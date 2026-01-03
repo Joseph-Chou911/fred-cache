@@ -1,790 +1,455 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fred_cache.py — Fetch latest FRED observations + series-page metadata, write auditable cache files,
-and maintain daily-cumulative history plus DQ streak state.
+FRED cache generator
 
-Outputs (committed by GitHub Actions):
-- cache/latest.csv
-- cache/latest.json
-- cache/history.json              (daily cumulative; unique (as_of_date, series_id) keeps last run per day)
-- cache/history.snapshot.json     (one-time snapshot at first run/migration)
-- cache/dq_state.json             (B-rule: WARN on bad_today; ERR if fatal or bad_streak>=3)
-
-Core:
-1) Fetch latest observation via FRED API (JSON endpoint)
-2) Fetch series HTML page meta (Updated / Next Release Date)
-3) Compute staleness and schedule-based overdue
-4) Judge per-series Quality using:
-   - If next_release_date known: overdue beyond grace => WARN/ERR
-   - Else fallback to staleness thresholds (per-series overrides)
-5) Update history.json as daily cumulative
-6) Audit latest vs history, write dq_state.json with streak (persisted in repo)
+Outputs (under ./cache):
+- latest.csv            : one row per series_id (latest observation)
+- latest.json           : array of records (same as latest.csv)
+- history.jsonl         : append-only log of records (one JSON object per line)
+- history.json          : compact view: latest record per series_id (from history.jsonl)
+- history.snapshot.json : snapshot of this run's latest.json (for audit)
+- dq_state.json         : lightweight data-quality state
+- manifest.json         : metadata + pinned raw URLs (including pinned.manifest_json)
 
 Environment variables:
 - FRED_API_KEY (required)
-- TIMEZONE (optional; default Asia/Taipei)
-- HISTORY_KEEP_DAYS (optional; default 730)
+- TIMEZONE (optional, default "Asia/Taipei")
 
-Schedule-based quality knobs (optional):
-- RELEASE_GRACE_DAYS (default 2)
-- OVERDUE_WARN_DAYS  (default 1)
-- OVERDUE_ERR_DAYS   (default 7)
+GitHub Actions recommended env:
+- GITHUB_REPOSITORY (owner/repo)  e.g. "Joseph-Chou911/fred-cache"
+- DATA_SHA (optional) commit sha you want pinned to (data commit)
+    If not provided, will fall back to GITHUB_SHA.
 """
 
 from __future__ import annotations
 
-import os
-import re
 import csv
 import json
+import os
+import re
+import sys
 import time
-from datetime import datetime, date, timezone
-from zoneinfo import ZoneInfo
-from urllib.parse import urlencode
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-
-# =============================================================================
-# Config
-# =============================================================================
-
-FRED_API_KEY = os.getenv("FRED_API_KEY", "").strip()
-if not FRED_API_KEY:
-    raise SystemExit("Missing FRED_API_KEY env var (set it in GitHub Actions Secrets).")
-
-TZ = ZoneInfo(os.getenv("TIMEZONE", "Asia/Taipei"))
+try:
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
 
 
-def _read_int_env(name: str, default: int) -> int:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
+BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
+CACHE_DIR = Path("cache")
 
-
-HISTORY_KEEP_DAYS = _read_int_env("HISTORY_KEEP_DAYS", 730)
-
-RELEASE_GRACE_DAYS = _read_int_env("RELEASE_GRACE_DAYS", 2)
-OVERDUE_WARN_DAYS = _read_int_env("OVERDUE_WARN_DAYS", 1)
-OVERDUE_ERR_DAYS = _read_int_env("OVERDUE_ERR_DAYS", 7)
-
-SERIES: List[str] = [
+# You can add/remove series here.
+SERIES_IDS: List[str] = [
     "STLFSI4",
     "VIXCLS",
     "BAMLH0A0HYM2",
     "DGS2",
     "DGS10",
-    "T10Y2Y",
-    "T10Y3M",
-    "NFCINONFINLEVERAGE",
     "DTWEXBGS",
     "DCOILWTICO",
     "SP500",
     "NASDAQCOM",
     "DJIA",
+    # extras you asked about
+    "NFCINONFINLEVERAGE",
+    "T10Y2Y",
+    "T10Y3M",
 ]
 
-BASE = "https://api.stlouisfed.org/fred/series/observations"
-FRED_SERIES_PAGE = "https://fred.stlouisfed.org/series/"
+CSV_FIELDNAMES = ["as_of_ts", "series_id", "data_date", "value", "source_url", "notes"]
 
-FIELDNAMES = [
-    "as_of_ts",
-    "as_of_date",
-    "series_id",
-    "data_date",
-    "value",
-    "staleness_days",
-    "fred_updated",
-    "next_release_date",
-    "release_overdue_days",
-    "quality",
-    "source_url",
-    "notes",
-]
-
-RETRYABLE_STATUS = {500, 502, 503, 504}
+# network policy
+TIMEOUT_SECS = 20
 MAX_ATTEMPTS = 3
-TIMEOUT_SECONDS = 20
-
-# Fallback staleness thresholds (used only when next_release_date is NA)
-DEFAULT_WARN_STALE_DAYS = 7
-DEFAULT_ERR_STALE_DAYS = 30
-
-# Per-series overrides (mainly to avoid false alarms for weekly / release-lag series)
-PER_SERIES_WARN_DAYS: Dict[str, int] = {
-    "STLFSI4": 10,
-    "NFCINONFINLEVERAGE": 10,
-    "DTWEXBGS": 10,
-}
-PER_SERIES_ERR_DAYS: Dict[str, int] = {
-    "STLFSI4": 45,
-    "NFCINONFINLEVERAGE": 45,
-    "DTWEXBGS": 45,
-}
+BACKOFF_SECS = [2, 4, 8]
+RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
-# =============================================================================
-# Helpers
-# =============================================================================
+def _tzinfo() -> timezone:
+    tz_name = os.getenv("TIMEZONE", "Asia/Taipei")
+    if ZoneInfo is None:
+        # Fallback: fixed offset +08:00 if zoneinfo unavailable
+        if tz_name == "Asia/Taipei":
+            return timezone.utc  # will still output UTC; better than crashing
+        return timezone.utc
+    try:
+        return ZoneInfo(tz_name)  # type: ignore[arg-type]
+    except Exception:
+        return ZoneInfo("Asia/Taipei")  # type: ignore[arg-type]
+
+
+def _now_iso(tz) -> str:
+    return datetime.now(tz).replace(microsecond=0).isoformat()
+
+
+def _now_utc_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
 
 def _safe_source_url(series_id: str) -> str:
-    """Build an audit-friendly FRED API URL WITHOUT api_key."""
+    # DO NOT include api_key
     params = {
         "series_id": series_id,
         "file_type": "json",
         "sort_order": "desc",
         "limit": 1,
     }
-    return f"{BASE}?{urlencode(params)}"
+    # stable order for readability (not required, but nicer)
+    qs = "&".join([f"{k}={requests.utils.quote(str(params[k]))}" for k in ["series_id", "file_type", "sort_order", "limit"]])
+    return f"{BASE_URL}?{qs}"
 
 
 def _redact_secrets(s: str) -> str:
-    """Last line of defense: redact any api_key values if present."""
     if not s:
         return s
-    if FRED_API_KEY and FRED_API_KEY in s:
-        s = s.replace(FRED_API_KEY, "***REDACTED***")
-    s = re.sub(r"(?i)(api_key=)[^&\s]+", r"\1***REDACTED***", s)
+    api_key = os.getenv("FRED_API_KEY", "")
+    if api_key and api_key in s:
+        s = s.replace(api_key, "***REDACTED***")
+    # mask any api_key=xxxx in text
+    s = re.sub(r"api_key=[^&\s]+", "api_key=***REDACTED***", s, flags=re.IGNORECASE)
     return s
 
 
-def _get_with_retry(url: str, params: Optional[dict] = None, timeout: int = TIMEOUT_SECONDS) -> requests.Response:
+@dataclass
+class FetchResult:
+    record: Dict[str, str]
+    warn: Optional[str] = None
+    err: Optional[str] = None
+    attempts: int = 0
+    status: Optional[int] = None
+
+
+def _http_get_with_retry(session: requests.Session, url: str, params: Dict[str, Any]) -> Tuple[Optional[requests.Response], Optional[str], int, Optional[int]]:
     """
-    Minimal, auditable retry:
-    - Retry on Timeout / ConnectionError
-    - Retry on HTTP 5xx in RETRYABLE_STATUS
-    Backoff: 1s -> 2s
+    Returns: (response or None, error_code string or None, attempts_used, last_status)
+    error_code examples: timeout, http_429, http_500, req_exc:...
     """
-    last_exc: Optional[BaseException] = None
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    last_status: Optional[int] = None
+    for i in range(MAX_ATTEMPTS):
+        attempt = i + 1
         try:
-            r = requests.get(url, params=params, timeout=timeout)
-            if r.status_code in RETRYABLE_STATUS:
-                raise requests.HTTPError(f"retryable_status:{r.status_code}", response=r)
-            r.raise_for_status()
-            return r
-        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:
-            last_exc = e
+            r = session.get(url, params=params, timeout=TIMEOUT_SECS)
+            last_status = r.status_code
+            if r.status_code == 200:
+                return r, None, attempt, last_status
+            if r.status_code in RETRY_STATUS:
+                # retry
+                if attempt < MAX_ATTEMPTS:
+                    time.sleep(BACKOFF_SECS[i])
+                    continue
+                return None, f"http_{r.status_code}", attempt, last_status
+            # non-retryable
+            return None, f"http_{r.status_code}", attempt, last_status
+        except requests.Timeout:
             if attempt < MAX_ATTEMPTS:
-                time.sleep(attempt)  # 1s, 2s
+                time.sleep(BACKOFF_SECS[i])
                 continue
-            raise
-    if last_exc:
-        raise last_exc
-    raise RuntimeError("Unexpected retry flow: no response and no exception.")
+            return None, "timeout", attempt, last_status
+        except requests.RequestException as e:
+            code = f"req_exc:{type(e).__name__}"
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(BACKOFF_SECS[i])
+                continue
+            return None, code, attempt, last_status
+    return None, "unknown", MAX_ATTEMPTS, last_status
 
 
-def _parse_iso_date(d: str) -> Optional[date]:
-    try:
-        return date.fromisoformat(d)
-    except Exception:
-        return None
+def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -> FetchResult:
+    api_key = os.getenv("FRED_API_KEY", "")
+    if not api_key or len(api_key) < 10:
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": "NA",
+                "value": "NA",
+                "source_url": _safe_source_url(series_id),
+                "notes": "err:missing_api_key",
+            },
+            err="missing_api_key",
+            attempts=0,
+            status=None,
+        )
 
-
-def _asof_date_str(as_of_ts: str) -> Optional[str]:
-    try:
-        dt = datetime.fromisoformat(as_of_ts)
-        return dt.date().isoformat()
-    except Exception:
-        return None
-
-
-def _atomic_write_text(path: str, content: str) -> None:
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(content)
-    os.replace(tmp, path)
-
-
-def _snapshot_once(snapshot_path: str, raw_history: List[Dict[str, str]]) -> None:
-    if os.path.exists(snapshot_path):
-        return
-    if not raw_history:
-        return
-    _atomic_write_text(snapshot_path, json.dumps(raw_history, ensure_ascii=False, separators=(",", ":")) + "\n")
-    print(f"Snapshot created: {snapshot_path}")
-
-
-def _parse_english_date_to_iso(s: str) -> Optional[str]:
-    """
-    Parse date like 'Jan 5, 2026' -> '2026-01-05'
-    Return None if cannot parse.
-    """
-    s = s.strip()
-    if not s or s == "NA":
-        return None
-    s = re.sub(r"\s+", " ", s)
-    for fmt in ("%b %d, %Y", "%B %d, %Y"):
-        try:
-            dt = datetime.strptime(s, fmt)
-            return dt.date().isoformat()
-        except Exception:
-            continue
-    return None
-
-
-# =============================================================================
-# Fetch (Obs + Meta)
-# =============================================================================
-
-def fetch_latest_obs(series_id: str) -> Dict[str, str]:
     params = {
         "series_id": series_id,
-        "api_key": FRED_API_KEY,  # used only for request; NEVER store/log request URL
+        "api_key": api_key,
         "file_type": "json",
         "sort_order": "desc",
         "limit": 1,
     }
 
-    r = _get_with_retry(BASE, params=params, timeout=TIMEOUT_SECONDS)
-    data = r.json()
-
-    obs = data.get("observations") or []
-    if not obs:
-        return {
-            "series_id": series_id,
-            "data_date": "NA",
-            "value": "NA",
-            "source_url": _safe_source_url(series_id),
-            "notes": "warn:no_observations",
-        }
-
-    latest = obs[0]
-    val = str(latest.get("value", "NA"))
-    if val == ".":
-        val = "NA"
-
-    return {
-        "series_id": series_id,
-        "data_date": str(latest.get("date", "NA")),
-        "value": val,
-        "source_url": _safe_source_url(series_id),
-        "notes": "NA",
-    }
-
-
-def fetch_series_meta(series_id: str) -> Dict[str, str]:
-    """
-    Fetch series HTML page and parse:
-    - Updated: <text>
-    - Next Release Date: <text>
-    Fail-open: return NA if parsing fails.
-    """
-    url = f"{FRED_SERIES_PAGE}{series_id}"
-    try:
-        r = _get_with_retry(url, params=None, timeout=TIMEOUT_SECONDS)
-        html = r.text
-
-        def _find(label: str) -> str:
-            pat = rf"{re.escape(label)}\s*:\s*([^<\n\r]+)"
-            m = re.search(pat, html, flags=re.IGNORECASE)
-            if not m:
-                return "NA"
-            return m.group(1).strip()
-
-        updated_raw = _find("Updated")
-        next_raw = _find("Next Release Date")
-
-        next_iso = _parse_english_date_to_iso(next_raw) if next_raw != "NA" else None
-
-        return {
-            "fred_updated": updated_raw if updated_raw else "NA",
-            "next_release_date": next_iso if next_iso else "NA",
-            "meta_url": url,
-            "meta_notes": "NA",
-        }
-    except Exception as e:
-        return {
-            "fred_updated": "NA",
-            "next_release_date": "NA",
-            "meta_url": url,
-            "meta_notes": f"warn:meta_fetch:{type(e).__name__}",
-        }
-
-
-# =============================================================================
-# Quality / staleness
-# =============================================================================
-
-def _compute_staleness_days(as_of_date: str, data_date: str) -> Optional[int]:
-    d_asof = _parse_iso_date(as_of_date)
-    d_data = _parse_iso_date(data_date)
-    if d_asof is None or d_data is None:
-        return None
-    return (d_asof - d_data).days
-
-
-def _compute_overdue_days(as_of_date: str, next_release_date: str, grace_days: int) -> Optional[int]:
-    d_asof = _parse_iso_date(as_of_date)
-    d_next = _parse_iso_date(next_release_date)
-    if d_asof is None or d_next is None:
-        return None
-    overdue = (d_asof - d_next).days - grace_days
-    return max(0, overdue)
-
-
-def _judge_quality(
-    series_id: str,
-    value: str,
-    staleness_days: Optional[int],
-    next_release_date: str,
-    overdue_days: Optional[int],
-    notes: str,
-    meta_notes: str,
-) -> Tuple[str, str]:
-    """
-    Return (quality, notes).
-
-    Priority:
-    1) Hard errors
-    2) Schedule-based overdue if next_release_date is known
-    3) Fallback staleness thresholds (when next_release_date is NA)
-    """
-    # hard errors
-    if notes.startswith("err:"):
-        return "ERR", notes
-    if value == "NA":
-        return "ERR", "err:value_na"
-    if notes.startswith("warn:no_observations"):
-        return "WARN", notes
-
-    # meta fetch warning (visibility)
-    meta_warn = meta_notes if meta_notes.startswith("warn:") else "NA"
-
-    # schedule-based
-    if next_release_date != "NA":
-        if overdue_days is None:
-            return "WARN", "warn:overdue_na"
-        if overdue_days >= OVERDUE_ERR_DAYS:
-            return "ERR", f"err:overdue:{overdue_days}d"
-        if overdue_days >= OVERDUE_WARN_DAYS:
-            return "WARN", f"warn:overdue:{overdue_days}d"
-
-        # Not overdue => OK (unless meta fetch had warn)
-        if meta_warn != "NA":
-            return "WARN", meta_warn
-        return "OK", "NA"
-
-    # fallback staleness thresholds
-    if staleness_days is None:
-        return ("WARN", meta_warn) if meta_warn != "NA" else ("WARN", "warn:staleness_na")
-
-    warn_th = PER_SERIES_WARN_DAYS.get(series_id, DEFAULT_WARN_STALE_DAYS)
-    err_th = PER_SERIES_ERR_DAYS.get(series_id, DEFAULT_ERR_STALE_DAYS)
-
-    if staleness_days >= err_th:
-        return "ERR", f"err:stale:{staleness_days}d"
-    if staleness_days >= warn_th:
-        return "WARN", f"warn:stale:{staleness_days}d"
-
-    if meta_warn != "NA":
-        return "WARN", meta_warn
-    return "OK", "NA"
-
-
-# =============================================================================
-# History (daily cumulative)
-# =============================================================================
-
-def _load_history_array(path: str) -> List[Dict[str, str]]:
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return [x for x in data if isinstance(x, dict)]
-        return []
-    except Exception:
-        return []
-
-
-def _load_history_from_jsonl_if_needed(history_json_path: str, history_jsonl_path: str) -> List[Dict[str, str]]:
-    if os.path.exists(history_json_path):
-        existing = _load_history_array(history_json_path)
-        if existing:
-            return existing
-
-    if not os.path.exists(history_jsonl_path):
-        return []
-
-    migrated: List[Dict[str, str]] = []
-    with open(history_jsonl_path, "r", encoding="utf-8") as f:
-        for line in f:
-            s = line.strip()
-            if not s:
-                continue
-            try:
-                obj = json.loads(s)
-                if isinstance(obj, dict):
-                    migrated.append(obj)
-            except Exception:
-                continue
-    return migrated
-
-
-def _normalize_to_daily_last(history: List[Dict[str, str]]) -> Tuple[Dict[Tuple[str, str], Dict[str, str]], List[Dict[str, str]]]:
-    daily_map: Dict[Tuple[str, str], Dict[str, str]] = {}
-    unknown_rows: List[Dict[str, str]] = []
-
-    def _dt(ts: str) -> Optional[datetime]:
-        try:
-            return datetime.fromisoformat(ts)
-        except Exception:
-            return None
-
-    for row in history:
-        as_of_ts = str(row.get("as_of_ts", ""))
-        sid = str(row.get("series_id", ""))
-        day = _asof_date_str(as_of_ts)
-
-        if not sid:
-            continue
-        if day is None:
-            unknown_rows.append(row)
-            continue
-
-        k = (day, sid)
-        if k not in daily_map:
-            daily_map[k] = row
-            continue
-
-        prev_ts = str(daily_map[k].get("as_of_ts", ""))
-        prev_dt = _dt(prev_ts)
-        curr_dt = _dt(as_of_ts)
-        if prev_dt is None or curr_dt is None:
-            if as_of_ts > prev_ts:
-                daily_map[k] = row
-        else:
-            if curr_dt > prev_dt:
-                daily_map[k] = row
-
-    return daily_map, unknown_rows
-
-
-def _apply_retention(daily_map: Dict[Tuple[str, str], Dict[str, str]], keep_days: int) -> Dict[Tuple[str, str], Dict[str, str]]:
-    if keep_days <= 0:
-        return daily_map
-
-    latest: Optional[date] = None
-    for (day_str, _sid) in daily_map.keys():
-        d = _parse_iso_date(day_str)
-        if d is None:
-            continue
-        if latest is None or d > latest:
-            latest = d
-
-    if latest is None:
-        return daily_map
-
-    cutoff_ord = latest.toordinal() - keep_days
-
-    kept: Dict[Tuple[str, str], Dict[str, str]] = {}
-    for (day_str, sid), row in daily_map.items():
-        d = _parse_iso_date(day_str)
-        if d is None:
-            kept[(day_str, sid)] = row
-            continue
-        if d.toordinal() >= cutoff_ord:
-            kept[(day_str, sid)] = row
-
-    return kept
-
-
-def update_history_json_daily_cumulative(
-    history_json_path: str,
-    history_jsonl_path: str,
-    snapshot_path: str,
-    new_rows: List[Dict[str, str]],
-    keep_days: int,
-) -> None:
-    raw_history = _load_history_from_jsonl_if_needed(history_json_path, history_jsonl_path)
-    _snapshot_once(snapshot_path, raw_history)
-
-    daily_map, unknown_rows = _normalize_to_daily_last(raw_history)
-
-    appended = 0
-    overwritten = 0
-
-    for row in new_rows:
-        sid = str(row.get("series_id", ""))
-        day = str(row.get("as_of_date", ""))
-        if not sid or not day or day == "NA":
-            unknown_rows.append(row)
-            continue
-
-        k = (day, sid)
-        if k in daily_map:
-            overwritten += 1
-        else:
-            appended += 1
-        daily_map[k] = row  # overwrite same-day same-series
-
-    daily_map = _apply_retention(daily_map, keep_days=keep_days)
-
-    history_out: List[Dict[str, str]] = list(daily_map.values()) + unknown_rows
-    history_out.sort(key=lambda r: (str(r.get("as_of_date", "")), str(r.get("series_id", "")), str(r.get("as_of_ts", ""))))
-
-    _atomic_write_text(history_json_path, json.dumps(history_out, ensure_ascii=False, separators=(",", ":")) + "\n")
-    print(
-        f"History(JSON daily cumulative) updated: appended={appended}, overwritten={overwritten}, "
-        f"keep_days={keep_days}, total={len(history_out)}"
-    )
-
-
-# =============================================================================
-# DQ State (B-rule streak)
-# =============================================================================
-
-def _load_json_obj(path: str) -> dict:
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            obj = json.load(f)
-        return obj if isinstance(obj, dict) else {}
-    except Exception:
-        return {}
-
-
-def _build_history_key_map(history_rows: List[Dict[str, str]]) -> Dict[Tuple[str, str], Dict[str, str]]:
-    """
-    Build (as_of_date, series_id) -> row map.
-    If duplicates exist, prefer the one with larger as_of_ts if present, else last seen.
-    """
-    mp: Dict[Tuple[str, str], Dict[str, str]] = {}
-
-    def _ts(row: Dict[str, str]) -> str:
-        return str(row.get("as_of_ts", ""))
-
-    for r in history_rows:
-        day = str(r.get("as_of_date", ""))
-        sid = str(r.get("series_id", ""))
-        if not day or not sid or day == "NA" or sid == "NA":
-            continue
-        k = (day, sid)
-        if k not in mp:
-            mp[k] = r
-        else:
-            if _ts(r) >= _ts(mp[k]):
-                mp[k] = r
-    return mp
-
-
-def _audit_latest_vs_history(
-    latest_rows: List[Dict[str, str]],
-    history_rows: List[Dict[str, str]],
-) -> Tuple[bool, List[str], int, List[dict]]:
-    """
-    Return:
-      fatal(bool), reasons(list[str]), mismatch_count(int), top_mismatches(list[dict])
-    """
-    reasons: List[str] = []
-    fatal = False
-    mismatch_count = 0
-    top: List[dict] = []
-
-    # latest as_of_ts consistency
-    as_of_ts_set = {str(r.get("as_of_ts", "")) for r in latest_rows}
-    as_of_ts_set.discard("")
-    if len(as_of_ts_set) != 1:
-        fatal = True
-        reasons.append("latest_as_of_ts_inconsistent")
-
-    hmap = _build_history_key_map(history_rows)
-
-    for r in latest_rows:
-        day = str(r.get("as_of_date", ""))
-        sid = str(r.get("series_id", ""))
-        if not day or not sid:
-            mismatch_count += 1
-            if len(top) < 5:
-                top.append({"series_id": sid or "NA", "as_of_date": day or "NA", "issue": "latest_missing_key"})
-            continue
-
-        hr = hmap.get((day, sid))
-        if not hr:
-            mismatch_count += 1
-            if len(top) < 5:
-                top.append({"series_id": sid, "as_of_date": day, "issue": "history_missing_row"})
-            continue
-
-        for field in ("data_date", "value", "quality"):
-            lv = str(r.get(field, ""))
-            hv = str(hr.get(field, ""))
-            if lv != hv:
-                mismatch_count += 1
-                if len(top) < 5:
-                    top.append(
-                        {
-                            "series_id": sid,
-                            "as_of_date": day,
-                            "issue": "field_mismatch",
-                            "field": field,
-                            "latest": lv,
-                            "history": hv,
-                        }
-                    )
-                break  # count 1 mismatch per series max
-
-    if mismatch_count > 0:
-        reasons.append("latest_history_mismatch")
-
-    return fatal, reasons, mismatch_count, top
-
-
-def write_dq_state(
-    dq_path: str,
-    as_of_ts: str,
-    as_of_date: str,
-    latest_rows: List[Dict[str, str]],
-    history_rows: List[Dict[str, str]],
-) -> Dict[str, str]:
-    """
-    Write cache/dq_state.json with B-rule streak:
-      - bad_today if fatal or mismatch_count>0
-      - dq_level=ERR if fatal or bad_streak>=3
-      - dq_level=WARN if bad_today and bad_streak<3
-      - dq_level=OK otherwise
-    """
-    prev = _load_json_obj(dq_path)
-    prev_streak = int(prev.get("bad_streak", 0) or 0)
-
-    fatal, reasons, mismatch_count, top = _audit_latest_vs_history(latest_rows, history_rows)
-    bad_today = fatal or (mismatch_count > 0)
-
-    bad_streak = (prev_streak + 1) if bad_today else 0
-
-    if fatal or bad_streak >= 3:
-        dq_level = "ERR"
-    elif bad_today:
-        dq_level = "WARN"
-    else:
-        dq_level = "OK"
-
-    state = {
-        "as_of_ts": as_of_ts,
-        "as_of_date": as_of_date,
-        "dq_level": dq_level,
-        "bad_today": bool(bad_today),
-        "bad_streak": int(bad_streak),
-        "mismatch_count": int(mismatch_count),
-        "reasons": reasons or ["NA"],
-        "top_mismatches": top,
-    }
-
-    _atomic_write_text(dq_path, json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n")
-    print(f"Wrote {dq_path}: dq_level={dq_level}, bad_streak={bad_streak}, mismatch_count={mismatch_count}")
-    return state
-
-
-# =============================================================================
-# Main
-# =============================================================================
-
-def main() -> None:
-    now = datetime.now(tz=TZ)
-    as_of_ts = now.isoformat(timespec="seconds")
-    as_of_date = now.date().isoformat()
-
-    rows: List[Dict[str, str]] = []
-
-    for sid in SERIES:
-        # 1) obs
-        try:
-            obs = fetch_latest_obs(sid)
-        except Exception as e:
-            obs = {
-                "series_id": sid,
+    r, err_code, attempts, last_status = _http_get_with_retry(session, BASE_URL, params)
+
+    if r is None:
+        notes = f"err:{err_code}"
+        # if retried (attempts>1), mark warn as well
+        warn = f"warn:retried_{attempts}x" if attempts > 1 else None
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(sid),
-                "notes": f"err:fetch:{type(e).__name__}",
-            }
-
-        # 2) meta (Updated + Next Release Date)
-        meta = fetch_series_meta(sid)
-
-        # 3) staleness + overdue
-        st = _compute_staleness_days(as_of_date, str(obs.get("data_date", "NA")))
-        st_str = "NA" if st is None else str(st)
-
-        next_rel = str(meta.get("next_release_date", "NA"))
-        overdue = _compute_overdue_days(as_of_date, next_rel, RELEASE_GRACE_DAYS) if next_rel != "NA" else None
-        overdue_str = "NA" if overdue is None else str(overdue)
-
-        # 4) quality
-        quality, notes = _judge_quality(
-            series_id=sid,
-            value=str(obs.get("value", "NA")),
-            staleness_days=st,
-            next_release_date=next_rel,
-            overdue_days=overdue,
-            notes=str(obs.get("notes", "NA")),
-            meta_notes=str(meta.get("meta_notes", "NA")),
+                "source_url": _safe_source_url(series_id),
+                "notes": notes,
+            },
+            warn=warn,
+            err=err_code,
+            attempts=attempts,
+            status=last_status,
         )
 
-        row = {
+    # parse JSON
+    try:
+        payload = r.json()
+    except Exception:
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": "NA",
+                "value": "NA",
+                "source_url": _safe_source_url(series_id),
+                "notes": "err:bad_json",
+            },
+            err="bad_json",
+            attempts=attempts,
+            status=last_status,
+        )
+
+    obs = payload.get("observations", [])
+    if not obs:
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": "NA",
+                "value": "NA",
+                "source_url": _safe_source_url(series_id),
+                "notes": "warn:no_observations",
+            },
+            warn="no_observations",
+            attempts=attempts,
+            status=last_status,
+        )
+
+    o0 = obs[0]
+    date = str(o0.get("date", "NA"))
+    value = str(o0.get("value", "NA"))
+
+    # missing value patterns FRED sometimes uses "."
+    if value.strip() in {"", "NA", "."}:
+        notes = "warn:missing_value"
+        warn = "missing_value"
+        value_out = "NA"
+    else:
+        notes = "NA"
+        warn = None
+        value_out = value
+
+    # If we retried at least once but succeeded, keep a warn tag
+    if attempts > 1 and notes == "NA":
+        notes = f"warn:retried_{attempts}x"
+        warn = f"retried_{attempts}x"
+
+    return FetchResult(
+        record={
             "as_of_ts": as_of_ts,
-            "as_of_date": as_of_date,
-            "series_id": sid,
-            "data_date": str(obs.get("data_date", "NA")),
-            "value": str(obs.get("value", "NA")),
-            "staleness_days": st_str,
-            "fred_updated": str(meta.get("fred_updated", "NA")),
-            "next_release_date": next_rel,
-            "release_overdue_days": overdue_str,
-            "quality": quality,
-            "source_url": _redact_secrets(str(obs.get("source_url", ""))),
+            "series_id": series_id,
+            "data_date": date,
+            "value": value_out,
+            "source_url": _safe_source_url(series_id),
             "notes": notes,
-        }
-        rows.append(row)
+        },
+        warn=warn,
+        err=None,
+        attempts=attempts,
+        status=last_status,
+    )
 
-    os.makedirs("cache", exist_ok=True)
 
-    # latest.csv
-    csv_path = "cache/latest.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDNAMES, lineterminator="\n")
+def _write_csv(path: Path, rows: List[Dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES, lineterminator="\n")
         w.writeheader()
-        w.writerows(rows)
+        for r in rows:
+            w.writerow({k: r.get(k, "NA") for k in CSV_FIELDNAMES})
 
-    # latest.json
-    latest_json_path = "cache/latest.json"
-    _atomic_write_text(latest_json_path, json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n")
 
-    # history.json daily cumulative
-    history_json_path = "cache/history.json"
-    history_jsonl_path = "cache/history.jsonl"  # legacy input only
-    snapshot_path = "cache/history.snapshot.json"
+def _write_json(path: Path, obj: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
 
-    update_history_json_daily_cumulative(
-        history_json_path=history_json_path,
-        history_jsonl_path=history_jsonl_path,
-        snapshot_path=snapshot_path,
-        new_rows=rows,
-        keep_days=HISTORY_KEEP_DAYS,
-    )
 
-    # DQ state (audit latest vs history; B-rule streak persisted)
-    history_rows = _load_history_array(history_json_path)
-    dq_path = "cache/dq_state.json"
-    write_dq_state(
-        dq_path=dq_path,
-        as_of_ts=as_of_ts,
-        as_of_date=as_of_date,
-        latest_rows=rows,
-        history_rows=history_rows,
-    )
+def _append_jsonl(path: Path, rows: List[Dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n")
 
-    print(_redact_secrets(f"Wrote {csv_path} + {latest_json_path} + {history_json_path} + {dq_path} @ {as_of_ts}"))
+
+def _read_jsonl(path: Path) -> List[Dict[str, str]]:
+    if not path.exists():
+        return []
+    out: List[Dict[str, str]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                # ignore malformed line; do not crash
+                continue
+    return out
+
+
+def _latest_per_series(records: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """
+    Pick latest record per series_id based on as_of_ts (ISO string).
+    Assumes as_of_ts sortable lexicographically (ISO-8601).
+    """
+    best: Dict[str, Dict[str, str]] = {}
+    for r in records:
+        sid = r.get("series_id", "")
+        if not sid:
+            continue
+        prev = best.get(sid)
+        if prev is None or str(r.get("as_of_ts", "")) > str(prev.get("as_of_ts", "")):
+            best[sid] = r
+    # stable output order: by series_id
+    return [best[sid] for sid in sorted(best.keys())]
+
+
+def _repo_slug() -> str:
+    return os.getenv("GITHUB_REPOSITORY", "Joseph-Chou911/fred-cache")
+
+
+def _data_sha() -> str:
+    # DATA_SHA is the data commit sha (after push) if workflow exports it.
+    # fallback: GITHUB_SHA (workflow run sha)
+    return os.getenv("DATA_SHA") or os.getenv("GITHUB_SHA") or "NA"
+
+
+def _pinned_urls(repo: str, sha: str) -> Dict[str, str]:
+    if sha == "NA":
+        # pinned not available
+        return {
+            "latest_json": "NA",
+            "history_json": "NA",
+            "latest_csv": "NA",
+            "manifest_json": "NA",
+        }
+    base = f"https://raw.githubusercontent.com/{repo}/{sha}/cache"
+    return {
+        "latest_json": f"{base}/latest.json",
+        "history_json": f"{base}/history.json",
+        "latest_csv": f"{base}/latest.csv",
+        "manifest_json": f"{base}/manifest.json",
+    }
+
+
+def main() -> int:
+    tz = _tzinfo()
+    as_of_ts = _now_iso(tz)
+    generated_at_utc = _now_utc_iso()
+
+    session = requests.Session()
+    session.headers.update({"User-Agent": "fred-cache/1.0"})
+
+    rows: List[Dict[str, str]] = []
+    dq: Dict[str, Any] = {
+        "as_of_ts": as_of_ts,
+        "generated_at_utc": generated_at_utc,
+        "series": {},
+        "summary": {"ok": 0, "warn": 0, "err": 0},
+    }
+
+    for sid in SERIES_IDS:
+        res = fetch_latest_obs(session, sid, as_of_ts)
+        # safety: ensure no secrets in any stored text
+        rec = {k: _redact_secrets(str(v)) for k, v in res.record.items()}
+
+        rows.append(rec)
+
+        note = rec.get("notes", "NA")
+        if note.startswith("err:"):
+            dq["summary"]["err"] += 1
+        elif note.startswith("warn:"):
+            dq["summary"]["warn"] += 1
+        else:
+            dq["summary"]["ok"] += 1
+
+        dq["series"][sid] = {
+            "notes": note,
+            "attempts": res.attempts,
+            "http_status": res.status if res.status is not None else "NA",
+            "data_date": rec.get("data_date", "NA"),
+            "value": rec.get("value", "NA"),
+        }
+
+    # write latest outputs
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    latest_csv = CACHE_DIR / "latest.csv"
+    latest_json = CACHE_DIR / "latest.json"
+    history_jsonl = CACHE_DIR / "history.jsonl"
+    history_json = CACHE_DIR / "history.json"
+    history_snapshot = CACHE_DIR / "history.snapshot.json"
+    dq_state = CACHE_DIR / "dq_state.json"
+    manifest = CACHE_DIR / "manifest.json"
+
+    _write_csv(latest_csv, rows)
+    _write_json(latest_json, rows)
+
+    # history append
+    _append_jsonl(history_jsonl, rows)
+
+    # rebuild history.json as "latest per series" from history.jsonl
+    all_hist = _read_jsonl(history_jsonl)
+    compact = _latest_per_series(all_hist)
+    _write_json(history_json, compact)
+
+    # snapshot of this run (full)
+    _write_json(history_snapshot, rows)
+
+    # dq state
+    _write_json(dq_state, dq)
+
+    # manifest
+    repo = _repo_slug()
+    sha = _data_sha()
+    manifest_obj = {
+        "generated_at_utc": generated_at_utc,
+        "as_of_ts": as_of_ts,
+        "data_commit_sha": sha,
+        "pinned": _pinned_urls(repo, sha),
+        "paths": {
+            "latest_csv": str(latest_csv.as_posix()),
+            "latest_json": str(latest_json.as_posix()),
+            "history_jsonl": str(history_jsonl.as_posix()),
+            "history_json": str(history_json.as_posix()),
+            "history_snapshot_json": str(history_snapshot.as_posix()),
+            "dq_state_json": str(dq_state.as_posix()),
+        },
+    }
+    _write_json(manifest, manifest_obj)
+
+    # minimal stdout (no secrets)
+    print(f"Wrote {latest_csv} + {latest_json} + {history_jsonl} + {history_json} + {history_snapshot} + {dq_state} + {manifest}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
