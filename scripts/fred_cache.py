@@ -1,14 +1,16 @@
 """
 fred_cache.py
 
-Fetch latest observations for selected FRED series and write an audit-friendly CSV:
-cache/latest.csv
+Fetch latest observations for selected FRED series and write audit-friendly outputs:
+- cache/latest.csv
+- cache/latest.json
 
 Design goals:
 - 可審計：source_url 不含 api_key，保留 series/endpoint/查核資訊
 - 安全：FRED_API_KEY 只用於 request，不寫入檔案、不輸出到 log；最後一道防線做遮蔽
-- 穩定：加入「最小可控」重試（timeout/連線錯誤/5xx）+ backoff
+- 穩定：加入「最小可控」重試（timeout/連線錯誤/指定 5xx）+ backoff
 - 一致：CSV 欄位固定，LF 換行，notes 使用可分類的 warn/err 格式
+- 便於解析：同時輸出 JSON（不依賴換行，適合 web.run 讀取）
 
 Environment variables:
 - FRED_API_KEY: required
@@ -20,6 +22,7 @@ from __future__ import annotations
 import os
 import re
 import csv
+import json
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -39,12 +42,16 @@ if not FRED_API_KEY:
 
 TZ = ZoneInfo(os.getenv("TIMEZONE", "Asia/Taipei"))
 
+# Added: NFCINONFINLEVERAGE, T10Y2Y, T10Y3M
 SERIES: List[str] = [
     "STLFSI4",
     "VIXCLS",
     "BAMLH0A0HYM2",
     "DGS2",
     "DGS10",
+    "T10Y2Y",
+    "T10Y3M",
+    "NFCINONFINLEVERAGE",
     "DTWEXBGS",
     "DCOILWTICO",
     "SP500",
@@ -134,11 +141,11 @@ def _get_with_retry(url: str, params: dict, timeout: int = TIMEOUT_SECONDS) -> r
 def fetch_latest_obs(series_id: str) -> Dict[str, str]:
     """
     Fetch the latest observation for a given FRED series.
-    Returns a dict matching the CSV schema (without as_of_ts; caller adds it).
+    Returns a dict matching the CSV/JSON schema (without as_of_ts; caller adds it).
     """
     params = {
         "series_id": series_id,
-        "api_key": FRED_API_KEY,  # used only for request; NEVER store/log the request URL
+        "api_key": FRED_API_KEY,  # used only for request; NEVER store/log request URL
         "file_type": "json",
         "sort_order": "desc",
         "limit": 1,
@@ -195,19 +202,26 @@ def main() -> None:
         rows.append(row)
 
     os.makedirs("cache", exist_ok=True)
-    out_path = "cache/latest.csv"
 
-    # Write CSV with consistent LF newlines
-    with open(out_path, "w", newline="", encoding="utf-8") as f:
+    # ---- Write CSV ----
+    csv_path = "cache/latest.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(
             f,
             fieldnames=FIELDNAMES,
-            lineterminator="\n",
+            lineterminator="\n",  # consistent LF newlines
         )
         w.writeheader()
         w.writerows(rows)
 
-    print(_redact_secrets(f"Wrote {out_path} with {len(rows)} rows @ {as_of_ts}"))
+    # ---- Write JSON ----
+    json_path = "cache/latest.json"
+    with open(json_path, "w", encoding="utf-8") as jf:
+        # JSON whitespace is irrelevant for parsers; keep compact & robust
+        json.dump(rows, jf, ensure_ascii=False, separators=(",", ":"))
+        jf.write("\n")
+
+    print(_redact_secrets(f"Wrote {csv_path} + {json_path} with {len(rows)} rows @ {as_of_ts}"))
 
 
 if __name__ == "__main__":
