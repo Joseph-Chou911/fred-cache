@@ -43,25 +43,19 @@ jobs:
           for attempt in 1 2 3; do
             echo "Attempt $attempt"
 
-            # Always start from latest remote main
             git fetch origin main
             git reset --hard origin/main
 
-            # Re-generate outputs on top of latest
             python scripts/fred_cache.py
 
             echo "== cache dir =="
             ls -la cache || true
 
-            # Stage outputs (include one-time snapshot if created)
             git add \
               cache/latest.csv \
               cache/latest.json \
               cache/history.json \
               cache/history.snapshot.json || true
-
-            # (Optional) If you want to stop tracking legacy jsonl in the future, do it explicitly once:
-            # git rm -f cache/history.jsonl || true
 
             if git diff --cached --quiet; then
               echo "No changes"
@@ -72,6 +66,11 @@ jobs:
 
             if git push origin HEAD:main; then
               echo "Pushed"
+
+              SHA=$(git rev-parse HEAD)
+              echo "Commit SHA: $SHA"
+              echo "Pinned latest.json:  https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SHA}/cache/latest.json"
+              echo "Pinned history.json: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SHA}/cache/history.json"
               exit 0
             fi
 
