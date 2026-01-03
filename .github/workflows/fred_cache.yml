@@ -30,11 +30,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate cache (CSV+JSON) and commit & push if changed (safe)
+      - name: Generate cache (CSV+JSON+HISTORY) and commit & push if changed (safe)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           # Optional override; default in script is Asia/Taipei
           TIMEZONE: Asia/Taipei
+          # Optional override; default in script is 730
+          HISTORY_KEEP_DAYS: "730"
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -53,15 +55,15 @@ jobs:
             echo "== cache dir =="
             ls -la cache
 
-            # Stage BOTH outputs
-            git add cache/latest.csv cache/latest.json
+            # Stage ALL outputs (latest + history)
+            git add cache/latest.csv cache/latest.json cache/history.jsonl
 
             if git diff --cached --quiet; then
               echo "No changes"
               exit 0
             fi
 
-            git commit -m "Update cache/latest (csv+json)"
+            git commit -m "Update cache (latest + history)"
 
             if git push origin HEAD:main; then
               echo "Pushed"
