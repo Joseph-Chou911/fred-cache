@@ -1,26 +1,30 @@
 """
-fred_cache.py
+fred_cache.py (FRED cache + audit + daily history)
 
-Outputs (audit-friendly):
+Outputs:
 - cache/latest.csv
 - cache/latest.json
-- cache/history.json            (JSON array, daily cumulative; daily-dedup keep LAST run per day per series)
+- cache/history.json            (daily cumulative; (as_of_date, series_id) unique, keep last run per day)
 - cache/history.snapshot.json   (one-time snapshot before first normalization/migration)
 
-Key behavior:
-- history.json uses unique key (as_of_date, series_id)
-- same day reruns overwrite (keep LAST as_of_ts per day per series)
-- cross-day accumulates (each day adds N series rows)
-
-Quality:
-- staleness_days = as_of_date - data_date (NA if unavailable)
-- quality: OK / WARN / ERR
-- notes: "NA" or "warn:..." / "err:..."
+Core:
+- Fetch latest observation via FRED API (JSON endpoint)
+- Fetch series page HTML meta:
+    - Updated:
+    - Next Release Date:
+- Quality uses schedule first:
+    - If next_release_date is known:
+        * If as_of_date <= next_release_date + grace: do NOT penalize staleness (OK unless other errors)
+        * If overdue > grace: WARN/ERR by overdue severity
+    - Else fallback to staleness thresholds
 
 Env:
-- FRED_API_KEY: required
-- TIMEZONE: optional, default "Asia/Taipei"
-- HISTORY_KEEP_DAYS: optional int, default 730
+- FRED_API_KEY (required)
+- TIMEZONE (optional; default Asia/Taipei)
+- HISTORY_KEEP_DAYS (optional; default 730)
+- RELEASE_GRACE_DAYS (optional; default 2)   # tolerance after next release date
+- OVERDUE_WARN_DAYS (optional; default 1)    # overdue days beyond grace => WARN
+- OVERDUE_ERR_DAYS (optional; default 7)     # overdue days beyond grace => ERR
 """
 
 from __future__ import annotations
@@ -61,6 +65,11 @@ def _read_int_env(name: str, default: int) -> int:
 
 HISTORY_KEEP_DAYS = _read_int_env("HISTORY_KEEP_DAYS", 730)
 
+# Schedule-based quality knobs
+RELEASE_GRACE_DAYS = _read_int_env("RELEASE_GRACE_DAYS", 2)
+OVERDUE_WARN_DAYS = _read_int_env("OVERDUE_WARN_DAYS", 1)
+OVERDUE_ERR_DAYS = _read_int_env("OVERDUE_ERR_DAYS", 7)
+
 SERIES: List[str] = [
     "STLFSI4",
     "VIXCLS",
@@ -78,8 +87,8 @@ SERIES: List[str] = [
 ]
 
 BASE = "https://api.stlouisfed.org/fred/series/observations"
+FRED_SERIES_PAGE = "https://fred.stlouisfed.org/series/"
 
-# Output columns (keep stable to reduce diff noise)
 FIELDNAMES = [
     "as_of_ts",
     "as_of_date",
@@ -87,6 +96,9 @@ FIELDNAMES = [
     "data_date",
     "value",
     "staleness_days",
+    "fred_updated",
+    "next_release_date",
+    "release_overdue_days",
     "quality",
     "source_url",
     "notes",
@@ -96,12 +108,11 @@ RETRYABLE_STATUS = {500, 502, 503, 504}
 MAX_ATTEMPTS = 3
 TIMEOUT_SECONDS = 20
 
-# Staleness thresholds (days). You can tune per series if desired.
+# fallback staleness thresholds (only used when next_release_date is NA)
 DEFAULT_WARN_STALE_DAYS = 7
 DEFAULT_ERR_STALE_DAYS = 30
 
 PER_SERIES_WARN_DAYS: Dict[str, int] = {
-    # weekly-ish series: allow a bit more latency before WARN
     "STLFSI4": 10,
     "NFCINONFINLEVERAGE": 10,
     "DTWEXBGS": 10,
@@ -138,7 +149,7 @@ def _redact_secrets(s: str) -> str:
     return s
 
 
-def _get_with_retry(url: str, params: dict, timeout: int = TIMEOUT_SECONDS) -> requests.Response:
+def _get_with_retry(url: str, params: Optional[dict] = None, timeout: int = TIMEOUT_SECONDS) -> requests.Response:
     """
     Minimal, auditable retry:
     - Retry on Timeout / ConnectionError
@@ -180,7 +191,6 @@ def _asof_date_str(as_of_ts: str) -> Optional[str]:
 
 
 def _atomic_write_text(path: str, content: str) -> None:
-    """Write file atomically to avoid partial writes."""
     tmp = f"{path}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(content)
@@ -188,7 +198,6 @@ def _atomic_write_text(path: str, content: str) -> None:
 
 
 def _snapshot_once(snapshot_path: str, raw_history: List[Dict[str, str]]) -> None:
-    """Create snapshot if not exists and raw_history non-empty."""
     if os.path.exists(snapshot_path):
         return
     if not raw_history:
@@ -197,59 +206,30 @@ def _snapshot_once(snapshot_path: str, raw_history: List[Dict[str, str]]) -> Non
     print(f"Snapshot created: {snapshot_path}")
 
 
-# =====================
-# Quality / staleness
-# =====================
-
-def _compute_staleness_days(as_of_date: str, data_date: str) -> Optional[int]:
-    d_asof = _parse_iso_date(as_of_date)
-    d_data = _parse_iso_date(data_date)
-    if d_asof is None or d_data is None:
+def _parse_english_date_to_iso(s: str) -> Optional[str]:
+    """
+    Parse date like 'Jan 5, 2026' -> '2026-01-05'
+    Return None if cannot parse.
+    """
+    s = s.strip()
+    if not s or s == "NA":
         return None
-    return (d_asof - d_data).days
-
-
-def _judge_quality(series_id: str, value: str, staleness_days: Optional[int], notes: str) -> Tuple[str, str]:
-    """
-    Return (quality, notes).
-    Rules:
-    - Any explicit err:* => ERR
-    - value NA => ERR
-    - staleness >= err_threshold => ERR
-    - staleness >= warn_threshold => WARN
-    - otherwise OK
-    """
-    if notes.startswith("err:"):
-        return "ERR", notes
-
-    if value == "NA":
-        return "ERR", "err:value_na"
-
-    if staleness_days is None:
-        # No date means we can't judge freshness; keep WARN (conservative but not fatal)
-        return "WARN", "warn:staleness_na"
-
-    warn_th = PER_SERIES_WARN_DAYS.get(series_id, DEFAULT_WARN_STALE_DAYS)
-    err_th = PER_SERIES_ERR_DAYS.get(series_id, DEFAULT_ERR_STALE_DAYS)
-
-    if staleness_days >= err_th:
-        return "ERR", f"err:stale:{staleness_days}d"
-    if staleness_days >= warn_th:
-        return "WARN", f"warn:stale:{staleness_days}d"
-
-    # keep any existing warn/no_obs notes if present
-    if notes.startswith("warn:"):
-        return "WARN", notes
-
-    return "OK", "NA"
+    # normalize multiple spaces
+    s = re.sub(r"\s+", " ", s)
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.date().isoformat()
+        except Exception:
+            continue
+    return None
 
 
 # =====================
-# Fetch
+# Fetch (Obs + Meta)
 # =====================
 
 def fetch_latest_obs(series_id: str) -> Dict[str, str]:
-    """Fetch the latest observation for a given FRED series (latest 1)."""
     params = {
         "series_id": series_id,
         "api_key": FRED_API_KEY,  # used only for request; NEVER store/log request URL
@@ -285,6 +265,134 @@ def fetch_latest_obs(series_id: str) -> Dict[str, str]:
     }
 
 
+def fetch_series_meta(series_id: str) -> Dict[str, str]:
+    """
+    Fetch series HTML page and parse:
+    - Updated: <text>
+    - Next Release Date: <text>
+    Fail-open: return NA if parsing fails.
+    """
+    url = f"{FRED_SERIES_PAGE}{series_id}"
+    try:
+        r = _get_with_retry(url, params=None, timeout=TIMEOUT_SECONDS)
+        html = r.text
+
+        # Try several patterns (FRED HTML can change)
+        # We keep captured text short to avoid accidental huge matches.
+        def _find(label: str) -> str:
+            # Example: "Updated:  Dec 29, 2025 3:44 PM CST"
+            # Example: "Next Release Date:  Jan 5, 2026"
+            pat = rf"{re.escape(label)}\s*:\s*([^<\n\r]+)"
+            m = re.search(pat, html, flags=re.IGNORECASE)
+            if not m:
+                return "NA"
+            return m.group(1).strip()
+
+        updated_raw = _find("Updated")
+        next_raw = _find("Next Release Date")
+
+        next_iso = _parse_english_date_to_iso(next_raw) if next_raw != "NA" else None
+
+        return {
+            "fred_updated": updated_raw if updated_raw else "NA",
+            "next_release_date": next_iso if next_iso else "NA",
+            "meta_url": url,
+            "meta_notes": "NA",
+        }
+    except Exception as e:
+        return {
+            "fred_updated": "NA",
+            "next_release_date": "NA",
+            "meta_url": url,
+            "meta_notes": f"warn:meta_fetch:{type(e).__name__}",
+        }
+
+
+# =====================
+# Quality / staleness
+# =====================
+
+def _compute_staleness_days(as_of_date: str, data_date: str) -> Optional[int]:
+    d_asof = _parse_iso_date(as_of_date)
+    d_data = _parse_iso_date(data_date)
+    if d_asof is None or d_data is None:
+        return None
+    return (d_asof - d_data).days
+
+
+def _compute_overdue_days(as_of_date: str, next_release_date: str, grace_days: int) -> Optional[int]:
+    d_asof = _parse_iso_date(as_of_date)
+    d_next = _parse_iso_date(next_release_date)
+    if d_asof is None or d_next is None:
+        return None
+    overdue = (d_asof - d_next).days - grace_days
+    return max(0, overdue)
+
+
+def _judge_quality(
+    series_id: str,
+    value: str,
+    staleness_days: Optional[int],
+    next_release_date: str,
+    overdue_days: Optional[int],
+    notes: str,
+    meta_notes: str,
+) -> Tuple[str, str]:
+    """
+    Return (quality, notes).
+
+    Priority:
+    1) Hard errors
+    2) Schedule-based overdue if next_release_date is known
+    3) Fallback staleness thresholds (when next_release_date is NA)
+    """
+    # hard errors
+    if notes.startswith("err:"):
+        return "ERR", notes
+    if value == "NA":
+        return "ERR", "err:value_na"
+    if notes.startswith("warn:no_observations"):
+        return "WARN", notes
+
+    # meta fetch warning (don't break)
+    if meta_notes.startswith("warn:"):
+        # keep as WARN unless schedule says OK; we want visibility
+        meta_warn = meta_notes
+    else:
+        meta_warn = "NA"
+
+    # schedule-based
+    if next_release_date != "NA":
+        # overdue_days is already (as_of - next_release - grace), floored at 0
+        if overdue_days is None:
+            return "WARN", "warn:overdue_na"
+        if overdue_days >= OVERDUE_ERR_DAYS:
+            return "ERR", f"err:overdue:{overdue_days}d"
+        if overdue_days >= OVERDUE_WARN_DAYS:
+            return "WARN", f"warn:overdue:{overdue_days}d"
+
+        # Not overdue => OK (but if meta fetch had warn, downgrade to WARN)
+        if meta_warn != "NA":
+            return "WARN", meta_warn
+        return "OK", "NA"
+
+    # fallback staleness thresholds
+    if staleness_days is None:
+        return ("WARN", meta_warn) if meta_warn != "NA" else ("WARN", "warn:staleness_na")
+
+    warn_th = PER_SERIES_WARN_DAYS.get(series_id, DEFAULT_WARN_STALE_DAYS)
+    err_th = PER_SERIES_ERR_DAYS.get(series_id, DEFAULT_ERR_STALE_DAYS)
+
+    if staleness_days >= err_th:
+        return "ERR", f"err:stale:{staleness_days}d"
+    if staleness_days >= warn_th:
+        return "WARN", f"warn:stale:{staleness_days}d"
+
+    if meta_warn != "NA":
+        return "WARN", meta_warn
+    return "OK", "NA"
+
+
 # =====================
 # History (daily cumulative)
 # =====================
@@ -299,16 +407,10 @@ def _load_history_array(path: str) -> List[Dict[str, str]]:
             return [x for x in data if isinstance(x, dict)]
         return []
     except Exception:
-        # fail-open
         return []
 
 
 def _load_history_from_jsonl_if_needed(history_json_path: str, history_jsonl_path: str) -> List[Dict[str, str]]:
-    """
-    Migration helper:
-    - If history.json exists and non-empty => use it
-    - Else if history.jsonl exists => migrate jsonl lines into array
-    """
     if os.path.exists(history_json_path):
         existing = _load_history_array(history_json_path)
         if existing:
@@ -333,11 +435,6 @@ def _load_history_from_jsonl_if_needed(history_json_path: str, history_jsonl_pat
 
 
 def _normalize_to_daily_last(history: List[Dict[str, str]]) -> Tuple[Dict[Tuple[str, str], Dict[str, str]], List[Dict[str, str]]]:
-    """
-    daily_map key = (as_of_date, series_id)
-    keep the row with the latest as_of_ts for that day+series
-    unknown_rows = unparseable as_of_ts (kept fail-open)
-    """
     daily_map: Dict[Tuple[str, str], Dict[str, str]] = {}
     unknown_rows: List[Dict[str, str]] = []
 
@@ -380,7 +477,6 @@ def _apply_retention(daily_map: Dict[Tuple[str, str], Dict[str, str]], keep_days
     if keep_days <= 0:
         return daily_map
 
-    # find latest day
     latest: Optional[date] = None
     for (day_str, _sid) in daily_map.keys():
         d = _parse_iso_date(day_str)
@@ -452,16 +548,18 @@ def update_history_json_daily_cumulative(
 # =====================
 
 def main() -> None:
-    as_of_ts = datetime.now(tz=TZ).isoformat(timespec="seconds")
-    as_of_date = datetime.now(tz=TZ).date().isoformat()
+    now = datetime.now(tz=TZ)
+    as_of_ts = now.isoformat(timespec="seconds")
+    as_of_date = now.date().isoformat()
 
     rows: List[Dict[str, str]] = []
 
     for sid in SERIES:
+        # 1) obs
         try:
-            base = fetch_latest_obs(sid)
+            obs = fetch_latest_obs(sid)
         except Exception as e:
-            base = {
+            obs = {
                 "series_id": sid,
                 "data_date": "NA",
                 "value": "NA",
@@ -469,26 +567,39 @@ def main() -> None:
                 "notes": f"err:fetch:{type(e).__name__}",
             }
 
-        # compute staleness + quality
-        st = _compute_staleness_days(as_of_date, str(base.get("data_date", "NA")))
+        # 2) meta (Updated + Next Release Date)
+        meta = fetch_series_meta(sid)
+
+        # 3) staleness + overdue
+        st = _compute_staleness_days(as_of_date, str(obs.get("data_date", "NA")))
         st_str = "NA" if st is None else str(st)
+
+        next_rel = str(meta.get("next_release_date", "NA"))
+        overdue = _compute_overdue_days(as_of_date, next_rel, RELEASE_GRACE_DAYS) if next_rel != "NA" else None
+        overdue_str = "NA" if overdue is None else str(overdue)
 
         quality, notes = _judge_quality(
             series_id=sid,
-            value=str(base.get("value", "NA")),
+            value=str(obs.get("value", "NA")),
             staleness_days=st,
-            notes=str(base.get("notes", "NA")),
+            next_release_date=next_rel,
+            overdue_days=overdue,
+            notes=str(obs.get("notes", "NA")),
+            meta_notes=str(meta.get("meta_notes", "NA")),
         )
 
         row = {
             "as_of_ts": as_of_ts,
             "as_of_date": as_of_date,
             "series_id": sid,
-            "data_date": str(base.get("data_date", "NA")),
-            "value": str(base.get("value", "NA")),
+            "data_date": str(obs.get("data_date", "NA")),
+            "value": str(obs.get("value", "NA")),
             "staleness_days": st_str,
+            "fred_updated": str(meta.get("fred_updated", "NA")),
+            "next_release_date": next_rel,
+            "release_overdue_days": overdue_str,
             "quality": quality,
-            "source_url": _redact_secrets(str(base.get("source_url", ""))),
+            "source_url": _redact_secrets(str(obs.get("source_url", ""))),
             "notes": notes,
         }
         rows.append(row)
