@@ -1,30 +1,35 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-fred_cache.py (FRED cache + audit + daily history)
+fred_cache.py — Fetch latest FRED observations + series-page metadata, write auditable cache files,
+and maintain daily-cumulative history plus DQ streak state.
 
-Outputs:
+Outputs (committed by GitHub Actions):
 - cache/latest.csv
 - cache/latest.json
-- cache/history.json            (daily cumulative; (as_of_date, series_id) unique, keep last run per day)
-- cache/history.snapshot.json   (one-time snapshot before first normalization/migration)
+- cache/history.json              (daily cumulative; unique (as_of_date, series_id) keeps last run per day)
+- cache/history.snapshot.json     (one-time snapshot at first run/migration)
+- cache/dq_state.json             (B-rule: WARN on bad_today; ERR if fatal or bad_streak>=3)
 
 Core:
-- Fetch latest observation via FRED API (JSON endpoint)
-- Fetch series page HTML meta:
-    - Updated:
-    - Next Release Date:
-- Quality uses schedule first:
-    - If next_release_date is known:
-        * If as_of_date <= next_release_date + grace: do NOT penalize staleness (OK unless other errors)
-        * If overdue > grace: WARN/ERR by overdue severity
-    - Else fallback to staleness thresholds
+1) Fetch latest observation via FRED API (JSON endpoint)
+2) Fetch series HTML page meta (Updated / Next Release Date)
+3) Compute staleness and schedule-based overdue
+4) Judge per-series Quality using:
+   - If next_release_date known: overdue beyond grace => WARN/ERR
+   - Else fallback to staleness thresholds (per-series overrides)
+5) Update history.json as daily cumulative
+6) Audit latest vs history, write dq_state.json with streak (persisted in repo)
 
-Env:
+Environment variables:
 - FRED_API_KEY (required)
 - TIMEZONE (optional; default Asia/Taipei)
 - HISTORY_KEEP_DAYS (optional; default 730)
-- RELEASE_GRACE_DAYS (optional; default 2)   # tolerance after next release date
-- OVERDUE_WARN_DAYS (optional; default 1)    # overdue days beyond grace => WARN
-- OVERDUE_ERR_DAYS (optional; default 7)     # overdue days beyond grace => ERR
+
+Schedule-based quality knobs (optional):
+- RELEASE_GRACE_DAYS (default 2)
+- OVERDUE_WARN_DAYS  (default 1)
+- OVERDUE_ERR_DAYS   (default 7)
 """
 
 from __future__ import annotations
@@ -34,7 +39,7 @@ import re
 import csv
 import json
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from zoneinfo import ZoneInfo
 from urllib.parse import urlencode
 from typing import Dict, List, Optional, Tuple
@@ -42,9 +47,9 @@ from typing import Dict, List, Optional, Tuple
 import requests
 
 
-# =====================
+# =============================================================================
 # Config
-# =====================
+# =============================================================================
 
 FRED_API_KEY = os.getenv("FRED_API_KEY", "").strip()
 if not FRED_API_KEY:
@@ -65,7 +70,6 @@ def _read_int_env(name: str, default: int) -> int:
 
 HISTORY_KEEP_DAYS = _read_int_env("HISTORY_KEEP_DAYS", 730)
 
-# Schedule-based quality knobs
 RELEASE_GRACE_DAYS = _read_int_env("RELEASE_GRACE_DAYS", 2)
 OVERDUE_WARN_DAYS = _read_int_env("OVERDUE_WARN_DAYS", 1)
 OVERDUE_ERR_DAYS = _read_int_env("OVERDUE_ERR_DAYS", 7)
@@ -108,10 +112,11 @@ RETRYABLE_STATUS = {500, 502, 503, 504}
 MAX_ATTEMPTS = 3
 TIMEOUT_SECONDS = 20
 
-# fallback staleness thresholds (only used when next_release_date is NA)
+# Fallback staleness thresholds (used only when next_release_date is NA)
 DEFAULT_WARN_STALE_DAYS = 7
 DEFAULT_ERR_STALE_DAYS = 30
 
+# Per-series overrides (mainly to avoid false alarms for weekly / release-lag series)
 PER_SERIES_WARN_DAYS: Dict[str, int] = {
     "STLFSI4": 10,
     "NFCINONFINLEVERAGE": 10,
@@ -124,12 +129,12 @@ PER_SERIES_ERR_DAYS: Dict[str, int] = {
 }
 
 
-# =====================
+# =============================================================================
 # Helpers
-# =====================
+# =============================================================================
 
 def _safe_source_url(series_id: str) -> str:
-    """Build an audit-friendly URL WITHOUT api_key."""
+    """Build an audit-friendly FRED API URL WITHOUT api_key."""
     params = {
         "series_id": series_id,
         "file_type": "json",
@@ -214,7 +219,6 @@ def _parse_english_date_to_iso(s: str) -> Optional[str]:
     s = s.strip()
     if not s or s == "NA":
         return None
-    # normalize multiple spaces
     s = re.sub(r"\s+", " ", s)
     for fmt in ("%b %d, %Y", "%B %d, %Y"):
         try:
@@ -225,9 +229,9 @@ def _parse_english_date_to_iso(s: str) -> Optional[str]:
     return None
 
 
-# =====================
+# =============================================================================
 # Fetch (Obs + Meta)
-# =====================
+# =============================================================================
 
 def fetch_latest_obs(series_id: str) -> Dict[str, str]:
     params = {
@@ -277,11 +281,7 @@ def fetch_series_meta(series_id: str) -> Dict[str, str]:
         r = _get_with_retry(url, params=None, timeout=TIMEOUT_SECONDS)
         html = r.text
 
-        # Try several patterns (FRED HTML can change)
-        # We keep captured text short to avoid accidental huge matches.
         def _find(label: str) -> str:
-            # Example: "Updated:  Dec 29, 2025 3:44 PM CST"
-            # Example: "Next Release Date:  Jan 5, 2026"
             pat = rf"{re.escape(label)}\s*:\s*([^<\n\r]+)"
             m = re.search(pat, html, flags=re.IGNORECASE)
             if not m:
@@ -308,9 +308,9 @@ def fetch_series_meta(series_id: str) -> Dict[str, str]:
         }
 
 
-# =====================
+# =============================================================================
 # Quality / staleness
-# =====================
+# =============================================================================
 
 def _compute_staleness_days(as_of_date: str, data_date: str) -> Optional[int]:
     d_asof = _parse_iso_date(as_of_date)
@@ -354,16 +354,11 @@ def _judge_quality(
     if notes.startswith("warn:no_observations"):
         return "WARN", notes
 
-    # meta fetch warning (don't break)
-    if meta_notes.startswith("warn:"):
-        # keep as WARN unless schedule says OK; we want visibility
-        meta_warn = meta_notes
-    else:
-        meta_warn = "NA"
+    # meta fetch warning (visibility)
+    meta_warn = meta_notes if meta_notes.startswith("warn:") else "NA"
 
     # schedule-based
     if next_release_date != "NA":
-        # overdue_days is already (as_of - next_release - grace), floored at 0
         if overdue_days is None:
             return "WARN", "warn:overdue_na"
         if overdue_days >= OVERDUE_ERR_DAYS:
@@ -371,7 +366,7 @@ def _judge_quality(
         if overdue_days >= OVERDUE_WARN_DAYS:
             return "WARN", f"warn:overdue:{overdue_days}d"
 
-        # Not overdue => OK (but if meta fetch had warn, downgrade to WARN)
+        # Not overdue => OK (unless meta fetch had warn)
         if meta_warn != "NA":
             return "WARN", meta_warn
         return "OK", "NA"
@@ -393,9 +388,9 @@ def _judge_quality(
     return "OK", "NA"
 
 
-# =====================
+# =============================================================================
 # History (daily cumulative)
-# =====================
+# =============================================================================
 
 def _load_history_array(path: str) -> List[Dict[str, str]]:
     if not os.path.exists(path):
@@ -543,9 +538,155 @@ def update_history_json_daily_cumulative(
     )
 
 
-# =====================
+# =============================================================================
+# DQ State (B-rule streak)
+# =============================================================================
+
+def _load_json_obj(path: str) -> dict:
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _build_history_key_map(history_rows: List[Dict[str, str]]) -> Dict[Tuple[str, str], Dict[str, str]]:
+    """
+    Build (as_of_date, series_id) -> row map.
+    If duplicates exist, prefer the one with larger as_of_ts if present, else last seen.
+    """
+    mp: Dict[Tuple[str, str], Dict[str, str]] = {}
+
+    def _ts(row: Dict[str, str]) -> str:
+        return str(row.get("as_of_ts", ""))
+
+    for r in history_rows:
+        day = str(r.get("as_of_date", ""))
+        sid = str(r.get("series_id", ""))
+        if not day or not sid or day == "NA" or sid == "NA":
+            continue
+        k = (day, sid)
+        if k not in mp:
+            mp[k] = r
+        else:
+            if _ts(r) >= _ts(mp[k]):
+                mp[k] = r
+    return mp
+
+
+def _audit_latest_vs_history(
+    latest_rows: List[Dict[str, str]],
+    history_rows: List[Dict[str, str]],
+) -> Tuple[bool, List[str], int, List[dict]]:
+    """
+    Return:
+      fatal(bool), reasons(list[str]), mismatch_count(int), top_mismatches(list[dict])
+    """
+    reasons: List[str] = []
+    fatal = False
+    mismatch_count = 0
+    top: List[dict] = []
+
+    # latest as_of_ts consistency
+    as_of_ts_set = {str(r.get("as_of_ts", "")) for r in latest_rows}
+    as_of_ts_set.discard("")
+    if len(as_of_ts_set) != 1:
+        fatal = True
+        reasons.append("latest_as_of_ts_inconsistent")
+
+    hmap = _build_history_key_map(history_rows)
+
+    for r in latest_rows:
+        day = str(r.get("as_of_date", ""))
+        sid = str(r.get("series_id", ""))
+        if not day or not sid:
+            mismatch_count += 1
+            if len(top) < 5:
+                top.append({"series_id": sid or "NA", "as_of_date": day or "NA", "issue": "latest_missing_key"})
+            continue
+
+        hr = hmap.get((day, sid))
+        if not hr:
+            mismatch_count += 1
+            if len(top) < 5:
+                top.append({"series_id": sid, "as_of_date": day, "issue": "history_missing_row"})
+            continue
+
+        for field in ("data_date", "value", "quality"):
+            lv = str(r.get(field, ""))
+            hv = str(hr.get(field, ""))
+            if lv != hv:
+                mismatch_count += 1
+                if len(top) < 5:
+                    top.append(
+                        {
+                            "series_id": sid,
+                            "as_of_date": day,
+                            "issue": "field_mismatch",
+                            "field": field,
+                            "latest": lv,
+                            "history": hv,
+                        }
+                    )
+                break  # count 1 mismatch per series max
+
+    if mismatch_count > 0:
+        reasons.append("latest_history_mismatch")
+
+    return fatal, reasons, mismatch_count, top
+
+
+def write_dq_state(
+    dq_path: str,
+    as_of_ts: str,
+    as_of_date: str,
+    latest_rows: List[Dict[str, str]],
+    history_rows: List[Dict[str, str]],
+) -> Dict[str, str]:
+    """
+    Write cache/dq_state.json with B-rule streak:
+      - bad_today if fatal or mismatch_count>0
+      - dq_level=ERR if fatal or bad_streak>=3
+      - dq_level=WARN if bad_today and bad_streak<3
+      - dq_level=OK otherwise
+    """
+    prev = _load_json_obj(dq_path)
+    prev_streak = int(prev.get("bad_streak", 0) or 0)
+
+    fatal, reasons, mismatch_count, top = _audit_latest_vs_history(latest_rows, history_rows)
+    bad_today = fatal or (mismatch_count > 0)
+
+    bad_streak = (prev_streak + 1) if bad_today else 0
+
+    if fatal or bad_streak >= 3:
+        dq_level = "ERR"
+    elif bad_today:
+        dq_level = "WARN"
+    else:
+        dq_level = "OK"
+
+    state = {
+        "as_of_ts": as_of_ts,
+        "as_of_date": as_of_date,
+        "dq_level": dq_level,
+        "bad_today": bool(bad_today),
+        "bad_streak": int(bad_streak),
+        "mismatch_count": int(mismatch_count),
+        "reasons": reasons or ["NA"],
+        "top_mismatches": top,
+    }
+
+    _atomic_write_text(dq_path, json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n")
+    print(f"Wrote {dq_path}: dq_level={dq_level}, bad_streak={bad_streak}, mismatch_count={mismatch_count}")
+    return state
+
+
+# =============================================================================
 # Main
-# =====================
+# =============================================================================
 
 def main() -> None:
     now = datetime.now(tz=TZ)
@@ -578,6 +719,7 @@ def main() -> None:
         overdue = _compute_overdue_days(as_of_date, next_rel, RELEASE_GRACE_DAYS) if next_rel != "NA" else None
         overdue_str = "NA" if overdue is None else str(overdue)
 
+        # 4) quality
         quality, notes = _judge_quality(
             series_id=sid,
             value=str(obs.get("value", "NA")),
@@ -630,7 +772,18 @@ def main() -> None:
         keep_days=HISTORY_KEEP_DAYS,
     )
 
-    print(_redact_secrets(f"Wrote {csv_path} + {latest_json_path} + {history_json_path} @ {as_of_ts}"))
+    # DQ state (audit latest vs history; B-rule streak persisted)
+    history_rows = _load_history_array(history_json_path)
+    dq_path = "cache/dq_state.json"
+    write_dq_state(
+        dq_path=dq_path,
+        as_of_ts=as_of_ts,
+        as_of_date=as_of_date,
+        latest_rows=rows,
+        history_rows=history_rows,
+    )
+
+    print(_redact_secrets(f"Wrote {csv_path} + {latest_json_path} + {history_json_path} + {dq_path} @ {as_of_ts}"))
 
 
 if __name__ == "__main__":
