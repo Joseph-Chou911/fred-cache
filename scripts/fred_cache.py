@@ -1,20 +1,21 @@
 """
 fred_cache.py
 
-Outputs:
+Outputs (audit-friendly):
 - cache/latest.csv
 - cache/latest.json
-- cache/history.json  (JSON array, daily-dedup: keep LAST run per day per series)
+- cache/history.json            (JSON array, daily cumulative; daily-dedup keep LAST run per day per series)
+- cache/history.snapshot.json   (one-time snapshot before first normalization/migration)
 
-Key change (daily dedup):
-- history 以 (as_of_date, series_id) 做唯一鍵
-- 同一天同一個 series 若你手動重跑，會覆蓋成當天「最後一次」快照
-  -> 避免同一天多筆造成 lookback 統計權重偏差
+Key behavior:
+- history.json uses unique key (as_of_date, series_id)
+- same day reruns overwrite (keep LAST as_of_ts per day per series)
+- cross-day accumulates (each day adds N series rows)
 
-Safety:
-- 原子寫入（.tmp -> replace）
-- 第一次啟用新規則時，若偵測到 history.json 內存在「同日多筆」或單純非空，
-  會先備份一份 cache/history.snapshot.json（僅一次）
+Quality:
+- staleness_days = as_of_date - data_date (NA if unavailable)
+- quality: OK / WARN / ERR
+- notes: "NA" or "warn:..." / "err:..."
 
 Env:
 - FRED_API_KEY: required
@@ -77,11 +78,39 @@ SERIES: List[str] = [
 ]
 
 BASE = "https://api.stlouisfed.org/fred/series/observations"
-FIELDNAMES = ["as_of_ts", "series_id", "data_date", "value", "source_url", "notes"]
+
+# Output columns (keep stable to reduce diff noise)
+FIELDNAMES = [
+    "as_of_ts",
+    "as_of_date",
+    "series_id",
+    "data_date",
+    "value",
+    "staleness_days",
+    "quality",
+    "source_url",
+    "notes",
+]
 
 RETRYABLE_STATUS = {500, 502, 503, 504}
 MAX_ATTEMPTS = 3
 TIMEOUT_SECONDS = 20
+
+# Staleness thresholds (days). You can tune per series if desired.
+DEFAULT_WARN_STALE_DAYS = 7
+DEFAULT_ERR_STALE_DAYS = 30
+
+PER_SERIES_WARN_DAYS: Dict[str, int] = {
+    # weekly-ish series: allow a bit more latency before WARN
+    "STLFSI4": 10,
+    "NFCINONFINLEVERAGE": 10,
+    "DTWEXBGS": 10,
+}
+PER_SERIES_ERR_DAYS: Dict[str, int] = {
+    "STLFSI4": 45,
+    "NFCINONFINLEVERAGE": 45,
+    "DTWEXBGS": 45,
+}
 
 
 # =====================
@@ -135,18 +164,19 @@ def _get_with_retry(url: str, params: dict, timeout: int = TIMEOUT_SECONDS) -> r
     raise RuntimeError("Unexpected retry flow: no response and no exception.")
 
 
-def _parse_asof_dt(as_of_ts: str) -> Optional[datetime]:
+def _parse_iso_date(d: str) -> Optional[date]:
     try:
-        return datetime.fromisoformat(as_of_ts)
+        return date.fromisoformat(d)
     except Exception:
         return None
 
 
-def _asof_date_key(as_of_ts: str) -> Optional[str]:
-    dt = _parse_asof_dt(as_of_ts)
-    if dt is None:
+def _asof_date_str(as_of_ts: str) -> Optional[str]:
+    try:
+        dt = datetime.fromisoformat(as_of_ts)
+        return dt.date().isoformat()
+    except Exception:
         return None
-    return dt.date().isoformat()  # YYYY-MM-DD
 
 
 def _atomic_write_text(path: str, content: str) -> None:
@@ -157,8 +187,65 @@ def _atomic_write_text(path: str, content: str) -> None:
     os.replace(tmp, path)
 
 
+def _snapshot_once(snapshot_path: str, raw_history: List[Dict[str, str]]) -> None:
+    """Create snapshot if not exists and raw_history non-empty."""
+    if os.path.exists(snapshot_path):
+        return
+    if not raw_history:
+        return
+    _atomic_write_text(snapshot_path, json.dumps(raw_history, ensure_ascii=False, separators=(",", ":")) + "\n")
+    print(f"Snapshot created: {snapshot_path}")
+
+
 # =====================
-# Core: fetch
+# Quality / staleness
+# =====================
+
+def _compute_staleness_days(as_of_date: str, data_date: str) -> Optional[int]:
+    d_asof = _parse_iso_date(as_of_date)
+    d_data = _parse_iso_date(data_date)
+    if d_asof is None or d_data is None:
+        return None
+    return (d_asof - d_data).days
+
+
+def _judge_quality(series_id: str, value: str, staleness_days: Optional[int], notes: str) -> Tuple[str, str]:
+    """
+    Return (quality, notes).
+    Rules:
+    - Any explicit err:* => ERR
+    - value NA => ERR
+    - staleness >= err_threshold => ERR
+    - staleness >= warn_threshold => WARN
+    - otherwise OK
+    """
+    if notes.startswith("err:"):
+        return "ERR", notes
+
+    if value == "NA":
+        return "ERR", "err:value_na"
+
+    if staleness_days is None:
+        # No date means we can't judge freshness; keep WARN (conservative but not fatal)
+        return "WARN", "warn:staleness_na"
+
+    warn_th = PER_SERIES_WARN_DAYS.get(series_id, DEFAULT_WARN_STALE_DAYS)
+    err_th = PER_SERIES_ERR_DAYS.get(series_id, DEFAULT_ERR_STALE_DAYS)
+
+    if staleness_days >= err_th:
+        return "ERR", f"err:stale:{staleness_days}d"
+    if staleness_days >= warn_th:
+        return "WARN", f"warn:stale:{staleness_days}d"
+
+    # keep any existing warn/no_obs notes if present
+    if notes.startswith("warn:"):
+        return "WARN", notes
+
+    return "OK", "NA"
+
+
+# =====================
+# Fetch
 # =====================
 
 def fetch_latest_obs(series_id: str) -> Dict[str, str]:
@@ -180,26 +267,26 @@ def fetch_latest_obs(series_id: str) -> Dict[str, str]:
             "series_id": series_id,
             "data_date": "NA",
             "value": "NA",
-            "source_url": _redact_secrets(_safe_source_url(series_id)),
+            "source_url": _safe_source_url(series_id),
             "notes": "warn:no_observations",
         }
 
     latest = obs[0]
-    val = latest.get("value", "NA")
+    val = str(latest.get("value", "NA"))
     if val == ".":
         val = "NA"
 
     return {
         "series_id": series_id,
-        "data_date": latest.get("date", "NA"),
+        "data_date": str(latest.get("date", "NA")),
         "value": val,
-        "source_url": _redact_secrets(_safe_source_url(series_id)),
+        "source_url": _safe_source_url(series_id),
         "notes": "NA",
     }
 
 
 # =====================
-# History (JSON array): migrate + daily-dedup + retention
+# History (daily cumulative)
 # =====================
 
 def _load_history_array(path: str) -> List[Dict[str, str]]:
@@ -209,21 +296,18 @@ def _load_history_array(path: str) -> List[Dict[str, str]]:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, list):
-            out: List[Dict[str, str]] = []
-            for x in data:
-                if isinstance(x, dict):
-                    out.append(x)
-            return out
+            return [x for x in data if isinstance(x, dict)]
         return []
     except Exception:
-        # Fail-open: if corrupted, don't crash; start fresh
+        # fail-open
         return []
 
 
 def _load_history_from_jsonl_if_needed(history_json_path: str, history_jsonl_path: str) -> List[Dict[str, str]]:
     """
     Migration helper:
-    - If history.json is empty/missing but history.jsonl exists, read jsonl lines into array.
+    - If history.json exists and non-empty => use it
+    - Else if history.jsonl exists => migrate jsonl lines into array
     """
     if os.path.exists(history_json_path):
         existing = _load_history_array(history_json_path)
@@ -248,93 +332,41 @@ def _load_history_from_jsonl_if_needed(history_json_path: str, history_jsonl_pat
     return migrated
 
 
-def _latest_date_in_history(history: List[Dict[str, str]]) -> Optional[date]:
-    latest: Optional[date] = None
-    for row in history:
-        as_of_ts = str(row.get("as_of_ts", ""))
-        dt = _parse_asof_dt(as_of_ts)
-        if dt is None:
-            continue
-        d = dt.date()
-        if latest is None or d > latest:
-            latest = d
-    return latest
-
-
-def _apply_retention_daily_map(
-    daily_map: Dict[Tuple[str, str], Dict[str, str]],
-    unknown_rows: List[Dict[str, str]],
-    keep_days: int,
-) -> Tuple[Dict[Tuple[str, str], Dict[str, str]], List[Dict[str, str]]]:
-    """
-    Retention window based on latest as_of_date among known daily keys.
-    - daily_map keys: (YYYY-MM-DD, series_id)
-    - unknown_rows: rows with unparseable as_of_ts (kept, fail-open)
-    """
-    if keep_days <= 0:
-        return daily_map, unknown_rows
-
-    latest_day: Optional[date] = None
-    for (day_str, _sid) in daily_map.keys():
-        try:
-            d = date.fromisoformat(day_str)
-        except Exception:
-            continue
-        if latest_day is None or d > latest_day:
-            latest_day = d
-
-    if latest_day is None:
-        return daily_map, unknown_rows
-
-    cutoff_ord = latest_day.toordinal() - keep_days
-
-    kept_map: Dict[Tuple[str, str], Dict[str, str]] = {}
-    for (day_str, sid), row in daily_map.items():
-        try:
-            d = date.fromisoformat(day_str)
-        except Exception:
-            # If day_str is somehow bad, keep it (fail-open)
-            kept_map[(day_str, sid)] = row
-            continue
-        if d.toordinal() >= cutoff_ord:
-            kept_map[(day_str, sid)] = row
-
-    return kept_map, unknown_rows
-
-
 def _normalize_to_daily_last(history: List[Dict[str, str]]) -> Tuple[Dict[Tuple[str, str], Dict[str, str]], List[Dict[str, str]]]:
     """
-    Normalize history to "daily last per series":
-    - For parseable as_of_ts: keep the row with max as_of_ts for each (as_of_date, series_id)
-    - For unparseable as_of_ts: keep rows separately (fail-open)
+    daily_map key = (as_of_date, series_id)
+    keep the row with the latest as_of_ts for that day+series
+    unknown_rows = unparseable as_of_ts (kept fail-open)
     """
     daily_map: Dict[Tuple[str, str], Dict[str, str]] = {}
     unknown_rows: List[Dict[str, str]] = []
 
+    def _dt(ts: str) -> Optional[datetime]:
+        try:
+            return datetime.fromisoformat(ts)
+        except Exception:
+            return None
+
     for row in history:
-        if not isinstance(row, dict):
-            continue
         as_of_ts = str(row.get("as_of_ts", ""))
         sid = str(row.get("series_id", ""))
-        day_key = _asof_date_key(as_of_ts)
+        day = _asof_date_str(as_of_ts)
+
         if not sid:
             continue
-
-        if day_key is None:
+        if day is None:
             unknown_rows.append(row)
             continue
 
-        k = (day_key, sid)
+        k = (day, sid)
         if k not in daily_map:
             daily_map[k] = row
             continue
 
-        # Compare timestamps; keep the later one
         prev_ts = str(daily_map[k].get("as_of_ts", ""))
-        prev_dt = _parse_asof_dt(prev_ts)
-        curr_dt = _parse_asof_dt(as_of_ts)
+        prev_dt = _dt(prev_ts)
+        curr_dt = _dt(as_of_ts)
         if prev_dt is None or curr_dt is None:
-            # Fallback: lexicographic ISO compare (usually safe here)
             if as_of_ts > prev_ts:
                 daily_map[k] = row
         else:
@@ -344,78 +376,74 @@ def _normalize_to_daily_last(history: List[Dict[str, str]]) -> Tuple[Dict[Tuple[
     return daily_map, unknown_rows
 
 
-def _should_snapshot(history_json_path: str, snapshot_path: str, history: List[Dict[str, str]]) -> bool:
-    """
-    Create snapshot once when moving to daily-dedup, to avoid anxiety about irreversible change.
-    Rule:
-    - If snapshot doesn't exist, and history is non-empty -> snapshot.
-    """
-    if os.path.exists(snapshot_path):
-        return False
-    if not history:
-        return False
-    # Snapshot is cheap; do it once.
-    return True
+def _apply_retention(daily_map: Dict[Tuple[str, str], Dict[str, str]], keep_days: int) -> Dict[Tuple[str, str], Dict[str, str]]:
+    if keep_days <= 0:
+        return daily_map
+
+    # find latest day
+    latest: Optional[date] = None
+    for (day_str, _sid) in daily_map.keys():
+        d = _parse_iso_date(day_str)
+        if d is None:
+            continue
+        if latest is None or d > latest:
+            latest = d
+
+    if latest is None:
+        return daily_map
+
+    cutoff_ord = latest.toordinal() - keep_days
+
+    kept: Dict[Tuple[str, str], Dict[str, str]] = {}
+    for (day_str, sid), row in daily_map.items():
+        d = _parse_iso_date(day_str)
+        if d is None:
+            kept[(day_str, sid)] = row
+            continue
+        if d.toordinal() >= cutoff_ord:
+            kept[(day_str, sid)] = row
+
+    return kept
 
 
-def update_history_json_daily_last(
+def update_history_json_daily_cumulative(
     history_json_path: str,
     history_jsonl_path: str,
     snapshot_path: str,
     new_rows: List[Dict[str, str]],
     keep_days: int,
 ) -> None:
-    """
-    Load (or migrate) history -> (optional snapshot once) -> normalize daily-last -> merge new rows (overwrite same-day same-series)
-    -> retention -> write history.json.
-    """
-    os.makedirs(os.path.dirname(history_json_path), exist_ok=True)
-
-    # Load or migrate
     raw_history = _load_history_from_jsonl_if_needed(history_json_path, history_jsonl_path)
+    _snapshot_once(snapshot_path, raw_history)
 
-    # One-time snapshot for safety
-    if _should_snapshot(history_json_path, snapshot_path, raw_history):
-        _atomic_write_text(snapshot_path, json.dumps(raw_history, ensure_ascii=False, separators=(",", ":")) + "\n")
-        print(f"Snapshot created: {snapshot_path}")
-
-    # Normalize existing history to daily-last per series
     daily_map, unknown_rows = _normalize_to_daily_last(raw_history)
 
-    # Merge new rows: overwrite same-day same-series (daily-last behavior)
-    overwritten = 0
     appended = 0
+    overwritten = 0
+
     for row in new_rows:
         sid = str(row.get("series_id", ""))
-        as_of_ts = str(row.get("as_of_ts", ""))
-        day_key = _asof_date_key(as_of_ts)
-        if not sid or day_key is None:
-            # Shouldn't happen, but fail-open
+        day = str(row.get("as_of_date", ""))
+        if not sid or not day or day == "NA":
             unknown_rows.append(row)
             continue
 
-        k = (day_key, sid)
+        k = (day, sid)
         if k in daily_map:
             overwritten += 1
         else:
             appended += 1
-        daily_map[k] = row
+        daily_map[k] = row  # overwrite same-day same-series
 
-    # Retention
-    daily_map, unknown_rows = _apply_retention_daily_map(daily_map, unknown_rows, keep_days=keep_days)
+    daily_map = _apply_retention(daily_map, keep_days=keep_days)
 
-    # Rebuild list
-    history: List[Dict[str, str]] = list(daily_map.values()) + unknown_rows
+    history_out: List[Dict[str, str]] = list(daily_map.values()) + unknown_rows
+    history_out.sort(key=lambda r: (str(r.get("as_of_date", "")), str(r.get("series_id", "")), str(r.get("as_of_ts", ""))))
 
-    # Stable sort by as_of_ts then series_id
-    history.sort(key=lambda r: (str(r.get("as_of_ts", "")), str(r.get("series_id", ""))))
-
-    # Write back
-    _atomic_write_text(history_json_path, json.dumps(history, ensure_ascii=False, separators=(",", ":")) + "\n")
-
+    _atomic_write_text(history_json_path, json.dumps(history_out, ensure_ascii=False, separators=(",", ":")) + "\n")
     print(
-        f"History(JSON daily-last) updated: appended={appended}, overwritten={overwritten}, "
-        f"keep_days={keep_days}, total={len(history)}"
+        f"History(JSON daily cumulative) updated: appended={appended}, overwritten={overwritten}, "
+        f"keep_days={keep_days}, total={len(history_out)}"
     )
 
 
@@ -425,41 +453,65 @@ def update_history_json_daily_last(
 
 def main() -> None:
     as_of_ts = datetime.now(tz=TZ).isoformat(timespec="seconds")
+    as_of_date = datetime.now(tz=TZ).date().isoformat()
 
     rows: List[Dict[str, str]] = []
+
     for sid in SERIES:
         try:
-            row = fetch_latest_obs(sid)
+            base = fetch_latest_obs(sid)
         except Exception as e:
-            row = {
+            base = {
                 "series_id": sid,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _redact_secrets(_safe_source_url(sid)),
+                "source_url": _safe_source_url(sid),
                 "notes": f"err:fetch:{type(e).__name__}",
             }
-        row["as_of_ts"] = as_of_ts
+
+        # compute staleness + quality
+        st = _compute_staleness_days(as_of_date, str(base.get("data_date", "NA")))
+        st_str = "NA" if st is None else str(st)
+
+        quality, notes = _judge_quality(
+            series_id=sid,
+            value=str(base.get("value", "NA")),
+            staleness_days=st,
+            notes=str(base.get("notes", "NA")),
+        )
+
+        row = {
+            "as_of_ts": as_of_ts,
+            "as_of_date": as_of_date,
+            "series_id": sid,
+            "data_date": str(base.get("data_date", "NA")),
+            "value": str(base.get("value", "NA")),
+            "staleness_days": st_str,
+            "quality": quality,
+            "source_url": _redact_secrets(str(base.get("source_url", ""))),
+            "notes": notes,
+        }
         rows.append(row)
 
     os.makedirs("cache", exist_ok=True)
 
-    # ---- latest.csv ----
+    # latest.csv
     csv_path = "cache/latest.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDNAMES, lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
 
-    # ---- latest.json ----
+    # latest.json
     latest_json_path = "cache/latest.json"
     _atomic_write_text(latest_json_path, json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n")
 
-    # ---- history.json (daily-last) ----
+    # history.json daily cumulative
     history_json_path = "cache/history.json"
-    history_jsonl_path = "cache/history.jsonl"  # legacy input for migration only
-    snapshot_path = "cache/history.snapshot.json"  # one-time safety snapshot
+    history_jsonl_path = "cache/history.jsonl"  # legacy input only
+    snapshot_path = "cache/history.snapshot.json"
 
-    update_history_json_daily_last(
+    update_history_json_daily_cumulative(
         history_json_path=history_json_path,
         history_jsonl_path=history_jsonl_path,
         snapshot_path=snapshot_path,
