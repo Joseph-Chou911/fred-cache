@@ -1,15 +1,22 @@
 """
 fred_cache.py
 
-Fetch latest observations for selected FRED series and write audit-friendly outputs:
+Outputs:
 - cache/latest.csv
 - cache/latest.json
-- cache/history.json   (JSON array; append with dedupe + rolling retention)
+- cache/history.json  (JSON array, daily-dedup: keep LAST run per day per series)
 
-Why history.json (array) instead of history.jsonl:
-- 不依賴換行；即使內容被壓成單行仍是合法 JSON，利於 web.run / 任何解析器。
+Key change (daily dedup):
+- history 以 (as_of_date, series_id) 做唯一鍵
+- 同一天同一個 series 若你手動重跑，會覆蓋成當天「最後一次」快照
+  -> 避免同一天多筆造成 lookback 統計權重偏差
 
-Environment variables:
+Safety:
+- 原子寫入（.tmp -> replace）
+- 第一次啟用新規則時，若偵測到 history.json 內存在「同日多筆」或單純非空，
+  會先備份一份 cache/history.snapshot.json（僅一次）
+
+Env:
 - FRED_API_KEY: required
 - TIMEZONE: optional, default "Asia/Taipei"
 - HISTORY_KEEP_DAYS: optional int, default 730
@@ -128,12 +135,18 @@ def _get_with_retry(url: str, params: dict, timeout: int = TIMEOUT_SECONDS) -> r
     raise RuntimeError("Unexpected retry flow: no response and no exception.")
 
 
-def _parse_asof_date(as_of_ts: str) -> Optional[date]:
+def _parse_asof_dt(as_of_ts: str) -> Optional[datetime]:
     try:
-        dt = datetime.fromisoformat(as_of_ts)
-        return dt.date()
+        return datetime.fromisoformat(as_of_ts)
     except Exception:
         return None
+
+
+def _asof_date_key(as_of_ts: str) -> Optional[str]:
+    dt = _parse_asof_dt(as_of_ts)
+    if dt is None:
+        return None
+    return dt.date().isoformat()  # YYYY-MM-DD
 
 
 def _atomic_write_text(path: str, content: str) -> None:
@@ -186,19 +199,14 @@ def fetch_latest_obs(series_id: str) -> Dict[str, str]:
 
 
 # =====================
-# History (JSON array): migrate + dedupe + retention
+# History (JSON array): migrate + daily-dedup + retention
 # =====================
 
-def _make_history_key(row: Dict[str, str]) -> str:
-    # Dedupe key: as_of_ts + series_id
-    return f"{row.get('as_of_ts','NA')}|{row.get('series_id','NA')}"
-
-
-def _load_history_array(history_json_path: str) -> List[Dict[str, str]]:
-    if not os.path.exists(history_json_path):
+def _load_history_array(path: str) -> List[Dict[str, str]]:
+    if not os.path.exists(path):
         return []
     try:
-        with open(history_json_path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, list):
             out: List[Dict[str, str]] = []
@@ -208,14 +216,14 @@ def _load_history_array(history_json_path: str) -> List[Dict[str, str]]:
             return out
         return []
     except Exception:
-        # If corrupted, do not crash; start fresh
+        # Fail-open: if corrupted, don't crash; start fresh
         return []
 
 
 def _load_history_from_jsonl_if_needed(history_json_path: str, history_jsonl_path: str) -> List[Dict[str, str]]:
     """
     Migration helper:
-    - If history.json does not exist (or empty) but history.jsonl exists, read jsonl lines into array.
+    - If history.json is empty/missing but history.jsonl exists, read jsonl lines into array.
     """
     if os.path.exists(history_json_path):
         existing = _load_history_array(history_json_path)
@@ -240,71 +248,175 @@ def _load_history_from_jsonl_if_needed(history_json_path: str, history_jsonl_pat
     return migrated
 
 
-def _apply_retention(history: List[Dict[str, str]], keep_days: int) -> List[Dict[str, str]]:
+def _latest_date_in_history(history: List[Dict[str, str]]) -> Optional[date]:
+    latest: Optional[date] = None
+    for row in history:
+        as_of_ts = str(row.get("as_of_ts", ""))
+        dt = _parse_asof_dt(as_of_ts)
+        if dt is None:
+            continue
+        d = dt.date()
+        if latest is None or d > latest:
+            latest = d
+    return latest
+
+
+def _apply_retention_daily_map(
+    daily_map: Dict[Tuple[str, str], Dict[str, str]],
+    unknown_rows: List[Dict[str, str]],
+    keep_days: int,
+) -> Tuple[Dict[Tuple[str, str], Dict[str, str]], List[Dict[str, str]]]:
     """
-    Keep only entries within keep_days from the latest as_of date.
-    Fail-open: if as_of_ts missing/unparseable, keep the entry.
+    Retention window based on latest as_of_date among known daily keys.
+    - daily_map keys: (YYYY-MM-DD, series_id)
+    - unknown_rows: rows with unparseable as_of_ts (kept, fail-open)
     """
     if keep_days <= 0:
-        return history
+        return daily_map, unknown_rows
 
-    latest: Optional[date] = None
-    parsed: List[Tuple[Optional[date], Dict[str, str]]] = []
-    for row in history:
-        d = _parse_asof_date(str(row.get("as_of_ts", "")))
-        parsed.append((d, row))
-        if d is not None:
-            if latest is None or d > latest:
-                latest = d
+    latest_day: Optional[date] = None
+    for (day_str, _sid) in daily_map.keys():
+        try:
+            d = date.fromisoformat(day_str)
+        except Exception:
+            continue
+        if latest_day is None or d > latest_day:
+            latest_day = d
 
-    if latest is None:
-        return history
+    if latest_day is None:
+        return daily_map, unknown_rows
 
-    cutoff_ord = latest.toordinal() - keep_days
-    kept: List[Dict[str, str]] = []
-    for d, row in parsed:
-        if d is None:
-            kept.append(row)
-        else:
-            if d.toordinal() >= cutoff_ord:
-                kept.append(row)
-    return kept
+    cutoff_ord = latest_day.toordinal() - keep_days
+
+    kept_map: Dict[Tuple[str, str], Dict[str, str]] = {}
+    for (day_str, sid), row in daily_map.items():
+        try:
+            d = date.fromisoformat(day_str)
+        except Exception:
+            # If day_str is somehow bad, keep it (fail-open)
+            kept_map[(day_str, sid)] = row
+            continue
+        if d.toordinal() >= cutoff_ord:
+            kept_map[(day_str, sid)] = row
+
+    return kept_map, unknown_rows
 
 
-def update_history_json(history_json_path: str, history_jsonl_path: str, new_rows: List[Dict[str, str]], keep_days: int) -> None:
+def _normalize_to_daily_last(history: List[Dict[str, str]]) -> Tuple[Dict[Tuple[str, str], Dict[str, str]], List[Dict[str, str]]]:
     """
-    Load (or migrate) history -> append unique -> apply retention -> write back as JSON array.
+    Normalize history to "daily last per series":
+    - For parseable as_of_ts: keep the row with max as_of_ts for each (as_of_date, series_id)
+    - For unparseable as_of_ts: keep rows separately (fail-open)
+    """
+    daily_map: Dict[Tuple[str, str], Dict[str, str]] = {}
+    unknown_rows: List[Dict[str, str]] = []
+
+    for row in history:
+        if not isinstance(row, dict):
+            continue
+        as_of_ts = str(row.get("as_of_ts", ""))
+        sid = str(row.get("series_id", ""))
+        day_key = _asof_date_key(as_of_ts)
+        if not sid:
+            continue
+
+        if day_key is None:
+            unknown_rows.append(row)
+            continue
+
+        k = (day_key, sid)
+        if k not in daily_map:
+            daily_map[k] = row
+            continue
+
+        # Compare timestamps; keep the later one
+        prev_ts = str(daily_map[k].get("as_of_ts", ""))
+        prev_dt = _parse_asof_dt(prev_ts)
+        curr_dt = _parse_asof_dt(as_of_ts)
+        if prev_dt is None or curr_dt is None:
+            # Fallback: lexicographic ISO compare (usually safe here)
+            if as_of_ts > prev_ts:
+                daily_map[k] = row
+        else:
+            if curr_dt > prev_dt:
+                daily_map[k] = row
+
+    return daily_map, unknown_rows
+
+
+def _should_snapshot(history_json_path: str, snapshot_path: str, history: List[Dict[str, str]]) -> bool:
+    """
+    Create snapshot once when moving to daily-dedup, to avoid anxiety about irreversible change.
+    Rule:
+    - If snapshot doesn't exist, and history is non-empty -> snapshot.
+    """
+    if os.path.exists(snapshot_path):
+        return False
+    if not history:
+        return False
+    # Snapshot is cheap; do it once.
+    return True
+
+
+def update_history_json_daily_last(
+    history_json_path: str,
+    history_jsonl_path: str,
+    snapshot_path: str,
+    new_rows: List[Dict[str, str]],
+    keep_days: int,
+) -> None:
+    """
+    Load (or migrate) history -> (optional snapshot once) -> normalize daily-last -> merge new rows (overwrite same-day same-series)
+    -> retention -> write history.json.
     """
     os.makedirs(os.path.dirname(history_json_path), exist_ok=True)
 
-    history = _load_history_from_jsonl_if_needed(history_json_path, history_jsonl_path)
+    # Load or migrate
+    raw_history = _load_history_from_jsonl_if_needed(history_json_path, history_jsonl_path)
 
-    existing_keys = set()
-    for row in history:
-        if isinstance(row, dict):
-            existing_keys.add(_make_history_key(row))
+    # One-time snapshot for safety
+    if _should_snapshot(history_json_path, snapshot_path, raw_history):
+        _atomic_write_text(snapshot_path, json.dumps(raw_history, ensure_ascii=False, separators=(",", ":")) + "\n")
+        print(f"Snapshot created: {snapshot_path}")
 
+    # Normalize existing history to daily-last per series
+    daily_map, unknown_rows = _normalize_to_daily_last(raw_history)
+
+    # Merge new rows: overwrite same-day same-series (daily-last behavior)
+    overwritten = 0
     appended = 0
     for row in new_rows:
-        k = _make_history_key(row)
-        if k in existing_keys:
+        sid = str(row.get("series_id", ""))
+        as_of_ts = str(row.get("as_of_ts", ""))
+        day_key = _asof_date_key(as_of_ts)
+        if not sid or day_key is None:
+            # Shouldn't happen, but fail-open
+            unknown_rows.append(row)
             continue
-        history.append(row)
-        existing_keys.add(k)
-        appended += 1
 
-    history = _apply_retention(history, keep_days=keep_days)
+        k = (day_key, sid)
+        if k in daily_map:
+            overwritten += 1
+        else:
+            appended += 1
+        daily_map[k] = row
 
-    # Stable ordering helps diffs: sort by as_of_ts then series_id (best-effort)
-    def _sort_key(r: Dict[str, str]) -> Tuple[str, str]:
-        return (str(r.get("as_of_ts", "")), str(r.get("series_id", "")))
+    # Retention
+    daily_map, unknown_rows = _apply_retention_daily_map(daily_map, unknown_rows, keep_days=keep_days)
 
-    history.sort(key=_sort_key)
+    # Rebuild list
+    history: List[Dict[str, str]] = list(daily_map.values()) + unknown_rows
 
-    content = json.dumps(history, ensure_ascii=False, separators=(",", ":")) + "\n"
-    _atomic_write_text(history_json_path, content)
+    # Stable sort by as_of_ts then series_id
+    history.sort(key=lambda r: (str(r.get("as_of_ts", "")), str(r.get("series_id", ""))))
 
-    print(f"History(JSON) updated: appended={appended}, keep_days={keep_days}, total={len(history)}")
+    # Write back
+    _atomic_write_text(history_json_path, json.dumps(history, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+    print(
+        f"History(JSON daily-last) updated: appended={appended}, overwritten={overwritten}, "
+        f"keep_days={keep_days}, total={len(history)}"
+    )
 
 
 # =====================
@@ -331,28 +443,31 @@ def main() -> None:
 
     os.makedirs("cache", exist_ok=True)
 
-    # latest.csv
+    # ---- latest.csv ----
     csv_path = "cache/latest.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDNAMES, lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
 
-    # latest.json
+    # ---- latest.json ----
     latest_json_path = "cache/latest.json"
-    _atomic_write_text(
-        latest_json_path,
-        json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n"
-    )
+    _atomic_write_text(latest_json_path, json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n")
 
-    # history.json (migrate from history.jsonl if present)
+    # ---- history.json (daily-last) ----
     history_json_path = "cache/history.json"
     history_jsonl_path = "cache/history.jsonl"  # legacy input for migration only
-    update_history_json(history_json_path, history_jsonl_path, rows, keep_days=HISTORY_KEEP_DAYS)
+    snapshot_path = "cache/history.snapshot.json"  # one-time safety snapshot
 
-    print(_redact_secrets(
-        f"Wrote {csv_path} + {latest_json_path} + {history_json_path} @ {as_of_ts}"
-    ))
+    update_history_json_daily_last(
+        history_json_path=history_json_path,
+        history_jsonl_path=history_jsonl_path,
+        snapshot_path=snapshot_path,
+        new_rows=rows,
+        keep_days=HISTORY_KEEP_DAYS,
+    )
+
+    print(_redact_secrets(f"Wrote {csv_path} + {latest_json_path} + {history_json_path} @ {as_of_ts}"))
 
 
 if __name__ == "__main__":
