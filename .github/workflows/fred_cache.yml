@@ -60,16 +60,16 @@ jobs:
               cache/latest.json \
               cache/history.json \
               cache/history.jsonl \
-              cache/history.snapshot.json || true
+              cache/history.snapshot.json \
+              cache/dq_state.json || true
 
             if git diff --cached --quiet; then
               echo "No data changes"
               break
             fi
 
-            git commit -m "Update cache (latest + history)"
+            git commit -m "Update cache (latest + history + dq_state)"
 
-            # IMPORTANT: define DATA_SHA in *this step* (not only via GITHUB_ENV)
             DATA_SHA="$(git rev-parse HEAD)"
             export DATA_SHA
             echo "DATA_SHA=$DATA_SHA" >> "$GITHUB_ENV"
@@ -108,7 +108,8 @@ jobs:
             "pinned": {
               "latest_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json",
               "history_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json",
-              "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv"
+              "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv",
+              "dq_state":     f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/dq_state.json",
             }
           }
 
@@ -134,4 +135,5 @@ jobs:
           echo "DATA_SHA: $DATA_SHA"
           echo "Pinned latest.json:  https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/cache/latest.json"
           echo "Pinned history.json: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/cache/history.json"
+          echo "Pinned dq_state.json:https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/cache/dq_state.json"
           echo "Manifest (branch):   https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/cache/manifest.json"
