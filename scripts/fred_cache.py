@@ -1,16 +1,45 @@
+"""
+fred_cache.py
+
+Fetch latest observations for selected FRED series and write an audit-friendly CSV:
+cache/latest.csv
+
+Design goals:
+- 可審計：source_url 不含 api_key，保留 series/endpoint/查核資訊
+- 安全：FRED_API_KEY 只用於 request，不寫入檔案、不輸出到 log；最後一道防線做遮蔽
+- 穩定：加入「最小可控」重試（timeout/連線錯誤/5xx）+ backoff
+- 一致：CSV 欄位固定，LF 換行，notes 使用可分類的 warn/err 格式
+
+Environment variables:
+- FRED_API_KEY: required
+- TIMEZONE: optional, default "Asia/Taipei"
+"""
+
+from __future__ import annotations
+
 import os
+import re
 import csv
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import urlencode
+from typing import Dict, List, Optional
 
 import requests
+
+
+# =====================
+# Config
+# =====================
 
 FRED_API_KEY = os.getenv("FRED_API_KEY", "").strip()
 if not FRED_API_KEY:
     raise SystemExit("Missing FRED_API_KEY env var (set it in GitHub Actions Secrets).")
 
-SERIES = [
+TZ = ZoneInfo(os.getenv("TIMEZONE", "Asia/Taipei"))
+
+SERIES: List[str] = [
     "STLFSI4",
     "VIXCLS",
     "BAMLH0A0HYM2",
@@ -23,11 +52,18 @@ SERIES = [
     "DJIA",
 ]
 
-TZ = ZoneInfo("Asia/Taipei")
-as_of_ts = datetime.now(tz=TZ).isoformat(timespec="seconds")
-
 BASE = "https://api.stlouisfed.org/fred/series/observations"
+FIELDNAMES = ["as_of_ts", "series_id", "data_date", "value", "source_url", "notes"]
 
+# Retry policy (minimal & auditable)
+RETRYABLE_STATUS = {500, 502, 503, 504}
+MAX_ATTEMPTS = 3
+TIMEOUT_SECONDS = 20
+
+
+# =====================
+# Helpers
+# =====================
 
 def _safe_source_url(series_id: str) -> str:
     """
@@ -44,40 +80,81 @@ def _safe_source_url(series_id: str) -> str:
 
 def _redact_secrets(s: str) -> str:
     """
-    Last line of defense: if api_key appears anywhere, redact it.
+    Last line of defense: redact any api_key values if present.
     """
     if not s:
         return s
+
+    # If the exact key appears anywhere, remove it.
     if FRED_API_KEY and FRED_API_KEY in s:
         s = s.replace(FRED_API_KEY, "***REDACTED***")
-    # redact any api_key query pattern (case-insensitive-ish minimal)
-    s = s.replace("api_key=", "api_key=***REDACTED***")
-    s = s.replace("API_KEY=", "API_KEY=***REDACTED***")
+
+    # Redact any api_key=VALUE pattern (case-insensitive).
+    s = re.sub(r"(?i)(api_key=)[^&\s]+", r"\1***REDACTED***", s)
     return s
 
 
-def fetch_latest_obs(series_id: str) -> dict:
-    # NOTE: Using api_key in query is fine; we never store r.url and we redact outputs anyway.
+def _get_with_retry(url: str, params: dict, timeout: int = TIMEOUT_SECONDS) -> requests.Response:
+    """
+    Minimal, auditable retry:
+    - Retry on Timeout / ConnectionError
+    - Retry on HTTP 5xx in RETRYABLE_STATUS
+    Backoff: 1s -> 2s (for attempts 1->2 and 2->3)
+    """
+    last_exc: Optional[BaseException] = None
+
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            r = requests.get(url, params=params, timeout=timeout)
+
+            # Retry certain 5xx before raise_for_status
+            if r.status_code in RETRYABLE_STATUS:
+                raise requests.HTTPError(f"retryable_status:{r.status_code}", response=r)
+
+            r.raise_for_status()
+            return r
+
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:
+            last_exc = e
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(attempt)  # 1s, 2s
+                continue
+            raise
+
+    # Should not reach here, but keep type-checkers happy
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Unexpected retry flow: no response and no exception.")
+
+
+# =====================
+# Core
+# =====================
+
+def fetch_latest_obs(series_id: str) -> Dict[str, str]:
+    """
+    Fetch the latest observation for a given FRED series.
+    Returns a dict matching the CSV schema (without as_of_ts; caller adds it).
+    """
     params = {
         "series_id": series_id,
-        "api_key": FRED_API_KEY,  # used only for request; NEVER store/log
+        "api_key": FRED_API_KEY,  # used only for request; NEVER store/log the request URL
         "file_type": "json",
         "sort_order": "desc",
         "limit": 1,
     }
 
-    r = requests.get(BASE, params=params, timeout=20)
-    r.raise_for_status()
-
+    r = _get_with_retry(BASE, params=params, timeout=TIMEOUT_SECONDS)
     data = r.json()
-    obs = (data.get("observations") or [])
+
+    obs = data.get("observations") or []
     if not obs:
         return {
             "series_id": series_id,
             "data_date": "NA",
             "value": "NA",
             "source_url": _redact_secrets(_safe_source_url(series_id)),
-            "notes": "no_observations",
+            "notes": "warn:no_observations",
         }
 
     latest = obs[0]
@@ -90,12 +167,18 @@ def fetch_latest_obs(series_id: str) -> dict:
         "data_date": latest.get("date", "NA"),
         "value": val,
         "source_url": _redact_secrets(_safe_source_url(series_id)),
-        "notes": "",
+        "notes": "NA",
     }
 
 
+# =====================
+# Main
+# =====================
+
 def main() -> None:
-    rows = []
+    as_of_ts = datetime.now(tz=TZ).isoformat(timespec="seconds")
+
+    rows: List[Dict[str, str]] = []
     for sid in SERIES:
         try:
             row = fetch_latest_obs(sid)
@@ -105,18 +188,21 @@ def main() -> None:
                 "data_date": "NA",
                 "value": "NA",
                 "source_url": _redact_secrets(_safe_source_url(sid)),
-                "notes": f"fetch_error:{type(e).__name__}",
+                "notes": f"err:fetch:{type(e).__name__}",
             }
+
         row["as_of_ts"] = as_of_ts
         rows.append(row)
 
     os.makedirs("cache", exist_ok=True)
     out_path = "cache/latest.csv"
 
+    # Write CSV with consistent LF newlines
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(
             f,
-            fieldnames=["as_of_ts", "series_id", "data_date", "value", "source_url", "notes"],
+            fieldnames=FIELDNAMES,
+            lineterminator="\n",
         )
         w.writeheader()
         w.writerows(rows)
