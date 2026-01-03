@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install requests
 
-      # 1) Generate cache files (latest/history/dq_state/manifest initial)
+      # 1) 產出資料檔（latest/history/dq_state/manifest 初版）
       - name: Generate cache files
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -50,7 +50,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # 2) First commit: commit data files to get DATA_SHA
+      # 2) 第一次 commit：把「資料檔」commit 起來，取得 data_commit_sha
       - name: Commit data files (attempt 1)
         id: commit_data
         run: |
@@ -75,7 +75,7 @@ jobs:
           set -euo pipefail
           git push
 
-      # 3) Patch manifest.json with pinned data URLs (manifest_json temporarily points to main)
+      # 3) 用 data_commit_sha 回填 manifest.json（先寫 pinned data urls；manifest 先暫時指向 main）
       - name: Patch manifest.json with pinned data URLs
         if: steps.commit_data.outputs.no_changes != 'true'
         env:
@@ -98,11 +98,11 @@ jobs:
 
           obj["data_commit_sha"] = data_sha
 
-          base_data = f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache"
+          base = f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache"
           obj["pinned"] = {
-            "latest_json": f"{base_data}/latest.json",
-            "history_json": f"{base_data}/history.json",
-            "latest_csv":  f"{base_data}/latest.csv",
+            "latest_json": f"{base}/latest.json",
+            "history_json": f"{base}/history.json",
+            "latest_csv":  f"{base}/latest.csv",
             # temporary (will be replaced by self-pin step)
             "manifest_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json",
           }
@@ -110,7 +110,7 @@ jobs:
           p.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
           PY
 
-      # 4) Commit manifest (sha1)
+      # 4) 第二次 commit：只 commit manifest.json，取得 manifest_commit_sha_v1
       - name: Commit manifest (attempt 1)
         if: steps.commit_data.outputs.no_changes != 'true'
         id: commit_manifest
@@ -134,7 +134,8 @@ jobs:
           set -euo pipefail
           git push
 
-      # 4.5) Self-pin manifest_json to sha1 (avoid branch cache); then commit again (sha2)
+      # 4.5) Self-pin：把 pinned.manifest_json 改成「指向 v1 sha 的 pinned manifest」
+      # 再 commit 一次（v2），避免 refs/heads/main 快取風險
       - name: Patch manifest.json to pinned.manifest_json (self-pin)
         if: steps.commit_data.outputs.no_changes != 'true'
         env:
@@ -147,17 +148,15 @@ jobs:
           from pathlib import Path
 
           repo = os.environ["REPO"]
-          manifest_sha = os.environ.get("MANIFEST_SHA", "").strip()
+          sha1 = (os.environ.get("MANIFEST_SHA") or "").strip()
 
           p = Path("cache/manifest.json")
           obj = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-
           obj.setdefault("pinned", {})
-          # Pin to sha1 (the first manifest commit). This avoids the impossible circular self-reference.
-          if manifest_sha:
-            obj["pinned"]["manifest_json"] = f"https://raw.githubusercontent.com/{repo}/{manifest_sha}/cache/manifest.json"
-            # Optional: record sha1 explicitly for audit
-            obj["manifest_commit_sha_v1"] = manifest_sha
+
+          if sha1:
+            obj["pinned"]["manifest_json"] = f"https://raw.githubusercontent.com/{repo}/{sha1}/cache/manifest.json"
+            obj["manifest_commit_sha_v1"] = sha1
 
           p.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
           PY
@@ -187,7 +186,7 @@ jobs:
           set -euo pipefail
           git push
 
-      # 5) Print pinned pointers (single-line JSON) — now includes pinned manifest sha2
+      # 5) 在 Actions log 輸出 pinned pointers（含 pinned.manifest_json）
       - name: Print pinned pointers (single-line JSON)
         if: steps.commit_data.outputs.no_changes != 'true'
         env:
@@ -203,20 +202,44 @@ jobs:
 
           repo = os.environ["REPO"]
           data_sha = (os.environ.get("DATA_SHA") or "").strip()
-          manifest_sha = (os.environ.get("MANIFEST_SHA") or "").strip()
-          manifest2_sha = (os.environ.get("MANIFEST2_SHA") or "").strip() or manifest_sha
+          sha1 = (os.environ.get("MANIFEST_SHA") or "").strip()
+          sha2 = (os.environ.get("MANIFEST2_SHA") or "").strip() or sha1
 
           out = {
             "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
             "data_commit_sha": data_sha,
-            "manifest_commit_sha_v1": manifest_sha,
-            "manifest_commit_sha_v2": manifest2_sha,
+            "manifest_commit_sha_v1": sha1,
+            "manifest_commit_sha_v2": sha2,
             "pinned": {
               "latest_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json" if data_sha else "NA",
               "history_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json" if data_sha else "NA",
               "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv"  if data_sha else "NA",
-              "manifest_json": f"https://raw.githubusercontent.com/{repo}/{manifest2_sha}/cache/manifest.json" if manifest2_sha else "NA",
+              "manifest_json": f"https://raw.githubusercontent.com/{repo}/{sha2}/cache/manifest.json" if sha2 else "NA",
             }
           }
           print(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
+          PY
+
+      # 6) ✅ A 方案：只做驗收輸出（不改檔案），確認「每天是否新增一天」
+      - name: Sanity check (history daily coverage)
+        run: |
+          set -euo pipefail
+          python - << 'PY'
+          import json
+          from pathlib import Path
+          from collections import Counter
+
+          h = json.loads(Path("cache/history.json").read_text(encoding="utf-8"))
+
+          days = sorted({r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts")})
+          c = Counter(r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts"))
+
+          keys = set((r.get("as_of_ts","")[:10], r.get("series_id","")) for r in h)
+          dedupe_ok = (len(keys) == len(h))
+
+          print("history_records =", len(h))
+          print("days_in_history =", days)
+          print("rows_per_day    =", dict(c))
+          print("dedupe_ok       =", dedupe_ok)
+          print("cap_records     =", 720, "cap_ok =", len(h) <= 720)
           PY
