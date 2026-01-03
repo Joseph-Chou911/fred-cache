@@ -30,12 +30,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate cache and push
+      - name: Generate cache and push (data + manifest)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           TIMEZONE: Asia/Taipei
           HISTORY_KEEP_DAYS: "730"
-          # 若你已做「next release」品質邏輯，可一併放：
           RELEASE_GRACE_DAYS: "2"
           OVERDUE_WARN_DAYS: "1"
           OVERDUE_ERR_DAYS: "7"
@@ -60,18 +59,20 @@ jobs:
               cache/latest.csv \
               cache/latest.json \
               cache/history.json \
+              cache/history.jsonl \
               cache/history.snapshot.json || true
 
             if git diff --cached --quiet; then
               echo "No data changes"
-              # 即便 data 沒變，我們仍可能要更新 manifest（視需求）
               break
             fi
 
             git commit -m "Update cache (latest + history)"
 
-            DATA_SHA=$(git rev-parse HEAD)
-            echo "DATA_SHA=$DATA_SHA" >> $GITHUB_ENV
+            # IMPORTANT: define DATA_SHA in *this step* (not only via GITHUB_ENV)
+            DATA_SHA="$(git rev-parse HEAD)"
+            export DATA_SHA
+            echo "DATA_SHA=$DATA_SHA" >> "$GITHUB_ENV"
 
             if git push origin HEAD:main; then
               echo "Pushed data commit: $DATA_SHA"
@@ -82,11 +83,11 @@ jobs:
             sleep $((attempt*2))
           done
 
-          # 若沒有新 data commit（No data changes），DATA_SHA 不會自動存在
-          # 這時用 main 的 HEAD 當作 data sha（資料不變也合理）
+          # If there was no new data commit, use current remote HEAD as DATA_SHA
           if [ -z "${DATA_SHA:-}" ]; then
-            DATA_SHA=$(git rev-parse origin/main)
-            echo "DATA_SHA=$DATA_SHA" >> $GITHUB_ENV
+            DATA_SHA="$(git rev-parse origin/main)"
+            export DATA_SHA
+            echo "DATA_SHA=$DATA_SHA" >> "$GITHUB_ENV"
             echo "No new data commit; using origin/main as DATA_SHA=$DATA_SHA"
             git reset --hard origin/main
           fi
@@ -107,7 +108,7 @@ jobs:
             "pinned": {
               "latest_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json",
               "history_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json",
-              "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv",
+              "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv"
             }
           }
 
@@ -115,6 +116,7 @@ jobs:
           with open("cache/manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, separators=(",", ":"))
             f.write("\n")
+
           print("Wrote cache/manifest.json pointing to", data_sha)
           PY
 
