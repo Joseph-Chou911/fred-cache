@@ -30,26 +30,31 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate cache and commit & push if changed (safe)
+      - name: Generate cache and push
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           TIMEZONE: Asia/Taipei
           HISTORY_KEEP_DAYS: "730"
+          # 若你已做「next release」品質邏輯，可一併放：
+          RELEASE_GRACE_DAYS: "2"
+          OVERDUE_WARN_DAYS: "1"
+          OVERDUE_ERR_DAYS: "7"
         run: |
           set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # -----------------------
+          # Part A) Data commit
+          # -----------------------
           for attempt in 1 2 3; do
-            echo "Attempt $attempt"
+            echo "== Data commit attempt $attempt =="
 
             git fetch origin main
             git reset --hard origin/main
 
             python scripts/fred_cache.py
-
-            echo "== cache dir =="
-            ls -la cache || true
 
             git add \
               cache/latest.csv \
@@ -58,25 +63,73 @@ jobs:
               cache/history.snapshot.json || true
 
             if git diff --cached --quiet; then
-              echo "No changes"
-              exit 0
+              echo "No data changes"
+              # 即便 data 沒變，我們仍可能要更新 manifest（視需求）
+              break
             fi
 
             git commit -m "Update cache (latest + history)"
 
-            if git push origin HEAD:main; then
-              echo "Pushed"
+            DATA_SHA=$(git rev-parse HEAD)
+            echo "DATA_SHA=$DATA_SHA" >> $GITHUB_ENV
 
-              SHA=$(git rev-parse HEAD)
-              echo "Commit SHA: $SHA"
-              echo "Pinned latest.json:  https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SHA}/cache/latest.json"
-              echo "Pinned history.json: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SHA}/cache/history.json"
-              exit 0
+            if git push origin HEAD:main; then
+              echo "Pushed data commit: $DATA_SHA"
+              break
             fi
 
             echo "Push failed, retrying..."
             sleep $((attempt*2))
           done
 
-          echo "Failed after retries"
-          exit 1
+          # 若沒有新 data commit（No data changes），DATA_SHA 不會自動存在
+          # 這時用 main 的 HEAD 當作 data sha（資料不變也合理）
+          if [ -z "${DATA_SHA:-}" ]; then
+            DATA_SHA=$(git rev-parse origin/main)
+            echo "DATA_SHA=$DATA_SHA" >> $GITHUB_ENV
+            echo "No new data commit; using origin/main as DATA_SHA=$DATA_SHA"
+            git reset --hard origin/main
+          fi
+
+          # -----------------------
+          # Part B) Manifest commit (points to DATA_SHA)
+          # -----------------------
+          python - << 'PY'
+          import json, os
+          from datetime import datetime, timezone
+
+          data_sha = os.environ["DATA_SHA"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+
+          manifest = {
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "data_commit_sha": data_sha,
+            "pinned": {
+              "latest_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json",
+              "history_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json",
+              "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv",
+            }
+          }
+
+          os.makedirs("cache", exist_ok=True)
+          with open("cache/manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, separators=(",", ":"))
+            f.write("\n")
+          print("Wrote cache/manifest.json pointing to", data_sha)
+          PY
+
+          git add cache/manifest.json
+
+          if git diff --cached --quiet; then
+            echo "No manifest changes"
+          else
+            git commit -m "Update cache manifest"
+            git push origin HEAD:main
+            echo "Pushed manifest commit"
+          fi
+
+          echo "== Pinned URLs (use these in reports) =="
+          echo "DATA_SHA: $DATA_SHA"
+          echo "Pinned latest.json:  https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/cache/latest.json"
+          echo "Pinned history.json: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/cache/history.json"
+          echo "Manifest (branch):   https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/cache/manifest.json"
