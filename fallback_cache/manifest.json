@@ -1,0 +1,16 @@
+{
+  "generated_at_utc": "2026-01-04T02:45:40Z",
+  "as_of_ts": "2026-01-04T10:45:40+08:00",
+  "data_commit_sha": "81227707a56bae725cef084de87e0eef3a4e0edc",
+  "sources": {
+    "cboe_vix_csv": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "treasury_textview": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+    "chicagofed_nfci_csv": "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
+  },
+  "files": {
+    "latest_json": "fallback_cache/latest.json",
+    "manifest_json": "fallback_cache/manifest.json",
+    "latest_csv": "fallback_cache/latest.csv"
+  },
+  "notes": "Standalone fallback cache (latest-only). Does NOT produce history.json."
+}
