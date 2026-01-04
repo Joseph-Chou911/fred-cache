@@ -1,7 +1,10 @@
-name: Update fallback cache
+name: Update fallback cache (latest-only)
 
 on:
   workflow_dispatch: {}
+  schedule:
+    # 12:05 UTC = 20:05 Asia/Taipei
+    - cron: "5 12 * * *"
 
 permissions:
   contents: write
@@ -27,9 +30,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run fallback script
+      - name: Build fallback cache (latest-only)
         env:
           FALLBACK_OUT_DIR: fallback_cache
+          # Optional: If Treasury TextView for current month is empty early-month, you can pin month:
+          # TREASURY_MONTH: "202601"
         run: |
           python scripts/update_fallback_cache.py
 
@@ -38,12 +43,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add fallback_cache/latest.json fallback_cache/history.json fallback_cache/manifest.json fallback_cache/latest.csv || true
+          git add fallback_cache/latest.json fallback_cache/manifest.json fallback_cache/latest.csv || true
 
           if git diff --cached --quiet; then
             echo "No changes."
             exit 0
           fi
 
-          git commit -m "Update fallback cache"
+          git commit -m "Update fallback cache (latest-only)"
           git push
