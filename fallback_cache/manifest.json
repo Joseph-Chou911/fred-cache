@@ -1,16 +1,21 @@
 {
-  "generated_at_utc": "2026-01-04T03:23:25Z",
-  "as_of_ts": "2026-01-04T11:23:25+08:00",
-  "data_commit_sha": "21b2e3a281ae4b919658842a10a27b3d354152e9",
-  "sources": {
-    "cboe_vix_csv": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-    "treasury_daily_csv": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv",
-    "chicagofed_nfci_csv": "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
-  },
-  "files": {
+  "generated_at_utc": "2026-01-04T05:39:50Z",
+  "as_of_ts": "2026-01-04T05:39:50Z",
+  "data_commit_sha": "27458e23f04eff6a1419ccb4c611ebb3675329ce",
+  "script_version": "fallback_vA_official_no_key_lock",
+  "paths": {
     "latest_json": "fallback_cache/latest.json",
-    "manifest_json": "fallback_cache/manifest.json",
-    "latest_csv": "fallback_cache/latest.csv"
+    "latest_csv": "fallback_cache/latest.csv",
+    "manifest_json": "fallback_cache/manifest.json"
   },
-  "notes": "Standalone fallback cache (latest-only). Adds UST3M. Does NOT produce history.json."
+  "branch": {
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/refs/heads/main/fallback_cache/latest.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/refs/heads/main/fallback_cache/latest.csv",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/refs/heads/main/fallback_cache/manifest.json"
+  },
+  "pinned": {
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/27458e23f04eff6a1419ccb4c611ebb3675329ce/fallback_cache/latest.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/27458e23f04eff6a1419ccb4c611ebb3675329ce/fallback_cache/latest.csv",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/27458e23f04eff6a1419ccb4c611ebb3675329ce/fallback_cache/manifest.json"
+  }
 }
