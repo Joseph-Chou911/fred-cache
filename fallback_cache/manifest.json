@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-01-04T03:15:42Z",
-  "as_of_ts": "2026-01-04T11:15:42+08:00",
-  "data_commit_sha": "bb627f8687e81f2efe710b8e450eb72e01949c0f",
+  "generated_at_utc": "2026-01-04T03:23:25Z",
+  "as_of_ts": "2026-01-04T11:23:25+08:00",
+  "data_commit_sha": "21b2e3a281ae4b919658842a10a27b3d354152e9",
   "sources": {
     "cboe_vix_csv": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
     "treasury_daily_csv": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv",
@@ -12,5 +12,5 @@
     "manifest_json": "fallback_cache/manifest.json",
     "latest_csv": "fallback_cache/latest.csv"
   },
-  "notes": "Standalone fallback cache (latest-only). Does NOT produce history.json."
+  "notes": "Standalone fallback cache (latest-only). Adds UST3M. Does NOT produce history.json."
 }
