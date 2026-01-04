@@ -2,17 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """
-Fallback cache updater (latest-only).
+Fallback cache updater (Version A)
 - Writes: fallback_cache/latest.json
-- Sources:
-  1) Cboe VIX CSV
-  2) U.S. Treasury daily yield curve CSV (10Y/2Y/3M + derived spreads)
-  3) Chicago Fed NFCI CSV (nonfinancial leverage subindex)
-  4) STOOQ CSV endpoint (indices/futures): ^SPX, ^NDQ, ^DJI, DX.F, CL.F
-Design goals:
-- Auditable fields: series_id, data_date, value, source_url, notes, as_of_ts
-- No history in version A
-- Never crash the whole run: per-series NA on failure
+- Dependencies: requests>=2.31.0 (only)
+
+Covered (current):
+- VIXCLS (CBOE VIX_History.csv)
+- DGS10, DGS2, UST3M (US Treasury daily yield curve CSV by month)
+- T10Y2Y, T10Y3M (derived from treasury yields)
+- NFCINONFINLEVERAGE (Chicago Fed NFCI CSV; robust parsing)
+- SP500, NASDAQCOM, DJIA (stooq indices; with derived 1d pct)
+- DCOILWTICO (WTI spot proxy via DataHub EIA open data wti-daily.csv)
+
+Intentionally NOT covered in vA:
+- DXY futures from stooq (dx.f) & WTI futures (cl.f): often blocked/empty
 """
 
 from __future__ import annotations
@@ -20,7 +23,8 @@ from __future__ import annotations
 import csv
 import json
 import os
-import re
+import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
@@ -29,132 +33,175 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 
-# -----------------------------
+# -------------------------
 # Config
-# -----------------------------
+# -------------------------
 
 OUT_DIR = "fallback_cache"
-OUT_LATEST_JSON = os.path.join(OUT_DIR, "latest.json")
+OUT_FILE = os.path.join(OUT_DIR, "latest.json")
 
-# Cboe VIX
-CBOE_VIX_CSV = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
+URL_CBOE_VIX = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 
-# U.S. Treasury (monthly CSV, you already use this pattern)
-# We will compute current YYYYMM in UTC; Treasury data is U.S. dates.
-TREASURY_MONTHLY_TEMPLATE = (
-    "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
-    "daily-treasury-rates.csv/all/{yyyymm}"
-    "?_format=csv&field_tdr_date_value_month={yyyymm}&page=&type=daily_treasury_yield_curve"
-)
+# US Treasury daily yield curve (month-scoped)
+# Example pattern you already used:
+# https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve
+TREASURY_BASE = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/{yyyymm}"
+TREASURY_QS = "?_format=csv&field_tdr_date_value_month={yyyymm}&page=&type=daily_treasury_yield_curve"
 
-# Chicago Fed NFCI (includes subindexes)
-CHICAGO_FED_NFCI_CSV = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
+URL_CHICAGOFED_NFCI = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
 
-# STOOQ direct CSV endpoint
-# Commonly used pattern: https://stooq.com/q/d/l/?s=^dji&i=d  (daily)
-# NOTE: STOOQ may change behavior; we guard by validating CSV headers.
-STOOQ_CSV_TEMPLATE = "https://stooq.com/q/d/l/?s={symbol}&i={interval}"
+# DataHub oil-prices (EIA open data)
+# CSV header: Date,Price
+URL_DATAHUB_WTI_DAILY = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
 
-
-# HTTP
-UA = "fallback-cache/1.0 (+https://github.com/Joseph-Chou911/fred-cache)"
-TIMEOUT = 20
+# Stooq indices CSV endpoint
+# header: Date,Open,High,Low,Close,Volume
+STOOQ_CSV = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 
 
-# -----------------------------
-# Helpers
-# -----------------------------
+# -------------------------
+# Utilities
+# -------------------------
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def sleep_backoff(attempt: int) -> None:
+    # attempt: 1..3
+    secs = 2 ** attempt  # 2,4,8
+    time.sleep(secs)
+
+
+def http_get_text(url: str, timeout: int = 30, max_retries: int = 3) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Returns (text, error_code)
+    error_code in { 'HTTP_<status>', 'timeout', 'request', 'empty' }
+    """
+    headers = {
+        "User-Agent": "fallback-cache-bot/1.0 (+https://github.com/Joseph-Chou911/fred-cache)"
+    }
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            r = requests.get(url, headers=headers, timeout=timeout)
+            if r.status_code != 200:
+                err = f"HTTP_{r.status_code}"
+                if attempt < max_retries:
+                    sleep_backoff(attempt)
+                    continue
+                return None, err
+
+            text = r.text
+            if not text:
+                # empty response body
+                if attempt < max_retries:
+                    sleep_backoff(attempt)
+                    continue
+                return None, "empty"
+
+            return text, None
+
+        except requests.Timeout:
+            if attempt < max_retries:
+                sleep_backoff(attempt)
+                continue
+            return None, "timeout"
+        except requests.RequestException:
+            if attempt < max_retries:
+                sleep_backoff(attempt)
+                continue
+            return None, "request"
+
+    return None, "unknown"
 
 
 def ensure_out_dir() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
 
 
-def safe_float(x: str) -> Optional[float]:
+def write_json_atomic(path: str, obj: Any) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def to_float(s: Any) -> Optional[float]:
     try:
-        if x is None:
+        if s is None:
             return None
-        x = str(x).strip()
-        if x == "" or x.upper() == "NA" or x.upper() == "N/A":
+        if isinstance(s, (int, float)):
+            return float(s)
+        s2 = str(s).strip()
+        if s2 == "" or s2.upper() == "NA" or s2 == ".":
             return None
-        return float(x)
+        return float(s2)
     except Exception:
         return None
 
 
-def make_na_row(series_id: str, as_of_ts: str, source_url: str = "NA", notes: str = "NA") -> Dict[str, Any]:
+def parse_date_any(s: str) -> Optional[str]:
+    """
+    Accepts:
+    - YYYY-MM-DD
+    - MM/DD/YYYY
+    Returns ISO 'YYYY-MM-DD' string or None
+    """
+    s = (s or "").strip()
+    if not s:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
+def make_na(series_id: str, source_url: str, err: str, as_of_ts: str) -> Dict[str, Any]:
     return {
         "series_id": series_id,
         "data_date": "NA",
         "value": "NA",
         "source_url": source_url if source_url else "NA",
-        "notes": notes if notes else "NA",
+        "notes": f"ERR:{err}",
         "as_of_ts": as_of_ts,
     }
 
 
-def http_get_text(url: str) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Returns (text, error). error is None on success.
-    """
-    try:
-        resp = requests.get(url, headers={"User-Agent": UA}, timeout=TIMEOUT)
-        if resp.status_code != 200:
-            return None, f"http_{resp.status_code}"
-        return resp.text, None
-    except requests.exceptions.Timeout:
-        return None, "timeout"
-    except Exception as e:
-        return None, f"exception:{type(e).__name__}"
-
-
-# -----------------------------
+# -------------------------
 # Fetchers
-# -----------------------------
+# -------------------------
 
-def fetch_vix(as_of_ts: str) -> Dict[str, Any]:
-    """
-    Parse Cboe VIX_History.csv and return latest row (Date, VIX Close).
-    """
-    text, err = http_get_text(CBOE_VIX_CSV)
-    if err or not text:
-        return make_na_row("VIXCLS", as_of_ts, source_url=CBOE_VIX_CSV, notes=f"ERR:{err or 'empty'}")
+def fetch_cboe_vix(as_of_ts: str) -> Dict[str, Any]:
+    text, err = http_get_text(URL_CBOE_VIX)
+    if err:
+        return make_na("VIXCLS", URL_CBOE_VIX, err, as_of_ts)
 
-    # Expect header includes "DATE" and "CLOSE" or similar
     sio = StringIO(text)
     reader = csv.DictReader(sio)
-    rows = list(reader)
-    if not rows:
-        return make_na_row("VIXCLS", as_of_ts, source_url=CBOE_VIX_CSV, notes="ERR:no_rows")
+    # Expect columns like: DATE, OPEN, HIGH, LOW, CLOSE
+    last_valid: Optional[Tuple[str, float]] = None
 
-    # Cboe file is usually newest-first? We will scan for max date.
-    best = None
-    best_date = None
-    for r in rows:
-        d = (r.get("DATE") or r.get("Date") or r.get("date") or "").strip()
-        v = r.get("CLOSE") or r.get("Close") or r.get("close")
-        fv = safe_float(v)
-        if not d or fv is None:
-            continue
-        try:
-            dt = datetime.strptime(d, "%m/%d/%Y").date()  # Cboe format
-        except Exception:
-            continue
-        if best_date is None or dt > best_date:
-            best_date = dt
-            best = fv
+    for row in reader:
+        d = parse_date_any(row.get("DATE") or row.get("Date") or row.get("date") or "")
+        v = to_float(row.get("CLOSE") or row.get("Close") or row.get("close"))
+        if d and v is not None:
+            last_valid = (d, v)
 
-    if best_date is None or best is None:
-        return make_na_row("VIXCLS", as_of_ts, source_url=CBOE_VIX_CSV, notes="ERR:parse_failed")
+    if not last_valid:
+        return make_na("VIXCLS", URL_CBOE_VIX, "no_valid_rows", as_of_ts)
 
+    d, v = last_valid
     return {
         "series_id": "VIXCLS",
-        "data_date": best_date.isoformat(),
-        "value": best,
-        "source_url": CBOE_VIX_CSV,
+        "data_date": d,
+        "value": v,
+        "source_url": URL_CBOE_VIX,
         "notes": "WARN:fallback_cboe_vix",
         "as_of_ts": as_of_ts,
     }
@@ -162,299 +209,267 @@ def fetch_vix(as_of_ts: str) -> Dict[str, Any]:
 
 def fetch_treasury_yields(as_of_ts: str) -> List[Dict[str, Any]]:
     """
-    Parse Treasury daily yield curve for current month; pick latest date.
-    Output DGS10, DGS2, UST3M, plus derived T10Y2Y, T10Y3M.
+    Returns rows for: DGS10, DGS2, UST3M + derived spreads (T10Y2Y, T10Y3M)
     """
-    yyyymm = datetime.now(timezone.utc).strftime("%Y%m")
-    url = TREASURY_MONTHLY_TEMPLATE.format(yyyymm=yyyymm)
+    yyyymm = datetime.now().strftime("%Y%m")
+    url = TREASURY_BASE.format(yyyymm=yyyymm) + TREASURY_QS.format(yyyymm=yyyymm)
+
     text, err = http_get_text(url)
-    if err or not text:
-        # Return NA rows for all
-        return [
-            make_na_row("DGS10", as_of_ts, source_url=url, notes=f"ERR:{err or 'empty'}"),
-            make_na_row("DGS2", as_of_ts, source_url=url, notes=f"ERR:{err or 'empty'}"),
-            make_na_row("UST3M", as_of_ts, source_url=url, notes=f"ERR:{err or 'empty'}"),
-            make_na_row("T10Y2Y", as_of_ts, source_url=url, notes=f"ERR:{err or 'empty'}"),
-            make_na_row("T10Y3M", as_of_ts, source_url=url, notes=f"ERR:{err or 'empty'}"),
+    if err:
+        # return NA set
+        out = [
+            make_na("DGS10", url, err, as_of_ts),
+            make_na("DGS2", url, err, as_of_ts),
+            make_na("UST3M", url, err, as_of_ts),
+            make_na("T10Y2Y", url, err, as_of_ts),
+            make_na("T10Y3M", url, err, as_of_ts),
         ]
+        return out
 
     sio = StringIO(text)
     reader = csv.DictReader(sio)
-    rows = list(reader)
-    if not rows:
-        return [
-            make_na_row("DGS10", as_of_ts, source_url=url, notes="ERR:no_rows"),
-            make_na_row("DGS2", as_of_ts, source_url=url, notes="ERR:no_rows"),
-            make_na_row("UST3M", as_of_ts, source_url=url, notes="ERR:no_rows"),
-            make_na_row("T10Y2Y", as_of_ts, source_url=url, notes="ERR:no_rows"),
-            make_na_row("T10Y3M", as_of_ts, source_url=url, notes="ERR:no_rows"),
+
+    # Treasury file uses "Date" and columns like "3 Mo", "2 Yr", "10 Yr"
+    last_row: Optional[Dict[str, str]] = None
+    for row in reader:
+        # keep last non-empty date row
+        if (row.get("Date") or "").strip():
+            last_row = row
+
+    if not last_row:
+        out = [
+            make_na("DGS10", url, "no_valid_rows", as_of_ts),
+            make_na("DGS2", url, "no_valid_rows", as_of_ts),
+            make_na("UST3M", url, "no_valid_rows", as_of_ts),
+            make_na("T10Y2Y", url, "no_valid_rows", as_of_ts),
+            make_na("T10Y3M", url, "no_valid_rows", as_of_ts),
         ]
+        return out
 
-    # Treasury columns: "Date", "3 Mo", "2 Yr", "10 Yr" etc.
-    # We choose the latest date with non-empty 10/2/3m.
-    best_date = None
-    best_10 = best_2 = best_3m = None
+    d = parse_date_any(last_row.get("Date", ""))
+    if not d:
+        d = "NA"
 
-    for r in rows:
-        d = (r.get("Date") or r.get("date") or "").strip()
-        if not d:
-            continue
-        try:
-            dt = datetime.strptime(d, "%m/%d/%Y").date()
-        except Exception:
-            continue
-
-        v10 = safe_float(r.get("10 Yr") or r.get("10YR") or r.get("10Y") or r.get("10 yr"))
-        v2 = safe_float(r.get("2 Yr") or r.get("2YR") or r.get("2Y") or r.get("2 yr"))
-        v3m = safe_float(r.get("3 Mo") or r.get("3MO") or r.get("3M") or r.get("3 mo"))
-
-        # keep if any exists; but spreads need both
-        if best_date is None or dt > best_date:
-            best_date = dt
-            best_10, best_2, best_3m = v10, v2, v3m
-
-    if best_date is None:
-        return [
-            make_na_row("DGS10", as_of_ts, source_url=url, notes="ERR:date_parse_failed"),
-            make_na_row("DGS2", as_of_ts, source_url=url, notes="ERR:date_parse_failed"),
-            make_na_row("UST3M", as_of_ts, source_url=url, notes="ERR:date_parse_failed"),
-            make_na_row("T10Y2Y", as_of_ts, source_url=url, notes="ERR:date_parse_failed"),
-            make_na_row("T10Y3M", as_of_ts, source_url=url, notes="ERR:date_parse_failed"),
-        ]
+    v10 = to_float(last_row.get("10 Yr"))
+    v2 = to_float(last_row.get("2 Yr"))
+    v3m = to_float(last_row.get("3 Mo"))
 
     out: List[Dict[str, Any]] = []
-    d_iso = best_date.isoformat()
 
-    def row(series_id: str, val: Optional[float], notes: str) -> Dict[str, Any]:
-        if val is None:
-            return make_na_row(series_id, as_of_ts, source_url=url, notes="ERR:missing_value")
+    def row_or_na(series_id: str, val: Optional[float], notes: str) -> Dict[str, Any]:
+        if d == "NA" or val is None:
+            return make_na(series_id, url, "missing", as_of_ts)
         return {
             "series_id": series_id,
-            "data_date": d_iso,
+            "data_date": d,
             "value": val,
             "source_url": url,
             "notes": notes,
             "as_of_ts": as_of_ts,
         }
 
-    out.append(row("DGS10", best_10, "WARN:fallback_treasury_csv"))
-    out.append(row("DGS2", best_2, "WARN:fallback_treasury_csv"))
-    out.append(row("UST3M", best_3m, "WARN:fallback_treasury_csv"))
+    out.append(row_or_na("DGS10", v10, "WARN:fallback_treasury_csv"))
+    out.append(row_or_na("DGS2", v2, "WARN:fallback_treasury_csv"))
+    out.append(row_or_na("UST3M", v3m, "WARN:fallback_treasury_csv"))
 
-    # Derived spreads (only if both inputs exist)
-    if best_10 is not None and best_2 is not None:
+    # derived spreads
+    if d != "NA" and (v10 is not None) and (v2 is not None):
         out.append({
             "series_id": "T10Y2Y",
-            "data_date": d_iso,
-            "value": best_10 - best_2,
+            "data_date": d,
+            "value": float(v10 - v2),
             "source_url": url,
             "notes": "WARN:derived_from_treasury(10Y-2Y)",
             "as_of_ts": as_of_ts,
         })
     else:
-        out.append(make_na_row("T10Y2Y", as_of_ts, source_url=url, notes="ERR:missing_input_for_spread"))
+        out.append(make_na("T10Y2Y", url, "missing_inputs", as_of_ts))
 
-    if best_10 is not None and best_3m is not None:
+    if d != "NA" and (v10 is not None) and (v3m is not None):
         out.append({
             "series_id": "T10Y3M",
-            "data_date": d_iso,
-            "value": best_10 - best_3m,
+            "data_date": d,
+            "value": float(v10 - v3m),
             "source_url": url,
             "notes": "WARN:derived_from_treasury(10Y-3M)",
             "as_of_ts": as_of_ts,
         })
     else:
-        out.append(make_na_row("T10Y3M", as_of_ts, source_url=url, notes="ERR:missing_input_for_spread"))
+        out.append(make_na("T10Y3M", url, "missing_inputs", as_of_ts))
 
     return out
 
 
-def fetch_chicago_fed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
-    """
-    Chicago Fed NFCI CSV includes subindexes. We pull the latest non-empty value of:
-      - NFCI Nonfinancial Leverage Subindex
-    Column naming can vary; we search headers by keywords.
-    """
-    text, err = http_get_text(CHICAGO_FED_NFCI_CSV)
-    if err or not text:
-        return make_na_row("NFCINONFINLEVERAGE", as_of_ts, source_url=CHICAGO_FED_NFCI_CSV, notes=f"ERR:{err or 'empty'}")
+def _pick_nfci_date_col(fieldnames: List[str]) -> Optional[str]:
+    # prefer exact common names, else any containing 'date'
+    for c in ("DATE", "Date", "date", "observation_date", "Observation Date"):
+        if c in fieldnames:
+            return c
+    for c in fieldnames:
+        if "date" in c.lower():
+            return c
+    return None
+
+
+def _pick_nfci_nonfin_leverage_col(fieldnames: List[str]) -> Optional[str]:
+    # Try several fuzzy heuristics
+    candidates = []
+    for c in fieldnames:
+        cl = c.lower().strip()
+        score = 0
+        if "non" in cl and "fin" in cl:
+            score += 2
+        if "nonfinancial" in cl:
+            score += 4
+        if "lever" in cl:
+            score += 3
+        if "subindex" in cl:
+            score += 1
+        if score > 0:
+            candidates.append((score, c))
+    candidates.sort(reverse=True, key=lambda x: x[0])
+    return candidates[0][1] if candidates else None
+
+
+def fetch_chicagofed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
+    text, err = http_get_text(URL_CHICAGOFED_NFCI)
+    if err:
+        return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, err, as_of_ts)
 
     sio = StringIO(text)
     reader = csv.DictReader(sio)
-    headers = [h.strip() for h in (reader.fieldnames or [])]
+    if not reader.fieldnames:
+        return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, "no_headers", as_of_ts)
 
-    # Find a column likely representing nonfinancial leverage subindex
-    # We try multiple patterns for robustness.
-    target_col = None
-    patterns = [
-        re.compile(r"non.?financial.*leverage", re.IGNORECASE),
-        re.compile(r"nonfinancial.*leverage", re.IGNORECASE),
-    ]
-    for h in headers:
-        for p in patterns:
-            if p.search(h):
-                target_col = h
-                break
-        if target_col:
-            break
+    date_col = _pick_nfci_date_col(reader.fieldnames)
+    val_col = _pick_nfci_nonfin_leverage_col(reader.fieldnames)
 
-    if not target_col:
-        return make_na_row("NFCINONFINLEVERAGE", as_of_ts, source_url=CHICAGO_FED_NFCI_CSV, notes="ERR:col_not_found")
+    if not date_col or not val_col:
+        missing = []
+        if not date_col:
+            missing.append("date_col")
+        if not val_col:
+            missing.append("value_col")
+        return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, "missing_" + "_".join(missing), as_of_ts)
 
-    best_date = None
-    best_val = None
+    last_valid: Optional[Tuple[str, float]] = None
+    for row in reader:
+        d = parse_date_any(row.get(date_col, ""))
+        v = to_float(row.get(val_col))
+        if d and v is not None:
+            last_valid = (d, v)
 
-    for r in reader:
-        d = (r.get("DATE") or r.get("Date") or r.get("date") or "").strip()
-        if not d:
-            continue
-        try:
-            dt = datetime.strptime(d, "%Y-%m-%d").date()
-        except Exception:
-            continue
-        v = safe_float(r.get(target_col))
-        if v is None:
-            continue
-        if best_date is None or dt > best_date:
-            best_date = dt
-            best_val = v
+    if not last_valid:
+        return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, "no_valid_rows", as_of_ts)
 
-    if best_date is None or best_val is None:
-        return make_na_row("NFCINONFINLEVERAGE", as_of_ts, source_url=CHICAGO_FED_NFCI_CSV, notes="ERR:no_valid_rows")
-
+    d, v = last_valid
     return {
         "series_id": "NFCINONFINLEVERAGE",
-        "data_date": best_date.isoformat(),
-        "value": best_val,
-        "source_url": CHICAGO_FED_NFCI_CSV,
+        "data_date": d,
+        "value": v,
+        "source_url": URL_CHICAGOFED_NFCI,
         "notes": "WARN:fallback_chicagofed_nfci(nonfinancial leverage)",
         "as_of_ts": as_of_ts,
     }
 
 
-def fetch_stooq_latest(symbol: str, interval: str = "d") -> Tuple[Optional[str], Optional[float], Optional[float], Optional[str]]:
-    """
-    Fetch STOOQ CSV via /q/d/l endpoint and return:
-      (latest_date_iso, latest_close, change_pct_1d, error)
-    change_pct_1d uses previous close if available.
-    """
-    url = STOOQ_CSV_TEMPLATE.format(symbol=symbol, interval=interval)
-    text, err = http_get_text(url)
-    if err or not text:
-        return None, None, None, f"ERR:{err or 'empty'}"
-
-    # Validate it looks like CSV (first line starts with "Date," or "DATE,")
-    first_line = text.splitlines()[0].strip() if text.splitlines() else ""
-    if not re.match(r"(?i)^date,", first_line):
-        # could be HTML / challenge page
-        return None, None, None, "ERR:not_csv"
+def fetch_datahub_wti_daily(as_of_ts: str) -> Dict[str, Any]:
+    text, err = http_get_text(URL_DATAHUB_WTI_DAILY)
+    if err:
+        return make_na("DCOILWTICO", URL_DATAHUB_WTI_DAILY, err, as_of_ts)
 
     sio = StringIO(text)
     reader = csv.DictReader(sio)
-    rows = list(reader)
-    if not rows:
-        return None, None, None, "ERR:no_rows"
+    # header: Date,Price
+    last_valid: Optional[Tuple[str, float]] = None
+    for row in reader:
+        d = parse_date_any(row.get("Date") or row.get("DATE") or row.get("date") or "")
+        v = to_float(row.get("Price") or row.get("PRICE") or row.get("price"))
+        if d and v is not None:
+            last_valid = (d, v)
 
-    # STOOQ CSV commonly sorted ascending by date
-    # We take last two valid close rows.
-    def parse_row(r: Dict[str, str]) -> Tuple[Optional[datetime], Optional[float]]:
-        d = (r.get("Date") or r.get("date") or "").strip()
-        c = safe_float(r.get("Close") or r.get("close"))
-        if not d or c is None:
-            return None, None
-        try:
-            dt = datetime.strptime(d, "%Y-%m-%d")
-        except Exception:
-            return None, None
-        return dt, c
+    if not last_valid:
+        return make_na("DCOILWTICO", URL_DATAHUB_WTI_DAILY, "no_valid_rows", as_of_ts)
 
-    valid: List[Tuple[datetime, float]] = []
-    for r in rows:
-        dt, c = parse_row(r)
-        if dt and c is not None:
-            valid.append((dt, c))
-
-    if not valid:
-        return None, None, None, "ERR:no_valid_data"
-
-    valid.sort(key=lambda x: x[0])
-    latest_dt, latest_close = valid[-1]
-    change_pct_1d = None
-    if len(valid) >= 2:
-        prev_dt, prev_close = valid[-2]
-        if prev_close != 0:
-            change_pct_1d = (latest_close / prev_close - 1.0) * 100.0
-
-    return latest_dt.date().isoformat(), latest_close, change_pct_1d, None
+    d, v = last_valid
+    return {
+        "series_id": "DCOILWTICO",
+        "data_date": d,
+        "value": v,
+        "source_url": URL_DATAHUB_WTI_DAILY,
+        "notes": "WARN:fallback_datahub_oil_prices(wti-daily)",
+        "as_of_ts": as_of_ts,
+    }
 
 
-def build_stooq_rows(as_of_ts: str) -> List[Dict[str, Any]]:
-    """
-    Add coverage: SP500, NASDAQCOM, DJIA, DXY_FUT, WTI_CL_F
-    """
-    mapping = [
-        ("SP500", "^spx", "WARN:fallback_stooq(^SPX)"),
-        ("NASDAQCOM", "^ndq", "WARN:fallback_stooq(^NDQ)"),
-        ("DJIA", "^dji", "WARN:fallback_stooq(^DJI)"),
-        ("DXY_FUT", "dx.f", "WARN:fallback_stooq(DX.F)"),
-        ("WTI_CL_F", "cl.f", "WARN:fallback_stooq(CL.F)"),
-    ]
+def fetch_stooq_index(series_id: str, symbol: str, as_of_ts: str) -> Dict[str, Any]:
+    url = STOOQ_CSV.format(symbol=symbol)
+    text, err = http_get_text(url)
+    if err:
+        return make_na(series_id, url, err, as_of_ts)
 
-    out: List[Dict[str, Any]] = []
-    for series_id, symbol, note in mapping:
-        url = STOOQ_CSV_TEMPLATE.format(symbol=symbol, interval="d")
-        d, v, chg, e = fetch_stooq_latest(symbol, interval="d")
-        if e or d is None or v is None:
-            out.append(make_na_row(series_id, as_of_ts, source_url=url, notes=e or "ERR:unknown"))
-            continue
+    sio = StringIO(text)
+    reader = csv.DictReader(sio)
+    rows: List[Tuple[str, float]] = []
+    for row in reader:
+        d = parse_date_any(row.get("Date") or row.get("DATE") or row.get("date") or "")
+        close = to_float(row.get("Close") or row.get("CLOSE") or row.get("close"))
+        if d and close is not None:
+            rows.append((d, close))
 
-        row: Dict[str, Any] = {
-            "series_id": series_id,
-            "data_date": d,
-            "value": v,
-            "source_url": url,
-            "notes": note,
-            "as_of_ts": as_of_ts,
-        }
-        # Optional auditable derived field (won't break consumers expecting minimal schema)
-        if chg is not None:
-            row["change_pct_1d"] = chg
-            row["notes"] = note + ";derived_1d_pct"
-        out.append(row)
+    if len(rows) < 1:
+        return make_na(series_id, url, "no_valid_rows", as_of_ts)
+
+    d_last, v_last = rows[-1]
+
+    out: Dict[str, Any] = {
+        "series_id": series_id,
+        "data_date": d_last,
+        "value": v_last,
+        "source_url": url,
+        "notes": f"WARN:fallback_stooq({symbol});derived_1d_pct",
+        "as_of_ts": as_of_ts,
+    }
+
+    if len(rows) >= 2 and rows[-2][1] != 0:
+        prev = rows[-2][1]
+        out["change_pct_1d"] = (v_last / prev - 1.0) * 100.0
+    else:
+        out["notes"] = f"WARN:fallback_stooq({symbol});missing_prev_close"
 
     return out
 
 
-# -----------------------------
+# -------------------------
 # Main
-# -----------------------------
+# -------------------------
 
 def main() -> int:
     as_of_ts = utc_now_iso()
     ensure_out_dir()
 
-    rows: List[Dict[str, Any]] = []
+    items: List[Dict[str, Any]] = []
 
-    # 1) VIX
-    rows.append(fetch_vix(as_of_ts))
+    # VIX
+    items.append(fetch_cboe_vix(as_of_ts))
 
-    # 2) Treasury yields + spreads
-    rows.extend(fetch_treasury_yields(as_of_ts))
+    # Treasury yields + spreads
+    items.extend(fetch_treasury_yields(as_of_ts))
 
-    # 3) Chicago Fed NFCI nonfinancial leverage
-    rows.append(fetch_chicago_fed_nfci_nonfin_leverage(as_of_ts))
+    # NFCI nonfinancial leverage
+    items.append(fetch_chicagofed_nfci_nonfin_leverage(as_of_ts))
 
-    # 4) STOOQ coverage expansion
-    rows.extend(build_stooq_rows(as_of_ts))
+    # Equity indices via stooq
+    items.append(fetch_stooq_index("SP500", "^spx", as_of_ts))
+    items.append(fetch_stooq_index("NASDAQCOM", "^ndq", as_of_ts))
+    items.append(fetch_stooq_index("DJIA", "^dji", as_of_ts))
 
-    # Keep placeholder if you still want it
-    # (You can remove it if it no longer matters)
-    rows.append(make_na_row("NFCI_LEVERAGE_SUBINDEX", as_of_ts))
+    # WTI spot via DataHub
+    items.append(fetch_datahub_wti_daily(as_of_ts))
 
-    with open(OUT_LATEST_JSON, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=2)
+    write_json_atomic(OUT_FILE, items)
 
-    print(f"Wrote {OUT_LATEST_JSON} rows={len(rows)} as_of_ts={as_of_ts}")
+    print(json.dumps(items, ensure_ascii=False, indent=2))
     return 0
 
 
