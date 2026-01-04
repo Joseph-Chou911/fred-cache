@@ -76,7 +76,6 @@ def normalize_date(s: str) -> str:
     if re.fullmatch(r"\d{2}/\d{2}/\d{4}", s):
         mm, dd, yyyy = s.split("/")
         return f"{yyyy}-{mm}-{dd}"
-    # fallback: take first 10 chars if looks like ISO
     if len(s) >= 10 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", s[:10]):
         return s[:10]
     return s
@@ -174,7 +173,7 @@ def fetch_cboe_vix_last_close() -> Tuple[str, float, str]:
 
 def treasury_csv_url(month_yyyymm: str) -> str:
     """
-    Treasury 'Download CSV' endpoint. We also include month param for stability.
+    Treasury 'Download CSV' endpoint (with month param).
     """
     return (
         "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
@@ -186,8 +185,9 @@ def treasury_csv_url(month_yyyymm: str) -> str:
 def fetch_treasury_yield_curve_last_row(month_yyyymm: Optional[str] = None) -> Tuple[str, Dict[str, float], str]:
     """
     Use Treasury 'Download CSV' and parse by column names.
-    We search from bottom for the latest row that has at least one of the needed columns.
-    Needed columns: '3 Mo', '2 Yr', '10 Yr' (Treasury naming).
+    Needed columns: '3 Mo', '2 Yr', '10 Yr'.
+    Walk backward to find the latest row with at least one needed value.
+    If current month CSV is empty, try previous month once.
     """
     if month_yyyymm is None:
         month_yyyymm = yyyymm_taipei()
@@ -199,7 +199,6 @@ def fetch_treasury_yield_curve_last_row(month_yyyymm: Optional[str] = None) -> T
     reader = csv.DictReader(lines)
     rows = list(reader)
 
-    # Some months may return empty early in month; try previous month once
     if not rows:
         pm = prev_month_yyyymm()
         url2 = treasury_csv_url(pm)
@@ -221,7 +220,6 @@ def fetch_treasury_yield_curve_last_row(month_yyyymm: Optional[str] = None) -> T
         except Exception:
             return None
 
-    # Walk backwards to find a row with at least one of needed values
     last_row = None
     for row in reversed(rows):
         if f(row, "10 Yr") is not None or f(row, "2 Yr") is not None or f(row, "3 Mo") is not None:
@@ -255,8 +253,8 @@ def fetch_chicagofed_nfci_csv_last() -> Tuple[str, Dict[str, float], str]:
     """
     Chicago Fed NFCI data CSV.
     Conservative mapping:
-      - only map to NFCINONFINLEVERAGE if column name contains BOTH 'nonfinancial' and 'leverage'
-      - otherwise, if we see a generic leverage subindex column, store as NFCI_LEVERAGE_SUBINDEX
+      - map to NFCINONFINLEVERAGE only if column name contains BOTH 'nonfinancial' and 'leverage'
+      - else if a generic leverage subindex exists, store as NFCI_LEVERAGE_SUBINDEX (not mapped)
     """
     url = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
     r = backoff_get(url)
@@ -269,7 +267,6 @@ def fetch_chicagofed_nfci_csv_last() -> Tuple[str, Dict[str, float], str]:
 
     last = rows[-1]
 
-    # Date key heuristic
     date_key = None
     for k in last.keys():
         lk = k.strip().lower()
@@ -289,15 +286,12 @@ def fetch_chicagofed_nfci_csv_last() -> Tuple[str, Dict[str, float], str]:
         if fv is None:
             continue
 
-        # overall NFCI (optional)
         if lk == "nfci" or lk.endswith(" nfci") or lk.endswith("_nfci"):
             out["NFCI"] = fv
 
-        # conservative mapping to nonfinancial leverage
         if "nonfinancial" in lk and "leverage" in lk:
             out["NFCINONFINLEVERAGE"] = fv
 
-        # generic leverage subindex (only if nonfinancial leverage not found)
         if "leverage" in lk and "subindex" in lk and "NFCINONFINLEVERAGE" not in out:
             out["NFCI_LEVERAGE_SUBINDEX"] = fv
 
@@ -312,11 +306,15 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
     """
     Always output a stable set of series_ids (fill NA if missing),
     so your dashboard can reliably look them up.
+
+    Added:
+      - UST3M: explicit 3-month Treasury yield from Treasury CSV ("3 Mo")
     """
     expected = [
         "VIXCLS",
         "DGS10",
         "DGS2",
+        "UST3M",
         "T10Y2Y",
         "T10Y3M",
         "NFCINONFINLEVERAGE",
@@ -332,9 +330,8 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
     except Exception as e:
         rows["VIXCLS"] = make_row("VIXCLS", None, None, "NA", f"ERR:cboe_vix:{type(e).__name__}", as_of_ts)
 
-    # 2) Treasury yields -> DGS10/DGS2 and derived spreads
-    # Optional override: TREASURY_MONTH=YYYYMM
-    treasury_month = os.environ.get("TREASURY_MONTH")
+    # 2) Treasury yields -> DGS10/DGS2/UST3M and derived spreads
+    treasury_month = os.environ.get("TREASURY_MONTH")  # optional YYYYMM override
     try:
         d, y, src = fetch_treasury_yield_curve_last_row(treasury_month)
 
@@ -348,19 +345,40 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
         else:
             rows["DGS2"] = make_row("DGS2", None, None, src, "ERR:treasury_missing_2y", as_of_ts)
 
+        if "3M" in y:
+            rows["UST3M"] = make_row("UST3M", d, y["3M"], src, "WARN:fallback_treasury_csv", as_of_ts)
+        else:
+            rows["UST3M"] = make_row("UST3M", None, None, src, "WARN:treasury_missing_3m", as_of_ts)
+
         if "10Y" in y and "2Y" in y:
-            rows["T10Y2Y"] = make_row("T10Y2Y", d, y["10Y"] - y["2Y"], src, "WARN:derived_from_treasury(10Y-2Y)", as_of_ts)
+            rows["T10Y2Y"] = make_row(
+                "T10Y2Y",
+                d,
+                y["10Y"] - y["2Y"],
+                src,
+                "WARN:derived_from_treasury(10Y-2Y)",
+                as_of_ts,
+            )
         else:
             rows["T10Y2Y"] = make_row("T10Y2Y", None, None, src, "ERR:treasury_insufficient_for_10y2y", as_of_ts)
 
+        # Now derived from explicit UST3M (if present)
         if "10Y" in y and "3M" in y:
-            rows["T10Y3M"] = make_row("T10Y3M", d, y["10Y"] - y["3M"], src, "WARN:derived_from_treasury(10Y-3M)", as_of_ts)
+            rows["T10Y3M"] = make_row(
+                "T10Y3M",
+                d,
+                y["10Y"] - y["3M"],
+                src,
+                "WARN:derived_from_treasury(10Y-3M)",
+                as_of_ts,
+            )
         else:
             rows["T10Y3M"] = make_row("T10Y3M", None, None, src, "WARN:treasury_no_3m_or_latest_missing", as_of_ts)
 
     except Exception as e:
         rows["DGS10"] = make_row("DGS10", None, None, "NA", f"ERR:treasury:{type(e).__name__}", as_of_ts)
         rows["DGS2"] = make_row("DGS2", None, None, "NA", f"ERR:treasury:{type(e).__name__}", as_of_ts)
+        rows["UST3M"] = make_row("UST3M", None, None, "NA", f"ERR:treasury:{type(e).__name__}", as_of_ts)
         rows["T10Y2Y"] = make_row("T10Y2Y", None, None, "NA", f"ERR:treasury:{type(e).__name__}", as_of_ts)
         rows["T10Y3M"] = make_row("T10Y3M", None, None, "NA", f"ERR:treasury:{type(e).__name__}", as_of_ts)
 
@@ -370,31 +388,50 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
 
         if "NFCINONFINLEVERAGE" in m:
             rows["NFCINONFINLEVERAGE"] = make_row(
-                "NFCINONFINLEVERAGE", d, m["NFCINONFINLEVERAGE"], src,
-                "WARN:fallback_chicagofed_nfci(nonfinancial leverage)", as_of_ts
+                "NFCINONFINLEVERAGE",
+                d,
+                m["NFCINONFINLEVERAGE"],
+                src,
+                "WARN:fallback_chicagofed_nfci(nonfinancial leverage)",
+                as_of_ts,
             )
         elif "NFCI_LEVERAGE_SUBINDEX" in m:
             rows["NFCI_LEVERAGE_SUBINDEX"] = make_row(
-                "NFCI_LEVERAGE_SUBINDEX", d, m["NFCI_LEVERAGE_SUBINDEX"], src,
-                "WARN:fallback_chicagofed_nfci(leverage subindex; not mapped to nonfinancial leverage)", as_of_ts
+                "NFCI_LEVERAGE_SUBINDEX",
+                d,
+                m["NFCI_LEVERAGE_SUBINDEX"],
+                src,
+                "WARN:fallback_chicagofed_nfci(leverage subindex; not mapped to nonfinancial leverage)",
+                as_of_ts,
             )
             rows["NFCINONFINLEVERAGE"] = make_row(
-                "NFCINONFINLEVERAGE", None, None, src,
-                "WARN:chicagofed_no_explicit_nonfinancial_leverage_column", as_of_ts
+                "NFCINONFINLEVERAGE",
+                None,
+                None,
+                src,
+                "WARN:chicagofed_no_explicit_nonfinancial_leverage_column",
+                as_of_ts,
             )
         else:
             rows["NFCINONFINLEVERAGE"] = make_row(
-                "NFCINONFINLEVERAGE", None, None, src,
-                "WARN:chicagofed_nfci_no_leverage_columns_found", as_of_ts
+                "NFCINONFINLEVERAGE",
+                None,
+                None,
+                src,
+                "WARN:chicagofed_nfci_no_leverage_columns_found",
+                as_of_ts,
             )
 
     except Exception as e:
         rows["NFCINONFINLEVERAGE"] = make_row(
-            "NFCINONFINLEVERAGE", None, None, "NA",
-            f"ERR:chicagofed_nfci:{type(e).__name__}", as_of_ts
+            "NFCINONFINLEVERAGE",
+            None,
+            None,
+            "NA",
+            f"ERR:chicagofed_nfci:{type(e).__name__}",
+            as_of_ts,
         )
 
-    # Keep consistent order
     return [rows[sid] for sid in expected]
 
 
@@ -423,7 +460,7 @@ def write_outputs(out_dir: str, latest_rows: List[CacheRow]) -> None:
             "manifest_json": f"{out_dir}/manifest.json",
             "latest_csv": f"{out_dir}/latest.csv",
         },
-        "notes": "Standalone fallback cache (latest-only). Does NOT produce history.json.",
+        "notes": "Standalone fallback cache (latest-only). Adds UST3M. Does NOT produce history.json.",
     }
 
     manifest_path = os.path.join(out_dir, "manifest.json")
