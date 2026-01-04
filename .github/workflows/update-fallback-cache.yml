@@ -29,6 +29,7 @@ jobs:
 
       - name: Install deps
         run: |
+          set -e
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
@@ -44,20 +45,26 @@ jobs:
       - name: Show outputs (debug)
         run: |
           set -e
+          echo "---- git status (before commit) ----"
+          git status --porcelain || true
+
           echo "---- ls fallback_cache ----"
           ls -al fallback_cache || true
+
           echo "---- preview fallback_cache/latest.json ----"
-          (head -n 40 fallback_cache/latest.json || true)
-          echo "---- preview fallback_cache/manifest.json ----"
+          (head -n 60 fallback_cache/latest.json || true)
+
+          echo "---- preview fallback_cache/manifest.json (pre-regen) ----"
           (cat fallback_cache/manifest.json || true)
+
           echo "---- preview fallback_cache/latest.csv ----"
-          (head -n 20 fallback_cache/latest.csv || true)
+          (head -n 30 fallback_cache/latest.csv || true)
 
       - name: Commit DATA (latest.json/latest.csv) if changed
         run: |
           set -e
 
-          # 1) 確認檔案存在
+          # 1) 確認三個檔案存在（避免你以為有更新，其實 script 沒產出）
           for f in fallback_cache/latest.json fallback_cache/latest.csv fallback_cache/manifest.json; do
             if [ ! -f "$f" ]; then
               echo "ERROR: missing file: $f"
@@ -65,32 +72,36 @@ jobs:
             fi
           done
 
-          # 2) 只先處理資料檔
+          # 2) 只先處理資料檔（避免 manifest 自我引用 SHA 問題）
           git add fallback_cache/latest.json fallback_cache/latest.csv
 
           if git diff --cached --quiet; then
             echo "No DATA changes to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update fallback DATA (latest json/csv)"
-            git push
+            exit 0
           fi
 
-      - name: Regenerate MANIFEST with pinned SHA for DATA and commit if changed
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update fallback DATA (latest json/csv)"
+          git push
+
+      - name: Regenerate MANIFEST with pinned SHA for DATA
         env:
           REPO_OWNER: Joseph-Chou911
           REPO_NAME: fred-cache
         run: |
           set -e
 
-          # 1) 這一刻的 HEAD 一定包含「最新資料」：
-          #    - 若剛剛有 data commit：HEAD 是最新 data commit
-          #    - 若沒有：HEAD 是上一個 commit，但資料也就是那版（沒變）
+          # 這一刻的 HEAD = 最新資料所在的 commit（若資料沒變，HEAD 仍是上一版，但也等同 pinned）
           SHA_DATA="$(git rev-parse HEAD)"
+          export SHA_DATA
           echo "SHA_DATA=$SHA_DATA"
 
-          # 2) 用 SHA_DATA 重寫 manifest（避免自我引用）
+          if [ -z "$SHA_DATA" ]; then
+            echo "ERROR: SHA_DATA is empty"
+            exit 1
+          fi
+
           python - <<'PY'
           import json, os, datetime
 
@@ -98,25 +109,31 @@ jobs:
           owner = os.environ.get("REPO_OWNER")
           repo  = os.environ.get("REPO_NAME")
 
+          if not sha_data or sha_data.lower() == "none":
+            raise SystemExit(f"ERROR: invalid SHA_DATA: {sha_data!r}")
+          if not owner or not repo:
+            raise SystemExit(f"ERROR: invalid REPO_OWNER/REPO_NAME: {owner!r}/{repo!r}")
+
           # 從 latest.json 嘗試取出 script_version（取不到就 unknown）
           script_version = "unknown"
           try:
             with open("fallback_cache/latest.json", "r", encoding="utf-8") as f:
               rows = json.load(f)
-            for r in rows:
-              if r.get("series_id") == "__META__" and r.get("notes") == "INFO:script_version":
-                script_version = r.get("value") or script_version
-                break
+            if isinstance(rows, list):
+              for r in rows:
+                if r.get("series_id") == "__META__" and r.get("notes") == "INFO:script_version":
+                  script_version = r.get("value") or script_version
+                  break
           except Exception:
             pass
 
           now_utc = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
-          # pinned data urls（真 pinned）
+          # 真 pinned（指向資料 commit）
           latest_json = f"https://raw.githubusercontent.com/{owner}/{repo}/{sha_data}/fallback_cache/latest.json"
           latest_csv  = f"https://raw.githubusercontent.com/{owner}/{repo}/{sha_data}/fallback_cache/latest.csv"
 
-          # manifest 自己本身不要放進 pinned（會自我引用）；用 main 當入口即可
+          # manifest 自己本身不做 SHA pinned（避免自我引用）；用 main 當入口即可
           manifest_main = f"https://raw.githubusercontent.com/{owner}/{repo}/main/fallback_cache/manifest.json"
 
           out = {
@@ -137,8 +154,9 @@ jobs:
             f.write("\n")
           PY
 
-          # 3) 將 SHA_DATA 帶給 python
-        shell: bash
+          echo "---- preview fallback_cache/manifest.json (post-regen) ----"
+          cat fallback_cache/manifest.json
+
       - name: Commit MANIFEST if changed
         run: |
           set -e
