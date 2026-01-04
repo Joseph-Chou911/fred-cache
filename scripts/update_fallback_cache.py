@@ -6,7 +6,6 @@ from __future__ import annotations
 import csv
 import json
 import os
-import re
 import time
 from datetime import datetime, timezone
 from io import StringIO
@@ -14,9 +13,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-
+# -------------------------
+# Config
+# -------------------------
 OUT_DIR = "fallback_cache"
 OUT_FILE = os.path.join(OUT_DIR, "latest.json")
+
+DEBUG_HEADERS_JSON = os.path.join(OUT_DIR, "debug_nfci_headers.json")
+DEBUG_FIRSTLINES_TXT = os.path.join(OUT_DIR, "debug_nfci_first_lines.txt")
+
+SCRIPT_VERSION = "fallback_vA_official_no_key_20260104_01"
 
 URL_CBOE_VIX = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 
@@ -25,14 +31,20 @@ TREASURY_QS = "?_format=csv&field_tdr_date_value_month={yyyymm}&page=&type=daily
 
 URL_CHICAGOFED_NFCI = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
 
-URL_DATAHUB_WTI_DAILY = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
+# FRED graph CSV (official + no key)
+FREDGRAPH = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
+# Non-official last resort
+URL_DATAHUB_WTI_DAILY = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
 STOOQ_CSV = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 
 UA = "fallback-cache-bot/1.0 (+https://github.com/Joseph-Chou911/fred-cache)"
 TIMEOUT = 30
 
 
+# -------------------------
+# Utils
+# -------------------------
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -72,6 +84,7 @@ def http_get_text(url: str, timeout: int = TIMEOUT, max_retries: int = 3) -> Tup
                 sleep_backoff(attempt)
                 continue
             return None, "request"
+
     return None, "unknown"
 
 
@@ -125,10 +138,57 @@ def make_na(series_id: str, source_url: str, err: str, as_of_ts: str) -> Dict[st
     }
 
 
-# -------------------------
-# VIX
-# -------------------------
+def write_nfci_debug(raw_text: str, raw_headers: Optional[List[str]], norm_headers: Optional[List[str]]) -> None:
+    first_lines = "\n".join(raw_text.splitlines()[:15])
+    with open(DEBUG_FIRSTLINES_TXT, "w", encoding="utf-8") as f:
+        f.write(first_lines)
+        f.write("\n")
 
+    payload = {
+        "raw_headers": raw_headers,
+        "normalized_headers": norm_headers,
+    }
+    with open(DEBUG_HEADERS_JSON, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+# -------------------------
+# Official / no-key: FRED graph CSV
+# -------------------------
+def fetch_fredgraph_series(series_id: str, as_of_ts: str) -> Dict[str, Any]:
+    url = FREDGRAPH.format(series_id=series_id)
+    text, err = http_get_text(url)
+    if err:
+        return make_na(series_id, url, err, as_of_ts)
+
+    sio = StringIO(text)
+    reader = csv.DictReader(sio)
+    # expected columns: DATE, <series_id>
+    last_valid: Optional[Tuple[str, float]] = None
+    for row in reader:
+        d = parse_date_any(row.get("DATE") or row.get("Date") or row.get("date") or "")
+        v = to_float(row.get(series_id))
+        if d and v is not None:
+            last_valid = (d, v)
+
+    if not last_valid:
+        return make_na(series_id, url, "no_valid_rows", as_of_ts)
+
+    d, v = last_valid
+    return {
+        "series_id": series_id,
+        "data_date": d,
+        "value": v,
+        "source_url": url,
+        "notes": f"WARN:fallback_fredgraph_csv({series_id})",
+        "as_of_ts": as_of_ts,
+    }
+
+
+# -------------------------
+# VIX (official-ish publisher feed; no key)
+# -------------------------
 def fetch_cboe_vix(as_of_ts: str) -> Dict[str, Any]:
     text, err = http_get_text(URL_CBOE_VIX)
     if err:
@@ -158,9 +218,8 @@ def fetch_cboe_vix(as_of_ts: str) -> Dict[str, Any]:
 
 
 # -------------------------
-# Treasury
+# Treasury (official; no key)
 # -------------------------
-
 def fetch_treasury_yields(as_of_ts: str) -> List[Dict[str, Any]]:
     yyyymm = datetime.now().strftime("%Y%m")
     url = TREASURY_BASE.format(yyyymm=yyyymm) + TREASURY_QS.format(yyyymm=yyyymm)
@@ -243,54 +302,39 @@ def fetch_treasury_yields(as_of_ts: str) -> List[Dict[str, Any]]:
 
 
 # -------------------------
-# Chicago Fed NFCI (robust)
+# Chicago Fed NFCI (official; no key) - robust
 # -------------------------
-
-def _normalize_header(h: str) -> str:
-    # strip whitespace + remove UTF-8 BOM if present
-    if h is None:
-        return ""
-    return h.replace("\ufeff", "").strip()
+def _norm(h: str) -> str:
+    return (h or "").replace("\ufeff", "").strip()
 
 
-def _normalize_fieldnames(fieldnames: List[str]) -> List[str]:
-    return [_normalize_header(h) for h in fieldnames]
-
-
-def _pick_date_column(fieldnames: List[str]) -> Optional[str]:
-    # Prefer explicit common names
-    lowered = {fn.lower(): fn for fn in fieldnames}
-    for key in ("date", "observation_date", "observation date", "week", "period"):
-        if key in lowered:
-            return lowered[key]
-
-    # Else: any header containing "date" or "week"
-    for fn in fieldnames:
-        l = fn.lower()
+def _pick_date_norm(norm_headers: List[str]) -> Optional[str]:
+    lower_map = {h.lower(): h for h in norm_headers}
+    for key in ("date", "observation_date", "week", "period", "time"):
+        if key in lower_map:
+            return lower_map[key]
+    for h in norm_headers:
+        l = h.lower()
         if "date" in l or "week" in l:
-            return fn
-
-    # Last resort: assume first column is time index
-    return fieldnames[0] if fieldnames else None
+            return h
+    return norm_headers[0] if norm_headers else None
 
 
-def _pick_nonfin_leverage_column(fieldnames: List[str]) -> Optional[str]:
-    # Choose best match by scoring keywords
+def _pick_nonfin_leverage_norm(norm_headers: List[str]) -> Optional[str]:
     best = None
     best_score = -1
-    for fn in fieldnames:
-        l = fn.lower()
+    for h in norm_headers:
+        l = h.lower()
         score = 0
         if "nonfinancial" in l or ("non" in l and "fin" in l):
             score += 5
-        if "leverage" in l or "lever" in l:
+        if "lever" in l:
             score += 5
-        if "subindex" in l:
+        if "sub" in l:
             score += 1
         if score > best_score:
             best_score = score
-            best = fn
-    # Require at least leverage-related signal
+            best = h
     if best_score < 5:
         return None
     return best
@@ -304,30 +348,28 @@ def fetch_chicagofed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
     sio = StringIO(text)
     reader = csv.DictReader(sio)
 
-    if not reader.fieldnames:
+    raw_headers = list(reader.fieldnames or [])
+    if not raw_headers:
+        write_nfci_debug(text, raw_headers, None)
         return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, "no_headers", as_of_ts)
 
-    # Normalize headers to handle BOM/whitespace
-    raw_headers = list(reader.fieldnames)
-    norm_headers = _normalize_fieldnames(raw_headers)
-
-    # Build mapping from normalized -> raw key present in row dict
-    # Because DictReader uses raw fieldnames as keys.
+    norm_headers = [_norm(h) for h in raw_headers]
     norm_to_raw = {norm_headers[i]: raw_headers[i] for i in range(len(raw_headers))}
 
-    date_norm = _pick_date_column(norm_headers)
-    val_norm = _pick_nonfin_leverage_column(norm_headers)
+    date_norm = _pick_date_norm(norm_headers)
+    val_norm = _pick_nonfin_leverage_norm(norm_headers)
 
     if not date_norm:
+        write_nfci_debug(text, raw_headers, norm_headers)
         return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, "missing_date_col", as_of_ts)
     if not val_norm:
+        write_nfci_debug(text, raw_headers, norm_headers)
         return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, "missing_value_col", as_of_ts)
 
     date_col = norm_to_raw[date_norm]
     val_col = norm_to_raw[val_norm]
 
     last_valid: Optional[Tuple[str, float]] = None
-
     for row in reader:
         d_raw = (row.get(date_col) or "").strip()
         d = parse_date_any(d_raw)
@@ -336,8 +378,7 @@ def fetch_chicagofed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
             last_valid = (d, v)
 
     if not last_valid:
-        # If parse_date_any fails because date is like "2025-12-26 " with spaces, this still should pass.
-        # If date is a week code, user must adjust parse_date_any or use another approach.
+        write_nfci_debug(text, raw_headers, norm_headers)
         return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, "no_valid_rows", as_of_ts)
 
     d, v = last_valid
@@ -352,9 +393,8 @@ def fetch_chicagofed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
 
 
 # -------------------------
-# Stooq indices
+# Non-official last resort: Stooq indices
 # -------------------------
-
 def fetch_stooq_index(series_id: str, symbol: str, as_of_ts: str) -> Dict[str, Any]:
     url = STOOQ_CSV.format(symbol=symbol)
     text, err = http_get_text(url)
@@ -380,7 +420,7 @@ def fetch_stooq_index(series_id: str, symbol: str, as_of_ts: str) -> Dict[str, A
         "data_date": d_last,
         "value": v_last,
         "source_url": url,
-        "notes": f"WARN:fallback_stooq({symbol});derived_1d_pct",
+        "notes": f"WARN:nonofficial_stooq({symbol});derived_1d_pct",
         "as_of_ts": as_of_ts,
     }
 
@@ -388,15 +428,14 @@ def fetch_stooq_index(series_id: str, symbol: str, as_of_ts: str) -> Dict[str, A
         prev = rows[-2][1]
         out["change_pct_1d"] = (v_last / prev - 1.0) * 100.0
     else:
-        out["notes"] = f"WARN:fallback_stooq({symbol});missing_prev_close"
+        out["notes"] = f"WARN:nonofficial_stooq({symbol});missing_prev_close"
 
     return out
 
 
 # -------------------------
-# WTI (DataHub)
+# Non-official last resort: DataHub WTI
 # -------------------------
-
 def fetch_datahub_wti_daily(as_of_ts: str) -> Dict[str, Any]:
     text, err = http_get_text(URL_DATAHUB_WTI_DAILY)
     if err:
@@ -421,7 +460,7 @@ def fetch_datahub_wti_daily(as_of_ts: str) -> Dict[str, Any]:
         "data_date": d,
         "value": v,
         "source_url": URL_DATAHUB_WTI_DAILY,
-        "notes": "WARN:fallback_datahub_oil_prices(wti-daily)",
+        "notes": "WARN:nonofficial_datahub_oil_prices(wti-daily)",
         "as_of_ts": as_of_ts,
     }
 
@@ -431,16 +470,42 @@ def main() -> int:
     ensure_out_dir()
 
     items: List[Dict[str, Any]] = []
-    items.append(fetch_cboe_vix(as_of_ts))
-    items.extend(fetch_treasury_yields(as_of_ts))
-    items.append(fetch_chicagofed_nfci_nonfin_leverage(as_of_ts))
+
+    # META row: lets you verify the workflow is running the intended script
+    items.append({
+        "series_id": "__META__",
+        "data_date": as_of_ts[:10],
+        "value": SCRIPT_VERSION,
+        "source_url": "NA",
+        "notes": "INFO:script_version",
+        "as_of_ts": as_of_ts,
+    })
+
+    # Official/no-key coverage
+    items.append(fetch_cboe_vix(as_of_ts))  # publisher feed
+    items.extend(fetch_treasury_yields(as_of_ts))  # US Treasury
+    items.append(fetch_chicagofed_nfci_nonfin_leverage(as_of_ts))  # Chicago Fed
+
+    # Add: official/no-key via FRED graph CSV
+    items.append(fetch_fredgraph_series("STLFSI4", as_of_ts))
+    items.append(fetch_fredgraph_series("BAMLH0A0HYM2", as_of_ts))
+    items.append(fetch_fredgraph_series("DTWEXBGS", as_of_ts))
+
+    # WTI: official/no-key first (FRED graph), then non-official last resort
+    wti_primary = fetch_fredgraph_series("DCOILWTICO", as_of_ts)
+    if wti_primary.get("value") == "NA":
+        items.append(wti_primary)
+        items.append(fetch_datahub_wti_daily(as_of_ts))
+    else:
+        items.append(wti_primary)
+
+    # Non-official but practical (indices)
     items.append(fetch_stooq_index("SP500", "^spx", as_of_ts))
     items.append(fetch_stooq_index("NASDAQCOM", "^ndq", as_of_ts))
     items.append(fetch_stooq_index("DJIA", "^dji", as_of_ts))
-    items.append(fetch_datahub_wti_daily(as_of_ts))
 
     write_json_atomic(OUT_FILE, items)
-    print(f"Wrote {OUT_FILE} rows={len(items)} as_of_ts={as_of_ts}")
+    print(f"Wrote {OUT_FILE} rows={len(items)} as_of_ts={as_of_ts} version={SCRIPT_VERSION}")
     return 0
 
 
