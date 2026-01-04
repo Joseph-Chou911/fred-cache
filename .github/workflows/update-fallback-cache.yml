@@ -1,197 +1,725 @@
-name: Update fallback cache
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-on:
-  workflow_dispatch: {}
-  schedule:
-    # Run every 8 hours at minute 13 (UTC): 00:13, 08:13, 16:13
-    - cron: "13 */8 * * *"
+"""
+Fallback cache (Version A): "official/no-key first", allow non-official for coverage.
+Outputs:
+  - fallback_cache/latest.json
+  - fallback_cache/latest.csv
+  - fallback_cache/manifest.json
+Dependencies: requests>=2.31.0
+"""
 
-permissions:
-  contents: write
+from __future__ import annotations
 
-concurrency:
-  group: fallback-cache-main
-  cancel-in-progress: true
+import csv
+import io
+import json
+import os
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+import requests
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
-      - name: Install deps
-        run: |
-          set -e
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            pip install "requests>=2.31.0"
-          fi
+# =========================
+# Config
+# =========================
+SCRIPT_VERSION = "fallback_vA_official_no_key_lock"
+OUT_DIR = "fallback_cache"
 
-      - name: Run fallback script
-        run: |
-          set -e
-          python scripts/update_fallback_cache.py
+# Sources
+CBOE_VIX_CSV_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
+CHICAGOFED_NFCI_CSV_URL = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
+FREDGRAPH_CSV_FMT = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
-      # --- NEW: hard-validate DATA JSON to prevent pushing broken files ---
-      - name: Validate DATA JSON (latest.json)
-        run: |
-          set -e
-          python -m json.tool fallback_cache/latest.json > /dev/null
-          echo "latest.json is valid JSON."
+# Stooq (non-official)
+STOOQ_DAILY_FMT = "https://stooq.com/q/d/l/?s={symbol}&i=d"
+# Oil (non-official)
+DATAHUB_WTI_DAILY_CSV = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
 
-      - name: Show outputs (debug)
-        run: |
-          set -e
-          echo "---- git status (before commit) ----"
-          git status --porcelain || true
 
-          echo "---- ls fallback_cache ----"
-          ls -al fallback_cache || true
+# =========================
+# Helpers
+# =========================
+def utc_now_iso_z() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-          echo "---- preview fallback_cache/latest.json ----"
-          (head -n 60 fallback_cache/latest.json || true)
 
-          echo "---- preview fallback_cache/manifest.json (pre-regen) ----"
-          (cat fallback_cache/manifest.json || true)
+def utc_today_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-          echo "---- preview fallback_cache/latest.csv ----"
-          (head -n 30 fallback_cache/latest.csv || true)
 
-      - name: Commit DATA (latest.json/latest.csv) if changed
-        run: |
-          set -e
+def _try_parse_date(s: str) -> Optional[str]:
+    """Return ISO date YYYY-MM-DD if parseable, else None."""
+    if s is None:
+        return None
+    s = str(s).strip()
+    if not s:
+        return None
 
-          # 1) Ensure files exist
-          for f in fallback_cache/latest.json fallback_cache/latest.csv fallback_cache/manifest.json; do
-            if [ ! -f "$f" ]; then
-              echo "ERROR: missing file: $f"
-              exit 1
-            fi
-          done
-
-          # 2) Commit only DATA files first (avoid manifest self-referential SHA issues)
-          git add fallback_cache/latest.json fallback_cache/latest.csv
-
-          if git diff --cached --quiet; then
-            echo "No DATA changes to commit."
-            # NOTE: we continue; manifest may still be regenerated/committed
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update fallback DATA (latest json/csv)"
-            git push
-          fi
-
-      - name: Regenerate MANIFEST with pinned SHA for DATA
-        env:
-          REPO_OWNER: Joseph-Chou911
-          REPO_NAME: fred-cache
-        run: |
-          set -e
-
-          # HEAD is the commit containing the latest DATA (if DATA unchanged, it's still the last DATA commit)
-          SHA_DATA="$(git rev-parse HEAD)"
-          export SHA_DATA
-          echo "SHA_DATA=$SHA_DATA"
-
-          if [ -z "$SHA_DATA" ]; then
-            echo "ERROR: SHA_DATA is empty"
-            exit 1
-          fi
-
-          python - <<'PY'
-          import json, os, datetime
-
-          sha_data = os.environ.get("SHA_DATA")
-          owner = os.environ.get("REPO_OWNER")
-          repo  = os.environ.get("REPO_NAME")
-
-          if not sha_data or sha_data.lower() == "none":
-            raise SystemExit(f"ERROR: invalid SHA_DATA: {sha_data!r}")
-          if not owner or not repo:
-            raise SystemExit(f"ERROR: invalid REPO_OWNER/REPO_NAME: {owner!r}/{repo!r}")
-
-          # Get script_version from latest.json (best-effort)
-          script_version = "unknown"
-          try:
-            with open("fallback_cache/latest.json", "r", encoding="utf-8") as f:
-              rows = json.load(f)
-            if isinstance(rows, list):
-              for r in rows:
-                if r.get("series_id") == "__META__" and r.get("notes") == "INFO:script_version":
-                  script_version = r.get("value") or script_version
-                  break
-          except Exception:
+    fmts = [
+        "%Y-%m-%d",
+        "%m/%d/%Y",
+        "%Y/%m/%d",
+        "%d/%m/%Y",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+    ]
+    for fmt in fmts:
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
             pass
+    return None
 
-          now_utc = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
-          # True pinned (points to DATA commit SHA)
-          latest_json = f"https://raw.githubusercontent.com/{owner}/{repo}/{sha_data}/fallback_cache/latest.json"
-          latest_csv  = f"https://raw.githubusercontent.com/{owner}/{repo}/{sha_data}/fallback_cache/latest.csv"
+def _try_parse_float(x) -> Optional[float]:
+    if x is None:
+        return None
+    s = str(x).strip()
+    if s == "" or s.upper() == "NA":
+        return None
+    s = s.replace(",", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
-          # manifest itself uses main as entry to avoid self-referential SHA
-          manifest_main = f"https://raw.githubusercontent.com/{owner}/{repo}/main/fallback_cache/manifest.json"
 
-          out = {
-            "generated_at_utc": now_utc,
-            "as_of_ts": now_utc,
-            "script_version": script_version,
-            "data_commit_sha": sha_data,
-            "pinned": {
-              "latest_json": latest_json,
-              "latest_csv": latest_csv,
-              "manifest_json": manifest_main
-            },
-            # --- NEW: notes as list to avoid newline-in-string risks forever ---
-            "notes": [
-              "Fallback cache; pinned points to DATA commit SHA.",
-              "manifest_json remains main entry to avoid self-referential SHA."
-            ]
-          }
+def http_get_text(url: str, timeout_sec: int = 30) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Return (text, err_note). err_note starts with ERR:...
+    """
+    try:
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "fallback-cache/1.0"},
+            timeout=timeout_sec,
+        )
+        resp.raise_for_status()
+        # utf-8-sig handles BOM
+        text = resp.content.decode("utf-8-sig", errors="replace")
+        return text, None
+    except Exception as e:
+        return None, f"ERR:http({type(e).__name__})"
 
-          with open("fallback_cache/manifest.json", "w", encoding="utf-8") as f:
-            json.dump(out, f, ensure_ascii=False, indent=2)
-            f.write("\n")
-          PY
 
-          echo "---- preview fallback_cache/manifest.json (post-regen) ----"
-          cat fallback_cache/manifest.json
+def ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
 
-      # --- NEW: hard-validate MANIFEST JSON before committing ---
-      - name: Validate MANIFEST JSON (manifest.json)
-        run: |
-          set -e
-          python -m json.tool fallback_cache/manifest.json > /dev/null
-          echo "manifest.json is valid JSON."
 
-      - name: Commit MANIFEST if changed
-        run: |
-          set -e
+def atomic_write_text(path: str, content: str) -> None:
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(content)
+    os.replace(tmp, path)
 
-          git add fallback_cache/manifest.json
 
-          if git diff --cached --quiet; then
-            echo "No MANIFEST changes to commit."
-            exit 0
-          fi
+def atomic_write_json(path: str, obj) -> None:
+    content = json.dumps(obj, ensure_ascii=False, indent=2)
+    atomic_write_text(path, content + "\n")
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update fallback MANIFEST (pinned to data sha)"
-          git push
 
-      - name: Post status
-        if: always()
-        run: |
-          echo "Done."
+# =========================
+# Fetchers
+# =========================
+def fetch_cboe_vix_close(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str]:
+    """
+    CBOE VIX history CSV has Date, Open, High, Low, Close.
+    Return latest (date_iso, close, notes)
+    """
+    text, err = http_get_text(CBOE_VIX_CSV_URL, timeout_sec=timeout_sec)
+    if err:
+        return None, None, f"{err}:cboe_vix"
+
+    f = io.StringIO(text)
+    reader = csv.DictReader(f)
+    rows = list(reader)
+    if not rows:
+        return None, None, "ERR:empty:cboe_vix"
+
+    best_date = None
+    best_close = None
+
+    for r in rows:
+        d = _try_parse_date(r.get("DATE") or r.get("Date") or r.get("date") or "")
+        c = _try_parse_float(r.get("CLOSE") or r.get("Close") or r.get("close") or "")
+        if d is None or c is None:
+            continue
+        if best_date is None or d > best_date:
+            best_date = d
+            best_close = c
+
+    if best_date is None or best_close is None:
+        return None, None, "ERR:no_valid_rows:cboe_vix"
+
+    return best_date, best_close, "WARN:fallback_cboe_vix"
+
+
+def _month_yyyymm(dt_utc: datetime) -> str:
+    return dt_utc.strftime("%Y%m")
+
+
+def _prev_month_yyyymm(dt_utc: datetime) -> str:
+    y = dt_utc.year
+    m = dt_utc.month
+    if m == 1:
+        return f"{y-1}12"
+    return f"{y}{m-1:02d}"
+
+
+def _build_treasury_month_url(yyyymm: str) -> str:
+    # same structure you used previously (works well)
+    return (
+        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+        f"daily-treasury-rates.csv/all/{yyyymm}"
+        "?_format=csv"
+        f"&field_tdr_date_value_month={yyyymm}"
+        "&page=&type=daily_treasury_yield_curve"
+    )
+
+
+def _pick_treasury_col(fieldnames: List[str], want: str) -> Optional[str]:
+    """
+    want in {"10", "2", "3m"}
+    Treasury file usually has columns like "10 Yr", "2 Yr", "3 Mo"
+    """
+    if not fieldnames:
+        return None
+
+    targets = []
+    if want == "10":
+        targets = ["10 Yr", "10 yr", "10Y", "10-Year", "10 Year"]
+    elif want == "2":
+        targets = ["2 Yr", "2 yr", "2Y", "2-Year", "2 Year"]
+    elif want == "3m":
+        targets = ["3 Mo", "3 mo", "3M", "3-Mo", "3 Month", "3 months"]
+    for t in targets:
+        if t in fieldnames:
+            return t
+
+    # heuristic search
+    for f in fieldnames:
+        low = f.lower().strip()
+        if want == "10" and ("10" in low and ("yr" in low or "year" in low)):
+            return f
+        if want == "2" and (low.startswith("2") and ("yr" in low or "year" in low)):
+            return f
+        if want == "3m" and ("3" in low and ("mo" in low or "month" in low)):
+            return f
+    return None
+
+
+def fetch_treasury_yields(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], Optional[float], Optional[float], str, str]:
+    """
+    Return (date_iso, y10, y2, y3m, source_url, notes)
+    Tries current month then previous month.
+    """
+    now = datetime.now(timezone.utc)
+    candidates = [_month_yyyymm(now), _prev_month_yyyymm(now)]
+
+    last_err = None
+    for yyyymm in candidates:
+        url = _build_treasury_month_url(yyyymm)
+        text, err = http_get_text(url, timeout_sec=timeout_sec)
+        if err:
+            last_err = f"{err}:treasury_csv"
+            continue
+
+        f = io.StringIO(text)
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames or []
+        rows = list(reader)
+        if not rows:
+            last_err = "ERR:treasury_empty"
+            continue
+
+        date_col = None
+        for c in ["Date", "date", "DATE"]:
+            if c in fieldnames:
+                date_col = c
+                break
+        if not date_col:
+            # some rare files may have first column as date with other name
+            date_col = fieldnames[0] if fieldnames else None
+
+        c10 = _pick_treasury_col(fieldnames, "10")
+        c2 = _pick_treasury_col(fieldnames, "2")
+        c3m = _pick_treasury_col(fieldnames, "3m")
+
+        if not date_col or not c10 or not c2 or not c3m:
+            last_err = "ERR:treasury_missing_cols"
+            continue
+
+        best_date = None
+        best_10 = None
+        best_2 = None
+        best_3m = None
+
+        for r in rows:
+            d = _try_parse_date(r.get(date_col, ""))
+            y10 = _try_parse_float(r.get(c10, ""))
+            y2 = _try_parse_float(r.get(c2, ""))
+            y3m = _try_parse_float(r.get(c3m, ""))
+            if d is None:
+                continue
+            if y10 is None or y2 is None or y3m is None:
+                continue
+            if best_date is None or d > best_date:
+                best_date = d
+                best_10 = y10
+                best_2 = y2
+                best_3m = y3m
+
+        if best_date is None:
+            last_err = "ERR:treasury_no_valid_rows"
+            continue
+
+        return best_date, best_10, best_2, best_3m, url, "WARN:fallback_treasury_csv"
+
+    return None, None, None, None, _build_treasury_month_url(candidates[0]), last_err or "ERR:treasury_no_valid_rows"
+
+
+def _pick_date_field(fieldnames: List[str], rows: List[Dict[str, str]]) -> Optional[str]:
+    if not fieldnames:
+        return None
+
+    candidates = ["date", "Date", "DATE", "week", "Week", "WEEK", "observation_date", "TIME", "time"]
+    for c in candidates:
+        if c in fieldnames:
+            return c
+
+    # heuristic: check first few columns
+    for f in fieldnames[:6]:
+        ok = 0
+        total = 0
+        for r in rows[:60]:
+            total += 1
+            if _try_parse_date(r.get(f, "")) is not None:
+                ok += 1
+        if total > 0 and ok / total >= 0.6:
+            return f
+
+    return None
+
+
+def _pick_nonfin_leverage_field(fieldnames: List[str]) -> Optional[str]:
+    if not fieldnames:
+        return None
+
+    known = [
+        "NFCINONFINLEVERAGE",
+        "NFCI_NONFIN_LEVERAGE",
+        "Nonfinancial Leverage Subindex",
+        "Nonfinancial leverage subindex",
+    ]
+    for k in known:
+        if k in fieldnames:
+            return k
+
+    for f in fieldnames:
+        low = f.strip().lower()
+        if ("nonfinancial" in low and "leverage" in low) or (("non" in low and "fin" in low) and "leverage" in low):
+            return f
+
+    return None
+
+
+def fetch_chicagofed_nfci_nonfin_leverage(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str]:
+    """
+    Return (data_date_iso, value, notes)
+    """
+    text, err = http_get_text(CHICAGOFED_NFCI_CSV_URL, timeout_sec=timeout_sec)
+    if err:
+        return None, None, f"{err}:chicagofed_nfci"
+
+    f = io.StringIO(text)
+    reader = csv.DictReader(f)
+    fieldnames = reader.fieldnames or []
+    rows: List[Dict[str, str]] = []
+    try:
+        for r in reader:
+            rows.append(r)
+    except Exception as e:
+        return None, None, f"ERR:chicagofed_csv_parse({type(e).__name__})"
+
+    if not rows or not fieldnames:
+        return None, None, "ERR:chicagofed_empty"
+
+    date_field = _pick_date_field(fieldnames, rows)
+    if not date_field:
+        return None, None, "ERR:missing_date_col"
+
+    val_field = _pick_nonfin_leverage_field(fieldnames)
+    if not val_field:
+        return None, None, "ERR:chicagofed_nfci_missing_col"
+
+    best_date = None
+    best_val = None
+    for r in rows:
+        d = _try_parse_date(r.get(date_field, ""))
+        v = _try_parse_float(r.get(val_field, ""))
+        if d is None or v is None:
+            continue
+        if best_date is None or d > best_date:
+            best_date = d
+            best_val = v
+
+    if best_date is None or best_val is None:
+        return None, None, "ERR:no_valid_rows"
+
+    return best_date, best_val, "WARN:fallback_chicagofed_nfci(nonfinancial leverage)"
+
+
+def fetch_fredgraph_last_value(series_id: str, timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str, str]:
+    """
+    FRED fredgraph CSV is generally "no key".
+    Return (date_iso, value, source_url, notes)
+    """
+    url = FREDGRAPH_CSV_FMT.format(series_id=series_id)
+    text, err = http_get_text(url, timeout_sec=timeout_sec)
+    if err:
+        return None, None, url, f"{err}:fredgraph"
+
+    f = io.StringIO(text)
+    reader = csv.DictReader(f)
+    rows = list(reader)
+    if not rows:
+        return None, None, url, "ERR:fredgraph_empty"
+
+    # columns: DATE, <series_id>
+    date_col = None
+    for c in ["DATE", "Date", "date"]:
+        if c in reader.fieldnames:
+            date_col = c
+            break
+    if not date_col:
+        date_col = reader.fieldnames[0] if reader.fieldnames else None
+
+    val_col = series_id if (reader.fieldnames and series_id in reader.fieldnames) else None
+    if not val_col:
+        # sometimes it uses a different column name; try second column
+        if reader.fieldnames and len(reader.fieldnames) >= 2:
+            val_col = reader.fieldnames[1]
+
+    best_date = None
+    best_val = None
+
+    for r in rows:
+        d = _try_parse_date(r.get(date_col, ""))
+        v = _try_parse_float(r.get(val_col, ""))
+        if d is None or v is None:
+            continue
+        if best_date is None or d > best_date:
+            best_date = d
+            best_val = v
+
+    if best_date is None or best_val is None:
+        return None, None, url, "ERR:fredgraph_no_valid_rows"
+
+    return best_date, best_val, url, f"WARN:fredgraph_no_key({series_id})"
+
+
+def fetch_stooq_index(symbol: str, timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], Optional[float], str]:
+    """
+    Return (date_iso, close, change_pct_1d, notes)
+    """
+    url = STOOQ_DAILY_FMT.format(symbol=symbol)
+    text, err = http_get_text(url, timeout_sec=timeout_sec)
+    if err:
+        return None, None, None, f"{err}:stooq({symbol})"
+
+    f = io.StringIO(text)
+    reader = csv.DictReader(f)
+    rows = list(reader)
+    if len(rows) < 1:
+        return None, None, None, "ERR:empty"
+
+    # Expect columns: Date, Open, High, Low, Close, Volume
+    def get_close(row) -> Optional[float]:
+        return _try_parse_float(row.get("Close") or row.get("CLOSE") or row.get("close"))
+
+    # pick latest two valid rows by date
+    candidates = []
+    for r in rows:
+        d = _try_parse_date(r.get("Date") or r.get("DATE") or r.get("date") or "")
+        c = get_close(r)
+        if d and c is not None:
+            candidates.append((d, c))
+    if not candidates:
+        return None, None, None, "ERR:no_valid_rows"
+
+    candidates.sort(key=lambda x: x[0])
+    d1, c1 = candidates[-1]
+    change = None
+    if len(candidates) >= 2:
+        d0, c0 = candidates[-2]
+        if c0 and c0 != 0:
+            change = (c1 - c0) / c0 * 100.0
+
+    return d1, c1, change, f"WARN:nonofficial_stooq({symbol});derived_1d_pct"
+
+
+def fetch_datahub_wti(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str]:
+    """
+    datahub wti-daily.csv columns typically: Date, Price
+    """
+    text, err = http_get_text(DATAHUB_WTI_DAILY_CSV, timeout_sec=timeout_sec)
+    if err:
+        return None, None, f"{err}:datahub_wti"
+
+    f = io.StringIO(text)
+    reader = csv.DictReader(f)
+    rows = list(reader)
+    if not rows:
+        return None, None, "ERR:empty"
+
+    best_date = None
+    best_val = None
+    for r in rows:
+        d = _try_parse_date(r.get("Date") or r.get("DATE") or r.get("date") or "")
+        v = _try_parse_float(r.get("Price") or r.get("price") or r.get("VALUE") or r.get("Value") or "")
+        if d is None or v is None:
+            continue
+        if best_date is None or d > best_date:
+            best_date = d
+            best_val = v
+
+    if best_date is None or best_val is None:
+        return None, None, "ERR:no_valid_rows"
+
+    return best_date, best_val, "WARN:nonofficial_datahub_oil_prices(wti-daily)"
+
+
+# =========================
+# Output builders
+# =========================
+def records_to_csv(records: List[Dict]) -> str:
+    # stable column order (with optional change_pct_1d)
+    fieldnames = ["series_id", "data_date", "value", "source_url", "notes", "as_of_ts", "change_pct_1d"]
+
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=fieldnames)
+    writer.writeheader()
+    for r in records:
+        row = {k: r.get(k, "") for k in fieldnames}
+        writer.writerow(row)
+    return out.getvalue()
+
+
+def build_manifest(repo: str, ref: str, as_of_ts: str) -> Dict:
+    base_raw = f"https://raw.githubusercontent.com/{repo}/{ref}/{OUT_DIR}"
+
+    # --- CHANGE: notes is a list (prevents any newline-in-string issues forever) ---
+    notes = [
+        "Fallback cache; prefers official/no-key sources.",
+        "Allows non-official for coverage."
+    ]
+
+    return {
+        "generated_at_utc": as_of_ts,
+        "as_of_ts": as_of_ts,
+        "script_version": SCRIPT_VERSION,
+        "pinned": {
+            "latest_json": f"{base_raw}/latest.json",
+            "latest_csv": f"{base_raw}/latest.csv",
+            "manifest_json": f"{base_raw}/manifest.json",
+        },
+        "notes": notes,
+    }
+
+
+# =========================
+# Main
+# =========================
+def main() -> int:
+    as_of_ts = utc_now_iso_z()
+
+    ensure_dir(OUT_DIR)
+
+    records: List[Dict] = []
+
+    # Meta record
+    records.append({
+        "series_id": "__META__",
+        "data_date": utc_today_iso(),
+        "value": SCRIPT_VERSION,
+        "source_url": "NA",
+        "notes": "INFO:script_version",
+        "as_of_ts": as_of_ts
+    })
+
+    # VIX (official no-key)
+    vix_date, vix_val, vix_note = fetch_cboe_vix_close()
+    records.append({
+        "series_id": "VIXCLS",
+        "data_date": vix_date if vix_date else "NA",
+        "value": vix_val if (vix_val is not None) else "NA",
+        "source_url": CBOE_VIX_CSV_URL,
+        "notes": vix_note,
+        "as_of_ts": as_of_ts
+    })
+
+    # Treasury yields (official no-key)
+    t_date, y10, y2, y3m, t_url, t_note = fetch_treasury_yields()
+    # DGS10
+    records.append({
+        "series_id": "DGS10",
+        "data_date": t_date if t_date else "NA",
+        "value": y10 if (y10 is not None) else "NA",
+        "source_url": t_url,
+        "notes": t_note if t_date else (t_note or "ERR:treasury_no_valid_rows"),
+        "as_of_ts": as_of_ts
+    })
+    # DGS2
+    records.append({
+        "series_id": "DGS2",
+        "data_date": t_date if t_date else "NA",
+        "value": y2 if (y2 is not None) else "NA",
+        "source_url": t_url,
+        "notes": t_note if t_date else (t_note or "ERR:treasury_no_valid_rows"),
+        "as_of_ts": as_of_ts
+    })
+    # UST3M (proxy for DGS3MO in your output naming)
+    records.append({
+        "series_id": "UST3M",
+        "data_date": t_date if t_date else "NA",
+        "value": y3m if (y3m is not None) else "NA",
+        "source_url": t_url,
+        "notes": t_note if t_date else (t_note or "ERR:treasury_no_valid_rows"),
+        "as_of_ts": as_of_ts
+    })
+
+    # Derived spreads (if available)
+    if t_date and (y10 is not None) and (y2 is not None):
+        records.append({
+            "series_id": "T10Y2Y",
+            "data_date": t_date,
+            "value": (y10 - y2),
+            "source_url": t_url,
+            "notes": "WARN:derived_from_treasury(10Y-2Y)",
+            "as_of_ts": as_of_ts
+        })
+    else:
+        records.append({
+            "series_id": "T10Y2Y",
+            "data_date": "NA",
+            "value": "NA",
+            "source_url": t_url,
+            "notes": "ERR:derived_missing_inputs(10Y-2Y)",
+            "as_of_ts": as_of_ts
+        })
+
+    if t_date and (y10 is not None) and (y3m is not None):
+        records.append({
+            "series_id": "T10Y3M",
+            "data_date": t_date,
+            "value": (y10 - y3m),
+            "source_url": t_url,
+            "notes": "WARN:derived_from_treasury(10Y-3M)",
+            "as_of_ts": as_of_ts
+        })
+    else:
+        records.append({
+            "series_id": "T10Y3M",
+            "data_date": "NA",
+            "value": "NA",
+            "source_url": t_url,
+            "notes": "ERR:derived_missing_inputs(10Y-3M)",
+            "as_of_ts": as_of_ts
+        })
+
+    # Chicago Fed NFCI Nonfinancial Leverage (official no-key)
+    nfci_date, nfci_val, nfci_note = fetch_chicagofed_nfci_nonfin_leverage()
+    records.append({
+        "series_id": "NFCINONFINLEVERAGE",
+        "data_date": nfci_date if nfci_date else "NA",
+        "value": nfci_val if (nfci_val is not None) else "NA",
+        "source_url": CHICAGOFED_NFCI_CSV_URL,
+        "notes": nfci_note if nfci_note else "NA",
+        "as_of_ts": as_of_ts
+    })
+
+    # HY OAS (no-key via fredgraph)
+    hy_date, hy_val, hy_url, hy_note = fetch_fredgraph_last_value("BAMLH0A0HYM2")
+    records.append({
+        "series_id": "BAMLH0A0HYM2",
+        "data_date": hy_date if hy_date else "NA",
+        "value": hy_val if (hy_val is not None) else "NA",
+        "source_url": hy_url,
+        "notes": hy_note,
+        "as_of_ts": as_of_ts
+    })
+
+    # Equity indices (non-official)
+    sp_date, sp_val, sp_chg, sp_note = fetch_stooq_index("^spx")
+    records.append({
+        "series_id": "SP500",
+        "data_date": sp_date if sp_date else "NA",
+        "value": sp_val if (sp_val is not None) else "NA",
+        "source_url": STOOQ_DAILY_FMT.format(symbol="^spx"),
+        "notes": sp_note,
+        "as_of_ts": as_of_ts,
+        "change_pct_1d": sp_chg if (sp_chg is not None) else ""
+    })
+
+    nd_date, nd_val, nd_chg, nd_note = fetch_stooq_index("^ndq")
+    records.append({
+        "series_id": "NASDAQCOM",
+        "data_date": nd_date if nd_date else "NA",
+        "value": nd_val if (nd_val is not None) else "NA",
+        "source_url": STOOQ_DAILY_FMT.format(symbol="^ndq"),
+        "notes": nd_note,
+        "as_of_ts": as_of_ts,
+        "change_pct_1d": nd_chg if (nd_chg is not None) else ""
+    })
+
+    dj_date, dj_val, dj_chg, dj_note = fetch_stooq_index("^dji")
+    records.append({
+        "series_id": "DJIA",
+        "data_date": dj_date if dj_date else "NA",
+        "value": dj_val if (dj_val is not None) else "NA",
+        "source_url": STOOQ_DAILY_FMT.format(symbol="^dji"),
+        "notes": dj_note,
+        "as_of_ts": as_of_ts,
+        "change_pct_1d": dj_chg if (dj_chg is not None) else ""
+    })
+
+    # Oil (non-official)
+    oil_date, oil_val, oil_note = fetch_datahub_wti()
+    records.append({
+        "series_id": "DCOILWTICO",
+        "data_date": oil_date if oil_date else "NA",
+        "value": oil_val if (oil_val is not None) else "NA",
+        "source_url": DATAHUB_WTI_DAILY_CSV,
+        "notes": oil_note,
+        "as_of_ts": as_of_ts
+    })
+
+    # Write outputs
+    latest_json_path = os.path.join(OUT_DIR, "latest.json")
+    latest_csv_path = os.path.join(OUT_DIR, "latest.csv")
+    manifest_path = os.path.join(OUT_DIR, "manifest.json")
+
+    atomic_write_json(latest_json_path, records)
+    atomic_write_text(latest_csv_path, records_to_csv(records))
+
+    # Build manifest (NOTE: In your workflow, this manifest will later be regenerated
+    # with data_commit_sha + SHA-pinned URLs. This is a safe baseline manifest only.)
+    repo = os.getenv("GITHUB_REPOSITORY", "").strip() or "UNKNOWN/UNKNOWN"
+    ref = os.getenv("GITHUB_REF_NAME", "").strip() or "main"
+    manifest = build_manifest(repo=repo, ref=ref, as_of_ts=as_of_ts)
+    atomic_write_json(manifest_path, manifest)
+
+    # Print to stdout (useful for Actions logs)
+    print(json.dumps(records, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
