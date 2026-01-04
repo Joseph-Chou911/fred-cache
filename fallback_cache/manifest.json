@@ -1,11 +1,12 @@
 {
-  "generated_at_utc": "2026-01-04T06:14:22Z",
-  "as_of_ts": "2026-01-04T06:14:22Z",
+  "generated_at_utc": "2026-01-04T06:30:32Z",
+  "as_of_ts": "2026-01-04T06:30:32Z",
   "script_version": "fallback_vA_official_no_key_lock",
+  "data_commit_sha": null,
   "pinned": {
-    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/main/fallback_cache/latest.json",
-    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/main/fallback_cache/latest.csv",
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/None/fallback_cache/latest.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/None/fallback_cache/latest.csv",
     "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/main/fallback_cache/manifest.json"
   },
-  "notes": "Fallback cache; prefers official/no-key sources, allows non-official for coverage."
+  "notes": "Fallback cache; pinned points to DATA commit SHA. manifest_json remains main entry to avoid self-referential SHA."
 }
