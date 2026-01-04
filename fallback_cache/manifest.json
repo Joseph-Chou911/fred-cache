@@ -1,12 +1,15 @@
 {
-  "generated_at_utc": "2026-01-04T08:15:42Z",
-  "as_of_ts": "2026-01-04T08:15:42Z",
+  "generated_at_utc": "2026-01-04T14:52:46Z",
+  "as_of_ts": "2026-01-04T14:52:46Z",
   "script_version": "fallback_vA_official_no_key_lock",
-  "data_commit_sha": "cc0faea6f74bd8d6a979ada7ac6cfcdbccce1556",
+  "data_commit_sha": "c32825acffcba81262f32b9e5725a2d991f8eb67",
   "pinned": {
-    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/cc0faea6f74bd8d6a979ada7ac6cfcdbccce1556/fallback_cache/latest.json",
-    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/cc0faea6f74bd8d6a979ada7ac6cfcdbccce1556/fallback_cache/latest.csv",
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/c32825acffcba81262f32b9e5725a2d991f8eb67/fallback_cache/latest.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/c32825acffcba81262f32b9e5725a2d991f8eb67/fallback_cache/latest.csv",
     "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/main/fallback_cache/manifest.json"
   },
-  "notes": "Fallback cache; pinned points to DATA commit SHA. manifest_json remains main entry to avoid self-referential SHA."
+  "notes": [
+    "Fallback cache; pinned points to DATA commit SHA.",
+    "manifest_json remains main entry to avoid self-referential SHA."
+  ]
 }
