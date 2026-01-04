@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from io import StringIO
@@ -21,8 +22,9 @@ OUT_FILE = os.path.join(OUT_DIR, "latest.json")
 
 DEBUG_HEADERS_JSON = os.path.join(OUT_DIR, "debug_nfci_headers.json")
 DEBUG_FIRSTLINES_TXT = os.path.join(OUT_DIR, "debug_nfci_first_lines.txt")
+DEBUG_FREDGRAPH_PREFIX = os.path.join(OUT_DIR, "debug_fredgraph_")  # + {series}.txt
 
-SCRIPT_VERSION = "fallback_vA_official_no_key_20260104_01"
+SCRIPT_VERSION = "fallback_vA_official_no_key_20260104_02"
 
 URL_CBOE_VIX = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 
@@ -31,14 +33,15 @@ TREASURY_QS = "?_format=csv&field_tdr_date_value_month={yyyymm}&page=&type=daily
 
 URL_CHICAGOFED_NFCI = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
 
-# FRED graph CSV (official + no key)
+# FRED (official + no key)
 FREDGRAPH = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+FRED_SERIES_HTML = "https://fred.stlouisfed.org/series/{series_id}"
 
 # Non-official last resort
 URL_DATAHUB_WTI_DAILY = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
 STOOQ_CSV = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 
-UA = "fallback-cache-bot/1.0 (+https://github.com/Joseph-Chou911/fred-cache)"
+UA = "fallback-cache-bot/1.1 (+https://github.com/Joseph-Chou911/fred-cache)"
 TIMEOUT = 30
 
 
@@ -53,8 +56,11 @@ def sleep_backoff(attempt: int) -> None:
     time.sleep(2 ** attempt)  # 2,4,8
 
 
-def http_get_text(url: str, timeout: int = TIMEOUT, max_retries: int = 3) -> Tuple[Optional[str], Optional[str]]:
+def http_get_text(url: str, timeout: int = TIMEOUT, max_retries: int = 3, extra_headers: Optional[Dict[str, str]] = None) -> Tuple[Optional[str], Optional[str]]:
     headers = {"User-Agent": UA}
+    if extra_headers:
+        headers.update(extra_headers)
+
     for attempt in range(1, max_retries + 1):
         try:
             r = requests.get(url, headers=headers, timeout=timeout)
@@ -153,27 +159,116 @@ def write_nfci_debug(raw_text: str, raw_headers: Optional[List[str]], norm_heade
         f.write("\n")
 
 
+def write_debug_text(path: str, text: str, max_lines: int = 40) -> None:
+    lines = text.splitlines()
+    head = "\n".join(lines[:max_lines])
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(head)
+        f.write("\n")
+
+
+def looks_like_html(text: str) -> bool:
+    t = text.lstrip().lower()
+    return t.startswith("<!doctype html") or t.startswith("<html") or "<html" in t[:500]
+
+
+def looks_like_csv_with_date(text: str) -> bool:
+    # Quick sanity: CSV should have a header containing DATE
+    head = "\n".join(text.splitlines()[:3]).lower()
+    return "date" in head and ("," in head)
+
+
 # -------------------------
-# Official / no-key: FRED graph CSV
+# Official / no-key: FRED graph CSV + fallback to FRED series HTML
 # -------------------------
-def fetch_fredgraph_series(series_id: str, as_of_ts: str) -> Dict[str, Any]:
-    url = FREDGRAPH.format(series_id=series_id)
-    text, err = http_get_text(url)
+def fetch_fred_series_html_latest(series_id: str, as_of_ts: str) -> Dict[str, Any]:
+    url = FRED_SERIES_HTML.format(series_id=series_id)
+    text, err = http_get_text(url, extra_headers={"Accept": "text/html"})
     if err:
         return make_na(series_id, url, err, as_of_ts)
+    if looks_like_html(text) is False:
+        # Still accept if it is HTML-ish; but if totally weird, record
+        pass
+
+    # Try to find the first "YYYY-MM-DD: value" after the word "Observations"
+    idx = text.find("Observations")
+    hay = text[idx:] if idx != -1 else text
+
+    # Skip "." values; accept numeric (int/float)
+    # Example on page: "2025-12-29: 57.89"
+    pattern = re.compile(r"(\d{4}-\d{2}-\d{2})\s*:\s*([0-9]+(?:\.[0-9]+)?)")
+    matches = pattern.findall(hay)
+    if not matches:
+        # dump some debug
+        write_debug_text(f"{DEBUG_FREDGRAPH_PREFIX}{series_id}_html.txt", text)
+        return make_na(series_id, url, "html_parse_no_matches", as_of_ts)
+
+    d, v_str = matches[0]
+    v = to_float(v_str)
+    if v is None:
+        write_debug_text(f"{DEBUG_FREDGRAPH_PREFIX}{series_id}_html.txt", text)
+        return make_na(series_id, url, "html_parse_bad_value", as_of_ts)
+
+    return {
+        "series_id": series_id,
+        "data_date": d,
+        "value": v,
+        "source_url": url,
+        "notes": f"WARN:fallback_fred_series_html({series_id})",
+        "as_of_ts": as_of_ts,
+    }
+
+
+def fetch_fredgraph_series(series_id: str, as_of_ts: str) -> Dict[str, Any]:
+    url = FREDGRAPH.format(series_id=series_id)
+
+    # FRED sometimes behaves differently with Accept/Referer; add both.
+    text, err = http_get_text(
+        url,
+        extra_headers={
+            "Accept": "text/csv,text/plain,*/*",
+            "Referer": FRED_SERIES_HTML.format(series_id=series_id),
+        },
+    )
+    if err:
+        # fallback to HTML
+        return fetch_fred_series_html_latest(series_id, as_of_ts)
+
+    # Detect bot/HTML page
+    if looks_like_html(text) or (not looks_like_csv_with_date(text)):
+        write_debug_text(f"{DEBUG_FREDGRAPH_PREFIX}{series_id}_fredgraph.txt", text)
+        # fallback to official HTML series page
+        return fetch_fred_series_html_latest(series_id, as_of_ts)
 
     sio = StringIO(text)
     reader = csv.DictReader(sio)
-    # expected columns: DATE, <series_id>
+    headers = reader.fieldnames or []
+
+    # FRED graph CSV sometimes uses "VALUE" instead of the series_id as column name.
+    value_col: Optional[str] = None
+    if series_id in headers:
+        value_col = series_id
+    elif "VALUE" in headers:
+        value_col = "VALUE"
+    else:
+        # pick the 2nd column if it exists
+        if len(headers) >= 2:
+            value_col = headers[1]
+
+    if not value_col or "DATE" not in headers:
+        write_debug_text(f"{DEBUG_FREDGRAPH_PREFIX}{series_id}_fredgraph.txt", text)
+        return fetch_fred_series_html_latest(series_id, as_of_ts)
+
     last_valid: Optional[Tuple[str, float]] = None
     for row in reader:
-        d = parse_date_any(row.get("DATE") or row.get("Date") or row.get("date") or "")
-        v = to_float(row.get(series_id))
+        d = parse_date_any(row.get("DATE") or "")
+        v = to_float(row.get(value_col))
         if d and v is not None:
             last_valid = (d, v)
 
     if not last_valid:
-        return make_na(series_id, url, "no_valid_rows", as_of_ts)
+        write_debug_text(f"{DEBUG_FREDGRAPH_PREFIX}{series_id}_fredgraph.txt", text)
+        return fetch_fred_series_html_latest(series_id, as_of_ts)
 
     d, v = last_valid
     return {
@@ -187,10 +282,10 @@ def fetch_fredgraph_series(series_id: str, as_of_ts: str) -> Dict[str, Any]:
 
 
 # -------------------------
-# VIX (official-ish publisher feed; no key)
+# VIX (publisher feed; no key)
 # -------------------------
 def fetch_cboe_vix(as_of_ts: str) -> Dict[str, Any]:
-    text, err = http_get_text(URL_CBOE_VIX)
+    text, err = http_get_text(URL_CBOE_VIX, extra_headers={"Accept": "text/csv,text/plain,*/*"})
     if err:
         return make_na("VIXCLS", URL_CBOE_VIX, err, as_of_ts)
 
@@ -224,7 +319,7 @@ def fetch_treasury_yields(as_of_ts: str) -> List[Dict[str, Any]]:
     yyyymm = datetime.now().strftime("%Y%m")
     url = TREASURY_BASE.format(yyyymm=yyyymm) + TREASURY_QS.format(yyyymm=yyyymm)
 
-    text, err = http_get_text(url)
+    text, err = http_get_text(url, extra_headers={"Accept": "text/csv,text/plain,*/*"})
     if err:
         return [
             make_na("DGS10", url, err, as_of_ts),
@@ -341,7 +436,7 @@ def _pick_nonfin_leverage_norm(norm_headers: List[str]) -> Optional[str]:
 
 
 def fetch_chicagofed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
-    text, err = http_get_text(URL_CHICAGOFED_NFCI)
+    text, err = http_get_text(URL_CHICAGOFED_NFCI, extra_headers={"Accept": "text/csv,text/plain,*/*"})
     if err:
         return make_na("NFCINONFINLEVERAGE", URL_CHICAGOFED_NFCI, err, as_of_ts)
 
@@ -397,7 +492,7 @@ def fetch_chicagofed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
 # -------------------------
 def fetch_stooq_index(series_id: str, symbol: str, as_of_ts: str) -> Dict[str, Any]:
     url = STOOQ_CSV.format(symbol=symbol)
-    text, err = http_get_text(url)
+    text, err = http_get_text(url, extra_headers={"Accept": "text/csv,text/plain,*/*"})
     if err:
         return make_na(series_id, url, err, as_of_ts)
 
@@ -437,7 +532,7 @@ def fetch_stooq_index(series_id: str, symbol: str, as_of_ts: str) -> Dict[str, A
 # Non-official last resort: DataHub WTI
 # -------------------------
 def fetch_datahub_wti_daily(as_of_ts: str) -> Dict[str, Any]:
-    text, err = http_get_text(URL_DATAHUB_WTI_DAILY)
+    text, err = http_get_text(URL_DATAHUB_WTI_DAILY, extra_headers={"Accept": "text/csv,text/plain,*/*"})
     if err:
         return make_na("DCOILWTICO", URL_DATAHUB_WTI_DAILY, err, as_of_ts)
 
@@ -471,7 +566,6 @@ def main() -> int:
 
     items: List[Dict[str, Any]] = []
 
-    # META row: lets you verify the workflow is running the intended script
     items.append({
         "series_id": "__META__",
         "data_date": as_of_ts[:10],
@@ -481,25 +575,23 @@ def main() -> int:
         "as_of_ts": as_of_ts,
     })
 
-    # Official/no-key coverage
-    items.append(fetch_cboe_vix(as_of_ts))  # publisher feed
-    items.extend(fetch_treasury_yields(as_of_ts))  # US Treasury
-    items.append(fetch_chicagofed_nfci_nonfin_leverage(as_of_ts))  # Chicago Fed
+    # publisher/official feeds
+    items.append(fetch_cboe_vix(as_of_ts))
+    items.extend(fetch_treasury_yields(as_of_ts))
+    items.append(fetch_chicagofed_nfci_nonfin_leverage(as_of_ts))
 
-    # Add: official/no-key via FRED graph CSV
+    # FRED official/no-key: try fredgraph.csv; fallback to series HTML
     items.append(fetch_fredgraph_series("STLFSI4", as_of_ts))
     items.append(fetch_fredgraph_series("BAMLH0A0HYM2", as_of_ts))
     items.append(fetch_fredgraph_series("DTWEXBGS", as_of_ts))
 
-    # WTI: official/no-key first (FRED graph), then non-official last resort
+    # WTI: official/no-key first (FRED graph/html), then non-official last resort
     wti_primary = fetch_fredgraph_series("DCOILWTICO", as_of_ts)
+    items.append(wti_primary)
     if wti_primary.get("value") == "NA":
-        items.append(wti_primary)
         items.append(fetch_datahub_wti_daily(as_of_ts))
-    else:
-        items.append(wti_primary)
 
-    # Non-official but practical (indices)
+    # Indices (non-official)
     items.append(fetch_stooq_index("SP500", "^spx", as_of_ts))
     items.append(fetch_stooq_index("NASDAQCOM", "^ndq", as_of_ts))
     items.append(fetch_stooq_index("DJIA", "^dji", as_of_ts))
