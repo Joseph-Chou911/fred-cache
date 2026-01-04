@@ -11,7 +11,6 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-
 TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 
@@ -24,8 +23,21 @@ def utc_now_iso() -> str:
 
 
 def taipei_now_iso() -> str:
-    # e.g. 2026-01-04T10:15:30+08:00
     return datetime.now(TAIPEI_TZ).replace(microsecond=0).isoformat()
+
+
+def yyyymm_taipei(dt: Optional[datetime] = None) -> str:
+    dt = dt or datetime.now(TAIPEI_TZ)
+    return dt.strftime("%Y%m")
+
+
+def prev_month_yyyymm(dt: Optional[datetime] = None) -> str:
+    dt = dt or datetime.now(TAIPEI_TZ)
+    y = dt.year
+    m = dt.month
+    if m == 1:
+        return f"{y-1}12"
+    return f"{y}{m-1:02d}"
 
 
 def git_head_sha() -> str:
@@ -41,16 +53,38 @@ def git_head_sha() -> str:
 def safe_float(x: str) -> Optional[float]:
     try:
         s = (x or "").strip()
-        if s == "" or s.upper() == "NA":
+        if s == "" or s.upper() in ("NA", "N/A"):
             return None
         return float(s)
     except Exception:
         return None
 
 
+def normalize_date(s: str) -> str:
+    """
+    Normalize to YYYY-MM-DD when possible.
+    Accepts:
+      - YYYY-MM-DD
+      - MM/DD/YYYY
+    Otherwise returns original trimmed (or "NA").
+    """
+    s = (s or "").strip()
+    if not s:
+        return "NA"
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        return s
+    if re.fullmatch(r"\d{2}/\d{2}/\d{4}", s):
+        mm, dd, yyyy = s.split("/")
+        return f"{yyyy}-{mm}-{dd}"
+    # fallback: take first 10 chars if looks like ISO
+    if len(s) >= 10 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", s[:10]):
+        return s[:10]
+    return s
+
+
 def backoff_get(url: str, timeout: int = 25, max_retries: int = 3) -> requests.Response:
     """
-    Retry on transient errors: 429/5xx/timeout/connection errors
+    Retry on transient errors: 429/5xx/timeouts/connection errors
     Backoff: 2s -> 4s -> 8s (max 3 retries)
     """
     last_err = None
@@ -72,7 +106,7 @@ def backoff_get(url: str, timeout: int = 25, max_retries: int = 3) -> requests.R
 
 
 # -----------------------------
-# Cache row schema (compatible with your latest.json style)
+# Cache row schema
 # -----------------------------
 
 @dataclass
@@ -82,13 +116,13 @@ class CacheRow:
     value: object      # float or "NA"
     source_url: str
     notes: str
-    as_of_ts: str      # cache generation timestamp
+    as_of_ts: str      # cache generation timestamp (UTC ISO)
 
 
 def make_row(series_id: str, data_date: Optional[str], value: Optional[float], source_url: str, notes: str, as_of_ts: str) -> CacheRow:
     return CacheRow(
         series_id=series_id,
-        data_date=data_date if data_date else "NA",
+        data_date=normalize_date(data_date or "NA"),
         value=value if value is not None else "NA",
         source_url=source_url if source_url else "NA",
         notes=notes if notes else "NA",
@@ -114,9 +148,11 @@ def row_to_dict(r: CacheRow) -> Dict:
 def fetch_cboe_vix_last_close() -> Tuple[str, float, str]:
     """
     Cboe VIX daily history CSV. Use last row CLOSE.
+    Date is usually YYYY-MM-DD already.
     """
     url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
     r = backoff_get(url)
+
     lines = [ln.strip() for ln in r.text.splitlines() if ln.strip()]
     if len(lines) < 2:
         raise RuntimeError("Cboe VIX CSV too short")
@@ -129,57 +165,78 @@ def fetch_cboe_vix_last_close() -> Tuple[str, float, str]:
     close_i = header.index("CLOSE")
 
     last = [c.strip() for c in lines[-1].split(",")]
-    d = last[date_i]  # YYYY-MM-DD
+    d = normalize_date(last[date_i])
     v = safe_float(last[close_i])
     if v is None:
         raise RuntimeError("Cboe VIX close is NA")
     return d, v, url
 
 
+def treasury_csv_url(month_yyyymm: str) -> str:
+    """
+    Treasury 'Download CSV' endpoint. We also include month param for stability.
+    """
+    return (
+        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+        f"daily-treasury-rates.csv/all/{month_yyyymm}"
+        f"?_format=csv&field_tdr_date_value_month={month_yyyymm}&page=&type=daily_treasury_yield_curve"
+    )
+
+
 def fetch_treasury_yield_curve_last_row(month_yyyymm: Optional[str] = None) -> Tuple[str, Dict[str, float], str]:
     """
-    U.S. Treasury TextView table (no key).
-    Extract latest row yields: 3M, 2Y, 10Y (if present).
+    Use Treasury 'Download CSV' and parse by column names.
+    We search from bottom for the latest row that has at least one of the needed columns.
+    Needed columns: '3 Mo', '2 Yr', '10 Yr' (Treasury naming).
     """
     if month_yyyymm is None:
-        month_yyyymm = datetime.now(TAIPEI_TZ).strftime("%Y%m")
+        month_yyyymm = yyyymm_taipei()
 
-    url = (
-        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView"
-        f"?type=daily_treasury_yield_curve&field_tdr_date_value_month={month_yyyymm}"
-    )
+    url = treasury_csv_url(month_yyyymm)
     r = backoff_get(url)
-    html = r.text
 
-    # Find table rows with <td> cells, where first cell is date MM/DD/YYYY
-    tr_blocks = re.findall(r"<tr[^>]*>(.*?)</tr>", html, flags=re.S | re.I)
-    data_rows: List[List[str]] = []
-    for blk in tr_blocks:
-        tds = re.findall(r"<td[^>]*>(.*?)</td>", blk, flags=re.S | re.I)
-        if not tds:
-            continue
-        cells = [re.sub(r"<[^>]+>", "", c).replace("&nbsp;", " ").strip() for c in tds]
-        if cells and re.fullmatch(r"\d{2}/\d{2}/\d{4}", cells[0]):
-            data_rows.append(cells)
+    lines = [ln for ln in r.text.splitlines() if ln.strip()]
+    reader = csv.DictReader(lines)
+    rows = list(reader)
 
-    if not data_rows:
-        raise RuntimeError("Treasury TextView parse found no data rows (month may be empty or layout changed).")
+    # Some months may return empty early in month; try previous month once
+    if not rows:
+        pm = prev_month_yyyymm()
+        url2 = treasury_csv_url(pm)
+        r2 = backoff_get(url2)
+        lines2 = [ln for ln in r2.text.splitlines() if ln.strip()]
+        reader2 = csv.DictReader(lines2)
+        rows = list(reader2)
+        url = url2
 
-    last = data_rows[-1]
-    mm, dd, yyyy = last[0].split("/")
-    data_date = f"{yyyy}-{mm}-{dd}"
+    if not rows:
+        raise RuntimeError("Treasury CSV empty (current and previous month).")
 
-    # Typical column positions:
-    # Date, 1 Mo, 1.5 Mo, 2 Mo, 3 Mo, 4 Mo, 6 Mo, 1 Yr, 2 Yr, 3 Yr, 5 Yr, 7 Yr, 10 Yr, 20 Yr, 30 Yr
-    def get(idx: int) -> Optional[float]:
-        if idx >= len(last):
+    def f(row: Dict[str, str], col: str) -> Optional[float]:
+        v = (row.get(col) or "").strip()
+        if v.upper() in ("", "NA", "N/A"):
             return None
-        return safe_float(last[idx])
+        try:
+            return float(v)
+        except Exception:
+            return None
+
+    # Walk backwards to find a row with at least one of needed values
+    last_row = None
+    for row in reversed(rows):
+        if f(row, "10 Yr") is not None or f(row, "2 Yr") is not None or f(row, "3 Mo") is not None:
+            last_row = row
+            break
+
+    if last_row is None:
+        raise RuntimeError("Treasury CSV has rows but none contain 3 Mo / 2 Yr / 10 Yr values.")
+
+    data_date = normalize_date(last_row.get("Date", "NA"))
 
     out: Dict[str, float] = {}
-    y_3m = get(4)
-    y_2y = get(8)
-    y_10y = get(12)
+    y_3m = f(last_row, "3 Mo")
+    y_2y = f(last_row, "2 Yr")
+    y_10y = f(last_row, "10 Yr")
 
     if y_3m is not None:
         out["3M"] = y_3m
@@ -189,7 +246,7 @@ def fetch_treasury_yield_curve_last_row(month_yyyymm: Optional[str] = None) -> T
         out["10Y"] = y_10y
 
     if not out:
-        raise RuntimeError("Treasury last row parsed but yields all NA (layout changed).")
+        raise RuntimeError("Treasury CSV parsed but all needed columns are missing/NA on latest row.")
 
     return data_date, out, url
 
@@ -203,6 +260,7 @@ def fetch_chicagofed_nfci_csv_last() -> Tuple[str, Dict[str, float], str]:
     """
     url = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
     r = backoff_get(url)
+
     lines = [ln for ln in r.text.splitlines() if ln.strip()]
     reader = csv.DictReader(lines)
     rows = list(reader)
@@ -211,7 +269,7 @@ def fetch_chicagofed_nfci_csv_last() -> Tuple[str, Dict[str, float], str]:
 
     last = rows[-1]
 
-    # Date column heuristic
+    # Date key heuristic
     date_key = None
     for k in last.keys():
         lk = k.strip().lower()
@@ -221,13 +279,7 @@ def fetch_chicagofed_nfci_csv_last() -> Tuple[str, Dict[str, float], str]:
     if date_key is None:
         date_key = list(last.keys())[0]
 
-    d_raw = (last.get(date_key) or "").strip()
-    # Normalize MM/DD/YYYY -> YYYY-MM-DD if needed
-    if re.fullmatch(r"\d{2}/\d{2}/\d{4}", d_raw):
-        mm, dd, yyyy = d_raw.split("/")
-        data_date = f"{yyyy}-{mm}-{dd}"
-    else:
-        data_date = d_raw[:10] if len(d_raw) >= 10 else d_raw
+    data_date = normalize_date(last.get(date_key, "NA"))
 
     out: Dict[str, float] = {}
 
@@ -268,7 +320,7 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
         "T10Y2Y",
         "T10Y3M",
         "NFCINONFINLEVERAGE",
-        "NFCI_LEVERAGE_SUBINDEX",  # will be NA unless discovered (or used as non-equal fallback)
+        "NFCI_LEVERAGE_SUBINDEX",
     ]
 
     rows: Dict[str, CacheRow] = {sid: make_row(sid, None, None, "NA", "NA", as_of_ts) for sid in expected}
@@ -281,16 +333,18 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
         rows["VIXCLS"] = make_row("VIXCLS", None, None, "NA", f"ERR:cboe_vix:{type(e).__name__}", as_of_ts)
 
     # 2) Treasury yields -> DGS10/DGS2 and derived spreads
-    treasury_month = os.environ.get("TREASURY_MONTH")  # optional: YYYYMM
+    # Optional override: TREASURY_MONTH=YYYYMM
+    treasury_month = os.environ.get("TREASURY_MONTH")
     try:
         d, y, src = fetch_treasury_yield_curve_last_row(treasury_month)
+
         if "10Y" in y:
-            rows["DGS10"] = make_row("DGS10", d, y["10Y"], src, "WARN:fallback_treasury", as_of_ts)
+            rows["DGS10"] = make_row("DGS10", d, y["10Y"], src, "WARN:fallback_treasury_csv", as_of_ts)
         else:
             rows["DGS10"] = make_row("DGS10", None, None, src, "ERR:treasury_missing_10y", as_of_ts)
 
         if "2Y" in y:
-            rows["DGS2"] = make_row("DGS2", d, y["2Y"], src, "WARN:fallback_treasury", as_of_ts)
+            rows["DGS2"] = make_row("DGS2", d, y["2Y"], src, "WARN:fallback_treasury_csv", as_of_ts)
         else:
             rows["DGS2"] = make_row("DGS2", None, None, src, "ERR:treasury_missing_2y", as_of_ts)
 
@@ -302,8 +356,7 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
         if "10Y" in y and "3M" in y:
             rows["T10Y3M"] = make_row("T10Y3M", d, y["10Y"] - y["3M"], src, "WARN:derived_from_treasury(10Y-3M)", as_of_ts)
         else:
-            # common if 3M column missing or parse changed; do NOT guess
-            rows["T10Y3M"] = make_row("T10Y3M", None, None, src, "WARN:treasury_no_3m_or_parse_missing", as_of_ts)
+            rows["T10Y3M"] = make_row("T10Y3M", None, None, src, "WARN:treasury_no_3m_or_latest_missing", as_of_ts)
 
     except Exception as e:
         rows["DGS10"] = make_row("DGS10", None, None, "NA", f"ERR:treasury:{type(e).__name__}", as_of_ts)
@@ -314,53 +367,34 @@ def build_latest_rows(as_of_ts: str) -> List[CacheRow]:
     # 3) Chicago Fed NFCI -> conservative leverage mapping
     try:
         d, m, src = fetch_chicagofed_nfci_csv_last()
+
         if "NFCINONFINLEVERAGE" in m:
             rows["NFCINONFINLEVERAGE"] = make_row(
-                "NFCINONFINLEVERAGE",
-                d,
-                m["NFCINONFINLEVERAGE"],
-                src,
-                "WARN:fallback_chicagofed_nfci(nonfinancial leverage)",
-                as_of_ts,
+                "NFCINONFINLEVERAGE", d, m["NFCINONFINLEVERAGE"], src,
+                "WARN:fallback_chicagofed_nfci(nonfinancial leverage)", as_of_ts
             )
         elif "NFCI_LEVERAGE_SUBINDEX" in m:
-            # Do NOT pretend it's identical to NFCINONFINLEVERAGE
             rows["NFCI_LEVERAGE_SUBINDEX"] = make_row(
-                "NFCI_LEVERAGE_SUBINDEX",
-                d,
-                m["NFCI_LEVERAGE_SUBINDEX"],
-                src,
-                "WARN:fallback_chicagofed_nfci(leverage subindex; not mapped to nonfinancial leverage)",
-                as_of_ts,
+                "NFCI_LEVERAGE_SUBINDEX", d, m["NFCI_LEVERAGE_SUBINDEX"], src,
+                "WARN:fallback_chicagofed_nfci(leverage subindex; not mapped to nonfinancial leverage)", as_of_ts
             )
             rows["NFCINONFINLEVERAGE"] = make_row(
-                "NFCINONFINLEVERAGE",
-                None,
-                None,
-                src,
-                "WARN:chicagofed_no_explicit_nonfinancial_leverage_column",
-                as_of_ts,
+                "NFCINONFINLEVERAGE", None, None, src,
+                "WARN:chicagofed_no_explicit_nonfinancial_leverage_column", as_of_ts
             )
         else:
             rows["NFCINONFINLEVERAGE"] = make_row(
-                "NFCINONFINLEVERAGE",
-                None,
-                None,
-                src,
-                "WARN:chicagofed_nfci_no_leverage_columns_found",
-                as_of_ts,
+                "NFCINONFINLEVERAGE", None, None, src,
+                "WARN:chicagofed_nfci_no_leverage_columns_found", as_of_ts
             )
+
     except Exception as e:
         rows["NFCINONFINLEVERAGE"] = make_row(
-            "NFCINONFINLEVERAGE",
-            None,
-            None,
-            "NA",
-            f"ERR:chicagofed_nfci:{type(e).__name__}",
-            as_of_ts,
+            "NFCINONFINLEVERAGE", None, None, "NA",
+            f"ERR:chicagofed_nfci:{type(e).__name__}", as_of_ts
         )
 
-    # Keep a consistent order
+    # Keep consistent order
     return [rows[sid] for sid in expected]
 
 
@@ -374,14 +408,14 @@ def write_outputs(out_dir: str, latest_rows: List[CacheRow]) -> None:
     with open(latest_path, "w", encoding="utf-8") as f:
         json.dump(latest, f, ensure_ascii=False, indent=2)
 
-    # manifest.json (standalone)
+    # manifest.json (standalone, latest-only)
     manifest = {
         "generated_at_utc": utc_now_iso(),
         "as_of_ts": taipei_now_iso(),
         "data_commit_sha": git_head_sha(),
         "sources": {
             "cboe_vix_csv": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-            "treasury_textview": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+            "treasury_daily_csv": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv",
             "chicagofed_nfci_csv": "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv",
         },
         "files": {
@@ -396,7 +430,7 @@ def write_outputs(out_dir: str, latest_rows: List[CacheRow]) -> None:
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-    # latest.csv (debug / human-readable)
+    # latest.csv (debug)
     csv_path = os.path.join(out_dir, "latest.csv")
     with open(csv_path, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(
