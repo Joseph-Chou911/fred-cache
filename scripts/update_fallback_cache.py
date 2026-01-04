@@ -2,241 +2,176 @@
 # -*- coding: utf-8 -*-
 
 """
-Fallback cache (方案A)：官方/免key優先，但允許非官方備援；以「不中斷」為最高優先。
-輸出：fallback_cache/latest.json （JSON array）
+fallback cache updater (no-key / mostly official first)
+
+Outputs:
+  - fallback_cache/latest.json
+  - fallback_cache/latest.csv
+  - fallback_cache/manifest.json
+
+Dependency:
+  - requests
 """
+
+from __future__ import annotations
 
 import csv
 import json
 import os
-import re
+import sys
 import time
-from datetime import datetime, timezone, date
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
 
-# ----------------------------
+# =========================
 # Config
-# ----------------------------
-SCRIPT_VERSION = os.getenv("FALLBACK_SCRIPT_VERSION", "fallback_vA_official_no_key_lock")
+# =========================
 
-OUT_PATH = os.getenv("FALLBACK_OUT_PATH", "fallback_cache/latest.json")
+SCRIPT_VERSION = "fallback_vA_official_no_key_lock"
 
-HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "25"))
-RETRY_MAX = int(os.getenv("RETRY_MAX", "3"))
+OUT_DIR = Path("fallback_cache")
+LATEST_JSON = OUT_DIR / "latest.json"
+LATEST_CSV = OUT_DIR / "latest.csv"
+MANIFEST_JSON = OUT_DIR / "manifest.json"
 
-# backoff: 2s -> 4s -> 8s (最多3次)
-BACKOFF_S = [2, 4, 8]
+UA = "fred-cache-fallback/1.0 (+github-actions)"
+TIMEOUT = 20
 
-# 類瀏覽器 headers：降低「回 HTML / 被擋」機率
-DEFAULT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/csv,text/plain,application/json,text/html;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-}
+# Sources (official / no-key first)
+CBOE_VIX_CSV = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 
+TREASURY_DAILY_CURVE_TEMPLATE = (
+    "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+    "daily-treasury-rates.csv/all/{yyyymm}?"
+    "_format=csv&field_tdr_date_value_month={yyyymm}&page=&type=daily_treasury_yield_curve"
+)
 
-# ----------------------------
-# Helpers
-# ----------------------------
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+CHICAGO_FED_NFCI_CSV = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
 
+# FRED "graph" CSV endpoints (usually no key required)
+FRED_GRAPH_CSV_TEMPLATE = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
-def canon_key(s: str) -> str:
-    """
-    更強的欄位容錯：
-    - 全小寫
-    - 移除所有非英數字（包含空白、底線、破折號、冒號、括號等）
-    """
-    if s is None:
-        return ""
-    s = s.strip().lower()
-    return re.sub(r"[^a-z0-9]+", "", s)
+# Non-official backups (explicitly labeled)
+STOOQ_DAILY_TEMPLATE = "https://stooq.com/q/d/l/?s={symbol}&i=d"
+DATAHUB_WTI_DAILY = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
 
 
-def looks_like_html(text: str) -> bool:
-    t = text.lstrip().lower()
-    return t.startswith("<!doctype html") or t.startswith("<html") or ("<html" in t[:500]) or ("access denied" in t[:500])
+# =========================
+# Utilities
+# =========================
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
-def parse_date_to_iso(d: str) -> Optional[str]:
-    """
-    支援：
-    - YYYY-MM-DD
-    - MM/DD/YYYY
-    - M/D/YYYY
-    - YYYY/MM/DD
-    """
-    if not d:
-        return None
-    d = d.strip()
-    # 常見：2026-01-02
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
-        try:
-            return datetime.strptime(d, fmt).date().isoformat()
-        except ValueError:
-            pass
-    # 常見：01/02/2026（CBOE）
-    for fmt in ("%m/%d/%Y", "%m/%d/%y"):
-        try:
-            return datetime.strptime(d, fmt).date().isoformat()
-        except ValueError:
-            pass
-    # 嘗試 M/D/YYYY（有些CSV不補零）
-    m = re.match(r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*$", d)
-    if m:
-        mm, dd, yy = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        try:
-            return date(yy, mm, dd).isoformat()
-        except ValueError:
-            return None
-    return None
+def iso_utc(ts: datetime) -> str:
+    return ts.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+def sleep_polite(sec: float = 0.2) -> None:
+    time.sleep(sec)
+
+def http_get_text(url: str) -> str:
+    headers = {"User-Agent": UA, "Accept": "*/*"}
+    r = requests.get(url, headers=headers, timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.text
 
 def safe_float(x: Any) -> Optional[float]:
     if x is None:
         return None
-    if isinstance(x, (int, float)):
-        return float(x)
     s = str(x).strip()
-    if s in ("", ".", "NA", "N/A", "null", "None"):
+    if s == "" or s.upper() in {"NA", "N/A", "NULL", "NONE"}:
+        return None
+    # FRED often uses "." for missing
+    if s == ".":
         return None
     try:
         return float(s)
-    except ValueError:
+    except Exception:
         return None
 
+def normalize_date_to_iso(d: str) -> Optional[str]:
+    """
+    Accepts common formats:
+      - YYYY-MM-DD
+      - MM/DD/YYYY
+      - M/D/YYYY
+      - YYYY/MM/DD
+    Returns YYYY-MM-DD or None
+    """
+    if not d:
+        return None
+    s = str(d).strip()
+    if s.upper() in {"NA", "N/A", "NULL", "NONE", "."}:
+        return None
 
-def http_get_text(url: str) -> Tuple[Optional[str], Optional[int], Optional[str]]:
-    """
-    具備重試/backoff；回傳 (text, status_code, err_note)
-    err_note 用於 notes（可稽核）
-    """
-    last_err = None
-    for i in range(RETRY_MAX):
+    # Try a few common formats
+    fmts = ["%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S"]
+    for f in fmts:
         try:
-            resp = requests.get(url, headers=DEFAULT_HEADERS, timeout=HTTP_TIMEOUT)
-            status = resp.status_code
-            text = resp.text if resp is not None else None
-            if status >= 200 and status < 300 and text:
-                return text, status, None
-            last_err = f"http_status_{status}_or_empty"
-        except Exception as e:
-            last_err = f"exception:{type(e).__name__}"
-        # backoff
-        if i < len(BACKOFF_S):
-            time.sleep(BACKOFF_S[i])
-    return None, None, last_err
+            dt = datetime.strptime(s, f)
+            return dt.strftime("%Y-%m-%d")
+        except Exception:
+            pass
 
-
-def csv_last_valid_row(
-    csv_text: str,
-    value_col_hint: str,
-    date_col_candidates: List[str],
-) -> Tuple[Optional[str], Optional[float], str]:
-    """
-    從 CSV 找到最後一筆有效（value 可轉 float 且 date 可解析）資料
-    回傳 (data_date_iso, value_float, note)
-    """
-    if not csv_text or not ("," in csv_text.splitlines()[0]):
-        return None, None, "ERR:csv_header_invalid"
-
-    if looks_like_html(csv_text):
-        return None, None, "ERR:html_instead_of_csv"
-
-    reader = csv.DictReader(csv_text.splitlines())
-    if not reader.fieldnames:
-        return None, None, "ERR:no_fieldnames"
-
-    # 找 date col
-    date_col = None
-    fns = reader.fieldnames
-    fns_ck = {canon_key(c): c for c in fns}
-
-    for c in date_col_candidates:
-        ck = canon_key(c)
-        if ck in fns_ck:
-            date_col = fns_ck[ck]
-            break
-    if date_col is None:
-        # 常見：DATE / Date / observation_date
-        # 若沒有，盡量抓第一欄
-        date_col = fns[0]
-
-    # 找 value col（允許 hint 不一致）
-    value_col = None
-    hint_ck = canon_key(value_col_hint)
-    if hint_ck in fns_ck:
-        value_col = fns_ck[hint_ck]
-    else:
-        # 退一步：找包含 hint 的欄位
-        for c in fns:
-            if hint_ck and hint_ck in canon_key(c):
-                value_col = c
-                break
-
-    if value_col is None:
-        return None, None, "ERR:value_col_not_found"
-
-    last_good_date = None
-    last_good_val = None
-
-    for row in reader:
-        d_raw = (row.get(date_col) or "").strip()
-        v_raw = row.get(value_col)
-
-        d_iso = parse_date_to_iso(d_raw)
-        v = safe_float(v_raw)
-        if d_iso and (v is not None):
-            last_good_date = d_iso
-            last_good_val = v
-
-    if last_good_date is None or last_good_val is None:
-        return None, None, "ERR:no_valid_rows"
-
-    return last_good_date, last_good_val, "OK"
-
-
-def chicagofed_find_nonfin_leverage_col(fieldnames: List[str]) -> Optional[str]:
-    """
-    Chicago Fed NFCI CSV 欄位常有命名變化，這裡用「去除非英數」後的 token 判斷。
-    目標：nonfinancial leverage subindex
-    """
-    targets = [
-        # 最理想：同時包含 nfci / nonfinancial / leverage
-        ["nfci", "nonfinancial", "leverage"],
-        # 有些會縮寫 nonfin
-        ["nfci", "nonfin", "lever"],
-        # 有些沒有 nfci 字樣，但有 nonfinancial leverage
-        ["nonfinancial", "leverage"],
-    ]
-
-    ck_map = {canon_key(fn): fn for fn in fieldnames}
-
-    for fn in fieldnames:
-        ck = canon_key(fn)
-        for toks in targets:
-            if all(t in ck for t in toks):
-                return fn
-
-    # 次佳：直接找最短匹配（避免欄位多時誤判）
-    for ck, orig in ck_map.items():
-        if ("nonfinancial" in ck or "nonfin" in ck) and ("leverage" in ck or "lever" in ck):
-            return orig
+    # Some CSVs may include time or extra spaces; attempt split
+    try:
+        s2 = s.split()[0]
+        for f in ["%Y-%m-%d", "%m/%d/%Y", "%Y/%m/%d"]:
+            try:
+                dt = datetime.strptime(s2, f)
+                return dt.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     return None
 
+def yyyymm_candidates(now_utc: datetime) -> List[str]:
+    """Return [current YYYYMM, previous YYYYMM] to survive month boundary."""
+    y = now_utc.year
+    m = now_utc.month
+    cur = f"{y}{m:02d}"
+    if m == 1:
+        prev = f"{y-1}12"
+    else:
+        prev = f"{y}{m-1:02d}"
+    return [cur, prev]
 
-def build_item(series_id: str, data_date: Any, value: Any, source_url: str, notes: str, as_of_ts: str, extra: Dict[str, Any] = None) -> Dict[str, Any]:
-    item = {
+def raw_branch_url(owner_repo: str, branch: str, path: str) -> str:
+    # using refs/heads style for clarity
+    return f"https://raw.githubusercontent.com/{owner_repo}/refs/heads/{branch}/{path}"
+
+def raw_pinned_url(owner_repo: str, sha: str, path: str) -> str:
+    return f"https://raw.githubusercontent.com/{owner_repo}/{sha}/{path}"
+
+def get_repo_owner_repo() -> Optional[str]:
+    # GitHub provides GITHUB_REPOSITORY like "Joseph-Chou911/fred-cache"
+    return os.environ.get("GITHUB_REPOSITORY")
+
+def get_sha() -> Optional[str]:
+    return os.environ.get("GITHUB_SHA")
+
+
+# =========================
+# Output row model
+# =========================
+
+def make_row(
+    series_id: str,
+    data_date: Any,
+    value: Any,
+    source_url: str,
+    notes: str,
+    as_of_ts: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    row: Dict[str, Any] = {
         "series_id": series_id,
         "data_date": data_date if data_date is not None else "NA",
         "value": value if value is not None else "NA",
@@ -245,286 +180,451 @@ def build_item(series_id: str, data_date: Any, value: Any, source_url: str, note
         "as_of_ts": as_of_ts,
     }
     if extra:
-        item.update(extra)
-    return item
+        row.update(extra)
+    return row
 
 
-# ----------------------------
+# =========================
 # Fetchers
-# ----------------------------
-def fetch_vix(as_of_ts: str) -> Dict[str, Any]:
-    url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
-    text, _, err = http_get_text(url)
-    if not text:
-        return build_item("VIXCLS", "NA", "NA", url, f"ERR:fetch_failed:{err}", as_of_ts)
+# =========================
 
-    d, v, note = csv_last_valid_row(
-        text,
-        value_col_hint="CLOSE",
-        date_col_candidates=["DATE", "Date"],
-    )
-    if note != "OK":
-        return build_item("VIXCLS", "NA", "NA", url, f"ERR:vix_{note}", as_of_ts)
+def fetch_cboe_vix(as_of_ts: str) -> Dict[str, Any]:
+    """
+    CBOE VIX history CSV typically has columns like:
+      DATE, OPEN, HIGH, LOW, CLOSE
+    Date often in MM/DD/YYYY.
+    We take the latest valid CLOSE.
+    """
+    url = CBOE_VIX_CSV
+    try:
+        text = http_get_text(url)
+        reader = csv.DictReader(text.splitlines())
+        best_date = None
+        best_val = None
+        for r in reader:
+            d = normalize_date_to_iso(r.get("DATE") or r.get("Date") or r.get("date") or "")
+            v = safe_float(r.get("CLOSE") or r.get("Close") or r.get("close"))
+            if d and v is not None:
+                if best_date is None or d > best_date:
+                    best_date, best_val = d, v
+        if best_date is None or best_val is None:
+            return make_row("VIXCLS", "NA", "NA", url, "ERR:no_valid_rows", as_of_ts)
+        return make_row("VIXCLS", best_date, best_val, url, "WARN:fallback_cboe_vix", as_of_ts)
+    except Exception as e:
+        return make_row("VIXCLS", "NA", "NA", url, f"ERR:{type(e).__name__}", as_of_ts)
 
-    return build_item("VIXCLS", d, v, url, "WARN:fallback_cboe_vix", as_of_ts)
+def fetch_treasury_curve(as_of_ts: str) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """
+    Treasury daily yield curve CSV.
+    We need:
+      - DGS10 (10 Yr)
+      - DGS2  (2 Yr)
+      - UST3M (3 Mo)
+      - T10Y2Y derived (10Y-2Y)
+      - T10Y3M derived (10Y-3M)
 
+    CSV columns often:
+      Date, 1 Mo, 2 Mo, 3 Mo, ..., 2 Yr, ..., 10 Yr, ...
+    """
+    now = utc_now()
+    months = yyyymm_candidates(now)
 
-def fetch_treasury_curve(as_of_ts: str) -> List[Dict[str, Any]]:
-    # 你原本成功的月參數路徑：202601。這裡自動用 UTC 當月（避免每月要改）
-    yyyymm = datetime.now(timezone.utc).strftime("%Y%m")
-    base = (
-        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
-        f"daily-treasury-rates.csv/all/{yyyymm}"
-        f"?_format=csv&field_tdr_date_value_month={yyyymm}&page=&type=daily_treasury_yield_curve"
-    )
+    last_row = None
+    last_url = None
+    last_date = None
 
-    text, _, err = http_get_text(base)
-    if not text:
-        na = build_item("DGS10", "NA", "NA", base, f"ERR:treasury_fetch_failed:{err}", as_of_ts)
-        return [na]
-
-    # treasury 欄位可能是：Date, 1 Mo, 2 Mo, 3 Mo, ... 2 Yr, 10 Yr 等
-    # 我們抓 10Y / 2Y / 3M，並衍生 T10Y2Y / T10Y3M
-    reader = csv.DictReader(text.splitlines())
-    if not reader.fieldnames:
-        return [build_item("DGS10", "NA", "NA", base, "ERR:treasury_no_fieldnames", as_of_ts)]
-
-    fns = reader.fieldnames
-    # 找 date 欄
-    date_col = None
-    for cand in ["Date", "DATE"]:
-        if cand in fns:
-            date_col = cand
-            break
-    if date_col is None:
-        date_col = fns[0]
-
-    # 容錯找欄位（不同命名）
-    def pick_col(possible: List[str]) -> Optional[str]:
-        for p in possible:
-            for fn in fns:
-                if canon_key(fn) == canon_key(p):
-                    return fn
-        # 再退：contains
-        for p in possible:
-            pck = canon_key(p)
-            for fn in fns:
-                if pck and pck in canon_key(fn):
-                    return fn
+    def pick_col(row: Dict[str, str], candidates: List[str]) -> Optional[str]:
+        # match by normalized header
+        keys = list(row.keys())
+        norm_map = {k: "".join(k.strip().lower().split()) for k in keys if k is not None}
+        for cand in candidates:
+            c = "".join(cand.strip().lower().split())
+            for k, nk in norm_map.items():
+                if nk == c:
+                    return k
         return None
 
-    col_10y = pick_col(["10 Yr", "10Y", "10 yr", "10-year", "10year"])
-    col_2y = pick_col(["2 Yr", "2Y", "2 yr", "2-year", "2year"])
-    col_3m = pick_col(["3 Mo", "3M", "3 mo", "3-month", "3month"])
+    try:
+        for yyyymm in months:
+            url = TREASURY_DAILY_CURVE_TEMPLATE.format(yyyymm=yyyymm)
+            try:
+                text = http_get_text(url)
+                reader = csv.DictReader(text.splitlines())
+                for r in reader:
+                    d_raw = r.get("Date") or r.get("DATE") or r.get("date") or ""
+                    d = normalize_date_to_iso(d_raw)
+                    if not d:
+                        continue
+                    if last_date is None or d > last_date:
+                        last_date = d
+                        last_row = r
+                        last_url = url
+                if last_row and last_url:
+                    break
+            except Exception:
+                continue
 
-    last = None
-    for row in reader:
-        d_iso = parse_date_to_iso((row.get(date_col) or "").strip())
-        if not d_iso:
-            continue
-        # 只更新 last（最後一筆）
-        last = (d_iso, row)
+        if not last_row or not last_url or not last_date:
+            err = make_row("DGS10", "NA", "NA", TREASURY_DAILY_CURVE_TEMPLATE.format(yyyymm=months[0]), "ERR:treasury_no_valid_rows", as_of_ts)
+            na2 = make_row("DGS2", "NA", "NA", err["source_url"], "ERR:treasury_no_valid_rows", as_of_ts)
+            na3 = make_row("UST3M", "NA", "NA", err["source_url"], "ERR:treasury_no_valid_rows", as_of_ts)
+            na4 = make_row("T10Y2Y", "NA", "NA", err["source_url"], "ERR:treasury_no_valid_rows", as_of_ts)
+            na5 = make_row("T10Y3M", "NA", "NA", err["source_url"], "ERR:treasury_no_valid_rows", as_of_ts)
+            return err, na2, na3, na4, na5
 
-    if not last:
-        return [build_item("DGS10", "NA", "NA", base, "ERR:treasury_no_valid_rows", as_of_ts)]
+        col_10y = pick_col(last_row, ["10 Yr", "10Year", "10y", "10yr"])
+        col_2y = pick_col(last_row, ["2 Yr", "2Year", "2y", "2yr"])
+        col_3m = pick_col(last_row, ["3 Mo", "3Month", "3m", "3mo"])
 
-    d_iso, row = last
-    v10 = safe_float(row.get(col_10y)) if col_10y else None
-    v2 = safe_float(row.get(col_2y)) if col_2y else None
-    v3m = safe_float(row.get(col_3m)) if col_3m else None
+        v10 = safe_float(last_row.get(col_10y)) if col_10y else None
+        v2 = safe_float(last_row.get(col_2y)) if col_2y else None
+        v3m = safe_float(last_row.get(col_3m)) if col_3m else None
 
-    out: List[Dict[str, Any]] = []
-    if v10 is None:
-        out.append(build_item("DGS10", "NA", "NA", base, "ERR:treasury_missing_10y", as_of_ts))
-    else:
-        out.append(build_item("DGS10", d_iso, v10, base, "WARN:fallback_treasury_csv", as_of_ts))
+        r10 = make_row("DGS10", last_date, v10 if v10 is not None else "NA", last_url,
+                       "WARN:fallback_treasury_csv" if v10 is not None else "ERR:missing_10y", as_of_ts)
+        r2 = make_row("DGS2", last_date, v2 if v2 is not None else "NA", last_url,
+                      "WARN:fallback_treasury_csv" if v2 is not None else "ERR:missing_2y", as_of_ts)
+        r3m = make_row("UST3M", last_date, v3m if v3m is not None else "NA", last_url,
+                       "WARN:fallback_treasury_csv" if v3m is not None else "ERR:missing_3m", as_of_ts)
 
-    if v2 is None:
-        out.append(build_item("DGS2", "NA", "NA", base, "ERR:treasury_missing_2y", as_of_ts))
-    else:
-        out.append(build_item("DGS2", d_iso, v2, base, "WARN:fallback_treasury_csv", as_of_ts))
+        t10y2y = (v10 - v2) if (v10 is not None and v2 is not None) else None
+        t10y3m = (v10 - v3m) if (v10 is not None and v3m is not None) else None
 
-    if v3m is None:
-        out.append(build_item("UST3M", "NA", "NA", base, "ERR:treasury_missing_3m", as_of_ts))
-    else:
-        out.append(build_item("UST3M", d_iso, v3m, base, "WARN:fallback_treasury_csv", as_of_ts))
+        r_t10y2y = make_row("T10Y2Y", last_date, t10y2y if t10y2y is not None else "NA", last_url,
+                            "WARN:derived_from_treasury(10Y-2Y)" if t10y2y is not None else "ERR:cannot_derive(10Y-2Y)",
+                            as_of_ts)
+        r_t10y3m = make_row("T10Y3M", last_date, t10y3m if t10y3m is not None else "NA", last_url,
+                            "WARN:derived_from_treasury(10Y-3M)" if t10y3m is not None else "ERR:cannot_derive(10Y-3M)",
+                            as_of_ts)
+        return r10, r2, r3m, r_t10y2y, r_t10y3m
 
-    # derived spreads
-    if (v10 is not None) and (v2 is not None):
-        out.append(build_item("T10Y2Y", d_iso, (v10 - v2), base, "WARN:derived_from_treasury(10Y-2Y)", as_of_ts))
-    else:
-        out.append(build_item("T10Y2Y", "NA", "NA", base, "ERR:treasury_cannot_derive_10y2y", as_of_ts))
+    except Exception as e:
+        base_url = TREASURY_DAILY_CURVE_TEMPLATE.format(yyyymm=months[0])
+        err = make_row("DGS10", "NA", "NA", base_url, f"ERR:{type(e).__name__}", as_of_ts)
+        na2 = make_row("DGS2", "NA", "NA", base_url, f"ERR:{type(e).__name__}", as_of_ts)
+        na3 = make_row("UST3M", "NA", "NA", base_url, f"ERR:{type(e).__name__}", as_of_ts)
+        na4 = make_row("T10Y2Y", "NA", "NA", base_url, f"ERR:{type(e).__name__}", as_of_ts)
+        na5 = make_row("T10Y3M", "NA", "NA", base_url, f"ERR:{type(e).__name__}", as_of_ts)
+        return err, na2, na3, na4, na5
 
-    if (v10 is not None) and (v3m is not None):
-        out.append(build_item("T10Y3M", d_iso, (v10 - v3m), base, "WARN:derived_from_treasury(10Y-3M)", as_of_ts))
-    else:
-        out.append(build_item("T10Y3M", "NA", "NA", base, "ERR:treasury_cannot_derive_10y3m", as_of_ts))
+def fetch_chicagofed_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
+    """
+    Chicago Fed NFCI CSV.
+    We try to locate DATE column and NFCINONFINLEVERAGE column (case-insensitive).
+    """
+    url = CHICAGO_FED_NFCI_CSV
+    try:
+        text = http_get_text(url)
+        reader = csv.DictReader(text.splitlines())
+        if not reader.fieldnames:
+            return make_row("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:missing_headers", as_of_ts)
 
-    return out
-
-
-def fetch_nfci_nonfin_leverage(as_of_ts: str) -> Dict[str, Any]:
-    url = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
-    text, _, err = http_get_text(url)
-    if not text:
-        return build_item("NFCINONFINLEVERAGE", "NA", "NA", url, f"ERR:chicagofed_fetch_failed:{err}", as_of_ts)
-
-    if looks_like_html(text):
-        return build_item("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:chicagofed_html_instead_of_csv", as_of_ts)
-
-    reader = csv.DictReader(text.splitlines())
-    if not reader.fieldnames:
-        return build_item("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:chicagofed_no_fieldnames", as_of_ts)
-
-    date_col = None
-    for cand in ["Date", "DATE", "observation_date", "Observation Date"]:
-        for fn in reader.fieldnames:
-            if canon_key(fn) == canon_key(cand):
-                date_col = fn
+        # normalize headers
+        norm = {h: "".join(h.strip().upper().split()) for h in reader.fieldnames if h}
+        date_key = None
+        for h, nh in norm.items():
+            if nh in {"DATE", "DATES"}:
+                date_key = h
                 break
-        if date_col:
-            break
-    if not date_col:
-        date_col = reader.fieldnames[0]
+        if not date_key:
+            # sometimes "TIME" or similar; last resort: find any header containing 'DATE'
+            for h, nh in norm.items():
+                if "DATE" in nh:
+                    date_key = h
+                    break
+        if not date_key:
+            return make_row("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:missing_date_col", as_of_ts)
 
-    value_col = chicagofed_find_nonfin_leverage_col(reader.fieldnames)
-    if not value_col:
-        return build_item("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:chicagofed_nfci_missing_col", as_of_ts)
+        target_key = None
+        # preferred exact code
+        for h, nh in norm.items():
+            if nh == "NFCINONFINLEVERAGE":
+                target_key = h
+                break
+        # fallback: contains code
+        if not target_key:
+            for h, nh in norm.items():
+                if "NFCINONFINLEVERAGE" in nh:
+                    target_key = h
+                    break
 
-    last_good_date = None
-    last_good_val = None
-    for row in reader:
-        d_iso = parse_date_to_iso((row.get(date_col) or "").strip())
-        v = safe_float(row.get(value_col))
-        if d_iso and v is not None:
-            last_good_date = d_iso
-            last_good_val = v
+        if not target_key:
+            return make_row("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:chicagofed_nfci_missing_col", as_of_ts)
 
-    if last_good_date is None or last_good_val is None:
-        return build_item("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:chicagofed_no_valid_rows", as_of_ts)
+        best_date = None
+        best_val = None
+        for r in reader:
+            d = normalize_date_to_iso(r.get(date_key, ""))
+            v = safe_float(r.get(target_key))
+            if d and v is not None:
+                if best_date is None or d > best_date:
+                    best_date, best_val = d, v
 
-    return build_item(
-        "NFCINONFINLEVERAGE",
-        last_good_date,
-        last_good_val,
-        url,
-        "WARN:fallback_chicagofed_nfci(nonfinancial leverage)",
-        as_of_ts,
-    )
+        if best_date is None or best_val is None:
+            return make_row("NFCINONFINLEVERAGE", "NA", "NA", url, "ERR:no_valid_rows", as_of_ts)
 
+        return make_row(
+            "NFCINONFINLEVERAGE",
+            best_date,
+            best_val,
+            url,
+            "WARN:fallback_chicagofed_nfci(nonfinancial leverage)",
+            as_of_ts,
+        )
+
+    except Exception as e:
+        return make_row("NFCINONFINLEVERAGE", "NA", "NA", url, f"ERR:{type(e).__name__}", as_of_ts)
 
 def fetch_fredgraph_series(series_id: str, as_of_ts: str) -> Dict[str, Any]:
-    # 免 key：fredgraph.csv
-    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-    text, _, err = http_get_text(url)
-    if not text:
-        return build_item(series_id, "NA", "NA", url, f"ERR:fredgraph_fetch_failed:{err}", as_of_ts)
+    """
+    FRED graph CSV: DATE, <series_id>
+    Some values may be '.'.
+    """
+    url = FRED_GRAPH_CSV_TEMPLATE.format(series_id=series_id)
+    try:
+        text = http_get_text(url)
+        reader = csv.DictReader(text.splitlines())
+        if not reader.fieldnames:
+            return make_row(series_id, "NA", "NA", url, "ERR:fredgraph_missing_headers", as_of_ts)
 
-    d, v, note = csv_last_valid_row(
-        text,
-        value_col_hint=series_id,
-        date_col_candidates=["DATE", "Date", "observation_date"],
-    )
-    if note != "OK":
-        # 很多時候其實是回 HTML（被擋），這裡會變成 ERR:html_instead_of_csv
-        return build_item(series_id, "NA", "NA", url, f"ERR:fredgraph_{note}", as_of_ts)
+        # find date col
+        date_key = None
+        for h in reader.fieldnames:
+            if h and h.strip().upper() == "DATE":
+                date_key = h
+                break
+        if not date_key:
+            date_key = reader.fieldnames[0]
 
-    # 特別標示：目前這是「免key備援」，不把它當成主來源
-    return build_item(series_id, d, v, url, f"WARN:fredgraph_no_key({series_id})", as_of_ts)
+        # find value col (series id)
+        val_key = None
+        for h in reader.fieldnames:
+            if h and h.strip().upper() == series_id.upper():
+                val_key = h
+                break
+        if not val_key:
+            # often second column
+            if len(reader.fieldnames) >= 2:
+                val_key = reader.fieldnames[1]
+
+        best_date = None
+        best_val = None
+        for r in reader:
+            d = normalize_date_to_iso(r.get(date_key, ""))
+            v = safe_float(r.get(val_key, "")) if val_key else None
+            if d and v is not None:
+                if best_date is None or d > best_date:
+                    best_date, best_val = d, v
+
+        if best_date is None or best_val is None:
+            return make_row(series_id, "NA", "NA", url, "ERR:fredgraph_no_valid_rows", as_of_ts)
+
+        return make_row(series_id, best_date, best_val, url, f"WARN:fredgraph_no_key({series_id})", as_of_ts)
+
+    except Exception as e:
+        return make_row(series_id, "NA", "NA", url, f"ERR:{type(e).__name__}", as_of_ts)
+
+def fetch_stooq_index(series_id: str, symbol: str, as_of_ts: str) -> Dict[str, Any]:
+    """
+    Stooq daily CSV: Date,Open,High,Low,Close,Volume
+    We take latest Close, and 1-day pct change from prior Close.
+    """
+    url = STOOQ_DAILY_TEMPLATE.format(symbol=symbol)
+    try:
+        text = http_get_text(url)
+        reader = csv.DictReader(text.splitlines())
+        rows = []
+        for r in reader:
+            d = normalize_date_to_iso(r.get("Date") or r.get("DATE") or "")
+            c = safe_float(r.get("Close") or r.get("CLOSE"))
+            if d and c is not None:
+                rows.append((d, c))
+        if not rows:
+            return make_row(series_id, "NA", "NA", url, "ERR:empty", as_of_ts)
+
+        rows.sort(key=lambda x: x[0])
+        last_d, last_c = rows[-1]
+        extra = {}
+
+        if len(rows) >= 2:
+            prev_d, prev_c = rows[-2]
+            if prev_c is not None and prev_c != 0:
+                extra["change_pct_1d"] = (last_c - prev_c) / prev_c * 100.0
+
+        return make_row(
+            series_id,
+            last_d,
+            last_c,
+            url,
+            f"WARN:nonofficial_stooq({symbol});derived_1d_pct",
+            as_of_ts,
+            extra=extra if extra else None,
+        )
+    except Exception as e:
+        return make_row(series_id, "NA", "NA", url, f"ERR:{type(e).__name__}", as_of_ts)
+
+def fetch_datahub_wti(as_of_ts: str) -> Dict[str, Any]:
+    """
+    datahub.io WTI daily CSV: Date, Price
+    """
+    url = DATAHUB_WTI_DAILY
+    try:
+        text = http_get_text(url)
+        reader = csv.DictReader(text.splitlines())
+        best_date = None
+        best_val = None
+        for r in reader:
+            d = normalize_date_to_iso(r.get("Date") or r.get("DATE") or r.get("date") or "")
+            v = safe_float(r.get("Price") or r.get("price"))
+            if d and v is not None:
+                if best_date is None or d > best_date:
+                    best_date, best_val = d, v
+        if best_date is None or best_val is None:
+            return make_row("DCOILWTICO", "NA", "NA", url, "ERR:no_valid_rows", as_of_ts)
+        return make_row("DCOILWTICO", best_date, best_val, url, "WARN:nonofficial_datahub_oil_prices(wti-daily)", as_of_ts)
+    except Exception as e:
+        return make_row("DCOILWTICO", "NA", "NA", url, f"ERR:{type(e).__name__}", as_of_ts)
 
 
-def fetch_stooq_index(symbol: str, series_id: str, as_of_ts: str) -> Dict[str, Any]:
-    # stooq 下載 CSV：Date,Open,High,Low,Close,Volume
-    url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
-    text, _, err = http_get_text(url)
-    if not text:
-        return build_item(series_id, "NA", "NA", url, f"ERR:stooq_fetch_failed:{err}", as_of_ts)
+# =========================
+# Writers
+# =========================
 
-    if looks_like_html(text):
-        return build_item(series_id, "NA", "NA", url, "ERR:stooq_html_instead_of_csv", as_of_ts)
+def write_json(path: Path, obj: Any) -> None:
+    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    rows = list(csv.DictReader(text.splitlines()))
-    if len(rows) < 2:
-        return build_item(series_id, "NA", "NA", url, "ERR:stooq_not_enough_rows", as_of_ts)
+def write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
+    # Collect union of keys for stable schema
+    keys = []
+    seen = set()
+    for r in rows:
+        for k in r.keys():
+            if k not in seen:
+                seen.add(k)
+                keys.append(k)
 
-    # 取最後一筆與倒數第二筆，推導 1D%
-    last = rows[-1]
-    prev = rows[-2]
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=keys)
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
 
-    d_iso = parse_date_to_iso((last.get("Date") or last.get("DATE") or "").strip())
-    close_last = safe_float(last.get("Close"))
-    close_prev = safe_float(prev.get("Close"))
+def build_manifest(owner_repo: Optional[str], sha: Optional[str], generated_at_utc: str, as_of_ts: str) -> Dict[str, Any]:
+    # Provide both branch and pinned links for auditability
+    branch = "main"
+    base = "fallback_cache"
 
-    if not d_iso or close_last is None:
-        return build_item(series_id, "NA", "NA", url, "ERR:stooq_last_row_invalid", as_of_ts)
+    manifest: Dict[str, Any] = {
+        "generated_at_utc": generated_at_utc,
+        "as_of_ts": as_of_ts,
+        "data_commit_sha": sha if sha else "NA",
+        "script_version": SCRIPT_VERSION,
+        "paths": {
+            "latest_json": str(LATEST_JSON),
+            "latest_csv": str(LATEST_CSV),
+            "manifest_json": str(MANIFEST_JSON),
+        },
+        "branch": {},
+        "pinned": {},
+    }
 
-    extra = {}
-    note = f"WARN:nonofficial_stooq({symbol});derived_1d_pct"
-    if close_prev is not None and close_prev != 0:
-        extra["change_pct_1d"] = (close_last / close_prev - 1.0) * 100.0
+    if owner_repo:
+        manifest["branch"] = {
+            "latest_json": raw_branch_url(owner_repo, branch, f"{base}/latest.json"),
+            "latest_csv": raw_branch_url(owner_repo, branch, f"{base}/latest.csv"),
+            "manifest_json": raw_branch_url(owner_repo, branch, f"{base}/manifest.json"),
+        }
+        if sha and sha != "NA":
+            manifest["pinned"] = {
+                "latest_json": raw_pinned_url(owner_repo, sha, f"{base}/latest.json"),
+                "latest_csv": raw_pinned_url(owner_repo, sha, f"{base}/latest.csv"),
+                "manifest_json": raw_pinned_url(owner_repo, sha, f"{base}/manifest.json"),
+            }
+        else:
+            manifest["pinned"] = {
+                "latest_json": "NA",
+                "latest_csv": "NA",
+                "manifest_json": "NA",
+            }
     else:
-        note = f"WARN:nonofficial_stooq({symbol});missing_prev_close"
+        manifest["branch"] = {"latest_json": "NA", "latest_csv": "NA", "manifest_json": "NA"}
+        manifest["pinned"] = {"latest_json": "NA", "latest_csv": "NA", "manifest_json": "NA"}
 
-    return build_item(series_id, d_iso, close_last, url, note, as_of_ts, extra=extra)
-
-
-def fetch_wti_datahub(as_of_ts: str) -> Dict[str, Any]:
-    # 非官方備援
-    url = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
-    text, _, err = http_get_text(url)
-    if not text:
-        return build_item("DCOILWTICO", "NA", "NA", url, f"ERR:datahub_fetch_failed:{err}", as_of_ts)
-
-    d, v, note = csv_last_valid_row(
-        text,
-        value_col_hint="Price",
-        date_col_candidates=["Date", "DATE"],
-    )
-    if note != "OK":
-        return build_item("DCOILWTICO", "NA", "NA", url, f"ERR:datahub_{note}", as_of_ts)
-
-    return build_item("DCOILWTICO", d, v, url, "WARN:nonofficial_datahub_oil_prices(wti-daily)", as_of_ts)
+    return manifest
 
 
-# ----------------------------
+# =========================
 # Main
-# ----------------------------
+# =========================
+
 def main() -> int:
-    as_of_ts = utc_now_iso()
-    items: List[Dict[str, Any]] = []
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # META
-    items.append(build_item("__META__", date.today().isoformat(), SCRIPT_VERSION, "NA", "INFO:script_version", as_of_ts))
+    now = utc_now()
+    as_of = iso_utc(now)
+    generated_at = iso_utc(now)
 
-    # 1) VIX (官方 CBOE，免 key)
-    items.append(fetch_vix(as_of_ts))
+    owner_repo = get_repo_owner_repo()
+    sha = get_sha()
 
-    # 2) Treasury (官方，免 key) + spreads derived
-    items.extend(fetch_treasury_curve(as_of_ts))
+    rows: List[Dict[str, Any]] = []
 
-    # 3) NFCI nonfinancial leverage (官方 Chicago Fed，免 key)
-    items.append(fetch_nfci_nonfin_leverage(as_of_ts))
+    # META row (always changes)
+    rows.append(
+        make_row(
+            "__META__",
+            now.strftime("%Y-%m-%d"),
+            SCRIPT_VERSION,
+            "NA",
+            "INFO:script_version",
+            as_of,
+        )
+    )
 
-    # 4) HY OAS（免 key 優先嘗試：FRED graph CSV）
-    #    你要求補這個；但若 FRED 偶發回 HTML，這裡會自動 NA，不崩
-    items.append(fetch_fredgraph_series("BAMLH0A0HYM2", as_of_ts))
+    # 1) VIX (official no-key)
+    rows.append(fetch_cboe_vix(as_of))
+    sleep_polite()
 
-    # 5) Equity indices（非官方 stooq 備援 + 1D%）
-    items.append(fetch_stooq_index("^spx", "SP500", as_of_ts))
-    items.append(fetch_stooq_index("^ndq", "NASDAQCOM", as_of_ts))
-    items.append(fetch_stooq_index("^dji", "DJIA", as_of_ts))
+    # 2) Treasury (official no-key)
+    r10, r2, r3m, r_t10y2y, r_t10y3m = fetch_treasury_curve(as_of)
+    rows.extend([r10, r2, r3m, r_t10y2y, r_t10y3m])
+    sleep_polite()
 
-    # 6) WTI（非官方 datahub 備援）
-    items.append(fetch_wti_datahub(as_of_ts))
+    # 3) Chicago Fed NFCI (official no-key)
+    rows.append(fetch_chicagofed_nfci_nonfin_leverage(as_of))
+    sleep_polite()
 
-    # Write JSON
-    os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
-    with open(OUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(items, f, ensure_ascii=False, indent=2)
+    # 4) HY OAS (prefer no-key via FRED graph CSV; you already confirmed it works)
+    rows.append(fetch_fredgraph_series("BAMLH0A0HYM2", as_of))
+    sleep_polite()
 
-    print(f"[OK] wrote {OUT_PATH} rows={len(items)} as_of_ts={as_of_ts}")
+    # 5) Equity indices (non-official; explicitly labeled)
+    rows.append(fetch_stooq_index("SP500", "^spx", as_of))
+    sleep_polite()
+    rows.append(fetch_stooq_index("NASDAQCOM", "^ndq", as_of))
+    sleep_polite()
+    rows.append(fetch_stooq_index("DJIA", "^dji", as_of))
+    sleep_polite()
+
+    # 6) WTI (non-official fallback)
+    rows.append(fetch_datahub_wti(as_of))
+
+    # Write outputs
+    write_json(LATEST_JSON, rows)
+    write_csv(LATEST_CSV, rows)
+
+    manifest = build_manifest(owner_repo, sha, generated_at, as_of)
+    write_json(MANIFEST_JSON, manifest)
+
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        # Hard guard: never crash silently
+        sys.stderr.write(f"[FATAL] {type(e).__name__}: {e}\n")
+        raise SystemExit(2)
