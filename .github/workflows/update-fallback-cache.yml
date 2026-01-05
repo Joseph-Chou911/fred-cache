@@ -43,7 +43,7 @@ jobs:
           set -e
           python scripts/update_fallback_cache.py
 
-      # --- NEW: hard-validate DATA JSON to prevent pushing broken files ---
+      # --- hard-validate DATA JSON to prevent pushing broken files ---
       - name: Validate DATA JSON (latest.json)
         run: |
           set -e
@@ -69,8 +69,29 @@ jobs:
           (head -n 30 fallback_cache/latest.csv || true)
 
       - name: Commit DATA (latest.json/latest.csv) if changed
+        shell: bash
         run: |
           set -e
+
+          # 0) helper: rebase+push with backoff retry
+          push_with_rebase_retry () {
+            for wait in 2 4 8; do
+              echo "---- fetch/pull --rebase origin main ----"
+              git fetch origin main
+              git pull --rebase --autostash origin main || true
+
+              echo "---- try push (origin HEAD:main) ----"
+              if git push origin HEAD:main; then
+                echo "Push OK."
+                return 0
+              fi
+
+              echo "Push failed. Retry after ${wait}s..."
+              sleep "${wait}"
+            done
+            echo "ERROR: push failed after retries."
+            return 1
+          }
 
           # 1) Ensure files exist
           for f in fallback_cache/latest.json fallback_cache/latest.csv fallback_cache/manifest.json; do
@@ -90,7 +111,9 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git commit -m "Update fallback DATA (latest json/csv)"
-            git push
+
+            # 3) Push with rebase+retry to avoid non-fast-forward
+            push_with_rebase_retry
           fi
 
       - name: Regenerate MANIFEST with pinned SHA for DATA
@@ -154,7 +177,7 @@ jobs:
               "latest_csv": latest_csv,
               "manifest_json": manifest_main
             },
-            # --- NEW: notes as list to avoid newline-in-string risks forever ---
+            # notes as list to avoid newline-in-string risks forever
             "notes": [
               "Fallback cache; pinned points to DATA commit SHA.",
               "manifest_json remains main entry to avoid self-referential SHA."
@@ -169,7 +192,7 @@ jobs:
           echo "---- preview fallback_cache/manifest.json (post-regen) ----"
           cat fallback_cache/manifest.json
 
-      # --- NEW: hard-validate MANIFEST JSON before committing ---
+      # --- hard-validate MANIFEST JSON before committing ---
       - name: Validate MANIFEST JSON (manifest.json)
         run: |
           set -e
@@ -177,8 +200,29 @@ jobs:
           echo "manifest.json is valid JSON."
 
       - name: Commit MANIFEST if changed
+        shell: bash
         run: |
           set -e
+
+          # helper: rebase+push with backoff retry (same as above, repeated for clarity)
+          push_with_rebase_retry () {
+            for wait in 2 4 8; do
+              echo "---- fetch/pull --rebase origin main ----"
+              git fetch origin main
+              git pull --rebase --autostash origin main || true
+
+              echo "---- try push (origin HEAD:main) ----"
+              if git push origin HEAD:main; then
+                echo "Push OK."
+                return 0
+              fi
+
+              echo "Push failed. Retry after ${wait}s..."
+              sleep "${wait}"
+            done
+            echo "ERROR: push failed after retries."
+            return 1
+          }
 
           git add fallback_cache/manifest.json
 
@@ -190,7 +234,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "Update fallback MANIFEST (pinned to data sha)"
-          git push
+
+          # Push with rebase+retry to avoid non-fast-forward
+          push_with_rebase_retry
 
       - name: Post status
         if: always()
