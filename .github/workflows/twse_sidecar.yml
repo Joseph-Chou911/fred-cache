@@ -43,7 +43,7 @@ jobs:
       - name: Sanity check (twse roll25 coverage)
         run: |
           set -euo pipefail
-          python scripts/sanity_check_twse_roll25.py
+          python scripts/sanity_twse_roll25.py
 
       - name: Commit & push if changed
         run: |
