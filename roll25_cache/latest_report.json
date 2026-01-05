@@ -1,26 +1,34 @@
 {
-  "generated_at": "2026-01-06T03:01:49.173299+08:00",
+  "generated_at": "2026-01-06T07:34:50.610686+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日資料未更新；UsedDate=2026-01-02：可得交易日數 <10，倍數不計算；風險等級=未知（資料不足）",
+  "summary": "今日資料未更新；UsedDate=2026-01-05：可得交易日數 <10，倍數不計算；風險等級=未知（資料不足）",
   "numbers": {
-    "UsedDate": "2026-01-02",
-    "Close": 29349.81,
-    "PctChange": null,
-    "TradeValue": 669781989470,
+    "UsedDate": "2026-01-05",
+    "Close": 30105.04,
+    "PctChange": 2.573,
+    "TradeValue": 800793653955,
     "VolumeMultiplier": null,
-    "AmplitudePct": null,
+    "AmplitudePct": 1.907,
     "VolMultiplier": null
   },
   "signal": {
     "DownDay": false,
     "VolumeAmplified": null,
     "VolAmplified": null,
-    "NewLow_N": true,
+    "NewLow_N": false,
     "ConsecutiveBreak": false
   },
   "action": "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。",
-  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nD-1: 昨收缺失（無法計算漲跌幅與振幅%）\nMode=FULL | UsedDate=2026-01-02 | UsedDminus1=NA | LookbackNTarget=20 | LookbackNActual=1 | LookbackOldest=2026-01-02 | OHLC=OK",
+  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nMode=FULL | UsedDate=2026-01-05 | UsedDminus1=2026-01-02 | LookbackNTarget=20 | LookbackNActual=2 | LookbackOldest=2026-01-02 | OHLC=OK",
   "cache_roll25": [
+    {
+      "date": "2026-01-05",
+      "close": 30105.04,
+      "change": 755.23,
+      "trade_value": 800793653955,
+      "high": 30339.32,
+      "low": 29779.7
+    },
     {
       "date": "2026-01-02",
       "close": 29349.81,
@@ -35,8 +43,8 @@
   "risk_level": "未知（資料不足）",
   "mode": "FULL",
   "ohlc_status": "OK",
-  "used_date": "2026-01-02",
-  "used_dminus1": "NA",
-  "lookback_n_actual": 1,
+  "used_date": "2026-01-05",
+  "used_dminus1": "2026-01-02",
+  "lookback_n_actual": 2,
   "lookback_oldest": "2026-01-02"
 }
