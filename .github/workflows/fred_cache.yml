@@ -17,7 +17,6 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-
     env:
       TIMEZONE: Asia/Taipei
 
@@ -42,8 +41,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # ✅ Core fix: avoid non-fast-forward by restarting from origin/main on push failure
-      # No rebase (would change commit hashes and break pinned URLs).
+      # ✅ 核心修補：
+      # - 不做 rebase（避免 commit hash 改變造成 pinned 失真）
+      # - push 失敗就回到 origin/main 重新產檔/重新 commit/再 push（2/4/8 秒 backoff，最多 3 次）
       - name: Generate + commit + push (retry-safe, no-rebase, pinned)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -176,26 +176,26 @@ PY
           echo "Push failed after 3 attempts."
           exit 1
 
-      # 6) ✅ A 方案：只做驗收輸出（不改檔案），確認「每天是否新增一天」
+      # ✅ 這段是你原本 sanity check，但我把 heredoc 改成「完全不縮排的 PY 結尾」
       - name: Sanity check (history daily coverage)
         run: |
           set -euo pipefail
-          python - << 'PY'
-          import json
-          from pathlib import Path
-          from collections import Counter
+          python - <<'PY'
+import json
+from pathlib import Path
+from collections import Counter
 
-          h = json.loads(Path("cache/history.json").read_text(encoding="utf-8"))
+h = json.loads(Path("cache/history.json").read_text(encoding="utf-8"))
 
-          days = sorted({r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts")})
-          c = Counter(r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts"))
+days = sorted({r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts")})
+c = Counter(r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts"))
 
-          keys = set((r.get("as_of_ts","")[:10], r.get("series_id","")) for r in h)
-          dedupe_ok = (len(keys) == len(h))
+keys = set((r.get("as_of_ts","")[:10], r.get("series_id","")) for r in h)
+dedupe_ok = (len(keys) == len(h))
 
-          print("history_records =", len(h))
-          print("days_in_history =", days)
-          print("rows_per_day    =", dict(c))
-          print("dedupe_ok       =", dedupe_ok)
-          print("cap_records     =", 720, "cap_ok =", len(h) <= 720)
-          PY
+print("history_records =", len(h))
+print("days_in_history =", days)
+print("rows_per_day    =", dict(c))
+print("dedupe_ok       =", dedupe_ok)
+print("cap_records     =", 720, "cap_ok =", len(h) <= 720)
+PY
