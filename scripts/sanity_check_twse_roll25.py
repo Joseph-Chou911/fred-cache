@@ -6,7 +6,7 @@ import os
 from collections import Counter
 from typing import Any, Dict, List
 
-ROLL25_PATH = os.path.join("cache", "roll25.json")
+ROLL25_PATH = os.path.join("roll25_cache", "roll25.json")
 CAP = 25
 
 def _read_json(path: str, default: Any) -> Any:
@@ -23,20 +23,15 @@ def main() -> None:
     if not isinstance(roll, list):
         roll = []
 
-    # Collect dates
-    dates = []
+    dates: List[str] = []
     for r in roll:
         if isinstance(r, dict) and "date" in r:
             dates.append(str(r["date"]))
 
-    # Count duplicates
     c = Counter(dates)
     dedupe_ok = all(v == 1 for v in c.values())
 
-    # rows_per_day (for TWSE roll25 should be 1 per date)
     rows_per_day: Dict[str, int] = dict(sorted(c.items()))
-
-    # days list (sorted)
     days_in_roll = sorted(rows_per_day.keys())
 
     cap_ok = len(roll) <= CAP
