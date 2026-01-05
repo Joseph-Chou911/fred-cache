@@ -8,14 +8,15 @@ TWSE sidecar updater (roll25_cache/):
   2) MI_5MINS_HIST: OHLC (must truly have high/low; never guess)
 - Maintains rolling cache: roll25_cache/roll25.json (max 25 trading days)
 - Writes:
-  - roll25_cache/latest_report.json (deterministic computed output + meta)
+  - roll25_cache/latest_report.json
   - roll25_cache/manifest.json (pinned URLs for audit, based on git HEAD sha)
 
-Robustness goals (IMPORTANT):
-- Do NOT crash the workflow if TWSE payload shape changes or returns no usable dates.
+Robustness:
+- Supports ROC compact date like "1150102" (YYYMMDD in ROC year)
+- Supports MI_5MINS_HIST fields: HighestIndex / LowestIndex / ClosingIndex
 - If FMTQIK can't be parsed into usable dates:
-  - Print diagnostics to Actions log
-  - Do NOT write/overwrite cache files
+  - Print diagnostics
+  - Do NOT overwrite cache files
   - Exit 0 so sanity check still runs
 """
 
@@ -80,10 +81,9 @@ def _safe_int(x: Any) -> Optional[int]:
     except Exception:
         return None
 
-def _roc_to_iso(roc: str) -> Optional[str]:
+def _roc_slash_to_iso(roc: str) -> Optional[str]:
     """
-    TWSE may return ROC date like "114/01/05".
-    Convert to "2025-01-05" (ROC year + 1911).
+    ROC date like "114/01/05" -> "2025-01-05"
     """
     if not isinstance(roc, str):
         return None
@@ -99,12 +99,31 @@ def _roc_to_iso(roc: str) -> Optional[str]:
     except Exception:
         return None
 
+def _roc_compact_to_iso(compact: str) -> Optional[str]:
+    """
+    ROC compact date like "1150102" (YYYMMDD, ROC year) -> "2026-01-02"
+    """
+    if not isinstance(compact, str):
+        return None
+    s = compact.strip()
+    if not re.match(r"^\d{7}$", s):
+        return None
+    try:
+        roc_y = int(s[:3])
+        mo = int(s[3:5])
+        da = int(s[5:7])
+        y = roc_y + 1911
+        return date(y, mo, da).isoformat()
+    except Exception:
+        return None
+
 def _parse_date_any(v: Any) -> Optional[str]:
     """
     Accept:
     - "YYYY-MM-DD"
     - "YYYY/MM/DD"
     - ROC "114/01/05"
+    - ROC compact "1150102"
     """
     if v is None:
         return None
@@ -124,16 +143,20 @@ def _parse_date_any(v: Any) -> Optional[str]:
         except Exception:
             return None
 
-    iso = _roc_to_iso(s)
+    iso = _roc_slash_to_iso(s)
     if iso:
         return iso
+
+    iso2 = _roc_compact_to_iso(s)
+    if iso2:
+        return iso2
 
     return None
 
 def _http_get_json(url: str, timeout: int = 25) -> Any:
     headers = {
         "Accept": "application/json",
-        "User-Agent": "twse-sidecar/1.1 (+github-actions)"
+        "User-Agent": "twse-sidecar/1.2 (+github-actions)"
     }
     r = requests.get(url, headers=headers, timeout=timeout)
     r.raise_for_status()
@@ -182,29 +205,18 @@ def _calc_amplitude_pct(high: float, low: float, prev_close: float) -> Optional[
     return (high - low) / prev_close * 100.0
 
 def _unwrap_to_rows(payload: Any) -> List[Dict[str, Any]]:
-    """
-    TWSE payload may be:
-      - list[dict]
-      - dict with list under a key (data/result/records/items/aaData/...)
-    Return list[dict] or [].
-    """
     if isinstance(payload, list):
         return [x for x in payload if isinstance(x, dict)]
-
     if isinstance(payload, dict):
         for k in ("data", "result", "records", "items", "aaData", "dataset"):
             v = payload.get(k)
             if isinstance(v, list):
                 return [x for x in v if isinstance(x, dict)]
-        # sometimes the dict itself is a single record
         if all(not isinstance(v, list) for v in payload.values()):
-            return [payload]  # best-effort
+            return [payload]
     return []
 
 def _diag_payload(name: str, payload: Any) -> None:
-    """
-    Print diagnostics to Actions log (short, safe).
-    """
     t = type(payload).__name__
     print(f"[DIAG] {name}: type={t}")
     if isinstance(payload, dict):
@@ -214,13 +226,10 @@ def _diag_payload(name: str, payload: Any) -> None:
         if rows:
             print(f"[DIAG] {name}: unwrapped_rows={len(rows)}")
             print(f"[DIAG] {name}: row0_keys={list(rows[0].keys())[:30]}")
-            if len(rows) > 1:
-                print(f"[DIAG] {name}: row1_keys={list(rows[1].keys())[:30]}")
         else:
             print(f"[DIAG] {name}: cannot unwrap to rows")
     elif isinstance(payload, list):
         print(f"[DIAG] {name}: list_len={len(payload)}")
-        # show first dict keys if present
         for i in range(min(2, len(payload))):
             if isinstance(payload[i], dict):
                 print(f"[DIAG] {name}: row{i}_keys={list(payload[i].keys())[:30]}")
@@ -245,41 +254,18 @@ def _parse_fmtqik(payload: Any) -> List[FmtqikRow]:
 
     parsed: List[FmtqikRow] = []
     for r in rows:
-        # broaden date key possibilities
-        d = _parse_date_any(
-            r.get("Date")
-            or r.get("date")
-            or r.get("日期")
-            or r.get("DATE")
-            or r.get("交易日期")
-        )
+        d = _parse_date_any(r.get("Date") or r.get("date") or r.get("日期") or r.get("DATE"))
         if not d:
             continue
 
-        tv = _safe_int(
-            r.get("TradeValue")
-            or r.get("tradeValue")
-            or r.get("成交金額")
-            or r.get("成交金額(元)")
-            or r.get("成交金額(千元)")
-            or r.get("成交金額_元")
-        )
+        tv = _safe_int(r.get("TradeValue") or r.get("tradeValue") or r.get("成交金額"))
 
+        # FMTQIK uses "TAIEX" for index value
         close = _safe_float(
-            r.get("Close")
-            or r.get("close")
-            or r.get("收盤指數")
-            or r.get("收盤")
-            or r.get("指數")
+            r.get("TAIEX") or r.get("Close") or r.get("close") or r.get("收盤指數") or r.get("收盤")
         )
 
-        chg = _safe_float(
-            r.get("Change")
-            or r.get("change")
-            or r.get("漲跌點數")
-            or r.get("漲跌")
-            or r.get("漲跌點")
-        )
+        chg = _safe_float(r.get("Change") or r.get("change") or r.get("漲跌點數") or r.get("漲跌"))
 
         parsed.append(FmtqikRow(date=d, trade_value=tv, close=close, change=chg, raw=r))
 
@@ -301,19 +287,15 @@ def _parse_mi_5mins_hist(payload: Any) -> List[OhlcRow]:
 
     parsed: List[OhlcRow] = []
     for r in rows:
-        d = _parse_date_any(
-            r.get("Date")
-            or r.get("date")
-            or r.get("日期")
-            or r.get("DATE")
-            or r.get("交易日期")
-        )
+        d = _parse_date_any(r.get("Date") or r.get("date") or r.get("日期") or r.get("DATE"))
         if not d:
             continue
 
-        high = _safe_float(r.get("High") or r.get("high") or r.get("最高") or r.get("最高價"))
-        low = _safe_float(r.get("Low") or r.get("low") or r.get("最低") or r.get("最低價"))
-        close = _safe_float(r.get("Close") or r.get("close") or r.get("收盤") or r.get("收盤價"))
+        # MI_5MINS_HIST uses these keys:
+        # OpeningIndex / HighestIndex / LowestIndex / ClosingIndex
+        high = _safe_float(r.get("HighestIndex") or r.get("High") or r.get("high") or r.get("最高"))
+        low = _safe_float(r.get("LowestIndex") or r.get("Low") or r.get("low") or r.get("最低"))
+        close = _safe_float(r.get("ClosingIndex") or r.get("Close") or r.get("close") or r.get("收盤"))
 
         parsed.append(OhlcRow(date=d, high=high, low=low, close=close, raw=r))
 
@@ -351,7 +333,6 @@ def _merge_roll_cache(existing: List[Dict[str, Any]], new_items: List[Dict[str, 
 
 def _pick_used_date(today: date, fmt_dates: List[str]) -> Tuple[str, str]:
     if not fmt_dates:
-        # caller should handle this; keep here for safety
         return ("NA", "FMTQIK_EMPTY")
 
     today_iso = today.isoformat()
@@ -391,47 +372,41 @@ def main() -> None:
     if not isinstance(existing_roll, list):
         existing_roll = []
 
-    # Fetch sources (guarded)
     try:
         fmt_raw = _http_get_json(FMTQIK_URL)
     except Exception as e:
         print(f"[ERROR] Failed to fetch/parse FMTQIK JSON: {e}")
-        # do not overwrite cache files; exit 0 to keep workflow green
         return
 
     try:
         ohlc_raw = _http_get_json(MI_5MINS_HIST_URL)
     except Exception as e:
         print(f"[ERROR] Failed to fetch/parse MI_5MINS_HIST JSON: {e}")
-        # still allow proceeding with FMTQIK-only mode; set to empty
         ohlc_raw = []
 
-    # Parse
     fmt_rows = _parse_fmtqik(fmt_raw)
     ohlc_rows = _parse_mi_5mins_hist(ohlc_raw)
 
-    # If no usable FMTQIK dates, print diagnostics and DO NOT write/overwrite cache
     if not fmt_rows:
         print("[ERROR] FMTQIK returned no usable rows/dates after parsing.")
         _diag_payload("FMTQIK", fmt_raw)
-        return  # exit 0
+        return
 
     fmt_by_date = _index_by_date_fmtqik(fmt_rows)
     ohlc_by_date = _index_by_date_ohlc(ohlc_rows)
 
     fmt_dates = sorted(fmt_by_date.keys())
-
     today = _today_taipei()
+
     used_date, tag = _pick_used_date(today, fmt_dates)
     if used_date == "NA":
-        print("[ERROR] UsedDate could not be determined (fmt_dates empty). This should not happen.")
+        print("[ERROR] UsedDate could not be determined (fmt_dates empty).")
         _diag_payload("FMTQIK", fmt_raw)
         return
 
     fmt_used = fmt_by_date.get(used_date)
     ohlc_used = ohlc_by_date.get(used_date)
 
-    # Determine OHLC availability strictly
     ohlc_ok = bool(ohlc_used and (ohlc_used.high is not None) and (ohlc_used.low is not None))
     mode = "FULL" if ohlc_ok else "MISSING_OHLC"
     ohlc_status = "OK" if ohlc_ok else "MISSING"
@@ -443,7 +418,6 @@ def main() -> None:
     lookback_n_actual = len(lookback)
     lookback_oldest = lookback[-1]["date"] if lookback else "NA"
 
-    # Freshness rule: oldest >45 days => unreliable
     freshness_ok = True
     if lookback_n_actual > 0:
         try:
@@ -462,24 +436,21 @@ def main() -> None:
     today_trade_value = _safe_float(cache_item.get("trade_value"))
     today_change = _safe_float(cache_item.get("change"))
 
-    # ---- Calculations ----
     pct_change = None
     if today_close is not None and prev_close is not None and prev_close != 0:
         pct_change = (today_close - prev_close) / prev_close * 100.0
 
     prior_days = lookback[1:] if lookback_n_actual >= 2 else []
 
-    # Volume multiplier: need >=9 prior days trade_value
     prior_tv = [_safe_float(x.get("trade_value")) for x in prior_days]
     prior_tv = [x for x in prior_tv if x is not None]
 
     volume_mult = None
     if today_trade_value is not None and len(prior_tv) >= 9:
-        avg_tv = _avg(prior_tv[:LOOKBACK_TARGET - 1])
+        avg_tv = sum(prior_tv[:LOOKBACK_TARGET - 1]) / len(prior_tv[:LOOKBACK_TARGET - 1])
         if avg_tv and avg_tv != 0:
             volume_mult = today_trade_value / avg_tv
 
-    # Amplitude and vol multiplier require OHLC + prev_close
     amplitude_pct = None
     vol_mult = None
     if ohlc_ok and prev_close is not None and prev_close != 0:
@@ -488,7 +459,6 @@ def main() -> None:
         if high is not None and low is not None:
             amplitude_pct = _calc_amplitude_pct(high, low, prev_close)
 
-            # prior amplitude avg: need >=9 prior days with non-null high/low and each day's D-1 close
             prior_amp: List[float] = []
             for x in prior_days:
                 d = str(x.get("date", ""))
@@ -503,14 +473,11 @@ def main() -> None:
                     prior_amp.append(amp)
 
             if amplitude_pct is not None and len(prior_amp) >= 9:
-                avg_amp = _avg(prior_amp[:LOOKBACK_TARGET - 1])
+                avg_amp = sum(prior_amp[:LOOKBACK_TARGET - 1]) / len(prior_amp[:LOOKBACK_TARGET - 1])
                 if avg_amp and avg_amp != 0:
                     vol_mult = amplitude_pct / avg_amp
 
-    # ---- Signals ----
     is_down_day = (pct_change is not None and pct_change < 0) or (today_change is not None and today_change < 0)
-    is_volume_amplified = (volume_mult is not None and volume_mult >= 1.2)
-    is_vol_amplified = (vol_mult is not None and vol_mult >= 1.2)
 
     closes = []
     for x in lookback:
@@ -536,7 +503,6 @@ def main() -> None:
                 if new_low and d1_new_low:
                     consecutive_break = True
 
-    # ---- Risk evaluation ----
     risk_level = "未知"
     signal_text = ""
 
@@ -548,7 +514,10 @@ def main() -> None:
         signal_text = "可得交易日數 <10，倍數不計算"
     else:
         if mode == "FULL":
-            if is_down_day and (volume_mult is not None and volume_mult >= 1.2) and (vol_mult is not None and vol_mult >= 1.2):
+            # 完整模式觸發：下跌日 + 量能>=1.2 + 波動>=1.2
+            vol_ok = (vol_mult is not None and vol_mult >= 1.2)
+            volu_ok = (volume_mult is not None and volume_mult >= 1.2)
+            if is_down_day and volu_ok and vol_ok:
                 if (volume_mult >= 1.5) and (vol_mult >= 1.5) and (pct_change is not None and pct_change <= -1.5):
                     risk_level = "高"
                 elif (pct_change is not None and pct_change <= -1.0):
@@ -560,7 +529,7 @@ def main() -> None:
                 risk_level = "低"
                 signal_text = "未觸發 A) 規則"
         else:
-            # Missing OHLC mode: never trigger deleveraging-risk-up
+            # 缺 OHLC 模式：不得觸發「去槓桿風險上升」
             if is_down_day and (volume_mult is not None and volume_mult >= 1.3) and (pct_change is not None and pct_change <= -1.2):
                 risk_level = "中"
                 signal_text = "代理警訊：放量下跌；OHLC缺失可能漏報踩踏"
@@ -568,7 +537,6 @@ def main() -> None:
                 risk_level = "未知（資料不足：OHLC缺失）"
                 signal_text = "OHLC缺失，無法套用完整模式"
 
-    # ---- Summary ----
     prefix = ""
     if tag == "NON_TRADING_DAY":
         prefix = "今日非交易日；"
@@ -580,7 +548,6 @@ def main() -> None:
     else:
         summary = f"{prefix}UsedDate={used_date}：{signal_text}；風險等級={risk_level}"
 
-    # ---- Numbers / Signal / Action / Caveats ----
     def _fmt_num(x: Optional[float], nd: int = 2) -> Any:
         return None if x is None else round(float(x), nd)
 
@@ -596,10 +563,10 @@ def main() -> None:
 
     signal = {
         "DownDay": bool(is_down_day) if (pct_change is not None or today_change is not None) else None,
-        "VolumeAmplified": bool(is_volume_amplified) if volume_mult is not None else None,
-        "VolAmplified": bool(is_vol_amplified) if vol_mult is not None else None,
         "NewLow_N": bool(new_low) if today_close is not None else None,
         "ConsecutiveBreak": bool(consecutive_break),
+        "VolumeAmplified": (volume_mult is not None and volume_mult >= 1.2) if volume_mult is not None else None,
+        "VolAmplified": (vol_mult is not None and vol_mult >= 1.2) if vol_mult is not None else None,
     }
 
     if risk_level in ("中", "高"):
@@ -612,8 +579,6 @@ def main() -> None:
 
     caveats_lines = []
     caveats_lines.append(f"Sources: FMTQIK={FMTQIK_URL} ; MI_5MINS_HIST={MI_5MINS_HIST_URL}")
-    if fmt_used is None:
-        caveats_lines.append("FMTQIK: UsedDate 對應資料缺失（欄位可能變更或解析失敗）")
     if not ohlc_ok:
         caveats_lines.append("OHLC: high 或 low 缺失（嚴格規則：不得硬猜；因此波動倍數=NA且不觸發完整模式）")
     if dminus1 is None:
@@ -625,7 +590,6 @@ def main() -> None:
         f"LookbackOldest={lookback_oldest} | OHLC={ohlc_status}"
     )
     caveats_lines.append(meta_line)
-
     caveats = "\n".join(caveats_lines)
 
     latest_report = {
@@ -648,7 +612,6 @@ def main() -> None:
         "lookback_oldest": lookback_oldest,
     }
 
-    # Write files only on successful parse
     _write_json_file(ROLL25_PATH, merged_roll)
     _write_json_file(LATEST_REPORT_PATH, latest_report)
 
@@ -666,7 +629,6 @@ def main() -> None:
     }
     _write_json_file(MANIFEST_PATH, manifest)
 
-    # Log summary for Actions
     print("TWSE sidecar updated:")
     print(f"  UsedDate={used_date}  Mode={mode}  Risk={risk_level}  LookbackNActual={lookback_n_actual}")
     print(f"  roll25_records={len(merged_roll)}  dedupe_ok={dedupe_ok}  sha={sha}")
