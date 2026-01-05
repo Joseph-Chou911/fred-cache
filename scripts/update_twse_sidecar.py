@@ -2,18 +2,18 @@
 # -*- coding: utf-8 -*-
 
 """
-TWSE sidecar updater:
+TWSE sidecar updater (roll25_cache/):
 - Fetches:
-  1) FMTQIK: volume/value/close/change
+  1) FMTQIK: trade value / close / change
   2) MI_5MINS_HIST: OHLC (must truly have high/low; never guess)
-- Maintains rolling cache: cache/roll25.json (max 25 trading days)
+- Maintains rolling cache: roll25_cache/roll25.json (max 25 trading days)
 - Writes:
-  - cache/latest_report.json (deterministic computed output + meta)
-  - cache/manifest.json (pinned URLs for audit, based on git HEAD sha)
+  - roll25_cache/latest_report.json (deterministic computed output + meta)
+  - roll25_cache/manifest.json (pinned URLs for audit, based on git HEAD sha)
 
-Design goals:
-- Deterministic, auditable, no "cache from chat output".
-- If OHLC missing -> mode "MISSING_OHLC" and do NOT trigger full A-mode rule.
+Strict rules:
+- Do NOT guess High/Low.
+- If OHLC missing: mode=MISSING_OHLC, volatility multiple = NA, and DO NOT trigger "deleveraging risk up".
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime, date, timezone
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -34,13 +34,14 @@ TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 FMTQIK_URL = "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK"
 MI_5MINS_HIST_URL = "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST"
 
-CACHE_DIR = "cache"
+CACHE_DIR = "roll25_cache"
 ROLL25_PATH = os.path.join(CACHE_DIR, "roll25.json")
 LATEST_REPORT_PATH = os.path.join(CACHE_DIR, "latest_report.json")
 MANIFEST_PATH = os.path.join(CACHE_DIR, "manifest.json")
 
 LOOKBACK_TARGET = 20
 STORE_CAP = 25
+
 
 # ---------- helpers ----------
 
@@ -61,7 +62,6 @@ def _safe_float(x: Any) -> Optional[float]:
     s = str(x).strip()
     if s == "" or s.upper() == "NA" or s.lower() == "null":
         return None
-    # remove commas
     s = s.replace(",", "")
     try:
         return float(s)
@@ -79,7 +79,7 @@ def _safe_int(x: Any) -> Optional[int]:
 
 def _roc_to_iso(roc: str) -> Optional[str]:
     """
-    TWSE sometimes returns ROC date like "114/01/05".
+    TWSE may return ROC date like "114/01/05".
     Convert to "2025-01-05" (ROC year + 1911).
     """
     if not isinstance(roc, str):
@@ -110,20 +110,21 @@ def _parse_date_any(v: Any) -> Optional[str]:
     s = str(v).strip()
     if s == "":
         return None
-    # ISO
+
     if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
         return s
-    # YYYY/MM/DD
+
     m = re.match(r"^(\d{4})/(\d{1,2})/(\d{1,2})$", s)
     if m:
         try:
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
         except Exception:
             return None
-    # ROC
+
     iso = _roc_to_iso(s)
     if iso:
         return iso
+
     return None
 
 def _http_get_json(url: str, timeout: int = 20) -> Any:
@@ -161,13 +162,22 @@ def _git_head_sha() -> str:
     return "UNKNOWN"
 
 def _pinned_raw_url(repo: str, sha: str, path: str) -> str:
-    # path should not start with /
     path = path.lstrip("/")
     return f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
 
 def _repo_slug_from_env() -> str:
-    # GITHUB_REPOSITORY is like "owner/repo"
     return os.environ.get("GITHUB_REPOSITORY", "<OWNER>/<REPO>")
+
+def _avg(values: List[float]) -> Optional[float]:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+def _calc_amplitude_pct(high: float, low: float, prev_close: float) -> Optional[float]:
+    if prev_close == 0:
+        return None
+    return (high - low) / prev_close * 100.0
+
 
 # ---------- domain parsing ----------
 
@@ -176,17 +186,10 @@ class FmtqikRow:
     date: str
     trade_value: Optional[int]   # 成交金額
     close: Optional[float]       # 收盤
-    change: Optional[float]      # 漲跌點數 (或可能是 change)
+    change: Optional[float]      # 漲跌點數
     raw: Dict[str, Any]
 
 def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
-    """
-    FMTQIK typical fields vary; we extract:
-    - date
-    - trade_value (成交金額)
-    - close (收盤指數 or 收盤)
-    - change (漲跌點數)
-    """
     if not isinstance(rows, list):
         return []
 
@@ -199,8 +202,6 @@ def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
         if not d:
             continue
 
-        # Try multiple possible keys
-        # trade_value:
         tv = _safe_int(
             r.get("TradeValue")
             or r.get("tradeValue")
@@ -209,7 +210,6 @@ def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
             or r.get("成交金額(千元)")
         )
 
-        # close:
         close = _safe_float(
             r.get("Close")
             or r.get("close")
@@ -217,7 +217,6 @@ def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
             or r.get("收盤")
         )
 
-        # change:
         chg = _safe_float(
             r.get("Change")
             or r.get("change")
@@ -227,7 +226,6 @@ def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
 
         parsed.append(FmtqikRow(date=d, trade_value=tv, close=close, change=chg, raw=r))
 
-    # sort by date ascending
     parsed.sort(key=lambda x: x.date)
     return parsed
 
@@ -240,27 +238,25 @@ class OhlcRow:
     raw: Dict[str, Any]
 
 def _parse_mi_5mins_hist(rows: Any) -> List[OhlcRow]:
-    """
-    MI_5MINS_HIST should include daily OHLC for index.
-    We strictly require actual high/low values to consider OHLC OK.
-    """
     if not isinstance(rows, list):
         return []
     parsed: List[OhlcRow] = []
     for r in rows:
         if not isinstance(r, dict):
             continue
+
         d = _parse_date_any(r.get("Date") or r.get("date") or r.get("日期"))
         if not d:
             continue
+
         high = _safe_float(r.get("High") or r.get("high") or r.get("最高") or r.get("最高價"))
         low = _safe_float(r.get("Low") or r.get("low") or r.get("最低") or r.get("最低價"))
         close = _safe_float(r.get("Close") or r.get("close") or r.get("收盤") or r.get("收盤價"))
+
         parsed.append(OhlcRow(date=d, high=high, low=low, close=close, raw=r))
+
     parsed.sort(key=lambda x: x.date)
     return parsed
-
-# ---------- core logic ----------
 
 def _index_by_date_fmtqik(rows: List[FmtqikRow]) -> Dict[str, FmtqikRow]:
     return {x.date: x for x in rows}
@@ -271,59 +267,55 @@ def _index_by_date_ohlc(rows: List[OhlcRow]) -> Dict[str, OhlcRow]:
 def _latest_date(dates: List[str]) -> Optional[str]:
     return max(dates) if dates else None
 
+
+# ---------- cache and selection ----------
+
 def _merge_roll_cache(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
     """
     Merge by date (dedupe), keep latest, sort desc by date, cap STORE_CAP.
     Returns (merged, dedupe_ok)
     """
     m: Dict[str, Dict[str, Any]] = {}
+
     for it in existing:
         if isinstance(it, dict) and "date" in it:
             m[str(it["date"])] = it
-    before = len(m)
+
     for it in new_items:
         if isinstance(it, dict) and "date" in it:
             m[str(it["date"])] = it
-    after = len(m)
-    dedupe_ok = after >= before  # always true unless weird input
+
     merged = list(m.values())
     merged.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     merged = merged[:STORE_CAP]
+
+    # dedupe ok if all dates are unique after merge
+    dates = [str(x.get("date", "")) for x in merged]
+    dedupe_ok = (len(dates) == len(set(dates)))
     return merged, dedupe_ok
 
-def _pick_used_date(
-    today: date,
-    fmt_dates: List[str],
-    ohlc_dates: List[str],
-) -> Tuple[str, str]:
+def _pick_used_date(today: date, fmt_dates: List[str]) -> Tuple[str, str]:
     """
-    Returns (used_date, summary_tag):
-    - weekend => "NON_TRADING_DAY" and use latest available date
+    Returns (used_date, tag):
+    - weekend => NON_TRADING_DAY, use latest fmt date
     - weekday:
-       if today not in fmt_dates => "DATA_NOT_UPDATED" and use latest fmt date
-       else => "OK_TODAY" and use today
-    If no fmt_dates => raise.
+        if today not in fmt_dates => DATA_NOT_UPDATED, use latest fmt date
+        else => OK_TODAY, use today
     """
-    today_iso = today.isoformat()
-
     if not fmt_dates:
         raise RuntimeError("FMTQIK returned no usable dates.")
+
+    today_iso = today.isoformat()
 
     if _is_weekend(today):
         return (_latest_date(fmt_dates) or fmt_dates[-1], "NON_TRADING_DAY")
 
-    # weekday
     if today_iso not in fmt_dates:
         return (_latest_date(fmt_dates) or fmt_dates[-1], "DATA_NOT_UPDATED")
 
     return (today_iso, "OK_TODAY")
 
-def _build_cache_item(
-    used_date: str,
-    fmt: Optional[FmtqikRow],
-    ohlc: Optional[OhlcRow]
-) -> Dict[str, Any]:
-    # Required: date, close, change, trade_value, high, low
+def _build_cache_item(used_date: str, fmt: Optional[FmtqikRow], ohlc: Optional[OhlcRow]) -> Dict[str, Any]:
     close = fmt.close if fmt else (ohlc.close if ohlc else None)
     change = fmt.change if fmt else None
     trade_value = fmt.trade_value if fmt else None
@@ -339,43 +331,24 @@ def _build_cache_item(
         "low": low,
     }
 
-def _extract_lookback_series(roll25: List[Dict[str, Any]], used_date: str) -> List[Dict[str, Any]]:
-    """
-    roll25 stored desc. We need series from used_date backwards (inclusive),
-    max LOOKBACK_TARGET entries. Only use dates <= used_date.
-    """
-    # filter eligible
-    eligible = [r for r in roll25 if isinstance(r, dict) and str(r.get("date", "")) <= used_date]
+def _extract_lookback_series(roll: List[Dict[str, Any]], used_date: str) -> List[Dict[str, Any]]:
+    eligible = [r for r in roll if isinstance(r, dict) and str(r.get("date", "")) <= used_date]
     eligible.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     return eligible[:LOOKBACK_TARGET]
 
-def _find_dminus1(roll25: List[Dict[str, Any]], used_date: str) -> Optional[Dict[str, Any]]:
-    """
-    Find the immediate previous trading day record (< used_date) from roll25.
-    """
-    eligible = [r for r in roll25 if isinstance(r, dict) and str(r.get("date", "")) < used_date]
+def _find_dminus1(roll: List[Dict[str, Any]], used_date: str) -> Optional[Dict[str, Any]]:
+    eligible = [r for r in roll if isinstance(r, dict) and str(r.get("date", "")) < used_date]
     if not eligible:
         return None
     eligible.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     return eligible[0]
 
-def _avg(values: List[float]) -> Optional[float]:
-    if not values:
-        return None
-    return sum(values) / len(values)
 
-def _calc_amplitude_pct(high: float, low: float, prev_close: float) -> Optional[float]:
-    if prev_close == 0:
-        return None
-    return (high - low) / prev_close * 100.0
-
-def _is_number(x: Any) -> bool:
-    return isinstance(x, (int, float)) and not (x is None)
+# ---------- main ----------
 
 def main() -> None:
     _ensure_cache_dir()
 
-    # Load existing roll cache
     existing_roll = _read_json_file(ROLL25_PATH, default=[])
     if not isinstance(existing_roll, list):
         existing_roll = []
@@ -391,10 +364,9 @@ def main() -> None:
     ohlc_by_date = _index_by_date_ohlc(ohlc_rows)
 
     fmt_dates = sorted(fmt_by_date.keys())
-    ohlc_dates = sorted(ohlc_by_date.keys())
 
     today = _today_taipei()
-    used_date, tag = _pick_used_date(today, fmt_dates, ohlc_dates)
+    used_date, tag = _pick_used_date(today, fmt_dates)
 
     fmt_used = fmt_by_date.get(used_date)
     ohlc_used = ohlc_by_date.get(used_date)
@@ -404,75 +376,69 @@ def main() -> None:
     if ohlc_used and (ohlc_used.high is not None) and (ohlc_used.low is not None):
         ohlc_ok = True
 
+    mode = "FULL" if ohlc_ok else "MISSING_OHLC"
+    ohlc_status = "OK" if ohlc_ok else "MISSING"
+
     cache_item = _build_cache_item(used_date, fmt_used, ohlc_used)
     merged_roll, dedupe_ok = _merge_roll_cache(existing_roll, [cache_item])
 
-    # Lookback series for calculation (max 20, used_date backward)
     lookback = _extract_lookback_series(merged_roll, used_date)
     lookback_n_actual = len(lookback)
     lookback_oldest = lookback[-1]["date"] if lookback else "NA"
 
-    # Freshness upper bound: oldest >45 days => unreliable
+    # Freshness rule: oldest >45 days => unreliable
     freshness_ok = True
     if lookback_n_actual > 0:
-        oldest_dt = datetime.fromisoformat(str(lookback_oldest)).date()
-        delta_days = (today - oldest_dt).days
-        if delta_days > 45:
+        try:
+            oldest_dt = datetime.fromisoformat(str(lookback_oldest)).date()
+            delta_days = (today - oldest_dt).days
+            if delta_days > 45:
+                freshness_ok = False
+        except Exception:
             freshness_ok = False
 
-    # D-1 (previous trading day)
     dminus1 = _find_dminus1(merged_roll, used_date)
     used_dminus1 = dminus1["date"] if dminus1 else "NA"
-    prev_close = dminus1.get("close") if dminus1 else None
-    prev_close_f = _safe_float(prev_close)
+    prev_close = _safe_float(dminus1.get("close")) if dminus1 else None
 
-    # Today's close/trade_value/change
     today_close = _safe_float(cache_item.get("close"))
     today_trade_value = _safe_float(cache_item.get("trade_value"))
     today_change = _safe_float(cache_item.get("change"))
 
-    # --- Calculations ---
+    # ---- Calculations ----
     pct_change = None
-    if (today_close is not None) and (prev_close_f is not None) and prev_close_f != 0:
-        pct_change = (today_close - prev_close_f) / prev_close_f * 100.0
+    if today_close is not None and prev_close is not None and prev_close != 0:
+        pct_change = (today_close - prev_close) / prev_close * 100.0
 
-    # N rules: at least 10 to compute multiples
-    # Average uses previous N-1 days excluding UsedDate, need at least 9 prior days
     prior_days = lookback[1:] if lookback_n_actual >= 2 else []
-    prior_tv = [ _safe_float(x.get("trade_value")) for x in prior_days ]
-    prior_tv = [ x for x in prior_tv if x is not None ]
+
+    # Volume multiplier: need >=9 prior days trade_value
+    prior_tv = [_safe_float(x.get("trade_value")) for x in prior_days]
+    prior_tv = [x for x in prior_tv if x is not None]
 
     volume_mult = None
     if today_trade_value is not None and len(prior_tv) >= 9:
-        avg_tv = _avg(prior_tv[:LOOKBACK_TARGET-1])  # already <=19 items
+        avg_tv = _avg(prior_tv[:LOOKBACK_TARGET - 1])
         if avg_tv and avg_tv != 0:
             volume_mult = today_trade_value / avg_tv
 
-    # Amplitude and volatility multiple require OHLC + prev_close
+    # Amplitude and vol multiplier require OHLC + prev_close
     amplitude_pct = None
     vol_mult = None
-    if ohlc_ok and (prev_close_f is not None) and prev_close_f != 0:
+    if ohlc_ok and prev_close is not None and prev_close != 0:
         high = _safe_float(cache_item.get("high"))
         low = _safe_float(cache_item.get("low"))
         if high is not None and low is not None:
-            amplitude_pct = _calc_amplitude_pct(high, low, prev_close_f)
+            amplitude_pct = _calc_amplitude_pct(high, low, prev_close)
 
-            # prior amplitude average: need >=9 prior days with non-null high/low
+            # prior amplitude avg: need >=9 prior days with non-null high/low and each day's D-1 close
             prior_amp: List[float] = []
             for x in prior_days:
+                d = str(x.get("date", ""))
                 h = _safe_float(x.get("high"))
                 l = _safe_float(x.get("low"))
-                pc = None
-                # amplitude definition uses each day's previous close,
-                # but your spec uses "昨收" baseline for amplitude each day;
-                # here we approximate by using that day's own D-1 close from cache if available.
-                # To keep deterministic and avoid "future peek", we compute amplitude for day D using D-1 close from cache.
-                # If unavailable, skip.
-                d = str(x.get("date", ""))
                 dm1 = _find_dminus1(merged_roll, d)
-                if dm1 is None:
-                    continue
-                pc = _safe_float(dm1.get("close"))
+                pc = _safe_float(dm1.get("close")) if dm1 else None
                 if h is None or l is None or pc is None or pc == 0:
                     continue
                 amp = _calc_amplitude_pct(h, l, pc)
@@ -480,17 +446,15 @@ def main() -> None:
                     prior_amp.append(amp)
 
             if amplitude_pct is not None and len(prior_amp) >= 9:
-                avg_amp = _avg(prior_amp[:LOOKBACK_TARGET-1])
+                avg_amp = _avg(prior_amp[:LOOKBACK_TARGET - 1])
                 if avg_amp and avg_amp != 0:
                     vol_mult = amplitude_pct / avg_amp
 
-    # --- Breakdown / signal ---
+    # ---- Signals ----
     is_down_day = (pct_change is not None and pct_change < 0) or (today_change is not None and today_change < 0)
     is_volume_amplified = (volume_mult is not None and volume_mult >= 1.2)
-
     is_vol_amplified = (vol_mult is not None and vol_mult >= 1.2)
 
-    # Break / consecutive break: "today close is new low in lookback window"
     closes = []
     for x in lookback:
         c = _safe_float(x.get("close"))
@@ -502,22 +466,20 @@ def main() -> None:
         min_close = min(c for _, c in closes)
         new_low = (today_close <= min_close)
 
-    # consecutive break: need D-1 also be "new low in its own lookback window"
     consecutive_break = False
     if dminus1 is not None:
         d1_date = str(dminus1.get("date"))
         d1_close = _safe_float(dminus1.get("close"))
         if d1_close is not None:
             d1_lookback = _extract_lookback_series(merged_roll, d1_date)
-            d1_closes = [ _safe_float(x.get("close")) for x in d1_lookback ]
-            d1_closes = [ x for x in d1_closes if x is not None ]
+            d1_closes = [_safe_float(x.get("close")) for x in d1_lookback]
+            d1_closes = [x for x in d1_closes if x is not None]
             if d1_closes:
                 d1_new_low = (d1_close <= min(d1_closes))
                 if new_low and d1_new_low:
                     consecutive_break = True
 
-    # --- Risk & action rules ---
-    mode = "FULL" if ohlc_ok else "MISSING_OHLC"
+    # ---- Risk evaluation ----
     risk_level = "未知"
     signal_text = ""
 
@@ -529,9 +491,8 @@ def main() -> None:
         signal_text = "可得交易日數 <10，倍數不計算"
     else:
         if mode == "FULL":
-            # Only trigger on down day and both multipliers >=1.2
+            # A) full mode trigger only when down day and both multipliers >=1.2
             if is_down_day and (volume_mult is not None and volume_mult >= 1.2) and (vol_mult is not None and vol_mult >= 1.2):
-                # crude tiering
                 if (volume_mult >= 1.5) and (vol_mult >= 1.5) and (pct_change is not None and pct_change <= -1.5):
                     risk_level = "高"
                 elif (pct_change is not None and pct_change <= -1.0):
@@ -543,8 +504,7 @@ def main() -> None:
                 risk_level = "低"
                 signal_text = "未觸發 A) 規則"
         else:
-            # Missing OHLC mode
-            # Do NOT trigger de-leveraging risk up message.
+            # B) missing OHLC mode: never trigger deleveraging-risk-up
             if is_down_day and (volume_mult is not None and volume_mult >= 1.3) and (pct_change is not None and pct_change <= -1.2):
                 risk_level = "中"
                 signal_text = "代理警訊：放量下跌；OHLC缺失可能漏報踩踏"
@@ -552,7 +512,7 @@ def main() -> None:
                 risk_level = "未知（資料不足：OHLC缺失）"
                 signal_text = "OHLC缺失，無法套用完整模式"
 
-    # Build Summary sentence
+    # ---- Summary ----
     prefix = ""
     if tag == "NON_TRADING_DAY":
         prefix = "今日非交易日；"
@@ -560,26 +520,24 @@ def main() -> None:
         prefix = "今日資料未更新；"
 
     if mode == "MISSING_OHLC":
-        # must contain 'OHLC缺失'
         summary = f"{prefix}UsedDate={used_date}：OHLC缺失，{signal_text}；風險等級={risk_level}"
     else:
         summary = f"{prefix}UsedDate={used_date}：{signal_text}；風險等級={risk_level}"
 
-    # Numbers: 4 core numbers (with multiples; NA if not available)
+    # ---- Numbers / Signal / Action / Caveats ----
     def _fmt_num(x: Optional[float], nd: int = 2) -> Any:
         return None if x is None else round(float(x), nd)
 
     numbers = {
         "UsedDate": used_date,
         "Close": _fmt_num(today_close, 2),
-        "PctChange": _fmt_num(pct_change, 3),  # %
+        "PctChange": _fmt_num(pct_change, 3),
         "TradeValue": _safe_int(today_trade_value),
-        "VolumeMultiplier": _fmt_num(volume_mult, 3),     # 倍數
-        "AmplitudePct": _fmt_num(amplitude_pct, 3),       # %
-        "VolMultiplier": _fmt_num(vol_mult, 3),           # 倍數
+        "VolumeMultiplier": _fmt_num(volume_mult, 3),
+        "AmplitudePct": _fmt_num(amplitude_pct, 3),
+        "VolMultiplier": _fmt_num(vol_mult, 3),
     }
 
-    # Signal section per your required booleans
     signal = {
         "DownDay": bool(is_down_day) if (pct_change is not None or today_change is not None) else None,
         "VolumeAmplified": bool(is_volume_amplified) if volume_mult is not None else None,
@@ -588,7 +546,6 @@ def main() -> None:
         "ConsecutiveBreak": bool(consecutive_break),
     }
 
-    # Action: one actionable item
     if risk_level in ("中", "高"):
         if mode == "FULL" and "去槓桿風險上升" in signal_text:
             action = "先下調槓桿與部位曝險、提高保證金緩衝（例如提高現金比重/降低融資占比），並觀察下一個交易日是否延續破位與放量。"
@@ -597,7 +554,6 @@ def main() -> None:
     else:
         action = "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。"
 
-    # Caveats: include sources + missing fields + lookback meta
     caveats_lines = []
     caveats_lines.append(f"Sources: FMTQIK={FMTQIK_URL} ; MI_5MINS_HIST={MI_5MINS_HIST_URL}")
     if fmt_used is None:
@@ -607,14 +563,13 @@ def main() -> None:
     if dminus1 is None:
         caveats_lines.append("D-1: 昨收缺失（無法計算漲跌幅與振幅%）")
 
-    # Final meta line + CACHE
-    ohlc_status = "OK" if ohlc_ok else "MISSING"
     meta_line = (
         f"Mode={mode} | UsedDate={used_date} | UsedDminus1={used_dminus1} | "
         f"LookbackNTarget={LOOKBACK_TARGET} | LookbackNActual={lookback_n_actual} | "
         f"LookbackOldest={lookback_oldest} | OHLC={ohlc_status}"
     )
     caveats_lines.append(meta_line)
+
     caveats = "\n".join(caveats_lines)
 
     latest_report = {
@@ -625,9 +580,7 @@ def main() -> None:
         "signal": signal,
         "action": action,
         "caveats": caveats,
-        # deterministic cache state (what we store)
         "cache_roll25": merged_roll,
-        # decision tags
         "tag": tag,
         "freshness_ok": freshness_ok,
         "risk_level": risk_level,
@@ -642,7 +595,7 @@ def main() -> None:
     _write_json_file(ROLL25_PATH, merged_roll)
     _write_json_file(LATEST_REPORT_PATH, latest_report)
 
-    # Manifest (pinned URLs based on current git HEAD)
+    # Manifest pinned URLs based on current git HEAD
     sha = _git_head_sha()
     repo = _repo_slug_from_env()
     manifest = {
@@ -650,18 +603,17 @@ def main() -> None:
         "as_of_ts": _now_taipei().isoformat(),
         "data_commit_sha": sha,
         "pinned": {
-            "roll25_json": _pinned_raw_url(repo, sha, "cache/roll25.json"),
-            "latest_report_json": _pinned_raw_url(repo, sha, "cache/latest_report.json"),
-            "manifest_json": _pinned_raw_url(repo, sha, "cache/manifest.json"),
+            "roll25_json": _pinned_raw_url(repo, sha, "roll25_cache/roll25.json"),
+            "latest_report_json": _pinned_raw_url(repo, sha, "roll25_cache/latest_report.json"),
+            "manifest_json": _pinned_raw_url(repo, sha, "roll25_cache/manifest.json"),
         }
     }
     _write_json_file(MANIFEST_PATH, manifest)
 
-    # Print key info for action logs
+    # Log summary for Actions
     print("TWSE sidecar updated:")
     print(f"  UsedDate={used_date}  Mode={mode}  Risk={risk_level}  LookbackNActual={lookback_n_actual}")
     print(f"  roll25_records={len(merged_roll)}  dedupe_ok={dedupe_ok}  sha={sha}")
-
 
 if __name__ == "__main__":
     main()
