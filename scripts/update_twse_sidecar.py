@@ -11,9 +11,12 @@ TWSE sidecar updater (roll25_cache/):
   - roll25_cache/latest_report.json (deterministic computed output + meta)
   - roll25_cache/manifest.json (pinned URLs for audit, based on git HEAD sha)
 
-Strict rules:
-- Do NOT guess High/Low.
-- If OHLC missing: mode=MISSING_OHLC, volatility multiple = NA, and DO NOT trigger "deleveraging risk up".
+Robustness goals (IMPORTANT):
+- Do NOT crash the workflow if TWSE payload shape changes or returns no usable dates.
+- If FMTQIK can't be parsed into usable dates:
+  - Print diagnostics to Actions log
+  - Do NOT write/overwrite cache files
+  - Exit 0 so sanity check still runs
 """
 
 from __future__ import annotations
@@ -127,10 +130,10 @@ def _parse_date_any(v: Any) -> Optional[str]:
 
     return None
 
-def _http_get_json(url: str, timeout: int = 20) -> Any:
+def _http_get_json(url: str, timeout: int = 25) -> Any:
     headers = {
         "Accept": "application/json",
-        "User-Agent": "twse-sidecar/1.0 (+github-actions)"
+        "User-Agent": "twse-sidecar/1.1 (+github-actions)"
     }
     r = requests.get(url, headers=headers, timeout=timeout)
     r.raise_for_status()
@@ -178,27 +181,78 @@ def _calc_amplitude_pct(high: float, low: float, prev_close: float) -> Optional[
         return None
     return (high - low) / prev_close * 100.0
 
+def _unwrap_to_rows(payload: Any) -> List[Dict[str, Any]]:
+    """
+    TWSE payload may be:
+      - list[dict]
+      - dict with list under a key (data/result/records/items/aaData/...)
+    Return list[dict] or [].
+    """
+    if isinstance(payload, list):
+        return [x for x in payload if isinstance(x, dict)]
+
+    if isinstance(payload, dict):
+        for k in ("data", "result", "records", "items", "aaData", "dataset"):
+            v = payload.get(k)
+            if isinstance(v, list):
+                return [x for x in v if isinstance(x, dict)]
+        # sometimes the dict itself is a single record
+        if all(not isinstance(v, list) for v in payload.values()):
+            return [payload]  # best-effort
+    return []
+
+def _diag_payload(name: str, payload: Any) -> None:
+    """
+    Print diagnostics to Actions log (short, safe).
+    """
+    t = type(payload).__name__
+    print(f"[DIAG] {name}: type={t}")
+    if isinstance(payload, dict):
+        keys = list(payload.keys())[:30]
+        print(f"[DIAG] {name}: top_keys={keys}")
+        rows = _unwrap_to_rows(payload)
+        if rows:
+            print(f"[DIAG] {name}: unwrapped_rows={len(rows)}")
+            print(f"[DIAG] {name}: row0_keys={list(rows[0].keys())[:30]}")
+            if len(rows) > 1:
+                print(f"[DIAG] {name}: row1_keys={list(rows[1].keys())[:30]}")
+        else:
+            print(f"[DIAG] {name}: cannot unwrap to rows")
+    elif isinstance(payload, list):
+        print(f"[DIAG] {name}: list_len={len(payload)}")
+        # show first dict keys if present
+        for i in range(min(2, len(payload))):
+            if isinstance(payload[i], dict):
+                print(f"[DIAG] {name}: row{i}_keys={list(payload[i].keys())[:30]}")
+            else:
+                print(f"[DIAG] {name}: row{i}_type={type(payload[i]).__name__}")
+
 
 # ---------- domain parsing ----------
 
 @dataclass
 class FmtqikRow:
     date: str
-    trade_value: Optional[int]   # 成交金額
-    close: Optional[float]       # 收盤
-    change: Optional[float]      # 漲跌點數
+    trade_value: Optional[int]
+    close: Optional[float]
+    change: Optional[float]
     raw: Dict[str, Any]
 
-def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
-    if not isinstance(rows, list):
+def _parse_fmtqik(payload: Any) -> List[FmtqikRow]:
+    rows = _unwrap_to_rows(payload)
+    if not rows:
         return []
 
     parsed: List[FmtqikRow] = []
     for r in rows:
-        if not isinstance(r, dict):
-            continue
-
-        d = _parse_date_any(r.get("Date") or r.get("date") or r.get("日期"))
+        # broaden date key possibilities
+        d = _parse_date_any(
+            r.get("Date")
+            or r.get("date")
+            or r.get("日期")
+            or r.get("DATE")
+            or r.get("交易日期")
+        )
         if not d:
             continue
 
@@ -208,6 +262,7 @@ def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
             or r.get("成交金額")
             or r.get("成交金額(元)")
             or r.get("成交金額(千元)")
+            or r.get("成交金額_元")
         )
 
         close = _safe_float(
@@ -215,6 +270,7 @@ def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
             or r.get("close")
             or r.get("收盤指數")
             or r.get("收盤")
+            or r.get("指數")
         )
 
         chg = _safe_float(
@@ -222,6 +278,7 @@ def _parse_fmtqik(rows: Any) -> List[FmtqikRow]:
             or r.get("change")
             or r.get("漲跌點數")
             or r.get("漲跌")
+            or r.get("漲跌點")
         )
 
         parsed.append(FmtqikRow(date=d, trade_value=tv, close=close, change=chg, raw=r))
@@ -237,15 +294,20 @@ class OhlcRow:
     close: Optional[float]
     raw: Dict[str, Any]
 
-def _parse_mi_5mins_hist(rows: Any) -> List[OhlcRow]:
-    if not isinstance(rows, list):
+def _parse_mi_5mins_hist(payload: Any) -> List[OhlcRow]:
+    rows = _unwrap_to_rows(payload)
+    if not rows:
         return []
+
     parsed: List[OhlcRow] = []
     for r in rows:
-        if not isinstance(r, dict):
-            continue
-
-        d = _parse_date_any(r.get("Date") or r.get("date") or r.get("日期"))
+        d = _parse_date_any(
+            r.get("Date")
+            or r.get("date")
+            or r.get("日期")
+            or r.get("DATE")
+            or r.get("交易日期")
+        )
         if not d:
             continue
 
@@ -271,16 +333,10 @@ def _latest_date(dates: List[str]) -> Optional[str]:
 # ---------- cache and selection ----------
 
 def _merge_roll_cache(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
-    """
-    Merge by date (dedupe), keep latest, sort desc by date, cap STORE_CAP.
-    Returns (merged, dedupe_ok)
-    """
     m: Dict[str, Dict[str, Any]] = {}
-
     for it in existing:
         if isinstance(it, dict) and "date" in it:
             m[str(it["date"])] = it
-
     for it in new_items:
         if isinstance(it, dict) and "date" in it:
             m[str(it["date"])] = it
@@ -289,30 +345,20 @@ def _merge_roll_cache(existing: List[Dict[str, Any]], new_items: List[Dict[str, 
     merged.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     merged = merged[:STORE_CAP]
 
-    # dedupe ok if all dates are unique after merge
     dates = [str(x.get("date", "")) for x in merged]
     dedupe_ok = (len(dates) == len(set(dates)))
     return merged, dedupe_ok
 
 def _pick_used_date(today: date, fmt_dates: List[str]) -> Tuple[str, str]:
-    """
-    Returns (used_date, tag):
-    - weekend => NON_TRADING_DAY, use latest fmt date
-    - weekday:
-        if today not in fmt_dates => DATA_NOT_UPDATED, use latest fmt date
-        else => OK_TODAY, use today
-    """
     if not fmt_dates:
-        raise RuntimeError("FMTQIK returned no usable dates.")
+        # caller should handle this; keep here for safety
+        return ("NA", "FMTQIK_EMPTY")
 
     today_iso = today.isoformat()
-
     if _is_weekend(today):
         return (_latest_date(fmt_dates) or fmt_dates[-1], "NON_TRADING_DAY")
-
     if today_iso not in fmt_dates:
         return (_latest_date(fmt_dates) or fmt_dates[-1], "DATA_NOT_UPDATED")
-
     return (today_iso, "OK_TODAY")
 
 def _build_cache_item(used_date: str, fmt: Optional[FmtqikRow], ohlc: Optional[OhlcRow]) -> Dict[str, Any]:
@@ -321,15 +367,7 @@ def _build_cache_item(used_date: str, fmt: Optional[FmtqikRow], ohlc: Optional[O
     trade_value = fmt.trade_value if fmt else None
     high = ohlc.high if ohlc else None
     low = ohlc.low if ohlc else None
-
-    return {
-        "date": used_date,
-        "close": close,
-        "change": change,
-        "trade_value": trade_value,
-        "high": high,
-        "low": low,
-    }
+    return {"date": used_date, "close": close, "change": change, "trade_value": trade_value, "high": high, "low": low}
 
 def _extract_lookback_series(roll: List[Dict[str, Any]], used_date: str) -> List[Dict[str, Any]]:
     eligible = [r for r in roll if isinstance(r, dict) and str(r.get("date", "")) <= used_date]
@@ -353,12 +391,30 @@ def main() -> None:
     if not isinstance(existing_roll, list):
         existing_roll = []
 
-    # Fetch sources
-    fmt_raw = _http_get_json(FMTQIK_URL)
-    ohlc_raw = _http_get_json(MI_5MINS_HIST_URL)
+    # Fetch sources (guarded)
+    try:
+        fmt_raw = _http_get_json(FMTQIK_URL)
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch/parse FMTQIK JSON: {e}")
+        # do not overwrite cache files; exit 0 to keep workflow green
+        return
 
+    try:
+        ohlc_raw = _http_get_json(MI_5MINS_HIST_URL)
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch/parse MI_5MINS_HIST JSON: {e}")
+        # still allow proceeding with FMTQIK-only mode; set to empty
+        ohlc_raw = []
+
+    # Parse
     fmt_rows = _parse_fmtqik(fmt_raw)
     ohlc_rows = _parse_mi_5mins_hist(ohlc_raw)
+
+    # If no usable FMTQIK dates, print diagnostics and DO NOT write/overwrite cache
+    if not fmt_rows:
+        print("[ERROR] FMTQIK returned no usable rows/dates after parsing.")
+        _diag_payload("FMTQIK", fmt_raw)
+        return  # exit 0
 
     fmt_by_date = _index_by_date_fmtqik(fmt_rows)
     ohlc_by_date = _index_by_date_ohlc(ohlc_rows)
@@ -367,15 +423,16 @@ def main() -> None:
 
     today = _today_taipei()
     used_date, tag = _pick_used_date(today, fmt_dates)
+    if used_date == "NA":
+        print("[ERROR] UsedDate could not be determined (fmt_dates empty). This should not happen.")
+        _diag_payload("FMTQIK", fmt_raw)
+        return
 
     fmt_used = fmt_by_date.get(used_date)
     ohlc_used = ohlc_by_date.get(used_date)
 
     # Determine OHLC availability strictly
-    ohlc_ok = False
-    if ohlc_used and (ohlc_used.high is not None) and (ohlc_used.low is not None):
-        ohlc_ok = True
-
+    ohlc_ok = bool(ohlc_used and (ohlc_used.high is not None) and (ohlc_used.low is not None))
     mode = "FULL" if ohlc_ok else "MISSING_OHLC"
     ohlc_status = "OK" if ohlc_ok else "MISSING"
 
@@ -491,7 +548,6 @@ def main() -> None:
         signal_text = "可得交易日數 <10，倍數不計算"
     else:
         if mode == "FULL":
-            # A) full mode trigger only when down day and both multipliers >=1.2
             if is_down_day and (volume_mult is not None and volume_mult >= 1.2) and (vol_mult is not None and vol_mult >= 1.2):
                 if (volume_mult >= 1.5) and (vol_mult >= 1.5) and (pct_change is not None and pct_change <= -1.5):
                     risk_level = "高"
@@ -504,7 +560,7 @@ def main() -> None:
                 risk_level = "低"
                 signal_text = "未觸發 A) 規則"
         else:
-            # B) missing OHLC mode: never trigger deleveraging-risk-up
+            # Missing OHLC mode: never trigger deleveraging-risk-up
             if is_down_day and (volume_mult is not None and volume_mult >= 1.3) and (pct_change is not None and pct_change <= -1.2):
                 risk_level = "中"
                 signal_text = "代理警訊：放量下跌；OHLC缺失可能漏報踩踏"
@@ -592,10 +648,10 @@ def main() -> None:
         "lookback_oldest": lookback_oldest,
     }
 
+    # Write files only on successful parse
     _write_json_file(ROLL25_PATH, merged_roll)
     _write_json_file(LATEST_REPORT_PATH, latest_report)
 
-    # Manifest pinned URLs based on current git HEAD
     sha = _git_head_sha()
     repo = _repo_slug_from_env()
     manifest = {
@@ -614,6 +670,7 @@ def main() -> None:
     print("TWSE sidecar updated:")
     print(f"  UsedDate={used_date}  Mode={mode}  Risk={risk_level}  LookbackNActual={lookback_n_actual}")
     print(f"  roll25_records={len(merged_roll)}  dedupe_ok={dedupe_ok}  sha={sha}")
+
 
 if __name__ == "__main__":
     main()
