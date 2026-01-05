@@ -41,20 +41,85 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # ✅ 核心修補：
-      # - 不做 rebase（避免 commit hash 改變造成 pinned 失真）
-      # - push 失敗就回到 origin/main 重新產檔/重新 commit/再 push（2/4/8 秒 backoff，最多 3 次）
-      - name: Generate + commit + push (retry-safe, no-rebase, pinned)
+      - name: Generate + commit + push (retry-safe, no-rebase, pinned) [NO HEREDOC]
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
+          # Prepare helper scripts (written once, reused in retries)
+          mkdir -p .tmp_scripts
+
+          cat > .tmp_scripts/patch_manifest_v1.py << 'EOF'
+          import json, os
+          from pathlib import Path
+
+          data_sha = os.environ["DATA_SHA"]
+          repo = os.environ["REPO"]
+
+          p = Path("cache/manifest.json")
+          obj = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+          obj.setdefault("generated_at_utc", None)
+          obj.setdefault("as_of_ts", None)
+          obj["data_commit_sha"] = data_sha
+
+          base = f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache"
+          obj["pinned"] = {
+            "latest_json": f"{base}/latest.json",
+            "history_json": f"{base}/history.json",
+            "latest_csv":  f"{base}/latest.csv",
+            "manifest_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json",
+          }
+
+          p.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+          EOF
+
+          cat > .tmp_scripts/patch_manifest_selfpin.py << 'EOF'
+          import json, os
+          from pathlib import Path
+
+          repo = os.environ["REPO"]
+          sha1 = os.environ["MANIFEST_SHA"]
+
+          p = Path("cache/manifest.json")
+          obj = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+          obj.setdefault("pinned", {})
+
+          obj["pinned"]["manifest_json"] = f"https://raw.githubusercontent.com/{repo}/{sha1}/cache/manifest.json"
+          obj["manifest_commit_sha_v1"] = sha1
+
+          p.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+          EOF
+
+          cat > .tmp_scripts/print_pinned.py << 'EOF'
+          import json, os
+          from datetime import datetime, timezone
+
+          repo = os.environ["REPO"]
+          data_sha = os.environ["DATA_SHA"]
+          sha1 = os.environ["MANIFEST_SHA"]
+          sha2 = os.environ["MANIFEST2_SHA"]
+
+          out = {
+            "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "data_commit_sha": data_sha,
+            "manifest_commit_sha_v1": sha1,
+            "manifest_commit_sha_v2": sha2,
+            "pinned": {
+              "latest_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json",
+              "history_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json",
+              "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv",
+              "manifest_json": f"https://raw.githubusercontent.com/{repo}/{sha2}/cache/manifest.json",
+            }
+          }
+          print(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
+          EOF
+
           for attempt in 1 2 3; do
             echo "===== Attempt ${attempt} ====="
 
-            # Always start from latest remote main to avoid non-fast-forward
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
@@ -74,32 +139,8 @@ jobs:
             export DATA_SHA
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 3) Patch manifest v1 (pinned data URLs; manifest_json temp points to main)
-            python - <<'PY'
-import json, os
-from pathlib import Path
-
-data_sha = os.environ["DATA_SHA"]
-repo = os.environ["REPO"]
-
-p = Path("cache/manifest.json")
-obj = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-
-obj.setdefault("generated_at_utc", None)
-obj.setdefault("as_of_ts", None)
-obj["data_commit_sha"] = data_sha
-
-base = f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache"
-obj["pinned"] = {
-  "latest_json": f"{base}/latest.json",
-  "history_json": f"{base}/history.json",
-  "latest_csv":  f"{base}/latest.csv",
-  # temporary (will be replaced by self-pin step)
-  "manifest_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json",
-}
-
-p.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-PY
+            # 3) Patch manifest v1
+            python .tmp_scripts/patch_manifest_v1.py
 
             git add cache/manifest.json
             if ! git diff --cached --quiet; then
@@ -109,61 +150,21 @@ PY
             export MANIFEST_SHA
             echo "MANIFEST_SHA=${MANIFEST_SHA}"
 
-            # 4) Self-pin manifest v2 (avoid refs/heads/main caching risk)
-            python - <<'PY'
-import json, os
-from pathlib import Path
-
-repo = os.environ["REPO"]
-sha1 = os.environ["MANIFEST_SHA"]
-
-p = Path("cache/manifest.json")
-obj = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-obj.setdefault("pinned", {})
-
-obj["pinned"]["manifest_json"] = f"https://raw.githubusercontent.com/{repo}/{sha1}/cache/manifest.json"
-obj["manifest_commit_sha_v1"] = sha1
-
-p.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-PY
+            # 4) Self-pin manifest v2
+            python .tmp_scripts/patch_manifest_selfpin.py
 
             git add cache/manifest.json
             if ! git diff --cached --quiet; then
               git commit -m "Update manifest (pin manifest url)"
             fi
-
             MANIFEST2_SHA="$(git rev-parse HEAD)"
             export MANIFEST2_SHA
             echo "MANIFEST2_SHA=${MANIFEST2_SHA}"
 
-            # 5) One push only. If it fails, retry from remote main.
+            # 5) One push only
             if git push origin HEAD:main; then
               echo "Push succeeded."
-
-              # Print pinned pointers (single-line JSON) for audit
-              python - <<'PY'
-import json, os
-from datetime import datetime, timezone
-
-repo = os.environ["REPO"]
-data_sha = os.environ["DATA_SHA"]
-sha1 = os.environ["MANIFEST_SHA"]
-sha2 = os.environ["MANIFEST2_SHA"]
-
-out = {
-  "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-  "data_commit_sha": data_sha,
-  "manifest_commit_sha_v1": sha1,
-  "manifest_commit_sha_v2": sha2,
-  "pinned": {
-    "latest_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json",
-    "history_json": f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json",
-    "latest_csv":  f"https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv",
-    "manifest_json": f"https://raw.githubusercontent.com/{repo}/{sha2}/cache/manifest.json",
-  }
-}
-print(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
-PY
+              python .tmp_scripts/print_pinned.py
               exit 0
             fi
 
@@ -176,26 +177,7 @@ PY
           echo "Push failed after 3 attempts."
           exit 1
 
-      # ✅ 這段是你原本 sanity check，但我把 heredoc 改成「完全不縮排的 PY 結尾」
       - name: Sanity check (history daily coverage)
         run: |
           set -euo pipefail
-          python - <<'PY'
-import json
-from pathlib import Path
-from collections import Counter
-
-h = json.loads(Path("cache/history.json").read_text(encoding="utf-8"))
-
-days = sorted({r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts")})
-c = Counter(r.get("as_of_ts","")[:10] for r in h if r.get("as_of_ts"))
-
-keys = set((r.get("as_of_ts","")[:10], r.get("series_id","")) for r in h)
-dedupe_ok = (len(keys) == len(h))
-
-print("history_records =", len(h))
-print("days_in_history =", days)
-print("rows_per_day    =", dict(c))
-print("dedupe_ok       =", dedupe_ok)
-print("cap_records     =", 720, "cap_ok =", len(h) <= 720)
-PY
+          python -c "import json; from pathlib import Path; from collections import Counter; h=json.loads(Path('cache/history.json').read_text(encoding='utf-8')); days=sorted({r.get('as_of_ts','')[:10] for r in h if r.get('as_of_ts')}); c=Counter(r.get('as_of_ts','')[:10] for r in h if r.get('as_of_ts')); keys=set((r.get('as_of_ts','')[:10], r.get('series_id','')) for r in h); print('history_records =', len(h)); print('days_in_history =', days); print('rows_per_day    =', dict(c)); print('dedupe_ok       =', len(keys)==len(h)); print('cap_records     =', 720, 'cap_ok =', len(h)<=720)"
