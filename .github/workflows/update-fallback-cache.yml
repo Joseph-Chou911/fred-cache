@@ -17,6 +17,8 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,8 +31,9 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
@@ -39,20 +42,22 @@ jobs:
           fi
 
       - name: Run fallback script
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           python scripts/update_fallback_cache.py
 
-      # --- hard-validate DATA JSON to prevent pushing broken files ---
       - name: Validate DATA JSON (latest.json)
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           python -m json.tool fallback_cache/latest.json > /dev/null
           echo "latest.json is valid JSON."
 
       - name: Show outputs (debug)
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           echo "---- git status (before commit) ----"
           git status --porcelain || true
 
@@ -60,24 +65,24 @@ jobs:
           ls -al fallback_cache || true
 
           echo "---- preview fallback_cache/latest.json ----"
-          (head -n 60 fallback_cache/latest.json || true)
+          head -n 60 fallback_cache/latest.json || true
 
           echo "---- preview fallback_cache/manifest.json (pre-regen) ----"
-          (cat fallback_cache/manifest.json || true)
+          cat fallback_cache/manifest.json || true
 
           echo "---- preview fallback_cache/latest.csv ----"
-          (head -n 30 fallback_cache/latest.csv || true)
+          head -n 30 fallback_cache/latest.csv || true
 
-      - name: Commit DATA (latest.json/latest.csv) if changed
+      - name: Commit & push DATA (latest.json/latest.csv) if changed
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          # 0) helper: rebase+push with backoff retry
           push_with_rebase_retry () {
             for wait in 2 4 8; do
               echo "---- fetch/pull --rebase origin main ----"
               git fetch origin main
+              git checkout -B main origin/main
               git pull --rebase --autostash origin main
 
               echo "---- try push (origin HEAD:main) ----"
@@ -93,47 +98,45 @@ jobs:
             return 1
           }
 
-          # 1) Ensure files exist
-          for f in fallback_cache/latest.json fallback_cache/latest.csv fallback_cache/manifest.json; do
+          # Ensure required files exist
+          for f in fallback_cache/latest.json fallback_cache/latest.csv; do
             if [ ! -f "$f" ]; then
               echo "ERROR: missing file: $f"
               exit 1
             fi
           done
 
-          # 2) Commit only DATA files first (avoid manifest self-referential SHA issues)
           git add fallback_cache/latest.json fallback_cache/latest.csv
 
           if git diff --cached --quiet; then
             echo "No DATA changes to commit."
-            # NOTE: we continue; manifest may still be regenerated/committed
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update fallback DATA (latest json/csv)"
-
-            # 3) Push with rebase+retry to avoid non-fast-forward
-            push_with_rebase_retry
+            exit 0
           fi
 
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update fallback DATA (latest json/csv)"
+
+          push_with_rebase_retry
+
       - name: Regenerate MANIFEST with pinned SHA for DATA
+        shell: bash
         env:
           REPO_OWNER: Joseph-Chou911
           REPO_NAME: fred-cache
         run: |
-          set -e
+          set -euo pipefail
 
-          # HEAD is the commit containing the latest DATA (if DATA unchanged, it's still the last DATA commit)
-          SHA_DATA="$(git log -n 1 --pretty=%H -- fallback_cache/latest.json fallback_cache/latest.csv)
-          export SHA_DATA
+          # Pin to last commit that touched DATA files (more accurate than HEAD)
+          SHA_DATA="$(git log -n 1 --pretty=%H -- fallback_cache/latest.json fallback_cache/latest.csv)"
           echo "SHA_DATA=$SHA_DATA"
-
           if [ -z "$SHA_DATA" ]; then
             echo "ERROR: SHA_DATA is empty"
             exit 1
           fi
+          export SHA_DATA
 
-          python - <<'PY'
+          cat > /tmp/regenerate_fallback_manifest.py <<'PY'
           import json, os, datetime
 
           sha_data = os.environ.get("SHA_DATA")
@@ -160,11 +163,8 @@ jobs:
 
           now_utc = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
-          # True pinned (points to DATA commit SHA)
           latest_json = f"https://raw.githubusercontent.com/{owner}/{repo}/{sha_data}/fallback_cache/latest.json"
           latest_csv  = f"https://raw.githubusercontent.com/{owner}/{repo}/{sha_data}/fallback_cache/latest.csv"
-
-          # manifest itself uses main as entry to avoid self-referential SHA
           manifest_main = f"https://raw.githubusercontent.com/{owner}/{repo}/main/fallback_cache/manifest.json"
 
           out = {
@@ -177,7 +177,6 @@ jobs:
               "latest_csv": latest_csv,
               "manifest_json": manifest_main
             },
-            # notes as list to avoid newline-in-string risks forever
             "notes": [
               "Fallback cache; pinned points to DATA commit SHA.",
               "manifest_json remains main entry to avoid self-referential SHA."
@@ -189,26 +188,28 @@ jobs:
             f.write("\n")
           PY
 
+          python /tmp/regenerate_fallback_manifest.py
+
           echo "---- preview fallback_cache/manifest.json (post-regen) ----"
           cat fallback_cache/manifest.json
 
-      # --- hard-validate MANIFEST JSON before committing ---
       - name: Validate MANIFEST JSON (manifest.json)
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           python -m json.tool fallback_cache/manifest.json > /dev/null
           echo "manifest.json is valid JSON."
 
-      - name: Commit MANIFEST if changed
+      - name: Commit & push MANIFEST if changed
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          # helper: rebase+push with backoff retry (same as above, repeated for clarity)
           push_with_rebase_retry () {
             for wait in 2 4 8; do
               echo "---- fetch/pull --rebase origin main ----"
               git fetch origin main
+              git checkout -B main origin/main
               git pull --rebase --autostash origin main
 
               echo "---- try push (origin HEAD:main) ----"
@@ -224,8 +225,12 @@ jobs:
             return 1
           }
 
-          git add fallback_cache/manifest.json
+          if [ ! -f fallback_cache/manifest.json ]; then
+            echo "ERROR: missing file: fallback_cache/manifest.json"
+            exit 1
+          fi
 
+          git add fallback_cache/manifest.json
           if git diff --cached --quiet; then
             echo "No MANIFEST changes to commit."
             exit 0
@@ -235,10 +240,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "Update fallback MANIFEST (pinned to data sha)"
 
-          # Push with rebase+retry to avoid non-fast-forward
           push_with_rebase_retry
 
       - name: Post status
         if: always()
+        shell: bash
         run: |
           echo "Done."
