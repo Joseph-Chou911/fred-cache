@@ -1,0 +1,10 @@
+[
+  {
+    "series_id": "HYG_IEF_RATIO",
+    "data_date": "2026-01-02",
+    "value": 0.8396128226477936,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20250907&d2=20260105&i=d | https://stooq.com/q/d/l/?s=ief.us&d1=20250907&d2=20260105&i=d",
+    "notes": "hyg_close=80.67; ief_close=96.08",
+    "as_of_ts": "2026-01-05T01:19:13Z"
+  }
+]
