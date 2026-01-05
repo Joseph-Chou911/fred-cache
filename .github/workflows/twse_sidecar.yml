@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: twse-sidecar-main
-  cancel-in-progress: true
+  group: repo-writer-man
+  cancel-in-progress: false
 
 jobs:
   update:
