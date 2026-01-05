@@ -1,5 +1,3 @@
-首先是yml
-
 name: Update FRED cache
 
 on:
