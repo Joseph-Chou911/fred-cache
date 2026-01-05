@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-01-05T15:30:20.446743+08:00",
+  "generated_at": "2026-01-05T16:02:23.109676+08:00",
   "timezone": "Asia/Taipei",
   "summary": "今日資料未更新；UsedDate=2026-01-02：可得交易日數 <10，倍數不計算；風險等級=未知（資料不足）",
   "numbers": {
@@ -13,10 +13,10 @@
   },
   "signal": {
     "DownDay": false,
-    "NewLow_N": true,
-    "ConsecutiveBreak": false,
     "VolumeAmplified": null,
-    "VolAmplified": null
+    "VolAmplified": null,
+    "NewLow_N": true,
+    "ConsecutiveBreak": false
   },
   "action": "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。",
   "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nD-1: 昨收缺失（無法計算漲跌幅與振幅%）\nMode=FULL | UsedDate=2026-01-02 | UsedDminus1=NA | LookbackNTarget=20 | LookbackNActual=1 | LookbackOldest=2026-01-02 | OHLC=OK",
