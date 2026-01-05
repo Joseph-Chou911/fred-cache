@@ -4,14 +4,14 @@ on:
   workflow_dispatch: {}
   schedule:
     # Run at minute 13, every 8 hours (UTC): 00:13, 08:13, 16:13
-    - cron: "13 */8 * * *"
+    - cron: "8 */9 * * *"
 
 permissions:
   contents: write
 
 concurrency:
   group: repo-writer-man
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   update:
