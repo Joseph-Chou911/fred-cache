@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: repo-write-main
+  group: repo-writer-main
   cancel-in-progress: false
 
 jobs:
