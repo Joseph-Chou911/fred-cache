@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: fallback-cache-main
-  cancel-in-progress: true
+  group: repo-writer-main
+  cancel-in-progress: false
 
 jobs:
   update:
