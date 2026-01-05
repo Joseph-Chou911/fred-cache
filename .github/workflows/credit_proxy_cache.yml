@@ -1,0 +1,97 @@
+name: Update credit proxy cache
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Every 8 hours at minute 13 UTC: 00:13, 08:13, 16:13
+    - cron: "13 */8 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: credit-proxy-cache-main
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install requests
+
+      # 1) Update data files (latest/history/csv) - NO manifest here
+      - name: Update credit proxy data files
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/update_credit_proxy_cache.py --mode data
+
+      # 2) Sanity check output (log evidence chain)
+      - name: Sanity check (history daily coverage)
+        run: |
+          set -euo pipefail
+          python scripts/update_credit_proxy_cache.py --mode check
+
+      # 3) Commit data files => get DATA_SHA (only if changed; includes untracked)
+      - name: Commit & push data files if changed
+        id: commit_data
+        run: |
+          set -euo pipefail
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add credit_proxy_cache/latest.json credit_proxy_cache/history.json credit_proxy_cache/latest.csv
+          git commit -m "Update credit proxy data"
+          git push
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "data_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # 4) Update manifest pinned to DATA_SHA (only when data changed)
+      - name: Update manifest (pinned to data_sha)
+        if: steps.commit_data.outputs.changed == 'true'
+        env:
+          TZ: Asia/Taipei
+          DATA_SHA: ${{ steps.commit_data.outputs.data_sha }}
+        run: |
+          set -euo pipefail
+          python scripts/update_credit_proxy_cache.py --mode manifest --data-sha "$DATA_SHA"
+
+      # 5) Commit manifest (second commit; manifest contains pinned URLs to DATA_SHA)
+      - name: Commit & push manifest if changed
+        if: steps.commit_data.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Manifest unchanged."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add credit_proxy_cache/manifest.json
+          git commit -m "Update credit proxy manifest (pinned)"
+          git push
