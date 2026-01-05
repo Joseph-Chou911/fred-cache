@@ -4,6 +4,7 @@ on:
   workflow_dispatch: {}
   schedule:
     # Runs at minute 17 of every 7th hour: 00:17, 07:17, 14:17, 21:17 (UTC).
+    # 換算台北時間（UTC+8）：08:17 / 15:17 / 22:17 / 05:17（隔天）
     - cron: "17 */7 * * *"
 
 permissions:
