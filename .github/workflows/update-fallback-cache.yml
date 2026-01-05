@@ -78,7 +78,7 @@ jobs:
             for wait in 2 4 8; do
               echo "---- fetch/pull --rebase origin main ----"
               git fetch origin main
-              git pull --rebase --autostash origin main || true
+              git pull --rebase --autostash origin main
 
               echo "---- try push (origin HEAD:main) ----"
               if git push origin HEAD:main; then
@@ -124,7 +124,7 @@ jobs:
           set -e
 
           # HEAD is the commit containing the latest DATA (if DATA unchanged, it's still the last DATA commit)
-          SHA_DATA="$(git rev-parse HEAD)"
+          SHA_DATA="$(git log -n 1 --pretty=%H -- fallback_cache/latest.json fallback_cache/latest.csv)
           export SHA_DATA
           echo "SHA_DATA=$SHA_DATA"
 
@@ -209,7 +209,7 @@ jobs:
             for wait in 2 4 8; do
               echo "---- fetch/pull --rebase origin main ----"
               git fetch origin main
-              git pull --rebase --autostash origin main || true
+              git pull --rebase --autostash origin main
 
               echo "---- try push (origin HEAD:main) ----"
               if git push origin HEAD:main; then
