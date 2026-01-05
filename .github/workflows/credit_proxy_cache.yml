@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: credit-proxy-cache-main
-  cancel-in-progress: true
+  group: repo-write-main
+  cancel-in-progress: false
 
 jobs:
   update:
