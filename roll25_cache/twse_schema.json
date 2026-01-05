@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "timezone": "Asia/Taipei",
+
+  "fmtqik": {
+    "url": "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK",
+    "date_keys": ["Date", "date", "日期", "DATE"],
+    "trade_value_keys": ["TradeValue", "tradeValue", "成交金額"],
+    "close_keys": ["TAIEX", "Close", "close", "收盤指數", "收盤"],
+    "change_keys": ["Change", "change", "漲跌點數", "漲跌"]
+  },
+
+  "mi_5mins_hist": {
+    "url": "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST",
+    "date_keys": ["Date", "date", "日期", "DATE"],
+    "high_keys": ["HighestIndex", "High", "high", "最高", "最高價"],
+    "low_keys": ["LowestIndex", "Low", "low", "最低", "最低價"],
+    "close_keys": ["ClosingIndex", "Close", "close", "收盤", "收盤價"]
+  }
+}
