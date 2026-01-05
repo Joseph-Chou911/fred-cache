@@ -1,1 +1,10 @@
-{}
+{
+  "generated_at_taipei": "2026-01-05T15:30:20.448893+08:00",
+  "as_of_ts": "2026-01-05T15:30:20.448904+08:00",
+  "data_commit_sha": "0b6536b427e1cd1c5d3473cca26709096e414f7c",
+  "pinned": {
+    "roll25_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/0b6536b427e1cd1c5d3473cca26709096e414f7c/roll25_cache/roll25.json",
+    "latest_report_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/0b6536b427e1cd1c5d3473cca26709096e414f7c/roll25_cache/latest_report.json",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/0b6536b427e1cd1c5d3473cca26709096e414f7c/roll25_cache/manifest.json"
+  }
+}
