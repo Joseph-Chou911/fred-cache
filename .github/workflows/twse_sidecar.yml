@@ -31,13 +31,15 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests
+          pip install --no-cache-dir requests
 
       - name: Update TWSE sidecar
         env:
           TZ: Asia/Taipei
         run: |
           set -euo pipefail
+          echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
+          echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
           python scripts/update_twse_sidecar.py
 
       - name: Sanity check (twse roll25 coverage)
@@ -48,12 +50,25 @@ jobs:
       - name: Commit & push if changed
         run: |
           set -euo pipefail
-          if git diff --quiet; then
+
+          # Stage outputs (allow missing files without failing)
+          git add -A roll25_cache/roll25.json roll25_cache/latest_report.json roll25_cache/manifest.json || true
+
+          # Determine whether there is anything to commit:
+          # - staged changes
+          # - unstaged changes
+          # - untracked files
+          if git diff --cached --quiet && git diff --quiet && [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add roll25_cache/roll25.json roll25_cache/latest_report.json roll25_cache/manifest.json
-          git commit -m "Update TWSE sidecar cache"
+
+          git commit -m "Update TWSE sidecar cache" || {
+            echo "Nothing to commit after staging."
+            exit 0
+          }
+
           git push
