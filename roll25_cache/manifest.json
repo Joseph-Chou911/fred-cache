@@ -1,11 +1,11 @@
 {
-  "generated_at_taipei": "2026-01-06T17:52:49.588564+08:00",
-  "as_of_ts": "2026-01-06T17:52:49.588571+08:00",
-  "data_commit_sha": "db0bb0e0e8aad4592428e3d020740f61769cfdc8",
+  "generated_at_taipei": "2026-01-07T02:57:56.228692+08:00",
+  "as_of_ts": "2026-01-07T02:57:56.228699+08:00",
+  "data_commit_sha": "82f0c265a9645377d55e1beaf1c5f8045be26ba9",
   "pinned": {
-    "schema_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/db0bb0e0e8aad4592428e3d020740f61769cfdc8/roll25_cache/twse_schema.json",
-    "roll25_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/db0bb0e0e8aad4592428e3d020740f61769cfdc8/roll25_cache/roll25.json",
-    "latest_report_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/db0bb0e0e8aad4592428e3d020740f61769cfdc8/roll25_cache/latest_report.json",
-    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/db0bb0e0e8aad4592428e3d020740f61769cfdc8/roll25_cache/manifest.json"
+    "schema_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/82f0c265a9645377d55e1beaf1c5f8045be26ba9/roll25_cache/twse_schema.json",
+    "roll25_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/82f0c265a9645377d55e1beaf1c5f8045be26ba9/roll25_cache/roll25.json",
+    "latest_report_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/82f0c265a9645377d55e1beaf1c5f8045be26ba9/roll25_cache/latest_report.json",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/82f0c265a9645377d55e1beaf1c5f8045be26ba9/roll25_cache/manifest.json"
   }
 }
