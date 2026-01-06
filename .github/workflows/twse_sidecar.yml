@@ -3,14 +3,15 @@ name: Update TWSE sidecar (roll25 + latest_report + manifest)
 on:
   workflow_dispatch: {}
   schedule:
-    # Run at minute 13, every 8 hours (UTC): 00:13, 08:13, 16:13
+    # Run at minute 8, every 9 hours (UTC): 00:08, 09:08, 18:08
+    # Asia/Taipei (UTC+8): 08:08, 17:08, 02:08 (next day)
     - cron: "8 */9 * * *"
 
 permissions:
   contents: write
 
 concurrency:
-  group: repo-writer-man
+  group: repo-writer-main
   cancel-in-progress: false
 
 jobs:
@@ -47,19 +48,23 @@ jobs:
           set -euo pipefail
           python scripts/sanity_twse_roll25.py
 
-      - name: Commit & push if changed
+      - name: Audit fingerprint (pre-commit)
+        run: |
+          set -euo pipefail
+          python -c "import hashlib; from pathlib import Path; files=['roll25_cache/roll25.json','roll25_cache/latest_report.json','roll25_cache/manifest.json']; \
+def sha(p): \
+  h=hashlib.sha256(); h.update(Path(p).read_bytes()); return h.hexdigest(); \
+for f in files: \
+  p=Path(f); print(f'{f}  sha256=' + (sha(f) if p.exists() else 'MISSING'))"
+
+      - name: Commit & push if changed (ff-only safe)
         run: |
           set -euo pipefail
 
-          # Stage outputs (allow missing files without failing)
           git add -A roll25_cache/roll25.json roll25_cache/latest_report.json roll25_cache/manifest.json || true
 
-          # Determine whether there is anything to commit:
-          # - staged changes
-          # - unstaged changes
-          # - untracked files
-          if git diff --cached --quiet && git diff --quiet && [ -z "$(git status --porcelain)" ]; then
-            echo "No changes to commit."
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit."
             exit 0
           fi
 
@@ -71,4 +76,5 @@ jobs:
             exit 0
           }
 
-          git push
+          git pull --ff-only origin main
+          git push origin HEAD:main
