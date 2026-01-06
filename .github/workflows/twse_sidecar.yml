@@ -48,14 +48,23 @@ jobs:
           set -euo pipefail
           python scripts/sanity_twse_roll25.py
 
+      # ✅ 最穩的指紋：不用 python -c，避免手機貼上造成 YAML 斷行/引號毀損
       - name: Audit fingerprint (pre-commit)
         run: |
           set -euo pipefail
-          python -c "import hashlib; from pathlib import Path; files=['roll25_cache/roll25.json','roll25_cache/latest_report.json','roll25_cache/manifest.json']; \
-def sha(p): \
-  h=hashlib.sha256(); h.update(Path(p).read_bytes()); return h.hexdigest(); \
-for f in files: \
-  p=Path(f); print(f'{f}  sha256=' + (sha(f) if p.exists() else 'MISSING'))"
+          files=(
+            "roll25_cache/roll25.json"
+            "roll25_cache/latest_report.json"
+            "roll25_cache/manifest.json"
+          )
+          for f in "${files[@]}"; do
+            if [ -f "$f" ]; then
+              h="$(sha256sum "$f" | awk '{print $1}')"
+              echo "$f  sha256=$h"
+            else
+              echo "$f  sha256=MISSING"
+            fi
+          done
 
       - name: Commit & push if changed (ff-only safe)
         run: |
