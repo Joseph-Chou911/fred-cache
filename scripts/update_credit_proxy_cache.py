@@ -8,6 +8,11 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
+try:
+    from zoneinfo import ZoneInfo  # py3.9+
+except Exception:
+    ZoneInfo = None  # type: ignore
+
 # -------------------------
 # Paths / Outputs
 # -------------------------
@@ -20,7 +25,7 @@ MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
 # -------------------------
 # Config
 # -------------------------
-SCRIPT_VERSION = "credit_proxy_cache_v1"
+SCRIPT_VERSION = "credit_proxy_cache_v1.1"
 MAX_HISTORY_ROWS = 720  # ratio 每天最多 1 筆；720 夠用很久，也不會太大
 
 SYMBOL_HYG = "hyg.us"
@@ -42,11 +47,37 @@ def safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
+def _tzinfo():
+    """
+    Prefer TZ (GitHub style) then TIMEZONE. Fallback to Asia/Taipei, final fallback fixed +08:00.
+    """
+    tz_name = (os.environ.get("TZ") or os.environ.get("TIMEZONE") or "Asia/Taipei").strip() or "Asia/Taipei"
+
+    if ZoneInfo is not None:
+        try:
+            return ZoneInfo(tz_name)
+        except Exception:
+            try:
+                return ZoneInfo("Asia/Taipei")
+            except Exception:
+                return timezone(timedelta(hours=8))
+
+    # no zoneinfo
+    if tz_name == "Asia/Taipei":
+        return timezone(timedelta(hours=8))
+    return timezone.utc
+
+
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def yyyymmdd_utc(dt: datetime) -> str:
+def now_local_iso(tz) -> str:
+    # e.g. 2026-01-06T22:30:00+08:00
+    return datetime.now(tz).replace(microsecond=0).isoformat()
+
+
+def yyyymmdd(dt: datetime) -> str:
     return dt.strftime("%Y%m%d")
 
 
@@ -98,16 +129,29 @@ def pick_latest_common_close(
     return d, float(hyg_map[d]), float(ief_map[d])
 
 
+def _atomic_write_text(path: str, text: str) -> None:
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
 def write_json(path: str, obj) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
+    # atomic JSON write
+    safe_mkdir(os.path.dirname(path) or ".")
+    text = json.dumps(obj, ensure_ascii=False, indent=2)
+    _atomic_write_text(path, text)
 
 
 def read_json(path: str):
     if not os.path.exists(path):
         return None
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        # bad json / partial file => treat as missing
+        return None
 
 
 def read_history() -> List[Dict]:
@@ -116,6 +160,7 @@ def read_history() -> List[Dict]:
 
 
 def write_latest_csv(rows: List[Dict]) -> None:
+    safe_mkdir(OUT_DIR)
     fieldnames = ["series_id", "data_date", "value", "source_url", "notes", "as_of_ts"]
     with open(LATEST_CSV, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
@@ -127,6 +172,7 @@ def write_latest_csv(rows: List[Dict]) -> None:
 def build_manifest(data_sha: str, as_of_ts_iso: str) -> Dict:
     repo = os.environ.get("GITHUB_REPOSITORY", "NA")
     base = f"https://raw.githubusercontent.com/{repo}/{data_sha}/{OUT_DIR}"
+    branch_manifest = f"https://raw.githubusercontent.com/{repo}/main/{OUT_DIR}/manifest.json"
     return {
         "generated_at_utc": now_utc_iso(),
         "as_of_ts": as_of_ts_iso,
@@ -135,8 +181,11 @@ def build_manifest(data_sha: str, as_of_ts_iso: str) -> Dict:
             "latest_json": f"{base}/latest.json",
             "history_json": f"{base}/history.json",
             "latest_csv": f"{base}/latest.csv",
-            # 索引入口：讀 main 上最新 manifest，再用 data_commit_sha 的 pinned 避免快取
-            "manifest_json_branch": f"https://raw.githubusercontent.com/{repo}/main/{OUT_DIR}/manifest.json",
+            # ✅ 對齊其他 sidecar：提供 manifest_json
+            # 仍是 branch 入口（可能有 cache），但讀到 data_commit_sha 後會再跳 pinned data
+            "manifest_json": branch_manifest,
+            # ✅ 相容欄位：保留你原本的命名
+            "manifest_json_branch": branch_manifest,
         },
     }
 
@@ -146,22 +195,27 @@ def build_manifest(data_sha: str, as_of_ts_iso: str) -> Dict:
 # -------------------------
 def run_mode_data() -> None:
     safe_mkdir(OUT_DIR)
-    as_of_ts = now_utc_iso()
+    tz = _tzinfo()
+    as_of_ts = now_local_iso(tz)
 
-    d2 = yyyymmdd_utc(datetime.now(timezone.utc))
-    d1 = yyyymmdd_utc(datetime.now(timezone.utc) - timedelta(days=120))
+    # use local "today" to avoid boundary surprises for Taipei users
+    now_local = datetime.now(tz)
+    d2 = yyyymmdd(now_local)
+    d1 = yyyymmdd(now_local - timedelta(days=120))
 
     url_hyg = STOOQ_URL_TMPL.format(sym=SYMBOL_HYG, d1=d1, d2=d2)
     url_ief = STOOQ_URL_TMPL.format(sym=SYMBOL_IEF, d1=d1, d2=d2)
 
     latest_rows: List[Dict] = [{
         "series_id": "__META__",
-        "data_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "data_date": now_local.strftime("%Y-%m-%d"),
         "value": SCRIPT_VERSION,
         "source_url": "NA",
         "notes": "INFO:script_version",
         "as_of_ts": as_of_ts,
     }]
+
+    history = read_history()
 
     try:
         hyg_text = http_get_text(url_hyg)
@@ -180,6 +234,7 @@ def run_mode_data() -> None:
             "as_of_ts": as_of_ts,
         })
         write_json(LATEST_JSON, latest_rows)
+        write_json(HISTORY_JSON, history)  # ✅ ensure file exists / remains valid
         write_latest_csv(latest_rows)
         return
 
@@ -193,6 +248,7 @@ def run_mode_data() -> None:
             "as_of_ts": as_of_ts,
         })
         write_json(LATEST_JSON, latest_rows)
+        write_json(HISTORY_JSON, history)
         write_latest_csv(latest_rows)
         return
 
@@ -227,13 +283,11 @@ def run_mode_data() -> None:
     ])
 
     # ---------- history append with dedupe (same data_date won't grow) ----------
-    history = read_history()
-
-    # 去重鍵：同一個 series_id + data_date 只允許一筆
     exists = any(
-        r.get("series_id") == "HYG_IEF_RATIO" and r.get("data_date") == data_date
+        isinstance(r, dict)
+        and r.get("series_id") == "HYG_IEF_RATIO"
+        and r.get("data_date") == data_date
         for r in history
-        if isinstance(r, dict)
     )
 
     if not exists:
@@ -246,7 +300,6 @@ def run_mode_data() -> None:
             "as_of_ts": as_of_ts,
         })
 
-        # cap
         if len(history) > MAX_HISTORY_ROWS:
             history = history[-MAX_HISTORY_ROWS:]
 
@@ -257,7 +310,8 @@ def run_mode_data() -> None:
 
 def run_mode_manifest(data_sha: str) -> None:
     safe_mkdir(OUT_DIR)
-    as_of_ts = now_utc_iso()
+    tz = _tzinfo()
+    as_of_ts = now_local_iso(tz)
     manifest = build_manifest(data_sha=data_sha, as_of_ts_iso=as_of_ts)
     write_json(MANIFEST_JSON, manifest)
 
@@ -274,7 +328,6 @@ def extract_latest_ratio_date_from_latest_json() -> str:
 
 def run_mode_check() -> None:
     history = read_history()
-
     history_records = len(history)
 
     days = [
@@ -300,14 +353,11 @@ def run_mode_check() -> None:
     cap_records = MAX_HISTORY_ROWS
     cap_ok = (history_records <= cap_records)
 
-    # sidecar 預期：每個有效交易日最多 1 筆 ratio
     rows_per_day_ok = all(v == 1 for v in rows_per_day.values()) if rows_per_day else True
 
     latest_ratio_date = extract_latest_ratio_date_from_latest_json()
     history_last_date = days_in_history[-1] if days_in_history else "NA"
 
-    # 模擬你截圖那種 log 風格
-    print("Run set -euo pipefail")
     print(f"history_records = {history_records}")
     print(f"days_in_history = {days_in_history}")
     print(f"rows_per_day    = {rows_per_day}")
