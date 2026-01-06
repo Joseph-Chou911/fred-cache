@@ -8,6 +8,12 @@ Outputs:
   - fallback_cache/latest.csv
   - fallback_cache/manifest.json
 Dependencies: requests>=2.31.0
+
+B version changes (retry/backoff + audit-friendly errors):
+- Add retry/backoff (2/4/8 sec, max 3 attempts) on 429/5xx, timeout, connection errors.
+- Include HTTP status / attempts in ERR notes for audit.
+- Round derived spreads to avoid float tail (e.g., 0.5299999999999998 -> 0.53).
+- Keep output schema unchanged.
 """
 
 from __future__ import annotations
@@ -18,7 +24,6 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -41,6 +46,12 @@ STOOQ_DAILY_FMT = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 # Oil (non-official)
 DATAHUB_WTI_DAILY_CSV = "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv"
 
+# Network retry policy (B version)
+TIMEOUT_SECS_DEFAULT = 30
+MAX_ATTEMPTS = 3
+BACKOFF_SCHEDULE = [2, 4, 8]
+RETRY_STATUS = {429, 500, 502, 503, 504}
+
 
 # =========================
 # Helpers
@@ -51,6 +62,15 @@ def utc_now_iso_z() -> str:
 
 def utc_today_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _round(x: Optional[float], nd: int = 3) -> Optional[float]:
+    if x is None:
+        return None
+    try:
+        return round(float(x), nd)
+    except Exception:
+        return None
 
 
 def _try_parse_date(s: str) -> Optional[str]:
@@ -91,24 +111,6 @@ def _try_parse_float(x) -> Optional[float]:
         return None
 
 
-def http_get_text(url: str, timeout_sec: int = 30) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Return (text, err_note). err_note starts with ERR:...
-    """
-    try:
-        resp = requests.get(
-            url,
-            headers={"User-Agent": "fallback-cache/1.0"},
-            timeout=timeout_sec,
-        )
-        resp.raise_for_status()
-        # utf-8-sig handles BOM
-        text = resp.content.decode("utf-8-sig", errors="replace")
-        return text, None
-    except Exception as e:
-        return None, f"ERR:http({type(e).__name__})"
-
-
 def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
@@ -125,15 +127,85 @@ def atomic_write_json(path: str, obj) -> None:
     atomic_write_text(path, content + "\n")
 
 
+def _is_retryable_exception(e: Exception) -> bool:
+    # Timeout + connection-ish errors are retryable; generic RequestException also often transient
+    return isinstance(
+        e,
+        (
+            requests.Timeout,
+            requests.ConnectionError,
+            requests.ChunkedEncodingError,
+            requests.ContentDecodingError,
+            requests.TooManyRedirects,
+            requests.RequestException,
+        ),
+    )
+
+
+def http_get_text(
+    session: requests.Session,
+    url: str,
+    timeout_sec: int = TIMEOUT_SECS_DEFAULT,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Return (text, err_note). err_note starts with ERR:...
+    Retry/backoff: 2s -> 4s -> 8s (max 3 attempts) on:
+      - HTTP 429/5xx
+      - timeout / connection-ish exceptions
+    Audit: include status + attempts in err_note.
+    """
+    last_status: Optional[int] = None
+    last_err: Optional[str] = None
+
+    for i in range(MAX_ATTEMPTS):
+        attempt = i + 1
+        try:
+            resp = session.get(url, timeout=timeout_sec)
+            last_status = resp.status_code
+
+            if resp.status_code == 200:
+                # utf-8-sig handles BOM
+                text = resp.content.decode("utf-8-sig", errors="replace")
+                return text, None
+
+            # Non-200
+            if resp.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS:
+                time.sleep(BACKOFF_SCHEDULE[i])
+                continue
+
+            last_err = f"ERR:http(status={resp.status_code},attempts={attempt})"
+            return None, last_err
+
+        except Exception as e:
+            # Retry on transient exceptions
+            retryable = _is_retryable_exception(e)
+            err_type = type(e).__name__
+
+            if retryable and attempt < MAX_ATTEMPTS:
+                time.sleep(BACKOFF_SCHEDULE[i])
+                last_err = f"ERR:http_exc({err_type},attempts={attempt})"
+                continue
+
+            # Final failure
+            if isinstance(e, requests.Timeout):
+                return None, f"ERR:timeout(attempts={attempt})"
+            return None, f"ERR:http_exc({err_type},attempts={attempt})"
+
+    # Should not reach here
+    if last_status is not None:
+        return None, f"ERR:http(status={last_status},attempts={MAX_ATTEMPTS})"
+    return None, last_err or f"ERR:http_unknown(attempts={MAX_ATTEMPTS})"
+
+
 # =========================
 # Fetchers
 # =========================
-def fetch_cboe_vix_close(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str]:
+def fetch_cboe_vix_close(session: requests.Session, timeout_sec: int = TIMEOUT_SECS_DEFAULT) -> Tuple[Optional[str], Optional[float], str]:
     """
     CBOE VIX history CSV has Date, Open, High, Low, Close.
     Return latest (date_iso, close, notes)
     """
-    text, err = http_get_text(CBOE_VIX_CSV_URL, timeout_sec=timeout_sec)
+    text, err = http_get_text(session, CBOE_VIX_CSV_URL, timeout_sec=timeout_sec)
     if err:
         return None, None, f"{err}:cboe_vix"
 
@@ -174,7 +246,6 @@ def _prev_month_yyyymm(dt_utc: datetime) -> str:
 
 
 def _build_treasury_month_url(yyyymm: str) -> str:
-    # same structure you used previously (works well)
     return (
         "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
         f"daily-treasury-rates.csv/all/{yyyymm}"
@@ -185,10 +256,6 @@ def _build_treasury_month_url(yyyymm: str) -> str:
 
 
 def _pick_treasury_col(fieldnames: List[str], want: str) -> Optional[str]:
-    """
-    want in {"10", "2", "3m"}
-    Treasury file usually has columns like "10 Yr", "2 Yr", "3 Mo"
-    """
     if not fieldnames:
         return None
 
@@ -203,7 +270,6 @@ def _pick_treasury_col(fieldnames: List[str], want: str) -> Optional[str]:
         if t in fieldnames:
             return t
 
-    # heuristic search
     for f in fieldnames:
         low = f.lower().strip()
         if want == "10" and ("10" in low and ("yr" in low or "year" in low)):
@@ -215,7 +281,9 @@ def _pick_treasury_col(fieldnames: List[str], want: str) -> Optional[str]:
     return None
 
 
-def fetch_treasury_yields(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], Optional[float], Optional[float], str, str]:
+def fetch_treasury_yields(
+    session: requests.Session, timeout_sec: int = TIMEOUT_SECS_DEFAULT
+) -> Tuple[Optional[str], Optional[float], Optional[float], Optional[float], str, str]:
     """
     Return (date_iso, y10, y2, y3m, source_url, notes)
     Tries current month then previous month.
@@ -226,7 +294,7 @@ def fetch_treasury_yields(timeout_sec: int = 30) -> Tuple[Optional[str], Optiona
     last_err = None
     for yyyymm in candidates:
         url = _build_treasury_month_url(yyyymm)
-        text, err = http_get_text(url, timeout_sec=timeout_sec)
+        text, err = http_get_text(session, url, timeout_sec=timeout_sec)
         if err:
             last_err = f"{err}:treasury_csv"
             continue
@@ -245,7 +313,6 @@ def fetch_treasury_yields(timeout_sec: int = 30) -> Tuple[Optional[str], Optiona
                 date_col = c
                 break
         if not date_col:
-            # some rare files may have first column as date with other name
             date_col = fieldnames[0] if fieldnames else None
 
         c10 = _pick_treasury_col(fieldnames, "10")
@@ -294,7 +361,6 @@ def _pick_date_field(fieldnames: List[str], rows: List[Dict[str, str]]) -> Optio
         if c in fieldnames:
             return c
 
-    # heuristic: check first few columns
     for f in fieldnames[:6]:
         ok = 0
         total = 0
@@ -330,11 +396,11 @@ def _pick_nonfin_leverage_field(fieldnames: List[str]) -> Optional[str]:
     return None
 
 
-def fetch_chicagofed_nfci_nonfin_leverage(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str]:
+def fetch_chicagofed_nfci_nonfin_leverage(session: requests.Session, timeout_sec: int = TIMEOUT_SECS_DEFAULT) -> Tuple[Optional[str], Optional[float], str]:
     """
     Return (data_date_iso, value, notes)
     """
-    text, err = http_get_text(CHICAGOFED_NFCI_CSV_URL, timeout_sec=timeout_sec)
+    text, err = http_get_text(session, CHICAGOFED_NFCI_CSV_URL, timeout_sec=timeout_sec)
     if err:
         return None, None, f"{err}:chicagofed_nfci"
 
@@ -376,13 +442,13 @@ def fetch_chicagofed_nfci_nonfin_leverage(timeout_sec: int = 30) -> Tuple[Option
     return best_date, best_val, "WARN:fallback_chicagofed_nfci(nonfinancial leverage)"
 
 
-def fetch_fredgraph_last_value(series_id: str, timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str, str]:
+def fetch_fredgraph_last_value(session: requests.Session, series_id: str, timeout_sec: int = TIMEOUT_SECS_DEFAULT) -> Tuple[Optional[str], Optional[float], str, str]:
     """
     FRED fredgraph CSV is generally "no key".
     Return (date_iso, value, source_url, notes)
     """
     url = FREDGRAPH_CSV_FMT.format(series_id=series_id)
-    text, err = http_get_text(url, timeout_sec=timeout_sec)
+    text, err = http_get_text(session, url, timeout_sec=timeout_sec)
     if err:
         return None, None, url, f"{err}:fredgraph"
 
@@ -392,18 +458,16 @@ def fetch_fredgraph_last_value(series_id: str, timeout_sec: int = 30) -> Tuple[O
     if not rows:
         return None, None, url, "ERR:fredgraph_empty"
 
-    # columns: DATE, <series_id>
     date_col = None
     for c in ["DATE", "Date", "date"]:
-        if c in reader.fieldnames:
+        if reader.fieldnames and c in reader.fieldnames:
             date_col = c
             break
     if not date_col:
-        date_col = reader.fieldnames[0] if reader.fieldnames else None
+        date_col = (reader.fieldnames[0] if reader.fieldnames else None)
 
     val_col = series_id if (reader.fieldnames and series_id in reader.fieldnames) else None
     if not val_col:
-        # sometimes it uses a different column name; try second column
         if reader.fieldnames and len(reader.fieldnames) >= 2:
             val_col = reader.fieldnames[1]
 
@@ -411,8 +475,8 @@ def fetch_fredgraph_last_value(series_id: str, timeout_sec: int = 30) -> Tuple[O
     best_val = None
 
     for r in rows:
-        d = _try_parse_date(r.get(date_col, ""))
-        v = _try_parse_float(r.get(val_col, ""))
+        d = _try_parse_date(r.get(date_col, "")) if date_col else None
+        v = _try_parse_float(r.get(val_col, "")) if val_col else None
         if d is None or v is None:
             continue
         if best_date is None or d > best_date:
@@ -425,12 +489,12 @@ def fetch_fredgraph_last_value(series_id: str, timeout_sec: int = 30) -> Tuple[O
     return best_date, best_val, url, f"WARN:fredgraph_no_key({series_id})"
 
 
-def fetch_stooq_index(symbol: str, timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], Optional[float], str]:
+def fetch_stooq_index(session: requests.Session, symbol: str, timeout_sec: int = TIMEOUT_SECS_DEFAULT) -> Tuple[Optional[str], Optional[float], Optional[float], str]:
     """
     Return (date_iso, close, change_pct_1d, notes)
     """
     url = STOOQ_DAILY_FMT.format(symbol=symbol)
-    text, err = http_get_text(url, timeout_sec=timeout_sec)
+    text, err = http_get_text(session, url, timeout_sec=timeout_sec)
     if err:
         return None, None, None, f"{err}:stooq({symbol})"
 
@@ -440,11 +504,9 @@ def fetch_stooq_index(symbol: str, timeout_sec: int = 30) -> Tuple[Optional[str]
     if len(rows) < 1:
         return None, None, None, "ERR:empty"
 
-    # Expect columns: Date, Open, High, Low, Close, Volume
     def get_close(row) -> Optional[float]:
         return _try_parse_float(row.get("Close") or row.get("CLOSE") or row.get("close"))
 
-    # pick latest two valid rows by date
     candidates = []
     for r in rows:
         d = _try_parse_date(r.get("Date") or r.get("DATE") or r.get("date") or "")
@@ -461,15 +523,16 @@ def fetch_stooq_index(symbol: str, timeout_sec: int = 30) -> Tuple[Optional[str]
         d0, c0 = candidates[-2]
         if c0 and c0 != 0:
             change = (c1 - c0) / c0 * 100.0
+            change = _round(change, 6)
 
     return d1, c1, change, f"WARN:nonofficial_stooq({symbol});derived_1d_pct"
 
 
-def fetch_datahub_wti(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[float], str]:
+def fetch_datahub_wti(session: requests.Session, timeout_sec: int = TIMEOUT_SECS_DEFAULT) -> Tuple[Optional[str], Optional[float], str]:
     """
     datahub wti-daily.csv columns typically: Date, Price
     """
-    text, err = http_get_text(DATAHUB_WTI_DAILY_CSV, timeout_sec=timeout_sec)
+    text, err = http_get_text(session, DATAHUB_WTI_DAILY_CSV, timeout_sec=timeout_sec)
     if err:
         return None, None, f"{err}:datahub_wti"
 
@@ -500,7 +563,6 @@ def fetch_datahub_wti(timeout_sec: int = 30) -> Tuple[Optional[str], Optional[fl
 # Output builders
 # =========================
 def records_to_csv(records: List[Dict]) -> str:
-    # stable column order (with optional change_pct_1d)
     fieldnames = ["series_id", "data_date", "value", "source_url", "notes", "as_of_ts", "change_pct_1d"]
 
     out = io.StringIO()
@@ -532,8 +594,11 @@ def build_manifest(repo: str, ref: str, as_of_ts: str) -> Dict:
 # =========================
 def main() -> int:
     as_of_ts = utc_now_iso_z()
-
     ensure_dir(OUT_DIR)
+
+    # Use a session for connection reuse + consistent headers
+    session = requests.Session()
+    session.headers.update({"User-Agent": "fallback-cache/1.0"})
 
     records: List[Dict] = []
 
@@ -548,7 +613,7 @@ def main() -> int:
     })
 
     # VIX (official no-key)
-    vix_date, vix_val, vix_note = fetch_cboe_vix_close()
+    vix_date, vix_val, vix_note = fetch_cboe_vix_close(session)
     records.append({
         "series_id": "VIXCLS",
         "data_date": vix_date if vix_date else "NA",
@@ -559,8 +624,7 @@ def main() -> int:
     })
 
     # Treasury yields (official no-key)
-    t_date, y10, y2, y3m, t_url, t_note = fetch_treasury_yields()
-    # DGS10
+    t_date, y10, y2, y3m, t_url, t_note = fetch_treasury_yields(session)
     records.append({
         "series_id": "DGS10",
         "data_date": t_date if t_date else "NA",
@@ -569,7 +633,6 @@ def main() -> int:
         "notes": t_note if t_date else (t_note or "ERR:treasury_no_valid_rows"),
         "as_of_ts": as_of_ts
     })
-    # DGS2
     records.append({
         "series_id": "DGS2",
         "data_date": t_date if t_date else "NA",
@@ -578,7 +641,6 @@ def main() -> int:
         "notes": t_note if t_date else (t_note or "ERR:treasury_no_valid_rows"),
         "as_of_ts": as_of_ts
     })
-    # UST3M (proxy for DGS3MO in your output naming)
     records.append({
         "series_id": "UST3M",
         "data_date": t_date if t_date else "NA",
@@ -588,14 +650,15 @@ def main() -> int:
         "as_of_ts": as_of_ts
     })
 
-    # Derived spreads (if available)
+    # Derived spreads (round to avoid float tails)
     if t_date and (y10 is not None) and (y2 is not None):
+        v = _round(y10 - y2, 3)
         records.append({
             "series_id": "T10Y2Y",
             "data_date": t_date,
-            "value": (y10 - y2),
+            "value": v if (v is not None) else "NA",
             "source_url": t_url,
-            "notes": "WARN:derived_from_treasury(10Y-2Y)",
+            "notes": "WARN:derived_from_treasury(10Y-2Y)" if (v is not None) else "ERR:derived_round_failed(10Y-2Y)",
             "as_of_ts": as_of_ts
         })
     else:
@@ -609,12 +672,13 @@ def main() -> int:
         })
 
     if t_date and (y10 is not None) and (y3m is not None):
+        v = _round(y10 - y3m, 3)
         records.append({
             "series_id": "T10Y3M",
             "data_date": t_date,
-            "value": (y10 - y3m),
+            "value": v if (v is not None) else "NA",
             "source_url": t_url,
-            "notes": "WARN:derived_from_treasury(10Y-3M)",
+            "notes": "WARN:derived_from_treasury(10Y-3M)" if (v is not None) else "ERR:derived_round_failed(10Y-3M)",
             "as_of_ts": as_of_ts
         })
     else:
@@ -628,7 +692,7 @@ def main() -> int:
         })
 
     # Chicago Fed NFCI Nonfinancial Leverage (official no-key)
-    nfci_date, nfci_val, nfci_note = fetch_chicagofed_nfci_nonfin_leverage()
+    nfci_date, nfci_val, nfci_note = fetch_chicagofed_nfci_nonfin_leverage(session)
     records.append({
         "series_id": "NFCINONFINLEVERAGE",
         "data_date": nfci_date if nfci_date else "NA",
@@ -639,7 +703,7 @@ def main() -> int:
     })
 
     # HY OAS (no-key via fredgraph)
-    hy_date, hy_val, hy_url, hy_note = fetch_fredgraph_last_value("BAMLH0A0HYM2")
+    hy_date, hy_val, hy_url, hy_note = fetch_fredgraph_last_value(session, "BAMLH0A0HYM2")
     records.append({
         "series_id": "BAMLH0A0HYM2",
         "data_date": hy_date if hy_date else "NA",
@@ -650,7 +714,7 @@ def main() -> int:
     })
 
     # Equity indices (non-official)
-    sp_date, sp_val, sp_chg, sp_note = fetch_stooq_index("^spx")
+    sp_date, sp_val, sp_chg, sp_note = fetch_stooq_index(session, "^spx")
     records.append({
         "series_id": "SP500",
         "data_date": sp_date if sp_date else "NA",
@@ -661,7 +725,7 @@ def main() -> int:
         "change_pct_1d": sp_chg if (sp_chg is not None) else ""
     })
 
-    nd_date, nd_val, nd_chg, nd_note = fetch_stooq_index("^ndq")
+    nd_date, nd_val, nd_chg, nd_note = fetch_stooq_index(session, "^ndq")
     records.append({
         "series_id": "NASDAQCOM",
         "data_date": nd_date if nd_date else "NA",
@@ -672,7 +736,7 @@ def main() -> int:
         "change_pct_1d": nd_chg if (nd_chg is not None) else ""
     })
 
-    dj_date, dj_val, dj_chg, dj_note = fetch_stooq_index("^dji")
+    dj_date, dj_val, dj_chg, dj_note = fetch_stooq_index(session, "^dji")
     records.append({
         "series_id": "DJIA",
         "data_date": dj_date if dj_date else "NA",
@@ -684,7 +748,7 @@ def main() -> int:
     })
 
     # Oil (non-official)
-    oil_date, oil_val, oil_note = fetch_datahub_wti()
+    oil_date, oil_val, oil_note = fetch_datahub_wti(session)
     records.append({
         "series_id": "DCOILWTICO",
         "data_date": oil_date if oil_date else "NA",
@@ -702,7 +766,7 @@ def main() -> int:
     atomic_write_json(latest_json_path, records)
     atomic_write_text(latest_csv_path, records_to_csv(records))
 
-    # Build manifest
+    # Build manifest (workflow will overwrite with pinned SHA later; keep this best-effort)
     repo = os.getenv("GITHUB_REPOSITORY", "").strip() or "UNKNOWN/UNKNOWN"
     ref = os.getenv("GITHUB_REF_NAME", "").strip() or "main"
     manifest = build_manifest(repo=repo, ref=ref, as_of_ts=as_of_ts)
