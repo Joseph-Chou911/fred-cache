@@ -43,6 +43,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          required_files=(
+            "roll25_cache/roll25.json"
+            "roll25_cache/latest_report.json"
+            "roll25_cache/manifest.json"
+          )
+
           for attempt in 1 2 3; do
             echo "===== Attempt ${attempt} ====="
 
@@ -60,23 +66,28 @@ jobs:
             # 2) Sanity
             python scripts/sanity_twse_roll25.py
 
-            # 3) Fingerprint (audit only)
-            files=(
-              "roll25_cache/roll25.json"
-              "roll25_cache/latest_report.json"
-              "roll25_cache/manifest.json"
-            )
-            for f in "${files[@]}"; do
-              if [ -f "$f" ]; then
-                h="$(sha256sum "$f" | awk '{print $1}')"
-                echo "$f  sha256=$h"
-              else
-                echo "$f  sha256=MISSING"
+            # 2.5) Required files check (do not publish partial/broken outputs)
+            missing=0
+            for f in "${required_files[@]}"; do
+              if [ ! -f "$f" ]; then
+                echo "[ERROR] missing required file: $f"
+                missing=1
               fi
+            done
+            if [ "$missing" -eq 1 ]; then
+              echo "[ERROR] required outputs missing; abort."
+              exit 1
+            fi
+
+            # 3) Fingerprint (audit only)
+            for f in "${required_files[@]}"; do
+              h="$(sha256sum "$f" | awk '{print $1}')"
+              echo "$f  sha256=$h"
             done
 
             # 4) Commit if changed
-            git add -A roll25_cache/roll25.json roll25_cache/latest_report.json roll25_cache/manifest.json || true
+            git add -A "${required_files[@]}"
+
             if git diff --cached --quiet; then
               echo "No staged changes to commit."
               exit 0
@@ -93,7 +104,7 @@ jobs:
               exit 0
             fi
 
-            echo "Push failed (likely non-fast-forward)."
+            echo "Push failed (likely non-fast-forward). Backoff then retry."
             if [ "$attempt" -eq 1 ]; then sleep 2; fi
             if [ "$attempt" -eq 2 ]; then sleep 4; fi
             if [ "$attempt" -eq 3 ]; then sleep 8; fi
