@@ -1,3 +1,3 @@
 as_of_ts,series_id,data_date,value,source_url,notes
-2026-01-06T16:54:31+08:00,DFII10,2026-01-02,1.94,https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1,NA
-2026-01-06T16:54:31+08:00,T10YIE,2026-01-05,2.26,https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1,NA
+2026-01-06T20:50:39+08:00,DFII10,2026-01-02,1.94,https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1,NA
+2026-01-06T20:50:39+08:00,T10YIE,2026-01-05,2.26,https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1,NA
