@@ -90,6 +90,7 @@ def upsert_history(history: List[Dict[str, str]], new_rows: List[Dict[str, str]]
         seen.add(key)
         out.append(r)
 
+    # Sort makes it easy to audit & diff; dashboard can reorder if needed
     out.sort(key=lambda r: (r.get("data_date", ""), r.get("series_id", "")))
 
     if len(out) > max_rows:
@@ -98,14 +99,21 @@ def upsert_history(history: List[Dict[str, str]], new_rows: List[Dict[str, str]]
     return out
 
 # -------------------------
-# FRED
+# FRED (IMPORTANT: redact api_key in persisted source_url)
 # -------------------------
 
-FRED_OBS_URL = (
+FRED_OBS_URL_TMPL = (
     "https://api.stlouisfed.org/fred/series/observations"
     "?series_id={series_id}&api_key={api_key}&file_type=json"
     "&sort_order=desc&limit=1"
 )
+
+def fred_url(series_id: str, api_key: str) -> str:
+    return FRED_OBS_URL_TMPL.format(series_id=series_id, api_key=api_key)
+
+def fred_safe_url(series_id: str) -> str:
+    # Persisted URL for audit WITHOUT leaking secrets
+    return FRED_OBS_URL_TMPL.format(series_id=series_id, api_key="REDACTED")
 
 def fetch_fred_latest(series_id: str, api_key: Optional[str], as_of_ts: str) -> Dict[str, str]:
     if not api_key:
@@ -118,7 +126,9 @@ def fetch_fred_latest(series_id: str, api_key: Optional[str], as_of_ts: str) -> 
             "notes": "NA (missing FRED_API_KEY)",
         }
 
-    url = FRED_OBS_URL.format(series_id=series_id, api_key=api_key)
+    url = fred_url(series_id, api_key)
+    safe_url = fred_safe_url(series_id)
+
     try:
         resp = http_get_with_backoff(url)
         if resp.status_code != 200:
@@ -127,9 +137,10 @@ def fetch_fred_latest(series_id: str, api_key: Optional[str], as_of_ts: str) -> 
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": url,
+                "source_url": safe_url,
                 "notes": f"NA (HTTP {resp.status_code})",
             }
+
         data = resp.json()
         obs = data.get("observations") or []
         if not obs:
@@ -138,25 +149,27 @@ def fetch_fred_latest(series_id: str, api_key: Optional[str], as_of_ts: str) -> 
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": url,
+                "source_url": safe_url,
                 "notes": "NA (no observations)",
             }
+
         o0 = obs[0]
         return {
             "as_of_ts": as_of_ts,
             "series_id": series_id,
             "data_date": o0.get("date", "NA"),
             "value": o0.get("value", "NA"),
-            "source_url": url,
+            "source_url": safe_url,
             "notes": "NA",
         }
+
     except Exception as e:
         return {
             "as_of_ts": as_of_ts,
             "series_id": series_id,
             "data_date": "NA",
             "value": "NA",
-            "source_url": url,
+            "source_url": safe_url,
             "notes": f"NA (exception: {type(e).__name__})",
         }
 
