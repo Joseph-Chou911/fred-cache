@@ -3,7 +3,8 @@ name: Update credit proxy cache
 on:
   workflow_dispatch: {}
   schedule:
-    # Every 8 hours at minute 13 UTC: 00:13, 08:13, 16:13
+    # Every 8 hours at minute 13 (UTC): 00:13, 08:13, 16:13
+    # Asia/Taipei (UTC+8): 08:13, 16:13, 00:13 (next day)
     - cron: "13 */8 * * *"
 
 permissions:
@@ -31,67 +32,83 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests
+          pip install --no-cache-dir requests
 
-      # 1) Update data files (latest/history/csv) - NO manifest here
-      - name: Update credit proxy data files
+      - name: Generate + check + commit + push (retry-safe, no-rebase, single-push)
         env:
           TZ: Asia/Taipei
         run: |
           set -euo pipefail
-          python scripts/update_credit_proxy_cache.py --mode data
-
-      # 2) Sanity check output (log evidence chain)
-      - name: Sanity check (history daily coverage)
-        run: |
-          set -euo pipefail
-          python scripts/update_credit_proxy_cache.py --mode check
-
-      # 3) Commit data files => get DATA_SHA (only if changed; includes untracked)
-      - name: Commit & push data files if changed
-        id: commit_data
-        run: |
-          set -euo pipefail
-
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
 
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add credit_proxy_cache/latest.json credit_proxy_cache/history.json credit_proxy_cache/latest.csv
-          git commit -m "Update credit proxy data"
-          git push
+          for attempt in 1 2 3; do
+            echo "===== Attempt ${attempt} ====="
 
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "data_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            # Always start from latest remote main to avoid divergence
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
 
-      # 4) Update manifest pinned to DATA_SHA (only when data changed)
-      - name: Update manifest (pinned to data_sha)
-        if: steps.commit_data.outputs.changed == 'true'
-        env:
-          TZ: Asia/Taipei
-          DATA_SHA: ${{ steps.commit_data.outputs.data_sha }}
-        run: |
-          set -euo pipefail
-          python scripts/update_credit_proxy_cache.py --mode manifest --data-sha "$DATA_SHA"
+            echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
+            echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
 
-      # 5) Commit manifest (second commit; manifest contains pinned URLs to DATA_SHA)
-      - name: Commit & push manifest if changed
-        if: steps.commit_data.outputs.changed == 'true'
-        run: |
-          set -euo pipefail
+            # 1) Update data files (latest/history/csv) - NO manifest here
+            python scripts/update_credit_proxy_cache.py --mode data
 
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "Manifest unchanged."
-            exit 0
-          fi
+            # 2) Sanity check output (log evidence chain)
+            python scripts/update_credit_proxy_cache.py --mode check
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+            # 2.5) Audit fingerprint (evidence only)
+            files=(
+              "credit_proxy_cache/latest.json"
+              "credit_proxy_cache/history.json"
+              "credit_proxy_cache/latest.csv"
+              "credit_proxy_cache/manifest.json"
+            )
+            for f in "${files[@]}"; do
+              if [ -f "$f" ]; then
+                h="$(sha256sum "$f" | awk '{print $1}')"
+                echo "$f  sha256=$h"
+              else
+                echo "$f  sha256=MISSING"
+              fi
+            done
 
-          git add credit_proxy_cache/manifest.json
-          git commit -m "Update credit proxy manifest (pinned)"
-          git push
+            # 3) Commit data files (only if changed)
+            git add credit_proxy_cache/latest.json credit_proxy_cache/history.json credit_proxy_cache/latest.csv || true
+            if git diff --cached --quiet; then
+              echo "No data changes to commit."
+              exit 0
+            fi
+
+            git commit -m "Update credit proxy data"
+            DATA_SHA="$(git rev-parse HEAD)"
+            echo "DATA_SHA=$DATA_SHA"
+
+            # 4) Update manifest pinned to DATA_SHA
+            python scripts/update_credit_proxy_cache.py --mode manifest --data-sha "$DATA_SHA"
+
+            # 5) Commit manifest (only if changed)
+            git add credit_proxy_cache/manifest.json || true
+            if git diff --cached --quiet; then
+              echo "Manifest unchanged (allowed)."
+            else
+              git commit -m "Update credit proxy manifest (pinned)"
+            fi
+
+            # 6) Single push (push both commits). If rejected, retry from latest origin/main.
+            if git push origin HEAD:main; then
+              echo "Push succeeded."
+              exit 0
+            fi
+
+            echo "Push failed (likely non-fast-forward)."
+            if [ "$attempt" -eq 1 ]; then sleep 2; fi
+            if [ "$attempt" -eq 2 ]; then sleep 4; fi
+            if [ "$attempt" -eq 3 ]; then sleep 8; fi
+          done
+
+          echo "Push failed after 3 attempts."
+          exit 1
