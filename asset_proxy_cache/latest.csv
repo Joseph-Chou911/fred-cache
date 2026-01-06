@@ -1,5 +1,5 @@
 as_of_ts,series_id,data_date,value,source_url,notes
-2026-01-06T16:46:55+08:00,GLD.US_CLOSE,2026-01-05,408.76,https://stooq.com/q/d/l/?s=gld.us&d1=20251207&d2=20260106&i=d,NA
-2026-01-06T16:46:55+08:00,IAU.US_CLOSE,2026-01-05,83.71,https://stooq.com/q/d/l/?s=iau.us&d1=20251207&d2=20260106&i=d,NA
-2026-01-06T16:46:55+08:00,VNQ.US_CLOSE,2026-01-05,88.72,https://stooq.com/q/d/l/?s=vnq.us&d1=20251207&d2=20260106&i=d,NA
-2026-01-06T16:46:55+08:00,IYR.US_CLOSE,2026-01-05,94.13,https://stooq.com/q/d/l/?s=iyr.us&d1=20251207&d2=20260106&i=d,NA
+2026-01-06T16:54:32+08:00,GLD.US_CLOSE,2026-01-05,408.76,https://stooq.com/q/d/l/?s=gld.us&d1=20251207&d2=20260106&i=d,NA
+2026-01-06T16:54:32+08:00,IAU.US_CLOSE,2026-01-05,83.71,https://stooq.com/q/d/l/?s=iau.us&d1=20251207&d2=20260106&i=d,NA
+2026-01-06T16:54:32+08:00,VNQ.US_CLOSE,2026-01-05,88.72,https://stooq.com/q/d/l/?s=vnq.us&d1=20251207&d2=20260106&i=d,NA
+2026-01-06T16:54:32+08:00,IYR.US_CLOSE,2026-01-05,94.13,https://stooq.com/q/d/l/?s=iyr.us&d1=20251207&d2=20260106&i=d,NA
