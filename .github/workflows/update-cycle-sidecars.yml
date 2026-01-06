@@ -1,0 +1,116 @@
+name: Update cycle sidecars (inflation_realrate + asset_proxy)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Every 8 hours at minute 21 (UTC): 00:21, 08:21, 16:21
+    # Asia/Taipei (UTC+8): 08:21, 16:21, 00:21(next day)
+    - cron: "21 */8 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  # IMPORTANT: serialize pushes with your other writer workflows
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync to latest main (ff-only)
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout main
+          git merge --ff-only origin/main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir requests
+
+      - name: Generate sidecar data
+        env:
+          TZ: Asia/Taipei
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: |
+          set -euo pipefail
+          python scripts/update_cycle_sidecars.py --tz Asia/Taipei
+
+      - name: Commit DATA (if changed)
+        id: commit_data
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add inflation_realrate_cache asset_proxy_cache
+
+          if git diff --cached --quiet; then
+            echo "changed=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "Update cycle sidecars data"
+          echo "changed=1" >> "$GITHUB_OUTPUT"
+          echo "data_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Write manifests (pinned.data -> DATA_SHA)
+        if: steps.commit_data.outputs.changed == '1'
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/write_cycle_sidecar_manifests.py \
+            --repo "Joseph-Chou911/fred-cache" \
+            --data-sha "${{ steps.commit_data.outputs.data_sha }}" \
+            --tz Asia/Taipei
+
+      - name: Commit MANIFEST (if changed)
+        if: steps.commit_data.outputs.changed == '1'
+        run: |
+          set -euo pipefail
+          git add inflation_realrate_cache/manifest.json asset_proxy_cache/manifest.json
+
+          if git diff --cached --quiet; then
+            # This is unlikely, but keep it safe:
+            exit 0
+          fi
+
+          git commit -m "Update cycle sidecars manifest"
+
+      - name: Push (no rebase; merge on conflict)
+        if: steps.commit_data.outputs.changed == '1'
+        run: |
+          set -euo pipefail
+
+          for i in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+
+            echo "push failed (likely non-fast-forward). Fetch+merge and retry..."
+            git fetch origin main
+            # MERGE keeps existing SHAs intact (no rebase)
+            git merge --no-edit origin/main || true
+
+            sleep $((2**i))
+          done
+
+          echo "ERROR: git push failed after retries"
+          exit 1
