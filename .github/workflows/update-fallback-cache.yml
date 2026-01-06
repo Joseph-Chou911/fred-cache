@@ -56,6 +56,72 @@ jobs:
         run: |
           set -euo pipefail
 
+          # ----------------------------
+          # Helper python scripts (avoid heredoc inside loops)
+          # ----------------------------
+          cat > /tmp/regenerate_fallback_manifest_v1.py <<'PY'
+import json, os, datetime
+from pathlib import Path
+
+sha_data = os.environ["SHA_DATA"]
+repo = os.environ["REPO"]  # owner/repo
+
+# best-effort script_version from latest.json
+script_version = "unknown"
+try:
+  rows = json.loads(Path("fallback_cache/latest.json").read_text(encoding="utf-8"))
+  if isinstance(rows, list):
+    for r in rows:
+      if r.get("series_id") == "__META__" and r.get("notes") == "INFO:script_version":
+        script_version = r.get("value") or script_version
+        break
+except Exception:
+  pass
+
+now_utc = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+base = f"https://raw.githubusercontent.com/{repo}/{sha_data}/fallback_cache"
+out = {
+  "generated_at_utc": now_utc,
+  "as_of_ts": now_utc,
+  "script_version": script_version,
+  "data_commit_sha": sha_data,
+  "pinned": {
+    "latest_json": f"{base}/latest.json",
+    "latest_csv":  f"{base}/latest.csv",
+    # temporary; will self-pin after first manifest commit
+    "manifest_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/fallback_cache/manifest.json"
+  },
+  "notes": [
+    "Fallback cache; pinned points to DATA commit SHA.",
+    "manifest_json will be self-pinned after first manifest commit."
+  ]
+}
+
+Path("fallback_cache/manifest.json").write_text(
+  json.dumps(out, ensure_ascii=False, indent=2) + "\n",
+  encoding="utf-8"
+)
+PY
+
+          cat > /tmp/self_pin_fallback_manifest.py <<'PY'
+import json, os
+from pathlib import Path
+
+repo = os.environ["REPO"]
+sha1 = os.environ.get("MANIFEST_SHA", "").strip()
+
+p = Path("fallback_cache/manifest.json")
+obj = json.loads(p.read_text(encoding="utf-8"))
+obj.setdefault("pinned", {})
+
+if sha1:
+  obj["pinned"]["manifest_json"] = f"https://raw.githubusercontent.com/{repo}/{sha1}/fallback_cache/manifest.json"
+  obj["manifest_commit_sha_v1"] = sha1
+
+p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
           sleep_for () {
             local attempt="$1"
             case "$attempt" in
@@ -80,19 +146,13 @@ jobs:
             python -m json.tool fallback_cache/latest.json > /dev/null
             echo "latest.json is valid JSON."
 
-            # 3) Show outputs (debug)
+            # 3) Debug outputs
             echo "---- git status (before commit) ----"
             git status --porcelain || true
-
             echo "---- ls fallback_cache ----"
             ls -al fallback_cache || true
-
             echo "---- preview fallback_cache/latest.json ----"
             head -n 60 fallback_cache/latest.json || true
-
-            echo "---- preview fallback_cache/manifest.json (pre-regen) ----"
-            cat fallback_cache/manifest.json || true
-
             echo "---- preview fallback_cache/latest.csv ----"
             head -n 30 fallback_cache/latest.csv || true
 
@@ -118,7 +178,7 @@ jobs:
               echo "Push DATA OK."
             fi
 
-            # 5) Regenerate MANIFEST with pinned SHA for DATA
+            # 5) Pin to last commit that touched DATA files
             SHA_DATA="$(git log -n 1 --pretty=%H -- fallback_cache/latest.json fallback_cache/latest.csv || true)"
             echo "SHA_DATA=$SHA_DATA"
             if [ -z "$SHA_DATA" ]; then
@@ -127,56 +187,11 @@ jobs:
             fi
             export SHA_DATA
 
-            python - <<'PY'
-            import json, os, datetime
-            from pathlib import Path
-
-            sha_data = os.environ["SHA_DATA"]
-            repo = os.environ["REPO"]  # owner/repo
-
-            # best-effort script_version from latest.json
-            script_version = "unknown"
-            try:
-              rows = json.loads(Path("fallback_cache/latest.json").read_text(encoding="utf-8"))
-              if isinstance(rows, list):
-                for r in rows:
-                  if r.get("series_id") == "__META__" and r.get("notes") == "INFO:script_version":
-                    script_version = r.get("value") or script_version
-                    break
-            except Exception:
-              pass
-
-            now_utc = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-            base = f"https://raw.githubusercontent.com/{repo}/{sha_data}/fallback_cache"
-            out = {
-              "generated_at_utc": now_utc,
-              "as_of_ts": now_utc,
-              "script_version": script_version,
-              "data_commit_sha": sha_data,
-              "pinned": {
-                "latest_json": f"{base}/latest.json",
-                "latest_csv":  f"{base}/latest.csv",
-                # temporary -> will self-pin after first manifest commit
-                "manifest_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/fallback_cache/manifest.json"
-              },
-              "notes": [
-                "Fallback cache; pinned points to DATA commit SHA.",
-                "manifest_json will be self-pinned after first manifest commit."
-              ]
-            }
-
-            Path("fallback_cache/manifest.json").write_text(
-              json.dumps(out, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8"
-            )
-            PY
-
-            # Validate MANIFEST JSON
+            # 6) Regenerate MANIFEST v1 (pinned data urls)
+            python /tmp/regenerate_fallback_manifest_v1.py
             python -m json.tool fallback_cache/manifest.json > /dev/null
             echo "manifest.json (v1) is valid JSON."
 
-            # 6) Commit & push MANIFEST v1 if changed
             git add fallback_cache/manifest.json
             if git diff --cached --quiet; then
               echo "No MANIFEST(v1) changes to commit."
@@ -185,6 +200,7 @@ jobs:
               git commit -m "Update fallback MANIFEST (pinned data urls)" || true
               MANIFEST_SHA="$(git rev-parse HEAD)"
               echo "MANIFEST_SHA=$MANIFEST_SHA"
+              export MANIFEST_SHA
               if ! git push origin HEAD:main; then
                 echo "Push MANIFEST(v1) failed. Retry from origin/main..."
                 sleep_for "${attempt}"
@@ -197,26 +213,10 @@ jobs:
             if [ -z "${MANIFEST_SHA:-}" ]; then
               MANIFEST_SHA="$(git log -n 1 --pretty=%H -- fallback_cache/manifest.json || true)"
               echo "MANIFEST_SHA(from log)=$MANIFEST_SHA"
+              export MANIFEST_SHA
             fi
 
-            python - <<'PY'
-            import json, os
-            from pathlib import Path
-
-            repo = os.environ["REPO"]
-            sha1 = os.environ.get("MANIFEST_SHA","").strip()
-
-            p = Path("fallback_cache/manifest.json")
-            obj = json.loads(p.read_text(encoding="utf-8"))
-            obj.setdefault("pinned", {})
-
-            if sha1:
-              obj["pinned"]["manifest_json"] = f"https://raw.githubusercontent.com/{repo}/{sha1}/fallback_cache/manifest.json"
-              obj["manifest_commit_sha_v1"] = sha1
-
-            p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            PY
-
+            python /tmp/self_pin_fallback_manifest.py
             python -m json.tool fallback_cache/manifest.json > /dev/null
             echo "manifest.json (self-pin) is valid JSON."
 
@@ -228,7 +228,6 @@ jobs:
             fi
 
             git commit -m "Update fallback MANIFEST (pin manifest url)" || true
-
             if ! git push origin HEAD:main; then
               echo "Push MANIFEST(self-pin) failed. Retry from origin/main..."
               sleep_for "${attempt}"
