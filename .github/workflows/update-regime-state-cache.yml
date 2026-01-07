@@ -39,9 +39,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
-      # -------------------------
-      # Generate & validate data
-      # -------------------------
       - name: Generate (latest.json/latest.csv/history.json)
         run: |
           set -euo pipefail
@@ -52,9 +49,6 @@ jobs:
           set -euo pipefail
           python scripts/update_regime_state_cache.py --out-dir regime_state_cache --validate-data
 
-      # -------------------------
-      # Commit data (DATA_SHA)
-      # -------------------------
       - name: Commit data
         run: |
           set -euo pipefail
@@ -64,90 +58,31 @@ jobs:
           git commit -m "Update regime_state_cache data" || echo "No changes to commit"
 
       - name: Capture data_commit_sha
-        id: cap_data
+        id: cap
         run: |
           set -euo pipefail
           echo "DATA_SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      # -------------------------
-      # Write manifest v1 (pin data to DATA_SHA)
-      # -------------------------
-      - name: Write manifest v1 (pinned data -> DATA_SHA)
+      - name: Write manifest (pinned -> DATA_SHA)
         run: |
           set -euo pipefail
           python scripts/update_regime_state_cache.py \
             --out-dir regime_state_cache \
             --write-manifest \
-            --data-commit-sha "${{ steps.cap_data.outputs.DATA_SHA }}"
+            --data-commit-sha "${{ steps.cap.outputs.DATA_SHA }}"
 
-      - name: Validate (manifest v1)
+      - name: Validate (manifest)
         run: |
           set -euo pipefail
           python scripts/update_regime_state_cache.py --out-dir regime_state_cache --validate-manifest
 
-      - name: Commit manifest v1
+      - name: Commit manifest
         run: |
           set -euo pipefail
           git add regime_state_cache/manifest.json
-          git commit -m "Update regime_state_cache manifest (pin data)" || echo "No changes to commit"
+          git commit -m "Update regime_state_cache manifest (pinned)" || echo "No changes to commit"
 
-      # -------------------------
-      # Self-pin manifest (MANIFEST_SHA) then rewrite manifest v2
-      # -------------------------
-      - name: Capture manifest_commit_sha
-        id: cap_manifest
-        run: |
-          set -euo pipefail
-          echo "MANIFEST_SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Write manifest v2 (self-pin manifest -> MANIFEST_SHA)
-        env:
-          MANIFEST_SHA: ${{ steps.cap_manifest.outputs.MANIFEST_SHA }}
-        run: |
-          set -euo pipefail
-          python - << 'PY'
-          import json
-          import os
-
-          out_dir = "regime_state_cache"
-          manifest_path = os.path.join(out_dir, "manifest.json")
-
-          with open(manifest_path, "r", encoding="utf-8") as f:
-            m = json.load(f)
-
-          pinned = m.get("pinned") or {}
-
-          manifest_sha = os.environ.get("MANIFEST_SHA", "").strip()
-          if not manifest_sha:
-            raise SystemExit("Missing MANIFEST_SHA")
-
-          pinned["manifest_json"] = (
-            f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{manifest_sha}/{out_dir}/manifest.json"
-          )
-
-          m["pinned"] = pinned
-
-          with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(m, f, ensure_ascii=False, indent=2)
-          PY
-
-      - name: Validate (manifest v2)
-        run: |
-          set -euo pipefail
-          python scripts/update_regime_state_cache.py --out-dir regime_state_cache --validate-manifest
-
-      - name: Commit manifest v2 (self-pinned)
-        run: |
-          set -euo pipefail
-          git add regime_state_cache/manifest.json
-          git commit -m "Update regime_state_cache manifest (self-pinned)" || echo "No changes to commit"
-
-      # -------------------------
-      # Push (safe retry)
-      # -------------------------
       - name: Push
         run: |
           set -euo pipefail
-          # With shared concurrency group, this should rarely conflict.
-          # Still, do one safe retry in case of manual pushes.
-          git push || (git pull --rebase && git push)
+          git push
