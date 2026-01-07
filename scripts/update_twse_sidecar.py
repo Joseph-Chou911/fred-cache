@@ -1,31 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-TWSE sidecar updater (roll25_cache/):
-- Uses schema file: roll25_cache/twse_schema.json (field mapping / URLs)
-- Fetches:
-  1) FMTQIK: trade value / close / change
-  2) MI_5MINS_HIST: OHLC (must truly have high/low; never guess)
-- Maintains rolling cache: roll25_cache/roll25.json (max 25 trading days)
-- Writes:
-  - roll25_cache/latest_report.json
-  - roll25_cache/manifest.json (pinned URLs for audit)
-
-Robustness:
-- Supports ROC compact date like "1150102" (YYYMMDD in ROC year)
-- If FMTQIK can't be parsed into usable dates:
-  - Print diagnostics
-  - Do NOT overwrite cache files
-  - Exit 0 so sanity check still runs
-"""
-
 from __future__ import annotations
 
 import json
 import os
 import re
-import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
@@ -38,7 +19,6 @@ SCHEMA_PATH = os.path.join(CACHE_DIR, "twse_schema.json")
 
 ROLL25_PATH = os.path.join(CACHE_DIR, "roll25.json")
 LATEST_REPORT_PATH = os.path.join(CACHE_DIR, "latest_report.json")
-MANIFEST_PATH = os.path.join(CACHE_DIR, "manifest.json")
 
 LOOKBACK_TARGET = 20
 STORE_CAP = 25
@@ -138,7 +118,7 @@ def _parse_date_any(v: Any) -> Optional[str]:
     return None
 
 def _http_get_json(url: str, timeout: int = 25) -> Any:
-    headers = {"Accept": "application/json", "User-Agent": "twse-sidecar/1.3 (+github-actions)"}
+    headers = {"Accept": "application/json", "User-Agent": "twse-sidecar/1.4 (+github-actions)"}
     r = requests.get(url, headers=headers, timeout=timeout)
     r.raise_for_status()
     return r.json()
@@ -155,24 +135,11 @@ def _read_json_file(path: str, default: Any) -> Any:
     except Exception:
         return default
 
-def _write_json_file(path: str, obj: Any) -> None:
-    with open(path, "w", encoding="utf-8") as f:
+def _atomic_write_json(path: str, obj: Any) -> None:
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=False)
-
-def _git_head_sha() -> str:
-    try:
-        out = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        if re.match(r"^[0-9a-f]{40}$", out):
-            return out
-    except Exception:
-        pass
-    return "UNKNOWN"
-
-def _repo_slug_from_env() -> str:
-    return os.environ.get("GITHUB_REPOSITORY", "<OWNER>/<REPO>")
-
-def _pinned_raw_url(repo: str, sha: str, path: str) -> str:
-    return f"https://raw.githubusercontent.com/{repo}/{sha}/{path.lstrip('/')}"
+    os.replace(tmp, path)
 
 def _unwrap_to_rows(payload: Any) -> List[Dict[str, Any]]:
     if isinstance(payload, list):
@@ -182,7 +149,6 @@ def _unwrap_to_rows(payload: Any) -> List[Dict[str, Any]]:
             v = payload.get(k)
             if isinstance(v, list):
                 return [x for x in v if isinstance(x, dict)]
-        # dict itself is a record
         if all(not isinstance(v, list) for v in payload.values()):
             return [payload]
     return []
@@ -305,56 +271,59 @@ def _find_dminus1(roll: List[Dict[str, Any]], used_date: str) -> Optional[Dict[s
 # ----------------- main -----------------
 
 def main() -> None:
-    schema = _load_schema()
-    tz = _tz(schema)
+    try:
+        schema = _load_schema()
+    except Exception as e:
+        print(f"[FATAL] schema load failed: {e}")
+        sys.exit(1)
 
+    tz = _tz(schema)
     _ensure_cache_dir()
+
     existing_roll = _read_json_file(ROLL25_PATH, default=[])
     if not isinstance(existing_roll, list):
         existing_roll = []
 
-    # Fetch
+    # Fetch FMTQIK (fatal if fails)
     try:
         fmt_raw = _http_get_json(schema["fmtqik"]["url"])
     except Exception as e:
-        print(f"[ERROR] FMTQIK fetch/parse failed: {e}")
-        return
+        print(f"[FATAL] FMTQIK fetch failed: {e}")
+        sys.exit(1)
 
+    # Fetch OHLC (non-fatal; allow downgrade)
     try:
         ohlc_raw = _http_get_json(schema["mi_5mins_hist"]["url"])
     except Exception as e:
-        print(f"[ERROR] MI_5MINS_HIST fetch/parse failed: {e}")
+        print(f"[WARN] MI_5MINS_HIST fetch failed (downgrade): {e}")
         ohlc_raw = []
 
     fmt_rows = _parse_fmtqik(fmt_raw, schema)
     ohlc_rows = _parse_ohlc(ohlc_raw, schema)
 
     if not fmt_rows:
-        print("[ERROR] FMTQIK returned no usable rows/dates after parsing.")
+        print("[FATAL] FMTQIK returned no usable rows/dates after parsing.")
         _diag_payload("FMTQIK", fmt_raw)
-        return
+        sys.exit(1)
 
     fmt_by_date = {x.date: x for x in fmt_rows}
     ohlc_by_date = {x.date: x for x in ohlc_rows}
-
     fmt_dates = sorted(fmt_by_date.keys())
-    today = _today_tz(tz)
 
+    today = _today_tz(tz)
     used_date, tag = _pick_used_date(today, fmt_dates)
     if used_date == "NA":
-        print("[ERROR] UsedDate could not be determined.")
+        print("[FATAL] UsedDate could not be determined.")
         _diag_payload("FMTQIK", fmt_raw)
-        return
+        sys.exit(1)
 
     fmt_used = fmt_by_date.get(used_date)
     ohlc_used = ohlc_by_date.get(used_date)
 
-    # Strict OHLC ok
     ohlc_ok = bool(ohlc_used and ohlc_used.high is not None and ohlc_used.low is not None)
     mode = "FULL" if ohlc_ok else "MISSING_OHLC"
     ohlc_status = "OK" if ohlc_ok else "MISSING"
 
-    # Build cache item
     close = fmt_used.close if fmt_used else (ohlc_used.close if ohlc_used else None)
     change = fmt_used.change if fmt_used else None
     trade_value = fmt_used.trade_value if fmt_used else None
@@ -376,7 +345,6 @@ def main() -> None:
     n_actual = len(lookback)
     oldest = lookback[-1]["date"] if lookback else "NA"
 
-    # Freshness (oldest >45 days => unreliable)
     freshness_ok = True
     if n_actual > 0:
         try:
@@ -459,7 +427,6 @@ def main() -> None:
                 if new_low and d1_new_low:
                     consecutive_break = True
 
-    # Risk logic (same as your rules)
     risk_level = "未知"
     signal_text = ""
 
@@ -564,28 +531,13 @@ def main() -> None:
         "lookback_oldest": oldest
     }
 
-    # Write outputs
-    _write_json_file(ROLL25_PATH, merged_roll)
-    _write_json_file(LATEST_REPORT_PATH, latest_report)
-
-    sha = _git_head_sha()
-    repo = _repo_slug_from_env()
-    manifest = {
-        "generated_at_taipei": _now_tz(tz).isoformat(),
-        "as_of_ts": _now_tz(tz).isoformat(),
-        "data_commit_sha": sha,
-        "pinned": {
-            "schema_json": _pinned_raw_url(repo, sha, "roll25_cache/twse_schema.json"),
-            "roll25_json": _pinned_raw_url(repo, sha, "roll25_cache/roll25.json"),
-            "latest_report_json": _pinned_raw_url(repo, sha, "roll25_cache/latest_report.json"),
-            "manifest_json": _pinned_raw_url(repo, sha, "roll25_cache/manifest.json")
-        }
-    }
-    _write_json_file(MANIFEST_PATH, manifest)
+    # Write outputs atomically
+    _atomic_write_json(ROLL25_PATH, merged_roll)
+    _atomic_write_json(LATEST_REPORT_PATH, latest_report)
 
     print("TWSE sidecar updated:")
     print(f"  UsedDate={used_date}  Mode={mode}  Risk={risk_level}  LookbackNActual={n_actual}")
-    print(f"  roll25_records={len(merged_roll)}  dedupe_ok={dedupe_ok}  sha={sha}")
+    print(f"  roll25_records={len(merged_roll)}  dedupe_ok={dedupe_ok}")
 
 
 if __name__ == "__main__":
