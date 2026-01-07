@@ -1,11 +1,11 @@
 as_of_ts,series_id,data_date,value,source_url,notes
-2026-01-07T16:59:14.390162+08:00,NOMINAL_10Y,01/02/2026,4.19,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&type=daily_treasury_yield_curve,NA
-2026-01-07T16:59:14.390162+08:00,REAL_10Y,NA,NA,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-real-yield-curve-rates.csv/all/202511?_format=csv&field_tdr_date_value_month=202511&type=daily_treasury_real_yield_curve,HTTP 404
-2026-01-07T16:59:14.390162+08:00,BE10Y_PROXY,NA,NA,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&type=daily_treasury_yield_curve + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-real-yield-curve-rates.csv/all/202511?_format=csv&field_tdr_date_value_month=202511&type=daily_treasury_real_yield_curve,date_mismatch_or_na
-2026-01-07T16:59:14.390162+08:00,VIX_PROXY,NA,NA,https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.json,cboe_HTTP 403;stooq_empty_csv
-2026-01-07T16:59:14.390162+08:00,HYG_CLOSE,2026-01-06,80.9,https://stooq.com/q/d/l/?s=hyg.us&d1=20251217&d2=20260107&i=d,NA
-2026-01-07T16:59:14.390162+08:00,IEF_CLOSE,2026-01-06,96.3,https://stooq.com/q/d/l/?s=ief.us&d1=20251217&d2=20260107&i=d,NA
-2026-01-07T16:59:14.390162+08:00,TIP_CLOSE,2026-01-06,110.08,https://stooq.com/q/d/l/?s=tip.us&d1=20251217&d2=20260107&i=d,NA
-2026-01-07T16:59:14.390162+08:00,HYG_IEF_RATIO,2026-01-06,0.8400830737279337,https://stooq.com/,NA
-2026-01-07T16:59:14.390162+08:00,TIP_IEF_RATIO,2026-01-06,1.1430944963655245,https://stooq.com/,NA
-2026-01-07T16:59:14.390162+08:00,OFR_FSI,NA,NA,https://www.financialresearch.gov/financial-stress-index/,no_csv_or_zip_links_found
+2026-01-07T17:17:09.569062+08:00,NOMINAL_10Y,2026-01-06T00:00:00,4.18,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601,NA
+2026-01-07T17:17:09.569062+08:00,REAL_10Y,2026-01-06T00:00:00,1.91,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601,NA
+2026-01-07T17:17:09.569062+08:00,BE10Y_PROXY,2026-01-06T00:00:00,2.2699999999999996,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601 + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601,NA
+2026-01-07T17:17:09.569062+08:00,VIX_PROXY,2026-01-06,14.75,https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv,NA
+2026-01-07T17:17:09.569062+08:00,HYG_CLOSE,2026-01-06,80.9,https://stooq.com/q/d/l/?s=hyg.us&d1=20251208&d2=20260107&i=d,NA
+2026-01-07T17:17:09.569062+08:00,IEF_CLOSE,2026-01-06,96.3,https://stooq.com/q/d/l/?s=ief.us&d1=20251208&d2=20260107&i=d,NA
+2026-01-07T17:17:09.569062+08:00,TIP_CLOSE,2026-01-06,110.08,https://stooq.com/q/d/l/?s=tip.us&d1=20251208&d2=20260107&i=d,NA
+2026-01-07T17:17:09.569062+08:00,HYG_IEF_RATIO,2026-01-06,0.8400830737279337,https://stooq.com/,NA
+2026-01-07T17:17:09.569062+08:00,TIP_IEF_RATIO,2026-01-06,1.1430944963655245,https://stooq.com/,NA
+2026-01-07T17:17:09.569062+08:00,OFR_FSI,NA,NA,https://www.financialresearch.gov/financial-stress-index/,NO_PUBLIC_CSV_LINK
