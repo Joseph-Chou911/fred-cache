@@ -1,0 +1,90 @@
+name: Update Regime State cache (Treasury + OFR + proxies)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Every 6 hours at minute 23 (UTC): 00:23, 06:23, 12:23, 18:23
+    # Asia/Taipei: 08:23, 14:23, 20:23, 02:23 (next day)
+    - cron: "23 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  # IMPORTANT: to "wait not fail", all repo-writing workflows must share the same group.
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Taipei
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir requests
+
+      - name: Generate (latest.json/latest.csv/history.json)
+        run: |
+          set -euo pipefail
+          python scripts/update_regime_state_cache.py --out-dir regime_state_cache
+
+      - name: Validate (data files)
+        run: |
+          set -euo pipefail
+          python scripts/update_regime_state_cache.py --out-dir regime_state_cache --validate-data
+
+      - name: Commit data
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add regime_state_cache/latest.json regime_state_cache/latest.csv regime_state_cache/history.json
+          git commit -m "Update regime_state_cache data" || echo "No changes to commit"
+
+      - name: Capture data_commit_sha
+        id: cap
+        run: |
+          set -euo pipefail
+          echo "DATA_SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Write manifest (pinned -> DATA_SHA)
+        run: |
+          set -euo pipefail
+          python scripts/update_regime_state_cache.py \
+            --out-dir regime_state_cache \
+            --write-manifest \
+            --data-commit-sha "${{ steps.cap.outputs.DATA_SHA }}"
+
+      - name: Validate (manifest)
+        run: |
+          set -euo pipefail
+          python scripts/update_regime_state_cache.py --out-dir regime_state_cache --validate-manifest
+
+      - name: Commit manifest
+        run: |
+          set -euo pipefail
+          git add regime_state_cache/manifest.json
+          git commit -m "Update regime_state_cache manifest (pinned)" || echo "No changes to commit"
+
+      - name: Push
+        run: |
+          set -euo pipefail
+          # With shared concurrency group, this should rarely conflict.
+          # Still, do one safe retry in case of manual pushes.
+          git push || (git pull --rebase && git push)
