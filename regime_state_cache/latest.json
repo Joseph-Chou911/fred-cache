@@ -1,6 +1,6 @@
 [
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "NOMINAL_10Y",
     "data_date": "01/02/2026",
     "value": "4.19",
@@ -8,31 +8,31 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "REAL_10Y",
     "data_date": "NA",
     "value": "NA",
-    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-par-real-yield-curve-rates.csv/all/202512?_format=csv&field_tdr_date_value_month=202512&type=daily_treasury_par_real_yield_curve",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-real-yield-curve-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&type=daily_treasury_real_yield_curve",
     "notes": "HTTP 404"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "BE10Y_PROXY",
     "data_date": "NA",
     "value": "NA",
-    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&type=daily_treasury_yield_curve + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-par-real-yield-curve-rates.csv/all/202512?_format=csv&field_tdr_date_value_month=202512&type=daily_treasury_par_real_yield_curve",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&type=daily_treasury_yield_curve + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-real-yield-curve-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&type=daily_treasury_real_yield_curve",
     "notes": "date_mismatch_or_na"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "VIX_PROXY",
-    "data_date": "01/06/2026",
-    "value": "14.75",
-    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-    "notes": "NA"
+    "data_date": "NA",
+    "value": "NA",
+    "source_url": "https://stooq.com/q/d/l/?s=vi.f&d1=20251224&d2=20260107&i=d",
+    "notes": "empty_csv"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "HYG_CLOSE",
     "data_date": "2026-01-06",
     "value": "80.9",
@@ -40,7 +40,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "IEF_CLOSE",
     "data_date": "2026-01-06",
     "value": "96.3",
@@ -48,7 +48,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "TIP_CLOSE",
     "data_date": "2026-01-06",
     "value": "110.08",
@@ -56,7 +56,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "HYG_IEF_RATIO",
     "data_date": "2026-01-06",
     "value": "0.8400830737279337",
@@ -64,7 +64,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "TIP_IEF_RATIO",
     "data_date": "2026-01-06",
     "value": "1.1430944963655245",
@@ -72,7 +72,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-07T14:41:16.869095+08:00",
+    "as_of_ts": "2026-01-07T15:01:04.395169+08:00",
     "series_id": "OFR_FSI",
     "data_date": "NA",
     "value": "NA",
