@@ -79,10 +79,32 @@ jobs:
       - name: Commit manifest
         run: |
           set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add regime_state_cache/manifest.json
           git commit -m "Update regime_state_cache manifest (pinned)" || echo "No changes to commit"
 
-      - name: Push
+      - name: Push (safe merge, retry; DO NOT rebase)
+        shell: bash
         run: |
           set -euo pipefail
-          git push
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Push may be rejected if remote main advanced after checkout (non-fast-forward).
+          # IMPORTANT: use MERGE (no rebase) to preserve existing commit SHAs referenced by pinned URLs.
+          for backoff in 2 4 8; do
+            if git push; then
+              exit 0
+            fi
+
+            echo "Push rejected (likely non-fast-forward). Fetch+merge origin/main then retry..."
+            git fetch origin main
+            git merge --no-edit origin/main || true
+
+            sleep "${backoff}"
+          done
+
+          echo "ERROR: push failed after retries"
+          exit 1
