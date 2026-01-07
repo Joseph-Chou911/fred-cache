@@ -18,7 +18,8 @@ LATEST_CSV_NAME = "latest.csv"
 HISTORY_JSON_NAME = "history.json"
 MANIFEST_JSON_NAME = "manifest.json"
 
-SCRIPT_VERSION = "regime_state_cache_v3"
+# v3.1: minimal necessary fixes
+SCRIPT_VERSION = "regime_state_cache_v3_1"
 MAX_HISTORY_ROWS = 5000
 
 # -------------------------
@@ -31,29 +32,10 @@ def as_of_ts_local_iso() -> str:
     # Runner TZ is set in workflow; this produces explicit offset like +08:00
     return datetime.now().astimezone().isoformat()
 
-def normalize_date_iso(s: Optional[str]) -> Optional[str]:
-    """
-    Normalize dates into YYYY-MM-DD to avoid BE proxy date mismatch.
-    Supports:
-      - YYYY-MM-DD
-      - MM/DD/YYYY
-    """
-    if not s:
-        return None
-    ss = str(s).strip()
-    if not ss:
-        return None
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(ss, fmt).strftime("%Y-%m-%d")
-        except Exception:
-            pass
-    return ss  # last resort: keep original (but this may cause mismatches)
-
 # -------------------------
 # HTTP helpers
 # -------------------------
-def http_get(url: str, timeout: int = 20) -> Tuple[Optional[str], Optional[str]]:
+def http_get(url: str, timeout: int = 25) -> Tuple[Optional[str], Optional[str]]:
     try:
         r = requests.get(url, timeout=timeout, headers={"User-Agent": f"{SCRIPT_VERSION}/1.0"})
         if r.status_code != 200:
@@ -63,6 +45,15 @@ def http_get(url: str, timeout: int = 20) -> Tuple[Optional[str], Optional[str]]
         return None, "timeout"
     except Exception as e:
         return None, f"exception:{type(e).__name__}"
+
+def http_get_json(url: str, timeout: int = 25) -> Tuple[Optional[dict], Optional[str]]:
+    text, err = http_get(url, timeout=timeout)
+    if err:
+        return None, err
+    try:
+        return json.loads(text), None
+    except Exception:
+        return None, "json_parse_fail"
 
 def safe_float(x) -> Optional[float]:
     try:
@@ -79,34 +70,29 @@ def ensure_dir(p: str) -> None:
     os.makedirs(p, exist_ok=True)
 
 # -------------------------
-# Treasury endpoints
+# Treasury CSV URLs (source-of-truth endpoints)
 # -------------------------
 def treasury_csv_url(kind: str, yyyymm: str) -> str:
     """
-    NOTE:
-      - nominal remains CSV endpoint (works well)
-      - real moved to TextView endpoint (HTML table) in v3 (see treasury_real_textview_url)
+    Use Treasury "all/{YYYYMM}?_format=csv..." endpoints (more stable than TextView HTML).
     """
+    base = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
     if kind == "nominal":
         return (
-            "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
-            f"daily-treasury-rates.csv/all/{yyyymm}"
+            f"{base}daily-treasury-rates.csv/all/{yyyymm}"
             f"?_format=csv&field_tdr_date_value_month={yyyymm}&type=daily_treasury_yield_curve"
+        )
+    if kind == "real":
+        return (
+            f"{base}daily-treasury-real-yield-curve-rates.csv/all/{yyyymm}"
+            f"?_format=csv&field_tdr_date_value_month={yyyymm}&type=daily_treasury_real_yield_curve"
         )
     raise ValueError("unknown kind")
 
-def treasury_real_textview_url(yyyymm: str) -> str:
+def yyyymm_candidates(n_months: int = 3) -> List[str]:
     """
-    v3 fix: use Treasury TextView HTML table for Daily Treasury Real Yield Curve Rates.
-    Example pattern observed on Treasury site:
-      https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?field_tdr_date_value=202512&type=daily_treasury_real_yield_curve
+    v3.1: try current + previous 2 months to handle month boundary / delayed posting.
     """
-    return (
-        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView"
-        f"?field_tdr_date_value={yyyymm}&type=daily_treasury_real_yield_curve"
-    )
-
-def yyyymm_candidates(n_months: int = 2) -> List[str]:
     now = datetime.now().astimezone()
     out = []
     y, m = now.year, now.month
@@ -119,112 +105,95 @@ def yyyymm_candidates(n_months: int = 2) -> List[str]:
         out.append(f"{yy:04d}{mm:02d}")
     return out
 
-def parse_latest_yield_from_treasury(csv_text: str) -> Tuple[Optional[str], Optional[float], str, Optional[str]]:
+def _normalize_key(k: str) -> str:
+    return (k or "").strip().lower().replace("\ufeff", "")
+
+def parse_latest_10y_from_treasury_csv(csv_text: str) -> Tuple[Optional[str], Optional[float], str, Optional[str]]:
     """
-    For nominal CSV:
-      Returns (data_date_iso, value_10y, notes, used_col_name)
+    v3.1: robust parse
+    - Accept Treasury CSV
+    - Find the 10Y column name (nominal/real CSV differs)
+    - Scan from last row backwards to find first numeric 10Y value
+    Returns (data_date, value_10y, notes, used_col_name)
     """
-    reader = csv.DictReader(csv_text.splitlines())
-    rows = [r for r in reader if r and any((v or "").strip() for v in r.values() if isinstance(v, str))]
+    try:
+        reader = csv.DictReader(csv_text.splitlines())
+        rows = [r for r in reader if isinstance(r, dict) and r]
+    except Exception:
+        return None, None, "csv_parse_fail", None
+
     if not rows:
         return None, None, "empty_csv", None
 
-    last = rows[-1]
-    date_raw = (last.get("Date") or last.get("date") or last.get("DATE") or "").strip() or None
-    date = normalize_date_iso(date_raw)
-
-    # Try common 10Y column names
-    candidates = ["10 Yr", "10 yr", "10 Year", "10 year", "10-year", "10 Year Treasury", "10 Yr Treasury"]
-    col = None
-    for c in candidates:
-        if c in last:
-            col = c
+    # Determine date key
+    # Treasury uses "Date" typically; be tolerant
+    sample_keys = list(rows[0].keys() or [])
+    date_key = None
+    for k in sample_keys:
+        kk = _normalize_key(k)
+        if kk in ("date",):
+            date_key = k
             break
-
-    # Fuzzy fallback
-    if col is None:
-        for k in (last.keys() or []):
-            if not k:
-                continue
-            kk = k.lower()
-            if "10" in kk and ("yr" in kk or "year" in kk):
-                col = k
+    if date_key is None:
+        # fallback: pick first key that looks like date
+        for k in sample_keys:
+            kk = _normalize_key(k)
+            if "date" in kk:
+                date_key = k
                 break
 
-    if col is None:
-        return date, None, "missing_10y_column", None
+    # Identify 10Y column
+    # Nominal often has "10 Yr"; Real often has "10 Yr"
+    col_10y = None
+    key_map = { _normalize_key(k): k for k in (sample_keys or []) }
 
-    val = safe_float(last.get(col))
-    if val is None:
-        return date, None, "na_or_parse_fail", col
+    # Preferred exact matches
+    preferred = ["10 yr", "10 yr.", "10 yr ", "10 year", "10-year", "10 yr treasury", "10 year treasury"]
+    for p in preferred:
+        if p in key_map:
+            col_10y = key_map[p]
+            break
 
-    return date, val, "NA", col
+    # Treasury CSV commonly: "10 Yr"
+    if col_10y is None:
+        for k in sample_keys:
+            kk = _normalize_key(k)
+            if kk in ("10 yr", "10yr", "10 yr "):
+                col_10y = k
+                break
 
-def parse_latest_real10y_from_textview(html: str) -> Tuple[Optional[str], Optional[float], str]:
-    """
-    v3: Parse Treasury TextView (HTML) table to get the latest 10Y real yield.
-    The table rows include lines like:
-      12/31/2025  1.77  1.81  1.91  2.15  2.18
-    Columns observed:
-      Date, 5 YR, 7 YR, 10 YR, 20 YR, 30 YR
-    We capture Date + first 3 numeric cols and take the 3rd numeric as 10Y.
-    Returns (data_date_iso, real10y, notes)
-    """
-    # Extract row-like patterns anywhere in HTML
-    # date + at least 3 numeric columns
-    pattern = re.compile(
-        r"(\d{2}/\d{2}/\d{4})\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)"
-    )
-    matches = pattern.findall(html)
-    if not matches:
-        return None, None, "no_table_rows_found"
+    # Fuzzy: contains 10 and (yr/year)
+    if col_10y is None:
+        for k in sample_keys:
+            kk = _normalize_key(k)
+            if ("10" in kk) and (("yr" in kk) or ("year" in kk)):
+                col_10y = k
+                break
 
-    date_raw, _v5, _v7, v10 = matches[-1]
-    date = normalize_date_iso(date_raw)
-    val10 = safe_float(v10)
-    if not date or val10 is None:
-        return date or None, None, "parse_fail_latest_row"
+    if col_10y is None:
+        # Provide last row date if possible
+        last_date = None
+        if date_key:
+            last_date = (rows[-1].get(date_key) or "").strip() or None
+        return last_date, None, "missing_10y_column", None
 
-    return date, val10, "NA"
+    # Scan backwards for first numeric 10Y
+    for r in reversed(rows):
+        d = None
+        if date_key:
+            d = (r.get(date_key) or "").strip() or None
+        v = safe_float(r.get(col_10y))
+        if d and (v is not None):
+            return d, v, "NA", col_10y
 
-# -------------------------
-# VIX (primary: CBOE official CSV; fallback: Stooq)
-# -------------------------
-CBOE_VIX_CSV = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
-
-def cboe_vix_latest() -> Tuple[Optional[str], Optional[float], str, str]:
-    """
-    Primary VIX source: CBOE official daily prices CSV.
-    Returns (data_date_iso, close, notes, source_url)
-    """
-    text, err = http_get(CBOE_VIX_CSV)
-    if err:
-        return None, None, f"cboe_{err}", CBOE_VIX_CSV
-
-    reader = csv.DictReader(text.splitlines())
-    rows = [r for r in reader]
-    if not rows:
-        return None, None, "cboe_empty_csv", CBOE_VIX_CSV
-
-    last = rows[-1]
-    date_raw = (last.get("DATE") or last.get("Date") or last.get("date") or "").strip() or None
-    date = normalize_date_iso(date_raw)
-
-    # Common columns in this file: VIX Close / CLOSE
-    close = safe_float(last.get("VIX Close") or last.get("CLOSE") or last.get("Close"))
-    if close is None:
-        # fallback: scan numeric values in row
-        for _, v in last.items():
-            vv = safe_float(v)
-            if vv is not None:
-                close = vv
-        if close is None:
-            return date, None, "cboe_parse_fail", CBOE_VIX_CSV
-
-    return date, close, "NA", CBOE_VIX_CSV
+    # If we never found numeric 10Y, return the last date to aid debugging
+    last_date = None
+    if date_key:
+        last_date = (rows[-1].get(date_key) or "").strip() or None
+    return last_date, None, "no_numeric_10y_found", col_10y
 
 # -------------------------
-# Stooq
+# Stooq (fallback / proxies)
 # -------------------------
 def stooq_daily_close(symbol: str, lookback_days: int = 14) -> Tuple[Optional[str], Optional[float], str, str]:
     now = datetime.now().astimezone()
@@ -235,14 +204,17 @@ def stooq_daily_close(symbol: str, lookback_days: int = 14) -> Tuple[Optional[st
     if err:
         return None, None, err, url
 
-    reader = csv.DictReader(text.splitlines())
-    rows = [r for r in reader]
+    try:
+        reader = csv.DictReader(text.splitlines())
+        rows = [r for r in reader if r]
+    except Exception:
+        return None, None, "csv_parse_fail", url
+
     if not rows:
         return None, None, "empty_csv", url
 
     last = rows[-1]
-    date_raw = (last.get("Date") or "").strip() or None
-    date = normalize_date_iso(date_raw)
+    date = (last.get("Date") or "").strip() or None
     close = safe_float(last.get("Close"))
     if close is None:
         return date, None, "na_or_parse_fail", url
@@ -250,59 +222,181 @@ def stooq_daily_close(symbol: str, lookback_days: int = 14) -> Tuple[Optional[st
     return date, close, "NA", url
 
 # -------------------------
+# VIX primary: CBOE daily prices (JSON)
+# fallback: Stooq
+# -------------------------
+def vix_latest_primary_then_fallback() -> Tuple[Optional[str], Optional[float], str, str]:
+    """
+    Primary: CBOE daily_prices endpoint (JSON). This is more stable than scraping.
+    Fallback: Stooq vix daily close.
+    """
+    primary_url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.json"
+    obj, err = http_get_json(primary_url, timeout=25)
+    if not err and isinstance(obj, dict):
+        data = obj.get("data")
+        if isinstance(data, list) and data:
+            # find last row with numeric close
+            # row schema often: [ "YYYY-MM-DD", open, high, low, close ]
+            for row in reversed(data):
+                if not isinstance(row, list) or len(row) < 5:
+                    continue
+                d = str(row[0]).strip()
+                close = safe_float(row[4])
+                if d and close is not None:
+                    return d, close, "NA", primary_url
+            # If no numeric close in tail
+            return None, None, "cboe_no_numeric_close", primary_url
+
+    # Primary failed -> fallback Stooq
+    d, c, n, u = stooq_daily_close("vix", 21)
+    if c is not None and d:
+        # record that we used fallback
+        return d, c, "fallback_stooq", u
+    # Both failed
+    return None, None, f"cboe_{err or 'unknown'};stooq_{n}", primary_url
+
+# -------------------------
 # OFR FSI (explicitly degradable)
 # -------------------------
-def ofr_fsi_latest() -> Tuple[Optional[str], Optional[float], str, str]:
+def _extract_candidate_links(html: str) -> List[str]:
     """
-    v3: Make OFR_FSI explicitly degradable.
-    - If we can't find a usable CSV: return (None, None, "degraded_<reason>", page_url)
-    - If data URL is zip: return (None, None, "degraded_zip_not_supported", data_url)
+    Multi-strategy link extraction:
+    - direct csv/zip links
+    - links containing key tokens (fsi/stress/download/data) even if not csv
+    """
+    if not html:
+        return []
+
+    # 1) Direct csv/zip
+    direct = re.findall(r"https?://[^\"'\s>]+?\.(?:csv|zip)(?:\?[^\"'\s>]*)?", html, flags=re.IGNORECASE)
+
+    # 2) Any link href, later filter by keywords
+    hrefs = re.findall(r'href=["\'](https?://[^"\']+)["\']', html, flags=re.IGNORECASE)
+
+    # Normalize and combine
+    links = []
+    seen = set()
+    for u in direct + hrefs:
+        if not u:
+            continue
+        uu = u.strip()
+        if uu in seen:
+            continue
+        seen.add(uu)
+        links.append(uu)
+
+    # Rank candidates: prefer ones with fsi/stress and csv
+    def score(u: str) -> int:
+        ul = u.lower()
+        s = 0
+        if ul.endswith(".csv") or ".csv?" in ul:
+            s += 50
+        if ul.endswith(".zip") or ".zip?" in ul:
+            s += 20
+        if "fsi" in ul:
+            s += 20
+        if "stress" in ul:
+            s += 15
+        if "download" in ul:
+            s += 10
+        if "data" in ul:
+            s += 5
+        return s
+
+    links.sort(key=score, reverse=True)
+    return links
+
+def ofr_fsi_latest_degradable() -> Tuple[Optional[str], Optional[float], str, str]:
+    """
+    v3.1: explicitly degradable.
+    - Try to locate a usable CSV/ZIP link via multiple heuristics
+    - If only ZIP found, mark as zip_not_supported_in_v3_1 (still degradable)
+    - If no usable link, return NA with reason
     """
     page_url = "https://www.financialresearch.gov/financial-stress-index/"
-    html, err = http_get(page_url)
+    html, err = http_get(page_url, timeout=25)
     if err:
-        return None, None, f"degraded_page_{err}", page_url
+        return None, None, f"page_{err}", page_url
 
-    links = re.findall(r"https?://[^\"']+\.(?:csv|zip)", html, flags=re.IGNORECASE)
-    links = [u for u in links if "fsi" in u.lower() or "stress" in u.lower()]
+    links = _extract_candidate_links(html)
     if not links:
-        return None, None, "degraded_data_link_not_found", page_url
+        return None, None, "data_link_not_found_in_html", page_url
 
-    data_url = links[0]
-    if data_url.lower().endswith(".zip"):
-        return None, None, "degraded_zip_not_supported", data_url
+    # Try best candidates that are csv or zip first
+    tried = 0
+    last_err = None
+    for u in links:
+        ul = u.lower()
+        if not (ul.endswith(".csv") or ".csv?" in ul or ul.endswith(".zip") or ".zip?" in ul):
+            # Skip non-data links in v3.1 (keep degradable)
+            continue
+        tried += 1
+        if tried > 6:
+            break
 
-    content, err2 = http_get(data_url)
-    if err2:
-        return None, None, f"degraded_data_{err2}", data_url
+        if ul.endswith(".zip") or ".zip?" in ul:
+            # Not supported but explicitly degradable
+            return None, None, "zip_not_supported_in_v3_1", u
 
-    reader = csv.DictReader(content.splitlines())
-    rows = [r for r in reader]
-    if not rows:
-        return None, None, "degraded_empty_csv", data_url
+        content, err2 = http_get(u, timeout=25)
+        if err2:
+            last_err = f"data_{err2}"
+            continue
 
-    last = rows[-1]
-    date_raw = (last.get("Date") or last.get("date") or "").strip() or None
-    date = normalize_date_iso(date_raw)
+        try:
+            reader = csv.DictReader(content.splitlines())
+            rows = [r for r in reader if r]
+        except Exception:
+            last_err = "csv_parse_fail"
+            continue
 
-    val = None
-    for k, v in last.items():
-        if k and ("fsi" in k.lower() or "stress" in k.lower() or "index" in k.lower()):
-            vv = safe_float(v)
-            if vv is not None:
-                val = vv
+        if not rows:
+            last_err = "empty_csv"
+            continue
+
+        # Find last row with a numeric value
+        # Try to detect date key and value key
+        keys = list(rows[0].keys() or [])
+        date_key = None
+        for k in keys:
+            kk = _normalize_key(k)
+            if kk == "date" or "date" in kk:
+                date_key = k
                 break
-    if val is None:
-        for _, v in last.items():
-            vv = safe_float(v)
-            if vv is not None:
-                val = vv
-                break
 
-    if val is None:
-        return date, None, "degraded_parse_fail", data_url
+        # Determine value key preference
+        # Some OFR csv might have column names like "OFR FSI", "FSI", etc.
+        def pick_value_from_row(r: Dict[str, str]) -> Optional[float]:
+            # Preferred by column name
+            for k in keys:
+                kk = _normalize_key(k)
+                if ("fsi" in kk) or ("stress" in kk) or ("index" in kk):
+                    vv = safe_float(r.get(k))
+                    if vv is not None:
+                        return vv
+            # Fallback: first numeric field
+            for k in keys:
+                vv = safe_float(r.get(k))
+                if vv is not None:
+                    return vv
+            return None
 
-    return date, val, "NA", data_url
+        for r in reversed(rows):
+            d = None
+            if date_key:
+                d = (r.get(date_key) or "").strip() or None
+            v = pick_value_from_row(r)
+            if v is not None:
+                # If date missing, still return v with NA date (degradable)
+                return (d or "NA"), v, "NA" if d else "missing_date_in_csv", u
+
+        last_err = "no_numeric_value_found"
+
+    if last_err:
+        return None, None, f"data_link_unusable:{last_err}", page_url
+
+    # We had links, but none were csv/zip
+    return None, None, "no_csv_or_zip_links_found", page_url
 
 # -------------------------
 # Data model
@@ -376,7 +470,7 @@ def validate_data(out_dir: str) -> None:
         raise SystemExit("VALIDATE_DATA_FAIL: latest.json empty or not list")
 
     required = {"as_of_ts", "series_id", "data_date", "value", "source_url", "notes"}
-    for i, r in enumerate(latest[:50]):  # sample first 50
+    for i, r in enumerate(latest[:100]):  # sample first 100
         if not isinstance(r, dict):
             raise SystemExit(f"VALIDATE_DATA_FAIL: latest.json row {i} not dict")
         missing = required - set(r.keys())
@@ -452,6 +546,7 @@ def main():
                 "latest_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{LATEST_JSON_NAME}",
                 "latest_csv": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{LATEST_CSV_NAME}",
                 "history_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{HISTORY_JSON_NAME}",
+                # IMPORTANT: keep manifest_json pointing to branch latest (stable link) as you finalized
                 "manifest_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/refs/heads/main/{out_dir}/{MANIFEST_JSON_NAME}",
             },
         }
@@ -462,75 +557,79 @@ def main():
     as_of = as_of_ts_local_iso()
 
     hist = load_json_list(history_path)
+
     points: List[Point] = []
 
     def add(series_id: str, data_date: Optional[str], value: Optional[float], source_url: str, notes: str):
         if not data_date or value is None:
-            points.append(Point(as_of, series_id, data_date or "NA", "NA", source_url, notes))
+            # keep NA rows in latest.json, but make reason explicit
+            points.append(Point(as_of, series_id, data_date or "NA", "NA", source_url or "NA", notes if notes != "NA" else "missing"))
         else:
-            points.append(Point(as_of, series_id, data_date, f"{value}", source_url, notes))
+            points.append(Point(as_of, series_id, data_date, f"{value}", source_url or "NA", notes))
 
-    # Treasury 10Y nominal (CSV, unchanged) & real (TextView HTML, v3 fix)
+    # -------------------------
+    # Treasury 10Y nominal & real (CSV endpoints only; robust backward scan)
+    # -------------------------
     nom_date = real_date = None
     nom10 = real10 = None
     nom_notes = real_notes = "NA"
-    nom_url_used = real_url_used = ""
+    nom_url_used = real_url_used = "NA"
 
-    # Nominal 10Y (CSV)
-    for yyyymm in yyyymm_candidates(2):
+    # nominal
+    for yyyymm in yyyymm_candidates(3):
         url = treasury_csv_url("nominal", yyyymm)
-        text, err = http_get(url)
+        text, err = http_get(url, timeout=25)
         if err:
             nom_notes, nom_url_used = err, url
             continue
-        d, v, notes, _ = parse_latest_yield_from_treasury(text)
+        d, v, notes, used_col = parse_latest_10y_from_treasury_csv(text)
         nom_notes, nom_url_used = notes, url
         if d and v is not None:
             nom_date, nom10 = d, v
             break
 
-    # Real 10Y (TextView HTML) — v3
-    for yyyymm in yyyymm_candidates(2):
-        url = treasury_real_textview_url(yyyymm)
-        html, err = http_get(url)
+    # real
+    for yyyymm in yyyymm_candidates(3):
+        url = treasury_csv_url("real", yyyymm)
+        text, err = http_get(url, timeout=25)
         if err:
-            real_notes, real_url_used = f"textview_{err}", url
+            real_notes, real_url_used = err, url
             continue
-        d, v, notes = parse_latest_real10y_from_textview(html)
+        d, v, notes, used_col = parse_latest_10y_from_treasury_csv(text)
         real_notes, real_url_used = notes, url
         if d and v is not None:
             real_date, real10 = d, v
             break
 
-    add("NOMINAL_10Y", nom_date, nom10, nom_url_used or "NA", nom_notes)
-    add("REAL_10Y", real_date, real10, real_url_used or "NA", real_notes)
+    add("NOMINAL_10Y", nom_date, nom10, nom_url_used, nom_notes)
+    add("REAL_10Y", real_date, real10, real_url_used, real_notes)
 
-    # Breakeven proxy (only if same normalized date)
+    # Breakeven proxy (only if same date)
     be10 = None
     be_date = None
     be_notes = "NA"
+    be_source = "NA"
     if nom10 is not None and real10 is not None and nom_date and real_date and nom_date == real_date:
         be10 = nom10 - real10
         be_date = nom_date
+        be_source = f"{nom_url_used} + {real_url_used}"
     else:
         be_notes = "date_mismatch_or_na"
-    add("BE10Y_PROXY", be_date, be10, f"{nom_url_used} + {real_url_used}".strip(), be_notes)
+        be_source = f"{nom_url_used} + {real_url_used}".strip()
+    add("BE10Y_PROXY", be_date, be10, be_source, be_notes)
 
-    # VIX (primary: CBOE; fallback: Stooq) — v3
-    vix_date, vix_close, vix_notes, vix_url = cboe_vix_latest()
-    if vix_close is None:
-        # fallback to Stooq
-        sd, sc, sn, su = stooq_daily_close("vix", 14)
-        # keep evidence of fallback
-        vix_date, vix_close = sd, sc
-        vix_url = su
-        vix_notes = f"fallback_stooq:{sn}" if sn != "NA" else "fallback_stooq"
+    # -------------------------
+    # VIX (primary CBOE JSON; fallback Stooq)
+    # -------------------------
+    vix_date, vix_close, vix_notes, vix_url = vix_latest_primary_then_fallback()
     add("VIX_PROXY", vix_date, vix_close, vix_url, vix_notes)
 
-    # Credit proxies: HYG/IEF and TIP/IEF
-    hyg_d, hyg_c, hyg_n, hyg_u = stooq_daily_close("hyg.us", 14)
-    ief_d, ief_c, ief_n, ief_u = stooq_daily_close("ief.us", 14)
-    tip_d, tip_c, tip_n, tip_u = stooq_daily_close("tip.us", 14)
+    # -------------------------
+    # Credit proxies: HYG/IEF and TIP/IEF (Stooq)
+    # -------------------------
+    hyg_d, hyg_c, hyg_n, hyg_u = stooq_daily_close("hyg.us", 21)
+    ief_d, ief_c, ief_n, ief_u = stooq_daily_close("ief.us", 21)
+    tip_d, tip_c, tip_n, tip_u = stooq_daily_close("tip.us", 21)
 
     add("HYG_CLOSE", hyg_d, hyg_c, hyg_u, hyg_n)
     add("IEF_CLOSE", ief_d, ief_c, ief_u, ief_n)
@@ -556,14 +655,15 @@ def main():
         tip_ratio_notes = "date_mismatch_or_na"
     add("TIP_IEF_RATIO", tip_ratio_date, tip_ief_ratio, "https://stooq.com/", tip_ratio_notes)
 
-    # OFR FSI — explicitly degradable (v3)
-    ofr_d, ofr_v, ofr_n, ofr_u = ofr_fsi_latest()
+    # -------------------------
+    # OFR FSI (explicitly degradable; best-effort)
+    # -------------------------
+    ofr_d, ofr_v, ofr_n, ofr_u = ofr_fsi_latest_degradable()
     add("OFR_FSI", ofr_d, ofr_v, ofr_u, ofr_n)
 
-    # upsert into history
+    # upsert into history (avoid polluting history with NA dates)
     for p in points:
-        # avoid polluting history with NA dates
-        if p.data_date and p.data_date != "NA":
+        if p.data_date != "NA":
             hist = upsert_history(hist, p)
 
     # write files
