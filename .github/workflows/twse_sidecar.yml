@@ -36,7 +36,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
-      - name: Generate + sanity + commit + push (retry-safe, no-rebase)
+      - name: Generate + sanity + commit data + commit manifest + push (retry-safe)
         env:
           TZ: Asia/Taipei
         run: |
@@ -45,10 +45,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          required_files=(
+          data_files=(
             "roll25_cache/roll25.json"
             "roll25_cache/latest_report.json"
-            "roll25_cache/manifest.json"
           )
 
           for attempt in 1 2 3; do
@@ -62,15 +61,18 @@ jobs:
             echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
             echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
 
-            # 1) Generate
+            # Force this run to actually regenerate data (avoid using old repo files)
+            rm -f roll25_cache/roll25.json roll25_cache/latest_report.json roll25_cache/manifest.json || true
+
+            # 1) Generate (FMTQIK failure => non-zero exit => workflow fails)
             python scripts/update_twse_sidecar.py
 
-            # 2) Sanity
+            # 2) Sanity (must fail if sanity fails)
             python scripts/sanity_twse_roll25.py
 
-            # 2.5) Required files check (do not publish partial/broken outputs)
+            # 3) Required files check (do not publish partial/broken outputs)
             missing=0
-            for f in "${required_files[@]}"; do
+            for f in "${data_files[@]}"; do
               if [ ! -f "$f" ]; then
                 echo "[ERROR] missing required file: $f"
                 missing=1
@@ -81,39 +83,79 @@ jobs:
               exit 1
             fi
 
-            # 3) Fingerprint (audit only)
-            for f in "${required_files[@]}"; do
+            # 4) Fingerprint (audit only)
+            for f in "${data_files[@]}"; do
               h="$(sha256sum "$f" | awk '{print $1}')"
               echo "$f  sha256=$h"
             done
 
-            # 4) Commit if changed
-            git add -A "${required_files[@]}"
-
+            # 5) Commit DATA (first commit)
+            git add -A "${data_files[@]}"
             if git diff --cached --quiet; then
-              echo "No staged changes to commit."
-              # Print links anyway for convenience (points to current main)
-              echo "Main (always latest) URL:"
-              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/latest_report.json"
+              echo "No staged data changes to commit."
+              echo "Manifest main URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
               exit 0
             fi
 
-            git commit -m "Update TWSE sidecar cache" || {
-              echo "Nothing to commit after staging."
-              echo "Main (always latest) URL:"
-              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/latest_report.json"
-              exit 0
-            }
+            git commit -m "Update TWSE data (roll25 + latest_report)"
+            DATA_SHA="$(git rev-parse HEAD)"
+            echo "DATA_SHA=${DATA_SHA}"
 
-            # 5) Push (no merge/rebase). If rejected, retry from latest origin/main.
+            # 6) Generate manifest.json pinned to DATA_SHA (second commit)
+            python - <<'PY'
+import json
+import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+repo = os.environ.get("GITHUB_REPOSITORY", "<OWNER>/<REPO>")
+data_sha = os.environ.get("DATA_SHA", "UNKNOWN")
+
+tz = ZoneInfo("Asia/Taipei")
+now = datetime.now(tz).isoformat()
+
+def raw(repo_slug: str, sha: str, path: str) -> str:
+    return f"https://raw.githubusercontent.com/{repo_slug}/{sha}/{path}"
+
+manifest = {
+  "generated_at_taipei": now,
+  "as_of_ts": now,
+
+  # This is the ONLY SHA you should treat as the authoritative data snapshot.
+  "data_commit_sha": data_sha,
+
+  "pinned": {
+    "schema_json": raw(repo, data_sha, "roll25_cache/twse_schema.json"),
+    "roll25_json": raw(repo, data_sha, "roll25_cache/roll25.json"),
+    "latest_report_json": raw(repo, data_sha, "roll25_cache/latest_report.json")
+  },
+
+  # Consumers should always fetch manifest from main, then jump to pinned.data URLs above.
+  "manifest_main_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/roll25_cache/manifest.json",
+
+  "notes": "Read manifest from main (index). Then use pinned URLs (data_commit_sha) for audit-grade snapshots. Manifest is not self-pinned to avoid SHA self-reference."
+}
+
+os.makedirs("roll25_cache", exist_ok=True)
+with open("roll25_cache/manifest.json", "w", encoding="utf-8") as f:
+    json.dump(manifest, f, ensure_ascii=False, indent=2)
+PY
+
+            git add -A roll25_cache/manifest.json
+            if git diff --cached --quiet; then
+              echo "[WARN] manifest has no changes; unexpected, but continue."
+            else
+              git commit -m "Update TWSE manifest (pin data ${DATA_SHA})"
+            fi
+
+            # 7) Push both commits together. If rejected, retry from latest origin/main.
             if git push origin HEAD:main; then
               echo "Push succeeded."
-              sha="$(git rev-parse HEAD)"
-              echo "Commit SHA: $sha"
-              echo "Snapshot URL:"
-              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${sha}/roll25_cache/latest_report.json"
-              echo "Main (always latest) URL:"
-              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/latest_report.json"
+              echo "DATA snapshot URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
+              echo "Manifest main URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
               exit 0
             fi
 
