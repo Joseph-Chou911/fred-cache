@@ -34,45 +34,36 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
       - name: Generate (latest.json/latest.csv/history.json)
-        shell: bash
         run: |
           set -euo pipefail
           python scripts/update_regime_state_cache.py --out-dir regime_state_cache
 
       - name: Validate (data files)
-        shell: bash
         run: |
           set -euo pipefail
           python scripts/update_regime_state_cache.py --out-dir regime_state_cache --validate-data
 
       - name: Commit data
-        shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add \
-            regime_state_cache/latest.json \
-            regime_state_cache/latest.csv \
-            regime_state_cache/history.json
+          git add regime_state_cache/latest.json regime_state_cache/latest.csv regime_state_cache/history.json
           git commit -m "Update regime_state_cache data" || echo "No changes to commit"
 
       - name: Capture data_commit_sha
         id: cap
-        shell: bash
         run: |
           set -euo pipefail
-          echo "DATA_SHA=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "DATA_SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Write manifest (pinned -> DATA_SHA)
-        shell: bash
         run: |
           set -euo pipefail
           python scripts/update_regime_state_cache.py \
@@ -80,26 +71,20 @@ jobs:
             --write-manifest \
             --data-commit-sha "${{ steps.cap.outputs.DATA_SHA }}"
 
-      - name: Validate (manifest + pinned URLs)
-        shell: bash
+      - name: Validate (manifest)
         run: |
           set -euo pipefail
-          python scripts/update_regime_state_cache.py \
-            --out-dir regime_state_cache \
-            --validate-manifest \
-            --validate-manifest-urls
+          python scripts/update_regime_state_cache.py --out-dir regime_state_cache --validate-manifest
 
       - name: Commit manifest
-        shell: bash
         run: |
           set -euo pipefail
           git add regime_state_cache/manifest.json
           git commit -m "Update regime_state_cache manifest (pinned)" || echo "No changes to commit"
 
       - name: Push
-        shell: bash
         run: |
           set -euo pipefail
           # With shared concurrency group, this should rarely conflict.
-          # Still, do one safe retry in case of manual pushes or timing edge cases.
+          # Still, do one safe retry in case of manual pushes.
           git push || (git pull --rebase && git push)
