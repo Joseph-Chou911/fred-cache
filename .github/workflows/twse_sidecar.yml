@@ -17,6 +17,8 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,17 +92,28 @@ jobs:
 
             if git diff --cached --quiet; then
               echo "No staged changes to commit."
+              # Print links anyway for convenience (points to current main)
+              echo "Main (always latest) URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/latest_report.json"
               exit 0
             fi
 
             git commit -m "Update TWSE sidecar cache" || {
               echo "Nothing to commit after staging."
+              echo "Main (always latest) URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/latest_report.json"
               exit 0
             }
 
             # 5) Push (no merge/rebase). If rejected, retry from latest origin/main.
             if git push origin HEAD:main; then
               echo "Push succeeded."
+              sha="$(git rev-parse HEAD)"
+              echo "Commit SHA: $sha"
+              echo "Snapshot URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${sha}/roll25_cache/latest_report.json"
+              echo "Main (always latest) URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/latest_report.json"
               exit 0
             fi
 
