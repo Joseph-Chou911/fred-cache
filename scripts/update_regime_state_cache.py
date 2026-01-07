@@ -21,6 +21,10 @@ MANIFEST_JSON_NAME = "manifest.json"
 SCRIPT_VERSION = "regime_state_cache_v1"
 MAX_HISTORY_ROWS = 5000
 
+# Repo config (hard-coded for this repo)
+REPO_OWNER = "Joseph-Chou911"
+REPO_NAME = "fred-cache"
+
 # -------------------------
 # Time helpers
 # -------------------------
@@ -58,6 +62,9 @@ def safe_float(x) -> Optional[float]:
 
 def ensure_dir(p: str) -> None:
     os.makedirs(p, exist_ok=True)
+
+def is_hex_sha(s: str) -> bool:
+    return bool(re.fullmatch(r"[0-9a-f]{40}", (s or "").strip()))
 
 # -------------------------
 # Treasury CSV URLs (source-of-truth endpoints)
@@ -283,11 +290,11 @@ def validate_data(out_dir: str) -> None:
             raise SystemExit(f"VALIDATE_DATA_FAIL: latest.json row {i} missing keys {sorted(list(missing))}")
 
     # history basic check
-    hist = load_json_list(history_json)
-    if hist is None:
+    _hist = load_json_list(history_json)
+    if _hist is None:
         raise SystemExit("VALIDATE_DATA_FAIL: history.json not loadable")
 
-def validate_manifest(out_dir: str) -> None:
+def validate_manifest(out_dir: str, validate_urls: bool = False) -> None:
     manifest_path = os.path.join(out_dir, MANIFEST_JSON_NAME)
     if not os.path.exists(manifest_path):
         raise SystemExit("VALIDATE_MANIFEST_FAIL: missing manifest.json")
@@ -304,10 +311,45 @@ def validate_manifest(out_dir: str) -> None:
     if "data_commit_sha" not in m or not m["data_commit_sha"]:
         raise SystemExit("VALIDATE_MANIFEST_FAIL: missing data_commit_sha")
 
+    data_sha = str(m["data_commit_sha"]).strip()
+    if not is_hex_sha(data_sha):
+        raise SystemExit("VALIDATE_MANIFEST_FAIL: data_commit_sha not a 40-hex SHA")
+
     pinned = (m.get("pinned") or {})
     for k in ["latest_json", "latest_csv", "history_json", "manifest_json"]:
         if k not in pinned or not pinned[k]:
             raise SystemExit(f"VALIDATE_MANIFEST_FAIL: pinned missing {k}")
+
+    if validate_urls:
+        # NOTE: do NOT HTTP fetch here (pre-push raw URLs would 404). Only validate shape & SHA consistency.
+        def expect_contains(url: str, needle: str, label: str):
+            if needle not in url:
+                raise SystemExit(f"VALIDATE_MANIFEST_URLS_FAIL: {label} does not contain '{needle}': {url}")
+
+        def expect_starts(url: str, prefix: str, label: str):
+            if not url.startswith(prefix):
+                raise SystemExit(f"VALIDATE_MANIFEST_URLS_FAIL: {label} does not start with '{prefix}': {url}")
+
+        base_raw = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/"
+        expect_starts(pinned["latest_json"], base_raw, "pinned.latest_json")
+        expect_starts(pinned["latest_csv"], base_raw, "pinned.latest_csv")
+        expect_starts(pinned["history_json"], base_raw, "pinned.history_json")
+        expect_starts(pinned["manifest_json"], base_raw, "pinned.manifest_json")
+
+        # Data files must be pinned to data_commit_sha
+        expect_contains(pinned["latest_json"], f"/{data_sha}/", "pinned.latest_json")
+        expect_contains(pinned["latest_csv"], f"/{data_sha}/", "pinned.latest_csv")
+        expect_contains(pinned["history_json"], f"/{data_sha}/", "pinned.history_json")
+
+        # manifest_json is allowed to be branch-latest (refs/heads/main) OR pinned to a SHA.
+        # If it is SHA-pinned, ensure it's a hex sha path segment.
+        mj = pinned["manifest_json"]
+        if "/refs/heads/main/" not in mj:
+            # Try extract segment after base_raw
+            rest = mj[len(base_raw):]
+            first_seg = rest.split("/", 1)[0]
+            if not is_hex_sha(first_seg):
+                raise SystemExit(f"VALIDATE_MANIFEST_URLS_FAIL: pinned.manifest_json must be refs/heads/main or SHA-pinned: {mj}")
 
 # -------------------------
 # Main
@@ -319,6 +361,7 @@ def main():
     ap.add_argument("--data-commit-sha", default="")
     ap.add_argument("--validate-data", action="store_true")
     ap.add_argument("--validate-manifest", action="store_true")
+    ap.add_argument("--validate-manifest-urls", action="store_true", help="Validate pinned URL shapes (no HTTP fetch).")
     args = ap.parse_args()
 
     out_dir = args.out_dir
@@ -334,24 +377,31 @@ def main():
         return
 
     if args.validate_manifest:
-        validate_manifest(out_dir)
+        validate_manifest(out_dir, validate_urls=args.validate_manifest_urls)
         return
 
     if args.write_manifest:
         if not args.data_commit_sha:
             raise SystemExit("Missing --data-commit-sha for --write-manifest")
 
-        data_sha = args.data_commit_sha
+        data_sha = args.data_commit_sha.strip()
+        if not is_hex_sha(data_sha):
+            raise SystemExit("Invalid --data-commit-sha (must be 40-hex SHA)")
+
+        # IMPORTANT:
+        # - Data files are SHA-pinned to data_sha (audit & reproducible)
+        # - manifest_json points to branch latest (refs/heads/main) because the manifest file itself
+        #   is committed AFTER the data commit in this workflow. Pinning it to data_sha would 404.
         manifest = {
             "script_version": SCRIPT_VERSION,
             "generated_at_utc": utc_iso(),
             "as_of_ts": as_of_ts_local_iso(),
             "data_commit_sha": data_sha,
             "pinned": {
-                "latest_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{LATEST_JSON_NAME}",
-                "latest_csv": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{LATEST_CSV_NAME}",
-                "history_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{HISTORY_JSON_NAME}",
-                "manifest_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{MANIFEST_JSON_NAME}",
+                "latest_json": f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{data_sha}/{out_dir}/{LATEST_JSON_NAME}",
+                "latest_csv": f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{data_sha}/{out_dir}/{LATEST_CSV_NAME}",
+                "history_json": f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{data_sha}/{out_dir}/{HISTORY_JSON_NAME}",
+                "manifest_json": f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/refs/heads/main/{out_dir}/{MANIFEST_JSON_NAME}",
             },
         }
         write_json(manifest_path, manifest)
@@ -414,7 +464,7 @@ def main():
         be_notes = "date_mismatch_or_na"
     add("BE10Y_PROXY", be_date, be10, f"{nom_url_used} + {real_url_used}".strip(), be_notes)
 
-    # VIX proxy from Stooq (you can adjust symbols if needed)
+    # VIX proxy from Stooq
     vix_date, vix_close, vix_notes, vix_url = stooq_daily_close("vix", 14)
     add("VIX_PROXY", vix_date, vix_close, vix_url, vix_notes)
 
@@ -460,7 +510,6 @@ def main():
     write_json(latest_json_path, [p.__dict__ for p in points])
     write_latest_csv(latest_csv_path, points)
     write_json(history_path, hist)
-
 
 if __name__ == "__main__":
     main()
