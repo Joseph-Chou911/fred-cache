@@ -1,1 +1,32 @@
-{"generated_at_utc":"2026-01-08T07:32:17+00:00","as_of_ts":"2026-01-08T15:32:17+08:00","data_commit_sha":"0710bbd64656921a6923ecaec201b8ebedc9d412","pinned":{"latest_json":"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/0710bbd64656921a6923ecaec201b8ebedc9d412/cache/latest.json","history_json":"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/0710bbd64656921a6923ecaec201b8ebedc9d412/cache/history.json","latest_csv":"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/0710bbd64656921a6923ecaec201b8ebedc9d412/cache/latest.csv","manifest_json":"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/f1027d5db5a19ec7dfc3daa7b29aa18b6877eb27/cache/manifest.json"},"paths":{"latest_csv":"cache/latest.csv","latest_json":"cache/latest.json","history_json":"cache/history.json","history_snapshot_json":"cache/history.snapshot.json","dq_state_json":"cache/dq_state.json"},"history_policy":{"format":"list","key":"(series_id, data_date)","same_key_rerun":"overwrite_by_latest_as_of_ts","cap_per_series":400,"ordering":"series_id asc, data_date asc, as_of_ts asc"},"fs_status":{"latest_csv":"ok","latest_json":"ok","history_json_read":"ok","history_json_write":"ok","history_snapshot_write":"ok"},"manifest_commit_sha":"f1027d5db5a19ec7dfc3daa7b29aa18b6877eb27","manifest_commit_sha_v1":"f1027d5db5a19ec7dfc3daa7b29aa18b6877eb27"}
+{
+  "generated_at_utc": "2026-01-08T08:36:36+00:00",
+  "as_of_ts": "2026-01-08T16:36:36+08:00",
+  "data_commit_sha": "3b54d15b95493d96c18adc5e4cbfd29816c627e8",
+  "pinned": {
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3b54d15b95493d96c18adc5e4cbfd29816c627e8/cache/latest.json",
+    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3b54d15b95493d96c18adc5e4cbfd29816c627e8/cache/history.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3b54d15b95493d96c18adc5e4cbfd29816c627e8/cache/latest.csv",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3b54d15b95493d96c18adc5e4cbfd29816c627e8/cache/manifest.json"
+  },
+  "paths": {
+    "latest_csv": "cache/latest.csv",
+    "latest_json": "cache/latest.json",
+    "history_json": "cache/history.json",
+    "history_snapshot_json": "cache/history.snapshot.json",
+    "dq_state_json": "cache/dq_state.json"
+  },
+  "history_policy": {
+    "format": "list",
+    "key": "(series_id, data_date)",
+    "same_key_rerun": "overwrite_by_latest_as_of_ts",
+    "cap_per_series": 400,
+    "ordering": "series_id asc, data_date asc, as_of_ts asc"
+  },
+  "fs_status": {
+    "latest_csv": "ok",
+    "latest_json": "ok",
+    "history_json_read": "ok",
+    "history_json_write": "ok",
+    "history_snapshot_write": "ok"
+  }
+}
