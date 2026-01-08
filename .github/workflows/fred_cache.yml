@@ -61,45 +61,44 @@ jobs:
             # 1) Generate cache files
             python scripts/fred_cache.py
 
-            # 2) Sanity check BEFORE any commit/push (avoid pushing bad history)
-            python - <<'PY'
-            import json
-            from pathlib import Path
-            from collections import Counter
+            # 2) Sanity check BEFORE any commit/push
+python - <<'PY'
+import json
+from pathlib import Path
+from collections import Counter
 
-            p = Path("cache/history.json")
-            h = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
-            print("history_records =", len(h))
+p = Path("cache/history.json")
+h = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
+print("history_records =", len(h))
 
-            keys = []
-            per_series = Counter()
-            bad = 0
+keys = []
+per_series = Counter()
+bad = 0
 
-            for r in h:
-                sid = str(r.get("series_id", ""))
-                dd  = str(r.get("data_date", ""))
-                if (not sid) or (not dd) or dd == "NA":
-                    bad += 1
-                    continue
-                keys.append((sid, dd))
-                per_series[sid] += 1
+for r in h:
+    sid = str(r.get("series_id", ""))
+    dd  = str(r.get("data_date", ""))
+    if (not sid) or (not dd) or dd == "NA":
+        bad += 1
+        continue
+    keys.append((sid, dd))
+    per_series[sid] += 1
 
-            uniq = len(set(keys))
-            print("dedupe_ok =", uniq == len(keys))
-            print("bad_rows  =", bad)
+uniq = len(set(keys))
+print("dedupe_ok =", uniq == len(keys))
+print("bad_rows  =", bad)
 
-            cap = 400
-            too_many = {sid: c for sid, c in per_series.items() if c > cap}
-            print("cap_per_series =", cap)
-            print("cap_ok =", len(too_many) == 0)
-            if too_many:
-                top = sorted(too_many.items(), key=lambda x: x[1], reverse=True)[:10]
-                print("cap_violations_top10 =", top)
+cap = 400
+too_many = {sid: c for sid, c in per_series.items() if c > cap}
+print("cap_per_series =", cap)
+print("cap_ok =", len(too_many) == 0)
+if too_many:
+    top = sorted(too_many.items(), key=lambda x: x[1], reverse=True)[:10]
+    print("cap_violations_top10 =", top)
 
-            # hard fail if violated
-            if uniq != len(keys) or bad > 0 or len(too_many) > 0:
-                raise SystemExit("Sanity check failed")
-            PY
+if uniq != len(keys) or bad > 0 or len(too_many) > 0:
+    raise SystemExit("Sanity check failed")
+PY
 
             # 3) Commit data files
             git add -A cache
