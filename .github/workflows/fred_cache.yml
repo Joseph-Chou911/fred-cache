@@ -4,19 +4,23 @@ on:
   workflow_dispatch: {}
   schedule:
     # Every 6 hours at minute 7 (UTC): 00:07, 06:07, 12:07, 18:07
-    # Asia/Taipei: 08:07, 14:07, 20:07, 02:07
+    # Asia/Taipei (UTC+8): 08:07, 14:07, 20:07, 02:07 (next day)
     - cron: "7 */6 * * *"
 
 permissions:
   contents: write
 
 concurrency:
+  # IMPORTANT:
+  # To make "wait instead of fail" work across workflows, ALL workflows that push to main
+  # should use the same concurrency.group value.
   group: repo-writer-main
   cancel-in-progress: false
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       TIMEZONE: Asia/Taipei
 
@@ -33,11 +37,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install requests
 
       - name: Configure git
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -55,10 +61,10 @@ jobs:
             git reset --hard origin/main
             git clean -fd
 
-            # 1) Generate cache files
+            # 1) Generate cache files (writes cache/latest.*, cache/history.*, cache/manifest.json, etc.)
             python scripts/fred_cache.py
 
-            # 2) Commit data files
+            # 2) Commit data files (cache/*)
             git add -A cache
             if git diff --cached --quiet; then
               echo "No changes in cache/. Exit."
@@ -70,36 +76,36 @@ jobs:
             export DATA_SHA
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 3) Patch manifest v1 (pinned data URLs; manifest_json temp points to main)
-            python -c "import json,os; from pathlib import Path; data_sha=os.environ['DATA_SHA']; repo=os.environ['REPO']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('generated_at_utc',None); obj.setdefault('as_of_ts',None); obj['data_commit_sha']=data_sha; base=f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache'; obj['pinned']={'latest_json':f'{base}/latest.json','history_json':f'{base}/history.json','latest_csv':f'{base}/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json'}; p.write_text(json.dumps(obj,ensure_ascii=False,separators=(',',':')),encoding='utf-8')"
+            # 3) Patch manifest (pinned data URLs; manifest_json temp points to branch main)
+            python -c "import json,os; from pathlib import Path; data_sha=os.environ['DATA_SHA']; repo=os.environ['REPO']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('generated_at_utc',None); obj.setdefault('as_of_ts',None); obj['data_commit_sha']=data_sha; base=f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache'; obj['pinned']={'latest_json':f'{base}/latest.json','history_json':f'{base}/history.json','latest_csv':f'{base}/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json'}; obj.pop('manifest_commit_sha', None); obj.pop('manifest_commit_sha_v1', None); p.write_text(json.dumps(obj,ensure_ascii=False,separators=(',',':')),encoding='utf-8')"
 
             git add cache/manifest.json
             if ! git diff --cached --quiet; then
-              git commit -m "Update manifest (pinned data urls)"
+              git commit -m "Update manifest (pin data urls)"
             fi
 
-            MANIFEST_SHA="$(git rev-parse HEAD)"
-            export MANIFEST_SHA
-            echo "MANIFEST_SHA=${MANIFEST_SHA}"
+            MANIFEST_SNAPSHOT_SHA="$(git rev-parse HEAD)"
+            export MANIFEST_SNAPSHOT_SHA
+            echo "MANIFEST_SNAPSHOT_SHA=${MANIFEST_SNAPSHOT_SHA}"
 
-            # 4) Self-pin manifest v2
-            python -c "import json,os; from pathlib import Path; repo=os.environ['REPO']; sha1=os.environ['MANIFEST_SHA']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('pinned',{}); obj['pinned']['manifest_json']=f'https://raw.githubusercontent.com/{repo}/{sha1}/cache/manifest.json'; obj['manifest_commit_sha_v1']=sha1; p.write_text(json.dumps(obj,ensure_ascii=False,separators=(',',':')),encoding='utf-8')"
+            # 4) Pin manifest_json to the snapshot commit (NOTE: must point to previous commit to avoid self-referential SHA)
+            python -c "import json,os; from pathlib import Path; repo=os.environ['REPO']; snap=os.environ['MANIFEST_SNAPSHOT_SHA']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('pinned',{}); obj['pinned']['manifest_json']=f'https://raw.githubusercontent.com/{repo}/{snap}/cache/manifest.json'; obj['manifest_commit_sha']=snap; obj['manifest_commit_sha_v1']=snap; p.write_text(json.dumps(obj,ensure_ascii=False,separators=(',',':')),encoding='utf-8')"
 
             git add cache/manifest.json
             if ! git diff --cached --quiet; then
-              git commit -m "Update manifest (pin manifest url)"
+              git commit -m "Update manifest (pin manifest snapshot url)"
             fi
 
-            MANIFEST2_SHA="$(git rev-parse HEAD)"
-            export MANIFEST2_SHA
-            echo "MANIFEST2_SHA=${MANIFEST2_SHA}"
+            HEAD_SHA="$(git rev-parse HEAD)"
+            export HEAD_SHA
+            echo "HEAD_SHA=${HEAD_SHA}"
 
             # 5) One push only. If it fails, retry from remote main.
             if git push origin HEAD:main; then
               echo "Push succeeded."
 
               # Print pinned pointers (single-line JSON)
-              python -c "import json,os; from datetime import datetime,timezone; repo=os.environ['REPO']; data_sha=os.environ['DATA_SHA']; sha1=os.environ['MANIFEST_SHA']; sha2=os.environ['MANIFEST2_SHA']; out={'generated_at_utc':datetime.now(timezone.utc).replace(microsecond=0).isoformat(),'data_commit_sha':data_sha,'manifest_commit_sha_v1':sha1,'manifest_commit_sha_v2':sha2,'pinned':{'latest_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json','history_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json','latest_csv':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/{sha2}/cache/manifest.json'}}; print(json.dumps(out,ensure_ascii=False,separators=(',',':')))"
+              python -c "import json,os; from datetime import datetime,timezone; repo=os.environ['REPO']; data_sha=os.environ['DATA_SHA']; snap=os.environ['MANIFEST_SNAPSHOT_SHA']; head=os.environ['HEAD_SHA']; out={'generated_at_utc':datetime.now(timezone.utc).replace(microsecond=0).isoformat(),'head_commit_sha':head,'data_commit_sha':data_sha,'manifest_commit_sha':snap,'pinned':{'latest_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json','history_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json','latest_csv':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/{snap}/cache/manifest.json'}}; print(json.dumps(out,ensure_ascii=False,separators=(',',':')))"
               exit 0
             fi
 
@@ -112,7 +118,42 @@ jobs:
           echo "Push failed after 3 attempts."
           exit 1
 
-      - name: Sanity check (history daily coverage)
+      - name: Sanity check (history cap_per_series=400, dedupe by (series_id,data_date))
         run: |
           set -euo pipefail
-          python -c "import json; from pathlib import Path; from collections import Counter; h=json.loads(Path('cache/history.json').read_text(encoding='utf-8')); days=sorted({r.get('as_of_ts','')[:10] for r in h if r.get('as_of_ts')}); c=Counter(r.get('as_of_ts','')[:10] for r in h if r.get('as_of_ts')); keys=set((r.get('as_of_ts','')[:10], r.get('series_id','')) for r in h); print('history_records =', len(h)); print('days_in_history =', days); print('rows_per_day    =', dict(c)); print('dedupe_ok       =', len(keys)==len(h)); print('cap_records     =', 720, 'cap_ok =', len(h)<=720)"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from collections import Counter, defaultdict
+
+          p = Path("cache/history.json")
+          h = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
+          print("history_records =", len(h))
+
+          # key uniqueness
+          keys = []
+          per_series = Counter()
+          bad = 0
+          for r in h:
+            sid = str(r.get("series_id",""))
+            dd  = str(r.get("data_date",""))
+            if not sid or not dd or dd=="NA":
+              bad += 1
+              continue
+            keys.append((sid, dd))
+            per_series[sid] += 1
+
+          uniq = len(set(keys))
+          print("dedupe_ok =", uniq == len(keys))
+          print("bad_rows  =", bad)
+
+          # cap check
+          cap = 400
+          too_many = {sid:c for sid,c in per_series.items() if c>cap}
+          print("cap_per_series =", cap)
+          print("cap_ok =", len(too_many)==0)
+          if too_many:
+            # print top offenders (bounded)
+            top = sorted(too_many.items(), key=lambda x: x[1], reverse=True)[:10]
+            print("cap_violations_top10 =", top)
+          PY
