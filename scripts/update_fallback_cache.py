@@ -6,6 +6,7 @@ Fallback cache (Version A): "official/no-key first", allow non-official for cove
 Outputs:
   - fallback_cache/latest.json
   - fallback_cache/latest.csv
+  - fallback_cache/history.json
   - fallback_cache/manifest.json
 Dependencies: requests>=2.31.0
 
@@ -14,6 +15,13 @@ B version changes (retry/backoff + audit-friendly errors):
 - Include HTTP status / attempts in ERR notes for audit.
 - Round derived spreads to avoid float tail (e.g., 0.5299999999999998 -> 0.53).
 - Keep output schema unchanged.
+
+History policy (added):
+- Append only "usable" rows into history.json:
+  - exclude __META__
+  - exclude rows with data_date == "NA" or value == "NA"
+- De-dupe by (series_id, data_date); keep the latest run's record.
+- Keep only the most recent MAX_HISTORY_ROWS rows.
 """
 
 from __future__ import annotations
@@ -33,8 +41,16 @@ import requests
 # =========================
 # Config
 # =========================
-SCRIPT_VERSION = "fallback_vA_official_no_key_lock"
+SCRIPT_VERSION = "fallback_vA_official_no_key_lock+history_v1"
 OUT_DIR = "fallback_cache"
+
+LATEST_JSON = os.path.join(OUT_DIR, "latest.json")
+LATEST_CSV = os.path.join(OUT_DIR, "latest.csv")
+HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
+MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
+
+# History size cap (see calculation: ~11k-15k rows/year)
+MAX_HISTORY_ROWS = 20000
 
 # Sources
 CBOE_VIX_CSV_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
@@ -177,7 +193,6 @@ def http_get_text(
             return None, last_err
 
         except Exception as e:
-            # Retry on transient exceptions
             retryable = _is_retryable_exception(e)
             err_type = type(e).__name__
 
@@ -186,15 +201,98 @@ def http_get_text(
                 last_err = f"ERR:http_exc({err_type},attempts={attempt})"
                 continue
 
-            # Final failure
             if isinstance(e, requests.Timeout):
                 return None, f"ERR:timeout(attempts={attempt})"
             return None, f"ERR:http_exc({err_type},attempts={attempt})"
 
-    # Should not reach here
     if last_status is not None:
         return None, f"ERR:http(status={last_status},attempts={MAX_ATTEMPTS})"
     return None, last_err or f"ERR:http_unknown(attempts={MAX_ATTEMPTS})"
+
+
+# -------------------------
+# History helpers
+# -------------------------
+def _is_usable_history_row(r: Dict) -> bool:
+    """Only keep rows that are meaningful for time-series history."""
+    if not isinstance(r, dict):
+        return False
+    sid = str(r.get("series_id", "")).strip()
+    if sid == "" or sid == "__META__":
+        return False
+
+    d = str(r.get("data_date", "")).strip()
+    v = r.get("value", "NA")
+
+    if d == "" or d.upper() == "NA":
+        return False
+    # Require parseable ISO date (defensive)
+    if _try_parse_date(d) is None:
+        return False
+
+    # value may be float or string; treat "NA" as not usable
+    if isinstance(v, str) and v.strip().upper() == "NA":
+        return False
+    return True
+
+
+def _history_key(r: Dict) -> Tuple[str, str]:
+    return (str(r.get("series_id", "")).strip(), str(r.get("data_date", "")).strip())
+
+
+def load_history(path: str) -> List[Dict]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        if isinstance(obj, list):
+            # Keep only dict rows (defensive)
+            return [x for x in obj if isinstance(x, dict)]
+        return []
+    except FileNotFoundError:
+        return []
+    except Exception:
+        # Keep a local backup but don't crash the job
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        try:
+            if os.path.exists(path):
+                os.replace(path, f"{path}.corrupt.{ts}")
+        except Exception:
+            pass
+        return []
+
+
+def merge_history(existing: List[Dict], new_records: List[Dict]) -> List[Dict]:
+    """
+    De-dupe by (series_id, data_date). Keep latest record (new overwrites old).
+    Sort by (data_date, series_id, as_of_ts) then trim to MAX_HISTORY_ROWS.
+    """
+    m: Dict[Tuple[str, str], Dict] = {}
+
+    # load existing usable rows first
+    for r in existing:
+        if _is_usable_history_row(r):
+            m[_history_key(r)] = r
+
+    # overwrite with current run usable rows
+    for r in new_records:
+        if _is_usable_history_row(r):
+            m[_history_key(r)] = r
+
+    rows = list(m.values())
+
+    def sort_key(r: Dict):
+        d = str(r.get("data_date", ""))
+        sid = str(r.get("series_id", ""))
+        a = str(r.get("as_of_ts", ""))
+        return (d, sid, a)
+
+    rows.sort(key=sort_key)
+
+    # trim to most recent MAX_HISTORY_ROWS
+    if len(rows) > MAX_HISTORY_ROWS:
+        rows = rows[-MAX_HISTORY_ROWS:]
+
+    return rows
 
 
 # =========================
@@ -583,6 +681,7 @@ def build_manifest(repo: str, ref: str, as_of_ts: str) -> Dict:
         "pinned": {
             "latest_json": f"{base_raw}/latest.json",
             "latest_csv": f"{base_raw}/latest.csv",
+            "history_json": f"{base_raw}/history.json",
             "manifest_json": f"{base_raw}/manifest.json",
         },
         "notes": "Fallback cache; prefers official/no-key sources, allows non-official for coverage.",
@@ -596,7 +695,6 @@ def main() -> int:
     as_of_ts = utc_now_iso_z()
     ensure_dir(OUT_DIR)
 
-    # Use a session for connection reuse + consistent headers
     session = requests.Session()
     session.headers.update({"User-Agent": "fallback-cache/1.0"})
 
@@ -758,19 +856,24 @@ def main() -> int:
         "as_of_ts": as_of_ts
     })
 
-    # Write outputs
-    latest_json_path = os.path.join(OUT_DIR, "latest.json")
-    latest_csv_path = os.path.join(OUT_DIR, "latest.csv")
-    manifest_path = os.path.join(OUT_DIR, "manifest.json")
+    # -------------------------
+    # Write latest outputs
+    # -------------------------
+    atomic_write_json(LATEST_JSON, records)
+    atomic_write_text(LATEST_CSV, records_to_csv(records))
 
-    atomic_write_json(latest_json_path, records)
-    atomic_write_text(latest_csv_path, records_to_csv(records))
+    # -------------------------
+    # Update history.json
+    # -------------------------
+    existing = load_history(HISTORY_JSON)
+    merged = merge_history(existing, records)
+    atomic_write_json(HISTORY_JSON, merged)
 
     # Build manifest (workflow will overwrite with pinned SHA later; keep this best-effort)
     repo = os.getenv("GITHUB_REPOSITORY", "").strip() or "UNKNOWN/UNKNOWN"
     ref = os.getenv("GITHUB_REF_NAME", "").strip() or "main"
     manifest = build_manifest(repo=repo, ref=ref, as_of_ts=as_of_ts)
-    atomic_write_json(manifest_path, manifest)
+    atomic_write_json(MANIFEST_JSON, manifest)
 
     # Print to stdout (useful for Actions logs)
     print(json.dumps(records, ensure_ascii=False, indent=2))
