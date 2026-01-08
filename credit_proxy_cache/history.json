@@ -22,5 +22,13 @@
     "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20250909&d2=20260107&i=d | https://stooq.com/q/d/l/?s=ief.us&d1=20250909&d2=20260107&i=d",
     "notes": "hyg_close=80.9; ief_close=96.3",
     "as_of_ts": "2026-01-07T12:02:56+08:00"
+  },
+  {
+    "series_id": "HYG_IEF_RATIO",
+    "data_date": "2026-01-07",
+    "value": 0.8383084577114427,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20250910&d2=20260108&i=d | https://stooq.com/q/d/l/?s=ief.us&d1=20250910&d2=20260108&i=d",
+    "notes": "hyg_close=80.88; ief_close=96.48",
+    "as_of_ts": "2026-01-08T12:02:31+08:00"
   }
 ]
