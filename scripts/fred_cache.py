@@ -5,13 +5,13 @@ FRED cache generator (per-series history upsert + cap_per_series, audit-friendly
 
 Outputs (under ./cache):
 - latest.csv            : one row per series_id (latest observation for this run)
-- latest.json           : array of records (same as latest.csv)
+- latest.json           : array of records (same as latest.csv) [pretty]
 - history.json          : rolling store, key=(series_id, data_date); same data_date reruns overwrite
                            keep last cap_per_series records PER series by data_date (and as_of_ts tie-break)
-                           format: list[dict] (stable for your consumer)
-- history.snapshot.json : snapshot of this run's latest.json (for audit)
-- dq_state.json         : lightweight data-quality state (includes read/write health notes)
-- manifest.json         : metadata + pinned raw URLs (DATA_SHA preferred, else GITHUB_SHA)
+                           format: list[dict] (stable for your consumer) [pretty + atomic write]
+- history.snapshot.json : snapshot of this run's latest.json (for audit) [pretty]
+- dq_state.json         : lightweight data-quality state (includes read/write health notes) [pretty]
+- manifest.json         : metadata + pinned raw URLs (DATA_SHA preferred, else GITHUB_SHA) [pretty]
 
 Env:
 - FRED_API_KEY (required)
@@ -29,6 +29,7 @@ import os
 import re
 import sys
 import time
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -295,12 +296,25 @@ def _write_csv(path: Path, rows: List[Dict[str, str]]) -> None:
             w.writerow({k: r.get(k, "NA") for k in CSV_FIELDNAMES})
 
 
-def _write_json(path: Path, obj: Any) -> Tuple[bool, str]:
-    """Write JSON. Never raises (returns ok flag + status)."""
+def _write_json(path: Path, obj: Any, *, indent: Optional[int] = None) -> Tuple[bool, str]:
+    """Write JSON atomically. Never raises (returns ok flag + status)."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+        text = json.dumps(
+            obj,
+            ensure_ascii=False,
+            indent=indent,
+            separators=(",", ": ") if indent is not None else (",", ":"),
+        ) + "\n"
+
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(path.parent), delete=False) as tf:
+            tf.write(text)
+            tmp_name = tf.name
+
+        Path(tmp_name).replace(path)
         return True, "ok"
+
     except PermissionError:
         return False, "err:permission"
     except OSError as e:
@@ -429,7 +443,7 @@ def main() -> int:
     generated_at_utc = _now_utc_iso()
 
     session = requests.Session()
-    session.headers.update({"User-Agent": "fred-cache/2.2"})
+    session.headers.update({"User-Agent": "fred-cache/2.3"})
 
     rows: List[Dict[str, str]] = []
 
@@ -478,31 +492,66 @@ def main() -> int:
     except Exception as e:
         dq["fs"]["latest_csv"] = f"err:csv_write_exc:{type(e).__name__}"
 
-    ok, st = _write_json(latest_json, rows)
+    ok, st = _write_json(latest_json, rows, indent=2)
     dq["fs"]["latest_json"] = st
 
     # history.json (per-series upsert + cap_per_series)
     existing_hist, read_status = _load_json_list(history_json)
     dq["fs"]["history_json_read"] = read_status
 
+    # guardrail: if history is corrupted, refuse to overwrite it (prevents silent data loss)
+    if read_status == "warn:json_decode_error":
+        print("[FATAL] cache/history.json JSON decode error; refuse to overwrite history (to prevent data loss).", file=sys.stderr)
+        # still attempt to write dq_state + manifest for debugging, but exit non-zero
+        ok2, st2 = _write_json(dq_state, dq, indent=2)
+        if not ok2:
+            print(f"[WARN] failed to write dq_state.json: {st2}", file=sys.stderr)
+
+        repo = _repo_slug()
+        sha = _data_sha()
+        manifest_obj: Dict[str, Any] = {
+            "generated_at_utc": generated_at_utc,
+            "as_of_ts": as_of_ts,
+            "data_commit_sha": sha,
+            "pinned": _pinned_urls(repo, sha),
+            "paths": {
+                "latest_csv": str(latest_csv.as_posix()),
+                "latest_json": str(latest_json.as_posix()),
+                "history_json": str(history_json.as_posix()),
+                "history_snapshot_json": str(history_snapshot.as_posix()),
+                "dq_state_json": str(dq_state.as_posix()),
+            },
+            "history_policy": {
+                "format": "list",
+                "key": "(series_id, data_date)",
+                "same_key_rerun": "overwrite_by_latest_as_of_ts",
+                "cap_per_series": CAP_PER_SERIES,
+                "ordering": "series_id asc, data_date asc, as_of_ts asc",
+            },
+            "fs_status": dq.get("fs", {}),
+            "fatal": "history_json_decode_error_refuse_overwrite",
+        }
+        _write_json(manifest, manifest_obj, indent=2)
+        return 2
+
     merged_hist = _upsert_history_per_series(existing_hist, rows, cap_per_series=CAP_PER_SERIES)
-    ok, st = _write_json(history_json, merged_hist)
+    ok, st = _write_json(history_json, merged_hist, indent=2)
     dq["fs"]["history_json_write"] = st
 
     # snapshot (audit)
-    ok, st = _write_json(history_snapshot, rows)
+    ok, st = _write_json(history_snapshot, rows, indent=2)
     dq["fs"]["history_snapshot_write"] = st
 
     # dq state
-    ok, st = _write_json(dq_state, dq)
+    ok, st = _write_json(dq_state, dq, indent=2)
     if not ok:
         print(f"[WARN] failed to write dq_state.json: {st}", file=sys.stderr)
 
-    # manifest (index)
+    # manifest (index) - pretty
     repo = _repo_slug()
     sha = _data_sha()
 
-    manifest_obj: Dict[str, Any] = {
+    manifest_obj2: Dict[str, Any] = {
         "generated_at_utc": generated_at_utc,
         "as_of_ts": as_of_ts,
         "data_commit_sha": sha,
@@ -524,7 +573,7 @@ def main() -> int:
         "fs_status": dq.get("fs", {}),
     }
 
-    ok, st = _write_json(manifest, manifest_obj)
+    ok, st = _write_json(manifest, manifest_obj2, indent=2)
     if not ok:
         print(f"[WARN] failed to write manifest.json: {st}", file=sys.stderr)
 
