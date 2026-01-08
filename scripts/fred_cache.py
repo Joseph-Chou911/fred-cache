@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-FRED cache generator (per-series rolling history by data_date, audit-friendly)
+FRED cache generator (per-series history upsert + cap_per_series, audit-friendly)
 
 Outputs (under ./cache):
 - latest.csv            : one row per series_id (latest observation for this run)
 - latest.json           : array of records (same as latest.csv)
-- history.json          : rolling time-series store (per series per data_date), cap per series
+- history.json          : rolling store, key=(series_id, data_date); same data_date reruns overwrite
+                           keep last cap_per_series records PER series by data_date (and as_of_ts tie-break)
+                           format: list[dict] (stable for your consumer)
 - history.snapshot.json : snapshot of this run's latest.json (for audit)
 - dq_state.json         : lightweight data-quality state (includes read/write health notes)
 - manifest.json         : metadata + pinned raw URLs (DATA_SHA preferred, else GITHUB_SHA)
 
-Environment variables:
+Env:
 - FRED_API_KEY (required)
 - TIMEZONE (optional, default "Asia/Taipei")
-
-GitHub Actions recommended env:
-- GITHUB_REPOSITORY (owner/repo)  e.g. "Joseph-Chou911/fred-cache"
+- GITHUB_REPOSITORY (optional)
 - DATA_SHA (optional) commit sha that contains the data files (preferred for pinned)
 - GITHUB_SHA fallback
 """
@@ -69,18 +69,15 @@ MAX_ATTEMPTS = 3
 BACKOFF_SCHEDULE = [2, 4, 8]
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
-# history policy (per series cap)
-FETCH_LIMIT_PER_SERIES = 400  # API observations limit per series per run
-HISTORY_CAP_PER_SERIES = 400  # rolling cap per series (by data_date)
+# history policy
+CAP_PER_SERIES = 400  # keep last N records PER series (records keyed by (series_id, data_date))
 
 # deterministic Taipei fallback
 TAIPEI_TZ_FALLBACK = timezone(timedelta(hours=8))
 
 
 def _tzinfo():
-    """
-    Returns tzinfo. Must never crash; ultimate fallback is fixed +08:00 for Asia/Taipei.
-    """
+    """Returns tzinfo. Must never crash; ultimate fallback is fixed +08:00 for Asia/Taipei."""
     tz_name = (os.getenv("TIMEZONE", "Asia/Taipei") or "").strip() or "Asia/Taipei"
 
     if ZoneInfo is not None:
@@ -92,7 +89,6 @@ def _tzinfo():
             except Exception:
                 return TAIPEI_TZ_FALLBACK
 
-    # No ZoneInfo available
     if tz_name == "Asia/Taipei":
         return TAIPEI_TZ_FALLBACK
     return timezone.utc
@@ -106,13 +102,13 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _safe_source_url(series_id: str, limit: int) -> str:
-    # DO NOT include api_key
+def _safe_source_url(series_id: str) -> str:
+    """DO NOT include api_key in source_url."""
     params = {
         "series_id": series_id,
         "file_type": "json",
         "sort_order": "desc",
-        "limit": limit,
+        "limit": 1,
     }
     qs = "&".join(
         [f"{k}={requests.utils.quote(str(params[k]))}" for k in ["series_id", "file_type", "sort_order", "limit"]]
@@ -130,28 +126,19 @@ def _redact_secrets(s: str) -> str:
     return s
 
 
-def _is_missing_value(v: str) -> bool:
-    v2 = (v or "").strip()
-    return v2 in {"", "NA", ".", "nan", "NaN"}
-
-
 @dataclass
-class FetchSeriesResult:
-    latest_record: Dict[str, str]
-    history_rows: List[Dict[str, str]]
+class FetchResult:
+    record: Dict[str, str]
     warn: Optional[str] = None
     err: Optional[str] = None
     attempts: int = 0
     status: Optional[int] = None
-    obs_count: int = 0
 
 
 def _http_get_with_retry(
     session: requests.Session, url: str, params: Dict[str, Any]
 ) -> Tuple[Optional[requests.Response], Optional[str], int, Optional[int]]:
-    """
-    Returns: (response or None, error_code or None, attempts_used, last_status)
-    """
+    """Returns: (response or None, error_code or None, attempts_used, last_status)"""
     last_status: Optional[int] = None
 
     for i in range(MAX_ATTEMPTS):
@@ -169,7 +156,6 @@ def _http_get_with_retry(
                     continue
                 return None, f"http_{r.status_code}", attempt, last_status
 
-            # non-retryable HTTP errors
             return None, f"http_{r.status_code}", attempt, last_status
 
         except requests.Timeout:
@@ -188,29 +174,22 @@ def _http_get_with_retry(
     return None, "unknown", MAX_ATTEMPTS, last_status
 
 
-def fetch_series_observations(session: requests.Session, series_id: str, as_of_ts: str) -> FetchSeriesResult:
-    """
-    - latest_record: based on observations[0] (even if missing -> value=NA w/ warn)
-    - history_rows: up to FETCH_LIMIT_PER_SERIES rows keyed by (series_id, data_date)
-    """
+def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -> FetchResult:
     api_key = os.getenv("FRED_API_KEY", "")
 
     if not api_key or len(api_key) < 10:
-        latest = {
-            "as_of_ts": as_of_ts,
-            "series_id": series_id,
-            "data_date": "NA",
-            "value": "NA",
-            "source_url": _safe_source_url(series_id, FETCH_LIMIT_PER_SERIES),
-            "notes": "err:missing_api_key",
-        }
-        return FetchSeriesResult(
-            latest_record=latest,
-            history_rows=[],
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": "NA",
+                "value": "NA",
+                "source_url": _safe_source_url(series_id),
+                "notes": "err:missing_api_key",
+            },
             err="missing_api_key",
             attempts=0,
             status=None,
-            obs_count=0,
         )
 
     params = {
@@ -218,138 +197,92 @@ def fetch_series_observations(session: requests.Session, series_id: str, as_of_t
         "api_key": api_key,
         "file_type": "json",
         "sort_order": "desc",
-        "limit": FETCH_LIMIT_PER_SERIES,
+        "limit": 1,
     }
 
     r, err_code, attempts, last_status = _http_get_with_retry(session, BASE_URL, params)
-    src_url = _safe_source_url(series_id, FETCH_LIMIT_PER_SERIES)
 
     if r is None:
         notes = f"err:{err_code}"
         warn = f"warn:retried_{attempts}x" if attempts > 1 else None
-        latest = {
-            "as_of_ts": as_of_ts,
-            "series_id": series_id,
-            "data_date": "NA",
-            "value": "NA",
-            "source_url": src_url,
-            "notes": notes,
-        }
-        return FetchSeriesResult(
-            latest_record=latest,
-            history_rows=[],
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": "NA",
+                "value": "NA",
+                "source_url": _safe_source_url(series_id),
+                "notes": notes,
+            },
             warn=warn,
             err=err_code,
             attempts=attempts,
             status=last_status,
-            obs_count=0,
         )
 
     try:
         payload = r.json()
     except Exception:
-        latest = {
-            "as_of_ts": as_of_ts,
-            "series_id": series_id,
-            "data_date": "NA",
-            "value": "NA",
-            "source_url": src_url,
-            "notes": "err:bad_json",
-        }
-        return FetchSeriesResult(
-            latest_record=latest,
-            history_rows=[],
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": "NA",
+                "value": "NA",
+                "source_url": _safe_source_url(series_id),
+                "notes": "err:bad_json",
+            },
             err="bad_json",
             attempts=attempts,
             status=last_status,
-            obs_count=0,
         )
 
     obs = payload.get("observations", [])
-    if not isinstance(obs, list) or not obs:
-        latest = {
-            "as_of_ts": as_of_ts,
-            "series_id": series_id,
-            "data_date": "NA",
-            "value": "NA",
-            "source_url": src_url,
-            "notes": "warn:no_observations",
-        }
-        return FetchSeriesResult(
-            latest_record=latest,
-            history_rows=[],
+    if not obs:
+        return FetchResult(
+            record={
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": "NA",
+                "value": "NA",
+                "source_url": _safe_source_url(series_id),
+                "notes": "warn:no_observations",
+            },
             warn="no_observations",
             attempts=attempts,
             status=last_status,
-            obs_count=0,
         )
 
-    # latest = first observation (may be missing)
-    o0 = obs[0] if isinstance(obs[0], dict) else {}
-    latest_date = str(o0.get("date", "NA"))
-    latest_value_raw = str(o0.get("value", "NA"))
-    if _is_missing_value(latest_value_raw):
-        latest_value = "NA"
-        latest_notes = "warn:missing_value"
-        latest_warn = "missing_value"
+    o0 = obs[0]
+    date = str(o0.get("date", "NA"))
+    value = str(o0.get("value", "NA"))
+
+    if value.strip() in {"", "NA", "."}:
+        notes = "warn:missing_value"
+        warn = "missing_value"
+        value_out = "NA"
     else:
-        latest_value = latest_value_raw
-        latest_notes = "NA"
-        latest_warn = None
+        notes = "NA"
+        warn = None
+        value_out = value
 
-    if attempts > 1 and latest_notes == "NA":
-        latest_notes = f"warn:retried_{attempts}x"
-        latest_warn = f"retried_{attempts}x"
+    if attempts > 1 and notes == "NA":
+        notes = f"warn:retried_{attempts}x"
+        warn = f"retried_{attempts}x"
 
-    latest = {
-        "as_of_ts": as_of_ts,
-        "series_id": series_id,
-        "data_date": latest_date,
-        "value": latest_value,
-        "source_url": src_url,
-        "notes": latest_notes,
-    }
-
-    # history rows (up to limit)
-    hist_rows: List[Dict[str, str]] = []
-    for x in obs:
-        if not isinstance(x, dict):
-            continue
-        d = str(x.get("date", "NA"))
-        v_raw = str(x.get("value", "NA"))
-        if d == "NA" or not d:
-            continue
-
-        if _is_missing_value(v_raw):
-            v_out = "NA"
-            n_out = "warn:missing_value"
-        else:
-            v_out = v_raw
-            n_out = "NA"
-
-        hist_rows.append(
-            {
-                "as_of_ts": as_of_ts,
-                "series_id": series_id,
-                "data_date": d,
-                "value": v_out,
-                "source_url": src_url,
-                "notes": n_out,
-            }
-        )
-
-    # If we retried and latest is NA-less, we already annotated latest; keep history notes as-is (per row).
-    # Count of obs returned:
-    obs_count = len(hist_rows)
-
-    return FetchSeriesResult(
-        latest_record=latest,
-        history_rows=hist_rows,
-        warn=latest_warn,
+    return FetchResult(
+        record={
+            "as_of_ts": as_of_ts,
+            "series_id": series_id,
+            "data_date": date,
+            "value": value_out,
+            "source_url": _safe_source_url(series_id),
+            "notes": notes,
+        },
+        warn=warn,
         err=None,
         attempts=attempts,
         status=last_status,
-        obs_count=obs_count,
     )
 
 
@@ -363,9 +296,7 @@ def _write_csv(path: Path, rows: List[Dict[str, str]]) -> None:
 
 
 def _write_json(path: Path, obj: Any) -> Tuple[bool, str]:
-    """
-    Write JSON. Never raises (returns ok flag + status).
-    """
+    """Write JSON. Never raises (returns ok flag + status)."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -379,10 +310,7 @@ def _write_json(path: Path, obj: Any) -> Tuple[bool, str]:
 
 
 def _load_json_list(path: Path) -> Tuple[List[Dict[str, Any]], str]:
-    """
-    Load JSON list safely. Never raises.
-    Returns (list, status_code).
-    """
+    """Load JSON list safely. Never raises. Returns (list, status_code)."""
     if not path.exists():
         return [], "ok:missing_file"
 
@@ -409,40 +337,42 @@ def _load_json_list(path: Path) -> Tuple[List[Dict[str, Any]], str]:
     return [], "warn:not_a_list"
 
 
-def _parse_date_key(d: str) -> str:
-    # FRED dates are "YYYY-MM-DD" (lex sortable).
-    return (d or "").strip()
+def _is_ymd(s: str) -> bool:
+    # minimal check: "YYYY-MM-DD"
+    return isinstance(s, str) and len(s) == 10 and s[4] == "-" and s[7] == "-"
 
 
-def _upsert_timeseries_history(
+def _upsert_history_per_series(
     existing: List[Dict[str, Any]],
     new_rows: List[Dict[str, str]],
-    cap_per_series: int = HISTORY_CAP_PER_SERIES,
+    cap_per_series: int = CAP_PER_SERIES,
 ) -> List[Dict[str, str]]:
     """
     Key = (series_id, data_date)
-    Overwrite by keeping the greatest as_of_ts if same key appears.
-    After merge, cap per series by keeping last `cap_per_series` points by data_date.
+    Same (series_id, data_date) reruns overwrite by keeping the greatest as_of_ts.
+    Keep only last `cap_per_series` records per series by (data_date, as_of_ts).
+    Output format stays list[dict].
     """
     best: Dict[Tuple[str, str], Dict[str, str]] = {}
 
     def take(r_any: Dict[str, Any]) -> None:
-        sid = str(r_any.get("series_id", ""))
-        d = str(r_any.get("data_date", ""))
-        as_of_ts = str(r_any.get("as_of_ts", ""))
-        if not sid or not d or not as_of_ts:
+        sid = str(r_any.get("series_id", "")).strip()
+        dd = str(r_any.get("data_date", "")).strip()
+        as_of_ts = str(r_any.get("as_of_ts", "")).strip()
+
+        if not sid or not dd or dd == "NA" or not _is_ymd(dd) or not as_of_ts:
             return
 
         rec: Dict[str, str] = {
             "as_of_ts": as_of_ts,
             "series_id": sid,
-            "data_date": d,
+            "data_date": dd,
             "value": str(r_any.get("value", "NA")),
             "source_url": str(r_any.get("source_url", "NA")),
             "notes": str(r_any.get("notes", "NA")),
         }
 
-        key = (sid, d)
+        key = (sid, dd)
         prev = best.get(key)
         if prev is None or as_of_ts > prev.get("as_of_ts", ""):
             best[key] = rec
@@ -452,24 +382,24 @@ def _upsert_timeseries_history(
             take(r)
 
     for r in new_rows:
-        take(r)  # type: ignore[arg-type]
+        take(r)  # new_rows already dict[str,str]
 
-    # group by series_id
-    by_sid: Dict[str, List[Dict[str, str]]] = {}
-    for rec in best.values():
-        by_sid.setdefault(rec.get("series_id", "NA"), []).append(rec)
+    # group by series and cap
+    by_series: Dict[str, List[Dict[str, str]]] = {}
+    for (sid, _dd), rec in best.items():
+        by_series.setdefault(sid, []).append(rec)
 
-    capped_all: List[Dict[str, str]] = []
-    for sid, recs in by_sid.items():
-        # sort by data_date (lex works for YYYY-MM-DD)
-        recs.sort(key=lambda r: _parse_date_key(r.get("data_date", "")))
-        if len(recs) > cap_per_series:
-            recs = recs[-cap_per_series:]
-        capped_all.extend(recs)
+    capped: List[Dict[str, str]] = []
+    for sid, arr in by_series.items():
+        # sort by data_date then as_of_ts, keep last cap_per_series
+        arr.sort(key=lambda x: (x.get("data_date", ""), x.get("as_of_ts", "")))
+        if len(arr) > cap_per_series:
+            arr = arr[-cap_per_series:]
+        capped.extend(arr)
 
-    # deterministic order: series_id then data_date
-    capped_all.sort(key=lambda r: (r.get("series_id", ""), _parse_date_key(r.get("data_date", ""))))
-    return capped_all
+    # stable overall ordering: by series_id then data_date then as_of_ts
+    capped.sort(key=lambda x: (x.get("series_id", ""), x.get("data_date", ""), x.get("as_of_ts", "")))
+    return capped
 
 
 def _repo_slug() -> str:
@@ -482,18 +412,14 @@ def _data_sha() -> str:
 
 def _pinned_urls(repo: str, sha: str) -> Dict[str, str]:
     if sha == "NA":
-        return {
-            "latest_json": "NA",
-            "history_json": "NA",
-            "latest_csv": "NA",
-            "manifest_json": "NA",
-        }
+        return {"latest_json": "NA", "history_json": "NA", "latest_csv": "NA", "manifest_json": "NA"}
     base = f"https://raw.githubusercontent.com/{repo}/{sha}/cache"
     return {
         "latest_json": f"{base}/latest.json",
         "history_json": f"{base}/history.json",
         "latest_csv": f"{base}/latest.csv",
-        "manifest_json": f"{base}/manifest.json",  # workflow may patch
+        # workflow may patch manifest_json to a better audit pointer
+        "manifest_json": f"{base}/manifest.json",
     }
 
 
@@ -503,10 +429,9 @@ def main() -> int:
     generated_at_utc = _now_utc_iso()
 
     session = requests.Session()
-    session.headers.update({"User-Agent": "fred-cache/3.0"})
+    session.headers.update({"User-Agent": "fred-cache/2.2"})
 
-    latest_rows: List[Dict[str, str]] = []
-    hist_new_rows: List[Dict[str, str]] = []
+    rows: List[Dict[str, str]] = []
 
     dq: Dict[str, Any] = {
         "as_of_ts": as_of_ts,
@@ -514,25 +439,14 @@ def main() -> int:
         "fs": {},
         "series": {},
         "summary": {"ok": 0, "warn": 0, "err": 0},
-        "history_policy": {
-            "key": "(series_id, data_date)",
-            "cap_per_series": HISTORY_CAP_PER_SERIES,
-            "fetch_limit_per_series": FETCH_LIMIT_PER_SERIES,
-        },
     }
 
     for sid in SERIES_IDS:
-        res = fetch_series_observations(session, sid, as_of_ts)
+        res = fetch_latest_obs(session, sid, as_of_ts)
+        rec = {k: _redact_secrets(str(v)) for k, v in res.record.items()}
+        rows.append(rec)
 
-        # redact any secrets defensively
-        latest_rec = {k: _redact_secrets(str(v)) for k, v in res.latest_record.items()}
-        latest_rows.append(latest_rec)
-
-        for r in res.history_rows:
-            rr = {k: _redact_secrets(str(v)) for k, v in r.items()}
-            hist_new_rows.append(rr)
-
-        note = latest_rec.get("notes", "NA")
+        note = rec.get("notes", "NA")
         if note.startswith("err:"):
             dq["summary"]["err"] += 1
         elif note.startswith("warn:"):
@@ -544,9 +458,8 @@ def main() -> int:
             "notes": note,
             "attempts": res.attempts,
             "http_status": res.status if res.status is not None else "NA",
-            "latest_data_date": latest_rec.get("data_date", "NA"),
-            "latest_value": latest_rec.get("value", "NA"),
-            "obs_count_returned": res.obs_count,
+            "data_date": rec.get("data_date", "NA"),
+            "value": rec.get("value", "NA"),
         }
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -558,26 +471,26 @@ def main() -> int:
     dq_state = CACHE_DIR / "dq_state.json"
     manifest = CACHE_DIR / "manifest.json"
 
-    # latest outputs (this run)
+    # latest outputs
     try:
-        _write_csv(latest_csv, latest_rows)
+        _write_csv(latest_csv, rows)
         dq["fs"]["latest_csv"] = "ok"
     except Exception as e:
         dq["fs"]["latest_csv"] = f"err:csv_write_exc:{type(e).__name__}"
 
-    ok, st = _write_json(latest_json, latest_rows)
+    ok, st = _write_json(latest_json, rows)
     dq["fs"]["latest_json"] = st
 
-    # history.json (time-series upsert + per-series cap)
+    # history.json (per-series upsert + cap_per_series)
     existing_hist, read_status = _load_json_list(history_json)
     dq["fs"]["history_json_read"] = read_status
 
-    merged_hist = _upsert_timeseries_history(existing_hist, hist_new_rows, cap_per_series=HISTORY_CAP_PER_SERIES)
+    merged_hist = _upsert_history_per_series(existing_hist, rows, cap_per_series=CAP_PER_SERIES)
     ok, st = _write_json(history_json, merged_hist)
     dq["fs"]["history_json_write"] = st
 
-    # snapshot of this run (audit)
-    ok, st = _write_json(history_snapshot, latest_rows)
+    # snapshot (audit)
+    ok, st = _write_json(history_snapshot, rows)
     dq["fs"]["history_snapshot_write"] = st
 
     # dq state
@@ -588,6 +501,7 @@ def main() -> int:
     # manifest (index)
     repo = _repo_slug()
     sha = _data_sha()
+
     manifest_obj: Dict[str, Any] = {
         "generated_at_utc": generated_at_utc,
         "as_of_ts": as_of_ts,
@@ -601,11 +515,11 @@ def main() -> int:
             "dq_state_json": str(dq_state.as_posix()),
         },
         "history_policy": {
-            "fetch_limit_per_series": FETCH_LIMIT_PER_SERIES,
-            "cap_per_series": HISTORY_CAP_PER_SERIES,
+            "format": "list",
             "key": "(series_id, data_date)",
-            "rerun_behavior": "same (series_id,data_date) overwritten_by_latest_as_of_ts",
-            "cap_behavior": "keep_last_N_by_data_date_per_series",
+            "same_key_rerun": "overwrite_by_latest_as_of_ts",
+            "cap_per_series": CAP_PER_SERIES,
+            "ordering": "series_id asc, data_date asc, as_of_ts asc",
         },
         "fs_status": dq.get("fs", {}),
     }
