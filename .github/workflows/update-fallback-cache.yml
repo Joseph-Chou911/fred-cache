@@ -89,6 +89,7 @@ jobs:
             "pinned": {
               "latest_json": f"{base}/latest.json",
               "latest_csv":  f"{base}/latest.csv",
+              "history_json": f"{base}/history.json",
               # temporary; will be self-pinned by v2 step
               "manifest_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/fallback_cache/manifest.json"
             }
@@ -135,22 +136,32 @@ jobs:
             # 1) Generate files
             python scripts/update_fallback_cache.py
 
+            # 1.1) Ensure history.json exists (non-breaking baseline)
+            mkdir -p fallback_cache
+            if [ ! -f fallback_cache/history.json ]; then
+              echo "WARN: history.json not found. Creating empty baseline []."
+              printf "[]\n" > fallback_cache/history.json
+            fi
+
             # 2) Validate JSON
             python -m json.tool fallback_cache/latest.json > /dev/null
             echo "latest.json valid."
+            python -m json.tool fallback_cache/history.json > /dev/null
+            echo "history.json valid."
 
             # Required files check
             test -f fallback_cache/latest.json
             test -f fallback_cache/latest.csv
+            test -f fallback_cache/history.json
 
             # 3) Commit DATA
-            git add fallback_cache/latest.json fallback_cache/latest.csv
+            git add fallback_cache/latest.json fallback_cache/latest.csv fallback_cache/history.json
             if git diff --cached --quiet; then
               echo "No DATA changes to commit. Exit."
               exit 0
             fi
 
-            git commit -m "Update fallback DATA (latest json/csv)" || true
+            git commit -m "Update fallback DATA (latest json/csv + history)" || true
             SHA_DATA="$(git rev-parse HEAD)"
             export SHA_DATA
             echo "SHA_DATA=$SHA_DATA"
