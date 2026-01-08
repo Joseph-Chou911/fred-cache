@@ -2,14 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """
-update_regime_state_cache.py  (v3.3.1)
+update_regime_state_cache.py  (v3.3.2)
+
+Modes:
+1) Generate (default): fetch sources -> write latest.json/latest.csv/history.json/manifest.json
+2) Validate (--validate-data): validate existing data files and exit (no fetching)
+
+Key features:
 - Treasury: XML primary (+ CSV fallback)
 - VIX: CBOE CSV primary (+ Stooq fallback)
-- OFR FSI: use official CSV https://www.financialresearch.gov/financial-stress-index/data/fsi.csv
+- OFR FSI: official CSV https://www.financialresearch.gov/financial-stress-index/data/fsi.csv
 - Credit axis: HYG/IEF ratio vs MA60 deviation
 - Regime output: REGIME_STATE + REGIME_CONFIDENCE + REGIME_REASONS
-- IMPORTANT: if BE10Y_PROXY missing this run, allow carry-forward from recent history (<= 7 days) WITH explicit reasons
 - Date normalization + history dedup (avoid duplicates due to mixed date formats)
+- If BE10Y_PROXY missing in current run: allow carry-forward from recent history (<= 7 days) WITH explicit reasons
 """
 
 import argparse
@@ -17,6 +23,7 @@ import csv
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Dict, List, Optional, Tuple
@@ -36,15 +43,15 @@ MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
 # -------------------------
 # Config
 # -------------------------
-SCRIPT_VERSION = "regime_state_cache_v3_3_1"
+SCRIPT_VERSION = "regime_state_cache_v3_3_2"
 
-MAX_HISTORY_ROWS = 5000  # plenty; dedup keeps it compact
+MAX_HISTORY_ROWS = 5000
 
 # Stooq symbols
 SYMBOL_HYG = "hyg.us"
 SYMBOL_IEF = "ief.us"
 SYMBOL_TIP = "tip.us"
-SYMBOL_VIX_FALLBACK = "^vix"  # stooq index
+SYMBOL_VIX_FALLBACK = "^vix"
 
 STOOQ_URL_TMPL = "https://stooq.com/q/d/l/?s={sym}&d1={d1}&d2={d2}&i=d"
 
@@ -103,6 +110,9 @@ BACKOFFS = [2, 4, 8]
 TZ_TAIPEI = timezone(timedelta(hours=8))
 
 
+# -------------------------
+# Utilities
+# -------------------------
 def now_taipei_iso() -> str:
     return datetime.now(TZ_TAIPEI).isoformat(timespec="microseconds")
 
@@ -191,12 +201,16 @@ def http_get_bytes(url: str, timeout: int = DEFAULT_TIMEOUT) -> Tuple[Optional[b
     return None, last_err or "unknown_error"
 
 
+def load_json_file(path: str) -> Any:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def load_history(path: str) -> List[Dict[str, Any]]:
     if not os.path.exists(path):
         return []
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = load_json_file(path)
         return data if isinstance(data, list) else []
     except Exception:
         return []
@@ -225,7 +239,6 @@ def normalize_and_dedup_history(rows: List[Dict[str, Any]]) -> List[Dict[str, An
             best[k] = r2
 
     out = list(best.values())
-
     out.sort(
         key=lambda r: (
             str(r.get("series_id", "")),
@@ -297,6 +310,9 @@ def get_recent_history_value(
     return (best_dd, best_val), None
 
 
+# -------------------------
+# Treasury parsing
+# -------------------------
 def parse_treasury_xml_rows(xml_text: str) -> List[Dict[str, str]]:
     xml_text = xml_text.strip()
     lt = xml_text.find("<")
@@ -321,7 +337,7 @@ def parse_treasury_xml_rows(xml_text: str) -> List[Dict[str, str]]:
     return rows
 
 
-def treasury_pick_date_and_10y(rows: List[Dict[str, str]], is_real: bool) -> Optional[Tuple[str, float]]:
+def treasury_pick_date_and_10y(rows: List[Dict[str, str]]) -> Optional[Tuple[str, float]]:
     if not rows:
         return None
 
@@ -336,7 +352,6 @@ def treasury_pick_date_and_10y(rows: List[Dict[str, str]], is_real: bool) -> Opt
             "real_10year",
             "real_10yr",
             "t10y",
-            "dgs10",
             "10year",
             "10yr",
         ]
@@ -383,7 +398,7 @@ def fetch_treasury_10y(data_name: str, yyyymm: str) -> Tuple[Optional[Tuple[str,
     if txt is not None:
         try:
             rows = parse_treasury_xml_rows(txt)
-            picked = treasury_pick_date_and_10y(rows, is_real=(data_name == TREASURY_REAL_DATA))
+            picked = treasury_pick_date_and_10y(rows)
             if picked:
                 return picked, xml_url, "NA"
             return None, xml_url, "xml_parse_no_10y"
@@ -416,16 +431,11 @@ def fetch_treasury_10y(data_name: str, yyyymm: str) -> Tuple[Optional[Tuple[str,
             if not dd:
                 continue
             val = None
-            for k in ("10 Yr", "10 yr", "10YR", "10 YR", "10-year", "10 Year", "10-Year"):
-                if k in row:
+            for k in row.keys():
+                lk = k.lower()
+                if "10" in lk and ("yr" in lk or "year" in lk):
                     val = row.get(k)
                     break
-            if val is None:
-                for k in row.keys():
-                    lk = k.lower()
-                    if "10" in lk and ("yr" in lk or "year" in lk):
-                        val = row.get(k)
-                        break
             v = parse_float_safe(val)
             if v is None:
                 continue
@@ -456,6 +466,9 @@ def nearest_match(target_dd: str, candidates: Dict[str, float], max_days: int) -
     return best
 
 
+# -------------------------
+# Market/OFR fetchers
+# -------------------------
 def fetch_cboe_vix_latest() -> Tuple[Optional[Tuple[str, float]], str, str]:
     b, err = http_get_bytes(CBOE_VIX_CSV)
     if b is None:
@@ -531,7 +544,8 @@ def fetch_ofr_fsi_latest() -> Tuple[Optional[Tuple[str, float]], str, str]:
                 continue
             v = None
             for k in row.keys():
-                if k.lower() in ("fsi", "value", "index", "ofr_fsi", "stress_index"):
+                lk = k.lower()
+                if lk in ("fsi", "value", "index", "ofr_fsi", "stress_index"):
                     v = row.get(k)
                     break
             if v is None:
@@ -551,6 +565,9 @@ def fetch_ofr_fsi_latest() -> Tuple[Optional[Tuple[str, float]], str, str]:
         return None, OFR_FSI_CSV, "ofr_parse_fail"
 
 
+# -------------------------
+# Credit MA
+# -------------------------
 def calc_ma_from_history(
     history: List[Dict[str, Any]],
     series_id: str,
@@ -578,6 +595,9 @@ def calc_ma_from_history(
     return (sum(tail) / len(tail), len(tail)) if tail else (None, 0)
 
 
+# -------------------------
+# Regime classification
+# -------------------------
 def classify_regime(
     vix: Optional[float],
     be10y: Optional[float],
@@ -686,6 +706,9 @@ def classify_regime(
     return regime, conf, reasons
 
 
+# -------------------------
+# Build rows
+# -------------------------
 def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     as_of_ts = now_taipei_iso()
     today_iso = datetime.now(TZ_TAIPEI).date().strftime("%Y-%m-%d")
@@ -737,8 +760,8 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     be_notes = "NA"
     be_url = f"{nominal_url} + {real_url}"
 
-    nominal_map = {}
-    real_map = {}
+    nominal_map: Dict[str, float] = {}
+    real_map: Dict[str, float] = {}
     if nominal:
         nominal_map[nominal[0]] = nominal[1]
     if real:
@@ -893,12 +916,114 @@ def write_manifest() -> None:
     write_json(MANIFEST_JSON, m)
 
 
+# -------------------------
+# Validate mode
+# -------------------------
+def _is_iso_date_or_na(x: Any) -> bool:
+    s = str(x).strip()
+    if s.upper() == "NA":
+        return True
+    return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", s))
+
+
+def _validate_rows_schema(rows: Any, name: str) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(rows, list):
+        return [f"{name}: not a list"]
+    required = {"as_of_ts", "series_id", "data_date", "value", "source_url", "notes"}
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict):
+            errs.append(f"{name}[{i}]: not an object")
+            continue
+        missing = required - set(r.keys())
+        if missing:
+            errs.append(f"{name}[{i}]: missing_keys={sorted(missing)}")
+        if "data_date" in r and not _is_iso_date_or_na(r["data_date"]):
+            errs.append(f"{name}[{i}]: bad_data_date={r.get('data_date')}")
+    return errs
+
+
+def validate_data_files(out_dir: str) -> int:
+    latest_path = os.path.join(out_dir, "latest.json")
+    history_path = os.path.join(out_dir, "history.json")
+    manifest_path = os.path.join(out_dir, "manifest.json")
+
+    errs: List[str] = []
+
+    for p in (latest_path, history_path, manifest_path):
+        if not os.path.exists(p):
+            errs.append(f"missing_file: {p}")
+
+    if errs:
+        for e in errs:
+            print(e, file=sys.stderr)
+        return 1
+
+    try:
+        latest = load_json_file(latest_path)
+    except Exception as e:
+        print(f"latest.json parse error: {type(e).__name__}", file=sys.stderr)
+        return 1
+
+    try:
+        history = load_json_file(history_path)
+    except Exception as e:
+        print(f"history.json parse error: {type(e).__name__}", file=sys.stderr)
+        return 1
+
+    try:
+        manifest = load_json_file(manifest_path)
+        if not isinstance(manifest, dict):
+            errs.append("manifest.json: not an object")
+    except Exception as e:
+        print(f"manifest.json parse error: {type(e).__name__}", file=sys.stderr)
+        return 1
+
+    errs.extend(_validate_rows_schema(latest, "latest"))
+    errs.extend(_validate_rows_schema(history, "history"))
+
+    # history duplicates: (series_id, data_date) must be unique when data_date != NA
+    if isinstance(history, list):
+        seen = set()
+        for i, r in enumerate(history):
+            if not isinstance(r, dict):
+                continue
+            sid = str(r.get("series_id", "")).strip()
+            dd = str(r.get("data_date", "")).strip()
+            if not sid or dd.upper() == "NA":
+                continue
+            key = (sid, dd)
+            if key in seen:
+                errs.append(f"history duplicate: series_id={sid} data_date={dd}")
+            else:
+                seen.add(key)
+
+    # latest should contain regime fields
+    if isinstance(latest, list):
+        sids = {str(r.get("series_id", "")).strip() for r in latest if isinstance(r, dict)}
+        for needed in ("REGIME_STATE", "REGIME_CONFIDENCE", "REGIME_REASONS"):
+            if needed not in sids:
+                errs.append(f"latest missing series_id: {needed}")
+
+    if errs:
+        for e in errs:
+            print(e, file=sys.stderr)
+        return 1
+
+    print("OK: validate-data passed")
+    return 0
+
+
+# -------------------------
+# Main
+# -------------------------
 def main() -> int:
-    # ✅ 修正點：global 必須在 main() 內第一次使用 OUT_DIR 之前宣告
+    # ✅ critical: global must be declared before first use inside main()
     global OUT_DIR, LATEST_JSON, LATEST_CSV, HISTORY_JSON, MANIFEST_JSON
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default=OUT_DIR)
+    parser.add_argument("--validate-data", action="store_true", help="Validate existing data files and exit.")
     args = parser.parse_args()
 
     OUT_DIR = args.out_dir
@@ -906,6 +1031,9 @@ def main() -> int:
     LATEST_CSV = os.path.join(OUT_DIR, "latest.csv")
     HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
     MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
+
+    if args.validate_data:
+        return validate_data_files(OUT_DIR)
 
     latest_rows, history_rows = build_rows()
 
