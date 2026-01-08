@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # update_regime_state_cache.py
 #
-# regime_state_cache_v3_3
-# - OFR_FSI: use explicit CSV endpoint first: https://www.financialresearch.gov/financial-stress-index/data/fsi.csv
+# regime_state_cache_v3_4
+# - Fix history.json "亂掉": normalize+dedup while preserving original order (no global sort)
+# - OFR_FSI: explicit CSV endpoint primary; on failure, try carry-forward from history with WARN notes
 # - VIX: CBOE CSV primary, Stooq fallback
 # - Treasury: XML endpoints (nominal + real) and compute BE10Y_PROXY when same-date
 # - Regime state: outputs REGIME_STATE + REGIME_CONFIDENCE + REGIME_REASONS
@@ -15,7 +16,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta, date as dt_date
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import requests
@@ -29,7 +30,7 @@ LATEST_CSV_NAME = "latest.csv"
 HISTORY_JSON_NAME = "history.json"
 MANIFEST_JSON_NAME = "manifest.json"
 
-SCRIPT_VERSION = "regime_state_cache_v3_3"
+SCRIPT_VERSION = "regime_state_cache_v3_4"
 MAX_HISTORY_ROWS = 5000
 
 # -------------------------
@@ -46,14 +47,10 @@ def as_of_ts_local_iso() -> str:
 # Date normalization
 # -------------------------
 _DATE_PATTERNS = [
-    # YYYY-MM-DD
     ("%Y-%m-%d", re.compile(r"^\d{4}-\d{2}-\d{2}$")),
-    # YYYY-MM-DDTHH:MM:SS (we take date part)
-    (None, re.compile(r"^\d{4}-\d{2}-\d{2}T")),
-    # MM/DD/YYYY
-    ("%m/%d/%Y", re.compile(r"^\d{2}/\d{2}/\d{4}$")),
-    # M/D/YYYY (loose)
-    ("%m/%d/%Y", re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")),
+    (None,      re.compile(r"^\d{4}-\d{2}-\d{2}T")),        # ISO datetime -> take date
+    ("%m/%d/%Y", re.compile(r"^\d{2}/\d{2}/\d{4}$")),       # MM/DD/YYYY
+    ("%m/%d/%Y", re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")),   # M/D/YYYY
 ]
 
 def normalize_date(s: Optional[str]) -> Optional[str]:
@@ -63,11 +60,9 @@ def normalize_date(s: Optional[str]) -> Optional[str]:
     if ss == "" or ss.upper() == "NA":
         return None
 
-    # ISO datetime -> date
     if "T" in ss and re.match(r"^\d{4}-\d{2}-\d{2}T", ss):
         return ss[:10]
 
-    # try patterns
     for fmt, pat in _DATE_PATTERNS:
         if pat.match(ss):
             if fmt is None:
@@ -78,7 +73,6 @@ def normalize_date(s: Optional[str]) -> Optional[str]:
             except Exception:
                 pass
 
-    # last resort: extract yyyy-mm-dd
     m = re.search(r"(\d{4})-(\d{2})-(\d{2})", ss)
     if m:
         return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
@@ -97,7 +91,6 @@ def http_get(url: str, timeout: int = 25) -> Tuple[Optional[str], Optional[str],
         r = requests.get(url, timeout=timeout, headers=headers)
         if r.status_code != 200:
             return None, f"HTTP {r.status_code}", r.status_code
-        # Some endpoints may return utf-8 with BOM etc.
         return r.text, None, r.status_code
     except requests.Timeout:
         return None, "timeout", 0
@@ -160,21 +153,17 @@ def cboe_vix_latest() -> Tuple[Optional[str], Optional[float], str, str]:
         return None, None, "empty_csv", url
 
     last = rows[-1]
-    # CBOE uses "DATE" or "Date" typically
     raw_date = (last.get("DATE") or last.get("Date") or last.get("date") or "").strip()
     dd = normalize_date(raw_date)
-    # Close col name varies; try common keys
+
     v = None
     for k in ["CLOSE", "Close", "close"]:
         if k in last:
             v = safe_float(last.get(k))
             break
     if v is None:
-        # sometimes "VIX Close" etc.
         for k, val in last.items():
-            if not k:
-                continue
-            if "close" in k.lower():
+            if k and "close" in k.lower():
                 vv = safe_float(val)
                 if vv is not None:
                     v = vv
@@ -190,7 +179,6 @@ def vix_latest_with_fallback() -> Tuple[Optional[str], Optional[float], str, str
     d, v, n, u = cboe_vix_latest()
     if d and v is not None:
         return d, v, n, u
-    # fallback to Stooq "vix"
     d2, v2, n2, u2 = stooq_daily_close("vix", 60)
     if d2 and v2 is not None:
         return d2, v2, f"fallback_stooq({n};{n2})", u2
@@ -200,7 +188,6 @@ def vix_latest_with_fallback() -> Tuple[Optional[str], Optional[float], str, str
 # Treasury XML (nominal + real)
 # -------------------------
 def treasury_xml_url(data_key: str, yyyymm: str) -> str:
-    # data_key: daily_treasury_yield_curve or daily_treasury_real_yield_curve
     return (
         "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
         f"?data={data_key}&field_tdr_date_value_month={yyyymm}"
@@ -219,100 +206,87 @@ def yyyymm_candidates(n_months: int = 2) -> List[str]:
         out.append(f"{yy:04d}{mm:02d}")
     return out
 
-def parse_latest_10y_from_treasury_xml(xml_text: str) -> Tuple[Optional[str], Optional[float], str]:
+def parse_latest_valid_10y_from_treasury_xml(xml_text: str) -> Tuple[Optional[str], Optional[float], str]:
     """
-    Returns (data_date_yyyy_mm_dd, value_10y, notes)
-    Uses simple regex parsing:
-      - find last <d:NEW_DATE>...</d:NEW_DATE> (or <NEW_DATE>)
-      - within same entry, find 10Y field:
-          - nominal: <d:BC_10YEAR>...</d:BC_10YEAR>
-          - real:    <d:TC_10YEAR>...</d:TC_10YEAR>
-    If unknown, attempt both.
+    Scan properties from bottom to top; return the first row that has:
+      - NEW_DATE parseable
+      - any 10Y field parseable
+    This avoids "last row has empty field" issues.
     """
-    # find entries: each <m:properties> ... </m:properties>
     props = re.findall(r"<m:properties>.*?</m:properties>", xml_text, flags=re.DOTALL | re.IGNORECASE)
     if not props:
-        # sometimes namespaces differ; try without m:
         props = re.findall(r"<properties>.*?</properties>", xml_text, flags=re.DOTALL | re.IGNORECASE)
     if not props:
         return None, None, "xml_no_properties"
 
-    last = props[-1]
-
     def find_tag(text: str, tag: str) -> Optional[str]:
-        # handle d:TAG or TAG
         m = re.search(rf"<(?:d:)?{tag}[^>]*>(.*?)</(?:d:)?{tag}>", text, flags=re.DOTALL | re.IGNORECASE)
         if not m:
             return None
         return (m.group(1) or "").strip()
 
-    raw_date = find_tag(last, "NEW_DATE")
-    dd = normalize_date(raw_date)
+    for block in reversed(props):
+        raw_date = find_tag(block, "NEW_DATE")
+        dd = normalize_date(raw_date)
+        if dd is None:
+            continue
 
-    # nominal / real tag candidates
-    val_txt = find_tag(last, "BC_10YEAR")  # nominal
-    if val_txt is None:
-        val_txt = find_tag(last, "TC_10YEAR")  # real
+        # Try nominal first then real
+        val_txt = find_tag(block, "BC_10YEAR")
+        if val_txt is None:
+            val_txt = find_tag(block, "TC_10YEAR")
 
-    # additional fallback: any 10year-like tag
-    if val_txt is None:
-        m2 = re.search(r"<(?:d:)?([A-Z_]*10YEAR)[^>]*>(.*?)</(?:d:)?\1>", last, flags=re.DOTALL | re.IGNORECASE)
-        if m2:
-            val_txt = (m2.group(2) or "").strip()
+        # Fallback: any tag containing 10YEAR
+        if val_txt is None:
+            m2 = re.search(
+                r"<(?:d:)?([A-Z_]*10YEAR)[^>]*>(.*?)</(?:d:)?\1>",
+                block, flags=re.DOTALL | re.IGNORECASE
+            )
+            if m2:
+                val_txt = (m2.group(2) or "").strip()
 
-    v = safe_float(val_txt)
-    if dd is None:
-        return None, v, "xml_date_parse_fail"
-    if v is None:
-        return dd, None, "xml_parse_fail_10y"
-    return dd, v, "NA"
+        v = safe_float(val_txt)
+        if v is None:
+            continue
+
+        return dd, v, "NA"
+
+    return None, None, "xml_parse_no_10y"
 
 def treasury_10y_latest(data_key: str) -> Tuple[Optional[str], Optional[float], str, str]:
-    last_err = "NA"
+    last_notes = "NA"
     last_url = "NA"
     for yyyymm in yyyymm_candidates(2):
         url = treasury_xml_url(data_key, yyyymm)
         text, err, _ = http_get(url)
         if err:
-            last_err, last_url = err, url
+            last_notes, last_url = err, url
             continue
-        d, v, notes = parse_latest_10y_from_treasury_xml(text)
-        last_err, last_url = notes, url
+        d, v, notes = parse_latest_valid_10y_from_treasury_xml(text)
+        last_notes, last_url = notes, url
         if d and v is not None:
             return d, v, "NA", url
-    return None, None, last_err, last_url
+    return None, None, last_notes, last_url
 
 # -------------------------
 # OFR FSI (explicit CSV endpoint)
 # -------------------------
-def ofr_fsi_latest() -> Tuple[Optional[str], Optional[float], str, str]:
-    """
-    Primary: explicit CSV endpoint
-      https://www.financialresearch.gov/financial-stress-index/data/fsi.csv
+OFR_FSI_CSV_URL = "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
 
-    If it fails, we degrade cleanly (NO_PUBLIC_CSV_LINK / HTTP / timeout).
-    We intentionally do NOT chase HTML parsing reliability anymore.
-    """
-    url = "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
-    text, err, _ = http_get(url)
+def ofr_fsi_latest() -> Tuple[Optional[str], Optional[float], str, str]:
+    text, err, _ = http_get(OFR_FSI_CSV_URL)
     if err:
-        # Degrade explicitly; caller treats NA as normal degradation.
-        return None, None, err, url
+        return None, None, err, OFR_FSI_CSV_URL
 
     reader = csv.DictReader(text.splitlines())
     rows = [r for r in reader if r]
     if not rows:
-        return None, None, "empty_csv", url
+        return None, None, "empty_csv", OFR_FSI_CSV_URL
 
     last = rows[-1]
-
-    # Date column variations
-    raw_date = (
-        (last.get("Date") or last.get("DATE") or last.get("date") or last.get("Observation Date") or "").strip()
-    )
+    raw_date = (last.get("Date") or last.get("DATE") or last.get("date") or last.get("Observation Date") or "").strip()
     dd = normalize_date(raw_date)
 
-    # Find value column:
     val = None
     preferred_keys: List[str] = []
     for k in last.keys():
@@ -329,12 +303,10 @@ def ofr_fsi_latest() -> Tuple[Optional[str], Optional[float], str, str]:
             break
 
     if val is None:
-        # fallback: first numeric field excluding date-ish columns
         for k, v0 in last.items():
             if not k:
                 continue
-            lk = k.lower()
-            if "date" in lk:
+            if "date" in k.lower():
                 continue
             vv = safe_float(v0)
             if vv is not None:
@@ -342,13 +314,13 @@ def ofr_fsi_latest() -> Tuple[Optional[str], Optional[float], str, str]:
                 break
 
     if dd is None:
-        return None, val, "date_parse_fail", url
+        return None, val, "date_parse_fail", OFR_FSI_CSV_URL
     if val is None:
-        return dd, None, "na_or_parse_fail", url
-    return dd, val, "NA", url
+        return dd, None, "na_or_parse_fail", OFR_FSI_CSV_URL
+    return dd, val, "NA", OFR_FSI_CSV_URL
 
 # -------------------------
-# Data model
+# Data model / IO
 # -------------------------
 @dataclass
 class Point:
@@ -388,41 +360,73 @@ def write_latest_csv(path: str, points: List[Point]) -> None:
                 "notes": p.notes,
             })
 
+def normalize_history_preserve_order(hist: List[dict]) -> List[dict]:
+    """
+    Normalize all history data_date to YYYY-MM-DD and deduplicate by (series_id, data_date),
+    but DO NOT sort / reshuffle the whole file.
+
+    Strategy:
+    - Walk in original order
+    - Keep a map key -> index in output
+    - If key repeats, overwrite the existing row in-place (keeps position stable)
+    """
+    out: List[dict] = []
+    idx: Dict[Tuple[str, str], int] = {}
+
+    for r in hist:
+        if not isinstance(r, dict):
+            continue
+        sid = str(r.get("series_id") or "").strip()
+        dd = normalize_date(r.get("data_date"))
+        if not sid or not dd:
+            continue
+
+        rr = dict(r)
+        rr["series_id"] = sid
+        rr["data_date"] = dd
+
+        key = (sid, dd)
+        if key in idx:
+            out[idx[key]] = rr  # overwrite in place, keep order stable
+        else:
+            idx[key] = len(out)
+            out.append(rr)
+
+    if len(out) > MAX_HISTORY_ROWS:
+        out = out[-MAX_HISTORY_ROWS:]
+    return out
+
 def upsert_history(hist: List[dict], p: Point) -> List[dict]:
-    # unique by (series_id, data_date) AFTER normalization
+    # unique by (series_id, data_date); update in place without reordering
     if p.data_date == "NA":
         return hist
+    key = (p.series_id, p.data_date)
+
     for i in range(len(hist) - 1, -1, -1):
-        if hist[i].get("series_id") == p.series_id and hist[i].get("data_date") == p.data_date:
+        if hist[i].get("series_id") == key[0] and hist[i].get("data_date") == key[1]:
             hist[i] = p.__dict__
             return hist
+
     hist.append(p.__dict__)
     if len(hist) > MAX_HISTORY_ROWS:
         hist = hist[-MAX_HISTORY_ROWS:]
     return hist
 
-def normalize_history_inplace(hist: List[dict]) -> List[dict]:
+def last_history_value(hist: List[dict], series_id: str) -> Tuple[Optional[str], Optional[float]]:
     """
-    Normalize all history data_date to YYYY-MM-DD and deduplicate by (series_id, data_date),
-    keeping the last occurrence.
+    Return latest (by data_date) value for a series from history.
     """
-    m: Dict[Tuple[str, str], dict] = {}
+    best_dd: Optional[str] = None
+    best_v: Optional[float] = None
     for r in hist:
-        sid = str(r.get("series_id") or "").strip()
-        raw_dd = r.get("data_date")
-        dd = normalize_date(raw_dd)
-        if not sid or not dd:
+        if (r.get("series_id") or "") != series_id:
             continue
-        rr = dict(r)
-        rr["series_id"] = sid
-        rr["data_date"] = dd
-        m[(sid, dd)] = rr  # keep last
-    # stable-ish ordering by (data_date, series_id)
-    out = list(m.values())
-    out.sort(key=lambda x: (x.get("data_date", ""), x.get("series_id", "")))
-    if len(out) > MAX_HISTORY_ROWS:
-        out = out[-MAX_HISTORY_ROWS:]
-    return out
+        dd = normalize_date(r.get("data_date"))
+        v = safe_float(r.get("value"))
+        if dd and v is not None:
+            if best_dd is None or dd > best_dd:
+                best_dd, best_v = dd, v
+    return best_dd, best_v
 
 # -------------------------
 # Validation
@@ -444,7 +448,7 @@ def validate_data(out_dir: str) -> None:
         raise SystemExit("VALIDATE_DATA_FAIL: latest.json empty or not list")
 
     required = {"as_of_ts", "series_id", "data_date", "value", "source_url", "notes"}
-    for i, r in enumerate(latest[:100]):  # sample first 100
+    for i, r in enumerate(latest[:100]):
         if not isinstance(r, dict):
             raise SystemExit(f"VALIDATE_DATA_FAIL: latest.json row {i} not dict")
         missing = required - set(r.keys())
@@ -486,13 +490,6 @@ def _get_latest_value(points: List[Point], series_id: str) -> Optional[float]:
             return safe_float(p.value)
     return None
 
-def _get_latest_date(points: List[Point], series_id: str) -> Optional[str]:
-    for p in points:
-        if p.series_id == series_id:
-            dd = normalize_date(p.data_date)
-            return dd
-    return None
-
 def _collect_history_series(hist: List[dict], series_id: str) -> List[Tuple[str, float]]:
     out: List[Tuple[str, float]] = []
     for r in hist:
@@ -502,7 +499,8 @@ def _collect_history_series(hist: List[dict], series_id: str) -> List[Tuple[str,
         v = safe_float(r.get("value"))
         if dd and v is not None:
             out.append((dd, v))
-    # unique by date keep last, then sort
+
+    # unique by date keep last, then sort (compute only; file order preserved elsewhere)
     m: Dict[str, float] = {}
     for dd, v in out:
         m[dd] = v
@@ -516,21 +514,15 @@ def _ma(values: List[float]) -> Optional[float]:
     return sum(values) / float(len(values))
 
 def compute_regime_state(points: List[Point], hist: List[dict]) -> Tuple[str, str, List[str]]:
-    """
-    Returns (regime_state, confidence, reasons[])
-    OFR_FSI may be NA and is treated as normal degradation (should not lower confidence).
-    """
     reasons: List[str] = []
 
     vix = _get_latest_value(points, "VIX_PROXY")
     be10 = _get_latest_value(points, "BE10Y_PROXY")
 
-    # ---- panic axis (VIX) ----
     panic: Optional[str] = None
     if vix is None:
         reasons.append("panic=NA(VIX=NA)")
     else:
-        # simple buckets
         if vix >= 35:
             panic = "HIGH"
         elif vix >= 20:
@@ -539,7 +531,6 @@ def compute_regime_state(points: List[Point], hist: List[dict]) -> Tuple[str, st
             panic = "LOW"
         reasons.append(f"panic={panic}(VIX={vix})")
 
-    # ---- inflation expectation axis (BE10Y) ----
     infl: Optional[str] = None
     if be10 is None:
         reasons.append("inflation_expect=NA(BE10Y=NA)")
@@ -552,11 +543,7 @@ def compute_regime_state(points: List[Point], hist: List[dict]) -> Tuple[str, st
             infl = "LOW"
         reasons.append(f"inflation_expect={infl}(BE10Y={be10})")
 
-    # ---- credit axis via HYG/IEF MA60 deviation ----
     credit: Optional[str] = None
-    dev_pct: Optional[float] = None
-
-    # prefer the ratio we already compute
     ratio_now = _get_latest_value(points, "HYG_IEF_RATIO")
     if ratio_now is None:
         reasons.append("credit=NA(HYG_IEF_RATIO=NA)")
@@ -571,7 +558,6 @@ def compute_regime_state(points: List[Point], hist: List[dict]) -> Tuple[str, st
                 reasons.append("credit_dev_unavailable(ma60=NA)")
             else:
                 dev_pct = (ratio_now / ma60 - 1.0) * 100.0
-                # threshold: +/-1% from MA60 (Scheme A)
                 if dev_pct <= -1.0:
                     credit = "TIGHT"
                 elif dev_pct >= 1.0:
@@ -580,49 +566,36 @@ def compute_regime_state(points: List[Point], hist: List[dict]) -> Tuple[str, st
                     credit = "NEUTRAL"
                 reasons.append(f"credit={credit}(dev_pct={dev_pct:.2f}%)")
 
-    # ---- OFR FSI is optional ----
     ofr = _get_latest_value(points, "OFR_FSI")
     if ofr is None:
         reasons.append("OFR_FSI=NA (optional; normal degradation)")
     else:
         reasons.append(f"OFR_FSI=OK({ofr})")
 
-    # ---- decide regime ----
-    # If core missing, return UNKNOWN
     core_missing: List[str] = []
     if vix is None:
         core_missing.append("VIX_PROXY")
     if be10 is None:
         core_missing.append("BE10Y_PROXY")
-
     if core_missing:
         return "UNKNOWN_INSUFFICIENT_DATA", "LOW", [f"core_missing={','.join(core_missing)}"] + reasons
 
-    # Base mapping (keep it simple and auditable)
-    # Crisis if panic HIGH and (infl LOW or credit TIGHT)
     if panic == "HIGH" and ((infl == "LOW") or (credit == "TIGHT")):
         regime = "CRISIS_RISK"
-    # Overheating if infl HIGH and panic LOW and credit EASY/NEUTRAL
     elif infl == "HIGH" and panic == "LOW" and (credit in (None, "EASY", "NEUTRAL")):
         regime = "OVERHEATING"
-    # Stagflation-ish if infl HIGH and panic MED/HIGH
     elif infl == "HIGH" and panic in ("MED", "HIGH"):
         regime = "STAGFLATION_RISK"
-    # Defensive if panic MED and (credit TIGHT or infl LOW)
     elif panic == "MED" and (credit == "TIGHT" or infl == "LOW"):
         regime = "DEFENSIVE"
     else:
         regime = "NEUTRAL_MIXED"
 
-    # ---- confidence ----
-    # Start at MEDIUM if cores present; upgrade to HIGH only if credit is available.
     confidence = "MEDIUM"
     if credit is None:
-        # cap LOW if credit unavailable (per your rule)
         confidence = "LOW"
         reasons.append("confidence_cap=LOW(credit_unavailable)")
     else:
-        # if credit available and both axes are non-extreme -> MED/HIGH
         confidence = "HIGH" if (panic in ("LOW", "MED") and infl in ("LOW", "MID", "HIGH")) else "MEDIUM"
 
     return regime, confidence, reasons
@@ -668,27 +641,25 @@ def main() -> None:
                 "latest_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{LATEST_JSON_NAME}",
                 "latest_csv": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{LATEST_CSV_NAME}",
                 "history_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/{data_sha}/{out_dir}/{HISTORY_JSON_NAME}",
-                # IMPORTANT: manifest is usually read from main branch
                 "manifest_json": f"https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/refs/heads/main/{out_dir}/{MANIFEST_JSON_NAME}",
             },
         }
         write_json(manifest_path, manifest)
         return
 
-    # -------- generate data files --------
     as_of = as_of_ts_local_iso()
     today_local = datetime.now().astimezone().date().strftime("%Y-%m-%d")
 
-    # Load + normalize existing history (prevents duplication across date formats)
+    # Load + normalize history WITHOUT global re-ordering
     hist_raw = load_json_list(history_path)
-    hist = normalize_history_inplace(hist_raw)
+    hist = normalize_history_preserve_order(hist_raw)
 
     points: List[Point] = []
 
     def add(series_id: str, data_date: Optional[str], value: Optional[float], source_url: str, notes: str) -> None:
         dd = normalize_date(data_date) if data_date else None
         if dd is None or value is None:
-            points.append(Point(as_of, series_id, dd or "NA", "NA", source_url, notes if notes != "NA" else "missing"))
+            points.append(Point(as_of, series_id, dd or "NA", "NA", source_url, notes))
         else:
             points.append(Point(as_of, series_id, dd, f"{value}", source_url, notes))
 
@@ -701,17 +672,14 @@ def main() -> None:
     # Breakeven proxy only if same date
     be10 = None
     be_d = None
-    be_notes = "NA"
+    be_notes = "date_mismatch_or_na"
     if nom_v is not None and real_v is not None and nom_d and real_d:
         nd = normalize_date(nom_d)
         rd = normalize_date(real_d)
         if nd and rd and nd == rd:
             be10 = nom_v - real_v
             be_d = nd
-        else:
-            be_notes = "date_mismatch_or_na"
-    else:
-        be_notes = "date_mismatch_or_na"
+            be_notes = "NA"
     add("BE10Y_PROXY", be_d, be10, f"{nom_u} + {real_u}".strip(), be_notes)
 
     # VIX (CBOE primary, Stooq fallback)
@@ -730,51 +698,47 @@ def main() -> None:
     # Ratios (only if same date)
     hyg_ief_ratio = None
     ratio_date = None
-    ratio_notes = "NA"
+    ratio_notes = "date_mismatch_or_na"
     if hyg_c is not None and ief_c is not None and hyg_d and ief_d:
         hd = normalize_date(hyg_d)
         idd = normalize_date(ief_d)
         if hd and idd and hd == idd:
             hyg_ief_ratio = hyg_c / ief_c
             ratio_date = hd
-        else:
-            ratio_notes = "date_mismatch_or_na"
-    else:
-        ratio_notes = "date_mismatch_or_na"
+            ratio_notes = "NA"
     add("HYG_IEF_RATIO", ratio_date, hyg_ief_ratio, "https://stooq.com/", ratio_notes)
 
     tip_ief_ratio = None
     tip_ratio_date = None
-    tip_ratio_notes = "NA"
+    tip_ratio_notes = "date_mismatch_or_na"
     if tip_c is not None and ief_c is not None and tip_d and ief_d:
         td = normalize_date(tip_d)
         idd = normalize_date(ief_d)
         if td and idd and td == idd:
             tip_ief_ratio = tip_c / ief_c
             tip_ratio_date = td
-        else:
-            tip_ratio_notes = "date_mismatch_or_na"
-    else:
-        tip_ratio_notes = "date_mismatch_or_na"
+            tip_ratio_notes = "NA"
     add("TIP_IEF_RATIO", tip_ratio_date, tip_ief_ratio, "https://stooq.com/", tip_ratio_notes)
 
-    # OFR FSI (explicit CSV)
+    # OFR FSI (explicit CSV) + carry-forward on failure
     ofr_d, ofr_v, ofr_n, ofr_u = ofr_fsi_latest()
-    # keep as NA if failed; state machine treats as normal degradation
     if ofr_d and ofr_v is not None:
         add("OFR_FSI", ofr_d, ofr_v, ofr_u, ofr_n)
     else:
-        add("OFR_FSI", None, None, "https://www.financialresearch.gov/financial-stress-index/", "NO_PUBLIC_CSV_LINK (ignored; normal degradation)")
+        # try carry-forward from history
+        last_dd, last_v = last_history_value(hist, "OFR_FSI")
+        if last_dd and last_v is not None:
+            add("OFR_FSI", last_dd, last_v, OFR_FSI_CSV_URL, f"WARN:carry_forward_from={last_dd}")
+        else:
+            add("OFR_FSI", None, None, OFR_FSI_CSV_URL, f"fetch_fail:{ofr_n}")
 
     # Upsert current points into history (exclude NA dates)
     for p in points:
         if p.data_date != "NA":
             hist = upsert_history(hist, p)
 
-    # Compute regime and append meta points
+    # Compute regime and append meta points (DO NOT upsert these into history)
     regime_state, confidence, reasons = compute_regime_state(points, hist)
-
-    # data_date for regime outputs uses "today local"
     points.append(Point(as_of, "REGIME_STATE", today_local, regime_state, "NA", "NA"))
     points.append(Point(as_of, "REGIME_CONFIDENCE", today_local, confidence, "NA", "NA"))
     points.append(Point(as_of, "REGIME_REASONS", today_local, json.dumps(reasons, ensure_ascii=False), "NA", "NA"))
