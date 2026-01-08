@@ -11,9 +11,6 @@ permissions:
   contents: write
 
 concurrency:
-  # IMPORTANT:
-  # To make "wait instead of fail" work across workflows, ALL workflows that push to main
-  # should use the same concurrency.group value.
   group: repo-writer-main
   cancel-in-progress: false
 
@@ -47,7 +44,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Generate + sanity + commit + push (retry-safe, pinned, pretty manifest) [NO HEREDOC]
+      - name: Generate + sanity + commit + push (retry-safe, no-rebase, pinned, pretty manifest)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           REPO: ${{ github.repository }}
@@ -57,37 +54,66 @@ jobs:
           for attempt in 1 2 3; do
             echo "===== Attempt ${attempt} ====="
 
-            # Always restart from remote main (avoid local divergence)
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
 
-            # 1) Generate cache files (writes cache/latest.*, cache/history.*, cache/manifest.json, etc.)
+            # 1) Generate cache files
             python scripts/fred_cache.py
 
-            # 2) Sanity check BEFORE any commit/push
-            python -c "import json; from pathlib import Path; from collections import Counter; p=Path('cache/history.json'); h=json.loads(p.read_text(encoding='utf-8')) if p.exists() else []; print('history_records =', len(h)); keys=[]; per=Counter(); bad=0; \
-for r in h: \
-  sid=str(r.get('series_id','')); dd=str(r.get('data_date','')); \
-  if (not sid) or (not dd) or dd=='NA': bad+=1; continue; \
-  keys.append((sid,dd)); per[sid]+=1; \
-uniq=len(set(keys)); print('dedupe_ok =', uniq==len(keys)); print('bad_rows  =', bad); cap=400; too={sid:c for sid,c in per.items() if c>cap}; print('cap_per_series =', cap); print('cap_ok =', len(too)==0); \
-print('cap_violations_top10 =', sorted(too.items(), key=lambda x:x[1], reverse=True)[:10] if too else [])"
+            # 2) Sanity check BEFORE any commit/push (avoid pushing bad history)
+            python - <<'PY'
+            import json
+            from pathlib import Path
+            from collections import Counter
 
-            # 3) Stage cache/*
+            p = Path("cache/history.json")
+            h = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
+            print("history_records =", len(h))
+
+            keys = []
+            per_series = Counter()
+            bad = 0
+
+            for r in h:
+                sid = str(r.get("series_id", ""))
+                dd  = str(r.get("data_date", ""))
+                if (not sid) or (not dd) or dd == "NA":
+                    bad += 1
+                    continue
+                keys.append((sid, dd))
+                per_series[sid] += 1
+
+            uniq = len(set(keys))
+            print("dedupe_ok =", uniq == len(keys))
+            print("bad_rows  =", bad)
+
+            cap = 400
+            too_many = {sid: c for sid, c in per_series.items() if c > cap}
+            print("cap_per_series =", cap)
+            print("cap_ok =", len(too_many) == 0)
+            if too_many:
+                top = sorted(too_many.items(), key=lambda x: x[1], reverse=True)[:10]
+                print("cap_violations_top10 =", top)
+
+            # hard fail if violated
+            if uniq != len(keys) or bad > 0 or len(too_many) > 0:
+                raise SystemExit("Sanity check failed")
+            PY
+
+            # 3) Commit data files
             git add -A cache
             if git diff --cached --quiet; then
               echo "No changes in cache/. Exit."
               exit 0
             fi
 
-            # 4) Commit data files
             git commit -m "Update cache (latest + history)"
             DATA_SHA="$(git rev-parse HEAD)"
             export DATA_SHA
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 5) Patch manifest (pinned data URLs; manifest_json temp points to branch main) - PRETTY
+            # 4) Patch manifest (pin data urls) - PRETTY
             python -c "import json,os; from pathlib import Path; data_sha=os.environ['DATA_SHA']; repo=os.environ['REPO']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('generated_at_utc',None); obj.setdefault('as_of_ts',None); obj['data_commit_sha']=data_sha; base=f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache'; obj['pinned']={'latest_json':f'{base}/latest.json','history_json':f'{base}/history.json','latest_csv':f'{base}/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json'}; obj.pop('manifest_commit_sha', None); obj.pop('manifest_commit_sha_v1', None); p.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+\"\\n\",encoding='utf-8')"
 
             git add cache/manifest.json
@@ -99,7 +125,7 @@ print('cap_violations_top10 =', sorted(too.items(), key=lambda x:x[1], reverse=T
             export MANIFEST_SNAPSHOT_SHA
             echo "MANIFEST_SNAPSHOT_SHA=${MANIFEST_SNAPSHOT_SHA}"
 
-            # 6) Pin manifest_json to the snapshot commit - PRETTY
+            # 5) Pin manifest_json to snapshot - PRETTY
             python -c "import json,os; from pathlib import Path; repo=os.environ['REPO']; snap=os.environ['MANIFEST_SNAPSHOT_SHA']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('pinned',{}); obj['pinned']['manifest_json']=f'https://raw.githubusercontent.com/{repo}/{snap}/cache/manifest.json'; obj['manifest_commit_sha']=snap; obj['manifest_commit_sha_v1']=snap; p.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+\"\\n\",encoding='utf-8')"
 
             git add cache/manifest.json
@@ -111,11 +137,9 @@ print('cap_violations_top10 =', sorted(too.items(), key=lambda x:x[1], reverse=T
             export HEAD_SHA
             echo "HEAD_SHA=${HEAD_SHA}"
 
-            # 7) One push only. If it fails, retry from remote main.
+            # 6) Push once; if fails, retry from origin/main
             if git push origin HEAD:main; then
               echo "Push succeeded."
-
-              # Print pinned pointers (single-line JSON)
               python -c "import json,os; from datetime import datetime,timezone; repo=os.environ['REPO']; data_sha=os.environ['DATA_SHA']; snap=os.environ['MANIFEST_SNAPSHOT_SHA']; head=os.environ['HEAD_SHA']; out={'generated_at_utc':datetime.now(timezone.utc).replace(microsecond=0).isoformat(),'head_commit_sha':head,'data_commit_sha':data_sha,'manifest_commit_sha':snap,'pinned':{'latest_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json','history_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json','latest_csv':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/{snap}/cache/manifest.json'}}; print(json.dumps(out,ensure_ascii=False,separators=(',',':')))"
               exit 0
             fi
