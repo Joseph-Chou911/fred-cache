@@ -2,17 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-update_regime_state_cache.py  (v3.3.3)
+update_regime_state_cache.py  (v3.3.4)
 
 Supported modes:
 - default (Generate): fetch -> latest.json/latest.csv/history.json ; manifest.json written with PENDING (or keep existing pinned)
-- --validate-data: validate existing data files and exit
-- --write-manifest --data-commit-sha <SHA> [--repo <owner/repo>] [--branch <branch>] :
+- --validate-data: validate existing data files (latest/history/manifest) and exit
+- --validate-manifest: validate manifest.json only and exit
+- --write-manifest --data-commit-sha <SHA> [--repo <owner/repo>] :
     write manifest.json where pinned URLs point to the given data commit SHA (raw GitHub URLs)
-
-This file is designed to match GitHub workflow steps that call:
-- python scripts/update_regime_state_cache.py --validate-data --out-dir <dir>
-- python scripts/update_regime_state_cache.py --write-manifest --data-commit-sha <sha> --out-dir <dir> --repo <owner/repo>
 """
 
 import argparse
@@ -37,10 +34,9 @@ LATEST_CSV = os.path.join(OUT_DIR, "latest.csv")
 HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
 MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
 
-SCRIPT_VERSION = "regime_state_cache_v3_3_3"
+SCRIPT_VERSION = "regime_state_cache_v3_3_4"
 MAX_HISTORY_ROWS = 5000
 
-# Repo default (override via --repo)
 DEFAULT_REPO = "Joseph-Chou911/fred-cache"
 DEFAULT_BRANCH = "main"
 
@@ -51,13 +47,13 @@ SYMBOL_TIP = "tip.us"
 SYMBOL_VIX_FALLBACK = "^vix"
 STOOQ_URL_TMPL = "https://stooq.com/q/d/l/?s={sym}&d1={d1}&d2={d2}&i=d"
 
-# CBOE VIX official
+# CBOE VIX
 CBOE_VIX_CSV = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 
-# OFR FSI official
+# OFR FSI
 OFR_FSI_CSV = "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
 
-# US Treasury XML
+# US Treasury XML/CSV
 TREASURY_XML_TMPL = (
     "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
     "?data={data}&field_tdr_date_value_month={yyyymm}"
@@ -90,9 +86,6 @@ CREDIT_MIN_POINTS_MED_CAP = 60
 
 # carry-forward window for BE10Y_PROXY when missing
 BE_CARRY_FORWARD_MAX_AGE_DAYS = 7
-
-# treasury pairing tolerance if exact match missing
-TREASURY_PAIR_NEAREST_MAX_DAYS = 7
 
 # HTTP
 DEFAULT_TIMEOUT = 20
@@ -440,24 +433,6 @@ def fetch_treasury_10y(data_name: str, yyyymm: str) -> Tuple[Optional[Tuple[str,
         return None, csv_url, "csv_parse_fail"
 
 
-def nearest_match(target_dd: str, candidates: Dict[str, float], max_days: int) -> Optional[Tuple[str, float, int]]:
-    try:
-        t = datetime.strptime(target_dd, "%Y-%m-%d").date()
-    except Exception:
-        return None
-    best = None
-    for dd, v in candidates.items():
-        try:
-            d = datetime.strptime(dd, "%Y-%m-%d").date()
-        except Exception:
-            continue
-        delta = abs((t - d).days)
-        if delta <= max_days:
-            if best is None or delta < best[2] or (delta == best[2] and dd > best[0]):
-                best = (dd, v, delta)
-    return best
-
-
 # -------------------------
 # Market/OFR fetchers
 # -------------------------
@@ -741,7 +716,7 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     else:
         latest_rows.append({"as_of_ts": as_of_ts, "series_id": "REAL_10Y", "data_date": "NA", "value": "NA", "source_url": real_url, "notes": real_notes})
 
-    # BE10Y_PROXY (pairing)
+    # BE10Y_PROXY (simple pairing)
     be10y = None
     be_dd = None
     be_notes = "NA"
@@ -753,7 +728,6 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         if nd == rd:
             be_dd, be10y = nd, (nv - rv)
         else:
-            # with current fetchers we only have one point each; keep notes explicit
             be_notes = "date_mismatch_or_na"
 
     if be10y is not None and be_dd is not None:
@@ -850,7 +824,12 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     used_be_carry_from = None
     be_for_regime = be10y
     if be_for_regime is None:
-        found, _ = get_recent_history_value(history2, "BE10Y_PROXY", BE_CARRY_FORWARD_MAX_AGE_DAYS, datetime.now(TZ_TAIPEI).date().strftime("%Y-%m-%d"))
+        found, _ = get_recent_history_value(
+            history2,
+            "BE10Y_PROXY",
+            BE_CARRY_FORWARD_MAX_AGE_DAYS,
+            datetime.now(TZ_TAIPEI).date().strftime("%Y-%m-%d"),
+        )
         if found:
             dd, vv = found
             be_for_regime = vv
@@ -879,12 +858,11 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 # Manifest writing (pinned -> DATA_SHA)
 # -------------------------
 def _raw_url(repo: str, sha: str, path: str) -> str:
-    # pin to specific commit SHA
-    return f"https://raw.githubusercontent.com/{repo}/{sha}/{path}".replace("//", "//")
+    # Pin to specific commit SHA
+    return f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
 
 
 def write_manifest_pinned(out_dir: str, repo: str, data_sha: str) -> None:
-    # Paths inside repo (not local filesystem path)
     rel_latest_json = f"{out_dir}/latest.json"
     rel_latest_csv = f"{out_dir}/latest.csv"
     rel_history_json = f"{out_dir}/history.json"
@@ -932,13 +910,79 @@ def _validate_rows_schema(rows: Any, name: str) -> List[str]:
     return errs
 
 
+def _is_hex_sha(s: str) -> bool:
+    s = (s or "").strip()
+    return bool(re.fullmatch(r"[0-9a-fA-F]{7,40}", s))
+
+
+def validate_manifest_only(out_dir: str, repo_hint: Optional[str] = None) -> int:
+    manifest_path = os.path.join(out_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        print(f"missing_file: {manifest_path}", file=sys.stderr)
+        return 1
+
+    try:
+        m = load_json_file(manifest_path)
+    except Exception as e:
+        print(f"manifest.json parse error: {type(e).__name__}", file=sys.stderr)
+        return 1
+
+    if not isinstance(m, dict):
+        print("manifest.json: not an object", file=sys.stderr)
+        return 1
+
+    errs: List[str] = []
+
+    data_sha = str(m.get("data_commit_sha", "")).strip()
+    if data_sha.upper() in ("", "NA"):
+        errs.append("manifest.json: missing data_commit_sha")
+    elif data_sha.upper() == "PENDING":
+        errs.append("manifest.json: data_commit_sha is PENDING")
+    elif not _is_hex_sha(data_sha):
+        errs.append(f"manifest.json: invalid data_commit_sha={data_sha}")
+
+    pinned = m.get("pinned")
+    if not isinstance(pinned, dict):
+        errs.append("manifest.json: pinned is missing or not an object")
+        pinned = {}
+
+    need_keys = ["latest_json", "latest_csv", "history_json", "manifest_json"]
+    for k in need_keys:
+        v = str(pinned.get(k, "")).strip()
+        if not v:
+            errs.append(f"manifest.json: pinned.{k} missing")
+        elif v.upper() == "PENDING":
+            errs.append(f"manifest.json: pinned.{k} is PENDING")
+
+    # If we have a proper SHA, verify pinned URLs contain it (strong sanity check)
+    if _is_hex_sha(data_sha):
+        for k in need_keys:
+            v = str(pinned.get(k, "")).strip()
+            if v and v.upper() != "PENDING" and data_sha not in v:
+                errs.append(f"manifest.json: pinned.{k} does not include data_commit_sha")
+
+    # If repo_hint is provided, verify pinned URLs contain repo
+    if repo_hint:
+        for k in need_keys:
+            v = str(pinned.get(k, "")).strip()
+            if v and v.upper() != "PENDING" and repo_hint not in v:
+                errs.append(f"manifest.json: pinned.{k} does not include repo={repo_hint}")
+
+    if errs:
+        for e in errs:
+            print(e, file=sys.stderr)
+        return 1
+
+    print("OK: validate-manifest passed")
+    return 0
+
+
 def validate_data_files(out_dir: str) -> int:
     latest_path = os.path.join(out_dir, "latest.json")
     history_path = os.path.join(out_dir, "history.json")
     manifest_path = os.path.join(out_dir, "manifest.json")
 
     errs: List[str] = []
-
     for p in (latest_path, history_path, manifest_path):
         if not os.path.exists(p):
             errs.append(f"missing_file: {p}")
@@ -960,14 +1004,7 @@ def validate_data_files(out_dir: str) -> int:
         print(f"history.json parse error: {type(e).__name__}", file=sys.stderr)
         return 1
 
-    try:
-        manifest = load_json_file(manifest_path)
-        if not isinstance(manifest, dict):
-            errs.append("manifest.json: not an object")
-    except Exception as e:
-        print(f"manifest.json parse error: {type(e).__name__}", file=sys.stderr)
-        return 1
-
+    # schema checks
     errs.extend(_validate_rows_schema(latest, "latest"))
     errs.extend(_validate_rows_schema(history, "history"))
 
@@ -1011,7 +1048,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default=OUT_DIR)
-    parser.add_argument("--validate-data", action="store_true", help="Validate existing data files and exit.")
+    parser.add_argument("--validate-data", action="store_true", help="Validate latest/history/manifest files and exit.")
+    parser.add_argument("--validate-manifest", action="store_true", help="Validate manifest.json only and exit.")
     parser.add_argument("--write-manifest", action="store_true", help="Write manifest pinned to --data-commit-sha and exit.")
     parser.add_argument("--data-commit-sha", default=None, help="Commit SHA that contains the data files (for pinned manifest).")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="GitHub repo in owner/name form for pinned raw URLs.")
@@ -1023,6 +1061,9 @@ def main() -> int:
     LATEST_CSV = os.path.join(OUT_DIR, "latest.csv")
     HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
     MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
+
+    if args.validate_manifest:
+        return validate_manifest_only(OUT_DIR, repo_hint=args.repo)
 
     if args.validate_data:
         return validate_data_files(OUT_DIR)
@@ -1040,32 +1081,36 @@ def main() -> int:
     write_latest_csv(LATEST_CSV, latest_rows)
     write_json(HISTORY_JSON, history_rows)
 
-    # In generate mode, we do NOT know the commit SHA yet; keep manifest conservative.
-    # If file exists, keep pinned; otherwise write a placeholder manifest with PENDING.
+    # Generate mode: keep existing pinned manifest if present; else create placeholder (PENDING)
     if os.path.exists(MANIFEST_JSON):
         try:
             m = load_json_file(MANIFEST_JSON)
-            if isinstance(m, dict) and "pinned" in m and "data_commit_sha" in m and str(m.get("data_commit_sha","")).strip():
-                # keep existing pinned manifest (workflow will overwrite later in write-manifest step)
+            if isinstance(m, dict) and "pinned" in m and "data_commit_sha" in m and str(m.get("data_commit_sha", "")).strip():
                 pass
             else:
                 raise ValueError("manifest missing pinned")
         except Exception:
-            write_json(MANIFEST_JSON, {
+            write_json(
+                MANIFEST_JSON,
+                {
+                    "script_version": SCRIPT_VERSION,
+                    "generated_at_utc": utc_now_iso(),
+                    "as_of_ts": now_taipei_iso(),
+                    "data_commit_sha": "PENDING",
+                    "pinned": {"latest_json": "PENDING", "latest_csv": "PENDING", "history_json": "PENDING", "manifest_json": "PENDING"},
+                },
+            )
+    else:
+        write_json(
+            MANIFEST_JSON,
+            {
                 "script_version": SCRIPT_VERSION,
                 "generated_at_utc": utc_now_iso(),
                 "as_of_ts": now_taipei_iso(),
                 "data_commit_sha": "PENDING",
                 "pinned": {"latest_json": "PENDING", "latest_csv": "PENDING", "history_json": "PENDING", "manifest_json": "PENDING"},
-            })
-    else:
-        write_json(MANIFEST_JSON, {
-            "script_version": SCRIPT_VERSION,
-            "generated_at_utc": utc_now_iso(),
-            "as_of_ts": now_taipei_iso(),
-            "data_commit_sha": "PENDING",
-            "pinned": {"latest_json": "PENDING", "latest_csv": "PENDING", "history_json": "PENDING", "manifest_json": "PENDING"},
-        })
+            },
+        )
 
     return 0
 
