@@ -2,14 +2,19 @@
 # -*- coding: utf-8 -*-
 
 """
-update_regime_state_cache.py  (v3.3.4)
+update_regime_state_cache.py  (v3.3.5)
 
-Supported modes:
+Modes:
 - default (Generate): fetch -> latest.json/latest.csv/history.json ; manifest.json written with PENDING (or keep existing pinned)
 - --validate-data: validate existing data files (latest/history/manifest) and exit
 - --validate-manifest: validate manifest.json only and exit
 - --write-manifest --data-commit-sha <SHA> [--repo <owner/repo>] :
     write manifest.json where pinned URLs point to the given data commit SHA (raw GitHub URLs)
+
+v3.3.5 changes:
+- Add OFR_FSI carry-forward (similar to BE10Y carry-forward) when fetch fails.
+- If carry-forward is used, latest.json will show OFR_FSI with notes "WARN:carry_forward_from=YYYY-MM-DD"
+  and regime reasons will show carry-forward as well.
 """
 
 import argparse
@@ -34,7 +39,7 @@ LATEST_CSV = os.path.join(OUT_DIR, "latest.csv")
 HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
 MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
 
-SCRIPT_VERSION = "regime_state_cache_v3_3_4"
+SCRIPT_VERSION = "regime_state_cache_v3_3_5"
 MAX_HISTORY_ROWS = 5000
 
 DEFAULT_REPO = "Joseph-Chou911/fred-cache"
@@ -84,8 +89,9 @@ MA_WINDOW = 60
 CREDIT_MIN_POINTS_LOW_CAP = 20
 CREDIT_MIN_POINTS_MED_CAP = 60
 
-# carry-forward window for BE10Y_PROXY when missing
+# carry-forward windows
 BE_CARRY_FORWARD_MAX_AGE_DAYS = 7
+OFR_CARRY_FORWARD_MAX_AGE_DAYS = 14  # OFR 是週頻/不一定天天更新；給更寬鬆一點
 
 # HTTP
 DEFAULT_TIMEOUT = 20
@@ -572,6 +578,7 @@ def classify_regime(
     ofr_fsi: Optional[float],
     credit_points_used: int,
     used_be_carry_forward: Optional[str],
+    used_ofr_carry_forward: Optional[str],
 ) -> Tuple[str, str, List[str]]:
     reasons: List[str] = []
 
@@ -619,7 +626,10 @@ def classify_regime(
         reasons.append("OFR_FSI=NA (optional; normal degradation)")
     else:
         ofr_level = "HIGH" if ofr_fsi > 0 else ("MID" if ofr_fsi > -1 else "LOW")
-        reasons.append(f"OFR_FSI={ofr_level}({ofr_fsi:g})")
+        if used_ofr_carry_forward:
+            reasons.append(f"OFR_FSI={ofr_level}({ofr_fsi:g};carry_forward_from={used_ofr_carry_forward})")
+        else:
+            reasons.append(f"OFR_FSI={ofr_level}({ofr_fsi:g})")
 
     if vix is None:
         regime = "UNKNOWN_INSUFFICIENT_DATA"
@@ -716,12 +726,11 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     else:
         latest_rows.append({"as_of_ts": as_of_ts, "series_id": "REAL_10Y", "data_date": "NA", "value": "NA", "source_url": real_url, "notes": real_notes})
 
-    # BE10Y_PROXY (simple pairing)
+    # BE10Y_PROXY
     be10y = None
     be_dd = None
     be_notes = "NA"
     be_url = f"{nominal_url} + {real_url}"
-
     if nominal and real:
         nd, nv = nominal
         rd, rv = real
@@ -797,8 +806,10 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     else:
         latest_rows.append({"as_of_ts": as_of_ts, "series_id": "TIP_IEF_RATIO", "data_date": "NA", "value": "NA", "source_url": "https://stooq.com/", "notes": "ratio_date_mismatch_or_na"})
 
-    # OFR FSI
+    # OFR FSI (with carry-forward fallback)
     ofr_val = None
+    used_ofr_carry_from = None
+
     ofr_picked, ofr_url, ofr_notes = fetch_ofr_fsi_latest()
     if ofr_picked:
         dd, vv = ofr_picked
@@ -806,7 +817,20 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         latest_rows.append({"as_of_ts": as_of_ts, "series_id": "OFR_FSI", "data_date": dd, "value": f"{vv:g}", "source_url": ofr_url, "notes": ofr_notes})
         new_history_rows.append(dict(latest_rows[-1]))
     else:
-        latest_rows.append({"as_of_ts": as_of_ts, "series_id": "OFR_FSI", "data_date": "NA", "value": "NA", "source_url": ofr_url, "notes": ofr_notes})
+        # try carry-forward from history (audit-friendly fallback)
+        ref = datetime.now(TZ_TAIPEI).date().strftime("%Y-%m-%d")
+        found, _ = get_recent_history_value(history, "OFR_FSI", OFR_CARRY_FORWARD_MAX_AGE_DAYS, ref)
+        if found:
+            dd, vv = found
+            ofr_val = vv
+            used_ofr_carry_from = dd
+            latest_rows.append(
+                {"as_of_ts": as_of_ts, "series_id": "OFR_FSI", "data_date": dd, "value": f"{vv:g}", "source_url": ofr_url, "notes": f"WARN:carry_forward_from={dd}"}
+            )
+            # NOTE: 這裡也寫入 history，會用較新的 as_of_ts 覆蓋同日值（但會保留 carry-forward 註記）
+            new_history_rows.append(dict(latest_rows[-1]))
+        else:
+            latest_rows.append({"as_of_ts": as_of_ts, "series_id": "OFR_FSI", "data_date": "NA", "value": "NA", "source_url": ofr_url, "notes": ofr_notes})
 
     # Merge history before regime calcs
     history2 = upsert_today(history, new_history_rows)
@@ -842,6 +866,7 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         ofr_fsi=ofr_val,
         credit_points_used=credit_points_used,
         used_be_carry_forward=used_be_carry_from,
+        used_ofr_carry_forward=used_ofr_carry_from,
     )
 
     latest_rows.append({"as_of_ts": as_of_ts, "series_id": "REGIME_STATE", "data_date": today_iso, "value": regime, "source_url": "NA", "notes": "NA"})
@@ -858,7 +883,6 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 # Manifest writing (pinned -> DATA_SHA)
 # -------------------------
 def _raw_url(repo: str, sha: str, path: str) -> str:
-    # Pin to specific commit SHA
     return f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
 
 
@@ -954,14 +978,12 @@ def validate_manifest_only(out_dir: str, repo_hint: Optional[str] = None) -> int
         elif v.upper() == "PENDING":
             errs.append(f"manifest.json: pinned.{k} is PENDING")
 
-    # If we have a proper SHA, verify pinned URLs contain it (strong sanity check)
     if _is_hex_sha(data_sha):
         for k in need_keys:
             v = str(pinned.get(k, "")).strip()
             if v and v.upper() != "PENDING" and data_sha not in v:
                 errs.append(f"manifest.json: pinned.{k} does not include data_commit_sha")
 
-    # If repo_hint is provided, verify pinned URLs contain repo
     if repo_hint:
         for k in need_keys:
             v = str(pinned.get(k, "")).strip()
@@ -1004,11 +1026,9 @@ def validate_data_files(out_dir: str) -> int:
         print(f"history.json parse error: {type(e).__name__}", file=sys.stderr)
         return 1
 
-    # schema checks
     errs.extend(_validate_rows_schema(latest, "latest"))
     errs.extend(_validate_rows_schema(history, "history"))
 
-    # history duplicates: (series_id, data_date) unique when data_date != NA
     if isinstance(history, list):
         seen = set()
         for r in history:
@@ -1024,7 +1044,6 @@ def validate_data_files(out_dir: str) -> int:
             else:
                 seen.add(key)
 
-    # latest should contain regime fields
     if isinstance(latest, list):
         sids = {str(r.get("series_id", "")).strip() for r in latest if isinstance(r, dict)}
         for needed in ("REGIME_STATE", "REGIME_CONFIDENCE", "REGIME_REASONS"):
