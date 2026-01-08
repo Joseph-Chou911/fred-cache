@@ -2,20 +2,17 @@
 # -*- coding: utf-8 -*-
 
 """
-update_regime_state_cache.py  (v3.3.2)
+update_regime_state_cache.py  (v3.3.3)
 
-Modes:
-1) Generate (default): fetch sources -> write latest.json/latest.csv/history.json/manifest.json
-2) Validate (--validate-data): validate existing data files and exit (no fetching)
+Supported modes:
+- default (Generate): fetch -> latest.json/latest.csv/history.json ; manifest.json written with PENDING (or keep existing pinned)
+- --validate-data: validate existing data files and exit
+- --write-manifest --data-commit-sha <SHA> [--repo <owner/repo>] [--branch <branch>] :
+    write manifest.json where pinned URLs point to the given data commit SHA (raw GitHub URLs)
 
-Key features:
-- Treasury: XML primary (+ CSV fallback)
-- VIX: CBOE CSV primary (+ Stooq fallback)
-- OFR FSI: official CSV https://www.financialresearch.gov/financial-stress-index/data/fsi.csv
-- Credit axis: HYG/IEF ratio vs MA60 deviation
-- Regime output: REGIME_STATE + REGIME_CONFIDENCE + REGIME_REASONS
-- Date normalization + history dedup (avoid duplicates due to mixed date formats)
-- If BE10Y_PROXY missing in current run: allow carry-forward from recent history (<= 7 days) WITH explicit reasons
+This file is designed to match GitHub workflow steps that call:
+- python scripts/update_regime_state_cache.py --validate-data --out-dir <dir>
+- python scripts/update_regime_state_cache.py --write-manifest --data-commit-sha <sha> --out-dir <dir> --repo <owner/repo>
 """
 
 import argparse
@@ -32,7 +29,7 @@ import requests
 from xml.etree import ElementTree as ET
 
 # -------------------------
-# Paths / Outputs
+# Defaults (can be overridden by CLI)
 # -------------------------
 OUT_DIR = "regime_state_cache"
 LATEST_JSON = os.path.join(OUT_DIR, "latest.json")
@@ -40,19 +37,18 @@ LATEST_CSV = os.path.join(OUT_DIR, "latest.csv")
 HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
 MANIFEST_JSON = os.path.join(OUT_DIR, "manifest.json")
 
-# -------------------------
-# Config
-# -------------------------
-SCRIPT_VERSION = "regime_state_cache_v3_3_2"
-
+SCRIPT_VERSION = "regime_state_cache_v3_3_3"
 MAX_HISTORY_ROWS = 5000
+
+# Repo default (override via --repo)
+DEFAULT_REPO = "Joseph-Chou911/fred-cache"
+DEFAULT_BRANCH = "main"
 
 # Stooq symbols
 SYMBOL_HYG = "hyg.us"
 SYMBOL_IEF = "ief.us"
 SYMBOL_TIP = "tip.us"
 SYMBOL_VIX_FALLBACK = "^vix"
-
 STOOQ_URL_TMPL = "https://stooq.com/q/d/l/?s={sym}&d1={d1}&d2={d2}&i=d"
 
 # CBOE VIX official
@@ -61,13 +57,11 @@ CBOE_VIX_CSV = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_Hist
 # OFR FSI official
 OFR_FSI_CSV = "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
 
-# US Treasury XML (Drupal Views output)
+# US Treasury XML
 TREASURY_XML_TMPL = (
     "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
     "?data={data}&field_tdr_date_value_month={yyyymm}"
 )
-
-# US Treasury CSV fallback
 TREASURY_CSV_TMPL = (
     "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
     "{csv_name}/all/{yyyymm}?_format=csv&field_tdr_date_value_month={yyyymm}&type={type_name}"
@@ -84,10 +78,8 @@ TREASURY_REAL_TYPE = "daily_treasury_real_yield_curve"
 # Regime thresholds
 VIX_LOW_TH = 20.0
 VIX_HIGH_TH = 30.0
-
 BE_LOW_TH = 1.5
 BE_HIGH_TH = 3.0
-
 CREDIT_DEV_ON_TH_PCT = +1.0
 CREDIT_DEV_OFF_TH_PCT = -1.0
 
@@ -651,12 +643,7 @@ def classify_regime(
     if ofr_fsi is None:
         reasons.append("OFR_FSI=NA (optional; normal degradation)")
     else:
-        if ofr_fsi > 0:
-            ofr_level = "HIGH"
-        elif ofr_fsi > -1:
-            ofr_level = "MID"
-        else:
-            ofr_level = "LOW"
+        ofr_level = "HIGH" if ofr_fsi > 0 else ("MID" if ofr_fsi > -1 else "LOW")
         reasons.append(f"OFR_FSI={ofr_level}({ofr_fsi:g})")
 
     if vix is None:
@@ -760,26 +747,14 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     be_notes = "NA"
     be_url = f"{nominal_url} + {real_url}"
 
-    nominal_map: Dict[str, float] = {}
-    real_map: Dict[str, float] = {}
-    if nominal:
-        nominal_map[nominal[0]] = nominal[1]
-    if real:
-        real_map[real[0]] = real[1]
-
     if nominal and real:
         nd, nv = nominal
         rd, rv = real
         if nd == rd:
             be_dd, be10y = nd, (nv - rv)
         else:
-            near = nearest_match(nd, real_map, TREASURY_PAIR_NEAREST_MAX_DAYS)
-            if near:
-                rd2, rv2, delta = near
-                be_dd, be10y = nd, (nv - rv2)
-                be_notes = f"WARN:nearest_real_match(delta_days={delta},real_date={rd2})"
-            else:
-                be_notes = "date_mismatch_or_na"
+            # with current fetchers we only have one point each; keep notes explicit
+            be_notes = "date_mismatch_or_na"
 
     if be10y is not None and be_dd is not None:
         latest_rows.append({"as_of_ts": as_of_ts, "series_id": "BE10Y_PROXY", "data_date": be_dd, "value": f"{be10y:g}", "source_url": be_url, "notes": be_notes})
@@ -875,7 +850,7 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     used_be_carry_from = None
     be_for_regime = be10y
     if be_for_regime is None:
-        found, _ = get_recent_history_value(history2, "BE10Y_PROXY", BE_CARRY_FORWARD_MAX_AGE_DAYS, today_iso)
+        found, _ = get_recent_history_value(history2, "BE10Y_PROXY", BE_CARRY_FORWARD_MAX_AGE_DAYS, datetime.now(TZ_TAIPEI).date().strftime("%Y-%m-%d"))
         if found:
             dd, vv = found
             be_for_regime = vv
@@ -900,20 +875,34 @@ def build_rows() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     return latest_rows, history3
 
 
-def write_manifest() -> None:
+# -------------------------
+# Manifest writing (pinned -> DATA_SHA)
+# -------------------------
+def _raw_url(repo: str, sha: str, path: str) -> str:
+    # pin to specific commit SHA
+    return f"https://raw.githubusercontent.com/{repo}/{sha}/{path}".replace("//", "//")
+
+
+def write_manifest_pinned(out_dir: str, repo: str, data_sha: str) -> None:
+    # Paths inside repo (not local filesystem path)
+    rel_latest_json = f"{out_dir}/latest.json"
+    rel_latest_csv = f"{out_dir}/latest.csv"
+    rel_history_json = f"{out_dir}/history.json"
+    rel_manifest_json = f"{out_dir}/manifest.json"
+
     m = {
         "script_version": SCRIPT_VERSION,
         "generated_at_utc": utc_now_iso(),
         "as_of_ts": now_taipei_iso(),
-        "data_commit_sha": "PENDING",
+        "data_commit_sha": data_sha,
         "pinned": {
-            "latest_json": "PENDING",
-            "latest_csv": "PENDING",
-            "history_json": "PENDING",
-            "manifest_json": "PENDING",
+            "latest_json": _raw_url(repo, data_sha, rel_latest_json),
+            "latest_csv": _raw_url(repo, data_sha, rel_latest_csv),
+            "history_json": _raw_url(repo, data_sha, rel_history_json),
+            "manifest_json": _raw_url(repo, data_sha, rel_manifest_json),
         },
     }
-    write_json(MANIFEST_JSON, m)
+    write_json(os.path.join(out_dir, "manifest.json"), m)
 
 
 # -------------------------
@@ -982,10 +971,10 @@ def validate_data_files(out_dir: str) -> int:
     errs.extend(_validate_rows_schema(latest, "latest"))
     errs.extend(_validate_rows_schema(history, "history"))
 
-    # history duplicates: (series_id, data_date) must be unique when data_date != NA
+    # history duplicates: (series_id, data_date) unique when data_date != NA
     if isinstance(history, list):
         seen = set()
-        for i, r in enumerate(history):
+        for r in history:
             if not isinstance(r, dict):
                 continue
             sid = str(r.get("series_id", "")).strip()
@@ -1018,12 +1007,15 @@ def validate_data_files(out_dir: str) -> int:
 # Main
 # -------------------------
 def main() -> int:
-    # ✅ critical: global must be declared before first use inside main()
     global OUT_DIR, LATEST_JSON, LATEST_CSV, HISTORY_JSON, MANIFEST_JSON
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default=OUT_DIR)
     parser.add_argument("--validate-data", action="store_true", help="Validate existing data files and exit.")
+    parser.add_argument("--write-manifest", action="store_true", help="Write manifest pinned to --data-commit-sha and exit.")
+    parser.add_argument("--data-commit-sha", default=None, help="Commit SHA that contains the data files (for pinned manifest).")
+    parser.add_argument("--repo", default=DEFAULT_REPO, help="GitHub repo in owner/name form for pinned raw URLs.")
+    parser.add_argument("--branch", default=DEFAULT_BRANCH, help="Branch name (kept for compatibility; not used when pinning by SHA).")
     args = parser.parse_args()
 
     OUT_DIR = args.out_dir
@@ -1035,12 +1027,45 @@ def main() -> int:
     if args.validate_data:
         return validate_data_files(OUT_DIR)
 
-    latest_rows, history_rows = build_rows()
+    if args.write_manifest:
+        if not args.data_commit_sha or str(args.data_commit_sha).strip().upper() in ("", "NA", "PENDING"):
+            print("error: --write-manifest requires --data-commit-sha <SHA>", file=sys.stderr)
+            return 2
+        write_manifest_pinned(OUT_DIR, args.repo, args.data_commit_sha.strip())
+        print("OK: write-manifest done")
+        return 0
 
+    latest_rows, history_rows = build_rows()
     write_json(LATEST_JSON, latest_rows)
     write_latest_csv(LATEST_CSV, latest_rows)
     write_json(HISTORY_JSON, history_rows)
-    write_manifest()
+
+    # In generate mode, we do NOT know the commit SHA yet; keep manifest conservative.
+    # If file exists, keep pinned; otherwise write a placeholder manifest with PENDING.
+    if os.path.exists(MANIFEST_JSON):
+        try:
+            m = load_json_file(MANIFEST_JSON)
+            if isinstance(m, dict) and "pinned" in m and "data_commit_sha" in m and str(m.get("data_commit_sha","")).strip():
+                # keep existing pinned manifest (workflow will overwrite later in write-manifest step)
+                pass
+            else:
+                raise ValueError("manifest missing pinned")
+        except Exception:
+            write_json(MANIFEST_JSON, {
+                "script_version": SCRIPT_VERSION,
+                "generated_at_utc": utc_now_iso(),
+                "as_of_ts": now_taipei_iso(),
+                "data_commit_sha": "PENDING",
+                "pinned": {"latest_json": "PENDING", "latest_csv": "PENDING", "history_json": "PENDING", "manifest_json": "PENDING"},
+            })
+    else:
+        write_json(MANIFEST_JSON, {
+            "script_version": SCRIPT_VERSION,
+            "generated_at_utc": utc_now_iso(),
+            "as_of_ts": now_taipei_iso(),
+            "data_commit_sha": "PENDING",
+            "pinned": {"latest_json": "PENDING", "latest_csv": "PENDING", "history_json": "PENDING", "manifest_json": "PENDING"},
+        })
 
     return 0
 
