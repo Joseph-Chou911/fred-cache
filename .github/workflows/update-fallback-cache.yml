@@ -87,8 +87,8 @@ jobs:
             "script_version": script_version,
             "data_commit_sha": sha_data,
             "pinned": {
-              "latest_json": f"{base}/latest.json",
-              "latest_csv":  f"{base}/latest.csv",
+              "latest_json":  f"{base}/latest.json",
+              "latest_csv":   f"{base}/latest.csv",
               "history_json": f"{base}/history.json",
               # temporary; will be self-pinned by v2 step
               "manifest_json": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/fallback_cache/manifest.json"
@@ -117,6 +117,30 @@ jobs:
           p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
           PY
 
+          # Hard guard: ensure self-pin succeeded AND matches this run's MANIFEST_SHA
+          cat > /tmp/assert_self_pin.py <<'PY'
+          import json, os
+          from pathlib import Path
+
+          repo = os.environ["REPO"]
+          manifest_sha = os.environ["MANIFEST_SHA"].strip()
+
+          p = Path("fallback_cache/manifest.json")
+          obj = json.loads(p.read_text(encoding="utf-8"))
+
+          u = (obj.get("pinned") or {}).get("manifest_json", "")
+          expected = f"https://raw.githubusercontent.com/{repo}/{manifest_sha}/fallback_cache/manifest.json"
+
+          if u != expected:
+              raise SystemExit(f"FATAL: self-pin mismatch\n  got:      {u}\n  expected: {expected}")
+
+          msha = str(obj.get("manifest_commit_sha_v1", "")).strip()
+          if msha != manifest_sha:
+              raise SystemExit(f"FATAL: manifest_commit_sha_v1 mismatch\n  got:      {msha}\n  expected: {manifest_sha}")
+
+          print("OK: self-pin assertions passed.")
+          PY
+
           sleep_for () {
             case "$1" in
               1) sleep 2 ;;
@@ -133,28 +157,22 @@ jobs:
             git reset --hard origin/main
             git clean -fd
 
-            # 1) Generate files
+            # 1) Generate files (must produce latest.json/latest.csv/history.json/manifest.json best-effort)
             python scripts/update_fallback_cache.py
-
-            # 1.1) Ensure history.json exists (non-breaking baseline)
-            mkdir -p fallback_cache
-            if [ ! -f fallback_cache/history.json ]; then
-              echo "WARN: history.json not found. Creating empty baseline []."
-              printf "[]\n" > fallback_cache/history.json
-            fi
 
             # 2) Validate JSON
             python -m json.tool fallback_cache/latest.json > /dev/null
-            echo "latest.json valid."
             python -m json.tool fallback_cache/history.json > /dev/null
-            echo "history.json valid."
+            python -m json.tool fallback_cache/manifest.json > /dev/null
+            echo "latest/history/manifest JSON valid."
 
             # Required files check
             test -f fallback_cache/latest.json
             test -f fallback_cache/latest.csv
             test -f fallback_cache/history.json
+            test -f fallback_cache/manifest.json
 
-            # 3) Commit DATA
+            # 3) Commit DATA (latest + history)
             git add fallback_cache/latest.json fallback_cache/latest.csv fallback_cache/history.json
             if git diff --cached --quiet; then
               echo "No DATA changes to commit. Exit."
@@ -200,6 +218,9 @@ jobs:
             python /tmp/self_pin_manifest.py
             python -m json.tool fallback_cache/manifest.json > /dev/null
             echo "manifest self-pin valid."
+
+            # 5.1) HARD GUARD (must be pinned to this run's MANIFEST_SHA)
+            python /tmp/assert_self_pin.py
 
             git add fallback_cache/manifest.json
             if git diff --cached --quiet; then
