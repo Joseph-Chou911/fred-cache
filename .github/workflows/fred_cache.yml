@@ -11,6 +11,9 @@ permissions:
   contents: write
 
 concurrency:
+  # IMPORTANT:
+  # To make "wait instead of fail" work across workflows, ALL workflows that push to main
+  # should use the same concurrency.group value.
   group: repo-writer-main
   cancel-in-progress: false
 
@@ -62,43 +65,7 @@ jobs:
             python scripts/fred_cache.py
 
             # 2) Sanity check BEFORE any commit/push
-python - <<'PY'
-import json
-from pathlib import Path
-from collections import Counter
-
-p = Path("cache/history.json")
-h = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
-print("history_records =", len(h))
-
-keys = []
-per_series = Counter()
-bad = 0
-
-for r in h:
-    sid = str(r.get("series_id", ""))
-    dd  = str(r.get("data_date", ""))
-    if (not sid) or (not dd) or dd == "NA":
-        bad += 1
-        continue
-    keys.append((sid, dd))
-    per_series[sid] += 1
-
-uniq = len(set(keys))
-print("dedupe_ok =", uniq == len(keys))
-print("bad_rows  =", bad)
-
-cap = 400
-too_many = {sid: c for sid, c in per_series.items() if c > cap}
-print("cap_per_series =", cap)
-print("cap_ok =", len(too_many) == 0)
-if too_many:
-    top = sorted(too_many.items(), key=lambda x: x[1], reverse=True)[:10]
-    print("cap_violations_top10 =", top)
-
-if uniq != len(keys) or bad > 0 or len(too_many) > 0:
-    raise SystemExit("Sanity check failed")
-PY
+            python scripts/sanity_check_history.py
 
             # 3) Commit data files
             git add -A cache
