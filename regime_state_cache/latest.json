@@ -1,38 +1,38 @@
 [
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "NOMINAL_10Y",
-    "data_date": "2026-01-07",
-    "value": "4.15",
-    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601",
-    "notes": "NA"
+    "data_date": "NA",
+    "value": "NA",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202512",
+    "notes": "no_table_found"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "REAL_10Y",
-    "data_date": "2026-01-07",
-    "value": "1.88",
-    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601",
-    "notes": "NA"
+    "data_date": "NA",
+    "value": "NA",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202512",
+    "notes": "no_table_found"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "BE10Y_PROXY",
-    "data_date": "2026-01-07",
-    "value": "2.2700000000000005",
-    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601 + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601",
-    "notes": "NA"
+    "data_date": "NA",
+    "value": "NA",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202512 + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202512",
+    "notes": "date_mismatch_or_na"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "VIX_PROXY",
-    "data_date": "2026-01-06",
-    "value": "14.75",
+    "data_date": "2026-01-07",
+    "value": "15.38",
     "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "HYG_CLOSE",
     "data_date": "2026-01-07",
     "value": "80.895",
@@ -40,7 +40,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "IEF_CLOSE",
     "data_date": "2026-01-07",
     "value": "96.475",
@@ -48,7 +48,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "TIP_CLOSE",
     "data_date": "2026-01-07",
     "value": "110.25",
@@ -56,7 +56,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "HYG_IEF_RATIO",
     "data_date": "2026-01-07",
     "value": "0.8385073853329879",
@@ -64,7 +64,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "TIP_IEF_RATIO",
     "data_date": "2026-01-07",
     "value": "1.1427831044311998",
@@ -72,7 +72,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "OFR_FSI",
     "data_date": "2026-01-05",
     "value": "-2.712",
@@ -80,7 +80,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "REGIME_STATE",
     "data_date": "2026-01-08",
     "value": "NEUTRAL_MIXED",
@@ -88,18 +88,18 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "REGIME_CONFIDENCE",
     "data_date": "2026-01-08",
-    "value": "LOW",
+    "value": "MEDIUM",
     "source_url": "NA",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-08T09:04:06.813761+08:00",
+    "as_of_ts": "2026-01-08T10:14:45.735869+08:00",
     "series_id": "REGIME_REASONS",
     "data_date": "2026-01-08",
-    "value": "[\"panic=LOW(VIX=14.75)\", \"inflation_expect=MID(BE10Y=2.2700000000000005)\", \"credit_dev_unavailable(history_lt_60(2))\", \"OFR_FSI=OK(-2.712)\", \"confidence_cap=LOW(credit_unavailable)\"]",
+    "value": "[\"panic=LOW(VIX=15.38)\", \"inflation_expect=NA(BE10Y=NA)\", \"credit_ma60=0.8329681420359678\", \"credit_dev=NEUTRAL(+0.67%)\", \"OFR_FSI=OK(-2.712)\"]",
     "source_url": "NA",
     "notes": "NA"
   }
