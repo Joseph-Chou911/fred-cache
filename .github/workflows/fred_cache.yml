@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 20
     env:
       TIMEZONE: Asia/Taipei
+      # Keep history size bounded (per-series cap). Default in scripts is 400 if not set.
+      CAP_PER_SERIES: "400"
 
     steps:
       - name: Checkout
