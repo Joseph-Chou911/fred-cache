@@ -2,10 +2,20 @@
 # -*- coding: utf-8 -*-
 
 import json
+import os
 from pathlib import Path
 from collections import Counter
 
-CAP = 400
+def _env_int(name: str, default: int) -> int:
+    raw = (os.getenv(name, "") or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+CAP = _env_int("CAP_PER_SERIES", 400)
 HISTORY_PATH = Path("cache/history.json")
 
 def main() -> int:
