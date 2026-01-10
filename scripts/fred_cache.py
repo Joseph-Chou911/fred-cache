@@ -1,3 +1,4 @@
+# scripts/fred_cache.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -10,9 +11,11 @@ Outputs (under ./cache):
                            keep last CAP_PER_SERIES per series; JSON array (record-per-line) for citation
 - history_lite.json     : per series keep last BACKFILL_TARGET_VALID records; JSON array (record-per-line)
 - stats_latest.json     : precomputed metrics per series (ma/dev/z/p + ret1), to reduce prompt loading
+                          NOTE: stats_latest.json includes stats_policy.script_version for version governance
 - history.snapshot.json : snapshot of this run's latest.json
 - dq_state.json         : lightweight data-quality state
 - backfill_state.json   : per-series last_attempt bookkeeping (+ attempted_success flag)
+- manifest.json         : pinned URLs + policies + fs status
 
 Env:
 - FRED_API_KEY (required)
@@ -65,26 +68,41 @@ SERIES_IDS: List[str] = [
 
 CSV_FIELDNAMES = ["as_of_ts", "series_id", "data_date", "value", "source_url", "notes"]
 
+# -------------------------
 # network policy
+# -------------------------
 TIMEOUT_SECS = 20
 MAX_ATTEMPTS = 3
 BACKOFF_SCHEDULE = [2, 4, 8]
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
+# -------------------------
 # history policy
+# -------------------------
 CAP_PER_SERIES = 400  # keep last N records PER series (records keyed by (series_id, data_date))
 
+# -------------------------
 # backfill policy
+# -------------------------
 # - target_valid: we want >=252 VALID values for metrics
 # - fetch_limit: because some series have missing values, fetch more to achieve target_valid
 BACKFILL_TARGET_VALID = 252
 BACKFILL_FETCH_LIMIT = 420  # should be >= target_valid; 420 is a safe ceiling for daily series with gaps
 
-# stats policy
+# -------------------------
+# stats policy (version-governed)
+# -------------------------
 STATS_W60 = 60
 STATS_W252 = 252
 STATS_STD_DDOF = 0  # population std for z-score
 RET1_MODE = "delta"  # robust across negatives/rates; ret1 = latest - prev_valid
+
+PERCENTILE_METHOD = "P = count(x<=latest)/n * 100"
+WINDOW_DEFINITION = "last N valid points (not calendar days)"
+
+# IMPORTANT: bump this when you change any of:
+# - ddof, windows, percentile definition, window definition, ret1_mode
+STATS_SCRIPT_VERSION = "stats_v1_ddof0_w60_w252_pct_le_ret1_delta"
 
 # deterministic Taipei fallback
 TAIPEI_TZ_FALLBACK = timezone(timedelta(hours=8))
@@ -619,6 +637,7 @@ def _repo_slug() -> str:
 
 
 def _data_sha() -> str:
+    # In workflow you can set DATA_SHA post-commit; otherwise fallback to GITHUB_SHA
     return os.getenv("DATA_SHA") or os.getenv("GITHUB_SHA") or "NA"
 
 
@@ -737,9 +756,9 @@ def _compute_stats_for_series(
         },
         "calc_policy": {
             "std_ddof": STATS_STD_DDOF,
-            "percentile_method": "P = count(x<=latest)/n * 100",
+            "percentile_method": PERCENTILE_METHOD,
             "z_method": "z = (latest - mean(window)) / std(window)",
-            "window_definition": "last N valid points (not calendar days)",
+            "window_definition": WINDOW_DEFINITION,
         },
     }
 
@@ -752,7 +771,7 @@ def _compute_stats_for_series(
 
     # ret1 (delta) using last 2 valid points
     if len(points) >= 2:
-        prev_dd, prev_v = points[-2]
+        _prev_dd, prev_v = points[-2]
         out["metrics"]["ret1"] = latest_v - prev_v
     else:
         out["metrics"]["ret1"] = "NA"
@@ -807,19 +826,15 @@ def _compute_stats_for_series(
 
 def _compute_stats_latest(
     lite_rows: List[Dict[str, Any]],
-    latest_rows: List[Dict[str, str]],
+    as_of_ts: str,
+    data_commit_sha: str,
 ) -> Dict[str, Any]:
     """
     Create compact stats payload:
-    - meta
+    - meta (generated_at_utc/as_of_ts/data_commit_sha)
+    - stats_policy (version-governed)
     - series: dict keyed by series_id
     """
-    latest_by_sid: Dict[str, Dict[str, str]] = {}
-    for r in latest_rows:
-        sid = r.get("series_id", "")
-        if sid:
-            latest_by_sid[sid] = r
-
     series_out: Dict[str, Any] = {}
     for sid in SERIES_IDS:
         pts = _series_points_from_history_lite(lite_rows, sid)
@@ -832,9 +847,18 @@ def _compute_stats_latest(
 
     return {
         "generated_at_utc": _now_utc_iso(),
+        "as_of_ts": as_of_ts,
+        "data_commit_sha": data_commit_sha,
         "series_count": len(SERIES_IDS),
-        "windows": {"w60": STATS_W60, "w252": STATS_W252},
-        "ret1_mode": RET1_MODE,
+        "stats_policy": {
+            "script_version": STATS_SCRIPT_VERSION,
+            "windows": {"w60": STATS_W60, "w252": STATS_W252},
+            "std_ddof": STATS_STD_DDOF,
+            "ret1_mode": RET1_MODE,
+            "percentile_method": PERCENTILE_METHOD,
+            "window_definition": WINDOW_DEFINITION,
+            "source": "history_lite.json",
+        },
         "series": series_out,
     }
 
@@ -845,7 +869,7 @@ def main() -> int:
     generated_at_utc = _now_utc_iso()
 
     session = requests.Session()
-    session.headers.update({"User-Agent": "fred-cache/4.0"})
+    session.headers.update({"User-Agent": "fred-cache/4.1"})
 
     rows: List[Dict[str, str]] = []
 
@@ -923,9 +947,7 @@ def main() -> int:
     counts_before = _count_valid_per_series(existing_hist)
     dq["backfill"]["counts_before"] = counts_before
 
-    # 5) Self-heal backfill:
-    # - If have >= target_valid: skip
-    # - Else try to fetch_limit; if after merge reaches >= target_valid => mark attempted_success=True
+    # 5) Self-heal backfill
     backfill_rows: List[Dict[str, str]] = []
     for sid in SERIES_IDS:
         have = int(counts_before.get(sid, 0))
@@ -934,12 +956,9 @@ def main() -> int:
 
         if have >= BACKFILL_TARGET_VALID:
             dq["backfill"]["attempted"][sid] = "skip:already_enough"
-            # keep attempted_success if it was true before, else leave as is
-            if sid not in backfill_state["series"]:
-                backfill_state["series"][sid] = {"attempted_success": True, "last_attempt": {"at": as_of_ts, "note": "skip:already_enough"}}
-            else:
-                backfill_state["series"][sid]["attempted_success"] = True
-                backfill_state["series"][sid]["last_attempt"] = {"at": as_of_ts, "note": "skip:already_enough"}
+            backfill_state["series"].setdefault(sid, {})
+            backfill_state["series"][sid]["attempted_success"] = True
+            backfill_state["series"][sid]["last_attempt"] = {"at": as_of_ts, "note": "skip:already_enough", "have_after": have}
             continue
 
         # If previously "success" but still not enough, treat as stale and retry
@@ -976,12 +995,11 @@ def main() -> int:
     counts_after = _count_valid_per_series(merged_hist)
     dq["backfill"]["counts_after"] = counts_after
 
-    # 7) Update attempted_success + have_after in backfill_state (still keep only last_attempt + attempted_success)
+    # 7) Update attempted_success + have_after in backfill_state
     for sid in SERIES_IDS:
         have_after = int(counts_after.get(sid, 0))
         backfill_state["series"].setdefault(sid, {})
         backfill_state["series"][sid]["attempted_success"] = bool(have_after >= BACKFILL_TARGET_VALID)
-        # attach have_after into last_attempt (without inflating schema too much)
         la = backfill_state["series"][sid].get("last_attempt", {})
         if isinstance(la, dict):
             la["have_after"] = have_after
@@ -994,14 +1012,14 @@ def main() -> int:
     ok, st = _write_json_array_record_per_line(history_json, merged_hist)  # type: ignore[arg-type]
     dq["fs"]["history_json_write"] = st
 
-    # 9) Write history_lite.json (per series last target_valid) in same format
+    # 9) Write history_lite.json (per series last target_valid)
     lite_hist = _make_history_lite(merged_hist, per_series_keep=BACKFILL_TARGET_VALID)
     ok, st = _write_json_array_record_per_line(history_lite_json, lite_hist)  # type: ignore[arg-type]
     dq["fs"]["history_lite_json_write"] = st
 
-    # 10) Precompute stats_latest.json (compact)
-    # stats is computed from history_lite.json-like rows; use lite_hist (already list[dict])
-    stats_obj = _compute_stats_latest(lite_hist, rows)
+    # 10) Precompute stats_latest.json (compact + version-governed policy)
+    data_sha = _data_sha()
+    stats_obj = _compute_stats_latest(lite_hist, as_of_ts=as_of_ts, data_commit_sha=data_sha)
     ok, st = _write_json_compact(stats_latest_json, stats_obj)
     dq["fs"]["stats_latest_json_write"] = st
 
@@ -1041,9 +1059,12 @@ def main() -> int:
             "backfill_policy": "self_heal_until_target_valid; fetch_limit_used_when_needed",
         },
         "stats_policy": {
+            "script_version": STATS_SCRIPT_VERSION,
             "windows": {"w60": STATS_W60, "w252": STATS_W252},
             "std_ddof": STATS_STD_DDOF,
             "ret1_mode": RET1_MODE,
+            "percentile_method": PERCENTILE_METHOD,
+            "window_definition": WINDOW_DEFINITION,
             "source": "history_lite.json",
         },
         "fs_status": dq.get("fs", {}),
