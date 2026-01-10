@@ -6,7 +6,10 @@
       "target": 252,
       "kept_rows_from_api": 252,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 252
     },
     "VIXCLS": {
       "attempted_success": true,
@@ -14,7 +17,19 @@
       "target": 252,
       "kept_rows_from_api": 249,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 249,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 415,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "BAMLH0A0HYM2": {
       "attempted_success": true,
@@ -22,7 +37,19 @@
       "target": 252,
       "kept_rows_from_api": 249,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 249,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 2,
+      "last_count_raw": 420,
+      "last_count_kept": 415,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "DGS2": {
       "attempted_success": true,
@@ -30,7 +57,19 @@
       "target": 252,
       "kept_rows_from_api": 241,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 241,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 400,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "DGS10": {
       "attempted_success": true,
@@ -38,7 +77,19 @@
       "target": 252,
       "kept_rows_from_api": 241,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 241,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 400,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "DTWEXBGS": {
       "attempted_success": true,
@@ -46,7 +97,19 @@
       "target": 252,
       "kept_rows_from_api": 241,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 241,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 400,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "DCOILWTICO": {
       "attempted_success": true,
@@ -54,7 +117,19 @@
       "target": 252,
       "kept_rows_from_api": 240,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 240,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 399,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 399
     },
     "SP500": {
       "attempted_success": true,
@@ -62,7 +137,19 @@
       "target": 252,
       "kept_rows_from_api": 243,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 243,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 403,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "NASDAQCOM": {
       "attempted_success": true,
@@ -70,7 +157,19 @@
       "target": 252,
       "kept_rows_from_api": 243,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 243,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 403,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "DJIA": {
       "attempted_success": true,
@@ -78,7 +177,19 @@
       "target": 252,
       "kept_rows_from_api": 243,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 243,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 403,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "NFCINONFINLEVERAGE": {
       "attempted_success": true,
@@ -86,7 +197,10 @@
       "target": 252,
       "kept_rows_from_api": 252,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 252
     },
     "T10Y2Y": {
       "attempted_success": true,
@@ -94,7 +208,19 @@
       "target": 252,
       "kept_rows_from_api": 241,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 241,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 400,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     },
     "T10Y3M": {
       "attempted_success": true,
@@ -102,7 +228,19 @@
       "target": 252,
       "kept_rows_from_api": 241,
       "http_status": 200,
-      "attempts": 1
+      "attempts": 1,
+      "consecutive_no_progress": 0,
+      "last_attempt_at": "2026-01-10T11:57:32+08:00",
+      "have_before": 241,
+      "fetch_limit": 420,
+      "target_valid": 252,
+      "last_err": "NA",
+      "last_http_status": 200,
+      "last_attempts": 1,
+      "last_count_raw": 420,
+      "last_count_kept": 400,
+      "success_at": "2026-01-10T11:57:32+08:00",
+      "have_after": 400
     }
   }
 }
