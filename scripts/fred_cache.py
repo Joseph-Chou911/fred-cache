@@ -19,6 +19,7 @@ Env:
 - GITHUB_REPOSITORY (optional)
 - DATA_SHA (optional) commit sha that contains the data files (preferred for pinned)
 - GITHUB_SHA fallback
+- CAP_PER_SERIES (optional) cap history records per series; default 400; clamped to [60, 5000]
 """
 
 from __future__ import annotations
@@ -69,8 +70,28 @@ MAX_ATTEMPTS = 3
 BACKOFF_SCHEDULE = [2, 4, 8]
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
-# history policy
-CAP_PER_SERIES = 400  # keep last N records PER series (records keyed by (series_id, data_date))
+
+# -------------------------
+# history policy (env-aware)
+# -------------------------
+def _env_int(name: str, default: int, *, min_v: int, max_v: int) -> int:
+    """Read int env safely; clamp to [min_v, max_v]."""
+    raw = (os.getenv(name, "") or "").strip()
+    if not raw:
+        return default
+    try:
+        v = int(raw)
+    except ValueError:
+        return default
+    if v < min_v:
+        return min_v
+    if v > max_v:
+        return max_v
+    return v
+
+
+CAP_PER_SERIES = _env_int("CAP_PER_SERIES", 400, min_v=60, max_v=5000)
+# keep last N records PER series (records keyed by (series_id, data_date))
 
 # deterministic Taipei fallback
 TAIPEI_TZ_FALLBACK = timezone(timedelta(hours=8))
