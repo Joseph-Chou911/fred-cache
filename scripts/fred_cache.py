@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-FRED cache generator
-- per-series history upsert + cap_per_series
-- backfill self-heal to reach target_valid observations (effective rows)
-- audit-friendly outputs
+FRED cache generator (per-series history upsert + cap_per_series + backfill/self-heal + stats precompute)
 
 Outputs (under ./cache):
-- latest.csv
-- latest.json
-- history.json              : JSON array (record-per-line) for citation
-- history_lite.json         : per series keep last target_valid records, same format
-- history.snapshot.json
-- dq_state.json
-- backfill_state.json       : v2 (last_attempt only)
-- manifest.json
+- latest.csv            : one row per series_id (latest observation for this run)
+- latest.json           : array of records (same as latest.csv)
+- history.json          : rolling store, key=(series_id, data_date); same data_date reruns overwrite by as_of_ts
+                           keep last CAP_PER_SERIES per series; JSON array (record-per-line) for citation
+- history_lite.json     : per series keep last BACKFILL_TARGET_VALID records; JSON array (record-per-line)
+- stats_latest.json     : precomputed metrics per series (ma/dev/z/p + ret1), to reduce prompt loading
+- history.snapshot.json : snapshot of this run's latest.json
+- dq_state.json         : lightweight data-quality state
+- backfill_state.json   : per-series last_attempt bookkeeping (+ attempted_success flag)
 
 Env:
 - FRED_API_KEY (required)
 - TIMEZONE (optional, default "Asia/Taipei")
 - GITHUB_REPOSITORY (optional)
-- DATA_SHA (optional)
-- GITHUB_SHA (fallback)
+- DATA_SHA (optional) commit sha that contains the data files (preferred for pinned)
+- GITHUB_SHA fallback
 """
 
 from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 import re
 import sys
@@ -45,9 +44,6 @@ except ImportError:
     ZoneInfo = None  # type: ignore
 
 
-# -------------------------
-# Config
-# -------------------------
 BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 CACHE_DIR = Path("cache")
 
@@ -76,23 +72,24 @@ BACKOFF_SCHEDULE = [2, 4, 8]
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
 # history policy
-CAP_PER_SERIES = 400  # storage cap (per series)
-TARGET_VALID = 252    # statistical window target (effective rows)
-FETCH_LIMIT = 420     # request limit for backfill (to compensate missing values)
+CAP_PER_SERIES = 400  # keep last N records PER series (records keyed by (series_id, data_date))
 
-# backfill behavior
-MAX_NO_PROGRESS = 5   # if attempt but no progress for N times, pause attempts for that series
-COOLDOWN_RUNS = 3     # after hitting MAX_NO_PROGRESS, skip next N runs (simple throttle)
+# backfill policy
+# - target_valid: we want >=252 VALID values for metrics
+# - fetch_limit: because some series have missing values, fetch more to achieve target_valid
+BACKFILL_TARGET_VALID = 252
+BACKFILL_FETCH_LIMIT = 420  # should be >= target_valid; 420 is a safe ceiling for daily series with gaps
 
-BACKFILL_STATE_SCHEMA = "backfill_state_v2_last_attempt_only"
+# stats policy
+STATS_W60 = 60
+STATS_W252 = 252
+STATS_STD_DDOF = 0  # population std for z-score
+RET1_MODE = "delta"  # robust across negatives/rates; ret1 = latest - prev_valid
 
 # deterministic Taipei fallback
 TAIPEI_TZ_FALLBACK = timezone(timedelta(hours=8))
 
 
-# -------------------------
-# Time / Utils
-# -------------------------
 def _tzinfo():
     """Returns tzinfo. Must never crash; ultimate fallback is fixed +08:00 for Asia/Taipei."""
     tz_name = (os.getenv("TIMEZONE", "Asia/Taipei") or "").strip() or "Asia/Taipei"
@@ -119,20 +116,6 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _is_ymd(s: str) -> bool:
-    return isinstance(s, str) and len(s) == 10 and s[4] == "-" and s[7] == "-"
-
-
-def _redact_secrets(s: str) -> str:
-    if not s:
-        return s
-    api_key = os.getenv("FRED_API_KEY", "")
-    if api_key and api_key in s:
-        s = s.replace(api_key, "***REDACTED***")
-    s = re.sub(r"api_key=[^&\s]+", "api_key=***REDACTED***", s, flags=re.IGNORECASE)
-    return s
-
-
 def _safe_source_url(series_id: str, limit_n: int) -> str:
     """DO NOT include api_key in source_url."""
     params = {
@@ -147,9 +130,24 @@ def _safe_source_url(series_id: str, limit_n: int) -> str:
     return f"{BASE_URL}?{qs}"
 
 
-# -------------------------
-# HTTP
-# -------------------------
+def _safe_source_url_latest(series_id: str) -> str:
+    return _safe_source_url(series_id, 1)
+
+
+def _safe_source_url_backfill(series_id: str, limit_n: int) -> str:
+    return _safe_source_url(series_id, limit_n)
+
+
+def _redact_secrets(s: str) -> str:
+    if not s:
+        return s
+    api_key = os.getenv("FRED_API_KEY", "")
+    if api_key and api_key in s:
+        s = s.replace(api_key, "***REDACTED***")
+    s = re.sub(r"api_key=[^&\s]+", "api_key=***REDACTED***", s, flags=re.IGNORECASE)
+    return s
+
+
 @dataclass
 class FetchResult:
     record: Dict[str, str]
@@ -208,7 +206,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id, 1),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": "err:missing_api_key",
             },
             err="missing_api_key",
@@ -235,7 +233,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id, 1),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": notes,
             },
             warn=warn,
@@ -253,7 +251,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id, 1),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": "err:bad_json",
             },
             err="bad_json",
@@ -269,7 +267,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id, 1),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": "warn:no_observations",
             },
             warn="no_observations",
@@ -300,7 +298,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
             "series_id": series_id,
             "data_date": date,
             "value": value_out,
-            "source_url": _safe_source_url(series_id, 1),
+            "source_url": _safe_source_url_latest(series_id),
             "notes": notes,
         },
         warn=warn,
@@ -315,7 +313,7 @@ def fetch_recent_observations(
 ) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
     """
     Backfill a window of recent observations (desc), filter invalid values.
-    Returns (rows, meta) where meta is audit info.
+    Returns (rows, meta) where meta is audit info (attempts/status/err_code/count_raw/count_kept).
     """
     api_key = os.getenv("FRED_API_KEY", "")
 
@@ -327,7 +325,7 @@ def fetch_recent_observations(
         "err": "NA",
         "count_raw": 0,
         "count_kept": 0,
-        "source_url": _safe_source_url(series_id, limit_n),
+        "source_url": _safe_source_url_backfill(series_id, limit_n),
     }
 
     if not api_key or len(api_key) < 10:
@@ -379,7 +377,7 @@ def fetch_recent_observations(
                 "series_id": series_id,
                 "data_date": dd,
                 "value": vv,
-                "source_url": _safe_source_url(series_id, limit_n),
+                "source_url": _safe_source_url_backfill(series_id, limit_n),
                 "notes": note,
             }
         )
@@ -389,9 +387,6 @@ def fetch_recent_observations(
     return out, meta
 
 
-# -------------------------
-# File IO
-# -------------------------
 def _write_csv(path: Path, rows: List[Dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
@@ -432,7 +427,7 @@ def _write_json_pretty(path: Path, obj: Any) -> Tuple[bool, str]:
 def _write_json_array_record_per_line(path: Path, rows: List[Dict[str, Any]]) -> Tuple[bool, str]:
     """
     Write a JSON array but force each record on its own line (valid JSON).
-    This is the "可引用格式".
+    This is the "可引用格式": avoids one super-long line and makes line citations feasible.
     """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -503,9 +498,22 @@ def _load_json_dict(path: Path) -> Tuple[Dict[str, Any], str]:
     return {}, "warn:not_a_dict"
 
 
-# -------------------------
-# History ops
-# -------------------------
+def _is_ymd(s: str) -> bool:
+    return isinstance(s, str) and len(s) == 10 and s[4] == "-" and s[7] == "-"
+
+
+def _to_float(s: str) -> Optional[float]:
+    try:
+        if s is None:
+            return None
+        ss = str(s).strip()
+        if ss in {"", "NA", "."}:
+            return None
+        return float(ss)
+    except Exception:
+        return None
+
+
 def _upsert_history_per_series(
     existing: List[Dict[str, Any]],
     new_rows: List[Dict[str, str]],
@@ -513,8 +521,9 @@ def _upsert_history_per_series(
 ) -> List[Dict[str, str]]:
     """
     Key = (series_id, data_date)
-    Same key reruns overwrite by greatest as_of_ts.
-    Keep only last `cap_per_series` per series by (data_date, as_of_ts).
+    Same (series_id, data_date) reruns overwrite by keeping the greatest as_of_ts.
+    Keep only last `cap_per_series` records per series by (data_date, as_of_ts).
+    Output format stays list[dict].
     """
     best: Dict[Tuple[str, str], Dict[str, str]] = {}
 
@@ -584,6 +593,9 @@ def _count_valid_per_series(rows: List[Dict[str, Any]]) -> Dict[str, int]:
 
 
 def _make_history_lite(rows: List[Dict[str, str]], per_series_keep: int) -> List[Dict[str, str]]:
+    """
+    From full history list, keep only last `per_series_keep` records per series by (data_date, as_of_ts).
+    """
     by_series: Dict[str, List[Dict[str, str]]] = {}
     for r in rows:
         sid = r.get("series_id", "")
@@ -602,48 +614,6 @@ def _make_history_lite(rows: List[Dict[str, str]], per_series_keep: int) -> List
     return lite
 
 
-# -------------------------
-# Backfill state (v2)
-# -------------------------
-def _init_backfill_state_v2() -> Dict[str, Any]:
-    return {
-        "schema_version": BACKFILL_STATE_SCHEMA,
-        "series": {},
-    }
-
-
-def _normalize_backfill_state_v2(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Force v2 structure. If old state exists, we ignore old fields and keep only what's needed.
-    """
-    if not isinstance(raw, dict):
-        return _init_backfill_state_v2()
-
-    out = _init_backfill_state_v2()
-    series = raw.get("series")
-    if isinstance(series, dict):
-        for sid, s in series.items():
-            if not isinstance(sid, str):
-                continue
-            if not isinstance(s, dict):
-                continue
-            out["series"][sid] = {
-                "done": bool(s.get("done", False)),
-                "have_valid": int(s.get("have_valid", 0) or 0),
-                "target_valid": int(s.get("target_valid", TARGET_VALID) or TARGET_VALID),
-                "fetch_limit": int(s.get("fetch_limit", FETCH_LIMIT) or FETCH_LIMIT),
-                "last_attempt_at": str(s.get("last_attempt_at", "NA")),
-                "last_http_status": s.get("last_http_status", "NA"),
-                "last_attempts": s.get("last_attempts", "NA"),
-                "last_err": str(s.get("last_err", "NA")),
-                "last_count_raw": s.get("last_count_raw", "NA"),
-                "last_count_kept": s.get("last_count_kept", "NA"),
-                "consecutive_no_progress": int(s.get("consecutive_no_progress", 0) or 0),
-                "cooldown_runs_left": int(s.get("cooldown_runs_left", 0) or 0),
-            }
-    return out
-
-
 def _repo_slug() -> str:
     return os.getenv("GITHUB_REPOSITORY", "Joseph-Chou911/fred-cache")
 
@@ -658,6 +628,7 @@ def _pinned_urls(repo: str, sha: str) -> Dict[str, str]:
             "latest_json": "NA",
             "history_json": "NA",
             "history_lite_json": "NA",
+            "stats_latest_json": "NA",
             "latest_csv": "NA",
             "manifest_json": "NA",
         }
@@ -666,21 +637,215 @@ def _pinned_urls(repo: str, sha: str) -> Dict[str, str]:
         "latest_json": f"{base}/latest.json",
         "history_json": f"{base}/history.json",
         "history_lite_json": f"{base}/history_lite.json",
+        "stats_latest_json": f"{base}/stats_latest.json",
         "latest_csv": f"{base}/latest.csv",
         "manifest_json": f"{base}/manifest.json",
     }
 
 
-# -------------------------
-# Main
-# -------------------------
+def _mean(xs: List[float]) -> Optional[float]:
+    if not xs:
+        return None
+    return sum(xs) / float(len(xs))
+
+
+def _std(xs: List[float], ddof: int = 0) -> Optional[float]:
+    n = len(xs)
+    if n <= ddof or n == 0:
+        return None
+    mu = _mean(xs)
+    if mu is None:
+        return None
+    var = sum((x - mu) ** 2 for x in xs) / float(n - ddof)
+    if var < 0:
+        return None
+    return math.sqrt(var)
+
+
+def _percentile_le(latest: float, xs: List[float]) -> Optional[float]:
+    """
+    Percentile (0..100): proportion of values <= latest (inclusive).
+    """
+    if not xs:
+        return None
+    le = sum(1 for x in xs if x <= latest)
+    return 100.0 * float(le) / float(len(xs))
+
+
+def _series_points_from_history_lite(
+    lite_rows: List[Dict[str, Any]], series_id: str
+) -> List[Tuple[str, float]]:
+    """
+    Returns sorted list of (data_date, value_float) for a series, ascending by data_date.
+    Only keeps entries with valid YMD and float value.
+    """
+    pts: List[Tuple[str, float]] = []
+    for r in lite_rows:
+        if not isinstance(r, dict):
+            continue
+        sid = str(r.get("series_id", "")).strip()
+        if sid != series_id:
+            continue
+        dd = str(r.get("data_date", "")).strip()
+        if not _is_ymd(dd):
+            continue
+        vf = _to_float(str(r.get("value", "NA")))
+        if vf is None:
+            continue
+        pts.append((dd, vf))
+    pts.sort(key=lambda x: x[0])
+    # De-dup by data_date (should already be unique, but keep safe)
+    dedup: Dict[str, float] = {}
+    for dd, v in pts:
+        dedup[dd] = v
+    out = sorted(dedup.items(), key=lambda x: x[0])
+    return [(dd, float(v)) for dd, v in out]
+
+
+def _compute_stats_for_series(
+    series_id: str,
+    points: List[Tuple[str, float]],
+    source_url_latest: str,
+) -> Dict[str, Any]:
+    """
+    Compute:
+    - ma60, dev60, z60, p60 using last 60 valid points
+    - z252, p252 using last 252 valid points
+    - ret1 (delta) using last 2 valid points
+    Returns NA when insufficient points or std=0.
+    """
+    out: Dict[str, Any] = {
+        "series_id": series_id,
+        "latest": {
+            "data_date": "NA",
+            "value": "NA",
+            "source_url": source_url_latest,
+        },
+        "windows": {
+            "w60": {"n": 0, "start_date": "NA", "end_date": "NA"},
+            "w252": {"n": 0, "start_date": "NA", "end_date": "NA"},
+        },
+        "metrics": {
+            "ma60": "NA",
+            "dev60": "NA",
+            "z60": "NA",
+            "p60": "NA",
+            "z252": "NA",
+            "p252": "NA",
+            "ret1": "NA",
+            "ret1_mode": RET1_MODE,
+        },
+        "calc_policy": {
+            "std_ddof": STATS_STD_DDOF,
+            "percentile_method": "P = count(x<=latest)/n * 100",
+            "z_method": "z = (latest - mean(window)) / std(window)",
+            "window_definition": "last N valid points (not calendar days)",
+        },
+    }
+
+    if not points:
+        return out
+
+    latest_dd, latest_v = points[-1]
+    out["latest"]["data_date"] = latest_dd
+    out["latest"]["value"] = latest_v
+
+    # ret1 (delta) using last 2 valid points
+    if len(points) >= 2:
+        prev_dd, prev_v = points[-2]
+        out["metrics"]["ret1"] = latest_v - prev_v
+    else:
+        out["metrics"]["ret1"] = "NA"
+
+    # w60
+    if len(points) >= STATS_W60:
+        w60_pts = points[-STATS_W60:]
+        xs60 = [v for _dd, v in w60_pts]
+        out["windows"]["w60"]["n"] = len(xs60)
+        out["windows"]["w60"]["start_date"] = w60_pts[0][0]
+        out["windows"]["w60"]["end_date"] = w60_pts[-1][0]
+
+        mu60 = _mean(xs60)
+        sd60 = _std(xs60, ddof=STATS_STD_DDOF)
+        if mu60 is not None:
+            out["metrics"]["ma60"] = mu60
+        if sd60 is not None:
+            out["metrics"]["dev60"] = sd60
+
+        if mu60 is not None and sd60 is not None and sd60 != 0.0:
+            out["metrics"]["z60"] = (latest_v - mu60) / sd60
+        else:
+            out["metrics"]["z60"] = "NA"
+
+        p60 = _percentile_le(latest_v, xs60)
+        out["metrics"]["p60"] = p60 if p60 is not None else "NA"
+    else:
+        out["windows"]["w60"]["n"] = len(points)
+
+    # w252
+    if len(points) >= STATS_W252:
+        w252_pts = points[-STATS_W252:]
+        xs252 = [v for _dd, v in w252_pts]
+        out["windows"]["w252"]["n"] = len(xs252)
+        out["windows"]["w252"]["start_date"] = w252_pts[0][0]
+        out["windows"]["w252"]["end_date"] = w252_pts[-1][0]
+
+        mu252 = _mean(xs252)
+        sd252 = _std(xs252, ddof=STATS_STD_DDOF)
+        if mu252 is not None and sd252 is not None and sd252 != 0.0:
+            out["metrics"]["z252"] = (latest_v - mu252) / sd252
+        else:
+            out["metrics"]["z252"] = "NA"
+
+        p252 = _percentile_le(latest_v, xs252)
+        out["metrics"]["p252"] = p252 if p252 is not None else "NA"
+    else:
+        out["windows"]["w252"]["n"] = len(points)
+
+    return out
+
+
+def _compute_stats_latest(
+    lite_rows: List[Dict[str, Any]],
+    latest_rows: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    """
+    Create compact stats payload:
+    - meta
+    - series: dict keyed by series_id
+    """
+    latest_by_sid: Dict[str, Dict[str, str]] = {}
+    for r in latest_rows:
+        sid = r.get("series_id", "")
+        if sid:
+            latest_by_sid[sid] = r
+
+    series_out: Dict[str, Any] = {}
+    for sid in SERIES_IDS:
+        pts = _series_points_from_history_lite(lite_rows, sid)
+        src = _safe_source_url_latest(sid)
+        series_out[sid] = _compute_stats_for_series(
+            sid,
+            pts,
+            source_url_latest=src,
+        )
+
+    return {
+        "generated_at_utc": _now_utc_iso(),
+        "series_count": len(SERIES_IDS),
+        "windows": {"w60": STATS_W60, "w252": STATS_W252},
+        "ret1_mode": RET1_MODE,
+        "series": series_out,
+    }
+
+
 def main() -> int:
     tz = _tzinfo()
     as_of_ts = _now_iso(tz)
     generated_at_utc = _now_utc_iso()
 
     session = requests.Session()
-    session.headers.update({"User-Agent": "fred-cache/3.2"})
+    session.headers.update({"User-Agent": "fred-cache/4.0"})
 
     rows: List[Dict[str, str]] = []
 
@@ -691,16 +856,14 @@ def main() -> int:
         "series": {},
         "summary": {"ok": 0, "warn": 0, "err": 0},
         "backfill": {
-            "target_valid": TARGET_VALID,
-            "fetch_limit": FETCH_LIMIT,
+            "target_valid": BACKFILL_TARGET_VALID,
+            "fetch_limit": BACKFILL_FETCH_LIMIT,
             "attempted": {},
             "meta": {},
-            "counts_before": {},
-            "counts_after": {},
         },
     }
 
-    # 1) Fetch latest
+    # 1) Fetch latest (1 obs per series)
     for sid in SERIES_IDS:
         res = fetch_latest_obs(session, sid, as_of_ts)
         rec = {k: _redact_secrets(str(v)) for k, v in res.record.items()}
@@ -728,6 +891,7 @@ def main() -> int:
     latest_json = CACHE_DIR / "latest.json"
     history_json = CACHE_DIR / "history.json"
     history_lite_json = CACHE_DIR / "history_lite.json"
+    stats_latest_json = CACHE_DIR / "stats_latest.json"
     history_snapshot = CACHE_DIR / "history.snapshot.json"
     dq_state = CACHE_DIR / "dq_state.json"
     backfill_state_path = CACHE_DIR / "backfill_state.json"
@@ -750,142 +914,104 @@ def main() -> int:
     existing_hist, read_status = _load_json_list(history_json)
     dq["fs"]["history_json_read"] = read_status
 
+    # 4) Load backfill state (only last_attempt + attempted_success flag)
+    backfill_state, backfill_state_read = _load_json_dict(backfill_state_path)
+    dq["fs"]["backfill_state_read"] = backfill_state_read
+    if "series" not in backfill_state or not isinstance(backfill_state.get("series"), dict):
+        backfill_state = {"series": {}}
+
     counts_before = _count_valid_per_series(existing_hist)
     dq["backfill"]["counts_before"] = counts_before
 
-    # 4) Load backfill state (v2)
-    raw_state, st_read = _load_json_dict(backfill_state_path)
-    dq["fs"]["backfill_state_read"] = st_read
-    state = _normalize_backfill_state_v2(raw_state)
-    series_state: Dict[str, Any] = state.get("series", {})
-    if not isinstance(series_state, dict):
-        series_state = {}
-        state["series"] = series_state
-
-    # 5) Decide / attempt backfill
+    # 5) Self-heal backfill:
+    # - If have >= target_valid: skip
+    # - Else try to fetch_limit; if after merge reaches >= target_valid => mark attempted_success=True
     backfill_rows: List[Dict[str, str]] = []
-    attempt_meta: Dict[str, Dict[str, Any]] = {}
-
     for sid in SERIES_IDS:
-        have_before = int(counts_before.get(sid, 0))
+        have = int(counts_before.get(sid, 0))
+        series_state = backfill_state["series"].get(sid, {})
+        attempted_success = bool(series_state.get("attempted_success", False))
 
-        # If already enough, skip (hard rule, independent of state flags)
-        if have_before >= TARGET_VALID:
+        if have >= BACKFILL_TARGET_VALID:
             dq["backfill"]["attempted"][sid] = "skip:already_enough"
+            # keep attempted_success if it was true before, else leave as is
+            if sid not in backfill_state["series"]:
+                backfill_state["series"][sid] = {"attempted_success": True, "last_attempt": {"at": as_of_ts, "note": "skip:already_enough"}}
+            else:
+                backfill_state["series"][sid]["attempted_success"] = True
+                backfill_state["series"][sid]["last_attempt"] = {"at": as_of_ts, "note": "skip:already_enough"}
             continue
 
-        # cooldown / no-progress throttle (optional but useful)
-        s = series_state.get(sid, {}) if isinstance(series_state.get(sid, {}), dict) else {}
-        cooldown_left = int(s.get("cooldown_runs_left", 0) or 0)
-        if cooldown_left > 0:
-            s["cooldown_runs_left"] = cooldown_left - 1
-            series_state[sid] = s
-            dq["backfill"]["attempted"][sid] = f"skip:cooldown_runs_left={cooldown_left}"
-            continue
+        # If previously "success" but still not enough, treat as stale and retry
+        if attempted_success and have < BACKFILL_TARGET_VALID:
+            dq["backfill"]["attempted"][sid] = f"retry:stale_success_flag (have={have} < {BACKFILL_TARGET_VALID})"
+        else:
+            dq["backfill"]["attempted"][sid] = f"attempt (have={have} < {BACKFILL_TARGET_VALID})"
 
-        # If this series has been stuck too long, enter cooldown
-        cnp = int(s.get("consecutive_no_progress", 0) or 0)
-        if cnp >= MAX_NO_PROGRESS:
-            s["cooldown_runs_left"] = COOLDOWN_RUNS
-            series_state[sid] = s
-            dq["backfill"]["attempted"][sid] = f"skip:too_many_no_progress (cnp={cnp})"
-            continue
-
-        # Attempt backfill using FETCH_LIMIT (not just 252)
-        bf_rows, meta = fetch_recent_observations(session, sid, as_of_ts, FETCH_LIMIT)
-        attempt_meta[sid] = meta
+        bf_rows, meta = fetch_recent_observations(session, sid, as_of_ts, BACKFILL_FETCH_LIMIT)
         dq["backfill"]["meta"][sid] = meta
 
-        if len(bf_rows) > 0:
-            backfill_rows.extend(bf_rows)
-            dq["backfill"]["attempted"][sid] = "attempted:true"
-        else:
-            dq["backfill"]["attempted"][sid] = f"attempted:false (err={meta.get('err','NA')})"
+        # record last_attempt (only)
+        backfill_state["series"].setdefault(sid, {})
+        backfill_state["series"][sid].setdefault("attempted_success", False)
+        backfill_state["series"][sid]["last_attempt"] = {
+            "at": as_of_ts,
+            "have_before": have,
+            "fetch_limit": BACKFILL_FETCH_LIMIT,
+            "target_valid": BACKFILL_TARGET_VALID,
+            "err": meta.get("err", "NA"),
+            "http_status": meta.get("http_status", "NA"),
+            "attempts": meta.get("attempts", "NA"),
+            "count_raw": meta.get("count_raw", "NA"),
+            "count_kept": meta.get("count_kept", "NA"),
+        }
 
-    # 6) Merge: existing + backfill + latest
+        if bf_rows:
+            backfill_rows.extend(bf_rows)
+
+    # 6) Merge: existing + backfill + this-run latest rows
     merged_hist = _upsert_history_per_series(existing_hist, backfill_rows, cap_per_series=CAP_PER_SERIES)
     merged_hist = _upsert_history_per_series(merged_hist, rows, cap_per_series=CAP_PER_SERIES)
 
     counts_after = _count_valid_per_series(merged_hist)
     dq["backfill"]["counts_after"] = counts_after
 
-    # 7) Update backfill_state v2 using *post-merge* counts (authoritative)
+    # 7) Update attempted_success + have_after in backfill_state (still keep only last_attempt + attempted_success)
     for sid in SERIES_IDS:
-        have_before = int(counts_before.get(sid, 0))
         have_after = int(counts_after.get(sid, 0))
-        done = have_after >= TARGET_VALID
+        backfill_state["series"].setdefault(sid, {})
+        backfill_state["series"][sid]["attempted_success"] = bool(have_after >= BACKFILL_TARGET_VALID)
+        # attach have_after into last_attempt (without inflating schema too much)
+        la = backfill_state["series"][sid].get("last_attempt", {})
+        if isinstance(la, dict):
+            la["have_after"] = have_after
+            backfill_state["series"][sid]["last_attempt"] = la
 
-        s = series_state.get(sid, {}) if isinstance(series_state.get(sid, {}), dict) else {}
-        prev_cnp = int(s.get("consecutive_no_progress", 0) or 0)
-
-        attempted_this_run = sid in attempt_meta
-        progress = have_after - have_before
-
-        if attempted_this_run:
-            if progress <= 0:
-                new_cnp = prev_cnp + 1
-            else:
-                new_cnp = 0
-        else:
-            new_cnp = prev_cnp  # unchanged
-
-        # If we reached target, reset counters (keep it calm)
-        if done:
-            new_cnp = 0
-            s["cooldown_runs_left"] = 0
-
-        # Always record authoritative snapshot fields
-        s["done"] = bool(done)
-        s["have_valid"] = int(have_after)
-        s["target_valid"] = int(TARGET_VALID)
-        s["fetch_limit"] = int(FETCH_LIMIT)
-        s["consecutive_no_progress"] = int(new_cnp)
-        s["cooldown_runs_left"] = int(s.get("cooldown_runs_left", 0) or 0)
-
-        # Only update last_attempt_* if attempted this run
-        if attempted_this_run:
-            meta = attempt_meta[sid]
-            s["last_attempt_at"] = as_of_ts
-            s["last_http_status"] = meta.get("http_status", "NA")
-            s["last_attempts"] = meta.get("attempts", "NA")
-            s["last_err"] = meta.get("err", "NA")
-            s["last_count_raw"] = meta.get("count_raw", "NA")
-            s["last_count_kept"] = meta.get("count_kept", "NA")
-
-        # Ensure keys exist even before first attempt
-        s.setdefault("last_attempt_at", "NA")
-        s.setdefault("last_http_status", "NA")
-        s.setdefault("last_attempts", "NA")
-        s.setdefault("last_err", "NA")
-        s.setdefault("last_count_raw", "NA")
-        s.setdefault("last_count_kept", "NA")
-
-        series_state[sid] = s
-
-    state["schema_version"] = BACKFILL_STATE_SCHEMA
-    state["as_of_ts"] = as_of_ts
-    state["generated_at_utc"] = generated_at_utc
-    state["target_valid"] = TARGET_VALID
-    state["fetch_limit"] = FETCH_LIMIT
-
-    ok, st = _write_json_pretty(backfill_state_path, state)
+    ok, st = _write_json_pretty(backfill_state_path, backfill_state)
     dq["fs"]["backfill_state_write"] = st
 
-    # 8) Write history outputs
+    # 8) Write history.json in record-per-line JSON array
     ok, st = _write_json_array_record_per_line(history_json, merged_hist)  # type: ignore[arg-type]
     dq["fs"]["history_json_write"] = st
 
-    lite_hist = _make_history_lite(merged_hist, per_series_keep=TARGET_VALID)
+    # 9) Write history_lite.json (per series last target_valid) in same format
+    lite_hist = _make_history_lite(merged_hist, per_series_keep=BACKFILL_TARGET_VALID)
     ok, st = _write_json_array_record_per_line(history_lite_json, lite_hist)  # type: ignore[arg-type]
     dq["fs"]["history_lite_json_write"] = st
 
-    # 9) Write dq_state.json (compact)
+    # 10) Precompute stats_latest.json (compact)
+    # stats is computed from history_lite.json-like rows; use lite_hist (already list[dict])
+    stats_obj = _compute_stats_latest(lite_hist, rows)
+    ok, st = _write_json_compact(stats_latest_json, stats_obj)
+    dq["fs"]["stats_latest_json_write"] = st
+
+    # 11) Write dq_state.json
     ok, st = _write_json_compact(dq_state, dq)
+    dq["fs"]["dq_state_write"] = st
     if not ok:
         print(f"[WARN] failed to write dq_state.json: {st}", file=sys.stderr)
-    dq["fs"]["dq_state_write"] = st
 
-    # 10) Write manifest.json (pretty)
+    # 12) Write manifest.json (pretty)
     repo = _repo_slug()
     sha = _data_sha()
 
@@ -899,6 +1025,7 @@ def main() -> int:
             "latest_json": str(latest_json.as_posix()),
             "history_json": str(history_json.as_posix()),
             "history_lite_json": str(history_lite_json.as_posix()),
+            "stats_latest_json": str(stats_latest_json.as_posix()),
             "history_snapshot_json": str(history_snapshot.as_posix()),
             "dq_state_json": str(dq_state.as_posix()),
             "backfill_state_json": str(backfill_state_path.as_posix()),
@@ -910,13 +1037,14 @@ def main() -> int:
             "cap_per_series": CAP_PER_SERIES,
             "ordering": "series_id asc, data_date asc, as_of_ts asc",
             "history_json_format": "json_array_record_per_line",
-            "history_lite_target_per_series": TARGET_VALID,
-            "backfill_policy": {
-                "target_valid": TARGET_VALID,
-                "fetch_limit": FETCH_LIMIT,
-                "no_progress_guard": {"max_no_progress": MAX_NO_PROGRESS, "cooldown_runs": COOLDOWN_RUNS},
-                "state_schema": BACKFILL_STATE_SCHEMA,
-            },
+            "history_lite_target_per_series": BACKFILL_TARGET_VALID,
+            "backfill_policy": "self_heal_until_target_valid; fetch_limit_used_when_needed",
+        },
+        "stats_policy": {
+            "windows": {"w60": STATS_W60, "w252": STATS_W252},
+            "std_ddof": STATS_STD_DDOF,
+            "ret1_mode": RET1_MODE,
+            "source": "history_lite.json",
         },
         "fs_status": dq.get("fs", {}),
     }
@@ -926,7 +1054,8 @@ def main() -> int:
         print(f"[WARN] failed to write manifest.json: {st}", file=sys.stderr)
 
     print(
-        f"Wrote {latest_csv} + {latest_json} + {history_json} + {history_lite_json} + "
+        "Wrote "
+        f"{latest_csv} + {latest_json} + {history_json} + {history_lite_json} + {stats_latest_json} + "
         f"{history_snapshot} + {dq_state} + {backfill_state_path} + {manifest}"
     )
     return 0
