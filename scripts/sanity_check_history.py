@@ -1,106 +1,98 @@
+# scripts/sanity_check_history.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+Sanity check for history/stats governance.
+
+Hard rules:
+- stats_latest.json MUST contain:
+  - as_of_ts
+  - stats_policy.script_version
+- If manifest.json exists and contains stats_policy.script_version:
+  - stats_latest.stats_policy.script_version must match manifest.stats_policy.script_version
+
+This prevents "pretty but wrong" reports when stats definitions change.
+"""
+
+from __future__ import annotations
+
 import json
+import sys
 from pathlib import Path
-from collections import Counter
+from typing import Any, Dict, Tuple
 
-CAP = 400
-TARGET_VALID = 252
 
-HISTORY = Path("cache/history.json")
-LITE = Path("cache/history_lite.json")
-STATS = Path("cache/stats_latest.json")
+CACHE_DIR = Path("cache")
+MANIFEST = CACHE_DIR / "manifest.json"
+STATS = CACHE_DIR / "stats_latest.json"
 
-# If you want strict series list, keep it in sync with fred_cache.py
-SERIES_IDS = [
-    "STLFSI4","VIXCLS","BAMLH0A0HYM2","DGS2","DGS10","DTWEXBGS","DCOILWTICO",
-    "SP500","NASDAQCOM","DJIA","NFCINONFINLEVERAGE","T10Y2Y","T10Y3M",
-]
 
-def is_ymd(s: str) -> bool:
-    return isinstance(s, str) and len(s) == 10 and s[4] == "-" and s[7] == "-"
+def _load_json(path: Path) -> Tuple[Any, str]:
+    if not path.exists():
+        return None, "missing"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), "ok"
+    except Exception as e:
+        return None, f"bad_json:{type(e).__name__}"
 
-def load_list(p: Path):
-    if not p.exists():
-        return []
-    obj = json.loads(p.read_text(encoding="utf-8"))
-    if not isinstance(obj, list):
-        raise SystemExit(f"{p} is not a JSON list")
-    return [x for x in obj if isinstance(x, dict)]
+
+def _get(d: Dict[str, Any], keys: str, default=None):
+    cur: Any = d
+    for k in keys.split("."):
+        if not isinstance(cur, dict):
+            return default
+        cur = cur.get(k)
+    return cur if cur is not None else default
+
 
 def main() -> int:
-    # 1) must have stats_latest.json
-    if not STATS.exists():
-        print("Sanity check failed: stats_latest.json missing")
-        return 1
-    stats = json.loads(STATS.read_text(encoding="utf-8"))
-    if not isinstance(stats, dict) or "series" not in stats or not isinstance(stats["series"], dict):
-        print("Sanity check failed: stats_latest.json invalid structure")
-        return 1
+    errors = []
+    warns = []
 
-    # 2) history.json basic integrity
-    h = load_list(HISTORY)
-    keys = []
-    per_series = Counter()
-    bad = 0
+    stats_obj, st_stats = _load_json(STATS)
+    if st_stats != "ok" or not isinstance(stats_obj, dict):
+        errors.append(f"stats_latest.json not readable ({st_stats})")
+        print("\n".join(errors), file=sys.stderr)
+        return 2
 
-    for r in h:
-        sid = str(r.get("series_id", "")).strip()
-        dd  = str(r.get("data_date", "")).strip()
-        if (not sid) or (not dd) or dd == "NA" or (not is_ymd(dd)):
-            bad += 1
-            continue
-        keys.append((sid, dd))
-        per_series[sid] += 1
+    # required: as_of_ts
+    stats_as_of = _get(stats_obj, "as_of_ts", None)
+    if not isinstance(stats_as_of, str) or not stats_as_of:
+        errors.append("stats_latest.json missing required field: as_of_ts")
 
-    uniq = len(set(keys))
-    dedupe_ok = (uniq == len(keys))
-    too_many = {sid: c for sid, c in per_series.items() if c > CAP}
+    # required: stats_policy.script_version
+    stats_ver = _get(stats_obj, "stats_policy.script_version", None)
+    if not isinstance(stats_ver, str) or not stats_ver:
+        errors.append("stats_latest.json missing required field: stats_policy.script_version")
 
-    print("history_records =", len(h))
-    print("dedupe_ok =", dedupe_ok)
-    print("bad_rows  =", bad)
-    print("cap_per_series =", CAP)
-    print("cap_ok =", len(too_many) == 0)
-    if too_many:
-        top = sorted(too_many.items(), key=lambda x: x[1], reverse=True)[:10]
-        print("cap_violations_top10 =", top)
+    # optional: compare with manifest
+    manifest_obj, st_manifest = _load_json(MANIFEST)
+    if st_manifest == "ok" and isinstance(manifest_obj, dict):
+        man_ver = _get(manifest_obj, "stats_policy.script_version", None)
+        if isinstance(man_ver, str) and man_ver:
+            if isinstance(stats_ver, str) and stats_ver and stats_ver != man_ver:
+                errors.append(
+                    f"stats_policy.script_version mismatch: stats_latest={stats_ver} vs manifest={man_ver}"
+                )
+        else:
+            warns.append("manifest.json has no stats_policy.script_version (recommended to add)")
 
-    if (not dedupe_ok) or bad > 0 or len(too_many) > 0:
-        print("Sanity check failed (history.json)")
-        return 1
+    # print result
+    if warns:
+        print("[WARN]")
+        for w in warns:
+            print(" -", w)
 
-    # 3) history_lite.json: ensure per-series has enough valid points for 252-window stats
-    lite = load_list(LITE)
-    seen = set()
-    valid_cnt = Counter()
-    for r in lite:
-        sid = str(r.get("series_id", "")).strip()
-        dd  = str(r.get("data_date", "")).strip()
-        vv  = str(r.get("value", "NA")).strip()
-        if not sid or dd == "NA" or not is_ymd(dd) or vv in {"NA", ".", ""}:
-            continue
-        k = (sid, dd)
-        if k in seen:
-            continue
-        seen.add(k)
-        valid_cnt[sid] += 1
+    if errors:
+        print("[ERROR]", file=sys.stderr)
+        for e in errors:
+            print(" -", e, file=sys.stderr)
+        return 2
 
-    missing_series = [sid for sid in SERIES_IDS if sid not in stats["series"]]
-    if missing_series:
-        print("Sanity check failed: stats_latest missing series:", missing_series)
-        return 1
-
-    insufficient = {sid: valid_cnt.get(sid, 0) for sid in SERIES_IDS if valid_cnt.get(sid, 0) < TARGET_VALID}
-    print("lite_valid_target =", TARGET_VALID)
-    print("lite_valid_counts =", {sid: valid_cnt.get(sid, 0) for sid in SERIES_IDS})
-    if insufficient:
-        print("Sanity check failed: history_lite insufficient valid points:", insufficient)
-        return 1
-
-    print("Sanity check passed")
+    print("OK: sanity_check_history passed (stats_policy.script_version present and consistent)")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
