@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-FRED cache generator (per-series history upsert + cap_per_series + one-time backfill(252) + audit-friendly)
+FRED cache generator (per-series history upsert + cap_per_series + backfill-to-252-valid + audit-friendly)
+
+Key fix:
+- Backfill must ensure >= BACKFILL_TARGET *VALID* observations (value not NA / '.')
+  For daily series with weekends/holidays (e.g., DGS10/DGS2/VIXCLS), limit=252 often yields <252 valid.
+  We therefore fetch a larger window (BACKFILL_FETCH_LIMIT, default 420), then select the most recent
+  BACKFILL_TARGET valid observations.
 
 Outputs (under ./cache):
 - latest.csv            : one row per series_id (latest observation for this run)
 - latest.json           : array of records (same as latest.csv)
 - history.json          : rolling store, key=(series_id, data_date); same data_date reruns overwrite by as_of_ts
                            keep last CAP_PER_SERIES per series; JSON array (record-per-line) for citation
-- history_lite.json     : per series keep last BACKFILL_TARGET records; JSON array (record-per-line)
+- history_lite.json     : per series keep last BACKFILL_TARGET *VALID* records; JSON array (record-per-line)
 - history.snapshot.json : snapshot of this run's latest.json
 - dq_state.json         : lightweight data-quality state
-- backfill_state.json   : one-time backfill bookkeeping (per-series attempted flag)
+- backfill_state.json   : backfill bookkeeping (per-series attempted_success flag)
 - manifest.json         : metadata + pinned raw URLs (DATA_SHA preferred, else GITHUB_SHA)
 
 Env:
@@ -73,8 +79,10 @@ RETRY_STATUS = {429, 500, 502, 503, 504}
 # history policy
 CAP_PER_SERIES = 400  # keep last N records PER series (records keyed by (series_id, data_date))
 
-# backfill policy (one-time)
-BACKFILL_TARGET = 252  # one-time backfill to 252 observations per series (if possible)
+# backfill policy
+BACKFILL_TARGET = 252  # want >=252 VALID observations per series (to unlock MA/Z/P windows)
+# Fetch a longer window so daily series can still yield 252 VALID values after filtering weekends/holidays.
+BACKFILL_FETCH_LIMIT = 420  # ~1.67x target; typically enough to recover missing-day '.' entries
 
 # deterministic Taipei fallback
 TAIPEI_TZ_FALLBACK = timezone(timedelta(hours=8))
@@ -192,6 +200,15 @@ def _http_get_with_retry(
     return None, "unknown", MAX_ATTEMPTS, last_status
 
 
+def _is_ymd(s: str) -> bool:
+    return isinstance(s, str) and len(s) == 10 and s[4] == "-" and s[7] == "-"
+
+
+def _is_valid_value(v: str) -> bool:
+    vv = (v or "").strip()
+    return vv not in {"", "NA", "."}
+
+
 def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -> FetchResult:
     api_key = os.getenv("FRED_API_KEY", "")
 
@@ -275,7 +292,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
     date = str(o0.get("date", "NA"))
     value = str(o0.get("value", "NA"))
 
-    if value.strip() in {"", "NA", "."}:
+    if not _is_valid_value(value):
         notes = "warn:missing_value"
         warn = "missing_value"
         value_out = "NA"
@@ -304,22 +321,74 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
     )
 
 
-def fetch_recent_observations(session: requests.Session, series_id: str, as_of_ts: str, limit_n: int) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
+def _select_most_recent_valid_obs(
+    obs: List[Dict[str, Any]], target_keep: int
+) -> Tuple[List[Tuple[str, str]], Dict[str, int]]:
     """
-    Backfill a window of recent observations (desc), filter invalid values.
-    Returns (rows, meta) where meta is audit info (attempts/status/err_code/count_raw/count_kept).
+    obs is from FRED, usually in DESC order.
+    Select most recent VALID values, unique by date, up to target_keep.
+    Returns:
+      - selected list of (date, value) in DESC order (most recent first)
+      - stats dict
+    """
+    seen_dates: set[str] = set()
+    valid_total = 0
+    valid_unique = 0
+
+    selected: List[Tuple[str, str]] = []
+    for o in obs:
+        dd = str(o.get("date", "NA"))
+        vv = str(o.get("value", "NA"))
+
+        if not _is_ymd(dd):
+            continue
+        if not _is_valid_value(vv):
+            continue
+
+        valid_total += 1
+        if dd in seen_dates:
+            continue
+        seen_dates.add(dd)
+        valid_unique += 1
+
+        selected.append((dd, vv))
+        if len(selected) >= target_keep:
+            break
+
+    stats = {
+        "valid_total": valid_total,
+        "valid_unique": valid_unique,
+        "selected": len(selected),
+    }
+    return selected, stats
+
+
+def fetch_recent_observations(
+    session: requests.Session,
+    series_id: str,
+    as_of_ts: str,
+    fetch_limit: int,
+    target_keep: int,
+) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
+    """
+    Backfill recent observations (desc).
+    Fix: fetch a larger window (fetch_limit), then select most recent target_keep VALID values.
+    Returns (rows, meta) where meta is audit info.
     """
     api_key = os.getenv("FRED_API_KEY", "")
 
     meta: Dict[str, Any] = {
         "series_id": series_id,
-        "limit": int(limit_n),
+        "fetch_limit": int(fetch_limit),
+        "target_keep": int(target_keep),
         "attempts": 0,
         "http_status": "NA",
         "err": "NA",
         "count_raw": 0,
-        "count_kept": 0,
-        "source_url": _safe_source_url_backfill(series_id, limit_n),
+        "count_valid_total": 0,
+        "count_valid_unique": 0,
+        "count_selected": 0,
+        "source_url": _safe_source_url_backfill(series_id, fetch_limit),
     }
 
     if not api_key or len(api_key) < 10:
@@ -331,7 +400,7 @@ def fetch_recent_observations(session: requests.Session, series_id: str, as_of_t
         "api_key": api_key,
         "file_type": "json",
         "sort_order": "desc",
-        "limit": int(limit_n),
+        "limit": int(fetch_limit),
     }
 
     r, err_code, attempts, last_status = _http_get_with_retry(session, BASE_URL, params)
@@ -351,33 +420,30 @@ def fetch_recent_observations(session: requests.Session, series_id: str, as_of_t
     obs = payload.get("observations", [])
     meta["count_raw"] = len(obs)
 
+    selected, stats = _select_most_recent_valid_obs(obs, target_keep=target_keep)
+    meta["count_valid_total"] = stats["valid_total"]
+    meta["count_valid_unique"] = stats["valid_unique"]
+    meta["count_selected"] = stats["selected"]
+    meta["err"] = "NA"
+
     out: List[Dict[str, str]] = []
-    for o in obs:
-        dd = str(o.get("date", "NA"))
-        vv = str(o.get("value", "NA"))
+    note = "backfill"
+    if attempts > 1:
+        note = f"backfill_warn:retried_{attempts}x"
 
-        if vv.strip() in {"", "NA", "."}:
-            continue
-        if not _is_ymd(dd):
-            continue
-
-        note = "backfill"
-        if attempts > 1:
-            note = f"backfill_warn:retried_{attempts}x"
-
+    # selected is in DESC order; that's okay (history is sorted later by upsert)
+    for (dd, vv) in selected:
         out.append(
             {
                 "as_of_ts": as_of_ts,
                 "series_id": series_id,
                 "data_date": dd,
                 "value": vv,
-                "source_url": _safe_source_url_backfill(series_id, limit_n),
+                "source_url": _safe_source_url_backfill(series_id, fetch_limit),
                 "notes": note,
             }
         )
 
-    meta["count_kept"] = len(out)
-    meta["err"] = "NA"
     return out, meta
 
 
@@ -492,10 +558,6 @@ def _load_json_dict(path: Path) -> Tuple[Dict[str, Any], str]:
     return {}, "warn:not_a_dict"
 
 
-def _is_ymd(s: str) -> bool:
-    return isinstance(s, str) and len(s) == 10 and s[4] == "-" and s[7] == "-"
-
-
 def _upsert_history_per_series(
     existing: List[Dict[str, Any]],
     new_rows: List[Dict[str, str]],
@@ -564,7 +626,7 @@ def _count_valid_per_series(rows: List[Dict[str, Any]]) -> Dict[str, int]:
         vv = str(r.get("value", "NA")).strip()
         if not sid or not _is_ymd(dd) or dd == "NA":
             continue
-        if vv in {"NA", ".", ""}:
+        if not _is_valid_value(vv):
             continue
         key = (sid, dd)
         if key in seen:
@@ -574,14 +636,19 @@ def _count_valid_per_series(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
-def _make_history_lite(rows: List[Dict[str, str]], per_series_keep: int) -> List[Dict[str, str]]:
+def _make_history_lite_valid(rows: List[Dict[str, str]], per_series_keep: int) -> List[Dict[str, str]]:
     """
-    From full history list, keep only last `per_series_keep` records per series by (data_date, as_of_ts).
+    From full history list, keep only last `per_series_keep` VALID records per series by (data_date, as_of_ts).
+    (This is for MA/Z/P windows; full history.json still retains everything.)
     """
     by_series: Dict[str, List[Dict[str, str]]] = {}
     for r in rows:
         sid = r.get("series_id", "")
-        if not sid:
+        dd = r.get("data_date", "")
+        vv = r.get("value", "NA")
+        if not sid or not _is_ymd(dd) or dd == "NA":
+            continue
+        if not _is_valid_value(vv):
             continue
         by_series.setdefault(sid, []).append(r)
 
@@ -629,7 +696,7 @@ def main() -> int:
     generated_at_utc = _now_utc_iso()
 
     session = requests.Session()
-    session.headers.update({"User-Agent": "fred-cache/3.0"})
+    session.headers.update({"User-Agent": "fred-cache/3.1"})
 
     rows: List[Dict[str, str]] = []
 
@@ -639,7 +706,12 @@ def main() -> int:
         "fs": {},
         "series": {},
         "summary": {"ok": 0, "warn": 0, "err": 0},
-        "backfill": {"target": BACKFILL_TARGET, "attempted": {}, "meta": {}},
+        "backfill": {
+            "target_valid": BACKFILL_TARGET,
+            "fetch_limit": BACKFILL_FETCH_LIMIT,
+            "attempted": {},
+            "meta": {},
+        },
     }
 
     # 1) Fetch latest (1 obs per series)
@@ -701,41 +773,50 @@ def main() -> int:
     counts_before = _count_valid_per_series(existing_hist)
     dq["backfill"]["counts_before"] = counts_before
 
-    # 5) One-time backfill: only if (count < target) AND not marked attempted-success before.
+    # 5) Backfill: only if (valid_count < target) AND not marked attempted_success before.
     backfill_rows: List[Dict[str, str]] = []
     for sid in SERIES_IDS:
         have = int(counts_before.get(sid, 0))
         series_state = backfill_state["series"].get(sid, {})
         attempted_success = bool(series_state.get("attempted_success", False))
 
-        # backfill "once": if already success-attempted, skip forever
         if attempted_success:
             dq["backfill"]["attempted"][sid] = "skip:already_attempted_success"
             continue
 
         if have >= BACKFILL_TARGET:
-            dq["backfill"]["attempted"][sid] = "skip:already_enough"
+            dq["backfill"]["attempted"][sid] = "skip:already_enough_valid"
             continue
 
-        # try backfill now
-        bf_rows, meta = fetch_recent_observations(session, sid, as_of_ts, BACKFILL_TARGET)
+        # try backfill now (fetch larger window, keep most recent 252 VALID)
+        bf_rows, meta = fetch_recent_observations(
+            session,
+            sid,
+            as_of_ts,
+            fetch_limit=BACKFILL_FETCH_LIMIT,
+            target_keep=BACKFILL_TARGET,
+        )
         dq["backfill"]["meta"][sid] = meta
 
         if len(bf_rows) > 0:
             backfill_rows.extend(bf_rows)
-            # mark as success-attempted (one-time)
+
+        # Mark success only if we actually selected >= target_keep valid rows.
+        selected = int(meta.get("count_selected", 0) or 0)
+        if selected >= BACKFILL_TARGET:
             backfill_state["series"][sid] = {
                 "attempted_success": True,
                 "attempted_at": as_of_ts,
-                "target": BACKFILL_TARGET,
-                "kept_rows_from_api": meta.get("count_kept", "NA"),
+                "target_valid": BACKFILL_TARGET,
+                "fetch_limit": BACKFILL_FETCH_LIMIT,
+                "selected_valid": selected,
                 "http_status": meta.get("http_status", "NA"),
                 "attempts": meta.get("attempts", "NA"),
             }
-            dq["backfill"]["attempted"][sid] = "attempted_success:true"
+            dq["backfill"]["attempted"][sid] = "attempted_success:true (selected_valid>=target)"
         else:
-            # do NOT mark attempted_success (so next run can retry if this was transient)
-            dq["backfill"]["attempted"][sid] = f"attempted_success:false (err={meta.get('err','NA')})"
+            # do NOT mark attempted_success (so next run can retry)
+            dq["backfill"]["attempted"][sid] = f"attempted_success:false (selected_valid={selected}, err={meta.get('err','NA')})"
 
     # write backfill_state
     ok, st = _write_json_pretty(backfill_state_path, backfill_state)
@@ -752,16 +833,16 @@ def main() -> int:
     ok, st = _write_json_array_record_per_line(history_json, merged_hist)  # type: ignore[arg-type]
     dq["fs"]["history_json_write"] = st
 
-    # 8) Write history_lite.json (per series last 252) in same format
-    lite_hist = _make_history_lite(merged_hist, per_series_keep=BACKFILL_TARGET)
+    # 8) Write history_lite.json: per series last 252 VALID (to support MA/Z/P windows)
+    lite_hist = _make_history_lite_valid(merged_hist, per_series_keep=BACKFILL_TARGET)
     ok, st = _write_json_array_record_per_line(history_lite_json, lite_hist)  # type: ignore[arg-type]
     dq["fs"]["history_lite_json_write"] = st
 
     # 9) Write dq_state.json
     ok, st = _write_json_compact(dq_state, dq)
+    dq["fs"]["dq_state_write"] = st
     if not ok:
         print(f"[WARN] failed to write dq_state.json: {st}", file=sys.stderr)
-    dq["fs"]["dq_state_write"] = st
 
     # 10) Write manifest.json (pretty)
     repo = _repo_slug()
@@ -788,8 +869,9 @@ def main() -> int:
             "cap_per_series": CAP_PER_SERIES,
             "ordering": "series_id asc, data_date asc, as_of_ts asc",
             "history_json_format": "json_array_record_per_line",
-            "history_lite_target_per_series": BACKFILL_TARGET,
-            "backfill_policy": "one_time_success_attempt_per_series_to_target_252",
+            "history_lite_target_per_series_valid": BACKFILL_TARGET,
+            "backfill_policy": "fetch_limit_then_select_most_recent_valid_to_target",
+            "backfill_fetch_limit": BACKFILL_FETCH_LIMIT,
         },
         "fs_status": dq.get("fs", {}),
     }
@@ -799,7 +881,8 @@ def main() -> int:
         print(f"[WARN] failed to write manifest.json: {st}", file=sys.stderr)
 
     print(
-        f"Wrote {latest_csv} + {latest_json} + {history_json} + {history_lite_json} + {history_snapshot} + {dq_state} + {backfill_state_path} + {manifest}"
+        f"Wrote {latest_csv} + {latest_json} + {history_json} + {history_lite_json} + "
+        f"{history_snapshot} + {dq_state} + {backfill_state_path} + {manifest}"
     )
     return 0
 
