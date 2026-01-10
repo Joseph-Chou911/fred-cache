@@ -3,8 +3,6 @@ name: Update FRED cache
 on:
   workflow_dispatch: {}
   schedule:
-    # Every 6 hours at minute 7 (UTC): 00:07, 06:07, 12:07, 18:07
-    # Asia/Taipei (UTC+8): 08:07, 14:07, 20:07, 02:07 (next day)
     - cron: "7 */6 * * *"
 
 permissions:
@@ -18,7 +16,6 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     env:
       TIMEZONE: Asia/Taipei
 
@@ -40,22 +37,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
-      - name: Generate cache (latest/history/lite/stats/dq/manifest)
-        shell: bash
-        env:
-          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          python scripts/fred_cache.py
-
-      - name: Sanity check history + stats
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/sanity_check_history.py
-
       - name: Configure git author
         shell: bash
         run: |
@@ -63,91 +44,65 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # -------------------------
-      # Commit 1: data files
-      # -------------------------
-      - name: Commit data files (DATA_SHA)
-        id: commit_data
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Stage all cache outputs we expect from fred_cache.py
-          git add -A cache/latest.csv \
-                    cache/latest.json \
-                    cache/history.json \
-                    cache/history_lite.json \
-                    cache/stats_latest.json \
-                    cache/history.snapshot.json \
-                    cache/dq_state.json \
-                    cache/backfill_state.json \
-                    cache/manifest.json || true
-
-          if git diff --cached --quiet; then
-            echo "no_changes=true" >> "$GITHUB_OUTPUT"
-            echo "data_sha=" >> "$GITHUB_OUTPUT"
-            echo "No changes to commit."
-            exit 0
-          fi
-
-          git commit -m "Update FRED cache data" --no-verify
-          git push
-
-          DATA_SHA="$(git rev-parse HEAD)"
-          echo "no_changes=false" >> "$GITHUB_OUTPUT"
-          echo "data_sha=$DATA_SHA" >> "$GITHUB_OUTPUT"
-          echo "Committed data sha: $DATA_SHA"
-
-      # -------------------------
-      # Patch manifest pinned with DATA_SHA (2nd commit)
-      # -------------------------
-      - name: Patch manifest pinned URLs using DATA_SHA
-        if: steps.commit_data.outputs.no_changes != 'true'
+      - name: Generate + sanity + commit + push (retry-safe, no inline python)
         shell: bash
         env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           REPO: ${{ github.repository }}
-          DATA_SHA: ${{ steps.commit_data.outputs.data_sha }}
         run: |
           set -euo pipefail
-          test -n "$DATA_SHA"
 
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          import os
+          for attempt in 1 2 3; do
+            echo "===== Attempt ${attempt} ====="
 
-          repo = os.environ["REPO"]
-          sha = os.environ["DATA_SHA"]
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
 
-          p = Path("cache/manifest.json")
-          obj = json.loads(p.read_text(encoding="utf-8"))
+            # 1) Generate
+            python scripts/fred_cache.py
 
-          base = f"https://raw.githubusercontent.com/{repo}/{sha}/cache"
-          obj["data_commit_sha"] = sha
-          obj["pinned"] = {
-              "latest_json": f"{base}/latest.json",
-              "history_json": f"{base}/history.json",
-              "history_lite_json": f"{base}/history_lite.json",
-              "stats_latest_json": f"{base}/stats_latest.json",
-              "latest_csv": f"{base}/latest.csv",
-              "manifest_json": f"{base}/manifest.json",
-          }
+            # 2) Sanity check (history + lite + stats)
+            python scripts/sanity_check_history.py
 
-          p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-          print("Patched manifest pinned with DATA_SHA:", sha)
-          PY
+            # 3) Commit data (cache/)
+            git add -A cache
 
-      - name: Commit manifest patch
-        if: steps.commit_data.outputs.no_changes != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git add cache/manifest.json
+            if git diff --cached --quiet; then
+              echo "No changes in cache/. Exit."
+              exit 0
+            fi
 
-          if git diff --cached --quiet; then
-            echo "No manifest changes to commit."
-            exit 0
-          fi
+            git commit -m "Update FRED cache data" --no-verify
+            DATA_SHA="$(git rev-parse HEAD)"
+            echo "DATA_SHA=${DATA_SHA}"
 
-          git commit -m "Patch manifest pinned (DATA_SHA)" --no-verify
-          git push
+            # 4) Patch manifest pinned to DATA_SHA (commit 2)
+            python scripts/patch_manifest.py --repo "$REPO" --data-sha "$DATA_SHA" --mode data
+            git add cache/manifest.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Patch manifest pinned (DATA_SHA)" --no-verify
+            fi
+
+            # 5) Pin manifest snapshot url (commit 3)
+            MANIFEST_SHA="$(git rev-parse HEAD)"
+            python scripts/patch_manifest.py --repo "$REPO" --data-sha "$DATA_SHA" --manifest-sha "$MANIFEST_SHA" --mode manifest
+            git add cache/manifest.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Pin manifest snapshot url" --no-verify
+            fi
+
+            # 6) Push once
+            if git push origin HEAD:main; then
+              echo "Push succeeded."
+              exit 0
+            fi
+
+            echo "Push failed (likely non-fast-forward)."
+            if [ "$attempt" -eq 1 ]; then sleep 2; fi
+            if [ "$attempt" -eq 2 ]; then sleep 4; fi
+            if [ "$attempt" -eq 3 ]; then sleep 8; fi
+          done
+
+          echo "Push failed after 3 attempts."
+          exit 1
