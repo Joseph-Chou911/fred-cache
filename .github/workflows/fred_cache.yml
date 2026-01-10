@@ -11,9 +11,6 @@ permissions:
   contents: write
 
 concurrency:
-  # IMPORTANT:
-  # To make "wait instead of fail" work across workflows, ALL workflows that push to main
-  # should use the same concurrency.group value.
   group: repo-writer-main
   cancel-in-progress: false
 
@@ -23,8 +20,6 @@ jobs:
     timeout-minutes: 20
     env:
       TIMEZONE: Asia/Taipei
-      # Keep history size bounded (per-series cap). Default in scripts is 400 if not set.
-      CAP_PER_SERIES: "400"
 
     steps:
       - name: Checkout
@@ -76,13 +71,13 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Update cache (latest + history)"
+            git commit -m "Update cache (latest + history + lite + backfill_state)"
             DATA_SHA="$(git rev-parse HEAD)"
             export DATA_SHA
             echo "DATA_SHA=${DATA_SHA}"
 
             # 4) Patch manifest (pin data urls) - PRETTY
-            python -c "import json,os; from pathlib import Path; data_sha=os.environ['DATA_SHA']; repo=os.environ['REPO']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('generated_at_utc',None); obj.setdefault('as_of_ts',None); obj['data_commit_sha']=data_sha; base=f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache'; obj['pinned']={'latest_json':f'{base}/latest.json','history_json':f'{base}/history.json','latest_csv':f'{base}/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json'}; obj.pop('manifest_commit_sha', None); obj.pop('manifest_commit_sha_v1', None); p.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+\"\\n\",encoding='utf-8')"
+            python -c "import json,os; from pathlib import Path; data_sha=os.environ['DATA_SHA']; repo=os.environ['REPO']; p=Path('cache/manifest.json'); obj=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; obj.setdefault('generated_at_utc',None); obj.setdefault('as_of_ts',None); obj['data_commit_sha']=data_sha; base=f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache'; obj['pinned']={'latest_json':f'{base}/latest.json','history_json':f'{base}/history.json','history_lite_json':f'{base}/history_lite.json','latest_csv':f'{base}/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/refs/heads/main/cache/manifest.json'}; obj.pop('manifest_commit_sha', None); obj.pop('manifest_commit_sha_v1', None); p.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+\"\\n\",encoding='utf-8')"
 
             git add cache/manifest.json
             if ! git diff --cached --quiet; then
@@ -108,7 +103,7 @@ jobs:
             # 6) Push once; if fails, retry from origin/main
             if git push origin HEAD:main; then
               echo "Push succeeded."
-              python -c "import json,os; from datetime import datetime,timezone; repo=os.environ['REPO']; data_sha=os.environ['DATA_SHA']; snap=os.environ['MANIFEST_SNAPSHOT_SHA']; head=os.environ['HEAD_SHA']; out={'generated_at_utc':datetime.now(timezone.utc).replace(microsecond=0).isoformat(),'head_commit_sha':head,'data_commit_sha':data_sha,'manifest_commit_sha':snap,'pinned':{'latest_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json','history_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json','latest_csv':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/{snap}/cache/manifest.json'}}; print(json.dumps(out,ensure_ascii=False,separators=(',',':')))"
+              python -c "import json,os; from datetime import datetime,timezone; repo=os.environ['REPO']; data_sha=os.environ['DATA_SHA']; snap=os.environ['MANIFEST_SNAPSHOT_SHA']; head=os.environ['HEAD_SHA']; out={'generated_at_utc':datetime.now(timezone.utc).replace(microsecond=0).isoformat(),'head_commit_sha':head,'data_commit_sha':data_sha,'manifest_commit_sha':snap,'pinned':{'latest_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.json','history_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history.json','history_lite_json':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/history_lite.json','latest_csv':f'https://raw.githubusercontent.com/{repo}/{data_sha}/cache/latest.csv','manifest_json':f'https://raw.githubusercontent.com/{repo}/{snap}/cache/manifest.json'}}; print(json.dumps(out,ensure_ascii=False,separators=(',',':')))"
               exit 0
             fi
 
