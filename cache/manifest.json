@@ -1,13 +1,13 @@
 {
-  "generated_at_utc": "2026-01-10T03:57:32+00:00",
-  "as_of_ts": "2026-01-10T11:57:32+08:00",
-  "data_commit_sha": "429a01fad7b789c4d20fa3f66f11690aa09c4a17",
+  "generated_at_utc": "2026-01-10T04:22:37+00:00",
+  "as_of_ts": "2026-01-10T12:22:37+08:00",
+  "data_commit_sha": "5219456ca3dfa56f65dcaeeab1327c2708c837be",
   "pinned": {
-    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/429a01fad7b789c4d20fa3f66f11690aa09c4a17/cache/latest.json",
-    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/429a01fad7b789c4d20fa3f66f11690aa09c4a17/cache/history.json",
-    "history_lite_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/429a01fad7b789c4d20fa3f66f11690aa09c4a17/cache/history_lite.json",
-    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/429a01fad7b789c4d20fa3f66f11690aa09c4a17/cache/latest.csv",
-    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/dd7d41b1bdcc57a429349111cc212c038e885b39/cache/manifest.json"
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/5219456ca3dfa56f65dcaeeab1327c2708c837be/cache/latest.json",
+    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/5219456ca3dfa56f65dcaeeab1327c2708c837be/cache/history.json",
+    "history_lite_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/5219456ca3dfa56f65dcaeeab1327c2708c837be/cache/history_lite.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/5219456ca3dfa56f65dcaeeab1327c2708c837be/cache/latest.csv",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/5219456ca3dfa56f65dcaeeab1327c2708c837be/cache/manifest.json"
   },
   "paths": {
     "latest_csv": "cache/latest.csv",
@@ -26,12 +26,14 @@
     "ordering": "series_id asc, data_date asc, as_of_ts asc",
     "history_json_format": "json_array_record_per_line",
     "history_lite_target_per_series": 252,
-    "backfill_target_valid": 252,
-    "backfill_fetch_limit": 420,
-    "backfill_self_healing": "retry_if_have_valid < target_even_if_old_attempted_success_true",
-    "cooldown_policy": {
-      "no_progress_after": 3,
-      "cooldown_hours": 24
+    "backfill_policy": {
+      "target_valid": 252,
+      "fetch_limit": 420,
+      "no_progress_guard": {
+        "max_no_progress": 5,
+        "cooldown_runs": 3
+      },
+      "state_schema": "backfill_state_v2_last_attempt_only"
     }
   },
   "fs_status": {
@@ -44,7 +46,5 @@
     "history_json_write": "ok",
     "history_lite_json_write": "ok",
     "dq_state_write": "ok"
-  },
-  "manifest_commit_sha": "dd7d41b1bdcc57a429349111cc212c038e885b39",
-  "manifest_commit_sha_v1": "dd7d41b1bdcc57a429349111cc212c038e885b39"
+  }
 }
