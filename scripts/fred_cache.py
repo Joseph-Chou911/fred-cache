@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-FRED cache generator (per-series history upsert + cap_per_series, audit-friendly)
+FRED cache generator (per-series history upsert + cap_per_series + one-time backfill(252) + audit-friendly)
 
 Outputs (under ./cache):
 - latest.csv            : one row per series_id (latest observation for this run)
 - latest.json           : array of records (same as latest.csv)
-- history.json          : rolling store, key=(series_id, data_date); same data_date reruns overwrite
-                           keep last cap_per_series records PER series by data_date (and as_of_ts tie-break)
-                           format: list[dict] (stable for your consumer)
-- history.snapshot.json : snapshot of this run's latest.json (for audit)
-- dq_state.json         : lightweight data-quality state (includes read/write health notes)
+- history.json          : rolling store, key=(series_id, data_date); same data_date reruns overwrite by as_of_ts
+                           keep last CAP_PER_SERIES per series; JSON array (record-per-line) for citation
+- history_lite.json     : per series keep last BACKFILL_TARGET records; JSON array (record-per-line)
+- history.snapshot.json : snapshot of this run's latest.json
+- dq_state.json         : lightweight data-quality state
+- backfill_state.json   : one-time backfill bookkeeping (per-series attempted flag)
 - manifest.json         : metadata + pinned raw URLs (DATA_SHA preferred, else GITHUB_SHA)
 
 Env:
@@ -19,7 +20,6 @@ Env:
 - GITHUB_REPOSITORY (optional)
 - DATA_SHA (optional) commit sha that contains the data files (preferred for pinned)
 - GITHUB_SHA fallback
-- CAP_PER_SERIES (optional) cap history records per series; default 400; clamped to [60, 5000]
 """
 
 from __future__ import annotations
@@ -70,28 +70,11 @@ MAX_ATTEMPTS = 3
 BACKOFF_SCHEDULE = [2, 4, 8]
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
+# history policy
+CAP_PER_SERIES = 400  # keep last N records PER series (records keyed by (series_id, data_date))
 
-# -------------------------
-# history policy (env-aware)
-# -------------------------
-def _env_int(name: str, default: int, *, min_v: int, max_v: int) -> int:
-    """Read int env safely; clamp to [min_v, max_v]."""
-    raw = (os.getenv(name, "") or "").strip()
-    if not raw:
-        return default
-    try:
-        v = int(raw)
-    except ValueError:
-        return default
-    if v < min_v:
-        return min_v
-    if v > max_v:
-        return max_v
-    return v
-
-
-CAP_PER_SERIES = _env_int("CAP_PER_SERIES", 400, min_v=60, max_v=5000)
-# keep last N records PER series (records keyed by (series_id, data_date))
+# backfill policy (one-time)
+BACKFILL_TARGET = 252  # one-time backfill to 252 observations per series (if possible)
 
 # deterministic Taipei fallback
 TAIPEI_TZ_FALLBACK = timezone(timedelta(hours=8))
@@ -123,13 +106,27 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _safe_source_url(series_id: str) -> str:
+def _safe_source_url_latest(series_id: str) -> str:
     """DO NOT include api_key in source_url."""
     params = {
         "series_id": series_id,
         "file_type": "json",
         "sort_order": "desc",
         "limit": 1,
+    }
+    qs = "&".join(
+        [f"{k}={requests.utils.quote(str(params[k]))}" for k in ["series_id", "file_type", "sort_order", "limit"]]
+    )
+    return f"{BASE_URL}?{qs}"
+
+
+def _safe_source_url_backfill(series_id: str, limit_n: int) -> str:
+    """Backfill source_url (no api_key)."""
+    params = {
+        "series_id": series_id,
+        "file_type": "json",
+        "sort_order": "desc",
+        "limit": int(limit_n),
     }
     qs = "&".join(
         [f"{k}={requests.utils.quote(str(params[k]))}" for k in ["series_id", "file_type", "sort_order", "limit"]]
@@ -205,7 +202,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": "err:missing_api_key",
             },
             err="missing_api_key",
@@ -232,7 +229,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": notes,
             },
             warn=warn,
@@ -250,7 +247,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": "err:bad_json",
             },
             err="bad_json",
@@ -266,7 +263,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
                 "series_id": series_id,
                 "data_date": "NA",
                 "value": "NA",
-                "source_url": _safe_source_url(series_id),
+                "source_url": _safe_source_url_latest(series_id),
                 "notes": "warn:no_observations",
             },
             warn="no_observations",
@@ -297,7 +294,7 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
             "series_id": series_id,
             "data_date": date,
             "value": value_out,
-            "source_url": _safe_source_url(series_id),
+            "source_url": _safe_source_url_latest(series_id),
             "notes": notes,
         },
         warn=warn,
@@ -305,6 +302,83 @@ def fetch_latest_obs(session: requests.Session, series_id: str, as_of_ts: str) -
         attempts=attempts,
         status=last_status,
     )
+
+
+def fetch_recent_observations(session: requests.Session, series_id: str, as_of_ts: str, limit_n: int) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
+    """
+    Backfill a window of recent observations (desc), filter invalid values.
+    Returns (rows, meta) where meta is audit info (attempts/status/err_code/count_raw/count_kept).
+    """
+    api_key = os.getenv("FRED_API_KEY", "")
+
+    meta: Dict[str, Any] = {
+        "series_id": series_id,
+        "limit": int(limit_n),
+        "attempts": 0,
+        "http_status": "NA",
+        "err": "NA",
+        "count_raw": 0,
+        "count_kept": 0,
+        "source_url": _safe_source_url_backfill(series_id, limit_n),
+    }
+
+    if not api_key or len(api_key) < 10:
+        meta["err"] = "missing_api_key"
+        return [], meta
+
+    params = {
+        "series_id": series_id,
+        "api_key": api_key,
+        "file_type": "json",
+        "sort_order": "desc",
+        "limit": int(limit_n),
+    }
+
+    r, err_code, attempts, last_status = _http_get_with_retry(session, BASE_URL, params)
+    meta["attempts"] = attempts
+    meta["http_status"] = last_status if last_status is not None else "NA"
+
+    if r is None:
+        meta["err"] = err_code or "unknown"
+        return [], meta
+
+    try:
+        payload = r.json()
+    except Exception:
+        meta["err"] = "bad_json"
+        return [], meta
+
+    obs = payload.get("observations", [])
+    meta["count_raw"] = len(obs)
+
+    out: List[Dict[str, str]] = []
+    for o in obs:
+        dd = str(o.get("date", "NA"))
+        vv = str(o.get("value", "NA"))
+
+        if vv.strip() in {"", "NA", "."}:
+            continue
+        if not _is_ymd(dd):
+            continue
+
+        note = "backfill"
+        if attempts > 1:
+            note = f"backfill_warn:retried_{attempts}x"
+
+        out.append(
+            {
+                "as_of_ts": as_of_ts,
+                "series_id": series_id,
+                "data_date": dd,
+                "value": vv,
+                "source_url": _safe_source_url_backfill(series_id, limit_n),
+                "notes": note,
+            }
+        )
+
+    meta["count_kept"] = len(out)
+    meta["err"] = "NA"
+    return out, meta
 
 
 def _write_csv(path: Path, rows: List[Dict[str, str]]) -> None:
@@ -316,14 +390,50 @@ def _write_csv(path: Path, rows: List[Dict[str, str]]) -> None:
             w.writerow({k: r.get(k, "NA") for k in CSV_FIELDNAMES})
 
 
-def _write_json(path: Path, obj: Any, *, pretty: bool = False) -> Tuple[bool, str]:
-    """Write JSON. Never raises (returns ok flag + status)."""
+def _write_json_compact(path: Path, obj: Any) -> Tuple[bool, str]:
+    """Write compact JSON (single-line). Never raises."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        if pretty:
-            path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        else:
-            path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+        return True, "ok"
+    except PermissionError:
+        return False, "err:permission"
+    except OSError as e:
+        return False, f"err:oserror:{type(e).__name__}"
+    except Exception as e:
+        return False, f"err:write_exc:{type(e).__name__}"
+
+
+def _write_json_pretty(path: Path, obj: Any) -> Tuple[bool, str]:
+    """Write pretty JSON (indent=2). Never raises."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return True, "ok"
+    except PermissionError:
+        return False, "err:permission"
+    except OSError as e:
+        return False, f"err:oserror:{type(e).__name__}"
+    except Exception as e:
+        return False, f"err:write_exc:{type(e).__name__}"
+
+
+def _write_json_array_record_per_line(path: Path, rows: List[Dict[str, Any]]) -> Tuple[bool, str]:
+    """
+    Write a JSON array but force each record on its own line (valid JSON).
+    This is the "可引用格式": avoids one super-long line and makes line citations feasible.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
+            f.write("[\n")
+            for i, r in enumerate(rows):
+                s = json.dumps(r, ensure_ascii=False, separators=(",", ":"))
+                if i < len(rows) - 1:
+                    f.write(s + ",\n")
+                else:
+                    f.write(s + "\n")
+            f.write("]\n")
         return True, "ok"
     except PermissionError:
         return False, "err:permission"
@@ -359,6 +469,27 @@ def _load_json_list(path: Path) -> Tuple[List[Dict[str, Any]], str]:
                 out.append(x)
         return out, "ok"
     return [], "warn:not_a_list"
+
+
+def _load_json_dict(path: Path) -> Tuple[Dict[str, Any], str]:
+    """Load JSON dict safely. Never raises."""
+    if not path.exists():
+        return {}, "ok:missing_file"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except PermissionError:
+        return {}, "err:permission"
+    except OSError as e:
+        return {}, f"err:oserror:{type(e).__name__}"
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        return {}, "warn:json_decode_error"
+    except Exception as e:
+        return {}, f"err:json_load_exc:{type(e).__name__}"
+    if isinstance(obj, dict):
+        return obj, "ok"
+    return {}, "warn:not_a_dict"
 
 
 def _is_ymd(s: str) -> bool:
@@ -422,6 +553,49 @@ def _upsert_history_per_series(
     return capped
 
 
+def _count_valid_per_series(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    seen: Dict[Tuple[str, str], bool] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        sid = str(r.get("series_id", "")).strip()
+        dd = str(r.get("data_date", "")).strip()
+        vv = str(r.get("value", "NA")).strip()
+        if not sid or not _is_ymd(dd) or dd == "NA":
+            continue
+        if vv in {"NA", ".", ""}:
+            continue
+        key = (sid, dd)
+        if key in seen:
+            continue
+        seen[key] = True
+        counts[sid] = counts.get(sid, 0) + 1
+    return counts
+
+
+def _make_history_lite(rows: List[Dict[str, str]], per_series_keep: int) -> List[Dict[str, str]]:
+    """
+    From full history list, keep only last `per_series_keep` records per series by (data_date, as_of_ts).
+    """
+    by_series: Dict[str, List[Dict[str, str]]] = {}
+    for r in rows:
+        sid = r.get("series_id", "")
+        if not sid:
+            continue
+        by_series.setdefault(sid, []).append(r)
+
+    lite: List[Dict[str, str]] = []
+    for sid, arr in by_series.items():
+        arr.sort(key=lambda x: (x.get("data_date", ""), x.get("as_of_ts", "")))
+        if len(arr) > per_series_keep:
+            arr = arr[-per_series_keep:]
+        lite.extend(arr)
+
+    lite.sort(key=lambda x: (x.get("series_id", ""), x.get("data_date", ""), x.get("as_of_ts", "")))
+    return lite
+
+
 def _repo_slug() -> str:
     return os.getenv("GITHUB_REPOSITORY", "Joseph-Chou911/fred-cache")
 
@@ -432,11 +606,18 @@ def _data_sha() -> str:
 
 def _pinned_urls(repo: str, sha: str) -> Dict[str, str]:
     if sha == "NA":
-        return {"latest_json": "NA", "history_json": "NA", "latest_csv": "NA", "manifest_json": "NA"}
+        return {
+            "latest_json": "NA",
+            "history_json": "NA",
+            "history_lite_json": "NA",
+            "latest_csv": "NA",
+            "manifest_json": "NA",
+        }
     base = f"https://raw.githubusercontent.com/{repo}/{sha}/cache"
     return {
         "latest_json": f"{base}/latest.json",
         "history_json": f"{base}/history.json",
+        "history_lite_json": f"{base}/history_lite.json",
         "latest_csv": f"{base}/latest.csv",
         "manifest_json": f"{base}/manifest.json",
     }
@@ -448,7 +629,7 @@ def main() -> int:
     generated_at_utc = _now_utc_iso()
 
     session = requests.Session()
-    session.headers.update({"User-Agent": "fred-cache/2.2"})
+    session.headers.update({"User-Agent": "fred-cache/3.0"})
 
     rows: List[Dict[str, str]] = []
 
@@ -458,8 +639,10 @@ def main() -> int:
         "fs": {},
         "series": {},
         "summary": {"ok": 0, "warn": 0, "err": 0},
+        "backfill": {"target": BACKFILL_TARGET, "attempted": {}, "meta": {}},
     }
 
+    # 1) Fetch latest (1 obs per series)
     for sid in SERIES_IDS:
         res = fetch_latest_obs(session, sid, as_of_ts)
         rec = {k: _redact_secrets(str(v)) for k, v in res.record.items()}
@@ -486,33 +669,101 @@ def main() -> int:
     latest_csv = CACHE_DIR / "latest.csv"
     latest_json = CACHE_DIR / "latest.json"
     history_json = CACHE_DIR / "history.json"
+    history_lite_json = CACHE_DIR / "history_lite.json"
     history_snapshot = CACHE_DIR / "history.snapshot.json"
     dq_state = CACHE_DIR / "dq_state.json"
+    backfill_state_path = CACHE_DIR / "backfill_state.json"
     manifest = CACHE_DIR / "manifest.json"
 
+    # 2) Write latest outputs
     try:
         _write_csv(latest_csv, rows)
         dq["fs"]["latest_csv"] = "ok"
     except Exception as e:
         dq["fs"]["latest_csv"] = f"err:csv_write_exc:{type(e).__name__}"
 
-    ok, st = _write_json(latest_json, rows, pretty=False)
+    ok, st = _write_json_compact(latest_json, rows)
     dq["fs"]["latest_json"] = st
 
+    ok, st = _write_json_compact(history_snapshot, rows)
+    dq["fs"]["history_snapshot_write"] = st
+
+    # 3) Load existing history
     existing_hist, read_status = _load_json_list(history_json)
     dq["fs"]["history_json_read"] = read_status
 
-    merged_hist = _upsert_history_per_series(existing_hist, rows, cap_per_series=CAP_PER_SERIES)
-    ok, st = _write_json(history_json, merged_hist, pretty=False)
+    # 4) Load backfill state
+    backfill_state, backfill_state_read = _load_json_dict(backfill_state_path)
+    dq["fs"]["backfill_state_read"] = backfill_state_read
+    if "series" not in backfill_state or not isinstance(backfill_state.get("series"), dict):
+        backfill_state = {"series": {}}
+
+    counts_before = _count_valid_per_series(existing_hist)
+    dq["backfill"]["counts_before"] = counts_before
+
+    # 5) One-time backfill: only if (count < target) AND not marked attempted-success before.
+    backfill_rows: List[Dict[str, str]] = []
+    for sid in SERIES_IDS:
+        have = int(counts_before.get(sid, 0))
+        series_state = backfill_state["series"].get(sid, {})
+        attempted_success = bool(series_state.get("attempted_success", False))
+
+        # backfill "once": if already success-attempted, skip forever
+        if attempted_success:
+            dq["backfill"]["attempted"][sid] = "skip:already_attempted_success"
+            continue
+
+        if have >= BACKFILL_TARGET:
+            dq["backfill"]["attempted"][sid] = "skip:already_enough"
+            continue
+
+        # try backfill now
+        bf_rows, meta = fetch_recent_observations(session, sid, as_of_ts, BACKFILL_TARGET)
+        dq["backfill"]["meta"][sid] = meta
+
+        if len(bf_rows) > 0:
+            backfill_rows.extend(bf_rows)
+            # mark as success-attempted (one-time)
+            backfill_state["series"][sid] = {
+                "attempted_success": True,
+                "attempted_at": as_of_ts,
+                "target": BACKFILL_TARGET,
+                "kept_rows_from_api": meta.get("count_kept", "NA"),
+                "http_status": meta.get("http_status", "NA"),
+                "attempts": meta.get("attempts", "NA"),
+            }
+            dq["backfill"]["attempted"][sid] = "attempted_success:true"
+        else:
+            # do NOT mark attempted_success (so next run can retry if this was transient)
+            dq["backfill"]["attempted"][sid] = f"attempted_success:false (err={meta.get('err','NA')})"
+
+    # write backfill_state
+    ok, st = _write_json_pretty(backfill_state_path, backfill_state)
+    dq["fs"]["backfill_state_write"] = st
+
+    # 6) Merge: existing + backfill + this-run latest rows
+    merged_hist = _upsert_history_per_series(existing_hist, backfill_rows, cap_per_series=CAP_PER_SERIES)
+    merged_hist = _upsert_history_per_series(merged_hist, rows, cap_per_series=CAP_PER_SERIES)
+
+    counts_after = _count_valid_per_series(merged_hist)
+    dq["backfill"]["counts_after"] = counts_after
+
+    # 7) Write history.json in "record-per-line JSON array" (可引用格式)
+    ok, st = _write_json_array_record_per_line(history_json, merged_hist)  # type: ignore[arg-type]
     dq["fs"]["history_json_write"] = st
 
-    ok, st = _write_json(history_snapshot, rows, pretty=False)
-    dq["fs"]["history_snapshot_write"] = st
+    # 8) Write history_lite.json (per series last 252) in same format
+    lite_hist = _make_history_lite(merged_hist, per_series_keep=BACKFILL_TARGET)
+    ok, st = _write_json_array_record_per_line(history_lite_json, lite_hist)  # type: ignore[arg-type]
+    dq["fs"]["history_lite_json_write"] = st
 
-    ok, st = _write_json(dq_state, dq, pretty=False)
+    # 9) Write dq_state.json
+    ok, st = _write_json_compact(dq_state, dq)
     if not ok:
         print(f"[WARN] failed to write dq_state.json: {st}", file=sys.stderr)
+    dq["fs"]["dq_state_write"] = st
 
+    # 10) Write manifest.json (pretty)
     repo = _repo_slug()
     sha = _data_sha()
 
@@ -525,8 +776,10 @@ def main() -> int:
             "latest_csv": str(latest_csv.as_posix()),
             "latest_json": str(latest_json.as_posix()),
             "history_json": str(history_json.as_posix()),
+            "history_lite_json": str(history_lite_json.as_posix()),
             "history_snapshot_json": str(history_snapshot.as_posix()),
             "dq_state_json": str(dq_state.as_posix()),
+            "backfill_state_json": str(backfill_state_path.as_posix()),
         },
         "history_policy": {
             "format": "list",
@@ -534,16 +787,20 @@ def main() -> int:
             "same_key_rerun": "overwrite_by_latest_as_of_ts",
             "cap_per_series": CAP_PER_SERIES,
             "ordering": "series_id asc, data_date asc, as_of_ts asc",
+            "history_json_format": "json_array_record_per_line",
+            "history_lite_target_per_series": BACKFILL_TARGET,
+            "backfill_policy": "one_time_success_attempt_per_series_to_target_252",
         },
         "fs_status": dq.get("fs", {}),
     }
 
-    # ✅ manifest pretty in repo
-    ok, st = _write_json(manifest, manifest_obj, pretty=True)
+    ok, st = _write_json_pretty(manifest, manifest_obj)
     if not ok:
         print(f"[WARN] failed to write manifest.json: {st}", file=sys.stderr)
 
-    print(f"Wrote {latest_csv} + {latest_json} + {history_json} + {history_snapshot} + {dq_state} + {manifest}")
+    print(
+        f"Wrote {latest_csv} + {latest_json} + {history_json} + {history_lite_json} + {history_snapshot} + {dq_state} + {backfill_state_path} + {manifest}"
+    )
     return 0
 
 
