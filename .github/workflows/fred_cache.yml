@@ -106,37 +106,36 @@ jobs:
         shell: bash
         env:
           REPO: ${{ github.repository }}
+          DATA_SHA: ${{ steps.commit_data.outputs.data_sha }}
         run: |
           set -euo pipefail
-
-          DATA_SHA="${{ steps.commit_data.outputs.data_sha }}"
           test -n "$DATA_SHA"
 
           python - <<'PY'
-import json
-from pathlib import Path
-import os
+          import json
+          from pathlib import Path
+          import os
 
-repo = os.environ["REPO"]
-sha = os.environ["DATA_SHA"]
+          repo = os.environ["REPO"]
+          sha = os.environ["DATA_SHA"]
 
-p = Path("cache/manifest.json")
-obj = json.loads(p.read_text(encoding="utf-8"))
+          p = Path("cache/manifest.json")
+          obj = json.loads(p.read_text(encoding="utf-8"))
 
-base = f"https://raw.githubusercontent.com/{repo}/{sha}/cache"
-obj["data_commit_sha"] = sha
-obj["pinned"] = {
-    "latest_json": f"{base}/latest.json",
-    "history_json": f"{base}/history.json",
-    "history_lite_json": f"{base}/history_lite.json",
-    "stats_latest_json": f"{base}/stats_latest.json",
-    "latest_csv": f"{base}/latest.csv",
-    "manifest_json": f"{base}/manifest.json",
-}
+          base = f"https://raw.githubusercontent.com/{repo}/{sha}/cache"
+          obj["data_commit_sha"] = sha
+          obj["pinned"] = {
+              "latest_json": f"{base}/latest.json",
+              "history_json": f"{base}/history.json",
+              "history_lite_json": f"{base}/history_lite.json",
+              "stats_latest_json": f"{base}/stats_latest.json",
+              "latest_csv": f"{base}/latest.csv",
+              "manifest_json": f"{base}/manifest.json",
+          }
 
-p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("Patched manifest pinned with DATA_SHA:", sha)
-PY
+          p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print("Patched manifest pinned with DATA_SHA:", sha)
+          PY
 
       - name: Commit manifest patch
         if: steps.commit_data.outputs.no_changes != 'true'
