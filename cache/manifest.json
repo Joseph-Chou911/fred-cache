@@ -1,14 +1,14 @@
 {
-  "generated_at_utc": "2026-01-10T05:50:38+00:00",
-  "as_of_ts": "2026-01-10T13:50:38+08:00",
-  "data_commit_sha": "3627b2b69227e25a857d1f6388de3fdd0f2679b7",
+  "generated_at_utc": "2026-01-10T06:57:41+00:00",
+  "as_of_ts": "2026-01-10T14:57:41+08:00",
+  "data_commit_sha": "e612362c63d61feec37ca19b1ead3361fb3cb0bd",
   "pinned": {
-    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3627b2b69227e25a857d1f6388de3fdd0f2679b7/cache/latest.json",
-    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3627b2b69227e25a857d1f6388de3fdd0f2679b7/cache/history.json",
-    "history_lite_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3627b2b69227e25a857d1f6388de3fdd0f2679b7/cache/history_lite.json",
-    "stats_latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3627b2b69227e25a857d1f6388de3fdd0f2679b7/cache/stats_latest.json",
-    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/3627b2b69227e25a857d1f6388de3fdd0f2679b7/cache/latest.csv",
-    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/1e2b24186d5c65a29e06ff45554a1d2907d73d19/cache/manifest.json"
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e612362c63d61feec37ca19b1ead3361fb3cb0bd/cache/latest.json",
+    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e612362c63d61feec37ca19b1ead3361fb3cb0bd/cache/history.json",
+    "history_lite_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e612362c63d61feec37ca19b1ead3361fb3cb0bd/cache/history_lite.json",
+    "stats_latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e612362c63d61feec37ca19b1ead3361fb3cb0bd/cache/stats_latest.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e612362c63d61feec37ca19b1ead3361fb3cb0bd/cache/latest.csv",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/9b9a8d2593e069422b26d34725a6f9cc3621e956/cache/manifest.json"
   },
   "paths": {
     "latest_csv": "cache/latest.csv",
@@ -51,6 +51,6 @@
     "stats_latest_json_write": "ok",
     "dq_state_write": "ok"
   },
-  "manifest_commit_sha": "1e2b24186d5c65a29e06ff45554a1d2907d73d19",
-  "manifest_commit_sha_v1": "1e2b24186d5c65a29e06ff45554a1d2907d73d19"
+  "manifest_commit_sha": "9b9a8d2593e069422b26d34725a6f9cc3621e956",
+  "manifest_commit_sha_v1": "9b9a8d2593e069422b26d34725a6f9cc3621e956"
 }
