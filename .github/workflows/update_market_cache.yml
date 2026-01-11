@@ -34,9 +34,20 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
+          # NOTE: scripts/update_market_cache.py uses urllib only; requests not required.
+          # Keeping this optional install in case you later switch to requests.Session.
           python -m pip install requests >/dev/null 2>&1 || true
-          # NOTE: update_market_cache.py uses urllib only; requests not required.
-          # kept here in case you later migrate to requests.Session for retries.
+
+      - name: Sanity check scripts exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PWD=$(pwd)"
+          ls -la
+          echo "---- scripts ----"
+          ls -la scripts
+          test -f scripts/update_market_cache.py
+          test -f scripts/patch_manifest_market_cache.py
 
       - name: Generate market_cache data files
         shell: bash
@@ -44,7 +55,7 @@ jobs:
           LITE_KEEP_N: "400"
         run: |
           set -euo pipefail
-          python market_cache/update_market_cache.py
+          python scripts/update_market_cache.py
 
       - name: Commit data files (data commit)
         shell: bash
@@ -52,7 +63,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add market_cache/latest.json market_cache/history_lite.json market_cache/stats_latest.json || true
+
           if git diff --cached --quiet; then
             echo "No data changes to commit."
           else
@@ -71,15 +84,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python market_cache/patch_manifest_market_cache.py \
+          python scripts/patch_manifest_market_cache.py \
             --repo "${GITHUB_REPOSITORY}" \
             --data-sha "${{ steps.data_sha.outputs.DATA_SHA }}"
+
+      - name: Sync with remote before manifest push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git rebase origin/main
 
       - name: Commit manifest (manifest commit)
         shell: bash
         run: |
           set -euo pipefail
           git add market_cache/manifest.json || true
+
           if git diff --cached --quiet; then
             echo "No manifest changes to commit."
           else
