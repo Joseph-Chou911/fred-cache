@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-01-11T06:17:15.467033Z",
-  "as_of_ts": "2026-01-11T14:17:15.467033+08:00",
-  "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
+  "generated_at_utc": "2026-01-11T06:21:26.311515Z",
+  "as_of_ts": "2026-01-11T14:21:26.311515+08:00",
+  "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
   "features_policy": {
     "window": 60,
     "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -10,6 +10,7 @@
     "ret1_mode": "delta (latest - previous valid point)",
     "rounding": "derived numbers rounded to 6 decimals deterministically",
     "w60_dates": "oldest_date/newest_date refer to the window slice (last 60 points when available)",
+    "strict_date": "only accept YYYY-MM-DD dates into features window",
     "source": "inputs_history_lite.json"
   },
   "series": {
@@ -29,7 +30,7 @@
         "dev": -2.9245
       },
       "ret1": -0.96,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60"
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
     },
     "OFR_FSI": {
       "series_id": "OFR_FSI",
@@ -47,7 +48,7 @@
         "dev": -0.281833
       },
       "ret1": 0.155,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60"
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
     },
     "SPX": {
       "series_id": "SPX",
@@ -65,7 +66,7 @@
         "dev": 160.601167
       },
       "ret1": 44.82,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60"
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
     },
     "HYG": {
       "series_id": "HYG",
@@ -83,7 +84,7 @@
         "dev": 0.373833
       },
       "ret1": 0.06,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60"
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
     },
     "IEF": {
       "series_id": "IEF",
@@ -101,7 +102,7 @@
         "dev": -0.448833
       },
       "ret1": 0.11,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60"
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
     }
   }
 }
