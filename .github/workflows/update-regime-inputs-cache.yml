@@ -47,12 +47,78 @@ jobs:
           cp -f regime_inputs_cache/inputs_latest.json regime_inputs_cache/latest.json
           cp -f regime_inputs_cache/inputs_history_lite.json regime_inputs_cache/history_lite.json
 
-      # 修正處：加上雙引號，避免 YAML 將 ": " 解析為鍵值分隔符
       - name: "Patch manifest (scheme A: pin both canonical+compat)"
         shell: bash
         run: |
           set -euo pipefail
           python scripts/patch_manifest_regime_inputs.py --repo "Joseph-Chou911/fred-cache"
+
+      - name: "Sanity check: required files exist & non-empty"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "== List regime_inputs_cache =="
+          ls -al regime_inputs_cache || true
+
+          required=(
+            "regime_inputs_cache/inputs_latest.json"
+            "regime_inputs_cache/inputs_history_lite.json"
+            "regime_inputs_cache/features_latest.json"
+            "regime_inputs_cache/dq_state.json"
+            "regime_inputs_cache/inputs_schema_out.json"
+            "regime_inputs_cache/latest.json"
+            "regime_inputs_cache/history_lite.json"
+            "regime_inputs_cache/manifest.json"
+          )
+
+          echo "== Check required files (must exist and size > 0) =="
+          missing=0
+          for f in "${required[@]}"; do
+            if [ ! -s "$f" ]; then
+              echo "MISSING_OR_EMPTY: $f"
+              missing=1
+            else
+              echo "OK: $f (size=$(wc -c < "$f"))"
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "ERROR: required output files missing/empty. Abort."
+            exit 2
+          fi
+
+      - name: "Sanity check: manifest pinned keys (scheme A)"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - << 'PY'
+          import json
+          from pathlib import Path
+
+          p = Path("regime_inputs_cache/manifest.json")
+          obj = json.loads(p.read_text(encoding="utf-8"))
+          pinned = obj.get("pinned", {}) or {}
+
+          required_keys = [
+              "inputs_latest_json",
+              "inputs_history_lite_json",
+              "features_latest_json",
+              "dq_state_json",
+              "inputs_schema_out_json",
+              "latest_json",
+              "history_lite_json",
+          ]
+
+          missing = [k for k in required_keys if not pinned.get(k)]
+          print("== manifest.json pinned keys ==")
+          for k in required_keys:
+              print(f"{k}: {pinned.get(k)}")
+
+          if missing:
+              raise SystemExit(f"ERROR: manifest pinned missing keys: {missing}")
+          print("OK: manifest pinned keys present.")
+          PY
 
       - name: Commit & push
         shell: bash
@@ -62,7 +128,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 注意：若這些檔案在前面步驟未被成功建立，git add 會報錯 (因為 set -e)
           git add \
             regime_inputs_cache/inputs_latest.json \
             regime_inputs_cache/inputs_history_lite.json \
