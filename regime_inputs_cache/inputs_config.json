@@ -1,0 +1,40 @@
+{
+  "version": "inputs_config_v1",
+  "default_timeout_sec": 20,
+  "series": [
+    {
+      "series_id": "VIX",
+      "fetcher": "csv_max_date",
+      "url": "PUT_YOUR_VIX_CSV_URL_HERE",
+      "date_col": "DATE",
+      "value_col": "CLOSE",
+      "expected_max_staleness_days": 7
+    },
+    {
+      "series_id": "OFR_FSI",
+      "fetcher": "csv_max_date",
+      "url": "PUT_YOUR_OFR_FSI_CSV_URL_HERE",
+      "date_col": "date",
+      "value_col": "value",
+      "expected_max_staleness_days": 14
+    },
+    {
+      "series_id": "SPX",
+      "fetcher": "stooq_daily",
+      "symbol": "^SPX",
+      "expected_max_staleness_days": 7
+    },
+    {
+      "series_id": "HYG",
+      "fetcher": "stooq_daily",
+      "symbol": "hyg.us",
+      "expected_max_staleness_days": 7
+    },
+    {
+      "series_id": "IEF",
+      "fetcher": "stooq_daily",
+      "symbol": "ief.us",
+      "expected_max_staleness_days": 7
+    }
+  ]
+}
