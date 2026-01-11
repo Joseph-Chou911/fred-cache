@@ -1,0 +1,86 @@
+name: Update regime inputs cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "DAILY or BACKFILL"
+        required: true
+        default: "DAILY"
+      backfill_days:
+        description: "used when mode=BACKFILL"
+        required: true
+        default: "2000"
+      daily_days:
+        description: "used when mode=DAILY"
+        required: true
+        default: "30"
+  schedule:
+    - cron: "40 5 * * *"  # 13:40 Asia/Taipei (UTC+8)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install requests python-dateutil
+
+      - name: Build regime_inputs_cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODE="${{ github.event.inputs.mode }}"
+          if [ -z "${MODE}" ]; then MODE="DAILY"; fi
+
+          if [ "${MODE}" = "BACKFILL" ]; then
+            python Scripts/update_regime_inputs_cache.py --mode BACKFILL --backfill-days "${{ github.event.inputs.backfill_days }}"
+          else
+            python Scripts/update_regime_inputs_cache.py --mode DAILY --daily-days "${{ github.event.inputs.daily_days }}"
+          fi
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add regime_inputs_cache/
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git commit -m "regime_inputs_cache: update"
+
+      - name: Push (rebase+retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            if git push; then exit 0; fi
+            git pull --rebase
+            sleep $((2 ** i))
+          done
+          exit 1
