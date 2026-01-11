@@ -1,0 +1,69 @@
+name: Update regime state cache (from inputs)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 * * *"  # 14:00 Asia/Taipei (UTC+8)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install requests python-dateutil
+
+      - name: Build regime state (from inputs)
+        shell: bash
+        env:
+          INPUTS_HISTORY_LITE: "regime_inputs_cache/history_lite.json"
+          INPUTS_MANIFEST: "regime_inputs_cache/manifest.json"
+        run: |
+          set -euo pipefail
+          python Scripts/update_regime_state_cache_from_inputs.py --out-dir regime_state_cache_from_inputs
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add regime_state_cache_from_inputs/
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git commit -m "regime_state_cache_from_inputs: update"
+
+      - name: Push (rebase+retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            if git push; then exit 0; fi
+            git pull --rebase
+            sleep $((2 ** i))
+          done
+          exit 1
