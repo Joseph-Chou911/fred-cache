@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-market_cache/update_market_cache.py
+market_cache/update_market_cache.py (enhanced)
 
 Fetch + normalize + compute stats for:
 - OFR_FSI (OFR CSV)
@@ -13,11 +13,17 @@ Outputs (in market_cache/):
 - latest.json
 - history_lite.json
 - stats_latest.json
+- dq_state.json  (NEW)
+
+Stats:
+- w60 / w252: mean, std(ddof=0), z, p, ma, dev_ma, ret1_delta, ret1_pct (NEW)
+- z60_delta / p60_delta, z252_delta / p252_delta (NEW): computed by re-evaluating stats at t and t-1
 
 Design goals:
 - auditable: keep source URLs (ratio keeps both URLs + formula notes)
 - no guessing: insufficient window -> NA
 - lite history: keep last N points per series (default 400) enough for w252
+- quality gating: dq_state.json to prevent bad/old data from poisoning downstream
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ import math
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as date_cls
 from typing import Dict, List, Optional, Tuple
 from urllib.request import Request, urlopen
 
@@ -37,8 +43,9 @@ OUT_DIR = os.path.join("market_cache")
 LATEST_PATH = os.path.join(OUT_DIR, "latest.json")
 HISTORY_LITE_PATH = os.path.join(OUT_DIR, "history_lite.json")
 STATS_LATEST_PATH = os.path.join(OUT_DIR, "stats_latest.json")
+DQ_STATE_PATH = os.path.join(OUT_DIR, "dq_state.json")
 
-SCRIPT_VERSION = "market_cache_v1_stats_zp_w60_w252_ret1_ma60_lite400"
+SCRIPT_VERSION = "market_cache_v2_stats_zp_w60_w252_ret1_delta_pct_deltas_dq_lite400"
 LITE_KEEP_N = int(os.environ.get("LITE_KEEP_N", "400"))
 
 # Primary sources (user-specified)
@@ -47,15 +54,11 @@ URL_VIX_CBOE = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_Hist
 
 # Stooq endpoints (CSV download)
 def stooq_daily_url(symbol: str) -> str:
-    # Examples: ^spx, hyg.us, ief.us
     return f"https://stooq.com/q/d/l/?s={symbol}&i=d"
 
 URL_SPX = stooq_daily_url("^spx")
 URL_HYG = stooq_daily_url("hyg.us")
 URL_IEF = stooq_daily_url("ief.us")
-
-# Optional fallback for VIX (NOT used unless you enable it)
-URL_VIX_FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS"
 
 
 @dataclass
@@ -66,6 +69,25 @@ class Point:
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_yyyy_mm_dd(s: str) -> Optional[date_cls]:
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def days_stale(latest_date: str, as_of_utc: str) -> Optional[int]:
+    d = parse_yyyy_mm_dd(latest_date)
+    if not d:
+        return None
+    # as_of_utc is ISO Z
+    try:
+        as_of_dt = datetime.strptime(as_of_utc, "%Y-%m-%dT%H:%M:%SZ").date()
+    except Exception:
+        return None
+    return (as_of_dt - d).days
 
 
 def http_get_text(url: str, timeout: int = 30) -> str:
@@ -79,7 +101,6 @@ def http_get_text(url: str, timeout: int = 30) -> str:
     )
     with urlopen(req, timeout=timeout) as resp:
         raw = resp.read()
-    # best-effort decode
     for enc in ("utf-8-sig", "utf-8", "cp1252"):
         try:
             return raw.decode(enc)
@@ -88,13 +109,12 @@ def http_get_text(url: str, timeout: int = 30) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def parse_csv_points_generic(text: str, date_col_hint: str = "date") -> Tuple[List[Point], List[str]]:
+def parse_csv_points_generic(text: str, date_col_hint: str = "date") -> Tuple[List[Point], List[str], str]:
     """
-    Parse a CSV where:
-    - there is a header row
-    - date column is named like 'date' (case-insensitive) OR first column
-    - value column is the first non-date numeric-like column (or second column)
-    Returns: (points_sorted_asc, header_fields)
+    Parse a CSV with header:
+    - date column name includes date_col_hint (case-insensitive) else first column
+    - value column: prefer header containing fsi/value/close; else second column
+    Returns: (points_sorted_asc, header_fields, value_col_name)
     """
     rows = list(csv.reader(text.splitlines()))
     if not rows or len(rows) < 2:
@@ -103,18 +123,17 @@ def parse_csv_points_generic(text: str, date_col_hint: str = "date") -> Tuple[Li
     header = [h.strip() for h in rows[0]]
     header_lc = [h.lower() for h in header]
 
-    # detect date column
+    # date col
     if date_col_hint.lower() in header_lc:
         date_idx = header_lc.index(date_col_hint.lower())
     else:
-        date_idx = 0  # fallback
+        date_idx = 0
 
-    # detect value column (first non-date column)
+    # value col
     value_idx = None
     for i, h in enumerate(header_lc):
         if i == date_idx:
             continue
-        # prefer something that looks like "fsi" / "value" / "close"
         if any(k in h for k in ("fsi", "value", "close")):
             value_idx = i
             break
@@ -135,27 +154,27 @@ def parse_csv_points_generic(text: str, date_col_hint: str = "date") -> Tuple[Li
             v = float(v_str)
         except Exception:
             continue
-        # normalize date (expect YYYY-MM-DD)
-        if "/" in d:
-            # very defensive parse for unexpected formats
+
+        # normalize possible MM/DD/YYYY
+        if "/" in d and len(d) <= 10:
             try:
                 dt = datetime.strptime(d, "%m/%d/%Y")
                 d = dt.strftime("%Y-%m-%d")
             except Exception:
                 pass
+
+        if parse_yyyy_mm_dd(d) is None:
+            continue
+
         pts.append(Point(d, v))
 
-    # sort asc by date (string sort works for YYYY-MM-DD)
     pts.sort(key=lambda x: x.date)
-    return pts, header
+    if len(pts) < 10:
+        raise ValueError("CSV: too few usable rows after parsing")
+    return pts, header, header[value_idx]
 
 
 def parse_stooq_ohlc(text: str) -> List[Point]:
-    """
-    Stooq CSV download typically includes:
-    Date,Open,High,Low,Close,Volume
-    We use Close.
-    """
     reader = csv.DictReader(text.splitlines())
     if not reader.fieldnames:
         raise ValueError("Stooq CSV: missing header")
@@ -173,6 +192,8 @@ def parse_stooq_ohlc(text: str) -> List[Point]:
         d = (row.get("Date") or row.get("date") or "").strip()
         c = (row.get("Close") or row.get("close") or "").strip()
         if not d or not c:
+            continue
+        if parse_yyyy_mm_dd(d) is None:
             continue
         try:
             v = float(c)
@@ -212,7 +233,6 @@ def std_ddof0(xs: List[float]) -> float:
 
 
 def percentile_le(xs: List[float], x: float) -> float:
-    # P = count(x_i <= x) / n * 100
     n = len(xs)
     if n == 0:
         return float("nan")
@@ -220,13 +240,23 @@ def percentile_le(xs: List[float], x: float) -> float:
     return c / n * 100.0
 
 
-def window_stats(values: List[Point], w: int) -> Dict[str, object]:
-    if len(values) < w:
+def window_stats_at(values: List[Point], w: int, idx: int) -> Dict[str, object]:
+    """
+    Compute window stats ending at values[idx] (inclusive).
+    idx must be within list.
+    """
+    if idx < 0 or idx >= len(values):
+        raise IndexError("idx out of range")
+
+    end = idx + 1
+    start = end - w
+    if start < 0:
+        # insufficient window
         return {
-            "n": len(values),
+            "n": end,
             "window": w,
-            "start_date": values[0].date if values else None,
-            "end_date": values[-1].date if values else None,
+            "start_date": values[0].date,
+            "end_date": values[idx].date,
             "mean": None,
             "std": None,
             "z": None,
@@ -234,7 +264,7 @@ def window_stats(values: List[Point], w: int) -> Dict[str, object]:
             "ma": None,
             "dev_ma": None,
         }
-    win = values[-w:]
+    win = values[start:end]
     xs = [p.value for p in win]
     x = xs[-1]
     mu = mean(xs)
@@ -263,6 +293,15 @@ def ret1_delta(values: List[Point]) -> Optional[float]:
     return values[-1].value - values[-2].value
 
 
+def ret1_pct(values: List[Point]) -> Optional[float]:
+    if len(values) < 2:
+        return None
+    prev = values[-2].value
+    if prev == 0:
+        return None
+    return (values[-1].value / prev - 1.0) * 100.0
+
+
 def to_lite(values: List[Point], keep_n: int) -> List[Dict[str, object]]:
     v = values[-keep_n:] if len(values) > keep_n else values
     return [{"date": p.date, "value": p.value} for p in v]
@@ -276,19 +315,34 @@ def main() -> None:
     ensure_out_dir()
     as_of_ts = utc_now_iso()
 
-    # ---- Fetch raw series ----
+    dq_checks: List[Dict[str, object]] = []
+    dq_overall = "OK"
+
+    def add_check(series_id: str, check: str, status: str, **kwargs) -> None:
+        nonlocal dq_overall
+        item = {"series_id": series_id, "check": check, "status": status}
+        item.update(kwargs)
+        dq_checks.append(item)
+        if status == "ERR":
+            dq_overall = "ERR"
+        elif status == "WARN" and dq_overall != "ERR":
+            dq_overall = "WARN"
+
+    # ---- Fetch + parse series ----
     # OFR_FSI
     ofr_text = http_get_text(URL_OFR_FSI)
-    ofr_pts, ofr_header = parse_csv_points_generic(ofr_text, date_col_hint="date")
+    ofr_pts, ofr_header, ofr_valcol = parse_csv_points_generic(ofr_text, date_col_hint="date")
+    add_check("OFR_FSI", "csv_value_col", "OK", value_col=ofr_valcol)
 
     # VIX (CBOE)
     vix_text = http_get_text(URL_VIX_CBOE)
-    # CBOE VIX_History.csv header is typically DATE,OPEN,HIGH,LOW,CLOSE
-    vix_pts, vix_header = parse_csv_points_generic(vix_text, date_col_hint="date")
+    vix_pts, vix_header, vix_valcol = parse_csv_points_generic(vix_text, date_col_hint="date")
+    add_check("VIX", "csv_value_col", "OK", value_col=vix_valcol)
 
     # SP500 via Stooq ^SPX
     spx_text = http_get_text(URL_SPX)
     spx_pts = parse_stooq_ohlc(spx_text)
+    add_check("SP500", "stooq_has_close", "OK")
 
     # HYG / IEF via Stooq
     hyg_text = http_get_text(URL_HYG)
@@ -296,12 +350,23 @@ def main() -> None:
     hyg_pts = parse_stooq_ohlc(hyg_text)
     ief_pts = parse_stooq_ohlc(ief_text)
     ratio_pts = align_ratio(hyg_pts, ief_pts)
+    add_check("HYG_IEF_RATIO", "aligned_points", "OK", n=len(ratio_pts))
 
     # ---- Build normalized series dict ----
     series_map: Dict[str, Dict[str, object]] = {}
 
     def add_series(series_id: str, pts: List[Point], source_url: str, extra: Optional[Dict[str, object]] = None) -> None:
         latest = pts[-1]
+        stale = days_stale(latest.date, as_of_ts)
+        if stale is None:
+            add_check(series_id, "latest_date_parseable", "ERR", latest_date=latest.date)
+        else:
+            # conservative threshold: >5 calendar days => WARN
+            if stale > 5:
+                add_check(series_id, "staleness_days", "WARN", staleness_days=stale, latest_date=latest.date)
+            else:
+                add_check(series_id, "staleness_days", "OK", staleness_days=stale, latest_date=latest.date)
+
         series_map[series_id] = {
             "series_id": series_id,
             "latest": {
@@ -355,16 +420,70 @@ def main() -> None:
         for r in lite:
             d = str(r["date"])
             v = float(r["value"])
+            if parse_yyyy_mm_dd(d) is None:
+                continue
             out.append(Point(d, v))
         out.sort(key=lambda x: x.date)
         return out
 
     stats_series: Dict[str, object] = {}
     for sid, obj in series_map.items():
-        pts = pts_from_lite(obj["history_lite"])  # already lite, but sorted
+        pts = pts_from_lite(obj["history_lite"])
+        if len(pts) < 2:
+            add_check(sid, "min_points>=2", "ERR", n=len(pts))
+            continue
+
         latest = pts[-1]
-        w60 = window_stats(pts, 60)
-        w252 = window_stats(pts, 252)
+        prev = pts[-2]
+
+        # window stats at latest (idx=-1) and prev (idx=-2) to get deltas
+        idx_latest = len(pts) - 1
+        idx_prev = len(pts) - 2
+
+        w60_now = window_stats_at(pts, 60, idx_latest)
+        w60_prev = window_stats_at(pts, 60, idx_prev)
+        w252_now = window_stats_at(pts, 252, idx_latest)
+        w252_prev = window_stats_at(pts, 252, idx_prev)
+
+        # deltas (only if both available)
+        def delta(a: Optional[float], b: Optional[float]) -> Optional[float]:
+            if a is None or b is None:
+                return None
+            return a - b
+
+        z60_delta = delta(w60_now.get("z"), w60_prev.get("z"))
+        p60_delta = delta(w60_now.get("p"), w60_prev.get("p"))
+        z252_delta = delta(w252_now.get("z"), w252_prev.get("z"))
+        p252_delta = delta(w252_now.get("p"), w252_prev.get("p"))
+
+        r1d = latest.value - prev.value
+        r1p = ret1_pct(pts)
+
+        # bad-tick check using w60 std (if available)
+        std60 = w60_now.get("std")
+        if isinstance(std60, (int, float)) and std60 not in (0, None):
+            if abs(r1d) > 8.0 * float(std60):
+                add_check(sid, "bad_tick_ret1_delta_vs_std60", "WARN", ret1_delta=r1d, std60=std60, threshold="8*std60")
+            else:
+                add_check(sid, "bad_tick_ret1_delta_vs_std60", "OK", ret1_delta=r1d, std60=std60, threshold="8*std60")
+
+        # pack windows + new fields
+        w60_out = dict(w60_now)
+        w60_out.update({
+            "ret1_delta": r1d,
+            "ret1_pct": r1p,
+            "z_delta": z60_delta,
+            "p_delta": p60_delta,
+        })
+
+        w252_out = dict(w252_now)
+        w252_out.update({
+            "ret1_delta": r1d,
+            "ret1_pct": r1p,
+            "z_delta": z252_delta,
+            "p_delta": p252_delta,
+        })
+
         stats_series[sid] = {
             "series_id": sid,
             "latest": {
@@ -374,11 +493,12 @@ def main() -> None:
                 "as_of_ts": as_of_ts,
             },
             "windows": {
-                "w60": {**w60, "ret1": ret1_delta(pts)},
-                "w252": {**w252, "ret1": ret1_delta(pts)},
+                "w60": w60_out,
+                "w252": w252_out,
             },
         }
-        # carry extra provenance for derived series
+
+        # provenance for derived series
         if sid == "HYG_IEF_RATIO":
             stats_series[sid]["latest"]["sources"] = obj["latest"].get("sources")
             stats_series[sid]["latest"]["formula"] = obj["latest"].get("formula")
@@ -390,16 +510,29 @@ def main() -> None:
         "windows": {"w60": 60, "w252": 252},
         "std_ddof": 0,
         "percentile_method": "P = count(x<=latest)/n * 100",
-        "ret1_mode": "delta",
+        "ret1_mode": "delta+percent",
         "series_count": len(stats_series),
         "series": stats_series,
     }
     with open(STATS_LATEST_PATH, "w", encoding="utf-8") as f:
         json.dump(stats_obj, f, ensure_ascii=False, indent=2)
 
+    # ---- Output dq_state.json ----
+    dq_obj = {
+        "generated_at_utc": as_of_ts,
+        "as_of_ts": as_of_ts,
+        "script_version": SCRIPT_VERSION,
+        "dq": dq_overall,
+        "checks": dq_checks,
+    }
+    with open(DQ_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(dq_obj, f, ensure_ascii=False, indent=2)
+
     print(f"[OK] wrote: {LATEST_PATH}")
     print(f"[OK] wrote: {HISTORY_LITE_PATH}")
     print(f"[OK] wrote: {STATS_LATEST_PATH}")
+    print(f"[OK] wrote: {DQ_STATE_PATH}")
+    print(f"[DQ] overall={dq_overall} checks={len(dq_checks)}")
 
 
 if __name__ == "__main__":
