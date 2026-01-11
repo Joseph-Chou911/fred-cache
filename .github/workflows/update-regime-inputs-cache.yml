@@ -47,7 +47,8 @@ jobs:
           cp -f regime_inputs_cache/inputs_latest.json regime_inputs_cache/latest.json
           cp -f regime_inputs_cache/inputs_history_lite.json regime_inputs_cache/history_lite.json
 
-      - name: Patch manifest (scheme A: pin both canonical+compat)
+      # 修正處：加上雙引號，避免 YAML 將 ": " 解析為鍵值分隔符
+      - name: "Patch manifest (scheme A: pin both canonical+compat)"
         shell: bash
         run: |
           set -euo pipefail
@@ -61,6 +62,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # 注意：若這些檔案在前面步驟未被成功建立，git add 會報錯 (因為 set -e)
           git add \
             regime_inputs_cache/inputs_latest.json \
             regime_inputs_cache/inputs_history_lite.json \
