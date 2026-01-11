@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-01-11T06:02:42.279743Z",
-  "as_of_ts": "2026-01-11T14:02:42.279743+08:00",
+  "generated_at_utc": "2026-01-11T06:23:38.575460Z",
+  "as_of_ts": "2026-01-11T14:23:38.575460+08:00",
   "script_version": "backfill_regime_inputs_history_v1",
   "n": 250,
   "per_series": {
