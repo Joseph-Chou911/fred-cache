@@ -3,7 +3,7 @@ name: Update regime inputs cache
 on:
   workflow_dispatch: {}
   schedule:
-    # Every 6 hours at minute 12 (UTC). Adjust as you like.
+    # every 6 hours at minute 12 (UTC)
     - cron: "12 */6 * * *"
 
 permissions:
@@ -29,12 +29,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run updater
+      - name: Run updater (serial, auditable)
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          # no external deps required (stdlib only)
           python scripts/update_regime_inputs_cache.py
 
       - name: Commit data files (without manifest)
@@ -44,12 +43,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Add generated files except manifest
           git add \
-            regime_inputs_cache/inputs_latest.json \
-            regime_inputs_cache/inputs_history_lite.json \
-            regime_inputs_cache/inputs_schema.json \
-            regime_inputs_cache/dq_state.json
+            regime_inputs_cache/latest.json \
+            regime_inputs_cache/history_lite.json \
+            regime_inputs_cache/dq_state.json \
+            regime_inputs_cache/inputs_schema_out.json
 
           if git diff --cached --quiet; then
             echo "No data changes."
@@ -61,10 +59,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # If no commit happened above, HEAD is still fine; we still pin to current HEAD
           DATA_SHA="$(git rev-parse HEAD)"
           echo "DATA_SHA=$DATA_SHA"
           python scripts/patch_regime_inputs_manifest.py --repo "${GITHUB_REPOSITORY}" --data-sha "${DATA_SHA}"
+
           git add regime_inputs_cache/manifest.json
           if git diff --cached --quiet; then
             echo "No manifest changes."
