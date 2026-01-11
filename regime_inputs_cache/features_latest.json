@@ -1,13 +1,14 @@
 {
-  "generated_at_utc": "2026-01-11T06:04:57.780975Z",
-  "as_of_ts": "2026-01-11T14:04:57.780975+08:00",
-  "script_version": "regime_inputs_cache_v1_2_features",
+  "generated_at_utc": "2026-01-11T06:12:43.843769Z",
+  "as_of_ts": "2026-01-11T14:12:43.843769+08:00",
+  "script_version": "regime_inputs_cache_v1_3_features_fixA",
   "features_policy": {
     "window": 60,
     "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
     "ma_definition": "mean of last 60 valid points when n_valid>=60 else NA",
     "dev_definition": "latest - ma (only when ma is available)",
     "ret1_mode": "delta (latest - previous valid point)",
+    "rounding": "derived numbers rounded to 6 decimals deterministically",
     "source": "inputs_history_lite.json"
   },
   "series": {
@@ -25,7 +26,7 @@
         "ma": 17.4145,
         "dev": -2.9245
       },
-      "ret1": -0.9599999999999991,
+      "ret1": -0.96,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "OFR_FSI": {
@@ -39,10 +40,10 @@
         "n_valid": 250,
         "oldest_date": "2025-10-16",
         "newest_date": "2026-01-07",
-        "ma": -2.3141666666666665,
-        "dev": -0.2818333333333336
+        "ma": -2.314167,
+        "dev": -0.281833
       },
-      "ret1": 0.1549999999999998,
+      "ret1": 0.155,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "SPX": {
@@ -56,10 +57,10 @@
         "n_valid": 250,
         "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
-        "ma": 6805.6788333333325,
-        "dev": 160.60116666666727
+        "ma": 6805.678833,
+        "dev": 160.601167
       },
-      "ret1": 44.81999999999971,
+      "ret1": 44.82,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "HYG": {
@@ -73,10 +74,10 @@
         "n_valid": 250,
         "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
-        "ma": 80.62616666666665,
-        "dev": 0.37383333333335145
+        "ma": 80.626167,
+        "dev": 0.373833
       },
-      "ret1": 0.060000000000002274,
+      "ret1": 0.06,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "IEF": {
@@ -90,10 +91,10 @@
         "n_valid": 250,
         "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
-        "ma": 96.74883333333334,
-        "dev": -0.4488333333333401
+        "ma": 96.748833,
+        "dev": -0.448833
       },
-      "ret1": 0.10999999999999943,
+      "ret1": 0.11,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     }
   }
