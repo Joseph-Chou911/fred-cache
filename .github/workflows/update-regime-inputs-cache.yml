@@ -48,6 +48,7 @@ jobs:
             regime_inputs_cache/history_lite.json \
             regime_inputs_cache/dq_state.json \
             regime_inputs_cache/inputs_schema_out.json
+            regime_inputs_cache/features_latest.json
 
           if git diff --cached --quiet; then
             echo "No data changes."
