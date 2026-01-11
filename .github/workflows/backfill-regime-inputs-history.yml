@@ -6,7 +6,7 @@ on:
       n:
         description: "Backfill last N points per series"
         required: true
-        default: "250"
+        default: "320"   # <-- from 250 -> 320 (MA252 needs >=252 + buffer)
 
 permissions:
   contents: write
@@ -46,7 +46,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # IMPORTANT: single-line add blocks to avoid "\" mistakes
           git add -- \
             regime_inputs_cache/inputs_history_lite.json \
             regime_inputs_cache/backfill_report.json
