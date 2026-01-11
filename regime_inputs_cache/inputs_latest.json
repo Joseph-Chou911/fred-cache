@@ -1,0 +1,47 @@
+{
+  "generated_at_utc": "2026-01-11T03:28:42.477563Z",
+  "as_of_ts": "2026-01-11T03:28:42.477563Z",
+  "script_version": "regime_inputs_cache_v1",
+  "series": {
+    "VIX": {
+      "series_id": "VIX",
+      "data_date": null,
+      "value": null,
+      "source_url": null,
+      "as_of_ts": "2026-01-11T03:28:42.477563Z",
+      "notes": "ERR:fetch_failed"
+    },
+    "OFR_FSI": {
+      "series_id": "OFR_FSI",
+      "data_date": null,
+      "value": null,
+      "source_url": null,
+      "as_of_ts": "2026-01-11T03:28:42.477563Z",
+      "notes": "ERR:fetch_failed"
+    },
+    "SPX": {
+      "series_id": "SPX",
+      "data_date": "2026-01-09",
+      "value": 6966.28,
+      "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+      "as_of_ts": "2026-01-11T03:28:42.477563Z",
+      "notes": null
+    },
+    "HYG": {
+      "series_id": "HYG",
+      "data_date": "2026-01-09",
+      "value": 81.0,
+      "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+      "as_of_ts": "2026-01-11T03:28:42.477563Z",
+      "notes": null
+    },
+    "IEF": {
+      "series_id": "IEF",
+      "data_date": "2026-01-09",
+      "value": 96.3,
+      "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+      "as_of_ts": "2026-01-11T03:28:42.477563Z",
+      "notes": null
+    }
+  }
+}

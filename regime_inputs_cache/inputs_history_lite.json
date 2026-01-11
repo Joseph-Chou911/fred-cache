@@ -1,0 +1,42 @@
+[
+  {
+    "series_id": "VIX",
+    "data_date": null,
+    "value": null,
+    "source_url": null,
+    "as_of_ts": "2026-01-11T03:28:42.477563Z",
+    "notes": "ERR:fetch_failed"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": null,
+    "value": null,
+    "source_url": null,
+    "as_of_ts": "2026-01-11T03:28:42.477563Z",
+    "notes": "ERR:fetch_failed"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2026-01-09",
+    "value": 6966.28,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T03:28:42.477563Z",
+    "notes": null
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2026-01-09",
+    "value": 81.0,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T03:28:42.477563Z",
+    "notes": null
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2026-01-09",
+    "value": 96.3,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T03:28:42.477563Z",
+    "notes": null
+  }
+]

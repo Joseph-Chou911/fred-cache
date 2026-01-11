@@ -1,0 +1,63 @@
+{
+  "generated_at_utc": "2026-01-11T03:28:42.477563Z",
+  "as_of_ts": "2026-01-11T03:28:42.477563Z",
+  "script_version": "regime_inputs_cache_v1",
+  "status": "ERR",
+  "errors": [
+    "VIX fetch failed: ValueError: unknown url type: 'PUT_YOUR_VIX_CSV_URL_HERE'",
+    "OFR_FSI fetch failed: ValueError: unknown url type: 'PUT_YOUR_OFR_FSI_CSV_URL_HERE'"
+  ],
+  "warnings": [],
+  "per_series": {
+    "VIX": {
+      "ok": false,
+      "fetcher": "csv_max_date",
+      "data_date": null,
+      "value": null,
+      "source_url": null,
+      "staleness_days": null,
+      "expected_max_staleness_days": 7,
+      "error": "VIX fetch failed: ValueError: unknown url type: 'PUT_YOUR_VIX_CSV_URL_HERE'"
+    },
+    "OFR_FSI": {
+      "ok": false,
+      "fetcher": "csv_max_date",
+      "data_date": null,
+      "value": null,
+      "source_url": null,
+      "staleness_days": null,
+      "expected_max_staleness_days": 14,
+      "error": "OFR_FSI fetch failed: ValueError: unknown url type: 'PUT_YOUR_OFR_FSI_CSV_URL_HERE'"
+    },
+    "SPX": {
+      "ok": true,
+      "fetcher": "stooq_daily",
+      "data_date": "2026-01-09",
+      "value": 6966.28,
+      "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+      "staleness_days": 2,
+      "expected_max_staleness_days": 7,
+      "error": null
+    },
+    "HYG": {
+      "ok": true,
+      "fetcher": "stooq_daily",
+      "data_date": "2026-01-09",
+      "value": 81.0,
+      "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+      "staleness_days": 2,
+      "expected_max_staleness_days": 7,
+      "error": null
+    },
+    "IEF": {
+      "ok": true,
+      "fetcher": "stooq_daily",
+      "data_date": "2026-01-09",
+      "value": 96.3,
+      "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+      "staleness_days": 2,
+      "expected_max_staleness_days": 7,
+      "error": null
+    }
+  }
+}
