@@ -1,15 +1,19 @@
 {
-  "generated_at_utc": "2026-01-11T06:35:48.317467Z",
-  "as_of_ts": "2026-01-11T14:35:48.317467+08:00",
-  "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
+  "generated_at_utc": "2026-01-11T07:03:04.441453Z",
+  "as_of_ts": "2026-01-11T15:03:04.441453+08:00",
+  "script_version": "regime_inputs_cache_v1_8_normalizedHistory",
   "status": "OK",
   "errors": [],
   "warnings": [],
   "history_cleanup": {
     "kept": 1250,
-    "dropped_null": 2,
+    "dropped_null": 0,
     "dropped_bad_date": 0,
     "dropped_bad_value": 0
+  },
+  "history_normalize": {
+    "kept_after": 1250,
+    "dropped_dupe_by_day": 0
   },
   "per_series": {
     "VIX": {
@@ -62,5 +66,9 @@
       "expected_max_staleness_days": 7,
       "error": null
     }
+  },
+  "history_normalize_after_append": {
+    "kept_after": 1250,
+    "dropped_dupe_by_day": 5
   }
 }

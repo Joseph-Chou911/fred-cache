@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-01-11T06:35:48.317467Z",
-  "as_of_ts": "2026-01-11T14:35:48.317467+08:00",
-  "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
+  "generated_at_utc": "2026-01-11T07:03:04.441453Z",
+  "as_of_ts": "2026-01-11T15:03:04.441453+08:00",
+  "script_version": "regime_inputs_cache_v1_8_normalizedHistory",
   "features_policy": {
     "window": 60,
     "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -9,9 +9,8 @@
     "dev_definition": "latest - ma (only when ma is available)",
     "ret1_mode": "delta (latest - previous valid point)",
     "rounding": "derived numbers rounded to 6 decimals deterministically",
-    "w60_dates": "oldest_date/newest_date refer to the window slice",
     "strict_date": "only accept YYYY-MM-DD dates into features window",
-    "window_preview": "window_head_dates/window_tail_dates included for quick audit",
+    "history_normalized": "inputs_history_lite.json is normalized per series_id/data_date for audit stability",
     "source": "inputs_history_lite.json"
   },
   "series": {
