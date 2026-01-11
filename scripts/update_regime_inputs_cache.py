@@ -2,20 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 regime_inputs_cache updater (standalone) + Upgrade A: features_latest.json
-
-Outputs:
-- regime_inputs_cache/latest.json
-- regime_inputs_cache/history_lite.json
-- regime_inputs_cache/dq_state.json
-- regime_inputs_cache/inputs_schema_out.json   (frozen schema used in this run)
-- regime_inputs_cache/features_latest.json     (MA60/dev/ret1 derived from history_lite)
-
-Design goals:
-- Serial fetch (no parallel)
-- Retry with backoff: 2s -> 4s -> 8s
-- No guessing: if required columns not found, mark ERR for that series
-- Auditable notes: record CSV header + chosen date/value columns + row counts
-- Features are computed ONLY from locally persisted history_lite (no extra fetching)
+- Supports fetchers:
+  - csv_max_date (explicit date_col/value_col)
+  - stooq_daily
+- Writes:
+  - regime_inputs_cache/inputs_latest.json
+  - regime_inputs_cache/inputs_history_lite.json
+  - regime_inputs_cache/dq_state.json
+  - regime_inputs_cache/features_latest.json   <-- Upgrade A
 """
 
 from __future__ import annotations
@@ -29,8 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    # Python 3.9+
-    from zoneinfo import ZoneInfo
+    from zoneinfo import ZoneInfo  # py3.9+
 except Exception:
     ZoneInfo = None  # type: ignore
 
@@ -38,12 +31,11 @@ except Exception:
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "regime_inputs_cache"
 
-SCHEMA_IN = OUT_DIR / "inputs_schema.json"
-LATEST_OUT = OUT_DIR / "latest.json"
-HISTORY_OUT = OUT_DIR / "history_lite.json"
-DQ_OUT = OUT_DIR / "dq_state.json"
-SCHEMA_OUT = OUT_DIR / "inputs_schema_out.json"
-FEATURES_OUT = OUT_DIR / "features_latest.json"
+CONFIG_PATH = OUT_DIR / "inputs_config.json"  # you are likely using this already
+LATEST_PATH = OUT_DIR / "inputs_latest.json"
+HIST_LITE_PATH = OUT_DIR / "inputs_history_lite.json"
+DQ_PATH = OUT_DIR / "dq_state.json"
+FEATURES_PATH = OUT_DIR / "features_latest.json"
 
 
 # -----------------------
@@ -59,7 +51,6 @@ def iso_z(dt: datetime) -> str:
 
 def iso_taipei(dt: datetime) -> str:
     if ZoneInfo is None:
-        # fallback: still output UTC if zoneinfo missing
         return iso_z(dt)
     return dt.astimezone(ZoneInfo("Asia/Taipei")).isoformat()
 
@@ -67,17 +58,17 @@ def iso_taipei(dt: datetime) -> str:
 # -----------------------
 # json i/o
 # -----------------------
+def load_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def write_json_atomic(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
-
-
-def load_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # -----------------------
@@ -86,12 +77,11 @@ def load_json(path: Path, default: Any) -> Any:
 def http_get_text(url: str, timeout_sec: int) -> str:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "regime_inputs_cache/1.1 (+https://github.com/)"},
+        headers={"User-Agent": "regime_inputs_cache/1.2 (+https://github.com/)"},
         method="GET",
     )
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
         raw = resp.read()
-    # Try utf-8, fallback latin-1
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
@@ -113,13 +103,13 @@ def retry_fetch(url: str, timeout_sec: int, backoff: List[int]) -> str:
 # -----------------------
 # parsing helpers
 # -----------------------
-def normalize_date(s: str, fmts: List[str]) -> str:
+def parse_date_yyyy_mm_dd(s: str) -> str:
     s = (s or "").strip()
-    for fmt in fmts:
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y"):
         try:
             dt = datetime.strptime(s, fmt)
             return dt.strftime("%Y-%m-%d")
-        except Exception:
+        except ValueError:
             continue
     raise ValueError(f"unsupported date format: {s}")
 
@@ -129,53 +119,41 @@ def safe_float(x: str) -> float:
     return float(x)
 
 
-def pick_column(header: List[str], candidates: List[str], kind: str) -> Optional[str]:
-    # exact match (case-insensitive) first
-    lower_map = {h.lower(): h for h in header}
-    for c in candidates:
-        if c.lower() in lower_map:
-            return lower_map[c.lower()]
-
-    # heuristic fallback
-    if kind == "date":
-        for h in header:
-            if "date" in h.lower():
-                return h
-
-    if kind == "value":
-        for h in header:
-            lh = h.lower()
-            if ("fsi" in lh) and ("date" not in lh):
-                return h
-
-    return None
+def fetch_stooq_daily(symbol: str, timeout: int, backoff: List[int]) -> Tuple[str, float, str, int]:
+    url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
+    text = retry_fetch(url, timeout_sec=timeout, backoff=backoff)
+    rows = list(csv.DictReader(text.splitlines()))
+    rows = [r for r in rows if r.get("Date") and r.get("Close")]
+    if not rows:
+        raise RuntimeError("no valid rows in stooq csv")
+    last = rows[-1]
+    data_date = parse_date_yyyy_mm_dd(last["Date"])
+    value = safe_float(last["Close"])
+    return data_date, value, url, len(rows)
 
 
-def parse_csv_latest_by_max_date(
-    csv_text: str,
-    date_col: str,
-    value_col: str,
-    date_formats: List[str],
-) -> Tuple[str, float, int]:
-    """
-    Returns: (max_data_date, value_at_max_date, parsed_row_count)
-    Strategy: scan all rows; choose the row with lexicographically largest normalized date (YYYY-MM-DD).
-    """
-    reader = csv.DictReader(csv_text.splitlines())
-    rows = 0
+def fetch_csv_max_date(url: str, date_col: str, value_col: str, timeout: int, backoff: List[int]) -> Tuple[str, float, str, List[str], int]:
+    text = retry_fetch(url, timeout_sec=timeout, backoff=backoff)
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        raise RuntimeError("empty csv")
+
+    header = next(csv.reader([lines[0]]))
+    header = [h.strip() for h in header]
+
+    reader = csv.DictReader(lines)
     best_date: Optional[str] = None
     best_value: Optional[float] = None
+    rows = 0
 
-    for r in reader:
-        if not r:
-            continue
+    for row in reader:
         rows += 1
-        d_raw = r.get(date_col, "")
-        v_raw = r.get(value_col, "")
+        d_raw = row.get(date_col, "")
+        v_raw = row.get(value_col, "")
         if not d_raw or not v_raw:
             continue
         try:
-            d = normalize_date(d_raw, date_formats)
+            d = parse_date_yyyy_mm_dd(d_raw)
             v = safe_float(v_raw)
         except Exception:
             continue
@@ -183,13 +161,10 @@ def parse_csv_latest_by_max_date(
             best_date, best_value = d, v
 
     if best_date is None or best_value is None:
-        raise RuntimeError("no valid (date,value) rows after parsing")
-    return best_date, best_value, rows
+        raise RuntimeError(f"no valid (date,value) using date_col={date_col}, value_col={value_col}")
+    return best_date, best_value, url, header, rows
 
 
-# -----------------------
-# dq + history helpers
-# -----------------------
 def staleness_days(data_date: str, now_utc: datetime) -> Optional[int]:
     try:
         d = datetime.strptime(data_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -198,10 +173,10 @@ def staleness_days(data_date: str, now_utc: datetime) -> Optional[int]:
         return None
 
 
-def dedup_preserve_order(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def dedup_preserve_order(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
     out: List[Dict[str, Any]] = []
-    for r in history:
+    for r in records:
         key = (r.get("series_id"), r.get("data_date"), r.get("value"))
         if key in seen:
             continue
@@ -217,21 +192,10 @@ def mean(vals: List[float]) -> float:
     return sum(vals) / float(len(vals))
 
 
-def compute_features_from_history(
-    history: List[Dict[str, Any]],
-    series_list: List[str],
-    window: int = 60,
-) -> Dict[str, Any]:
-    """
-    Compute MA60/dev_ma60/ret1 from history_lite for each series.
-    - Uses valid points only: data_date != None and value != None
-    - Orders by data_date ascending (YYYY-MM-DD)
-    - MA60 requires >= window valid points; else NA
-    - ret1 requires >= 2 valid points; else NA
-    """
+def compute_features(history: List[Dict[str, Any]], series_ids: List[str], window: int = 60) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
 
-    for sid in series_list:
+    for sid in series_ids:
         pts: List[Tuple[str, float]] = []
         latest_source_url: Optional[str] = None
 
@@ -242,7 +206,6 @@ def compute_features_from_history(
             v = r.get("value")
             if d is None or v is None:
                 continue
-            # v should be float, but be defensive
             try:
                 vv = float(v)
             except Exception:
@@ -251,138 +214,117 @@ def compute_features_from_history(
             if r.get("source_url"):
                 latest_source_url = r.get("source_url")
 
-        # sort by date ascending; if duplicate dates exist, stable sort keeps earlier first
-        pts.sort(key=lambda x: x[0])
+        pts.sort(key=lambda x: x[0])  # YYYY-MM-DD
 
-        n_valid = len(pts)
-        if n_valid == 0:
+        n = len(pts)
+        if n == 0:
             out[sid] = {
                 "series_id": sid,
                 "latest": {"data_date": None, "value": None, "source_url": latest_source_url},
-                "windows": {
-                    f"w{window}": {
-                        "n_valid": 0,
-                        "oldest_date": None,
-                        "newest_date": None,
-                        "ma": None,
-                        "dev": None
-                    }
-                },
+                "w60": {"n_valid": 0, "oldest_date": None, "newest_date": None, "ma": None, "dev": None},
                 "ret1": None,
-                "notes": "NA:no_valid_points_in_history"
+                "notes": "NA:no_valid_points"
             }
             continue
 
         newest_date, newest_val = pts[-1]
-        prev_val = pts[-2][1] if n_valid >= 2 else None
-
-        # window slice
-        w_slice = pts[-window:] if n_valid >= window else pts[:]
-        w_n = len(w_slice)
-        w_old = w_slice[0][0] if w_n else None
-        w_new = w_slice[-1][0] if w_n else None
+        prev_val = pts[-2][1] if n >= 2 else None
 
         ma_val: Optional[float] = None
         dev_val: Optional[float] = None
-        if n_valid >= window:
-            ma_val = mean([x[1] for x in w_slice])
+        if n >= window:
+            w = pts[-window:]
+            ma_val = mean([x[1] for x in w])
             dev_val = newest_val - ma_val
+            oldest = w[0][0]
+        else:
+            oldest = pts[0][0]
 
         ret1_val: Optional[float] = None
         if prev_val is not None:
-            ret1_val = newest_val - prev_val  # delta mode
-
-        notes_parts = [
-            f"policy=last_{window}_valid_points_by_data_date",
-            f"n_valid={n_valid}",
-            f"window_n={w_n}",
-        ]
-        if n_valid < window:
-            notes_parts.append("WARN:insufficient_points_for_ma60")
+            ret1_val = newest_val - prev_val  # delta
 
         out[sid] = {
             "series_id": sid,
-            "latest": {
-                "data_date": newest_date,
-                "value": newest_val,
-                "source_url": latest_source_url
-            },
-            "windows": {
-                f"w{window}": {
-                    "n_valid": n_valid,
-                    "oldest_date": w_old,
-                    "newest_date": w_new,
-                    "ma": ma_val,
-                    "dev": dev_val
-                }
+            "latest": {"data_date": newest_date, "value": newest_val, "source_url": latest_source_url},
+            "w60": {
+                "n_valid": n,
+                "oldest_date": oldest,
+                "newest_date": newest_date,
+                "ma": ma_val,
+                "dev": dev_val
             },
             "ret1": ret1_val,
-            "notes": "; ".join(notes_parts)
+            "notes": f"policy=last_{window}_valid_points_by_data_date; n_valid={n}" + ("" if n >= window else "; WARN:insufficient_points_for_ma60")
         }
 
     return out
 
 
-# -----------------------
-# main
-# -----------------------
 def main() -> int:
     now = utc_now()
     run_utc = iso_z(now)
     run_taipei = iso_taipei(now)
 
-    schema = load_json(SCHEMA_IN, None)
-    if not schema:
-        raise SystemExit(f"Missing inputs schema: {SCHEMA_IN}")
+    cfg = load_json(CONFIG_PATH, None)
+    if not cfg:
+        raise SystemExit(f"Missing config: {CONFIG_PATH}")
 
-    defaults = schema.get("defaults", {})
-    timeout_sec = int(defaults.get("timeout_sec", 25))
-    backoff = defaults.get("backoff_seconds", [2, 4, 8])
+    timeout = int(cfg.get("default_timeout_sec", 25))
+    backoff = cfg.get("backoff_seconds", [2, 4, 8])
     if not isinstance(backoff, list) or not backoff:
         backoff = [2, 4, 8]
 
-    # load existing history (lite)
-    history: List[Dict[str, Any]] = load_json(HISTORY_OUT, default=[])
+    history: List[Dict[str, Any]] = load_json(HIST_LITE_PATH, default=[])
 
-    latest_obj: Dict[str, Any] = {
+    latest: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1_1_features",
+        "script_version": "regime_inputs_cache_v1_2_features",
         "series": {}
     }
 
     dq: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1_1_features",
+        "script_version": "regime_inputs_cache_v1_2_features",
         "status": "OK",
         "errors": [],
         "warnings": [],
         "per_series": {}
     }
 
-    for s in schema.get("series", []):
-        series_id = s.get("series_id")
-        url = s.get("url")
-        date_candidates = s.get("date_col_candidates", [])
-        value_candidates = s.get("value_col_candidates", [])
-        date_formats = s.get("date_formats", ["%Y-%m-%d"])
+    series_cfg = cfg.get("series", [])
+    series_ids: List[str] = []
+
+    for s in series_cfg:
+        sid = s.get("series_id")
+        if not sid:
+            continue
+        series_ids.append(sid)
+
+        fetcher = s.get("fetcher")
         expected_max = s.get("expected_max_staleness_days", None)
 
+        # Always keep source_url even when failed
+        source_url_for_entry: Optional[str] = s.get("url")
+        if fetcher == "stooq_daily":
+            symbol = s.get("symbol")
+            source_url_for_entry = f"https://stooq.com/q/d/l/?s={symbol}&i=d" if symbol else source_url_for_entry
+
         entry = {
-            "series_id": series_id,
+            "series_id": sid,
             "data_date": None,
             "value": None,
-            "source_url": url,
+            "source_url": source_url_for_entry,
             "as_of_ts": run_taipei,
             "notes": None
         }
 
         per = {
             "ok": False,
-            "source_url": url,
-            "http": {"retried": True, "timeout_sec": timeout_sec, "backoff_seconds": backoff},
-            "csv": {"header": None, "date_col": None, "value_col": None, "parsed_rows": None},
+            "fetcher": fetcher,
+            "source_url": source_url_for_entry,
             "data_date": None,
             "value": None,
             "staleness_days": None,
@@ -391,72 +333,49 @@ def main() -> int:
         }
 
         try:
-            if not url:
-                raise RuntimeError("missing url")
+            if fetcher == "stooq_daily":
+                symbol = s["symbol"]
+                data_date, value, real_url, parsed_rows = fetch_stooq_daily(symbol, timeout, backoff)
+                entry["source_url"] = real_url
+                entry["data_date"] = data_date
+                entry["value"] = value
+                entry["notes"] = f"ok; parsed_rows={parsed_rows}"
 
-            csv_text = retry_fetch(url, timeout_sec=timeout_sec, backoff=backoff)
+            elif fetcher == "csv_max_date":
+                url = s["url"]
+                date_col = s["date_col"]
+                value_col = s["value_col"]
+                data_date, value, real_url, header, parsed_rows = fetch_csv_max_date(url, date_col, value_col, timeout, backoff)
+                entry["source_url"] = real_url
+                entry["data_date"] = data_date
+                entry["value"] = value
+                entry["notes"] = f"ok; header={header}; date_col={date_col}; value_col={value_col}; parsed_rows={parsed_rows}"
 
-            # Parse header
-            lines = [ln for ln in csv_text.splitlines() if ln.strip()]
-            if not lines:
-                raise RuntimeError("empty csv")
-
-            header_reader = csv.reader([lines[0]])
-            header = next(header_reader)
-            header = [h.strip() for h in header if h is not None]
-            per["csv"]["header"] = header
-
-            date_col = pick_column(header, date_candidates, kind="date")
-            value_col = pick_column(header, value_candidates, kind="value")
-
-            # If still missing and only 2 columns, use (col0 as date, col1 as value) BUT record WARN
-            if (date_col is None or value_col is None) and len(header) == 2:
-                date_col = header[0]
-                value_col = header[1]
-                dq["status"] = "WARN" if dq["status"] == "OK" else dq["status"]
-                dq["warnings"].append(f"{series_id}: used 2-col fallback (date={date_col}, value={value_col})")
-
-            if date_col is None or value_col is None:
-                raise RuntimeError(f"cannot_detect_columns header={header}")
-
-            per["csv"]["date_col"] = date_col
-            per["csv"]["value_col"] = value_col
-
-            data_date, value, parsed_rows = parse_csv_latest_by_max_date(
-                csv_text=csv_text,
-                date_col=date_col,
-                value_col=value_col,
-                date_formats=date_formats
-            )
-            per["csv"]["parsed_rows"] = parsed_rows
-
-            entry["data_date"] = data_date
-            entry["value"] = value
-            entry["notes"] = f"ok; header={header}; date_col={date_col}; value_col={value_col}; parsed_rows={parsed_rows}"
+            else:
+                raise RuntimeError(f"unsupported fetcher: {fetcher}")
 
             per["ok"] = True
-            per["data_date"] = data_date
-            per["value"] = value
+            per["data_date"] = entry["data_date"]
+            per["value"] = entry["value"]
 
-            sd = staleness_days(data_date, now)
+            sd = staleness_days(entry["data_date"], now)  # type: ignore[arg-type]
             per["staleness_days"] = sd
             if expected_max is not None and sd is not None and sd > int(expected_max):
                 dq["status"] = "WARN" if dq["status"] == "OK" else dq["status"]
-                dq["warnings"].append(f"{series_id}: staleness_days={sd} > expected_max={expected_max}")
+                dq["warnings"].append(f"{sid}: staleness_days={sd} > expected_max={expected_max}")
 
         except Exception as e:
             dq["status"] = "ERR"
-            err = f"{series_id}: {type(e).__name__}: {e}"
+            err = f"{sid} fetch failed: {type(e).__name__}: {e}"
             dq["errors"].append(err)
-            entry["notes"] = f"ERR: {err}"
+            entry["notes"] = f"ERR:{err}"
             per["error"] = err
 
-        latest_obj["series"][series_id] = entry
-        dq["per_series"][series_id] = per
+        latest["series"][sid] = entry
+        dq["per_series"][sid] = per
 
-        # Append history record (auditable, even if failed)
         history.append({
-            "series_id": series_id,
+            "series_id": sid,
             "data_date": entry["data_date"],
             "value": entry["value"],
             "source_url": entry["source_url"],
@@ -464,42 +383,29 @@ def main() -> int:
             "notes": entry["notes"]
         })
 
-    # normalize history (dedup only; do NOT globally sort)
     history = dedup_preserve_order(history)
 
-    # Freeze schema used in this run (for audit downstream)
-    schema_out = {
+    # Upgrade A: features
+    features_series = compute_features(history, series_ids, window=60)
+    features = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_taipei,
-        "frozen_from": str(SCHEMA_IN),
-        "schema": schema
-    }
-
-    # Upgrade A: compute derived features from history_lite
-    series_list = [x.get("series_id") for x in schema.get("series", []) if x.get("series_id")]
-    window = 60
-    features_series = compute_features_from_history(history=history, series_list=series_list, window=window)
-    features_obj: Dict[str, Any] = {
-        "generated_at_utc": run_utc,
-        "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1_1_features",
+        "script_version": "regime_inputs_cache_v1_2_features",
         "features_policy": {
-            "window": window,
-            "window_definition": "last N valid points ordered by data_date (not calendar days)",
-            "ma_definition": "mean of last N valid points when N>=window else NA",
+            "window": 60,
+            "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
+            "ma_definition": "mean of last 60 valid points when n_valid>=60 else NA",
             "dev_definition": "latest - ma (only when ma is available)",
             "ret1_mode": "delta (latest - previous valid point)",
-            "source": "history_lite.json"
+            "source": "inputs_history_lite.json"
         },
         "series": features_series
     }
 
-    # write outputs
-    write_json_atomic(LATEST_OUT, latest_obj)
-    write_json_atomic(HISTORY_OUT, history)
-    write_json_atomic(DQ_OUT, dq)
-    write_json_atomic(SCHEMA_OUT, schema_out)
-    write_json_atomic(FEATURES_OUT, features_obj)
+    write_json_atomic(LATEST_PATH, latest)
+    write_json_atomic(HIST_LITE_PATH, history)
+    write_json_atomic(DQ_PATH, dq)
+    write_json_atomic(FEATURES_PATH, features)
 
     return 0
 
