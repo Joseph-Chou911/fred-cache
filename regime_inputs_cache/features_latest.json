@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-01-11T08:22:20.094743Z",
-  "as_of_ts": "2026-01-11T16:22:20.094743+08:00",
+  "generated_at_utc": "2026-01-11T09:16:53.498793Z",
+  "as_of_ts": "2026-01-11T17:16:53.498793+08:00",
   "script_version": "regime_inputs_cache_v1_8_normalizedHistory",
   "features_policy": {
     "window": 60,
