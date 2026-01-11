@@ -1,33 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-update_regime_inputs_cache.py (v1_7)
+update_regime_inputs_cache.py (v1_8)
 
-What this version fixes (important):
-- CLEAN existing history on load:
-  remove records where:
-    - data_date is null OR value is null
-    - data_date is not a real YYYY-MM-DD date
-    - value is not numeric
-  This purges legacy "ERR:fetch_failed" null points from inputs_history_lite.json.
-
-- DO NOT append failed/null points in the future.
-
-- Features:
-  - MA60/dev/ret1 computed from last 60 valid points ordered by data_date
-  - Deterministic rounding to 6 decimals
-  - window_count + window preview dates (head/tail) for audit
-
-Files:
-Reads:
-- regime_inputs_cache/inputs_config.json
-- regime_inputs_cache/inputs_history_lite.json (optional)
-
-Writes:
-- regime_inputs_cache/inputs_latest.json
-- regime_inputs_cache/inputs_history_lite.json
-- regime_inputs_cache/dq_state.json
-- regime_inputs_cache/features_latest.json
+Adds:
+- normalize_history(): per series_id sort by data_date asc; keep last record per (series_id, data_date)
+- stable output ordering: series_id asc, then data_date asc
+Keeps:
+- v1_7 clean_history(): drop null/bad_date/bad_value legacy garbage
+- never append failed points
+- compute MA60/dev/ret1 from strict YYYY-MM-DD valid points, sorted by data_date
 """
 
 from __future__ import annotations
@@ -42,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from zoneinfo import ZoneInfo  # py3.9+
+    from zoneinfo import ZoneInfo
 except Exception:
     ZoneInfo = None  # type: ignore
 
@@ -59,9 +41,6 @@ FEATURES_PATH = OUT_DIR / "features_latest.json"
 RE_YYYY_MM_DD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-# -----------------------
-# time helpers
-# -----------------------
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -76,9 +55,6 @@ def iso_taipei(dt: datetime) -> str:
     return dt.astimezone(ZoneInfo("Asia/Taipei")).isoformat()
 
 
-# -----------------------
-# json i/o
-# -----------------------
 def load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
@@ -92,13 +68,10 @@ def write_json_atomic(path: Path, obj: Any) -> None:
     tmp.replace(path)
 
 
-# -----------------------
-# http fetch with retry
-# -----------------------
 def http_get_text(url: str, timeout_sec: int) -> str:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "regime_inputs_cache/1.7 (+https://github.com/)"},
+        headers={"User-Agent": "regime_inputs_cache/1.8 (+https://github.com/)"},
         method="GET",
     )
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
@@ -121,9 +94,6 @@ def retry_fetch(url: str, timeout_sec: int, backoff: List[int]) -> str:
     raise RuntimeError(f"fetch_failed after retries: {type(last_err).__name__}: {last_err}")  # type: ignore[arg-type]
 
 
-# -----------------------
-# parsing helpers
-# -----------------------
 def parse_date_yyyy_mm_dd(s: str) -> str:
     s = (s or "").strip()
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y"):
@@ -216,28 +186,7 @@ def staleness_days(data_date: str, now_utc: datetime) -> Optional[int]:
         return None
 
 
-def dedup_preserve_order(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen = set()
-    out: List[Dict[str, Any]] = []
-    for r in records:
-        key = (r.get("series_id"), r.get("data_date"), r.get("value"))
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(r)
-    return out
-
-
-# -----------------------
-# history cleanup (NEW)
-# -----------------------
 def clean_history(history: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
-    """
-    Remove legacy garbage points:
-    - data_date is None / invalid date
-    - value is None / non-numeric
-    Keep other fields as-is.
-    """
     stats = {"kept": 0, "dropped_null": 0, "dropped_bad_date": 0, "dropped_bad_value": 0}
     cleaned: List[Dict[str, Any]] = []
 
@@ -260,13 +209,61 @@ def clean_history(history: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], 
         cleaned.append(r)
         stats["kept"] += 1
 
-    cleaned = dedup_preserve_order(cleaned)
     return cleaned, stats
 
 
-# -----------------------
-# features (MA60/dev/ret1)
-# -----------------------
+def normalize_history(history: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """
+    Normalize for audit stability:
+    - Group by series_id
+    - Sort each group by data_date asc, then as_of_ts asc (if present)
+    - Keep last record per (series_id, data_date)
+    - Output order: series_id asc, then data_date asc
+
+    Returns:
+    - normalized history
+    - stats: kept_after, dropped_dupe_by_day
+    """
+    # Group
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for r in history:
+        sid = r.get("series_id")
+        if not sid:
+            continue
+        groups.setdefault(str(sid), []).append(r)
+
+    out: List[Dict[str, Any]] = []
+    dropped_dupe = 0
+    kept = 0
+
+    for sid in sorted(groups.keys()):
+        items = groups[sid]
+
+        def keyfun(x: Dict[str, Any]) -> Tuple[str, str]:
+            d = x.get("data_date") or ""
+            a = x.get("as_of_ts") or ""
+            return (d, a)
+
+        items.sort(key=keyfun)
+
+        # Keep last per day
+        last_by_day: Dict[str, Dict[str, Any]] = {}
+        for r in items:
+            d = r.get("data_date")
+            if not isinstance(d, str):
+                continue
+            if d in last_by_day:
+                dropped_dupe += 1
+            last_by_day[d] = r
+
+        # Emit in date order
+        for d in sorted(last_by_day.keys()):
+            out.append(last_by_day[d])
+            kept += 1
+
+    return out, {"kept_after": kept, "dropped_dupe_by_day": dropped_dupe}
+
+
 def round6(x: Optional[float]) -> Optional[float]:
     if x is None:
         return None
@@ -386,30 +383,35 @@ def main() -> int:
     if not isinstance(backoff, list) or not backoff:
         backoff = [2, 4, 8]
 
-    # Load + CLEAN history (one-time legacy purge happens here)
+    # Load + clean + normalize history
     history_raw: List[Dict[str, Any]] = load_json(HIST_LITE_PATH, default=[])
-    history, clean_stats = clean_history(history_raw)
+    history_clean, clean_stats = clean_history(history_raw)
+    history_norm, norm_stats = normalize_history(history_clean)
 
     latest: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
+        "script_version": "regime_inputs_cache_v1_8_normalizedHistory",
         "series": {}
     }
 
     dq: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
+        "script_version": "regime_inputs_cache_v1_8_normalizedHistory",
         "status": "OK",
         "errors": [],
         "warnings": [],
         "history_cleanup": clean_stats,
+        "history_normalize": norm_stats,
         "per_series": {}
     }
 
     series_cfg = cfg.get("series", [])
     series_ids: List[str] = []
+
+    # Start from normalized history (stable baseline)
+    history: List[Dict[str, Any]] = history_norm[:]
 
     for s in series_cfg:
         sid = s.get("series_id")
@@ -420,7 +422,6 @@ def main() -> int:
         fetcher = s.get("fetcher")
         expected_max = s.get("expected_max_staleness_days", None)
 
-        # Keep source_url even on failure (audit)
         source_url_for_entry: Optional[str] = s.get("url")
         if fetcher == "stooq_daily":
             symbol = s.get("symbol")
@@ -494,7 +495,7 @@ def main() -> int:
         latest["series"][sid] = entry
         dq["per_series"][sid] = per
 
-        # IMPORTANT: append only when fetch succeeded and data_date/value are present
+        # Append only on success
         if ok and entry["data_date"] is not None and entry["value"] is not None:
             history.append({
                 "series_id": sid,
@@ -505,13 +506,16 @@ def main() -> int:
                 "notes": entry["notes"]
             })
 
-    history = dedup_preserve_order(history)
+    # Re-normalize after appends (ensures stable file each run)
+    history2_clean, _ = clean_history(history)
+    history2_norm, norm2_stats = normalize_history(history2_clean)
+    dq["history_normalize_after_append"] = norm2_stats
 
-    features_series = compute_features(history, series_ids, window=60)
+    features_series = compute_features(history2_norm, series_ids, window=60)
     features = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
+        "script_version": "regime_inputs_cache_v1_8_normalizedHistory",
         "features_policy": {
             "window": 60,
             "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -519,16 +523,15 @@ def main() -> int:
             "dev_definition": "latest - ma (only when ma is available)",
             "ret1_mode": "delta (latest - previous valid point)",
             "rounding": "derived numbers rounded to 6 decimals deterministically",
-            "w60_dates": "oldest_date/newest_date refer to the window slice",
             "strict_date": "only accept YYYY-MM-DD dates into features window",
-            "window_preview": "window_head_dates/window_tail_dates included for quick audit",
+            "history_normalized": "inputs_history_lite.json is normalized per series_id/data_date for audit stability",
             "source": "inputs_history_lite.json"
         },
         "series": features_series
     }
 
     write_json_atomic(LATEST_PATH, latest)
-    write_json_atomic(HIST_LITE_PATH, history)
+    write_json_atomic(HIST_LITE_PATH, history2_norm)
     write_json_atomic(DQ_PATH, dq)
     write_json_atomic(FEATURES_PATH, features)
 
