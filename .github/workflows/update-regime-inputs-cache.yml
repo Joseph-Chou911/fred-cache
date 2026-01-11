@@ -3,8 +3,7 @@ name: Update regime inputs cache
 on:
   workflow_dispatch: {}
   schedule:
-    # 00:30 UTC = 08:30 Asia/Taipei
-    - cron: "30 0 * * *"
+    - cron: "30 0 * * *"  # 00:30 UTC = 08:30 Asia/Taipei
 
 permissions:
   contents: write
@@ -62,7 +61,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Add exactly the files we expect (avoid accidentally executing file paths)
           git add \
             regime_inputs_cache/inputs_latest.json \
             regime_inputs_cache/inputs_history_lite.json \
