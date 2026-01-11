@@ -3,7 +3,7 @@ name: Update regime inputs cache
 on:
   workflow_dispatch: {}
   schedule:
-    # every 6 hours at minute 12 (UTC)
+    # Every 6 hours at minute 12 (UTC)
     - cron: "12 */6 * * *"
 
 permissions:
@@ -40,14 +40,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add \
-            regime_inputs_cache/latest.json \
-            regime_inputs_cache/history_lite.json \
+          # IMPORTANT: single-line git add to avoid "\" mistakes
+          git add -- \
+            regime_inputs_cache/inputs_latest.json \
+            regime_inputs_cache/inputs_history_lite.json \
             regime_inputs_cache/dq_state.json \
-            regime_inputs_cache/inputs_schema_out.json
             regime_inputs_cache/features_latest.json
 
           if git diff --cached --quiet; then
@@ -60,11 +61,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           DATA_SHA="$(git rev-parse HEAD)"
           echo "DATA_SHA=$DATA_SHA"
-          python scripts/patch_regime_inputs_manifest.py --repo "${GITHUB_REPOSITORY}" --data-sha "${DATA_SHA}"
 
-          git add regime_inputs_cache/manifest.json
+          python scripts/patch_regime_inputs_manifest.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --data-sha "${DATA_SHA}"
+
+          git add -- regime_inputs_cache/manifest.json
+
           if git diff --cached --quiet; then
             echo "No manifest changes."
           else
@@ -75,13 +81,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           for i in 1 2 3; do
             if git push; then
               exit 0
             fi
+
             echo "Push failed, retry with rebase... attempt=$i"
             git pull --rebase
             sleep $((2**i))
           done
+
           echo "Push failed after retries"
           exit 1
