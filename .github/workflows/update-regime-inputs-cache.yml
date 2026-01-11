@@ -1,0 +1,88 @@
+name: Update regime inputs cache
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Every 6 hours at minute 12 (UTC). Adjust as you like.
+    - cron: "12 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          # no external deps required (stdlib only)
+          python scripts/update_regime_inputs_cache.py
+
+      - name: Commit data files (without manifest)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Add generated files except manifest
+          git add \
+            regime_inputs_cache/inputs_latest.json \
+            regime_inputs_cache/inputs_history_lite.json \
+            regime_inputs_cache/inputs_schema.json \
+            regime_inputs_cache/dq_state.json
+
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Update regime_inputs_cache data"
+          fi
+
+      - name: Patch manifest pinned to committed SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          # If no commit happened above, HEAD is still fine; we still pin to current HEAD
+          DATA_SHA="$(git rev-parse HEAD)"
+          echo "DATA_SHA=$DATA_SHA"
+          python scripts/patch_regime_inputs_manifest.py --repo "${GITHUB_REPOSITORY}" --data-sha "${DATA_SHA}"
+          git add regime_inputs_cache/manifest.json
+          if git diff --cached --quiet; then
+            echo "No manifest changes."
+          else
+            git commit -m "Pin regime_inputs_cache manifest to ${DATA_SHA}"
+          fi
+
+      - name: Push with retry (rebase)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push failed, retry with rebase... attempt=$i"
+            git pull --rebase
+            sleep $((2**i))
+          done
+          echo "Push failed after retries"
+          exit 1
