@@ -1,0 +1,18 @@
+[
+  {
+    "series_id": "VIX",
+    "data_date": "2026-01-09",
+    "value": 14.49,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T12:46:29.600643+08:00",
+    "notes": "ok; header=['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE']; date_col=DATE; value_col=CLOSE; parsed_rows=9097"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2026-01-07",
+    "value": -2.596,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T12:46:29.600643+08:00",
+    "notes": "ok; header=['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets']; date_col=Date; value_col=OFR FSI; parsed_rows=6580"
+  }
+]
