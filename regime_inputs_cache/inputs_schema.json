@@ -1,20 +1,31 @@
 {
-  "generated_at_utc": "2026-01-11T03:28:42.477563Z",
-  "as_of_ts": "2026-01-11T03:28:42.477563Z",
-  "schema_version": "inputs_schema_v1",
-  "fields": [
-    "series_id",
-    "data_date",
-    "value",
-    "source_url",
-    "as_of_ts",
-    "notes"
-  ],
-  "series_list": [
-    "VIX",
-    "OFR_FSI",
-    "SPX",
-    "HYG",
-    "IEF"
+  "schema_version": "regime_inputs_inputs_schema_v1",
+  "description": "Upstream inputs cache: fetch and normalize external CSV sources into latest/history_lite with auditable notes.",
+  "defaults": {
+    "timeout_sec": 25,
+    "max_retries": 3,
+    "backoff_seconds": [2, 4, 8]
+  },
+  "series": [
+    {
+      "series_id": "VIX",
+      "source_kind": "csv",
+      "url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+      "date_col_candidates": ["DATE", "Date", "date"],
+      "value_col_candidates": ["CLOSE", "Close", "close"],
+      "date_formats": ["%m/%d/%Y", "%Y-%m-%d", "%Y/%m/%d"],
+      "expected_max_staleness_days": 7,
+      "notes": "CBOE VIX daily prices; take latest CLOSE by max date."
+    },
+    {
+      "series_id": "OFR_FSI",
+      "source_kind": "csv",
+      "url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+      "date_col_candidates": ["date", "Date", "DATE"],
+      "value_col_candidates": ["fsi", "FSI", "ofr_fsi", "OFR_FSI", "value", "Value"],
+      "date_formats": ["%Y-%m-%d", "%m/%d/%Y", "%Y/%m/%d"],
+      "expected_max_staleness_days": 14,
+      "notes": "OFR Financial Stress Index; publication typically lags; take latest value column by max date."
+    }
   ]
 }
