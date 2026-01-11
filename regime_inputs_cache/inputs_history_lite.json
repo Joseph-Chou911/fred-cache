@@ -9998,5 +9998,2805 @@
     "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
     "as_of_ts": "2026-01-11T17:16:53.498793+08:00",
     "notes": "ok; header=['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE']; date_col=DATE; value_col=CLOSE; parsed_rows=9097"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-14",
+    "value": 19.7,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-15",
+    "value": 20.64,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-16",
+    "value": 19.58,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-17",
+    "value": 19.11,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-18",
+    "value": 18.03,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-21",
+    "value": 18.37,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-22",
+    "value": 18.2,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-23",
+    "value": 19.24,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-24",
+    "value": 19.08,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-25",
+    "value": 20.33,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-28",
+    "value": 19.8,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-29",
+    "value": 19.34,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-30",
+    "value": 20.35,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-10-31",
+    "value": 23.16,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-01",
+    "value": 21.88,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-04",
+    "value": 21.98,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-05",
+    "value": 20.49,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-06",
+    "value": 16.27,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-07",
+    "value": 15.2,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-08",
+    "value": 14.94,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-11",
+    "value": 14.97,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-12",
+    "value": 14.71,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-13",
+    "value": 14.02,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-14",
+    "value": 14.31,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-15",
+    "value": 16.14,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-18",
+    "value": 15.58,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-19",
+    "value": 16.35,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-20",
+    "value": 17.16,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-21",
+    "value": 16.87,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-22",
+    "value": 15.24,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-25",
+    "value": 14.6,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-26",
+    "value": 14.1,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-27",
+    "value": 14.1,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-28",
+    "value": 13.9,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-11-29",
+    "value": 13.51,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-02",
+    "value": 13.34,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-03",
+    "value": 13.3,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-04",
+    "value": 13.45,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-05",
+    "value": 13.54,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-06",
+    "value": 12.77,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-09",
+    "value": 14.19,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-10",
+    "value": 14.18,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-11",
+    "value": 13.58,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-12",
+    "value": 13.92,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-13",
+    "value": 13.81,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-16",
+    "value": 14.69,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-17",
+    "value": 15.87,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-18",
+    "value": 27.62,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-19",
+    "value": 24.09,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-20",
+    "value": 18.36,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-23",
+    "value": 16.78,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-24",
+    "value": 14.27,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-26",
+    "value": 14.73,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-27",
+    "value": 15.95,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-30",
+    "value": 17.4,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2024-12-31",
+    "value": 17.35,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-02",
+    "value": 17.93,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-03",
+    "value": 16.13,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-06",
+    "value": 16.04,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-07",
+    "value": 17.82,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-08",
+    "value": 17.7,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-09",
+    "value": 18.07,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-10",
+    "value": 19.54,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-13",
+    "value": 19.19,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-14",
+    "value": 18.71,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-15",
+    "value": 16.12,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-16",
+    "value": 16.6,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-17",
+    "value": 15.97,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-20",
+    "value": 15.81,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "VIX",
+    "data_date": "2025-01-21",
+    "value": 15.06,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE'], 'rows_total': 9097, 'rows_valid': 9097, 'rows_bad': 0, 'date_col': 'DATE', 'value_col': 'CLOSE'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-17",
+    "value": -1.549,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-18",
+    "value": -1.635,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-21",
+    "value": -1.599,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-22",
+    "value": -1.496,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-23",
+    "value": -1.325,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-24",
+    "value": -1.341,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-25",
+    "value": -1.196,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-28",
+    "value": -2.325,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-29",
+    "value": -1.289,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-30",
+    "value": -1.398,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-10-31",
+    "value": -1.132,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-01",
+    "value": -1.224,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-04",
+    "value": -1.223,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-05",
+    "value": -1.441,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-06",
+    "value": -1.863,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-07",
+    "value": -1.889,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-08",
+    "value": -1.985,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-11",
+    "value": -1.981,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-12",
+    "value": -1.948,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-13",
+    "value": -1.914,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-14",
+    "value": -1.92,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-15",
+    "value": -1.737,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-18",
+    "value": -1.658,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-19",
+    "value": -1.631,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-20",
+    "value": -1.577,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-21",
+    "value": -1.472,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-22",
+    "value": -1.647,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-25",
+    "value": -1.908,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-26",
+    "value": -1.882,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-27",
+    "value": -1.755,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-28",
+    "value": -1.733,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-11-29",
+    "value": -1.845,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-02",
+    "value": -1.949,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-03",
+    "value": -1.865,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-04",
+    "value": -1.971,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-05",
+    "value": -1.984,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-06",
+    "value": -2.02,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-09",
+    "value": -2.011,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-10",
+    "value": -1.942,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-11",
+    "value": -2.061,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-12",
+    "value": -2.06,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-13",
+    "value": -2.027,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-16",
+    "value": -2.044,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-17",
+    "value": -1.966,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-18",
+    "value": -1.473,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-19",
+    "value": -1.269,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-20",
+    "value": -1.518,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-23",
+    "value": -1.673,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-24",
+    "value": -1.9,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-25",
+    "value": -1.816,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-26",
+    "value": -1.812,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-27",
+    "value": -1.794,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-30",
+    "value": -1.625,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2024-12-31",
+    "value": -1.643,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-01",
+    "value": -1.64,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-02",
+    "value": -1.556,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-03",
+    "value": -1.676,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-06",
+    "value": -1.73,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-07",
+    "value": -1.802,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-08",
+    "value": -1.62,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-09",
+    "value": -1.605,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-10",
+    "value": -1.604,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-13",
+    "value": -1.543,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-14",
+    "value": -1.567,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-15",
+    "value": -1.762,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-16",
+    "value": -1.799,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-17",
+    "value": -1.857,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-20",
+    "value": -1.95,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-21",
+    "value": -2.119,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "OFR_FSI",
+    "data_date": "2025-01-22",
+    "value": -2.204,
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=csv_max_date; {'header': ['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets'], 'rows_total': 6580, 'rows_valid': 6580, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'OFR FSI'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-01",
+    "value": 5708.75,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-02",
+    "value": 5709.54,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-03",
+    "value": 5699.94,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-04",
+    "value": 5751.07,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-07",
+    "value": 5695.94,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-08",
+    "value": 5751.13,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-09",
+    "value": 5792.04,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-10",
+    "value": 5780.05,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-11",
+    "value": 5815.03,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-14",
+    "value": 5859.85,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-15",
+    "value": 5815.26,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-16",
+    "value": 5842.47,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-17",
+    "value": 5841.47,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-18",
+    "value": 5864.67,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-21",
+    "value": 5853.98,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-22",
+    "value": 5851.2,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-23",
+    "value": 5797.42,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-24",
+    "value": 5809.86,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-25",
+    "value": 5808.12,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-28",
+    "value": 5823.52,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-29",
+    "value": 5832.92,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-30",
+    "value": 5813.67,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-10-31",
+    "value": 5705.45,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-01",
+    "value": 5728.8,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-04",
+    "value": 5712.69,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-05",
+    "value": 5782.76,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-06",
+    "value": 5929.04,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-07",
+    "value": 5973.1,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-08",
+    "value": 5995.54,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-11",
+    "value": 6001.35,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-12",
+    "value": 5983.99,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-13",
+    "value": 5985.38,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-14",
+    "value": 5949.17,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-15",
+    "value": 5870.62,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-18",
+    "value": 5893.62,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-19",
+    "value": 5916.98,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-20",
+    "value": 5917.11,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-21",
+    "value": 5948.71,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-22",
+    "value": 5969.34,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-25",
+    "value": 5987.37,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-26",
+    "value": 6021.63,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-27",
+    "value": 5998.74,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-11-29",
+    "value": 6032.38,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-02",
+    "value": 6047.15,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-03",
+    "value": 6049.88,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-04",
+    "value": 6086.49,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-05",
+    "value": 6075.11,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-06",
+    "value": 6090.27,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-09",
+    "value": 6052.85,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-10",
+    "value": 6034.91,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-11",
+    "value": 6084.19,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-12",
+    "value": 6051.25,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-13",
+    "value": 6051.09,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-16",
+    "value": 6074.08,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-17",
+    "value": 6050.61,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-18",
+    "value": 5872.16,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-19",
+    "value": 5867.08,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-20",
+    "value": 5930.85,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-23",
+    "value": 5974.07,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-24",
+    "value": 6040.04,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-26",
+    "value": 6037.59,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-27",
+    "value": 5970.84,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-30",
+    "value": 5906.94,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2024-12-31",
+    "value": 5881.63,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2025-01-02",
+    "value": 5868.55,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2025-01-03",
+    "value": 5942.47,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2025-01-06",
+    "value": 5975.38,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2025-01-07",
+    "value": 5909.03,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2025-01-08",
+    "value": 5918.25,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "SPX",
+    "data_date": "2025-01-10",
+    "value": 5827.04,
+    "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 39611, 'rows_valid': 39611, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-01",
+    "value": 79.87,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-02",
+    "value": 79.88,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-03",
+    "value": 79.69,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-04",
+    "value": 79.6,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-07",
+    "value": 79.26,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-08",
+    "value": 79.45,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-09",
+    "value": 79.4,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-10",
+    "value": 79.36,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-11",
+    "value": 79.57,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-14",
+    "value": 79.61,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-15",
+    "value": 79.59,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-16",
+    "value": 79.73,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-17",
+    "value": 79.61,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-18",
+    "value": 79.8,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-21",
+    "value": 79.48,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-22",
+    "value": 79.37,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-23",
+    "value": 79.13,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-24",
+    "value": 79.36,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-25",
+    "value": 79.28,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-28",
+    "value": 79.48,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-29",
+    "value": 79.5,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-30",
+    "value": 79.36,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-10-31",
+    "value": 79.14,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-01",
+    "value": 78.75,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-04",
+    "value": 78.97,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-05",
+    "value": 79.19,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-06",
+    "value": 79.33,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-07",
+    "value": 79.67,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-08",
+    "value": 79.8,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-11",
+    "value": 79.71,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-12",
+    "value": 79.39,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-13",
+    "value": 79.41,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-14",
+    "value": 79.24,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-15",
+    "value": 79.23,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-18",
+    "value": 79.38,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-19",
+    "value": 79.5,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-20",
+    "value": 79.48,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-21",
+    "value": 79.51,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-22",
+    "value": 79.49,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-25",
+    "value": 79.79,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-26",
+    "value": 79.64,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-27",
+    "value": 79.88,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-11-29",
+    "value": 80.04,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-02",
+    "value": 79.65,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-03",
+    "value": 79.65,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-04",
+    "value": 79.84,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-05",
+    "value": 79.77,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-06",
+    "value": 79.9,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-09",
+    "value": 79.8,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-10",
+    "value": 79.84,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-11",
+    "value": 79.86,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-12",
+    "value": 79.64,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-13",
+    "value": 79.41,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-16",
+    "value": 79.56,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-17",
+    "value": 79.39,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-18",
+    "value": 78.17,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-19",
+    "value": 78.09,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-20",
+    "value": 78.58,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-23",
+    "value": 78.37,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-24",
+    "value": 78.62,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-26",
+    "value": 78.82,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-27",
+    "value": 78.55,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-30",
+    "value": 78.66,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2024-12-31",
+    "value": 78.65,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2025-01-02",
+    "value": 78.84,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2025-01-03",
+    "value": 78.96,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2025-01-06",
+    "value": 79.1,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2025-01-07",
+    "value": 78.84,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2025-01-08",
+    "value": 78.94,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "HYG",
+    "data_date": "2025-01-10",
+    "value": 78.53,
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 4718, 'rows_valid': 4718, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-01",
+    "value": 98.19,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-02",
+    "value": 97.91,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-03",
+    "value": 97.41,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-04",
+    "value": 96.47,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-07",
+    "value": 96.12,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-08",
+    "value": 96.2,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-09",
+    "value": 95.84,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-10",
+    "value": 95.83,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-11",
+    "value": 95.86,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-14",
+    "value": 95.69,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-15",
+    "value": 96.18,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-16",
+    "value": 96.33,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-17",
+    "value": 95.83,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-18",
+    "value": 95.94,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-21",
+    "value": 95.2,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-22",
+    "value": 95.11,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-23",
+    "value": 94.89,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-24",
+    "value": 95.1,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-25",
+    "value": 94.89,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-28",
+    "value": 94.67,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-29",
+    "value": 94.71,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-30",
+    "value": 94.57,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-10-31",
+    "value": 94.52,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-01",
+    "value": 93.67,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-04",
+    "value": 94.17,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-05",
+    "value": 94.22,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-06",
+    "value": 93.25,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-07",
+    "value": 94.0,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-08",
+    "value": 94.2,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-11",
+    "value": 93.94,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-12",
+    "value": 93.35,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-13",
+    "value": 93.29,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-14",
+    "value": 93.28,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-15",
+    "value": 93.32,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-18",
+    "value": 93.53,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-19",
+    "value": 93.73,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-20",
+    "value": 93.59,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-21",
+    "value": 93.54,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-22",
+    "value": 93.6,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-25",
+    "value": 94.61,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-26",
+    "value": 94.41,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-27",
+    "value": 94.79,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-11-29",
+    "value": 95.19,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-02",
+    "value": 94.89,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-03",
+    "value": 94.62,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-04",
+    "value": 94.98,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-05",
+    "value": 94.97,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-06",
+    "value": 95.27,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-09",
+    "value": 94.94,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-10",
+    "value": 94.77,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-11",
+    "value": 94.49,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-12",
+    "value": 94.13,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-13",
+    "value": 93.69,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-16",
+    "value": 93.72,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-17",
+    "value": 93.72,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-18",
+    "value": 92.69,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-19",
+    "value": 92.27,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-20",
+    "value": 92.61,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-23",
+    "value": 92.2,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-24",
+    "value": 92.25,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-26",
+    "value": 92.32,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-27",
+    "value": 92.08,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-30",
+    "value": 92.62,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2024-12-31",
+    "value": 92.45,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2025-01-02",
+    "value": 92.5,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2025-01-03",
+    "value": 92.35,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2025-01-06",
+    "value": 92.26,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2025-01-07",
+    "value": 91.84,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2025-01-08",
+    "value": 92.0,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
+  },
+  {
+    "series_id": "IEF",
+    "data_date": "2025-01-10",
+    "value": 91.33,
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+    "as_of_ts": "2026-01-11T19:12:59.575972+08:00",
+    "notes": "backfill_n320; fetcher=stooq_daily; {'rows_total': 5251, 'rows_valid': 5251, 'rows_bad': 0, 'date_col': 'Date', 'value_col': 'Close'}"
   }
 ]
