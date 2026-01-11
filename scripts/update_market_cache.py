@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-market_cache/update_market_cache.py (enhanced)
+scripts/update_market_cache.py  (v2_2)
 
 Fetch + normalize + compute stats for:
 - OFR_FSI (OFR CSV)
@@ -20,6 +20,18 @@ Stats:
               ret1_delta,
               ret1_pct (direction-consistent using abs(prev) denominator),
               z_delta, p_delta
+
+DQ Enhancements (A/B/C):
+A) Ratio latest date alignment check:
+   - Ensure HYG_IEF_RATIO.latest_date exists in BOTH HYG and IEF raw date sets.
+
+B) Per-series staleness thresholds:
+   - Fast series (VIX/SP500/HYG_IEF_RATIO): WARN > 3 days, ERR > 7 days
+   - Slow series (OFR_FSI): WARN > 7 days, ERR > 14 days
+   - DQ check records thresholds for auditability.
+
+C) Ret1 pct definition is recorded in dq_state.json:
+   - ret1_pct = (delta / abs(prev)) * 100
 
 Design goals:
 - auditable: keep source URLs (ratio keeps both URLs + formula notes)
@@ -47,9 +59,7 @@ HISTORY_LITE_PATH = os.path.join(OUT_DIR, "history_lite.json")
 STATS_LATEST_PATH = os.path.join(OUT_DIR, "stats_latest.json")
 DQ_STATE_PATH = os.path.join(OUT_DIR, "dq_state.json")
 
-# NOTE: v2_1 changes ret1_pct definition to be direction-consistent for negative series:
-#   ret1_pct = (delta / abs(prev)) * 100
-SCRIPT_VERSION = "market_cache_v2_1_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400"
+SCRIPT_VERSION = "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400"
 LITE_KEEP_N = int(os.environ.get("LITE_KEEP_N", "400"))
 
 # Primary sources (user-specified)
@@ -63,6 +73,19 @@ def stooq_daily_url(symbol: str) -> str:
 URL_SPX = stooq_daily_url("^spx")
 URL_HYG = stooq_daily_url("hyg.us")
 URL_IEF = stooq_daily_url("ief.us")
+
+# -------------------------
+# DQ Policies (B)
+# -------------------------
+# Calendar-day staleness thresholds
+STALENESS_POLICY: Dict[str, Dict[str, int]] = {
+    "OFR_FSI": {"warn_days": 7, "err_days": 14},          # slow
+    "VIX": {"warn_days": 3, "err_days": 7},               # fast
+    "SP500": {"warn_days": 3, "err_days": 7},             # fast
+    "HYG_IEF_RATIO": {"warn_days": 3, "err_days": 7},     # fast
+}
+
+RET1_PCT_DEFINITION = "ret1_pct = (ret1_delta / abs(prev)) * 100"
 
 
 @dataclass
@@ -97,7 +120,7 @@ def http_get_text(url: str, timeout: int = 30) -> str:
     req = Request(
         url,
         headers={
-            "User-Agent": "Mozilla/5.0 (compatible; market_cache/1.0; +https://github.com/)",
+            "User-Agent": "Mozilla/5.0 (compatible; market_cache/2.2; +https://github.com/)",
             "Accept": "text/csv,text/plain,*/*",
         },
         method="GET",
@@ -115,7 +138,7 @@ def http_get_text(url: str, timeout: int = 30) -> str:
 def parse_csv_points_generic(text: str, date_col_hint: str = "date") -> Tuple[List[Point], List[str], str]:
     """
     Parse a CSV with header:
-    - date column name includes date_col_hint (case-insensitive) else first column
+    - date column name equals date_col_hint (case-insensitive) else first column
     - value column: prefer header containing fsi/value/close; else second column
 
     Returns: (points_sorted_asc, header_fields, value_col_name)
@@ -340,6 +363,11 @@ def main() -> None:
         elif status == "WARN" and dq_overall != "ERR":
             dq_overall = "WARN"
 
+    # -------------------------
+    # (C) Record definition for auditability
+    # -------------------------
+    add_check("GLOBAL", "ret1_pct_definition", "OK", definition=RET1_PCT_DEFINITION)
+
     # ---- Fetch + parse series ----
     # OFR_FSI
     ofr_text = http_get_text(URL_OFR_FSI)
@@ -364,20 +392,73 @@ def main() -> None:
     ratio_pts = align_ratio(hyg_pts, ief_pts)
     add_check("HYG_IEF_RATIO", "aligned_points", "OK", n=len(ratio_pts))
 
+    # -------------------------
+    # (A) Ratio latest date must exist in BOTH HYG and IEF
+    # -------------------------
+    hyg_dates = {p.date for p in hyg_pts}
+    ief_dates = {p.date for p in ief_pts}
+    ratio_latest_date = ratio_pts[-1].date
+    if (ratio_latest_date in hyg_dates) and (ratio_latest_date in ief_dates):
+        add_check(
+            "HYG_IEF_RATIO",
+            "ratio_latest_date_present_in_hyg_and_ief",
+            "OK",
+            latest_date=ratio_latest_date,
+        )
+    else:
+        add_check(
+            "HYG_IEF_RATIO",
+            "ratio_latest_date_present_in_hyg_and_ief",
+            "ERR",
+            latest_date=ratio_latest_date,
+            hyg_has=(ratio_latest_date in hyg_dates),
+            ief_has=(ratio_latest_date in ief_dates),
+        )
+
     # ---- Build normalized series dict ----
     series_map: Dict[str, Dict[str, object]] = {}
 
     def add_series(series_id: str, pts: List[Point], source_url: str, extra: Optional[Dict[str, object]] = None) -> None:
         latest = pts[-1]
+
         stale = days_stale(latest.date, as_of_ts)
+        policy = STALENESS_POLICY.get(series_id, {"warn_days": 5, "err_days": 10})
+        warn_days = policy["warn_days"]
+        err_days = policy["err_days"]
+
         if stale is None:
-            add_check(series_id, "latest_date_parseable", "ERR", latest_date=latest.date)
+            add_check(series_id, "staleness_days", "ERR", latest_date=latest.date, threshold_warn_days=warn_days, threshold_err_days=err_days)
         else:
-            # conservative threshold: >5 calendar days => WARN
-            if stale > 5:
-                add_check(series_id, "staleness_days", "WARN", staleness_days=stale, latest_date=latest.date)
+            if stale > err_days:
+                add_check(
+                    series_id,
+                    "staleness_days",
+                    "ERR",
+                    staleness_days=stale,
+                    latest_date=latest.date,
+                    threshold_warn_days=warn_days,
+                    threshold_err_days=err_days,
+                )
+            elif stale > warn_days:
+                add_check(
+                    series_id,
+                    "staleness_days",
+                    "WARN",
+                    staleness_days=stale,
+                    latest_date=latest.date,
+                    threshold_warn_days=warn_days,
+                    threshold_err_days=err_days,
+                )
             else:
-                add_check(series_id, "staleness_days", "OK", staleness_days=stale, latest_date=latest.date)
+                add_check(
+                    series_id,
+                    "staleness_days",
+                    "OK",
+                    staleness_days=stale,
+                    latest_date=latest.date,
+                    threshold_warn_days=warn_days,
+                    threshold_err_days=err_days,
+                )
 
         series_map[series_id] = {
             "series_id": series_id,
@@ -448,7 +529,6 @@ def main() -> None:
         latest = pts[-1]
         prev = pts[-2]
 
-        # window stats at latest (idx=-1) and prev (idx=-2) to get deltas
         idx_latest = len(pts) - 1
         idx_prev = len(pts) - 2
 
@@ -457,7 +537,6 @@ def main() -> None:
         w252_now = window_stats_at(pts, 252, idx_latest)
         w252_prev = window_stats_at(pts, 252, idx_prev)
 
-        # deltas (only if both available)
         def delta(a: Optional[float], b: Optional[float]) -> Optional[float]:
             if a is None or b is None:
                 return None
@@ -493,7 +572,6 @@ def main() -> None:
                     threshold="8*std60",
                 )
 
-        # pack windows + new fields
         w60_out = dict(w60_now)
         w60_out.update(
             {
