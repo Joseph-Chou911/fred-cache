@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+update_regime_inputs_cache.py
+
 regime_inputs_cache updater (standalone) + features_latest.json (MA60/dev/ret1)
 
-Fix-A:
-1) oldest_date/newest_date in w60 now refer to the *w60 window slice* (not n_valid range)
-2) Numeric outputs are rounded deterministically to reduce float tail noise
-   - default rounding: 6 decimals for all derived numbers (ma/dev/ret1)
-   - latest.value is kept as original float from source (you can change if you want)
+Fix-A (final, full file):
+1) w60.oldest_date / newest_date refer to the *window slice* (last 60 valid points),
+   NOT the full n_valid range.
+2) Derived numbers (ma/dev/ret1) are rounded deterministically to 6 decimals to avoid
+   float tail noise in audit diffs.
+3) Adds w60.window_count and notes include window_count for auditability.
+
+Reads:
+- regime_inputs_cache/inputs_config.json
+
+Writes:
+- regime_inputs_cache/inputs_latest.json
+- regime_inputs_cache/inputs_history_lite.json
+- regime_inputs_cache/dq_state.json
+- regime_inputs_cache/features_latest.json
 """
 
 from __future__ import annotations
@@ -75,7 +87,7 @@ def write_json_atomic(path: Path, obj: Any) -> None:
 def http_get_text(url: str, timeout_sec: int) -> str:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "regime_inputs_cache/1.3 (+https://github.com/)"},
+        headers={"User-Agent": "regime_inputs_cache/1.4 (+https://github.com/)"},
         method="GET",
     )
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
@@ -95,7 +107,9 @@ def retry_fetch(url: str, timeout_sec: int, backoff: List[int]) -> str:
             return http_get_text(url, timeout_sec=timeout_sec)
         except Exception as e:
             last_err = e
-    raise RuntimeError(f"fetch_failed after retries: {type(last_err).__name__}: {last_err}")  # type: ignore[arg-type]
+    raise RuntimeError(
+        f"fetch_failed after retries: {type(last_err).__name__}: {last_err}"
+    )  # type: ignore[arg-type]
 
 
 # -----------------------
@@ -130,7 +144,9 @@ def fetch_stooq_daily(symbol: str, timeout: int, backoff: List[int]) -> Tuple[st
     return data_date, value, url, len(rows)
 
 
-def fetch_csv_max_date(url: str, date_col: str, value_col: str, timeout: int, backoff: List[int]) -> Tuple[str, float, str, List[str], int]:
+def fetch_csv_max_date(
+    url: str, date_col: str, value_col: str, timeout: int, backoff: List[int]
+) -> Tuple[str, float, str, List[str], int]:
     text = retry_fetch(url, timeout_sec=timeout, backoff=backoff)
     lines = [ln for ln in text.splitlines() if ln.strip()]
     if not lines:
@@ -184,7 +200,7 @@ def dedup_preserve_order(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 # -----------------------
-# Fix-A: deterministic rounding for derived numbers
+# features (MA60/dev/ret1) + deterministic rounding
 # -----------------------
 def round6(x: Optional[float]) -> Optional[float]:
     if x is None:
@@ -199,9 +215,13 @@ def mean(vals: List[float]) -> float:
 def compute_features(history: List[Dict[str, Any]], series_ids: List[str], window: int = 60) -> Dict[str, Any]:
     """
     Compute MA60/dev/ret1 from inputs_history_lite.json.
-    Fix-A:
-    - w60.oldest_date/newest_date refer to the last-60 slice (not global valid range)
-    - derived numbers are rounded to 6 decimals deterministically
+
+    Key audit semantics:
+    - n_valid: total valid points found for series in history (after parsing)
+    - window_count: points used for the window slice (min(n_valid, window))
+    - oldest_date/newest_date: refer to the window slice (NOT n_valid range)
+    - ma/dev only when n_valid >= window
+    - ret1 only when n_valid >= 2
     """
     out: Dict[str, Any] = {}
 
@@ -225,49 +245,58 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
                 latest_source_url = r.get("source_url")
 
         pts.sort(key=lambda x: x[0])  # YYYY-MM-DD
-        n = len(pts)
+        n_valid = len(pts)
 
-        if n == 0:
+        if n_valid == 0:
             out[sid] = {
                 "series_id": sid,
                 "latest": {"data_date": None, "value": None, "source_url": latest_source_url},
-                "w60": {"n_valid": 0, "oldest_date": None, "newest_date": None, "ma": None, "dev": None},
+                "w60": {
+                    "n_valid": 0,
+                    "window_count": 0,
+                    "oldest_date": None,
+                    "newest_date": None,
+                    "ma": None,
+                    "dev": None
+                },
                 "ret1": None,
                 "notes": "NA:no_valid_points"
             }
             continue
 
         newest_date, newest_val = pts[-1]
-        prev_val = pts[-2][1] if n >= 2 else None
+        prev_val = pts[-2][1] if n_valid >= 2 else None
 
-        # window slice definition
-        w_slice = pts[-window:] if n >= window else pts[:]  # keep order
-        w_old = w_slice[0][0] if w_slice else None
-        w_new = w_slice[-1][0] if w_slice else None
+        # strictly define window slice
+        w_slice = pts[-window:] if n_valid >= window else pts[:]
+        window_count = len(w_slice)
+        w_old = w_slice[0][0] if window_count else None
+        w_new = w_slice[-1][0] if window_count else None
 
         ma_val: Optional[float] = None
         dev_val: Optional[float] = None
-        if n >= window:
+        if n_valid >= window:
             ma_val = mean([x[1] for x in w_slice])
             dev_val = newest_val - ma_val
 
         ret1_val: Optional[float] = None
         if prev_val is not None:
-            ret1_val = newest_val - prev_val  # delta
+            ret1_val = newest_val - prev_val
 
-        notes = f"policy=last_{window}_valid_points_by_data_date; n_valid={n}"
-        if n < window:
+        notes = f"policy=last_{window}_valid_points_by_data_date; n_valid={n_valid}; window_count={window_count}"
+        if n_valid < window:
             notes += "; WARN:insufficient_points_for_ma60"
 
         out[sid] = {
             "series_id": sid,
             "latest": {"data_date": newest_date, "value": newest_val, "source_url": latest_source_url},
             "w60": {
-                "n_valid": n,
+                "n_valid": n_valid,
+                "window_count": window_count,
                 "oldest_date": w_old,
                 "newest_date": w_new,
                 "ma": round6(ma_val),
-                "dev": round6(dev_val)
+                "dev": round6(dev_val),
             },
             "ret1": round6(ret1_val),
             "notes": notes
@@ -279,7 +308,7 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
 def main() -> int:
     now = utc_now()
     run_utc = iso_z(now)
-    run_taipei = iso_taipei(now)
+    run_tpe = iso_taipei(now)
 
     cfg = load_json(CONFIG_PATH, None)
     if not cfg:
@@ -294,15 +323,15 @@ def main() -> int:
 
     latest: Dict[str, Any] = {
         "generated_at_utc": run_utc,
-        "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1_3_features_fixA",
+        "as_of_ts": run_tpe,
+        "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
         "series": {}
     }
 
     dq: Dict[str, Any] = {
         "generated_at_utc": run_utc,
-        "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1_3_features_fixA",
+        "as_of_ts": run_tpe,
+        "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
         "status": "OK",
         "errors": [],
         "warnings": [],
@@ -325,14 +354,15 @@ def main() -> int:
         source_url_for_entry: Optional[str] = s.get("url")
         if fetcher == "stooq_daily":
             symbol = s.get("symbol")
-            source_url_for_entry = f"https://stooq.com/q/d/l/?s={symbol}&i=d" if symbol else source_url_for_entry
+            if symbol:
+                source_url_for_entry = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
 
         entry = {
             "series_id": sid,
             "data_date": None,
             "value": None,
             "source_url": source_url_for_entry,
-            "as_of_ts": run_taipei,
+            "as_of_ts": run_tpe,
             "notes": None
         }
 
@@ -360,7 +390,9 @@ def main() -> int:
                 url = s["url"]
                 date_col = s["date_col"]
                 value_col = s["value_col"]
-                data_date, value, real_url, header, parsed_rows = fetch_csv_max_date(url, date_col, value_col, timeout, backoff)
+                data_date, value, real_url, header, parsed_rows = fetch_csv_max_date(
+                    url, date_col, value_col, timeout, backoff
+                )
                 entry["source_url"] = real_url
                 entry["data_date"] = data_date
                 entry["value"] = value
@@ -389,23 +421,24 @@ def main() -> int:
         latest["series"][sid] = entry
         dq["per_series"][sid] = per
 
+        # Append observation to history (even if failed: null data_date/value).
         history.append({
             "series_id": sid,
             "data_date": entry["data_date"],
             "value": entry["value"],
             "source_url": entry["source_url"],
-            "as_of_ts": run_taipei,
+            "as_of_ts": run_tpe,
             "notes": entry["notes"]
         })
 
     history = dedup_preserve_order(history)
 
-    # Fix-A features
+    # Compute features
     features_series = compute_features(history, series_ids, window=60)
     features = {
         "generated_at_utc": run_utc,
-        "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1_3_features_fixA",
+        "as_of_ts": run_tpe,
+        "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
         "features_policy": {
             "window": 60,
             "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -413,6 +446,7 @@ def main() -> int:
             "dev_definition": "latest - ma (only when ma is available)",
             "ret1_mode": "delta (latest - previous valid point)",
             "rounding": "derived numbers rounded to 6 decimals deterministically",
+            "w60_dates": "oldest_date/newest_date refer to the window slice (last 60 points when available)",
             "source": "inputs_history_lite.json"
         },
         "series": features_series
