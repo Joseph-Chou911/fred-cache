@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-01-11T06:24:07.844795Z",
-  "as_of_ts": "2026-01-11T14:24:07.844795+08:00",
-  "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
+  "generated_at_utc": "2026-01-11T06:30:53.927788Z",
+  "as_of_ts": "2026-01-11T14:30:53.927788+08:00",
+  "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
   "features_policy": {
     "window": 60,
     "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -9,8 +9,9 @@
     "dev_definition": "latest - ma (only when ma is available)",
     "ret1_mode": "delta (latest - previous valid point)",
     "rounding": "derived numbers rounded to 6 decimals deterministically",
-    "w60_dates": "oldest_date/newest_date refer to the window slice (last 60 points when available)",
+    "w60_dates": "oldest_date/newest_date refer to the window slice",
     "strict_date": "only accept YYYY-MM-DD dates into features window",
+    "window_preview": "window_head_dates/window_tail_dates are included for quick audit",
     "source": "inputs_history_lite.json"
   },
   "series": {
@@ -27,7 +28,17 @@
         "oldest_date": "2025-10-16",
         "newest_date": "2026-01-09",
         "ma": 17.4145,
-        "dev": -2.9245
+        "dev": -2.9245,
+        "window_head_dates": [
+          "2025-10-16",
+          "2025-10-17",
+          "2025-10-20"
+        ],
+        "window_tail_dates": [
+          "2026-01-07",
+          "2026-01-08",
+          "2026-01-09"
+        ]
       },
       "ret1": -0.96,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
@@ -45,7 +56,17 @@
         "oldest_date": "2025-10-16",
         "newest_date": "2026-01-07",
         "ma": -2.314167,
-        "dev": -0.281833
+        "dev": -0.281833,
+        "window_head_dates": [
+          "2025-10-16",
+          "2025-10-17",
+          "2025-10-20"
+        ],
+        "window_tail_dates": [
+          "2026-01-05",
+          "2026-01-06",
+          "2026-01-07"
+        ]
       },
       "ret1": 0.155,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
@@ -63,7 +84,17 @@
         "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
         "ma": 6805.678833,
-        "dev": 160.601167
+        "dev": 160.601167,
+        "window_head_dates": [
+          "2025-10-15",
+          "2025-10-16",
+          "2025-10-17"
+        ],
+        "window_tail_dates": [
+          "2026-01-07",
+          "2026-01-08",
+          "2026-01-09"
+        ]
       },
       "ret1": 44.82,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
@@ -81,7 +112,17 @@
         "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
         "ma": 80.626167,
-        "dev": 0.373833
+        "dev": 0.373833,
+        "window_head_dates": [
+          "2025-10-15",
+          "2025-10-16",
+          "2025-10-17"
+        ],
+        "window_tail_dates": [
+          "2026-01-07",
+          "2026-01-08",
+          "2026-01-09"
+        ]
       },
       "ret1": 0.06,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
@@ -99,7 +140,17 @@
         "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
         "ma": 96.748833,
-        "dev": -0.448833
+        "dev": -0.448833,
+        "window_head_dates": [
+          "2025-10-15",
+          "2025-10-16",
+          "2025-10-17"
+        ],
+        "window_tail_dates": [
+          "2026-01-07",
+          "2026-01-08",
+          "2026-01-09"
+        ]
       },
       "ret1": 0.11,
       "notes": "policy=last_60_valid_points_by_data_date; n_valid=250; window_count=60; strict_date=YYYY-MM-DD"
