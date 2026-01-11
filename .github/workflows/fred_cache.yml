@@ -44,7 +44,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Generate + sanity + commit + push (retry-safe)
+      - name: Generate + sanity + commit + patch-manifest + push (retry-safe)
         shell: bash
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -65,40 +65,24 @@ jobs:
             # 2) Sanity check
             python scripts/sanity_check_history.py
 
-            # 3) Commit data files (Commit 1)
+            # 3) Commit data snapshot (Commit 1)
             git add -A cache
-
             if git diff --cached --quiet; then
               echo "No changes in cache/. Exit."
               exit 0
             fi
-
             git commit -m "Update FRED cache data" --no-verify
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 4) Patch stats_latest.json with the correct DATA_SHA (Commit 2 part)
-            python scripts/patch_stats.py --data-sha "$DATA_SHA"
-            git add cache/stats_latest.json || true
-
-            # 5) Patch manifest pinned URLs using DATA_SHA (Commit 2)
-            python scripts/patch_manifest.py --repo "$REPO" --data-sha "$DATA_SHA" --mode data
+            # 4) Patch manifest pinned.* -> DATA_SHA (Commit 2)
+            python scripts/patch_manifest.py --repo "$REPO" --data-sha "$DATA_SHA"
             git add cache/manifest.json
-
             if ! git diff --cached --quiet; then
-              git commit -m "Patch stats/meta + manifest pinned (DATA_SHA)" --no-verify
+              git commit -m "Patch manifest pinned to DATA_SHA" --no-verify
             fi
 
-            # 6) Pin manifest snapshot + stats_latest_json to MANIFEST_SHA (Commit 3)
-            MANIFEST_SHA="$(git rev-parse HEAD)"
-            python scripts/patch_manifest.py --repo "$REPO" --data-sha "$DATA_SHA" --manifest-sha "$MANIFEST_SHA" --mode manifest
-            git add cache/manifest.json
-
-            if ! git diff --cached --quiet; then
-              git commit -m "Pin manifest snapshot url (MANIFEST_SHA)" --no-verify
-            fi
-
-            # 7) Push once
+            # 5) Push once
             if git push origin HEAD:main; then
               echo "Push succeeded."
               exit 0
