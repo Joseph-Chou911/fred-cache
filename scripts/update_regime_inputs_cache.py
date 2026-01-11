@@ -1,20 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-update_regime_inputs_cache.py (v1_5)
+update_regime_inputs_cache.py (v1_6)
 
-Fix-A final:
-- Deterministic rounding for derived numbers (ma/dev/ret1) to 6 decimals
-- w60 oldest/newest dates refer to the true last-60 window slice
-- STRICT date validation for features:
-    only accept data_date that matches YYYY-MM-DD and is a real date
-  This prevents window corruption by null/empty/invalid dates in history.
+Purpose:
+- Standalone regime_inputs_cache pipeline:
+  1) Fetch latest points for configured series (CSV max-date or Stooq daily)
+  2) Maintain inputs_history_lite.json (append-only BUT dedup; and DO NOT append failed/null points)
+  3) Emit dq_state.json (per-series audit)
+  4) Compute features_latest.json (MA60/dev/ret1) from inputs_history_lite.json
+     - last 60 valid points by data_date (not calendar days)
+     - deterministic rounding for derived values to avoid float tail noise
+     - includes window_count and a small window preview (head/tail dates) for audit
+
+Key Fixes:
+- Do not append fetch_failed/null points into inputs_history_lite.json (reduces noise and avoids future window corruption)
+- Strict date validation in feature computation (accept only YYYY-MM-DD real dates)
+- Optional: window preview fields for quick verification
 
 Writes:
 - regime_inputs_cache/inputs_latest.json
 - regime_inputs_cache/inputs_history_lite.json
 - regime_inputs_cache/dq_state.json
 - regime_inputs_cache/features_latest.json
+
+Reads:
+- regime_inputs_cache/inputs_config.json
 """
 
 from __future__ import annotations
@@ -46,6 +57,9 @@ FEATURES_PATH = OUT_DIR / "features_latest.json"
 RE_YYYY_MM_DD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+# -----------------------
+# time helpers
+# -----------------------
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -60,6 +74,9 @@ def iso_taipei(dt: datetime) -> str:
     return dt.astimezone(ZoneInfo("Asia/Taipei")).isoformat()
 
 
+# -----------------------
+# json i/o
+# -----------------------
 def load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
@@ -73,10 +90,13 @@ def write_json_atomic(path: Path, obj: Any) -> None:
     tmp.replace(path)
 
 
+# -----------------------
+# http fetch with retry
+# -----------------------
 def http_get_text(url: str, timeout_sec: int) -> str:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "regime_inputs_cache/1.5 (+https://github.com/)"},
+        headers={"User-Agent": "regime_inputs_cache/1.6 (+https://github.com/)"},
         method="GET",
     )
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
@@ -99,6 +119,9 @@ def retry_fetch(url: str, timeout_sec: int, backoff: List[int]) -> str:
     raise RuntimeError(f"fetch_failed after retries: {type(last_err).__name__}: {last_err}")  # type: ignore[arg-type]
 
 
+# -----------------------
+# parsing helpers
+# -----------------------
 def parse_date_yyyy_mm_dd(s: str) -> str:
     s = (s or "").strip()
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y"):
@@ -142,10 +165,11 @@ def fetch_csv_max_date(
     reader = csv.DictReader(lines)
     best_date: Optional[str] = None
     best_value: Optional[float] = None
-    rows = 0
+    rows_total = 0
+    rows_valid = 0
 
     for row in reader:
-        rows += 1
+        rows_total += 1
         d_raw = row.get(date_col, "")
         v_raw = row.get(value_col, "")
         if not d_raw or not v_raw:
@@ -155,12 +179,15 @@ def fetch_csv_max_date(
             v = safe_float(v_raw)
         except Exception:
             continue
+
+        rows_valid += 1
         if (best_date is None) or (d > best_date):
             best_date, best_value = d, v
 
     if best_date is None or best_value is None:
         raise RuntimeError(f"no valid (date,value) using date_col={date_col}, value_col={value_col}")
-    return best_date, best_value, url, header, rows
+
+    return best_date, best_value, url, header, rows_total
 
 
 def staleness_days(data_date: str, now_utc: datetime) -> Optional[int]:
@@ -210,9 +237,16 @@ def is_valid_yyyy_mm_dd(d: Any) -> bool:
 
 def compute_features(history: List[Dict[str, Any]], series_ids: List[str], window: int = 60) -> Dict[str, Any]:
     """
-    STRICT window semantics:
-    - only accept valid YYYY-MM-DD dates into pts
-    - window slice = last `window` points by data_date
+    Compute MA60/dev/ret1 from inputs_history_lite.json.
+
+    Semantics:
+    - pts built only from strict YYYY-MM-DD dates and numeric values
+    - n_valid: total valid points after strict filtering
+    - w_slice: last `window` points (or fewer if n_valid < window)
+    - oldest/newest in w60 refer to w_slice
+    - ma/dev only when n_valid >= window
+    - ret1 only when n_valid >= 2
+    - adds window preview dates for quick audit
     """
     out: Dict[str, Any] = {}
 
@@ -228,17 +262,17 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
             if d is None or v is None:
                 continue
             if not is_valid_yyyy_mm_dd(d):
-                # ignore invalid date points to prevent window corruption
                 continue
             try:
                 vv = float(v)
             except Exception:
                 continue
+
             pts.append((d, vv))
             if r.get("source_url"):
                 latest_source_url = r.get("source_url")
 
-        pts.sort(key=lambda x: x[0])  # YYYY-MM-DD ascending
+        pts.sort(key=lambda x: x[0])
         n_valid = len(pts)
 
         if n_valid == 0:
@@ -251,10 +285,12 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
                     "oldest_date": None,
                     "newest_date": None,
                     "ma": None,
-                    "dev": None
+                    "dev": None,
+                    "window_head_dates": [],
+                    "window_tail_dates": [],
                 },
                 "ret1": None,
-                "notes": "NA:no_valid_points_after_strict_date_validation"
+                "notes": "NA:no_valid_points_after_strict_filter"
             }
             continue
 
@@ -265,6 +301,10 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
         window_count = len(w_slice)
         w_old = w_slice[0][0] if window_count else None
         w_new = w_slice[-1][0] if window_count else None
+
+        # window preview (for audit)
+        head_dates = [x[0] for x in w_slice[:3]]
+        tail_dates = [x[0] for x in w_slice[-3:]]
 
         ma_val: Optional[float] = None
         dev_val: Optional[float] = None
@@ -293,6 +333,8 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
                 "newest_date": w_new,
                 "ma": round6(ma_val),
                 "dev": round6(dev_val),
+                "window_head_dates": head_dates,
+                "window_tail_dates": tail_dates,
             },
             "ret1": round6(ret1_val),
             "notes": notes
@@ -320,14 +362,14 @@ def main() -> int:
     latest: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
+        "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
         "series": {}
     }
 
     dq: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
+        "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
         "status": "OK",
         "errors": [],
         "warnings": [],
@@ -346,7 +388,7 @@ def main() -> int:
         fetcher = s.get("fetcher")
         expected_max = s.get("expected_max_staleness_days", None)
 
-        # Keep source_url even on failure
+        # Keep source_url even on failure (audit)
         source_url_for_entry: Optional[str] = s.get("url")
         if fetcher == "stooq_daily":
             symbol = s.get("symbol")
@@ -373,6 +415,7 @@ def main() -> int:
             "error": None
         }
 
+        ok = False
         try:
             if fetcher == "stooq_daily":
                 symbol = s["symbol"]
@@ -381,18 +424,20 @@ def main() -> int:
                 entry["data_date"] = data_date
                 entry["value"] = value
                 entry["notes"] = f"ok; parsed_rows={parsed_rows}"
+                ok = True
 
             elif fetcher == "csv_max_date":
                 url = s["url"]
                 date_col = s["date_col"]
                 value_col = s["value_col"]
-                data_date, value, real_url, header, parsed_rows = fetch_csv_max_date(
+                data_date, value, real_url, header, rows_total = fetch_csv_max_date(
                     url, date_col, value_col, timeout, backoff
                 )
                 entry["source_url"] = real_url
                 entry["data_date"] = data_date
                 entry["value"] = value
-                entry["notes"] = f"ok; header={header}; date_col={date_col}; value_col={value_col}; parsed_rows={parsed_rows}"
+                entry["notes"] = f"ok; header={header}; date_col={date_col}; value_col={value_col}; parsed_rows={rows_total}"
+                ok = True
 
             else:
                 raise RuntimeError(f"unsupported fetcher: {fetcher}")
@@ -417,15 +462,16 @@ def main() -> int:
         latest["series"][sid] = entry
         dq["per_series"][sid] = per
 
-        # Append observation to history (even if failed: null data_date/value).
-        history.append({
-            "series_id": sid,
-            "data_date": entry["data_date"],
-            "value": entry["value"],
-            "source_url": entry["source_url"],
-            "as_of_ts": run_tpe,
-            "notes": entry["notes"]
-        })
+        # IMPORTANT FIX: only append to history when fetch succeeded AND data_date/value are present
+        if ok and entry["data_date"] is not None and entry["value"] is not None:
+            history.append({
+                "series_id": sid,
+                "data_date": entry["data_date"],
+                "value": entry["value"],
+                "source_url": entry["source_url"],
+                "as_of_ts": run_tpe,
+                "notes": entry["notes"]
+            })
 
     history = dedup_preserve_order(history)
 
@@ -433,7 +479,7 @@ def main() -> int:
     features = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
+        "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
         "features_policy": {
             "window": 60,
             "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -441,8 +487,9 @@ def main() -> int:
             "dev_definition": "latest - ma (only when ma is available)",
             "ret1_mode": "delta (latest - previous valid point)",
             "rounding": "derived numbers rounded to 6 decimals deterministically",
-            "w60_dates": "oldest_date/newest_date refer to the window slice (last 60 points when available)",
+            "w60_dates": "oldest_date/newest_date refer to the window slice",
             "strict_date": "only accept YYYY-MM-DD dates into features window",
+            "window_preview": "window_head_dates/window_tail_dates are included for quick audit",
             "source": "inputs_history_lite.json"
         },
         "series": features_series
