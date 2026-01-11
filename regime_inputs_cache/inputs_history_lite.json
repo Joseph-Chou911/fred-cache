@@ -1996,7 +1996,7 @@
     "data_date": "2026-01-09",
     "value": 81.0,
     "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
-    "as_of_ts": "2026-01-11T15:03:04.441453+08:00",
+    "as_of_ts": "2026-01-11T16:22:20.094743+08:00",
     "notes": "ok; parsed_rows=4718"
   },
   {
@@ -3996,7 +3996,7 @@
     "data_date": "2026-01-09",
     "value": 96.3,
     "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
-    "as_of_ts": "2026-01-11T15:03:04.441453+08:00",
+    "as_of_ts": "2026-01-11T16:22:20.094743+08:00",
     "notes": "ok; parsed_rows=5251"
   },
   {
@@ -5996,7 +5996,7 @@
     "data_date": "2026-01-07",
     "value": -2.596,
     "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
-    "as_of_ts": "2026-01-11T15:03:04.441453+08:00",
+    "as_of_ts": "2026-01-11T16:22:20.094743+08:00",
     "notes": "ok; header=['Date', 'OFR FSI', 'Credit', 'Equity valuation', 'Safe assets', 'Funding', 'Volatility', 'United States', 'Other advanced economies', 'Emerging markets']; date_col=Date; value_col=OFR FSI; parsed_rows=6580"
   },
   {
@@ -7996,7 +7996,7 @@
     "data_date": "2026-01-09",
     "value": 6966.28,
     "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
-    "as_of_ts": "2026-01-11T15:03:04.441453+08:00",
+    "as_of_ts": "2026-01-11T16:22:20.094743+08:00",
     "notes": "ok; parsed_rows=39611"
   },
   {
@@ -9996,7 +9996,7 @@
     "data_date": "2026-01-09",
     "value": 14.49,
     "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-    "as_of_ts": "2026-01-11T15:03:04.441453+08:00",
+    "as_of_ts": "2026-01-11T16:22:20.094743+08:00",
     "notes": "ok; header=['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE']; date_col=DATE; value_col=CLOSE; parsed_rows=9097"
   }
 ]
