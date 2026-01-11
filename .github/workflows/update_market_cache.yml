@@ -1,0 +1,88 @@
+name: Update market_cache (OFR_FSI / VIX / SP500 / HYG_IEF_RATIO)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 00:40 UTC = 08:40 Asia/Taipei (daily)
+    - cron: "40 0 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install requests >/dev/null 2>&1 || true
+          # NOTE: update_market_cache.py uses urllib only; requests not required.
+          # kept here in case you later migrate to requests.Session for retries.
+
+      - name: Generate market_cache data files
+        shell: bash
+        env:
+          LITE_KEEP_N: "400"
+        run: |
+          set -euo pipefail
+          python market_cache/update_market_cache.py
+
+      - name: Commit data files (data commit)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add market_cache/latest.json market_cache/history_lite.json market_cache/stats_latest.json || true
+          if git diff --cached --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "market_cache: update data files"
+            git push
+          fi
+
+      - name: Resolve DATA_SHA (HEAD)
+        id: data_sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "DATA_SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Patch manifest to pin DATA_SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python market_cache/patch_manifest_market_cache.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --data-sha "${{ steps.data_sha.outputs.DATA_SHA }}"
+
+      - name: Commit manifest (manifest commit)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add market_cache/manifest.json || true
+          if git diff --cached --quiet; then
+            echo "No manifest changes to commit."
+          else
+            git commit -m "market_cache: pin manifest to data sha"
+            git push
+          fi
