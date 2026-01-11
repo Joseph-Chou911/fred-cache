@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-regime_inputs_cache updater (standalone)
+regime_inputs_cache updater (standalone) + Upgrade A: features_latest.json
 
 Outputs:
 - regime_inputs_cache/latest.json
 - regime_inputs_cache/history_lite.json
 - regime_inputs_cache/dq_state.json
-- regime_inputs_cache/inputs_schema_out.json  (frozen, for downstream audit)
+- regime_inputs_cache/inputs_schema_out.json   (frozen schema used in this run)
+- regime_inputs_cache/features_latest.json     (MA60/dev/ret1 derived from history_lite)
 
 Design goals:
 - Serial fetch (no parallel)
 - Retry with backoff: 2s -> 4s -> 8s
 - No guessing: if required columns not found, mark ERR for that series
 - Auditable notes: record CSV header + chosen date/value columns + row counts
+- Features are computed ONLY from locally persisted history_lite (no extra fetching)
 """
 
 from __future__ import annotations
@@ -22,7 +24,6 @@ import csv
 import json
 import time
 import urllib.request
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,8 +43,12 @@ LATEST_OUT = OUT_DIR / "latest.json"
 HISTORY_OUT = OUT_DIR / "history_lite.json"
 DQ_OUT = OUT_DIR / "dq_state.json"
 SCHEMA_OUT = OUT_DIR / "inputs_schema_out.json"
+FEATURES_OUT = OUT_DIR / "features_latest.json"
 
 
+# -----------------------
+# time helpers
+# -----------------------
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -59,6 +64,9 @@ def iso_taipei(dt: datetime) -> str:
     return dt.astimezone(ZoneInfo("Asia/Taipei")).isoformat()
 
 
+# -----------------------
+# json i/o
+# -----------------------
 def write_json_atomic(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -72,10 +80,13 @@ def load_json(path: Path, default: Any) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+# -----------------------
+# http fetch with retry
+# -----------------------
 def http_get_text(url: str, timeout_sec: int) -> str:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "regime_inputs_cache/1.0 (+https://github.com/)"},
+        headers={"User-Agent": "regime_inputs_cache/1.1 (+https://github.com/)"},
         method="GET",
     )
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
@@ -89,17 +100,19 @@ def http_get_text(url: str, timeout_sec: int) -> str:
 
 def retry_fetch(url: str, timeout_sec: int, backoff: List[int]) -> str:
     last_err: Optional[Exception] = None
-    for i, wait_s in enumerate([0] + backoff):
+    for wait_s in [0] + backoff:
         if wait_s:
             time.sleep(wait_s)
         try:
             return http_get_text(url, timeout_sec=timeout_sec)
         except Exception as e:
             last_err = e
-            # continue retry
     raise RuntimeError(f"fetch_failed after retries: {type(last_err).__name__}: {last_err}")  # type: ignore[arg-type]
 
 
+# -----------------------
+# parsing helpers
+# -----------------------
 def normalize_date(s: str, fmts: List[str]) -> str:
     s = (s or "").strip()
     for fmt in fmts:
@@ -122,16 +135,19 @@ def pick_column(header: List[str], candidates: List[str], kind: str) -> Optional
     for c in candidates:
         if c.lower() in lower_map:
             return lower_map[c.lower()]
-    # heuristic fallback: contains keyword (for OFR FSI)
+
+    # heuristic fallback
     if kind == "date":
         for h in header:
             if "date" in h.lower():
                 return h
+
     if kind == "value":
         for h in header:
             lh = h.lower()
             if ("fsi" in lh) and ("date" not in lh):
                 return h
+
     return None
 
 
@@ -143,7 +159,7 @@ def parse_csv_latest_by_max_date(
 ) -> Tuple[str, float, int]:
     """
     Returns: (max_data_date, value_at_max_date, parsed_row_count)
-    Strategy: scan all rows; choose the row with lexicographically largest normalized date.
+    Strategy: scan all rows; choose the row with lexicographically largest normalized date (YYYY-MM-DD).
     """
     reader = csv.DictReader(csv_text.splitlines())
     rows = 0
@@ -171,6 +187,9 @@ def parse_csv_latest_by_max_date(
     return best_date, best_value, rows
 
 
+# -----------------------
+# dq + history helpers
+# -----------------------
 def staleness_days(data_date: str, now_utc: datetime) -> Optional[int]:
     try:
         d = datetime.strptime(data_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -191,6 +210,122 @@ def dedup_preserve_order(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+# -----------------------
+# Upgrade A: features (MA60/dev/ret1)
+# -----------------------
+def mean(vals: List[float]) -> float:
+    return sum(vals) / float(len(vals))
+
+
+def compute_features_from_history(
+    history: List[Dict[str, Any]],
+    series_list: List[str],
+    window: int = 60,
+) -> Dict[str, Any]:
+    """
+    Compute MA60/dev_ma60/ret1 from history_lite for each series.
+    - Uses valid points only: data_date != None and value != None
+    - Orders by data_date ascending (YYYY-MM-DD)
+    - MA60 requires >= window valid points; else NA
+    - ret1 requires >= 2 valid points; else NA
+    """
+    out: Dict[str, Any] = {}
+
+    for sid in series_list:
+        pts: List[Tuple[str, float]] = []
+        latest_source_url: Optional[str] = None
+
+        for r in history:
+            if r.get("series_id") != sid:
+                continue
+            d = r.get("data_date")
+            v = r.get("value")
+            if d is None or v is None:
+                continue
+            # v should be float, but be defensive
+            try:
+                vv = float(v)
+            except Exception:
+                continue
+            pts.append((str(d), vv))
+            if r.get("source_url"):
+                latest_source_url = r.get("source_url")
+
+        # sort by date ascending; if duplicate dates exist, stable sort keeps earlier first
+        pts.sort(key=lambda x: x[0])
+
+        n_valid = len(pts)
+        if n_valid == 0:
+            out[sid] = {
+                "series_id": sid,
+                "latest": {"data_date": None, "value": None, "source_url": latest_source_url},
+                "windows": {
+                    f"w{window}": {
+                        "n_valid": 0,
+                        "oldest_date": None,
+                        "newest_date": None,
+                        "ma": None,
+                        "dev": None
+                    }
+                },
+                "ret1": None,
+                "notes": "NA:no_valid_points_in_history"
+            }
+            continue
+
+        newest_date, newest_val = pts[-1]
+        prev_val = pts[-2][1] if n_valid >= 2 else None
+
+        # window slice
+        w_slice = pts[-window:] if n_valid >= window else pts[:]
+        w_n = len(w_slice)
+        w_old = w_slice[0][0] if w_n else None
+        w_new = w_slice[-1][0] if w_n else None
+
+        ma_val: Optional[float] = None
+        dev_val: Optional[float] = None
+        if n_valid >= window:
+            ma_val = mean([x[1] for x in w_slice])
+            dev_val = newest_val - ma_val
+
+        ret1_val: Optional[float] = None
+        if prev_val is not None:
+            ret1_val = newest_val - prev_val  # delta mode
+
+        notes_parts = [
+            f"policy=last_{window}_valid_points_by_data_date",
+            f"n_valid={n_valid}",
+            f"window_n={w_n}",
+        ]
+        if n_valid < window:
+            notes_parts.append("WARN:insufficient_points_for_ma60")
+
+        out[sid] = {
+            "series_id": sid,
+            "latest": {
+                "data_date": newest_date,
+                "value": newest_val,
+                "source_url": latest_source_url
+            },
+            "windows": {
+                f"w{window}": {
+                    "n_valid": n_valid,
+                    "oldest_date": w_old,
+                    "newest_date": w_new,
+                    "ma": ma_val,
+                    "dev": dev_val
+                }
+            },
+            "ret1": ret1_val,
+            "notes": "; ".join(notes_parts)
+        }
+
+    return out
+
+
+# -----------------------
+# main
+# -----------------------
 def main() -> int:
     now = utc_now()
     run_utc = iso_z(now)
@@ -212,14 +347,14 @@ def main() -> int:
     latest_obj: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1",
+        "script_version": "regime_inputs_cache_v1_1_features",
         "series": {}
     }
 
     dq: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_taipei,
-        "script_version": "regime_inputs_cache_v1",
+        "script_version": "regime_inputs_cache_v1_1_features",
         "status": "OK",
         "errors": [],
         "warnings": [],
@@ -329,6 +464,7 @@ def main() -> int:
             "notes": entry["notes"]
         })
 
+    # normalize history (dedup only; do NOT globally sort)
     history = dedup_preserve_order(history)
 
     # Freeze schema used in this run (for audit downstream)
@@ -339,10 +475,31 @@ def main() -> int:
         "schema": schema
     }
 
+    # Upgrade A: compute derived features from history_lite
+    series_list = [x.get("series_id") for x in schema.get("series", []) if x.get("series_id")]
+    window = 60
+    features_series = compute_features_from_history(history=history, series_list=series_list, window=window)
+    features_obj: Dict[str, Any] = {
+        "generated_at_utc": run_utc,
+        "as_of_ts": run_taipei,
+        "script_version": "regime_inputs_cache_v1_1_features",
+        "features_policy": {
+            "window": window,
+            "window_definition": "last N valid points ordered by data_date (not calendar days)",
+            "ma_definition": "mean of last N valid points when N>=window else NA",
+            "dev_definition": "latest - ma (only when ma is available)",
+            "ret1_mode": "delta (latest - previous valid point)",
+            "source": "history_lite.json"
+        },
+        "series": features_series
+    }
+
+    # write outputs
     write_json_atomic(LATEST_OUT, latest_obj)
     write_json_atomic(HISTORY_OUT, history)
     write_json_atomic(DQ_OUT, dq)
     write_json_atomic(SCHEMA_OUT, schema_out)
+    write_json_atomic(FEATURES_OUT, features_obj)
 
     return 0
 
