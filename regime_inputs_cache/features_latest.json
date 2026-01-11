@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-01-11T05:10:23.435156Z",
-  "as_of_ts": "2026-01-11T13:10:23.435156+08:00",
+  "generated_at_utc": "2026-01-11T06:04:57.780975Z",
+  "as_of_ts": "2026-01-11T14:04:57.780975+08:00",
   "script_version": "regime_inputs_cache_v1_2_features",
   "features_policy": {
     "window": 60,
@@ -19,14 +19,14 @@
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
-        "n_valid": 1,
-        "oldest_date": "2026-01-09",
+        "n_valid": 250,
+        "oldest_date": "2025-10-16",
         "newest_date": "2026-01-09",
-        "ma": null,
-        "dev": null
+        "ma": 17.4145,
+        "dev": -2.9245
       },
-      "ret1": null,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=1; WARN:insufficient_points_for_ma60"
+      "ret1": -0.9599999999999991,
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "OFR_FSI": {
       "series_id": "OFR_FSI",
@@ -36,14 +36,14 @@
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
-        "n_valid": 1,
-        "oldest_date": "2026-01-07",
+        "n_valid": 250,
+        "oldest_date": "2025-10-16",
         "newest_date": "2026-01-07",
-        "ma": null,
-        "dev": null
+        "ma": -2.3141666666666665,
+        "dev": -0.2818333333333336
       },
-      "ret1": null,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=1; WARN:insufficient_points_for_ma60"
+      "ret1": 0.1549999999999998,
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "SPX": {
       "series_id": "SPX",
@@ -53,14 +53,14 @@
         "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d"
       },
       "w60": {
-        "n_valid": 1,
-        "oldest_date": "2026-01-09",
+        "n_valid": 250,
+        "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
-        "ma": null,
-        "dev": null
+        "ma": 6805.6788333333325,
+        "dev": 160.60116666666727
       },
-      "ret1": null,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=1; WARN:insufficient_points_for_ma60"
+      "ret1": 44.81999999999971,
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "HYG": {
       "series_id": "HYG",
@@ -70,14 +70,14 @@
         "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d"
       },
       "w60": {
-        "n_valid": 1,
-        "oldest_date": "2026-01-09",
+        "n_valid": 250,
+        "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
-        "ma": null,
-        "dev": null
+        "ma": 80.62616666666665,
+        "dev": 0.37383333333335145
       },
-      "ret1": null,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=1; WARN:insufficient_points_for_ma60"
+      "ret1": 0.060000000000002274,
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     },
     "IEF": {
       "series_id": "IEF",
@@ -87,14 +87,14 @@
         "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d"
       },
       "w60": {
-        "n_valid": 1,
-        "oldest_date": "2026-01-09",
+        "n_valid": 250,
+        "oldest_date": "2025-10-15",
         "newest_date": "2026-01-09",
-        "ma": null,
-        "dev": null
+        "ma": 96.74883333333334,
+        "dev": -0.4488333333333401
       },
-      "ret1": null,
-      "notes": "policy=last_60_valid_points_by_data_date; n_valid=1; WARN:insufficient_points_for_ma60"
+      "ret1": 0.10999999999999943,
+      "notes": "policy=last_60_valid_points_by_data_date; n_valid=250"
     }
   }
 }
