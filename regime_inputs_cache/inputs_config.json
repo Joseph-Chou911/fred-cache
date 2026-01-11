@@ -1,11 +1,12 @@
 {
-  "version": "inputs_config_v1",
-  "default_timeout_sec": 20,
+  "version": "inputs_config_v1_2_features",
+  "default_timeout_sec": 25,
+  "backoff_seconds": [2, 4, 8],
   "series": [
     {
       "series_id": "VIX",
       "fetcher": "csv_max_date",
-      "url": "PUT_YOUR_VIX_CSV_URL_HERE",
+      "url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
       "date_col": "DATE",
       "value_col": "CLOSE",
       "expected_max_staleness_days": 7
@@ -13,9 +14,9 @@
     {
       "series_id": "OFR_FSI",
       "fetcher": "csv_max_date",
-      "url": "PUT_YOUR_OFR_FSI_CSV_URL_HERE",
-      "date_col": "date",
-      "value_col": "value",
+      "url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+      "date_col": "Date",
+      "value_col": "OFR FSI",
       "expected_max_staleness_days": 14
     },
     {
