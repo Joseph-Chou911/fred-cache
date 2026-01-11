@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-update_regime_inputs_cache.py
+update_regime_inputs_cache.py (v1_5)
 
-regime_inputs_cache updater (standalone) + features_latest.json (MA60/dev/ret1)
-
-Fix-A (final, full file):
-1) w60.oldest_date / newest_date refer to the *window slice* (last 60 valid points),
-   NOT the full n_valid range.
-2) Derived numbers (ma/dev/ret1) are rounded deterministically to 6 decimals to avoid
-   float tail noise in audit diffs.
-3) Adds w60.window_count and notes include window_count for auditability.
-
-Reads:
-- regime_inputs_cache/inputs_config.json
+Fix-A final:
+- Deterministic rounding for derived numbers (ma/dev/ret1) to 6 decimals
+- w60 oldest/newest dates refer to the true last-60 window slice
+- STRICT date validation for features:
+    only accept data_date that matches YYYY-MM-DD and is a real date
+  This prevents window corruption by null/empty/invalid dates in history.
 
 Writes:
 - regime_inputs_cache/inputs_latest.json
@@ -26,6 +21,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -47,10 +43,9 @@ HIST_LITE_PATH = OUT_DIR / "inputs_history_lite.json"
 DQ_PATH = OUT_DIR / "dq_state.json"
 FEATURES_PATH = OUT_DIR / "features_latest.json"
 
+RE_YYYY_MM_DD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-# -----------------------
-# time helpers
-# -----------------------
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -65,9 +60,6 @@ def iso_taipei(dt: datetime) -> str:
     return dt.astimezone(ZoneInfo("Asia/Taipei")).isoformat()
 
 
-# -----------------------
-# json i/o
-# -----------------------
 def load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
@@ -81,13 +73,10 @@ def write_json_atomic(path: Path, obj: Any) -> None:
     tmp.replace(path)
 
 
-# -----------------------
-# http fetch with retry
-# -----------------------
 def http_get_text(url: str, timeout_sec: int) -> str:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "regime_inputs_cache/1.4 (+https://github.com/)"},
+        headers={"User-Agent": "regime_inputs_cache/1.5 (+https://github.com/)"},
         method="GET",
     )
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
@@ -107,14 +96,9 @@ def retry_fetch(url: str, timeout_sec: int, backoff: List[int]) -> str:
             return http_get_text(url, timeout_sec=timeout_sec)
         except Exception as e:
             last_err = e
-    raise RuntimeError(
-        f"fetch_failed after retries: {type(last_err).__name__}: {last_err}"
-    )  # type: ignore[arg-type]
+    raise RuntimeError(f"fetch_failed after retries: {type(last_err).__name__}: {last_err}")  # type: ignore[arg-type]
 
 
-# -----------------------
-# parsing helpers
-# -----------------------
 def parse_date_yyyy_mm_dd(s: str) -> str:
     s = (s or "").strip()
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y"):
@@ -200,7 +184,7 @@ def dedup_preserve_order(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 # -----------------------
-# features (MA60/dev/ret1) + deterministic rounding
+# features helpers
 # -----------------------
 def round6(x: Optional[float]) -> Optional[float]:
     if x is None:
@@ -212,16 +196,23 @@ def mean(vals: List[float]) -> float:
     return sum(vals) / float(len(vals))
 
 
+def is_valid_yyyy_mm_dd(d: Any) -> bool:
+    if not isinstance(d, str):
+        return False
+    if not RE_YYYY_MM_DD.match(d):
+        return False
+    try:
+        datetime.strptime(d, "%Y-%m-%d")
+        return True
+    except Exception:
+        return False
+
+
 def compute_features(history: List[Dict[str, Any]], series_ids: List[str], window: int = 60) -> Dict[str, Any]:
     """
-    Compute MA60/dev/ret1 from inputs_history_lite.json.
-
-    Key audit semantics:
-    - n_valid: total valid points found for series in history (after parsing)
-    - window_count: points used for the window slice (min(n_valid, window))
-    - oldest_date/newest_date: refer to the window slice (NOT n_valid range)
-    - ma/dev only when n_valid >= window
-    - ret1 only when n_valid >= 2
+    STRICT window semantics:
+    - only accept valid YYYY-MM-DD dates into pts
+    - window slice = last `window` points by data_date
     """
     out: Dict[str, Any] = {}
 
@@ -236,15 +227,18 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
             v = r.get("value")
             if d is None or v is None:
                 continue
+            if not is_valid_yyyy_mm_dd(d):
+                # ignore invalid date points to prevent window corruption
+                continue
             try:
                 vv = float(v)
             except Exception:
                 continue
-            pts.append((str(d), vv))
+            pts.append((d, vv))
             if r.get("source_url"):
                 latest_source_url = r.get("source_url")
 
-        pts.sort(key=lambda x: x[0])  # YYYY-MM-DD
+        pts.sort(key=lambda x: x[0])  # YYYY-MM-DD ascending
         n_valid = len(pts)
 
         if n_valid == 0:
@@ -260,14 +254,13 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
                     "dev": None
                 },
                 "ret1": None,
-                "notes": "NA:no_valid_points"
+                "notes": "NA:no_valid_points_after_strict_date_validation"
             }
             continue
 
         newest_date, newest_val = pts[-1]
         prev_val = pts[-2][1] if n_valid >= 2 else None
 
-        # strictly define window slice
         w_slice = pts[-window:] if n_valid >= window else pts[:]
         window_count = len(w_slice)
         w_old = w_slice[0][0] if window_count else None
@@ -283,7 +276,10 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
         if prev_val is not None:
             ret1_val = newest_val - prev_val
 
-        notes = f"policy=last_{window}_valid_points_by_data_date; n_valid={n_valid}; window_count={window_count}"
+        notes = (
+            f"policy=last_{window}_valid_points_by_data_date; "
+            f"n_valid={n_valid}; window_count={window_count}; strict_date=YYYY-MM-DD"
+        )
         if n_valid < window:
             notes += "; WARN:insufficient_points_for_ma60"
 
@@ -324,14 +320,14 @@ def main() -> int:
     latest: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
+        "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
         "series": {}
     }
 
     dq: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
+        "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
         "status": "OK",
         "errors": [],
         "warnings": [],
@@ -433,12 +429,11 @@ def main() -> int:
 
     history = dedup_preserve_order(history)
 
-    # Compute features
     features_series = compute_features(history, series_ids, window=60)
     features = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
+        "script_version": "regime_inputs_cache_v1_5_features_fixA_strictDates",
         "features_policy": {
             "window": 60,
             "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -447,6 +442,7 @@ def main() -> int:
             "ret1_mode": "delta (latest - previous valid point)",
             "rounding": "derived numbers rounded to 6 decimals deterministically",
             "w60_dates": "oldest_date/newest_date refer to the window slice (last 60 points when available)",
+            "strict_date": "only accept YYYY-MM-DD dates into features window",
             "source": "inputs_history_lite.json"
         },
         "series": features_series
