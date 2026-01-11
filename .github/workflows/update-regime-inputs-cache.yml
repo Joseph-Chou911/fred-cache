@@ -1,10 +1,10 @@
-name: Update regime inputs cache
+name: Update regime_inputs_cache
 
 on:
   workflow_dispatch: {}
   schedule:
-    # Every 6 hours at minute 12 (UTC)
-    - cron: "12 */6 * * *"
+    # Daily at 00:30 UTC = 08:30 Asia/Taipei
+    - cron: "30 0 * * *"
 
 permissions:
   contents: write
@@ -29,68 +29,71 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run updater (serial, auditable)
+      - name: Install deps
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python scripts/update_regime_inputs_cache.py
 
-      - name: Commit data files (without manifest)
+      - name: Run regime inputs pipeline (inputs + features + dq)
         shell: bash
         run: |
           set -euo pipefail
+          # Your main generator script:
+          # Must output:
+          # - regime_inputs_cache/inputs_latest.json
+          # - regime_inputs_cache/inputs_history_lite.json
+          # - regime_inputs_cache/features_latest.json
+          # - regime_inputs_cache/dq_state.json
+          # - regime_inputs_cache/inputs_schema_out.json (if you have it)
+          python scripts/update_regime_inputs_cache.py
 
+      - name: Compatibility copies (scheme A)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Ensure compat filenames exist for old readers
+          cp -f regime_inputs_cache/inputs_latest.json regime_inputs_cache/latest.json
+          cp -f regime_inputs_cache/inputs_history_lite.json regime_inputs_cache/history_lite.json
+
+      - name: Patch manifest (scheme A: pin both canonical+compat)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/patch_manifest_regime_inputs.py --repo "Joseph-Chou911/fred-cache"
+
+      - name: Git status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --porcelain
+
+      - name: Commit data files
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # IMPORTANT: single-line git add to avoid "\" mistakes
-          git add -- \
+          git add \
             regime_inputs_cache/inputs_latest.json \
             regime_inputs_cache/inputs_history_lite.json \
+            regime_inputs_cache/features_latest.json \
             regime_inputs_cache/dq_state.json \
-            regime_inputs_cache/features_latest.json
+            regime_inputs_cache/inputs_schema_out.json \
+            regime_inputs_cache/latest.json \
+            regime_inputs_cache/history_lite.json \
+            regime_inputs_cache/manifest.json
 
           if git diff --cached --quiet; then
-            echo "No data changes."
-          else
-            git commit -m "Update regime_inputs_cache data"
+            echo "No changes to commit."
+            exit 0
           fi
 
-      - name: Patch manifest pinned to committed SHA
+          git commit -m "Update regime_inputs_cache (inputs+features+manifest)"
+
+      - name: Push
         shell: bash
         run: |
           set -euo pipefail
-
-          DATA_SHA="$(git rev-parse HEAD)"
-          echo "DATA_SHA=$DATA_SHA"
-
-          python scripts/patch_regime_inputs_manifest.py \
-            --repo "${GITHUB_REPOSITORY}" \
-            --data-sha "${DATA_SHA}"
-
-          git add -- regime_inputs_cache/manifest.json
-
-          if git diff --cached --quiet; then
-            echo "No manifest changes."
-          else
-            git commit -m "Pin regime_inputs_cache manifest to ${DATA_SHA}"
-          fi
-
-      - name: Push with retry (rebase)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          for i in 1 2 3; do
-            if git push; then
-              exit 0
-            fi
-
-            echo "Push failed, retry with rebase... attempt=$i"
-            git pull --rebase
-            sleep $((2**i))
-          done
-
-          echo "Push failed after retries"
-          exit 1
+          git push
