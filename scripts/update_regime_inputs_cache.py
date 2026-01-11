@@ -1,31 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-update_regime_inputs_cache.py (v1_6)
+update_regime_inputs_cache.py (v1_7)
 
-Purpose:
-- Standalone regime_inputs_cache pipeline:
-  1) Fetch latest points for configured series (CSV max-date or Stooq daily)
-  2) Maintain inputs_history_lite.json (append-only BUT dedup; and DO NOT append failed/null points)
-  3) Emit dq_state.json (per-series audit)
-  4) Compute features_latest.json (MA60/dev/ret1) from inputs_history_lite.json
-     - last 60 valid points by data_date (not calendar days)
-     - deterministic rounding for derived values to avoid float tail noise
-     - includes window_count and a small window preview (head/tail dates) for audit
+What this version fixes (important):
+- CLEAN existing history on load:
+  remove records where:
+    - data_date is null OR value is null
+    - data_date is not a real YYYY-MM-DD date
+    - value is not numeric
+  This purges legacy "ERR:fetch_failed" null points from inputs_history_lite.json.
 
-Key Fixes:
-- Do not append fetch_failed/null points into inputs_history_lite.json (reduces noise and avoids future window corruption)
-- Strict date validation in feature computation (accept only YYYY-MM-DD real dates)
-- Optional: window preview fields for quick verification
+- DO NOT append failed/null points in the future.
+
+- Features:
+  - MA60/dev/ret1 computed from last 60 valid points ordered by data_date
+  - Deterministic rounding to 6 decimals
+  - window_count + window preview dates (head/tail) for audit
+
+Files:
+Reads:
+- regime_inputs_cache/inputs_config.json
+- regime_inputs_cache/inputs_history_lite.json (optional)
 
 Writes:
 - regime_inputs_cache/inputs_latest.json
 - regime_inputs_cache/inputs_history_lite.json
 - regime_inputs_cache/dq_state.json
 - regime_inputs_cache/features_latest.json
-
-Reads:
-- regime_inputs_cache/inputs_config.json
 """
 
 from __future__ import annotations
@@ -96,7 +98,7 @@ def write_json_atomic(path: Path, obj: Any) -> None:
 def http_get_text(url: str, timeout_sec: int) -> str:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "regime_inputs_cache/1.6 (+https://github.com/)"},
+        headers={"User-Agent": "regime_inputs_cache/1.7 (+https://github.com/)"},
         method="GET",
     )
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
@@ -133,9 +135,27 @@ def parse_date_yyyy_mm_dd(s: str) -> str:
     raise ValueError(f"unsupported date format: {s}")
 
 
-def safe_float(x: str) -> float:
-    x = (x or "").strip().replace(",", "")
-    return float(x)
+def safe_float(x: Any) -> float:
+    if x is None:
+        raise ValueError("value is None")
+    if isinstance(x, (int, float)):
+        return float(x)
+    s = str(x).strip().replace(",", "")
+    if s == "":
+        raise ValueError("empty value")
+    return float(s)
+
+
+def is_valid_yyyy_mm_dd(d: Any) -> bool:
+    if not isinstance(d, str):
+        return False
+    if not RE_YYYY_MM_DD.match(d):
+        return False
+    try:
+        datetime.strptime(d, "%Y-%m-%d")
+        return True
+    except Exception:
+        return False
 
 
 def fetch_stooq_daily(symbol: str, timeout: int, backoff: List[int]) -> Tuple[str, float, str, int]:
@@ -166,7 +186,6 @@ def fetch_csv_max_date(
     best_date: Optional[str] = None
     best_value: Optional[float] = None
     rows_total = 0
-    rows_valid = 0
 
     for row in reader:
         rows_total += 1
@@ -180,7 +199,6 @@ def fetch_csv_max_date(
         except Exception:
             continue
 
-        rows_valid += 1
         if (best_date is None) or (d > best_date):
             best_date, best_value = d, v
 
@@ -211,7 +229,43 @@ def dedup_preserve_order(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 # -----------------------
-# features helpers
+# history cleanup (NEW)
+# -----------------------
+def clean_history(history: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """
+    Remove legacy garbage points:
+    - data_date is None / invalid date
+    - value is None / non-numeric
+    Keep other fields as-is.
+    """
+    stats = {"kept": 0, "dropped_null": 0, "dropped_bad_date": 0, "dropped_bad_value": 0}
+    cleaned: List[Dict[str, Any]] = []
+
+    for r in history:
+        d = r.get("data_date")
+        v = r.get("value")
+
+        if d is None or v is None:
+            stats["dropped_null"] += 1
+            continue
+        if not is_valid_yyyy_mm_dd(d):
+            stats["dropped_bad_date"] += 1
+            continue
+        try:
+            _ = safe_float(v)
+        except Exception:
+            stats["dropped_bad_value"] += 1
+            continue
+
+        cleaned.append(r)
+        stats["kept"] += 1
+
+    cleaned = dedup_preserve_order(cleaned)
+    return cleaned, stats
+
+
+# -----------------------
+# features (MA60/dev/ret1)
 # -----------------------
 def round6(x: Optional[float]) -> Optional[float]:
     if x is None:
@@ -223,31 +277,7 @@ def mean(vals: List[float]) -> float:
     return sum(vals) / float(len(vals))
 
 
-def is_valid_yyyy_mm_dd(d: Any) -> bool:
-    if not isinstance(d, str):
-        return False
-    if not RE_YYYY_MM_DD.match(d):
-        return False
-    try:
-        datetime.strptime(d, "%Y-%m-%d")
-        return True
-    except Exception:
-        return False
-
-
 def compute_features(history: List[Dict[str, Any]], series_ids: List[str], window: int = 60) -> Dict[str, Any]:
-    """
-    Compute MA60/dev/ret1 from inputs_history_lite.json.
-
-    Semantics:
-    - pts built only from strict YYYY-MM-DD dates and numeric values
-    - n_valid: total valid points after strict filtering
-    - w_slice: last `window` points (or fewer if n_valid < window)
-    - oldest/newest in w60 refer to w_slice
-    - ma/dev only when n_valid >= window
-    - ret1 only when n_valid >= 2
-    - adds window preview dates for quick audit
-    """
     out: Dict[str, Any] = {}
 
     for sid in series_ids:
@@ -264,7 +294,7 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
             if not is_valid_yyyy_mm_dd(d):
                 continue
             try:
-                vv = float(v)
+                vv = safe_float(v)
             except Exception:
                 continue
 
@@ -290,7 +320,7 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
                     "window_tail_dates": [],
                 },
                 "ret1": None,
-                "notes": "NA:no_valid_points_after_strict_filter"
+                "notes": "NA:no_valid_points_after_cleaning"
             }
             continue
 
@@ -302,7 +332,6 @@ def compute_features(history: List[Dict[str, Any]], series_ids: List[str], windo
         w_old = w_slice[0][0] if window_count else None
         w_new = w_slice[-1][0] if window_count else None
 
-        # window preview (for audit)
         head_dates = [x[0] for x in w_slice[:3]]
         tail_dates = [x[0] for x in w_slice[-3:]]
 
@@ -357,22 +386,25 @@ def main() -> int:
     if not isinstance(backoff, list) or not backoff:
         backoff = [2, 4, 8]
 
-    history: List[Dict[str, Any]] = load_json(HIST_LITE_PATH, default=[])
+    # Load + CLEAN history (one-time legacy purge happens here)
+    history_raw: List[Dict[str, Any]] = load_json(HIST_LITE_PATH, default=[])
+    history, clean_stats = clean_history(history_raw)
 
     latest: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
+        "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
         "series": {}
     }
 
     dq: Dict[str, Any] = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
+        "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
         "status": "OK",
         "errors": [],
         "warnings": [],
+        "history_cleanup": clean_stats,
         "per_series": {}
     }
 
@@ -462,7 +494,7 @@ def main() -> int:
         latest["series"][sid] = entry
         dq["per_series"][sid] = per
 
-        # IMPORTANT FIX: only append to history when fetch succeeded AND data_date/value are present
+        # IMPORTANT: append only when fetch succeeded and data_date/value are present
         if ok and entry["data_date"] is not None and entry["value"] is not None:
             history.append({
                 "series_id": sid,
@@ -479,7 +511,7 @@ def main() -> int:
     features = {
         "generated_at_utc": run_utc,
         "as_of_ts": run_tpe,
-        "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
+        "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
         "features_policy": {
             "window": 60,
             "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -489,7 +521,7 @@ def main() -> int:
             "rounding": "derived numbers rounded to 6 decimals deterministically",
             "w60_dates": "oldest_date/newest_date refer to the window slice",
             "strict_date": "only accept YYYY-MM-DD dates into features window",
-            "window_preview": "window_head_dates/window_tail_dates are included for quick audit",
+            "window_preview": "window_head_dates/window_tail_dates included for quick audit",
             "source": "inputs_history_lite.json"
         },
         "series": features_series
