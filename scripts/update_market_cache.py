@@ -13,11 +13,13 @@ Outputs (in market_cache/):
 - latest.json
 - history_lite.json
 - stats_latest.json
-- dq_state.json  (NEW)
+- dq_state.json
 
 Stats:
-- w60 / w252: mean, std(ddof=0), z, p, ma, dev_ma, ret1_delta, ret1_pct (NEW)
-- z60_delta / p60_delta, z252_delta / p252_delta (NEW): computed by re-evaluating stats at t and t-1
+- w60 / w252: mean, std(ddof=0), z, p, ma, dev_ma,
+              ret1_delta,
+              ret1_pct (direction-consistent using abs(prev) denominator),
+              z_delta, p_delta
 
 Design goals:
 - auditable: keep source URLs (ratio keeps both URLs + formula notes)
@@ -45,7 +47,9 @@ HISTORY_LITE_PATH = os.path.join(OUT_DIR, "history_lite.json")
 STATS_LATEST_PATH = os.path.join(OUT_DIR, "stats_latest.json")
 DQ_STATE_PATH = os.path.join(OUT_DIR, "dq_state.json")
 
-SCRIPT_VERSION = "market_cache_v2_stats_zp_w60_w252_ret1_delta_pct_deltas_dq_lite400"
+# NOTE: v2_1 changes ret1_pct definition to be direction-consistent for negative series:
+#   ret1_pct = (delta / abs(prev)) * 100
+SCRIPT_VERSION = "market_cache_v2_1_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400"
 LITE_KEEP_N = int(os.environ.get("LITE_KEEP_N", "400"))
 
 # Primary sources (user-specified)
@@ -82,7 +86,6 @@ def days_stale(latest_date: str, as_of_utc: str) -> Optional[int]:
     d = parse_yyyy_mm_dd(latest_date)
     if not d:
         return None
-    # as_of_utc is ISO Z
     try:
         as_of_dt = datetime.strptime(as_of_utc, "%Y-%m-%dT%H:%M:%SZ").date()
     except Exception:
@@ -114,6 +117,7 @@ def parse_csv_points_generic(text: str, date_col_hint: str = "date") -> Tuple[Li
     Parse a CSV with header:
     - date column name includes date_col_hint (case-insensitive) else first column
     - value column: prefer header containing fsi/value/close; else second column
+
     Returns: (points_sorted_asc, header_fields, value_col_name)
     """
     rows = list(csv.reader(text.splitlines()))
@@ -294,12 +298,20 @@ def ret1_delta(values: List[Point]) -> Optional[float]:
 
 
 def ret1_pct(values: List[Point]) -> Optional[float]:
+    """
+    Direction-consistent percent change for series that may be negative.
+    Uses abs(prev) as denominator so sign matches ret1_delta.
+
+      ret1_pct = (delta / abs(prev)) * 100
+    """
     if len(values) < 2:
         return None
     prev = values[-2].value
-    if prev == 0:
+    denom = abs(prev)
+    if denom == 0:
         return None
-    return (values[-1].value / prev - 1.0) * 100.0
+    delta = values[-1].value - prev
+    return (delta / denom) * 100.0
 
 
 def to_lite(values: List[Point], keep_n: int) -> List[Dict[str, object]]:
@@ -463,26 +475,44 @@ def main() -> None:
         std60 = w60_now.get("std")
         if isinstance(std60, (int, float)) and std60 not in (0, None):
             if abs(r1d) > 8.0 * float(std60):
-                add_check(sid, "bad_tick_ret1_delta_vs_std60", "WARN", ret1_delta=r1d, std60=std60, threshold="8*std60")
+                add_check(
+                    sid,
+                    "bad_tick_ret1_delta_vs_std60",
+                    "WARN",
+                    ret1_delta=r1d,
+                    std60=std60,
+                    threshold="8*std60",
+                )
             else:
-                add_check(sid, "bad_tick_ret1_delta_vs_std60", "OK", ret1_delta=r1d, std60=std60, threshold="8*std60")
+                add_check(
+                    sid,
+                    "bad_tick_ret1_delta_vs_std60",
+                    "OK",
+                    ret1_delta=r1d,
+                    std60=std60,
+                    threshold="8*std60",
+                )
 
         # pack windows + new fields
         w60_out = dict(w60_now)
-        w60_out.update({
-            "ret1_delta": r1d,
-            "ret1_pct": r1p,
-            "z_delta": z60_delta,
-            "p_delta": p60_delta,
-        })
+        w60_out.update(
+            {
+                "ret1_delta": r1d,
+                "ret1_pct": r1p,
+                "z_delta": z60_delta,
+                "p_delta": p60_delta,
+            }
+        )
 
         w252_out = dict(w252_now)
-        w252_out.update({
-            "ret1_delta": r1d,
-            "ret1_pct": r1p,
-            "z_delta": z252_delta,
-            "p_delta": p252_delta,
-        })
+        w252_out.update(
+            {
+                "ret1_delta": r1d,
+                "ret1_pct": r1p,
+                "z_delta": z252_delta,
+                "p_delta": p252_delta,
+            }
+        )
 
         stats_series[sid] = {
             "series_id": sid,
@@ -510,7 +540,7 @@ def main() -> None:
         "windows": {"w60": 60, "w252": 252},
         "std_ddof": 0,
         "percentile_method": "P = count(x<=latest)/n * 100",
-        "ret1_mode": "delta+percent",
+        "ret1_mode": "delta+percent(abs_prev_denominator)",
         "series_count": len(stats_series),
         "series": stats_series,
     }
