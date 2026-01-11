@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-01-11T06:30:53.927788Z",
-  "as_of_ts": "2026-01-11T14:30:53.927788+08:00",
-  "script_version": "regime_inputs_cache_v1_6_noNullHistory_preview",
+  "generated_at_utc": "2026-01-11T06:35:48.317467Z",
+  "as_of_ts": "2026-01-11T14:35:48.317467+08:00",
+  "script_version": "regime_inputs_cache_v1_7_cleanHistory_noNullAppend",
   "features_policy": {
     "window": 60,
     "window_definition": "last 60 valid points ordered by data_date (not calendar days)",
@@ -11,7 +11,7 @@
     "rounding": "derived numbers rounded to 6 decimals deterministically",
     "w60_dates": "oldest_date/newest_date refer to the window slice",
     "strict_date": "only accept YYYY-MM-DD dates into features window",
-    "window_preview": "window_head_dates/window_tail_dates are included for quick audit",
+    "window_preview": "window_head_dates/window_tail_dates included for quick audit",
     "source": "inputs_history_lite.json"
   },
   "series": {
