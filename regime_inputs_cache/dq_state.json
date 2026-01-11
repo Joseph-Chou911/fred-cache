@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-01-11T06:12:43.843769Z",
-  "as_of_ts": "2026-01-11T14:12:43.843769+08:00",
-  "script_version": "regime_inputs_cache_v1_3_features_fixA",
+  "generated_at_utc": "2026-01-11T06:17:15.467033Z",
+  "as_of_ts": "2026-01-11T14:17:15.467033+08:00",
+  "script_version": "regime_inputs_cache_v1_4_features_fixA_windowDates",
   "status": "OK",
   "errors": [],
   "warnings": [],
