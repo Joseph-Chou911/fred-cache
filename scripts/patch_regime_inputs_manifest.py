@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
+
 import argparse
 import json
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "regime_inputs_cache" / "manifest.json"
 
-def utc_now_iso() -> str:
+def iso_z_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 def main() -> int:
@@ -23,18 +24,19 @@ def main() -> int:
     base = f"https://raw.githubusercontent.com/{args.repo}/{args.data_sha}/regime_inputs_cache"
 
     obj = {
-        "generated_at_utc": utc_now_iso(),
-        "as_of_ts": utc_now_iso(),
+        "generated_at_utc": iso_z_now(),
+        "as_of_ts": iso_z_now(),
         "script_version": args.script_version,
         "data_commit_sha": args.data_sha,
         "pinned": {
-            "inputs_latest_json": f"{base}/inputs_latest.json",
-            "inputs_history_lite_json": f"{base}/inputs_history_lite.json",
-            "inputs_schema_json": f"{base}/inputs_schema.json",
-            "dq_state_json": f"{base}/dq_state.json"
+            "latest_json": f"{base}/latest.json",
+            "history_lite_json": f"{base}/history_lite.json",
+            "dq_state_json": f"{base}/dq_state.json",
+            "inputs_schema_out_json": f"{base}/inputs_schema_out.json"
         }
     }
 
+    MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST_PATH.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return 0
 
