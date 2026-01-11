@@ -1,0 +1,49 @@
+{
+  "generated_at_utc": "2026-01-11T06:02:42.279743Z",
+  "as_of_ts": "2026-01-11T14:02:42.279743+08:00",
+  "script_version": "backfill_regime_inputs_history_v1",
+  "n": 250,
+  "per_series": {
+    "VIX": {
+      "fetcher": "csv_max_date",
+      "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+      "points_total_valid": 9097,
+      "points_selected": 250,
+      "selected_oldest": "2025-01-22",
+      "selected_newest": "2026-01-09"
+    },
+    "OFR_FSI": {
+      "fetcher": "csv_max_date",
+      "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+      "points_total_valid": 6580,
+      "points_selected": 250,
+      "selected_oldest": "2025-01-23",
+      "selected_newest": "2026-01-07"
+    },
+    "SPX": {
+      "fetcher": "stooq_daily",
+      "source_url": "https://stooq.com/q/d/l/?s=^SPX&i=d",
+      "points_total_valid": 39611,
+      "points_selected": 250,
+      "selected_oldest": "2025-01-13",
+      "selected_newest": "2026-01-09"
+    },
+    "HYG": {
+      "fetcher": "stooq_daily",
+      "source_url": "https://stooq.com/q/d/l/?s=hyg.us&i=d",
+      "points_total_valid": 4718,
+      "points_selected": 250,
+      "selected_oldest": "2025-01-13",
+      "selected_newest": "2026-01-09"
+    },
+    "IEF": {
+      "fetcher": "stooq_daily",
+      "source_url": "https://stooq.com/q/d/l/?s=ief.us&i=d",
+      "points_total_valid": 5251,
+      "points_selected": 250,
+      "selected_oldest": "2025-01-13",
+      "selected_newest": "2026-01-09"
+    }
+  },
+  "errors": []
+}
