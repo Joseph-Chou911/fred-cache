@@ -45,6 +45,20 @@ jobs:
           test -f scripts/update_market_cache.py
           test -f scripts/patch_manifest_market_cache.py
 
+      - name: Git identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with remote before work (autostash)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git rebase --autostash origin/main
+
       - name: Generate market_cache data files
         shell: bash
         env:
@@ -53,14 +67,11 @@ jobs:
           set -euo pipefail
           python scripts/update_market_cache.py
 
-      - name: Commit data files (data commit)
+      - name: Commit data files (data commit) with push-retry
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # IMPORTANT: include dq_state.json (new output)
           git add market_cache/latest.json \
                  market_cache/history_lite.json \
                  market_cache/stats_latest.json \
@@ -68,42 +79,63 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "No data changes to commit."
-          else
-            git commit -m "market_cache: update data files"
-            git push
+            echo "DATA_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+            exit 0
           fi
 
-      - name: Resolve DATA_SHA (HEAD)
-        id: data_sha
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "DATA_SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          git commit -m "market_cache: update data files"
 
-      - name: Sync with remote (autostash)
+          # push with retry + rebase to avoid non-fast-forward
+          for i in 1 2 3; do
+            if git push; then
+              break
+            fi
+            echo "Push failed (attempt $i). Rebase and retry..."
+            git fetch origin main
+            git rebase --autostash origin/main
+          done
+
+          # final sanity: if still not pushed, fail loudly
+          git push
+
+          echo "DATA_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+      - name: Sync with remote before manifest commit (autostash)
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main
           git rebase --autostash origin/main
 
-      - name: Patch manifest to pin DATA_SHA
+      - name: Patch manifest to pin DATA_SHA (and include dq_state_json)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/patch_manifest_market_cache.py \
             --repo "${GITHUB_REPOSITORY}" \
-            --data-sha "${{ steps.data_sha.outputs.DATA_SHA }}"
+            --data-sha "${DATA_SHA}"
 
-      - name: Commit manifest (manifest commit)
+      - name: Commit manifest (manifest commit) with push-retry
         shell: bash
         run: |
           set -euo pipefail
+
           git add market_cache/manifest.json || true
 
           if git diff --cached --quiet; then
             echo "No manifest changes to commit."
-          else
-            git commit -m "market_cache: pin manifest to data sha"
-            git push
+            exit 0
           fi
+
+          git commit -m "market_cache: pin manifest to data sha"
+
+          for i in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push failed (attempt $i). Rebase and retry..."
+            git fetch origin main
+            git rebase --autostash origin/main
+          done
+
+          git push
