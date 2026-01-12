@@ -3,6 +3,7 @@ name: Update FRED cache
 on:
   workflow_dispatch: {}
   schedule:
+    # minute 07 of every 6th hour (UTC): 00:07, 06:07, 12:07, 18:07
     - cron: "7 */6 * * *"
 
 permissions:
@@ -44,7 +45,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Generate + sanity + commit + patch-meta + patch-manifest + push (retry-safe)
+      - name: Generate + sanity + commit + patch-meta + push (retry-safe)
         shell: bash
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -71,18 +72,20 @@ jobs:
               echo "No changes in cache/. Exit."
               exit 0
             fi
+
             git commit -m "Update FRED cache data" --no-verify
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 4) Patch stats_latest.json data_commit_sha -> DATA_SHA (Commit 2a)
+            # 4) Patch stats_latest.json metadata -> DATA_SHA (keep audit consistent)
             python scripts/patch_stats.py --data-sha "$DATA_SHA"
             git add cache/stats_latest.json || true
 
-            # 5) Patch manifest pinned.* -> DATA_SHA (Commit 2b)
+            # 5) Patch manifest pinned.* -> DATA_SHA (overwrite pinned fully)
             python scripts/patch_manifest.py --repo "$REPO" --data-sha "$DATA_SHA"
             git add cache/manifest.json
 
+            # Commit meta patch if any change
             if ! git diff --cached --quiet; then
               git commit -m "Patch stats/meta + manifest pinned to DATA_SHA" --no-verify
             fi
