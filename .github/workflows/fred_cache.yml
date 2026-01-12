@@ -44,7 +44,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Generate + sanity + commit + patch-manifest + push (retry-safe)
+      - name: Generate + sanity + commit + patch-meta + patch-manifest + push (retry-safe)
         shell: bash
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -75,14 +75,19 @@ jobs:
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 4) Patch manifest pinned.* -> DATA_SHA (Commit 2)
+            # 4) Patch stats_latest.json data_commit_sha -> DATA_SHA (Commit 2a)
+            python scripts/patch_stats.py --data-sha "$DATA_SHA"
+            git add cache/stats_latest.json || true
+
+            # 5) Patch manifest pinned.* -> DATA_SHA (Commit 2b)
             python scripts/patch_manifest.py --repo "$REPO" --data-sha "$DATA_SHA"
             git add cache/manifest.json
+
             if ! git diff --cached --quiet; then
-              git commit -m "Patch manifest pinned to DATA_SHA" --no-verify
+              git commit -m "Patch stats/meta + manifest pinned to DATA_SHA" --no-verify
             fi
 
-            # 5) Push once
+            # 6) Push once
             if git push origin HEAD:main; then
               echo "Push succeeded."
               exit 0
