@@ -368,11 +368,83 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-13T03:03:00.142309+08:00",
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
     "series_id": "OFR_FSI",
     "data_date": "2026-01-08",
     "value": "-2.627",
     "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "NOMINAL_10Y",
+    "data_date": "2026-01-12",
+    "value": "4.19",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "REAL_10Y",
+    "data_date": "2026-01-12",
+    "value": "1.9",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "BE10Y_PROXY",
+    "data_date": "2026-01-12",
+    "value": "2.2900000000000005",
+    "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601 + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "VIX_PROXY",
+    "data_date": "2026-01-12",
+    "value": "15.12",
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "HYG_CLOSE",
+    "data_date": "2026-01-12",
+    "value": "81.04",
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20250915&d2=20260113&i=d",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "IEF_CLOSE",
+    "data_date": "2026-01-12",
+    "value": "96.18",
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&d1=20250915&d2=20260113&i=d",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "TIP_CLOSE",
+    "data_date": "2026-01-12",
+    "value": "110.18",
+    "source_url": "https://stooq.com/q/d/l/?s=tip.us&d1=20250915&d2=20260113&i=d",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "HYG_IEF_RATIO",
+    "data_date": "2026-01-12",
+    "value": "0.842586816385943",
+    "source_url": "https://stooq.com/",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-01-13T12:07:06.413465+08:00",
+    "series_id": "TIP_IEF_RATIO",
+    "data_date": "2026-01-12",
+    "value": "1.1455604075691412",
+    "source_url": "https://stooq.com/",
     "notes": "NA"
   }
 ]
