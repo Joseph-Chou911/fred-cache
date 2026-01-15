@@ -1,5 +1,5 @@
 series_id,data_date,value,source_url,notes,as_of_ts
-__META__,2026-01-15,credit_proxy_cache_v1.1,NA,INFO:script_version,2026-01-15T12:09:36+08:00
-HYG_CLOSE,2026-01-14,81.04,https://stooq.com/q/d/l/?s=hyg.us&d1=20250917&d2=20260115&i=d,close_price_common_date,2026-01-15T12:09:36+08:00
-IEF_CLOSE,2026-01-14,96.5,https://stooq.com/q/d/l/?s=ief.us&d1=20250917&d2=20260115&i=d,close_price_common_date,2026-01-15T12:09:36+08:00
-HYG_IEF_RATIO,2026-01-14,0.8397927461139897,https://stooq.com/q/d/l/?s=hyg.us&d1=20250917&d2=20260115&i=d | https://stooq.com/q/d/l/?s=ief.us&d1=20250917&d2=20260115&i=d,ratio=HYG_CLOSE/IEF_CLOSE; hyg_close=81.04; ief_close=96.5,2026-01-15T12:09:36+08:00
+__META__,2026-01-15,credit_proxy_cache_v1.1,NA,INFO:script_version,2026-01-15T17:00:21+08:00
+HYG_CLOSE,2026-01-14,81.04,https://stooq.com/q/d/l/?s=hyg.us&d1=20250917&d2=20260115&i=d,close_price_common_date,2026-01-15T17:00:21+08:00
+IEF_CLOSE,2026-01-14,96.5,https://stooq.com/q/d/l/?s=ief.us&d1=20250917&d2=20260115&i=d,close_price_common_date,2026-01-15T17:00:21+08:00
+HYG_IEF_RATIO,2026-01-14,0.8397927461139897,https://stooq.com/q/d/l/?s=hyg.us&d1=20250917&d2=20260115&i=d | https://stooq.com/q/d/l/?s=ief.us&d1=20250917&d2=20260115&i=d,ratio=HYG_CLOSE/IEF_CLOSE; hyg_close=81.04; ief_close=96.5,2026-01-15T17:00:21+08:00
