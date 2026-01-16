@@ -162,7 +162,7 @@
     "value": -0.51002112499937,
     "source_url": "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv",
     "notes": "WARN:fallback_chicagofed_nfci(nonfinancial leverage)",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
   },
   {
     "series_id": "SP500",
@@ -219,7 +219,7 @@
     "value": 59.39,
     "source_url": "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv",
     "notes": "WARN:nonofficial_datahub_oil_prices(wti-daily)",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
   },
   {
     "series_id": "DGS10",
@@ -385,7 +385,7 @@
     "value": 2.76,
     "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2",
     "notes": "WARN:fredgraph_no_key(BAMLH0A0HYM2)",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
   },
   {
     "series_id": "DGS10",
@@ -468,7 +468,7 @@
     "value": 4.17,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:fallback_treasury_csv",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
   },
   {
     "series_id": "DGS2",
@@ -476,7 +476,7 @@
     "value": 3.56,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:fallback_treasury_csv",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
   },
   {
     "series_id": "DJIA",
@@ -511,7 +511,7 @@
     "value": 0.61,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:derived_from_treasury(10Y-2Y)",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
   },
   {
     "series_id": "T10Y3M",
@@ -519,7 +519,7 @@
     "value": 0.49,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:derived_from_treasury(10Y-3M)",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
   },
   {
     "series_id": "UST3M",
@@ -527,6 +527,41 @@
     "value": 3.68,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:fallback_treasury_csv",
-    "as_of_ts": "2026-01-15T21:46:21Z"
+    "as_of_ts": "2026-01-16T14:56:59Z"
+  },
+  {
+    "series_id": "VIXCLS",
+    "data_date": "2026-01-15",
+    "value": 15.84,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "notes": "WARN:fallback_cboe_vix",
+    "as_of_ts": "2026-01-16T14:56:59Z"
+  },
+  {
+    "series_id": "DJIA",
+    "data_date": "2026-01-16",
+    "value": 49379.75,
+    "source_url": "https://stooq.com/q/d/l/?s=^dji&i=d",
+    "notes": "WARN:nonofficial_stooq(^dji);derived_1d_pct",
+    "as_of_ts": "2026-01-16T14:56:59Z",
+    "change_pct_1d": -0.126794
+  },
+  {
+    "series_id": "NASDAQCOM",
+    "data_date": "2026-01-16",
+    "value": 23588.738,
+    "source_url": "https://stooq.com/q/d/l/?s=^ndq&i=d",
+    "notes": "WARN:nonofficial_stooq(^ndq);derived_1d_pct",
+    "as_of_ts": "2026-01-16T14:56:59Z",
+    "change_pct_1d": 0.249545
+  },
+  {
+    "series_id": "SP500",
+    "data_date": "2026-01-16",
+    "value": 6950.17,
+    "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
+    "notes": "WARN:nonofficial_stooq(^spx);derived_1d_pct",
+    "as_of_ts": "2026-01-16T14:56:59Z",
+    "change_pct_1d": 0.08208
   }
 ]
