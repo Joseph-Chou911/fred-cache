@@ -7,15 +7,9 @@
 # - Read history_lite.json for streak + (when needed) deltas
 # - Clamp signals to INFO when data_date lag exceeds per-series threshold
 #
-# v5.6 change (per your request):
-# - data_lag_overrides_days: add {DGS2,DGS10,VIXCLS,T10Y2Y,T10Y3M}=3
-#
-# Usage (example):
-#   python scripts/render_dashboard.py \
-#     --stats market_cache/stats_latest.json --history market_cache/history_lite.json \
-#     --stats2 cache/stats_latest.json --history2 cache/history_lite.json \
-#     --out-md dashboard/DASHBOARD.md --out-json dashboard/dashboard_latest.json \
-#     --module merged --stale-hours 36
+# Fixes in this version:
+# 1) stale_h formatting bug: "240" was being printed as "24" due to rstrip("0")
+# 2) market_cache/history_lite.json schema: support {"series": {...}} wrapper (or {"history": {...}} just in case)
 #
 from __future__ import annotations
 
@@ -28,7 +22,7 @@ from datetime import datetime, timezone, date
 from typing import Any, Dict, List, Optional, Tuple
 
 # -------------------------
-# Defaults (tuned for your repo)
+# Defaults
 # -------------------------
 
 DEFAULT_STALE_HOURS = 36.0
@@ -44,7 +38,7 @@ DATA_LAG_OVERRIDES_DAYS: Dict[str, int] = {
     "NFCINONFINLEVERAGE": 10,
     "OFR_FSI": 7,
     "BAMLH0A0HYM2": 3,
-    # v5.6: weekend-friendly overrides
+    # weekend-friendly overrides
     "DGS2": 3,
     "DGS10": 3,
     "VIXCLS": 3,
@@ -87,7 +81,6 @@ def _write_json(path: str, obj: Any) -> None:
 def _parse_ts(ts: Optional[str]) -> Optional[datetime]:
     if not ts or not isinstance(ts, str):
         return None
-    # accept "Z" or "+00:00"
     s = ts.strip()
     if s.endswith("Z"):
         s = s[:-1] + "+00:00"
@@ -145,6 +138,9 @@ def _percentile_le(vals: List[float], x: float) -> Optional[float]:
 def _fmt(x: Optional[float], nd: int = 6) -> str:
     if x is None:
         return "NA"
+    # IMPORTANT: when nd==0 do NOT strip trailing zeros (would turn "240" -> "24")
+    if nd == 0:
+        return f"{x:.0f}"
     return f"{x:.{nd}f}".rstrip("0").rstrip(".")
 
 def _fmt_int(x: Optional[int]) -> str:
@@ -158,30 +154,40 @@ def _signal_rank(sig: str) -> int:
 def _max_signal(a: str, b: str) -> str:
     return a if _signal_rank(a) >= _signal_rank(b) else b
 
-def _near(th: float, val: Optional[float]) -> bool:
+def _near_abs(th: float, val: Optional[float]) -> bool:
     if val is None:
         return False
     lo = th * (1.0 - NEAR_FRACTION)
     return lo <= abs(val) < th
-
-def _near_signed(th: float, val: Optional[float]) -> bool:
-    if val is None:
-        return False
-    lo = th * (1.0 - NEAR_FRACTION)
-    return lo <= val < th
 
 
 # -------------------------
 # History loaders
 # -------------------------
 
+def _unwrap_history_root(obj: Any) -> Any:
+    """
+    Support common wrappers:
+      - {"series": {...}}
+      - {"history": {...}}
+    Otherwise return as-is.
+    """
+    if isinstance(obj, dict):
+        if isinstance(obj.get("series"), (dict, list)):
+            return obj["series"]
+        if isinstance(obj.get("history"), (dict, list)):
+            return obj["history"]
+    return obj
+
 def _history_to_series_map(history_obj: Any) -> Dict[str, List[Tuple[date, float]]]:
     """
-    Support both schemas:
+    Support schemas:
     A) dict: {"SERIES":[{"data_date":..., "value":...}, ...], ...}
     B) list: [{"series_id":..., "data_date":..., "value":...}, ...]
+    plus wrapper: {"series": <A or B>}
     Returns: series_id -> sorted list of (data_date, value)
     """
+    history_obj = _unwrap_history_root(history_obj)
     out: Dict[str, List[Tuple[date, float]]] = {}
 
     if isinstance(history_obj, dict):
@@ -240,9 +246,6 @@ class SeriesMetrics:
     ret1_pct: Optional[float]
 
 def _extract_from_stats_native(stats: Dict[str, Any], sid: str) -> Optional[SeriesMetrics]:
-    """
-    For market_cache stats schema (series -> latest + windows[w60,w252] with z/p and deltas).
-    """
     s = stats.get("series", {}).get(sid)
     if not isinstance(s, dict):
         return None
@@ -270,7 +273,7 @@ def _extract_from_stats_native(stats: Dict[str, Any], sid: str) -> Optional[Seri
     z60 = _to_float(w60.get("z"))
     p252 = _to_float(w252.get("p"))
     z_delta60 = _to_float(w60.get("z_delta"))
-    p_delta252 = _to_float(w252.get("p_delta"))  # align with your renamed column
+    p_delta252 = _to_float(w252.get("p_delta"))
     ret1_pct = _to_float(w60.get("ret1_pct"))
 
     return SeriesMetrics(
@@ -287,10 +290,6 @@ def _extract_from_stats_native(stats: Dict[str, Any], sid: str) -> Optional[Seri
     )
 
 def _extract_from_stats_policy(stats: Dict[str, Any], sid: str) -> Optional[SeriesMetrics]:
-    """
-    For cache stats_v1 schema:
-      series -> latest + metrics{z60,p252,ret1} (no deltas)
-    """
     s = stats.get("series", {}).get(sid)
     if not isinstance(s, dict):
         return None
@@ -306,7 +305,6 @@ def _extract_from_stats_policy(stats: Dict[str, Any], sid: str) -> Optional[Seri
 
     z60 = _to_float(m.get("z60"))
     p252 = _to_float(m.get("p252"))
-    # We'll compute deltas + ret1_pct from history for consistency
     return SeriesMetrics(
         series_id=sid,
         data_date=dd,
@@ -321,22 +319,13 @@ def _extract_from_stats_policy(stats: Dict[str, Any], sid: str) -> Optional[Seri
     )
 
 def _compute_deltas_from_history(
-    sid: str,
     latest_date: Optional[date],
     series_pts: List[Tuple[date, float]],
     w60: int = 60,
     w252: int = 252,
 ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
-    """
-    Compute:
-      z_delta60 = z60(latest) - z60(prev)
-      p_delta252 = p252(latest) - p252(prev)
-      ret1_pct = (latest-prev)/abs(prev)*100
-    Requires at least 2 points and ability to locate latest and prev index by date.
-    """
     if latest_date is None or not series_pts:
         return None, None, None
-    # find latest index by date
     idx = None
     for i, (d, _) in enumerate(series_pts):
         if d == latest_date:
@@ -345,20 +334,14 @@ def _compute_deltas_from_history(
     if idx is None or idx == 0:
         return None, None, None
 
-    prev_idx = idx - 1
-    prev_val = series_pts[prev_idx][1]
+    prev_val = series_pts[idx - 1][1]
     cur_val = series_pts[idx][1]
-
-    # ret1_pct
-    if prev_val == 0:
-        ret1_pct = None
-    else:
-        ret1_pct = (cur_val - prev_val) / abs(prev_val) * 100.0
+    ret1_pct = None if prev_val == 0 else (cur_val - prev_val) / abs(prev_val) * 100.0
 
     def _z_at(end_i: int) -> Optional[float]:
         start = max(0, end_i - (w60 - 1))
         window = [v for _, v in series_pts[start : end_i + 1]]
-        if len(window) < min(10, w60):  # avoid nonsense if too short
+        if len(window) < min(10, w60):
             return None
         m, sd = _mean_std_ddof0(window)
         if m is None or sd is None or sd == 0:
@@ -368,16 +351,16 @@ def _compute_deltas_from_history(
     def _p252_at(end_i: int) -> Optional[float]:
         start = max(0, end_i - (w252 - 1))
         window = [v for _, v in series_pts[start : end_i + 1]]
-        if len(window) < min(30, w252):  # need some mass
+        if len(window) < min(30, w252):
             return None
         return _percentile_le(window, window[-1])
 
     z_cur = _z_at(idx)
-    z_prev = _z_at(prev_idx)
+    z_prev = _z_at(idx - 1)
     z_delta = (z_cur - z_prev) if (z_cur is not None and z_prev is not None) else None
 
     p_cur = _p252_at(idx)
-    p_prev = _p252_at(prev_idx)
+    p_prev = _p252_at(idx - 1)
     p_delta = (p_cur - p_prev) if (p_cur is not None and p_prev is not None) else None
 
     return z_delta, p_delta, ret1_pct
@@ -388,16 +371,11 @@ def _compute_deltas_from_history(
 # -------------------------
 
 def _compute_signal_tag_near(metrics: SeriesMetrics) -> Tuple[str, str, str, str]:
-    """
-    Returns: (signal_raw, tag_csv, near_str, reason)
-    signal_raw ignores stale_data clamp.
-    """
     tags: List[str] = []
     nears: List[str] = []
     reason_parts: List[str] = []
     signal = "NONE"
 
-    # Extreme by Z60
     if metrics.z60 is not None:
         if abs(metrics.z60) >= TH_Z60_ALERT:
             signal = _max_signal(signal, "ALERT")
@@ -408,23 +386,20 @@ def _compute_signal_tag_near(metrics: SeriesMetrics) -> Tuple[str, str, str, str
             tags.append("EXTREME_Z")
             reason_parts.append(f"|Z60|>={TH_Z60_WATCH:g}")
 
-    # Jump only by ZΔ60
     if metrics.z_delta60 is not None:
         if abs(metrics.z_delta60) >= TH_ZD60_JUMP:
             signal = _max_signal(signal, "WATCH")
             tags.append("JUMP_ZD")
             reason_parts.append(f"|ZΔ60|>={TH_ZD60_JUMP:g}")
-        elif _near(TH_ZD60_JUMP, metrics.z_delta60):
+        elif _near_abs(TH_ZD60_JUMP, metrics.z_delta60):
             nears.append("NEAR:ZΔ60")
 
-    # Long extreme by P252 (no escalation if only long-extreme + no |Z60|>=2 and no Jump)
     if metrics.p252 is not None:
         if metrics.p252 <= TH_P252_ALERT_LO:
             signal = _max_signal(signal, "ALERT")
             tags.append("LONG_EXTREME")
             reason_parts.append(f"P252<={TH_P252_ALERT_LO:g}")
         elif metrics.p252 >= TH_P252_EXTREME_HI or metrics.p252 <= TH_P252_EXTREME_LO:
-            # if not already WATCH/ALERT, mark INFO
             if _signal_rank(signal) < _signal_rank("WATCH"):
                 signal = _max_signal(signal, "INFO")
             tags.append("LONG_EXTREME")
@@ -434,19 +409,18 @@ def _compute_signal_tag_near(metrics: SeriesMetrics) -> Tuple[str, str, str, str
     if metrics.p_delta252 is not None:
         if abs(metrics.p_delta252) >= TH_PDELTA252_INFO:
             tags.append("INFO_PΔ")
-        elif _near(TH_PDELTA252_INFO, metrics.p_delta252):
+        elif _near_abs(TH_PDELTA252_INFO, metrics.p_delta252):
             nears.append("NEAR:PΔ252")
 
     if metrics.ret1_pct is not None:
         if abs(metrics.ret1_pct) >= TH_RET1PCT_INFO:
             tags.append("INFO_RET")
-        elif _near(TH_RET1PCT_INFO, metrics.ret1_pct):
+        elif _near_abs(TH_RET1PCT_INFO, metrics.ret1_pct):
             nears.append("NEAR:ret1%")
 
     tag_csv = ",".join(dict.fromkeys(tags)) if tags else "NA"
     near_str = ",".join(dict.fromkeys(nears)) if nears else "NA"
     reason = ";".join(reason_parts) if reason_parts else "NA"
-
     return signal, tag_csv, near_str, reason
 
 
@@ -486,7 +460,9 @@ def main() -> int:
     feed1_asof = _parse_ts(stats1.get("as_of_ts") if isinstance(stats1.get("as_of_ts"), str) else stats1.get("generated_at_utc"))
     feed1_gen = stats1.get("generated_at_utc")
     feed1_ver = stats1.get("script_version")
-    feed1_schema = "dict" if isinstance(hist1_obj, dict) else ("list" if isinstance(hist1_obj, list) else "unknown")
+    # Use original root for schema label, but unwrap doesn't change type usually
+    feed1_root = _unwrap_history_root(hist1_obj)
+    feed1_schema = "dict" if isinstance(feed1_root, dict) else ("list" if isinstance(feed1_root, list) else "unknown")
 
     # Load feed2 (optional)
     stats2 = None
@@ -502,15 +478,15 @@ def main() -> int:
         hist2 = _history_to_series_map(hist2_obj)
         feed2_asof = _parse_ts(stats2.get("as_of_ts") if isinstance(stats2.get("as_of_ts"), str) else stats2.get("generated_at_utc"))
         feed2_gen = stats2.get("generated_at_utc")
-        # Prefer stats_policy.script_version if present
         if isinstance(stats2.get("stats_policy"), dict) and isinstance(stats2["stats_policy"].get("script_version"), str):
             feed2_ver = stats2["stats_policy"]["script_version"]
         else:
             feed2_ver = stats2.get("script_version")
-        feed2_schema = "dict" if isinstance(hist2_obj, dict) else ("list" if isinstance(hist2_obj, list) else "unknown")
+        feed2_root = _unwrap_history_root(hist2_obj)
+        feed2_schema = "dict" if isinstance(feed2_root, dict) else ("list" if isinstance(feed2_root, list) else "unknown")
 
-    # Build series universe
-    series_ids: List[Tuple[str, str]] = []  # (feed, sid)
+    # Series universe
+    series_ids: List[Tuple[str, str]] = []
     for sid in (stats1.get("series", {}) or {}).keys():
         if isinstance(sid, str):
             series_ids.append(("market_cache", sid))
@@ -523,11 +499,10 @@ def main() -> int:
     seen = set()
     series_ids = [x for x in series_ids if (x not in seen and not seen.add(x))]
 
-    # Assemble rows
+    # Build rows
     rows_out: Dict[str, Dict[str, Any]] = {}
     table_rows: List[Dict[str, Any]] = []
 
-    # Metadata header items for MD
     stale_overrides = STALE_OVERRIDES_HOURS.copy()
     data_lag_overrides = DATA_LAG_OVERRIDES_DAYS.copy()
 
@@ -552,10 +527,10 @@ def main() -> int:
         if m is None:
             continue
 
-        # If deltas missing, compute from history (feed2 primarily)
+        # If deltas missing, compute from history (feed2 mainly)
         pts = hist_map.get(sid, [])
         if (m.z_delta60 is None or m.p_delta252 is None or m.ret1_pct is None) and pts:
-            zd, pd, rp = _compute_deltas_from_history(sid, m.data_date, pts)
+            zd, pd, rp = _compute_deltas_from_history(m.data_date, pts)
             if m.z_delta60 is None:
                 m.z_delta60 = zd
             if m.p_delta252 is None:
@@ -563,10 +538,8 @@ def main() -> int:
             if m.ret1_pct is None:
                 m.ret1_pct = rp
 
-        # Compute signal/tags/near (raw)
         signal_raw, tag_csv, near_str, reason_raw = _compute_signal_tag_near(m)
 
-        # Prev signal/streak (based on raw, so stale clamp doesn't reset streak)
         prev_key = f"{feed}:{sid}"
         prev_rec = prev_map.get(prev_key, {})
         prev_signal = prev_rec.get("signal", "NONE") if isinstance(prev_rec, dict) else "NONE"
@@ -596,7 +569,6 @@ def main() -> int:
 
         tags_list = [] if tag_csv == "NA" else tag_csv.split(",")
         if data_lag_d is not None and data_lag_d > data_lag_thr_d:
-            # clamp to INFO + STALE_DATA (match your output)
             signal = "INFO"
             if "STALE_DATA" not in tags_list:
                 tags_list.append("STALE_DATA")
@@ -629,27 +601,20 @@ def main() -> int:
             "as_of_ts": m.as_of_ts or "NA",
         }
 
-        # Persist row for next run
         rows_out[prev_key] = {
             "signal": signal,
             "signal_raw": signal_raw,
             "streakWA": streakWA,
             "updated_at_utc": run_ts.isoformat(),
         }
-
         table_rows.append(row)
 
-    # Sort: Signal desc, then Feed, then Series
+    # Sort
     def _sort_key(r: Dict[str, Any]) -> Tuple[int, str, str]:
         return (-_signal_rank(r["Signal"]), str(r["Feed"]), str(r["Series"]))
-
     table_rows.sort(key=_sort_key)
 
     # Build MD
-    # Feed metadata
-    def _ts_str(dt: Optional[datetime]) -> str:
-        return dt.isoformat() if dt else "NA"
-
     md_lines: List[str] = []
     md_lines.append(f"# Risk Dashboard ({args.module})\n")
     md_lines.append(f"- RUN_TS_UTC: `{run_ts.isoformat()}`")
@@ -685,7 +650,6 @@ def main() -> int:
     )
     md_lines.append("")
 
-    # Table
     headers = [
         "Signal","Tag","Near","PrevSignal","StreakWA","Feed","Series","DQ",
         "age_h","stale_h","data_lag_d","data_lag_thr_d",
@@ -727,7 +691,6 @@ def main() -> int:
 
     _write_text(args.out_md, "\n".join(md_lines) + "\n")
 
-    # Output json for next run
     out_obj = {
         "run_ts_utc": run_ts.isoformat(),
         "module": args.module,
