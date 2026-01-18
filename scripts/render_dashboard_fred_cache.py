@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard_fred_cache.py
 #
-# Standalone renderer for FRED cache dashboard
-# Output folder recommended: dashboard_fred_cache/
+# Standalone renderer for FRED cache dashboard (cache/stats_latest.json)
 #
-# Features:
-# - Reason uses abs(...)
-# - Summary counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
-# - PrevSignal/Streak derived from dashboard_fred_cache/history.json
-# - DeltaSignal computed from PrevSignal
+# Supports BOTH schemas:
+# A) market_cache-style: windows.w60.{z,p,z_delta,p_delta,ret1_pct} ...
+# B) fred_cache-style:  metrics.{z60,p252,ret1,...} with top-level as_of_ts and stats_policy.script_version
 #
-# Input:
-#   --stats cache/stats_latest.json
-# History:
-#   --history dashboard_fred_cache/history.json
+# Key fixes for fred_cache:
+# - script_version from stats_policy.script_version
+# - z60/p252/ret1 from series.metrics
+# - effective as_of_ts uses per-series latest.as_of_ts if present; else falls back to stats.as_of_ts
+# - DQ and age_h computed from effective as_of_ts, not from missing per-series as_of_ts
+#
+# PrevSignal/Streak:
+# - derived from dashboard_fred_cache/history.json (past renderer outputs)
+#
+# Outputs:
+# - dashboard_fred_cache/DASHBOARD.md
+# - dashboard_fred_cache/dashboard_latest.json
 
 import argparse
 import json
@@ -40,7 +45,7 @@ STREAK_HISTORY_MAX = 120
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
-    if not ts:
+    if not ts or not isinstance(ts, str):
         return None
     ts2 = ts.replace("Z", "+00:00")
     try:
@@ -49,19 +54,11 @@ def parse_iso(ts: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def dq_from_ts(run_ts: datetime, as_of_ts: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
-    if as_of_ts is None:
+def dq_from_ts(run_ts: datetime, as_of_dt: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
+    if as_of_dt is None:
         return "MISSING", None
-    age_hours = (run_ts - as_of_ts).total_seconds() / 3600.0
+    age_hours = (run_ts - as_of_dt).total_seconds() / 3600.0
     return ("STALE" if age_hours > stale_hours else "OK"), age_hours
-
-
-def get_w(series_obj: Dict[str, Any], key: str) -> Dict[str, Any]:
-    w = series_obj.get("windows", {})
-    if not isinstance(w, dict):
-        return {}
-    wk = w.get(key, {})
-    return wk if isinstance(wk, dict) else {}
 
 
 def fmt(x: Any, nd: int = 6) -> str:
@@ -75,7 +72,7 @@ def fmt(x: Any, nd: int = 6) -> str:
 
 def md_escape_cell(x: Any) -> str:
     s = str(x) if x is not None else "NA"
-    s = s.replace("|", "&#124;")
+    s = s.replace("|", "&#124;")  # keep table stable if any stray pipes appear
     s = s.replace("\n", "<br>")
     return s
 
@@ -100,6 +97,20 @@ def compute_signal_tag_near(
     pdel60: Optional[float],
     ret1pct60: Optional[float],
 ) -> Tuple[str, str, str, str]:
+    """
+    Rules (same as market_cache dashboard):
+      - Extreme:
+          abs(Z60)>=2 => WATCH
+          abs(Z60)>=2.5 => ALERT
+          P252>=95 or <=5 => WATCH/INFO
+          P252<=2 => ALERT
+      - Jump:
+          abs(ZΔ60)>=0.75 OR abs(PΔ60)>=15 OR abs(ret1%60)>=2
+      - Near:
+          within 10% of jump thresholds
+      - INFO special:
+          if ONLY long-extreme (P252 extreme) and no jump and abs(Z60)<2
+    """
     reasons: List[str] = []
     tags: List[str] = []
     nears: List[str] = []
@@ -264,6 +275,18 @@ def summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
+def pick_script_version(stats: Dict[str, Any]) -> Optional[str]:
+    sv = stats.get("script_version")
+    if isinstance(sv, str) and sv:
+        return sv
+    sp = stats.get("stats_policy")
+    if isinstance(sp, dict):
+        sv2 = sp.get("script_version")
+        if isinstance(sv2, str) and sv2:
+            return sv2
+    return None
+
+
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
     os.makedirs(os.path.dirname(out_md), exist_ok=True)
     os.makedirs(os.path.dirname(out_json), exist_ok=True)
@@ -328,7 +351,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             md_escape_cell(fmt(r.get("ret1_pct_60"), nd=6)),
             md_escape_cell(r.get("reason")),
             md_escape_cell(r.get("source_url")),
-            md_escape_cell(r.get("as_of_ts")),
+            md_escape_cell(r.get("effective_as_of_ts")),
         ]) + " |")
 
     with open(out_md, "w", encoding="utf-8") as f:
@@ -362,6 +385,9 @@ def main() -> None:
     with open(args.stats, "r", encoding="utf-8") as f:
         stats = json.load(f)
 
+    stats_as_of_ts = stats.get("as_of_ts") if isinstance(stats.get("as_of_ts"), str) else None
+    stats_as_of_dt = parse_iso(stats_as_of_ts)
+
     snaps = load_history(args.history)
     timeline = build_timeline(snaps, args.module)
 
@@ -370,8 +396,8 @@ def main() -> None:
         "module": args.module,
         "stale_hours": args.stale_hours,
         "stats_generated_at_utc": stats.get("generated_at_utc"),
-        "stats_as_of_ts": stats.get("as_of_ts"),
-        "script_version": stats.get("script_version"),
+        "stats_as_of_ts": stats_as_of_ts,
+        "script_version": pick_script_version(stats),
         "series_count": stats.get("series_count"),
         "history_path": args.history,
         "streak_calc": "PrevSignal/Streak derived from history.json (dashboard outputs)",
@@ -383,23 +409,56 @@ def main() -> None:
         series = {}
 
     rows: List[Dict[str, Any]] = []
+
     for sid, s in series.items():
         if not isinstance(s, dict):
             continue
 
         latest = s.get("latest", {}) if isinstance(s.get("latest"), dict) else {}
-        w60 = get_w(s, "w60")
-        w252 = get_w(s, "w252")
+        metrics = s.get("metrics", {}) if isinstance(s.get("metrics"), dict) else {}
+        windows = s.get("windows", {}) if isinstance(s.get("windows"), dict) else {}
 
-        latest_asof_dt = parse_iso(latest.get("as_of_ts"))
-        dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, args.stale_hours)
+        # Determine schema: market_cache has windows.w60 with z/p, fred_cache has metrics.z60/p252
+        is_market_schema = False
+        w60 = None
+        w252 = None
+        if isinstance(windows, dict):
+            w60 = windows.get("w60") if isinstance(windows.get("w60"), dict) else None
+            w252 = windows.get("w252") if isinstance(windows.get("w252"), dict) else None
+
+        # market-style signals live under series.windows.w60.{z,p,z_delta,p_delta,ret1_pct}
+        # fred-style signals live under series.metrics.{z60,p252,ret1} (no deltas, no ret1_pct)
+        if isinstance(w60, dict) and ("z" in w60 or "p" in w60 or "z_delta" in w60 or "p_delta" in w60 or "ret1_pct" in w60):
+            is_market_schema = True
+
+        # Effective as_of_ts for DQ:
+        # - prefer per-series latest.as_of_ts if present
+        # - else fall back to top-level stats.as_of_ts (fred_cache)
+        eff_as_of_ts = latest.get("as_of_ts") if isinstance(latest.get("as_of_ts"), str) else stats_as_of_ts
+        eff_as_of_dt = parse_iso(eff_as_of_ts)
+
+        dq, age_hours = dq_from_ts(run_ts, eff_as_of_dt or stats_as_of_dt, args.stale_hours)
+
+        if is_market_schema:
+            z60 = w60.get("z") if isinstance(w60, dict) else None
+            p252 = w252.get("p") if isinstance(w252, dict) else None
+            zdel60 = w60.get("z_delta") if isinstance(w60, dict) else None
+            pdel60 = w60.get("p_delta") if isinstance(w60, dict) else None
+            ret1pct60 = w60.get("ret1_pct") if isinstance(w60, dict) else None
+        else:
+            z60 = metrics.get("z60")
+            p252 = metrics.get("p252")
+            # fred_cache stats doesn't provide deltas or ret1_pct; keep NA
+            zdel60 = None
+            pdel60 = None
+            ret1pct60 = None
 
         lvl, reason, tag, near = compute_signal_tag_near(
-            z60=w60.get("z"),
-            p252=w252.get("p"),
-            zdel60=w60.get("z_delta"),
-            pdel60=w60.get("p_delta"),
-            ret1pct60=w60.get("ret1_pct"),
+            z60=z60,
+            p252=p252,
+            zdel60=zdel60,
+            pdel60=pdel60,
+            ret1pct60=ret1pct60,
         )
 
         prev, streak = prev_and_streak(sid, lvl, timeline)
@@ -411,11 +470,11 @@ def main() -> None:
             "age_hours": age_hours,
             "data_date": latest.get("data_date"),
             "value": latest.get("value"),
-            "z60": w60.get("z"),
-            "p252": w252.get("p"),
-            "z_delta_60": w60.get("z_delta"),
-            "p_delta_60": w60.get("p_delta"),
-            "ret1_pct_60": w60.get("ret1_pct"),
+            "z60": z60,
+            "p252": p252,
+            "z_delta_60": zdel60,
+            "p_delta_60": pdel60,
+            "ret1_pct_60": ret1pct60,
             "reason": reason,
             "tag": tag,
             "near": near,
@@ -424,7 +483,7 @@ def main() -> None:
             "delta_signal": dlt,
             "streak_wa": streak,
             "source_url": latest.get("source_url"),
-            "as_of_ts": latest.get("as_of_ts"),
+            "effective_as_of_ts": eff_as_of_ts or "NA",
         })
 
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
