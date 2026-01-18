@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render dashboard (fred_cache) with sudden-move metrics
+      - name: Render dashboard (fred_cache)
         shell: bash
         run: |
           set -euo pipefail
@@ -49,10 +49,9 @@ jobs:
           set -euo pipefail
 
           python scripts/append_dashboard_history.py \
-            --dash-latest dashboard_fred_cache/dashboard_latest.json \
-            --dash-history dashboard_fred_cache/history.json \
-            --module fred_cache \
-            --stats-as-of-ts-from-meta
+            --latest dashboard_fred_cache/dashboard_latest.json \
+            --history dashboard_fred_cache/history.json \
+            --max-items 180
 
       - name: Commit & push
         shell: bash
