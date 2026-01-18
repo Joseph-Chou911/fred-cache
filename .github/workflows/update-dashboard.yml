@@ -1,10 +1,10 @@
-name: Update Dashboard (MVP)
+name: Render Risk Dashboard (merged)
 
 on:
   workflow_dispatch: {}
   schedule:
-    # 23:10 Asia/Taipei = 15:10 UTC
-    - cron: "10 15 * * *"
+    # 00:20 UTC = 08:20 Asia/Taipei
+    - cron: "20 0 * * *"
 
 permissions:
   contents: write
@@ -14,9 +14,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dashboard:
+  render:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -24,38 +24,73 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Render dashboard (market_cache + cache)
+      - name: Render dashboard
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/render_dashboard.py \
-            --stats market_cache/stats_latest.json \
-            --history market_cache/history_lite.json \
-            --stats2 cache/stats_latest.json \
-            --history2 cache/history_lite.json \
-            --out-md dashboard/DASHBOARD.md \
-            --out-json dashboard/dashboard_latest.json \
-            --stale-hours 36
 
-      - name: Commit & push
+          # Render dashboard.md + dashboard_state.json
+          python scripts/render_dashboard.py \
+            --feed market_cache \
+              --stats market_cache/stats_latest.json \
+              --history market_cache/history_lite.json \
+              --dq market_cache/dq_state.json \
+              --asof-field as_of_ts \
+            --feed cache \
+              --stats cache/stats_latest.json \
+              --history cache/history_lite.json \
+              --dq cache/dq_state.json \
+              --asof-field as_of_ts \
+            --state-file dashboard_state.json \
+            --script-fingerprint render_dashboard_py_fix_history_autodetect_and_staleh_2026-01-18 \
+            --out dashboard.md
+
+          # Optional: quick sanity checks (fail fast if output missing)
+          test -s dashboard.md
+
+      - name: Configure git author
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add dashboard/DASHBOARD.md dashboard/dashboard_latest.json
+      - name: Commit changes (if any)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git add dashboard.md dashboard_state.json || true
 
           if git diff --cached --quiet; then
-            echo "No changes"
+            echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "chore: update dashboard (mvp)"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git commit -m "chore(dashboard): update merged risk dashboard"
+
+      - name: Push with rebase-retry
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Rebase + retry to avoid non-fast-forward in scheduled workflows
+          for attempt in 1 2 3; do
+            git pull --rebase origin main || true
+
+            if git push origin HEAD:main; then
+              echo "Push succeeded."
+              exit 0
+            fi
+
+            echo "Push failed (attempt=$attempt). Retrying after backoff..."
+            sleep $((2 ** attempt))
+          done
+
+          echo "Push failed after retries."
+          exit 1
