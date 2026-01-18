@@ -35,6 +35,7 @@ jobs:
           set -euo pipefail
           python scripts/render_dashboard.py \
             --stats market_cache/stats_latest.json \
+            --history market_cache/history_lite.json \
             --out-md dashboard/DASHBOARD.md \
             --out-json dashboard/dashboard_latest.json \
             --module market_cache \
