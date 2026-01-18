@@ -1,37 +1,22 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (v5.4: Jump = ZΔ60 only; keep PΔ/ret1% as tags/near; p_delta252 rename)
+# Dashboard renderer (v5.5: add data_date lag + stale-data clamp)
 #
-# Inputs:
-#   Feed1 (primary): --stats market_cache/stats_latest.json --history market_cache/history_lite.json
-#   Feed2 (secondary): --stats2 cache/stats_latest.json --history2 cache/history_lite.json
+# v5.4 changes kept:
+# - Jump = ONLY |ZΔ60| >= 0.75 (affects signal)
+# - PΔ252 / ret1% kept as INFO tags/near only (no escalation)
+# - p_delta252 naming fixed
 #
-# Output:
-#   - dashboard/DASHBOARD.md
-#   - dashboard/dashboard_latest.json
-#
-# Signals (改法 B, 降噪版):
-# - Extreme:
-#     |Z60|>=2 (WATCH), |Z60|>=2.5 (ALERT)
-# - Long extreme:
-#     P252>=95 or <=5 => INFO (if no |Z60|>=2 and no Jump)
-#     P252<=2 => ALERT (very extreme low tail)
-# - Jump:
-#     ONLY |ZΔ60|>=0.75
-# - Near:
-#     within 10% of thresholds for ZΔ60 / PΔ252 / ret1% (but PΔ/ret1% only informational)
-# - Note:
-#     PΔ252 and ret1% are retained as tags/near but no longer raise signal level by themselves.
-#
-# Streak:
-# - PrevSignal: previous point's derived signal (from history recompute)
-# - StreakWA: consecutive points (from latest backwards) that are WATCH/ALERT
+# v5.5 changes:
+# - add data_lag_d = (RUN_TS_UTC date - data_date).days
+# - add per-series data_lag threshold
+# - if data_lag_d > threshold: clamp signal to INFO and tag STALE_DATA
 
 import argparse
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -44,6 +29,18 @@ STALE_OVERRIDES_HOURS: Dict[str, float] = {
     "STLFSI4": 240.0,              # 10 days
     "NFCINONFINLEVERAGE": 240.0,   # 10 days
     "BAMLH0A0HYM2": 72.0,          # 3 days
+}
+
+# data_date lag thresholds (days)
+DATA_LAG_DEFAULT_DAYS = 2  # daily-ish feeds (stocks, yields, VIX, FX)
+DATA_LAG_OVERRIDES_DAYS: Dict[str, int] = {
+    # slow/weekly-ish indicators
+    "STLFSI4": 10,
+    "NFCINONFINLEVERAGE": 10,
+    "OFR_FSI": 7,
+
+    # credit spread series can lag slightly
+    "BAMLH0A0HYM2": 3,
 }
 
 # Extreme thresholds
@@ -81,6 +78,15 @@ def parse_iso(ts: Optional[str]) -> Optional[datetime]:
     ts2 = ts.replace("Z", "+00:00")
     try:
         return datetime.fromisoformat(ts2)
+    except Exception:
+        return None
+
+
+def parse_ymd(d: Optional[str]) -> Optional[date]:
+    if not d or not isinstance(d, str):
+        return None
+    try:
+        return date.fromisoformat(d.strip())
     except Exception:
         return None
 
@@ -126,6 +132,10 @@ def percentile_leq(vals: List[float], x: float) -> float:
 
 def stale_hours_for_series(series_id: str, default_hours: float) -> float:
     return float(STALE_OVERRIDES_HOURS.get(series_id, default_hours))
+
+
+def data_lag_thr_days_for_series(series_id: str) -> int:
+    return int(DATA_LAG_OVERRIDES_DAYS.get(series_id, DATA_LAG_DEFAULT_DAYS))
 
 
 def dq_from_ts(run_ts: datetime, as_of_ts: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
@@ -224,7 +234,7 @@ def compute_signal_tag_near_from_metrics(
         if is_near(ar1p, RET1PCT_INFO_ABS, NEAR_FRAC):
             nears.append("NEAR:ret1%")
 
-    # --- Level assignment (降噪版) ---
+    # --- Level assignment ---
     if long_extreme_only and (not jump):
         level = "INFO"
     else:
@@ -235,7 +245,6 @@ def compute_signal_tag_near_from_metrics(
         else:
             level = "NONE"
 
-    # Reason string:
     reason_str = ";".join(reasons) if reasons else "NA"
 
     # Dedup tags preserving order
@@ -493,9 +502,43 @@ def extract_market_cache_metrics(sobj: Dict[str, Any]) -> Dict[str, Optional[flo
         "z60": to_float_or_none(w60.get("z")),
         "p252": to_float_or_none(w252.get("p")),
         "z_delta_60": to_float_or_none(w60.get("z_delta")),
-        "p_delta_252": to_float_or_none(w60.get("p_delta")),  # NOTE: this is p252-delta in our recompute logic
+        "p_delta_252": to_float_or_none(w60.get("p_delta")),  # p252 delta by our design
         "ret1_pct": to_float_or_none(w60.get("ret1_pct")),
     }
+
+
+def clamp_for_stale_data(
+    series_id: str,
+    run_ts: datetime,
+    data_date_str: Optional[str],
+    signal_level: str,
+    reason: str,
+    tag: str,
+) -> Tuple[Optional[int], int, str, str, str]:
+    d = parse_ymd(data_date_str)
+    thr = data_lag_thr_days_for_series(series_id)
+    if d is None:
+        return None, thr, signal_level, reason, tag
+
+    lag = (run_ts.date() - d).days
+    if lag < 0:
+        lag = 0
+
+    if lag > thr:
+        # clamp to INFO regardless of current level, because signal is computed from stale data_date
+        new_level = "INFO"
+        new_reason = f"STALE_DATA(lag_d={lag}>thr_d={thr})"
+        # preserve existing tags but add STALE_DATA
+        if tag in (None, "", "NA"):
+            new_tag = "STALE_DATA"
+        else:
+            if "STALE_DATA" in tag.split(","):
+                new_tag = tag
+            else:
+                new_tag = f"{tag},STALE_DATA"
+        return lag, thr, new_level, new_reason, new_tag
+
+    return lag, thr, signal_level, reason, tag
 
 
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
@@ -512,6 +555,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- RUN_TS_UTC: `{meta.get('run_ts_utc','')}`")
     lines.append(f"- stale_hours_default: `{meta.get('stale_hours_default','')}`")
     lines.append(f"- stale_overrides: `{meta.get('stale_overrides','')}`")
+    lines.append(f"- data_lag_default_days: `{meta.get('data_lag_default_days','')}`")
+    lines.append(f"- data_lag_overrides_days: `{meta.get('data_lag_overrides_days','')}`")
     lines.append(f"- FEED1.stats: `{meta.get('feed1_stats','')}`")
     lines.append(f"- FEED1.history: `{meta.get('feed1_history','')}`")
     lines.append(f"- FEED1.history_schema: `{meta.get('feed1_history_schema','')}`")
@@ -534,13 +579,15 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
         f"P252<={P252_ALERT_LO:g} (ALERT)); "
         f"Jump(ONLY |ZΔ60|>={ZDELTA60_JUMP_ABS:g}); "
         f"Near(within {NEAR_FRAC*100:.0f}% of thresholds: ZΔ60 / PΔ252 / ret1%); "
-        f"PΔ252>= {PDELTA252_INFO_ABS:g} and |ret1%|>= {RET1PCT_INFO_ABS:g} are INFO tags only (no escalation)`"
+        f"PΔ252>= {PDELTA252_INFO_ABS:g} and |ret1%|>= {RET1PCT_INFO_ABS:g} are INFO tags only (no escalation); "
+        f"StaleData(if data_lag_d > data_lag_thr_d => clamp Signal to INFO + Tag=STALE_DATA)`"
     )
     lines.append("")
 
     header = [
         "Signal", "Tag", "Near", "PrevSignal", "StreakWA",
         "Feed", "Series", "DQ", "age_h", "stale_h",
+        "data_lag_d", "data_lag_thr_d",
         "data_date", "value",
         "z60", "p252",
         "z_delta60", "p_delta252", "ret1_pct",
@@ -561,6 +608,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             r.get("dq", ""),
             fmt(r.get("age_hours"), nd=2),
             fmt(r.get("stale_hours"), nd=2),
+            fmt(r.get("data_lag_days"), nd=0),
+            fmt(r.get("data_lag_thr_days"), nd=0),
             fmt(r.get("data_date")),
             fmt(r.get("value"), nd=6),
             fmt(r.get("z60"), nd=6),
@@ -600,6 +649,8 @@ def main() -> None:
             "run_ts_utc": run_ts.isoformat(),
             "stale_hours_default": args.stale_hours,
             "stale_overrides": json.dumps(STALE_OVERRIDES_HOURS, ensure_ascii=False),
+            "data_lag_default_days": DATA_LAG_DEFAULT_DAYS,
+            "data_lag_overrides_days": json.dumps(DATA_LAG_OVERRIDES_DAYS, ensure_ascii=False),
             "feed1_stats": args.stats,
             "feed1_history": args.history,
             "feed2_stats": args.stats2 or "NA",
@@ -616,6 +667,8 @@ def main() -> None:
         "run_ts_utc": run_ts.isoformat(),
         "stale_hours_default": args.stale_hours,
         "stale_overrides": json.dumps(STALE_OVERRIDES_HOURS, ensure_ascii=False),
+        "data_lag_default_days": DATA_LAG_DEFAULT_DAYS,
+        "data_lag_overrides_days": json.dumps(DATA_LAG_OVERRIDES_DAYS, ensure_ascii=False),
         "feed1_stats": args.stats,
         "feed1_history": args.history,
         "feed1_history_schema": type(hist1_raw).__name__ if hist1_raw is not None else "None",
@@ -633,8 +686,14 @@ def main() -> None:
         "warnings": [],
     }
 
+    def iter_series(stats: Any) -> Dict[str, Dict[str, Any]]:
+        if not isinstance(stats, dict):
+            return {}
+        s = stats.get("series", {})
+        return s if isinstance(s, dict) else {}
+
     s1 = iter_series(stats1)
-    s2 = iter_series(stats2) if isinstance(stats2, dict) else {}
+    s2 = iter_series(stats2)
 
     merged: List[Tuple[str, str, Dict[str, Any], Dict[str, Any]]] = []
     seen_ids = set()
@@ -666,8 +725,6 @@ def main() -> None:
             m = extract_market_cache_metrics(sobj)
         else:
             m = compute_current_metrics_from_history(hist2_index, sid)
-
-            # fallback if history missing: keep z60/p252 from cache metrics if present
             if m["z60"] is None or m["p252"] is None:
                 metrics = sobj.get("metrics", {})
                 if isinstance(metrics, dict):
@@ -683,6 +740,18 @@ def main() -> None:
             pdel252=m.get("p_delta_252"),
             ret1pct=m.get("ret1_pct"),
         )
+
+        # v5.5: clamp if data_date lag too large
+        lag_d, lag_thr_d, signal_level2, reason2, tag2 = clamp_for_stale_data(
+            series_id=sid,
+            run_ts=run_ts,
+            data_date_str=latest.get("data_date"),
+            signal_level=signal_level,
+            reason=reason,
+            tag=tag,
+        )
+
+        signal_level, reason, tag = signal_level2, reason2, tag2
 
         if signal_level in ("ALERT", "WATCH") and (reason == "NA" or not reason):
             meta["warnings"].append(f"inconsistent_signal_no_reason:{feed}:{sid}")
@@ -702,6 +771,8 @@ def main() -> None:
             "dq": dq,
             "age_hours": age_hours,
             "stale_hours": stale_h,
+            "data_lag_days": lag_d,
+            "data_lag_thr_days": lag_thr_d,
             "data_date": latest.get("data_date"),
             "value": latest.get("value"),
             "as_of_ts": latest.get("as_of_ts"),
