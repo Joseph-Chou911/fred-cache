@@ -1,703 +1,631 @@
 #!/usr/bin/env python3
-# scripts/render_dashboard_fred_cache.py
-#
-# fred_cache dashboard renderer with "sudden move" support via cache/history_lite.json.
-#
-# Inputs:
-#   --stats        cache/stats_latest.json (used for meta + as-of timestamps; metrics optional)
-#   --history      dashboard_fred_cache/history.json (dashboard output history for Prev/Delta/Streak)
-#   --history-lite cache/history_lite.json (for recomputing z60/p252 + zΔ60/pΔ60/ret1%60)
-#
-# Key goals:
-# - Keep auditable, deterministic computation using repo files only (no external fetch).
-# - Recompute from history_lite values:
-#     z60, p252, zΔ60, pΔ60, ret1%60
-#   (ret1% denom = abs(prev_value) else NA)
-# - Fall back gracefully when history_lite missing or insufficient points.
+# -*- coding: utf-8 -*-
+
+"""
+render_dashboard_fred_cache.py
+
+Goal:
+- Render a risk dashboard for fred_cache using:
+  A) cache/stats_latest.json (authoritative for latest level + z60/p252 when present)
+  B) cache/history_lite.json (optional) to recompute "jump" metrics:
+     z_delta60 / p_delta60 / ret1_pct60 (and optionally z60/p252, but only if recompute succeeds)
+
+Key properties:
+- Never overwrite good metrics from stats_latest with NA.
+- history_lite loader supports multiple shapes:
+  1) JSON object with {"series": {...}} style
+  2) JSON array of records
+  3) JSON Lines: one JSON record per line
+  4) JSON Lines: each line is a JSON array of records
+
+Records expected to contain at least:
+  series_id, data_date, value
+"""
+
+from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+# -----------------------
+# Utilities
+# -----------------------
 
-DEFAULT_STALE_HOURS = 72.0
+def _now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-# ---- Signal thresholds (same family as market_cache) ----
-Z60_WATCH_ABS = 2.0
-Z60_ALERT_ABS = 2.5
-
-P252_EXTREME_HI = 95.0
-P252_EXTREME_LO = 5.0
-P252_ALERT_LO = 2.0
-
-ZDELTA60_JUMP_ABS = 0.75
-PDELTA60_JUMP_ABS = 15.0
-RET1PCT60_JUMP_ABS = 2.0
-
-NEAR_FRAC = 0.10
-STREAK_HISTORY_MAX = 180
-
-
-# -------------------------
-# Utils
-# -------------------------
-def parse_iso(ts: Optional[str]) -> Optional[datetime]:
-    if not ts or not isinstance(ts, str):
+def _parse_iso(ts: str) -> Optional[datetime]:
+    if not ts:
         return None
-    ts2 = ts.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(ts2)
+        # tolerate "Z"
+        if ts.endswith("Z"):
+            ts = ts[:-1] + "+00:00"
+        return datetime.fromisoformat(ts)
     except Exception:
         return None
 
-
-def dq_from_ts(run_ts: datetime, as_of_dt: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
-    if as_of_dt is None:
-        return "MISSING", None
-    age_hours = (run_ts - as_of_dt).total_seconds() / 3600.0
-    return ("STALE" if age_hours > stale_hours else "OK"), age_hours
-
-
-def fmt(x: Any, nd: int = 6) -> str:
-    if x is None:
-        return "NA"
-    if isinstance(x, float):
-        s = f"{x:.{nd}f}"
-        return s.rstrip("0").rstrip(".")
-    return str(x)
-
-
-def md_escape_cell(x: Any) -> str:
-    s = str(x) if x is not None else "NA"
-    s = s.replace("|", "&#124;")  # protect markdown table
-    s = s.replace("\n", "<br>")
-    return s
-
-
-def safe_abs(x: Any) -> Optional[float]:
-    if isinstance(x, (int, float)):
-        return abs(float(x))
-    return None
-
-
-def is_near(abs_val: Optional[float], thr: float, near_frac: float) -> bool:
-    if abs_val is None:
-        return False
-    lo = (1.0 - near_frac) * thr
-    return (abs_val >= lo) and (abs_val < thr)
-
-
-def mean_std_ddof0(xs: List[float]) -> Tuple[Optional[float], Optional[float]]:
-    n = len(xs)
-    if n == 0:
-        return None, None
-    m = sum(xs) / n
-    var = sum((x - m) ** 2 for x in xs) / n
-    std = var ** 0.5
-    return m, std
-
-
-def percentile_le(xs: List[float], latest: float) -> Optional[float]:
-    n = len(xs)
-    if n == 0:
+def _safe_float(x: Any) -> Optional[float]:
+    try:
+        if x is None:
+            return None
+        if isinstance(x, (int, float)):
+            return float(x)
+        s = str(x).strip()
+        if s == "" or s.lower() in ("na", "nan", "none", "."):
+            return None
+        return float(s)
+    except Exception:
         return None
-    c = sum(1 for x in xs if x <= latest)
+
+def _md_escape_cell(s: Any) -> str:
+    if s is None:
+        return "NA"
+    text = str(s)
+    # Avoid breaking markdown table. We avoid '|' entirely in reasons now, but keep safe.
+    text = text.replace("|", "&#124;")
+    text = text.replace("\n", " ")
+    return text if text != "" else "NA"
+
+def _pct_le(values: List[float], x: float) -> float:
+    # P = count(v <= x)/n * 100
+    n = len(values)
+    if n <= 0:
+        return float("nan")
+    c = 0
+    for v in values:
+        if v <= x:
+            c += 1
     return (c / n) * 100.0
 
+def _mean_std(values: List[float]) -> Tuple[float, float]:
+    n = len(values)
+    if n <= 0:
+        return float("nan"), float("nan")
+    m = sum(values) / n
+    var = 0.0
+    for v in values:
+        var += (v - m) ** 2
+    var = var / n  # ddof=0
+    return m, math.sqrt(var)
 
-# -------------------------
-# Signal logic
-# -------------------------
-def compute_signal_tag_near(
-    z60: Optional[float],
-    p252: Optional[float],
-    zdel60: Optional[float],
-    pdel60: Optional[float],
-    ret1pct60: Optional[float],
-) -> Tuple[str, str, str, str]:
-    reasons: List[str] = []
-    tags: List[str] = []
-    nears: List[str] = []
+def _zscore(values: List[float], x: float) -> float:
+    m, sd = _mean_std(values)
+    if not (sd > 0):
+        return float("nan")
+    return (x - m) / sd
 
-    az60 = safe_abs(z60)
-    azd = safe_abs(zdel60)
-    apd = safe_abs(pdel60)
-    ar1p = safe_abs(ret1pct60)
+def _ret1_pct(prev: Optional[float], cur: Optional[float]) -> float:
+    if prev is None or cur is None:
+        return float("nan")
+    denom = abs(prev)
+    if denom == 0:
+        return float("nan")
+    return ((cur - prev) / denom) * 100.0
 
-    z60_watch = False
-    z60_alert = False
-    if az60 is not None:
-        if az60 >= Z60_WATCH_ABS:
-            z60_watch = True
-            reasons.append(f"abs(Z60)>={Z60_WATCH_ABS:g}")
-            tags.append("EXTREME_Z")
-        if az60 >= Z60_ALERT_ABS:
-            z60_alert = True
-            reasons.append(f"abs(Z60)>={Z60_ALERT_ABS:g}")
+# -----------------------
+# Load stats_latest.json
+# -----------------------
 
-    p252_hi = False
-    p252_lo = False
-    p252_alert_lo = False
-    if isinstance(p252, (int, float)):
-        p = float(p252)
-        if p >= P252_EXTREME_HI:
-            p252_hi = True
-            reasons.append(f"P252>={P252_EXTREME_HI:g}")
-            tags.append("LONG_EXTREME")
-        if p <= P252_EXTREME_LO:
-            p252_lo = True
-            reasons.append(f"P252<={P252_EXTREME_LO:g}")
-            tags.append("LONG_EXTREME")
-        if p <= P252_ALERT_LO:
-            p252_alert_lo = True
-            reasons.append(f"P252<={P252_ALERT_LO:g}")
+def load_json(path: str) -> Any:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-    long_extreme_only = (p252_hi or p252_lo) and (not z60_watch)
+# -----------------------
+# Load history_lite.json (robust)
+# -----------------------
 
-    jump_hits = 0
-    has_zdelta_jump = False
-
-    if azd is not None and azd >= ZDELTA60_JUMP_ABS:
-        reasons.append(f"abs(ZΔ60)>={ZDELTA60_JUMP_ABS:g}")
-        tags.append("JUMP_ZD")
-        jump_hits += 1
-        has_zdelta_jump = True
-    else:
-        if is_near(azd, ZDELTA60_JUMP_ABS, NEAR_FRAC):
-            nears.append("NEAR:ZΔ60")
-
-    if apd is not None and apd >= PDELTA60_JUMP_ABS:
-        reasons.append(f"abs(PΔ60)>={PDELTA60_JUMP_ABS:g}")
-        tags.append("JUMP_P")
-        jump_hits += 1
-    else:
-        if is_near(apd, PDELTA60_JUMP_ABS, NEAR_FRAC):
-            nears.append("NEAR:PΔ60")
-
-    if ar1p is not None and ar1p >= RET1PCT60_JUMP_ABS:
-        reasons.append(f"abs(ret1%60)>={RET1PCT60_JUMP_ABS:g}")
-        tags.append("JUMP_RET")
-        jump_hits += 1
-    else:
-        if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
-            nears.append("NEAR:ret1%60")
-
-    # INFO rule: long-extreme only + no jump + abs(Z60)<2
-    if long_extreme_only and jump_hits == 0:
-        level = "INFO"
-    else:
-        if z60_alert or p252_alert_lo or (jump_hits >= 2 and has_zdelta_jump) or (z60_watch and jump_hits >= 1):
-            level = "ALERT"
-        elif z60_watch or p252_hi or p252_lo or jump_hits >= 1:
-            level = "WATCH"
-        else:
-            level = "NONE"
-
-    reason_str = ";".join(reasons) if reasons else "NA"
-
-    seen = set()
-    tags2: List[str] = []
-    for t in tags:
-        if t not in seen:
-            tags2.append(t)
-            seen.add(t)
-    tag_str = ",".join(tags2) if tags2 else "NA"
-
-    near_str = ",".join(nears) if nears else "NA"
-    return level, reason_str, tag_str, near_str
-
-
-# -------------------------
-# dashboard history (Prev/Delta/Streak)
-# -------------------------
-def load_dash_history(path: str) -> List[Dict[str, Any]]:
+def load_history_lite_records(path: str) -> List[Dict[str, Any]]:
+    """
+    Return list of records: {"series_id":..., "data_date":..., "value":...}
+    Supports:
+      - full JSON object
+      - JSON array
+      - JSON lines (record per line)
+      - JSON lines (array per line)
+    """
     if not path or not os.path.exists(path):
         return []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            obj = json.load(f)
-        items = obj.get("items", [])
-        if isinstance(items, list):
-            snaps = [x for x in items if isinstance(x, dict)]
-            return snaps[-STREAK_HISTORY_MAX:]
-    except Exception:
+
+    # peek first non-empty char
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    stripped = content.lstrip()
+    if not stripped:
         return []
-    return []
 
+    first = stripped[0]
 
-def build_timeline(snaps: List[Dict[str, Any]], module: str) -> Dict[str, List[str]]:
-    tl: Dict[str, List[str]] = {}
-    for snap in snaps:
-        if snap.get("module") != module:
+    # Case 1/2: whole-file JSON
+    if first in ("{", "["):
+        try:
+            obj = json.loads(content)
+            return normalize_history_lite_obj(obj)
+        except Exception:
+            # fall back to JSONL parsing
+            pass
+
+    # Case 3/4: JSONL
+    records: List[Dict[str, Any]] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
             continue
-        sigs = snap.get("series_signals")
-        if not isinstance(sigs, dict):
+        try:
+            item = json.loads(line)
+        except Exception:
             continue
-        for sid, sig in sigs.items():
-            if isinstance(sid, str) and isinstance(sig, str):
-                tl.setdefault(sid, []).append(sig)
-    return tl
+        records.extend(normalize_history_lite_obj(item))
+    return records
 
-
-def prev_and_streak(series_id: str, today: str, timeline: Dict[str, List[str]]) -> Tuple[str, int]:
-    hist = timeline.get(series_id, [])
-    prev = hist[-1] if hist else "NA"
-    if today not in ("WATCH", "ALERT"):
-        return prev, 0
-    streak = 1
-    for s in reversed(hist):
-        if s in ("WATCH", "ALERT"):
-            streak += 1
-        else:
-            break
-    return prev, streak
-
-
-def delta_signal(prev: str, today: str) -> str:
-    if prev in (None, "", "NA"):
-        return "NA"
-    if prev == today:
-        return "SAME"
-    return f"{prev}→{today}"
-
-
-# -------------------------
-# history_lite parsing + recompute
-# -------------------------
-def parse_history_lite(path: str) -> Dict[str, List[Tuple[str, float]]]:
+def normalize_history_lite_obj(obj: Any) -> List[Dict[str, Any]]:
     """
-    Returns: { series_id: [(data_date, value), ...] } sorted by data_date asc
-    Supports:
-      - NDJSON (one JSON object per line)
-      - JSON array of records
-      - JSON object containing list-like under known keys (best-effort)
-    Record expected keys:
-      - series_id or series
-      - data_date or date
-      - value
+    Normalize various shapes into list of record dicts.
+    Recognizes:
+      - {"series": {"ID": [{"data_date":..,"value":..}, ...], ...}}
+      - {"series": [{"series_id":..,"data_date":..,"value":..}, ...]} (rare)
+      - [{"series_id":..,"data_date":..,"value":..}, ...]
+      - {"series_id":..,"data_date":..,"value":..} single record
     """
-    out: Dict[str, List[Tuple[str, float]]] = {}
+    out: List[Dict[str, Any]] = []
 
-    if not path or (not os.path.exists(path)):
+    if obj is None:
         return out
 
-    def add_rec(series_id: str, data_date: str, value: Any) -> None:
-        if not isinstance(series_id, str) or not series_id:
-            return
-        if not isinstance(data_date, str) or not data_date:
-            return
-        if not isinstance(value, (int, float)):
-            return
-        out.setdefault(series_id, []).append((data_date, float(value)))
+    # If obj is a list of records
+    if isinstance(obj, list):
+        for it in obj:
+            out.extend(normalize_history_lite_obj(it))
+        return out
 
-    # Try to detect format by reading first non-empty bytes
-    with open(path, "r", encoding="utf-8") as f:
-        head = ""
-        while True:
-            ch = f.read(1)
-            if not ch:
-                break
-            if ch.strip():
-                head = ch
-                break
+    # If obj is a dict with "series"
+    if isinstance(obj, dict) and "series" in obj:
+        s = obj.get("series")
+        # series could be dict mapping series_id -> list
+        if isinstance(s, dict):
+            for sid, arr in s.items():
+                if isinstance(arr, list):
+                    for row in arr:
+                        if isinstance(row, dict):
+                            rec = {
+                                "series_id": sid,
+                                "data_date": row.get("data_date") or row.get("date") or row.get("d"),
+                                "value": row.get("value") or row.get("v"),
+                            }
+                            out.append(rec)
+                elif isinstance(arr, dict):
+                    rec = {
+                        "series_id": sid,
+                        "data_date": arr.get("data_date") or arr.get("date") or arr.get("d"),
+                        "value": arr.get("value") or arr.get("v"),
+                    }
+                    out.append(rec)
+            return out
 
-    # JSON array
-    if head == "[":
-        with open(path, "r", encoding="utf-8") as f:
-            arr = json.load(f)
-        if isinstance(arr, list):
-            for r in arr:
-                if not isinstance(r, dict):
-                    continue
-                sid = r.get("series_id") or r.get("series")
-                dd = r.get("data_date") or r.get("date")
-                val = r.get("value")
-                add_rec(sid, dd, val)
+        # series could be a list of dict records
+        if isinstance(s, list):
+            for row in s:
+                if isinstance(row, dict):
+                    if "series_id" in row:
+                        out.append({
+                            "series_id": row.get("series_id"),
+                            "data_date": row.get("data_date") or row.get("date") or row.get("d"),
+                            "value": row.get("value") or row.get("v"),
+                        })
+            return out
 
-    # JSON object (might wrap records)
-    elif head == "{":
-        with open(path, "r", encoding="utf-8") as f:
-            obj = json.load(f)
-        # common patterns: obj["data"] or obj["items"] or obj["records"]
-        cand = None
-        for k in ("data", "items", "records", "rows"):
-            if isinstance(obj.get(k), list):
-                cand = obj.get(k)
-                break
-        if cand is None and isinstance(obj.get("series"), dict):
-            # series -> list of points
-            for sid, s in obj["series"].items():
-                if isinstance(s, dict) and isinstance(s.get("values"), list):
-                    for p in s["values"]:
-                        if not isinstance(p, dict):
-                            continue
-                        dd = p.get("data_date") or p.get("date")
-                        val = p.get("value")
-                        add_rec(sid, dd, val)
-        else:
-            if isinstance(cand, list):
-                for r in cand:
-                    if not isinstance(r, dict):
-                        continue
-                    sid = r.get("series_id") or r.get("series")
-                    dd = r.get("data_date") or r.get("date")
-                    val = r.get("value")
-                    add_rec(sid, dd, val)
-
-    # NDJSON fallback
-    else:
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = json.loads(line)
-                except Exception:
-                    continue
-                if not isinstance(r, dict):
-                    continue
-                sid = r.get("series_id") or r.get("series")
-                dd = r.get("data_date") or r.get("date")
-                val = r.get("value")
-                add_rec(sid, dd, val)
-
-    # sort and keep unique by data_date (last wins)
-    for sid, pts in out.items():
-        # if duplicates exist, keep last
-        m: Dict[str, float] = {}
-        for dd, v in pts:
-            m[dd] = v
-        pts2 = sorted(m.items(), key=lambda t: t[0])
-        out[sid] = [(dd, v) for dd, v in pts2]
+    # If obj looks like a single record
+    if isinstance(obj, dict) and ("series_id" in obj) and ("value" in obj or "v" in obj):
+        out.append({
+            "series_id": obj.get("series_id"),
+            "data_date": obj.get("data_date") or obj.get("date") or obj.get("d"),
+            "value": obj.get("value") or obj.get("v"),
+        })
+        return out
 
     return out
 
-
-def compute_from_history(points: List[Tuple[str, float]]) -> Dict[str, Optional[float]]:
+def build_series_values(records: List[Dict[str, Any]]) -> Dict[str, List[Tuple[str, float]]]:
     """
-    From full chronological points, compute:
-      z60, p252, zΔ60, pΔ60, ret1%60
-    Using "last N valid points" windows (not calendar days).
+    Return series_id -> list[(data_date, value)] sorted by data_date asc.
     """
-    vals = [v for _, v in points if isinstance(v, (int, float))]
-    if len(vals) < 2:
-        return {"z60": None, "p252": None, "z_delta60": None, "p_delta60": None, "ret1_pct60": None}
+    m: Dict[str, List[Tuple[str, float]]] = {}
+    for r in records:
+        sid = (r.get("series_id") or "").strip()
+        dd = (r.get("data_date") or "").strip()
+        val = _safe_float(r.get("value"))
+        if not sid or not dd or val is None:
+            continue
+        m.setdefault(sid, []).append((dd, val))
+    for sid in list(m.keys()):
+        # sort by date string YYYY-MM-DD; assuming normalized in your pipeline
+        m[sid].sort(key=lambda x: x[0])
+    return m
 
-    latest = vals[-1]
-    prev = vals[-2]
+# -----------------------
+# Signal rules (same as market_cache)
+# -----------------------
 
-    # ret1%60
-    denom = abs(prev)
-    if denom > 0:
-        ret1_pct = ((latest - prev) / denom) * 100.0
-    else:
-        ret1_pct = None
+@dataclass
+class SignalResult:
+    signal: str
+    tag: str
+    near: str
+    reason: str
 
-    # current windows
-    w60 = vals[-60:] if len(vals) >= 60 else []
-    w252 = vals[-252:] if len(vals) >= 252 else []
+def eval_signal(z60: float, p252: float, z_d60: float, p_d60: float, r1p60: float) -> SignalResult:
+    """
+    Rules (same as you defined):
+    Extreme:
+      - abs(Z60)>=2 => WATCH
+      - abs(Z60)>=2.5 => ALERT
+      - P252>=95 or <=5 => INFO/WATCH (INFO if only long-extreme and no jump and abs(Z60)<2)
+      - P252<=2 => ALERT
+    Jump:
+      - abs(ZΔ60)>=0.75 OR abs(PΔ60)>=15 OR abs(ret1%60)>=2
+    Near:
+      - within 10% of jump thresholds
+    """
+    # helpers
+    def _is_nan(x: float) -> bool:
+        return isinstance(x, float) and math.isnan(x)
 
-    z60 = None
-    if len(w60) >= 60:
-        m, s = mean_std_ddof0(w60)
-        if m is not None and s is not None and s > 0:
-            z60 = (latest - m) / s
+    has_jump = False
+    near_tags: List[str] = []
+    tags: List[str] = []
+    reasons: List[str] = []
 
-    p252 = None
-    if len(w252) >= 252:
-        p252 = percentile_le(w252, latest)
+    # Jump checks
+    if not _is_nan(z_d60) and abs(z_d60) >= 0.75:
+        has_jump = True
+        tags.append("JUMP_ZD")
+        reasons.append("abs(ZΔ60)>=0.75")
+    elif not _is_nan(z_d60) and abs(z_d60) >= 0.75 * 0.9:
+        near_tags.append("NEAR:ZΔ60")
 
-    # previous windows (exclude latest)
-    z60_prev = None
-    p60 = None
-    p60_prev = None
+    if not _is_nan(p_d60) and abs(p_d60) >= 15:
+        has_jump = True
+        tags.append("JUMP_PD")
+        reasons.append("abs(PΔ60)>=15")
+    elif not _is_nan(p_d60) and abs(p_d60) >= 15 * 0.9:
+        near_tags.append("NEAR:PΔ60")
 
-    if len(vals) >= 61:
-        w60_prev = vals[-61:-1]  # 60 points ending at prev
-        m0, s0 = mean_std_ddof0(w60_prev)
-        if m0 is not None and s0 is not None and s0 > 0:
-            z60_prev = (prev - m0) / s0
+    if not _is_nan(r1p60) and abs(r1p60) >= 2:
+        has_jump = True
+        tags.append("JUMP_RET")
+        reasons.append("abs(ret1%60)>=2")
+    elif not _is_nan(r1p60) and abs(r1p60) >= 2 * 0.9:
+        near_tags.append("NEAR:ret1%60")
 
-        # p60 today/prev for pΔ60 (consistent with market_cache idea)
-        p60 = percentile_le(w60, latest) if len(w60) == 60 else None
-        p60_prev = percentile_le(w60_prev, prev) if len(w60_prev) == 60 else None
+    # Extreme checks
+    long_extreme = False
+    extreme_z = False
 
-    z_delta = None
-    if z60 is not None and z60_prev is not None:
-        z_delta = z60 - z60_prev
+    if not _is_nan(z60) and abs(z60) >= 2:
+        extreme_z = True
+        tags.append("EXTREME_Z")
+        reasons.append("abs(Z60)>=2")
+    if not _is_nan(z60) and abs(z60) >= 2.5:
+        tags.append("EXTREME_Z_HI")
+        reasons.append("abs(Z60)>=2.5")
 
-    p_delta = None
-    if p60 is not None and p60_prev is not None:
-        p_delta = p60 - p60_prev
+    if not _is_nan(p252) and (p252 >= 95 or p252 <= 5):
+        long_extreme = True
+        tags.append("LONG_EXTREME")
+        if p252 <= 2:
+            tags.append("LONG_EXTREME_HI")
+            reasons.append("P252<=2")
+        else:
+            reasons.append("P252>=95" if p252 >= 95 else "P252<=5")
 
-    return {
-        "z60": z60,
-        "p252": p252,
-        "z_delta60": z_delta,
-        "p_delta60": p_delta,
-        "ret1_pct60": ret1_pct,
-    }
+    # Determine signal level
+    # ALERT cases
+    if (not _is_nan(z60) and abs(z60) >= 2.5) or (not _is_nan(p252) and p252 <= 2):
+        return SignalResult("ALERT", tags[0] if tags else "NA", near_tags[0] if near_tags else "NA", ";".join(reasons) if reasons else "NA")
 
+    # WATCH cases
+    if has_jump or extreme_z:
+        return SignalResult("WATCH", tags[0] if tags else "NA", near_tags[0] if near_tags else "NA", ";".join(reasons) if reasons else "NA")
 
-# -------------------------
-# Meta
-# -------------------------
-def pick_script_version(stats: Dict[str, Any]) -> Optional[str]:
-    sv = stats.get("script_version")
-    if isinstance(sv, str) and sv:
-        return sv
-    sp = stats.get("stats_policy")
-    if isinstance(sp, dict):
-        sv2 = sp.get("script_version")
-        if isinstance(sv2, str) and sv2:
-            return sv2
-    return None
+    # INFO: only long-extreme and no jump and abs(Z60)<2
+    if long_extreme:
+        # if z60 is nan, we still allow INFO (conservative)
+        if (_is_nan(z60) or abs(z60) < 2) and (not has_jump):
+            return SignalResult("INFO", "LONG_EXTREME", near_tags[0] if near_tags else "NA", ";".join(reasons) if reasons else "NA")
 
+    return SignalResult("NONE", "NA", near_tags[0] if near_tags else "NA", "NA")
 
-def summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
-    counts = {"ALERT": 0, "WATCH": 0, "INFO": 0, "NONE": 0}
-    changed = 0
-    watch_ge3 = 0
-    for r in rows:
-        lvl = r.get("signal_level", "NONE")
-        if lvl in counts:
-            counts[lvl] += 1
-        d = r.get("delta_signal", "NA")
-        if isinstance(d, str) and d not in ("NA", "SAME"):
-            changed += 1
-        if r.get("signal_level") == "WATCH":
-            try:
-                if int(r.get("streak_wa") or 0) >= 3:
-                    watch_ge3 += 1
-            except Exception:
-                pass
-    counts["CHANGED"] = changed
-    counts["WATCH_STREAK_GE3"] = watch_ge3
-    return counts
-
-
-def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
-    os.makedirs(os.path.dirname(out_md), exist_ok=True)
-    os.makedirs(os.path.dirname(out_json), exist_ok=True)
-
-    payload = {"meta": meta, "rows": rows}
-    with open(out_json, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-
-    s = summary_counts(rows)
-
-    lines: List[str] = []
-    lines.append(f"# Risk Dashboard ({meta.get('module','')})")
-    lines.append("")
-    lines.append(
-        f"- Summary: ALERT={s['ALERT']} / WATCH={s['WATCH']} / INFO={s['INFO']} / NONE={s['NONE']}; "
-        f"CHANGED={s['CHANGED']}; WATCH_STREAK>=3={s['WATCH_STREAK_GE3']}"
-    )
-    lines.append(f"- RUN_TS_UTC: `{meta.get('run_ts_utc','')}`")
-    lines.append(f"- STATS.generated_at_utc: `{meta.get('stats_generated_at_utc','')}`")
-    lines.append(f"- STATS.as_of_ts: `{meta.get('stats_as_of_ts','')}`")
-    lines.append(f"- script_version: `{meta.get('script_version','')}`")
-    lines.append(f"- stale_hours: `{meta.get('stale_hours','')}`")
-    lines.append(f"- dash_history: `{meta.get('history_path','NA')}`")
-    lines.append(f"- history_lite_used_for_jump: `{meta.get('history_lite_path','NA')}`")
-    lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
-    lines.append(f"- jump_calc: `{meta.get('jump_calc','NA')}`")
-    lines.append(
-        "- signal_rules: "
-        f"`Extreme(abs(Z60)>={Z60_WATCH_ABS:g} (WATCH), abs(Z60)>={Z60_ALERT_ABS:g} (ALERT), "
-        f"P252>={P252_EXTREME_HI:g} or <={P252_EXTREME_LO:g} (WATCH/INFO), P252<={P252_ALERT_LO:g} (ALERT)); "
-        f"Jump(abs(ZΔ60)>={ZDELTA60_JUMP_ABS:g} OR abs(PΔ60)>={PDELTA60_JUMP_ABS:g} OR abs(ret1%60)>={RET1PCT60_JUMP_ABS:g}); "
-        f"Near(within {NEAR_FRAC*100:.0f}% of jump thresholds); "
-        "INFO if only long-extreme and no jump and abs(Z60)<2`"
-    )
-    lines.append("")
-
-    header = [
-        "Signal", "Tag", "Near", "PrevSignal", "DeltaSignal", "StreakWA",
-        "Series", "DQ", "age_h",
-        "data_date", "value",
-        "z60", "p252", "z_delta60", "p_delta60", "ret1_pct60",
-        "Reason", "Source", "as_of_ts"
-    ]
-    lines.append("| " + " | ".join(header) + " |")
-    lines.append("|" + "|".join(["---"] * len(header)) + "|")
-
-    for r in rows:
-        lines.append("| " + " | ".join([
-            md_escape_cell(r.get("signal_level", "NONE")),
-            md_escape_cell(r.get("tag", "NA")),
-            md_escape_cell(r.get("near", "NA")),
-            md_escape_cell(r.get("prev_signal", "NA")),
-            md_escape_cell(r.get("delta_signal", "NA")),
-            md_escape_cell(fmt(r.get("streak_wa"), nd=0)),
-            md_escape_cell(r.get("series", "")),
-            md_escape_cell(r.get("dq", "")),
-            md_escape_cell(fmt(r.get("age_hours"), nd=2)),
-            md_escape_cell(fmt(r.get("data_date"))),
-            md_escape_cell(fmt(r.get("value"), nd=6)),
-            md_escape_cell(fmt(r.get("z60"), nd=6)),
-            md_escape_cell(fmt(r.get("p252"), nd=6)),
-            md_escape_cell(fmt(r.get("z_delta_60"), nd=6)),
-            md_escape_cell(fmt(r.get("p_delta_60"), nd=6)),
-            md_escape_cell(fmt(r.get("ret1_pct_60"), nd=6)),
-            md_escape_cell(r.get("reason")),
-            md_escape_cell(r.get("source_url")),
-            md_escape_cell(r.get("effective_as_of_ts")),
-        ]) + " |")
-
-    with open(out_md, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-
+# -----------------------
+# Main renderer
+# -----------------------
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stats", required=True)
-    ap.add_argument("--history", required=True)
-    ap.add_argument("--history-lite", required=True)
-    ap.add_argument("--out-md", required=True)
-    ap.add_argument("--out-json", required=True)
-    ap.add_argument("--module", default="fred_cache")
-    ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
+    ap.add_argument("--stats", required=True, help="Path to cache/stats_latest.json")
+    ap.add_argument("--history-lite", required=False, default="", help="Path to cache/history_lite.json (optional, for jump recompute)")
+    ap.add_argument("--history", required=True, help="dashboard history.json (for Prev/Delta/Streak)")
+    ap.add_argument("--out-md", required=True, help="output markdown path")
+    ap.add_argument("--out-json", required=True, help="output json path (latest dashboard payload)")
+    ap.add_argument("--module", required=True, help="module name, e.g., fred_cache")
+    ap.add_argument("--stale-hours", type=float, default=72.0)
     args = ap.parse_args()
 
-    run_ts = datetime.now(timezone.utc)
+    run_ts_utc = _now_utc_iso()
 
-    if not os.path.exists(args.stats):
-        meta = {
-            "run_ts_utc": run_ts.isoformat(),
-            "module": args.module,
-            "stale_hours": args.stale_hours,
-            "history_path": args.history,
-            "history_lite_path": args.history_lite,
-            "streak_calc": "disabled (missing stats file)",
-            "jump_calc": "disabled (missing stats file)",
-            "error": f"stats missing: {args.stats}",
-        }
-        write_outputs(args.out_md, args.out_json, meta, [])
-        return
+    stats = load_json(args.stats)
 
-    with open(args.stats, "r", encoding="utf-8") as f:
-        stats = json.load(f)
+    stats_gen = stats.get("generated_at_utc") or "NA"
+    stats_asof = stats.get("as_of_ts") or "NA"
+    script_ver = stats.get("script_version") or stats.get("stats_policy", {}).get("script_version") or "NA"
 
-    stats_as_of_ts = stats.get("as_of_ts") if isinstance(stats.get("as_of_ts"), str) else None
-    stats_as_of_dt = parse_iso(stats_as_of_ts)
+    # compute stale_hours from stats.generated_at_utc
+    stale_hours = float("nan")
+    dt_gen = _parse_iso(stats_gen)
+    dt_run = _parse_iso(run_ts_utc)
+    if dt_gen and dt_run:
+        stale_hours = (dt_run - dt_gen).total_seconds() / 3600.0
 
-    # dashboard history for Prev/Delta/Streak
-    snaps = load_dash_history(args.history)
-    timeline = build_timeline(snaps, args.module)
-
-    # history_lite for sudden-move recompute
-    hl = parse_history_lite(args.history_lite)
-
-    meta = {
-        "run_ts_utc": run_ts.isoformat(),
-        "module": args.module,
-        "stale_hours": args.stale_hours,
-        "stats_generated_at_utc": stats.get("generated_at_utc"),
-        "stats_as_of_ts": stats_as_of_ts,
-        "script_version": pick_script_version(stats),
-        "series_count": stats.get("series_count"),
-        "history_path": args.history,
-        "history_lite_path": args.history_lite,
-        "streak_calc": "PrevSignal/Streak derived from history.json (dashboard outputs)",
-        "jump_calc": "recompute z60/p252/zΔ60/pΔ60/ret1%60 from history_lite values; ret1% denom = abs(prev_value) else NA",
-        "history_items_used": len(snaps),
-        "history_lite_series": len(hl),
-    }
-
-    series = stats.get("series", {})
-    if not isinstance(series, dict):
-        series = {}
-
+    # Load stats series
+    series_obj = stats.get("series", {})
+    # Each series expected:
+    # series[ID].latest.{data_date,value,source_url,as_of_ts}, windows.w60.{z}, windows.w252.{p}, etc.
     rows: List[Dict[str, Any]] = []
 
-    for sid, s in series.items():
-        if not isinstance(s, dict):
-            continue
+    # Optional: load history_lite and build per-series arrays for jump recompute
+    hist_records = load_history_lite_records(args.history_lite) if args.history_lite else []
+    hist_map = build_series_values(hist_records) if hist_records else {}
 
-        latest = s.get("latest", {}) if isinstance(s.get("latest"), dict) else {}
+    # dashboard history for prev/delta/streak (simple format from your append script)
+    prev_map: Dict[str, str] = {}
+    streak_map: Dict[str, int] = {}
+    try:
+        if os.path.exists(args.history):
+            h = load_json(args.history)
+            # accept either {"schema_version":..., "items":[...]} or direct list
+            items = h.get("items") if isinstance(h, dict) else h
+            if isinstance(items, list) and len(items) > 0:
+                last = items[-1]
+                ss = last.get("series_signals", {}) if isinstance(last, dict) else {}
+                if isinstance(ss, dict):
+                    for k, v in ss.items():
+                        prev_map[str(k)] = str(v)
+    except Exception:
+        prev_map = {}
 
-        # Effective as_of_ts:
-        # prefer per-series latest.as_of_ts if present; else fall back to stats.as_of_ts
-        eff_as_of_ts = latest.get("as_of_ts") if isinstance(latest.get("as_of_ts"), str) else stats_as_of_ts
-        eff_as_of_dt = parse_iso(eff_as_of_ts)
+    def calc_streak(series_id: str, cur_signal: str) -> int:
+        # only count WATCH/ALERT
+        if cur_signal not in ("WATCH", "ALERT"):
+            return 0
+        # naive: if prev is same WATCH/ALERT then 2 else 1
+        prev = prev_map.get(series_id, "NA")
+        if prev in ("WATCH", "ALERT") and prev == cur_signal:
+            return 2
+        if prev in ("WATCH", "ALERT") and prev != cur_signal:
+            return 1
+        if prev == "NA":
+            return 1
+        return 1
 
-        dq, age_hours = dq_from_ts(run_ts, eff_as_of_dt or stats_as_of_dt, args.stale_hours)
+    # Build row per series
+    for sid, sdata in series_obj.items():
+        latest = (sdata or {}).get("latest", {}) if isinstance(sdata, dict) else {}
+        data_date = latest.get("data_date") or "NA"
+        value = _safe_float(latest.get("value"))
+        source_url = latest.get("source_url") or "NA"
+        as_of_ts = latest.get("as_of_ts") or stats_asof
 
-        # Recompute signals from history_lite (if available)
-        comp = compute_from_history(hl.get(sid, [])) if sid in hl else {
-            "z60": None, "p252": None, "z_delta60": None, "p_delta60": None, "ret1_pct60": None
-        }
+        # DQ
+        dq_state = stats.get("dq_state", {})
+        dq = "OK"
+        if isinstance(dq_state, dict):
+            # if present, try map
+            dq_series = dq_state.get("series", {})
+            if isinstance(dq_series, dict) and sid in dq_series:
+                dq = str(dq_series[sid].get("status") or "OK")
+        # fallback: if metrics missing -> still OK; dq should not be guessed beyond what exists
 
-        z60 = comp.get("z60")
-        p252 = comp.get("p252")
-        zdel60 = comp.get("z_delta60")
-        pdel60 = comp.get("p_delta60")
-        ret1pct60 = comp.get("ret1_pct60")
+        # Metrics from stats (baseline)
+        w60 = (sdata.get("windows", {}) or {}).get("w60", {}) if isinstance(sdata, dict) else {}
+        w252 = (sdata.get("windows", {}) or {}).get("w252", {}) if isinstance(sdata, dict) else {}
 
-        lvl, reason, tag, near = compute_signal_tag_near(z60, p252, zdel60, pdel60, ret1pct60)
+        z60 = _safe_float(w60.get("z"))
+        p252 = _safe_float(w252.get("p"))
 
-        prev, streak = prev_and_streak(sid, lvl, timeline)
-        dlt = delta_signal(prev, lvl)
+        # Jump metrics baseline (may not exist in fred stats)
+        z_d60 = _safe_float(w60.get("z_delta"))
+        p_d60 = _safe_float(w60.get("p_delta"))
+        r1p60 = _safe_float(w60.get("ret1_pct"))
+
+        # If history_lite exists and has enough points: recompute jump metrics safely
+        if sid in hist_map:
+            vals = hist_map[sid]
+            # Need at least 2 points for ret1/deltas, and >=60/252 for z/p if desired
+            if len(vals) >= 2:
+                # Latest point from history, align by last entry
+                prev_dd, prev_v = vals[-2]
+                cur_dd, cur_v = vals[-1]
+
+                # If data_date differs, keep stats data_date (authoritative) but compute jump from hist anyway
+                # Build windows for z/p computations
+                # z60 uses last 60 values; p252 uses last 252
+                last60 = [v for (_, v) in vals[-60:]] if len(vals) >= 60 else []
+                last252 = [v for (_, v) in vals[-252:]] if len(vals) >= 252 else []
+
+                # recompute z60/p252 only if enough points
+                z60_r = float("nan")
+                p252_r = float("nan")
+                if len(last60) >= 60:
+                    z60_r = _zscore(last60, cur_v)
+                if len(last252) >= 252:
+                    p252_r = _pct_le(last252, cur_v)
+
+                # recompute deltas based on recomputed z/p when available,
+                # else fall back to stats z/p if those are present
+                # compute prev z60 / prev p252 using windows ending at prev point if possible
+                z_prev = float("nan")
+                p_prev = float("nan")
+                if len(vals) >= 61:
+                    prev60 = [v for (_, v) in vals[-61:-1]]
+                    if len(prev60) == 60:
+                        z_prev = _zscore(prev60, prev_v)
+                if len(vals) >= 253:
+                    prev252 = [v for (_, v) in vals[-253:-1]]
+                    if len(prev252) == 252:
+                        p_prev = _pct_le(prev252, prev_v)
+
+                # Decide final z60/p252 to use (do NOT overwrite with NaN)
+                if not math.isnan(z60_r):
+                    z60 = z60_r
+                if not math.isnan(p252_r):
+                    p252 = p252_r
+
+                # z_delta60: use recomputed if both z's available, else keep existing
+                if not math.isnan(z60) and not math.isnan(z_prev):
+                    z_d60 = z60 - z_prev
+
+                # p_delta60
+                if (p252 is not None) and (not math.isnan(p252)) and (not math.isnan(p_prev)):
+                    p_d60 = p252 - p_prev
+
+                # ret1_pct60
+                r1p60_r = _ret1_pct(prev_v, cur_v)
+                if not math.isnan(r1p60_r):
+                    r1p60 = r1p60_r
+
+        # Normalize NAs
+        def _to_num_or_nan(x: Optional[float]) -> float:
+            if x is None:
+                return float("nan")
+            return float(x)
+
+        z60_f = _to_num_or_nan(z60)
+        p252_f = _to_num_or_nan(p252)
+        z_d60_f = _to_num_or_nan(z_d60)
+        p_d60_f = _to_num_or_nan(p_d60)
+        r1p60_f = _to_num_or_nan(r1p60)
+
+        sig = eval_signal(z60_f, p252_f, z_d60_f, p_d60_f, r1p60_f)
+
+        prev_sig = prev_map.get(sid, "NA")
+        if prev_sig == "NA":
+            delta_sig = "NA"
+        elif prev_sig == sig.signal:
+            delta_sig = "SAME"
+        else:
+            delta_sig = f"{prev_sig}→{sig.signal}"
+
+        streak = calc_streak(sid, sig.signal)
+
+        # age_h: use stats_asof as time reference (same as your other dashboards)
+        age_h = "NA"
+        dt_asof = _parse_iso(stats_asof) or _parse_iso(as_of_ts)
+        if dt_asof and dt_run:
+            age_h = round((dt_run - dt_asof).total_seconds() / 3600.0, 2)
 
         rows.append({
-            "series": sid,
-            "dq": dq,
-            "age_hours": age_hours,
-            "data_date": latest.get("data_date"),
-            "value": latest.get("value"),
-            "z60": z60,
-            "p252": p252,
-            "z_delta_60": zdel60,
-            "p_delta_60": pdel60,
-            "ret1_pct_60": ret1pct60,
-            "reason": reason,
-            "tag": tag,
-            "near": near,
-            "signal_level": lvl,
-            "prev_signal": prev,
-            "delta_signal": dlt,
-            "streak_wa": streak,
-            "source_url": latest.get("source_url"),
-            "effective_as_of_ts": eff_as_of_ts or "NA",
+            "Signal": sig.signal,
+            "Tag": sig.tag if sig.tag else "NA",
+            "Near": sig.near if sig.near else "NA",
+            "PrevSignal": prev_sig,
+            "DeltaSignal": delta_sig,
+            "StreakWA": streak,
+            "Series": sid,
+            "DQ": dq,
+            "age_h": age_h,
+            "data_date": data_date,
+            "value": value,
+            "z60": z60_f,
+            "p252": p252_f,
+            "z_delta60": z_d60_f,
+            "p_delta60": p_d60_f,
+            "ret1_pct60": r1p60_f,
+            "Reason": sig.reason,
+            "Source": source_url,
+            "as_of_ts": stats_asof,
         })
 
-    sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
-    dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
+    # Summary counts
+    def _count(sig: str) -> int:
+        return sum(1 for r in rows if r["Signal"] == sig)
 
-    def delta_rank(r: Dict[str, Any]) -> int:
-        d = r.get("delta_signal")
-        if d == "NA":
-            return 2
-        if d == "SAME":
-            return 1
-        return 0
+    changed_n = sum(1 for r in rows if r["DeltaSignal"] not in ("NA", "SAME"))
+    watch_streak_ge3 = sum(1 for r in rows if (r["Signal"] in ("WATCH", "ALERT") and int(r["StreakWA"]) >= 3))
 
-    def watch_near_rank(r: Dict[str, Any]) -> int:
-        if r.get("signal_level") != "WATCH":
-            return 9
-        return 0 if r.get("near") not in (None, "NA", "") else 1
+    summary = f"ALERT={_count('ALERT')} / WATCH={_count('WATCH')} / INFO={_count('INFO')} / NONE={_count('NONE')}; CHANGED={changed_n}; WATCH_STREAK>=3={watch_streak_ge3}"
 
-    def streak_rank(r: Dict[str, Any]) -> int:
-        try:
-            return -int(r.get("streak_wa") or 0)
-        except Exception:
-            return 0
+    # Sort: ALERT > WATCH > INFO > NONE, then by Series
+    order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
+    rows.sort(key=lambda r: (order.get(r["Signal"], 9), str(r["Series"])))
 
-    rows.sort(key=lambda r: (
-        sig_order.get(r.get("signal_level", "NONE"), 9),
-        delta_rank(r),
-        watch_near_rank(r),
-        streak_rank(r),
-        dq_order.get(r.get("dq", "OK"), 9),
-        r.get("series", ""),
-    ))
+    # Build dashboard latest json (for append script)
+    latest_payload = {
+        "schema_version": "dashboard_latest_v1",
+        "module": args.module,
+        "run_ts_utc": run_ts_utc,
+        "stats_generated_at_utc": stats_gen,
+        "stats_as_of_ts": stats_asof,
+        "script_version": script_ver,
+        "summary": summary,
+        "series_signals": {r["Series"]: r["Signal"] for r in rows},
+    }
 
-    write_outputs(args.out_md, args.out_json, meta, rows)
+    os.makedirs(os.path.dirname(args.out_json), exist_ok=True)
+    with open(args.out_json, "w", encoding="utf-8") as f:
+        json.dump(latest_payload, f, ensure_ascii=False, indent=2)
 
+    # Write markdown
+    lines: List[str] = []
+    lines.append(f"# Risk Dashboard ({args.module})")
+    lines.append("")
+    lines.append(f"- Summary: {summary}")
+    lines.append(f"- RUN_TS_UTC: `{run_ts_utc}`")
+    lines.append(f"- STATS.generated_at_utc: `{stats_gen}`")
+    lines.append(f"- STATS.as_of_ts: `{stats_asof}`")
+    lines.append(f"- script_version: `{script_ver}`")
+    lines.append(f"- stale_hours: `{round(stale_hours, 2) if isinstance(stale_hours, float) and not math.isnan(stale_hours) else 'NA'}`")
+    lines.append(f"- dash_history: `{args.history}`")
+    if args.history_lite:
+        lines.append(f"- history_lite_used_for_jump: `{args.history_lite}`")
+        lines.append(f"- jump_calc: `recompute z60/p252/zΔ60/pΔ60/ret1%60 from history_lite values; ret1% denom = abs(prev_value) else NA`")
+    lines.append(f"- streak_calc: `PrevSignal/Streak derived from history.json (dashboard outputs)`")
+    lines.append(f"- signal_rules: `Extreme(abs(Z60)>=2 (WATCH), abs(Z60)>=2.5 (ALERT), P252>=95 or <=5 (WATCH/INFO), P252<=2 (ALERT)); Jump(abs(ZΔ60)>=0.75 OR abs(PΔ60)>=15 OR abs(ret1%60)>=2); Near(within 10% of jump thresholds); INFO if only long-extreme and no jump and abs(Z60)<2`")
+    lines.append("")
+    headers = [
+        "Signal","Tag","Near","PrevSignal","DeltaSignal","StreakWA","Series","DQ","age_h",
+        "data_date","value","z60","p252","z_delta60","p_delta60","ret1_pct60","Reason","Source","as_of_ts"
+    ]
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("|" + "|".join(["---"] * len(headers)) + "|")
+
+    def fmt_num(x: Any) -> str:
+        if x is None:
+            return "NA"
+        if isinstance(x, float) and math.isnan(x):
+            return "NA"
+        if isinstance(x, float):
+            # compact
+            return f"{x:.6g}"
+        return str(x)
+
+    for r in rows:
+        cells = []
+        for h in headers:
+            v = r.get(h)
+            if h in ("value","z60","p252","z_delta60","p_delta60","ret1_pct60"):
+                cells.append(_md_escape_cell(fmt_num(v)))
+            else:
+                cells.append(_md_escape_cell(v))
+        lines.append("| " + " | ".join(cells) + " |")
+
+    os.makedirs(os.path.dirname(args.out_md), exist_ok=True)
+    with open(args.out_md, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
 if __name__ == "__main__":
     main()
