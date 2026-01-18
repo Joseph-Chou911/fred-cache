@@ -2,14 +2,14 @@
   "schema_version": "dash_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-01-18T11:36:33.588708+00:00",
+      "run_ts_utc": "2026-01-18T11:56:36.608238+00:00",
       "stats_as_of_ts": "2026-01-18T14:57:27+08:00",
       "module": "fred_cache",
       "series_signals": {
-        "DJIA": "INFO",
-        "NFCINONFINLEVERAGE": "INFO",
-        "SP500": "INFO",
-        "T10Y3M": "INFO",
+        "DJIA": "NONE",
+        "NFCINONFINLEVERAGE": "NONE",
+        "SP500": "NONE",
+        "T10Y3M": "NONE",
         "BAMLH0A0HYM2": "NONE",
         "DCOILWTICO": "NONE",
         "DGS10": "NONE",
