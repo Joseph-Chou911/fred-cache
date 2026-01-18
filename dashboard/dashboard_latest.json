@@ -1,6 +1,6 @@
 {
   "meta": {
-    "run_ts_utc": "2026-01-18T05:39:08.741486+00:00",
+    "run_ts_utc": "2026-01-18T05:46:24.767999+00:00",
     "module": "market_cache",
     "stale_hours": 36.0,
     "stats_generated_at_utc": "2026-01-18T04:13:53Z",
@@ -17,7 +17,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "DERIVED",
       "dq": "OK",
-      "age_hours": 1.4210393016666667,
+      "age_hours": 1.5421577775,
       "z60": 2.46496708281083,
       "p60": 100.0,
       "ret1_delta_60": 0.003767003436544236,
@@ -27,8 +27,8 @@
       "p_delta_60": 1.6666666666666714,
       "z252": 0.6271976760558241,
       "p252": 77.77777777777779,
-      "signal_level": "ALERT",
-      "reason": "|Z60|>=2;|ZΔ60|>=0.5"
+      "signal_level": "WATCH",
+      "reason": "|Z60|>=2"
     },
     {
       "module": "market_cache",
@@ -38,7 +38,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
       "dq": "OK",
-      "age_hours": 1.4210393016666667,
+      "age_hours": 1.5421577775,
       "z60": -0.7091208189130702,
       "p60": 28.333333333333332,
       "ret1_delta_60": 0.08899999999999997,
@@ -48,8 +48,8 @@
       "p_delta_60": 13.333333333333332,
       "z252": -0.9928816124516595,
       "p252": 6.746031746031746,
-      "signal_level": "ALERT",
-      "reason": "|PΔ60|>=10;|ret1%60|>=1"
+      "signal_level": "WATCH",
+      "reason": "|ret1%60|>=2"
     },
     {
       "module": "market_cache",
@@ -59,7 +59,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
       "dq": "OK",
-      "age_hours": 1.4210393016666667,
+      "age_hours": 1.5421577775,
       "z60": 1.1849297043742244,
       "p60": 91.66666666666666,
       "ret1_delta_60": -4.460000000000036,
@@ -69,7 +69,7 @@
       "p_delta_60": -1.6666666666666714,
       "z252": 1.4245755784902454,
       "p252": 98.01587301587301,
-      "signal_level": "ALERT",
+      "signal_level": "INFO",
       "reason": "P252>=95"
     },
     {
@@ -80,7 +80,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
       "dq": "OK",
-      "age_hours": 1.4210393016666667,
+      "age_hours": 1.5421577775,
       "z60": -0.450182847841524,
       "p60": 38.333333333333336,
       "ret1_delta_60": 0.019999999999999574,
