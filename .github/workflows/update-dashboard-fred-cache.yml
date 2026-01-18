@@ -1,9 +1,10 @@
-name: Update Dashboard (fred_cache)
+name: Update dashboard (fred_cache)
 
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "35 3 * * *"  # example: 03:35 UTC = 11:35 Asia/Taipei
+    # daily at 13:10 UTC = 21:10 Asia/Taipei (adjust if you want)
+    - cron: "10 13 * * *"
 
 permissions:
   contents: write
@@ -16,6 +17,8 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      TIMEZONE: Asia/Taipei
 
     steps:
       - name: Checkout
@@ -23,77 +26,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Run dashboard renderer (fred_cache)
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
+          python scripts/render_dashboard_fred_cache.py
 
-      # -----------------------
-      # Render dashboard (fred_cache)
-      # -----------------------
-      - name: Render dashboard (fred_cache)
+      - name: Configure git author
         shell: bash
         run: |
-          set -euo pipefail
-          mkdir -p dashboard_fred_cache
-
-          python scripts/render_dashboard_fred_cache.py \
-            --stats cache/stats_latest.json \
-            --history-lite cache/history_lite.json \
-            --history dashboard_fred_cache/history.json \
-            --out-md dashboard_fred_cache/DASHBOARD.md \
-            --out-json dashboard_fred_cache/dashboard_latest.json \
-            --module fred_cache \
-            --stale-hours 72
-
-      # -----------------------
-      # Sanity check dashboard_latest.json keys (critical)
-      # -----------------------
-      - name: Sanity check dashboard_latest.json meta keys
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f dashboard_fred_cache/dashboard_latest.json
-          python - <<'PY'
-          import json
-          p="dashboard_fred_cache/dashboard_latest.json"
-          j=json.load(open(p,"r",encoding="utf-8"))
-          print("dashboard_latest.json keys =", sorted(list(j.keys())))
-          for k in ["run_ts_utc","stats_as_of_ts","module","series_signals"]:
-            print(k, "=>", "OK" if k in j else "MISSING")
-          PY
-
-      # -----------------------
-      # Append dashboard history
-      # -----------------------
-      - name: Append dashboard history (fred_cache)
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/append_dashboard_history.py \
-            --latest dashboard_fred_cache/dashboard_latest.json \
-            --history dashboard_fred_cache/history.json \
-            --max-items 180
-
-      - name: Commit changes
-        shell: bash
-        run: |
-          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add dashboard_fred_cache/DASHBOARD.md dashboard_fred_cache/dashboard_latest.json dashboard_fred_cache/history.json || true
-
+      - name: Commit changes (if any)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add dashboard_fred_cache/README.md dashboard_fred_cache/history.json || true
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No changes."
             exit 0
           fi
+          git commit -m "dashboard(fred_cache): update"
 
-          git commit -m "dashboard_fred_cache: update dashboard + history"
-          git push
+      - name: Push (with rebase retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            git pull --rebase origin main || true
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Push failed after retries" >&2
+          exit 1
