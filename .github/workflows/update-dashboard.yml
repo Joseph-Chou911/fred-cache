@@ -29,12 +29,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render dashboard
+      - name: Render dashboard (to fred-cache/dashboard/)
         shell: bash
         run: |
           set -euo pipefail
 
-          # Render dashboard.md + dashboard_state.json
+          OUT_DIR="fred-cache/dashboard"
+          mkdir -p "${OUT_DIR}"
+
           python scripts/render_dashboard.py \
             --feed market_cache \
               --stats market_cache/stats_latest.json \
@@ -46,12 +48,11 @@ jobs:
               --history cache/history_lite.json \
               --dq cache/dq_state.json \
               --asof-field as_of_ts \
-            --state-file dashboard_state.json \
+            --state-file "${OUT_DIR}/dashboard_state.json" \
             --script-fingerprint render_dashboard_py_fix_history_autodetect_and_staleh_2026-01-18 \
-            --out dashboard.md
+            --out "${OUT_DIR}/dashboard.md"
 
-          # Optional: quick sanity checks (fail fast if output missing)
-          test -s dashboard.md
+          test -s "${OUT_DIR}/dashboard.md"
 
       - name: Configure git author
         shell: bash
@@ -65,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          git add dashboard.md dashboard_state.json || true
+          git add fred-cache/dashboard/dashboard.md fred-cache/dashboard/dashboard_state.json || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
@@ -79,7 +80,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Rebase + retry to avoid non-fast-forward in scheduled workflows
           for attempt in 1 2 3; do
             git pull --rebase origin main || true
 
