@@ -134,6 +134,8 @@ class Row:
     streak_wa: int
     source_url: str
     as_of_ts: str
+    # NEW: for JUMP_1of3_count auditing
+    jump_hits_3: int
 
 
 MODULE = "fred_cache"
@@ -156,9 +158,9 @@ NEAR_RATIO = 0.90
 STREAK_BASIS_TEXT = "distinct snapshots (snapshot_id); re-run same snapshot does not increment"
 
 # ----------------------------
-# NEW: ret1% guard (avoid blow-ups when prev is near 0)
+# ret1% guard (avoid blow-ups when prev is near 0)
 # ----------------------------
-RET1_DENOM_EPS = 1e-3  # safe default; prevents % explosion near zero
+RET1_DENOM_EPS = 1e-3  # prevents % explosion near zero
 RET1_GUARD_TEXT = "ret1% guard: if abs(prev_value)<1e-3 -> ret1%=NA (avoid near-zero denom blow-ups)"
 
 
@@ -240,7 +242,6 @@ def _compute_prev_window_metrics(
         prev_z60 = _zscore_ddof0(win, prev_val)
         prev_p60 = _percentile_le(win, prev_val)
 
-    # NEW: guarded ret1%
     if abs(prev_val) < RET1_DENOM_EPS:
         ret1_pct = None
     else:
@@ -260,11 +261,14 @@ def _near_flags(z_delta60: Optional[float], p_delta60: Optional[float], ret1_pct
     return "+".join(flags) if flags else "NA"
 
 
-def _jump_vote(
+# ----------------------------
+# NEW: expose "hits out of 3" for audit summary
+# ----------------------------
+def _jump_hits_3(
     z_delta60: Optional[float],
     p_delta60: Optional[float],
     ret1_pct: Optional[float]
-) -> Tuple[bool, List[str]]:
+) -> Tuple[int, List[str]]:
     hits = 0
     reasons: List[str] = []
     if z_delta60 is not None and abs(z_delta60) >= TH_ZDELTA:
@@ -276,7 +280,7 @@ def _jump_vote(
     if ret1_pct is not None and abs(ret1_pct) >= TH_RET1P:
         hits += 1
         reasons.append("abs(ret1%)>=2")
-    return (hits >= 2, reasons)
+    return hits, reasons
 
 
 def _signal_for_series(
@@ -285,7 +289,7 @@ def _signal_for_series(
     z_delta60: Optional[float],
     p_delta60: Optional[float],
     ret1_pct: Optional[float]
-) -> Tuple[str, str, str, str]:
+) -> Tuple[str, str, str, str, int]:
     reasons: List[str] = []
     signal = "NONE"
 
@@ -307,7 +311,8 @@ def _signal_for_series(
                 signal = "WATCH"
             reasons.append("abs(Z60)>=2")
 
-    jump_hit, jump_reasons = _jump_vote(z_delta60, p_delta60, ret1_pct)
+    jump_hits, jump_reasons = _jump_hits_3(z_delta60, p_delta60, ret1_pct)
+    jump_hit = (jump_hits >= 2)
     if jump_hit and signal != "ALERT":
         if signal in ("NONE", "INFO"):
             signal = "WATCH"
@@ -329,7 +334,7 @@ def _signal_for_series(
             tag = "JUMP_RET"
 
     reason = ";".join(reasons) if reasons else "NA"
-    return (signal, tag, near, reason)
+    return (signal, tag, near, reason, jump_hits)
 
 
 def _load_dash_history(path: str) -> Dict[str, Any]:
@@ -420,7 +425,6 @@ def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
 
 def _migrate_asof_to_commit(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    關鍵修正：
     若同一 (module, stats_as_of_ts) 同時存在：
       - 新格式(commit:...) item
       - 舊格式(asof:...) item
@@ -513,7 +517,6 @@ def _delta_signal(prev: str, curr: str) -> str:
 # ----------------------------
 # Alignment check
 # ----------------------------
-
 def _last_hist_value(series_hist: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[float]]:
     if not series_hist:
         return (None, None)
@@ -638,7 +641,7 @@ def main() -> None:
         z_delta60 = (z60 - prev_z60) if (z60 is not None and prev_z60 is not None) else None
         p_delta60 = (p60_latest - prev_p60) if (p60_latest is not None and prev_p60 is not None) else None
 
-        signal, tag, near, reason = _signal_for_series(z60, p252, z_delta60, p_delta60, ret1_pct)
+        signal, tag, near, reason, jump_hits_3 = _signal_for_series(z60, p252, z_delta60, p_delta60, ret1_pct)
 
         prev_signal = prev_map.get(sid, "NA")
         delta_signal = _delta_signal(prev_signal, signal)
@@ -652,6 +655,7 @@ def main() -> None:
             reason=reason, tag=tag, near=near, signal=signal,
             prev_signal=prev_signal, delta_signal=delta_signal, streak_wa=streak_wa,
             source_url=source_url, as_of_ts=stats_as_of_ts,
+            jump_hits_3=jump_hits_3,
         ))
         series_signals_out[sid] = signal
 
@@ -666,12 +670,23 @@ def main() -> None:
     changed_n = sum(1 for r in rows if r.delta_signal not in ("NA", "SAME"))
     watch_streak_ge3 = sum(1 for r in rows if r.signal == "WATCH" and r.streak_wa >= 3)
 
+    # ----------------------------
+    # NEW: Summary counters you requested
+    # ----------------------------
+    near_count = sum(1 for r in rows if r.near != "NA")
+    # "命中 1/3，但沒到 WATCH"：排除 WATCH/ALERT，保留 INFO/NONE
+    jump_1of3_count = sum(1 for r in rows if r.jump_hits_3 == 1 and r.signal not in ("WATCH", "ALERT"))
+
     order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     rows.sort(key=lambda r: (order.get(r.signal, 9), r.series))
 
     md: List[str] = []
     md.append(f"# Risk Dashboard ({MODULE})\n")
-    md.append(f"- Summary: ALERT={alert_n} / WATCH={watch_n} / INFO={info_n} / NONE={none_n}; CHANGED={changed_n}; WATCH_STREAK>=3={watch_streak_ge3}")
+    md.append(
+        f"- Summary: ALERT={alert_n} / WATCH={watch_n} / INFO={info_n} / NONE={none_n}; "
+        f"CHANGED={changed_n}; WATCH_STREAK>=3={watch_streak_ge3}; "
+        f"NEAR={near_count}; JUMP_1of3={jump_1of3_count}"
+    )
     md.append(f"- RUN_TS_UTC: `{run_ts_utc.isoformat()}`")
     md.append(f"- STATS.generated_at_utc: `{stats.get('generated_at_utc','NA')}`")
     md.append(f"- STATS.as_of_ts: `{stats_as_of_ts}`")
@@ -687,10 +702,8 @@ def main() -> None:
     md.append(f"- dash_history: `{OUT_HISTORY}`")
     md.append(f"- history_lite_used_for_jump: `{PATH_HISTORY_LITE}`")
 
-    # NEW: ret1 guard line (audit-friendly)
     md.append(f"- ret1_guard: `{RET1_GUARD_TEXT}`")
 
-    # alignment summary
     md.append(
         f"- alignment: `{align.get('alignment','NA')}`; checked={align.get('checked',0)}; "
         f"mismatch={align.get('mismatch',0)}; hl_missing={align.get('missing_hl',0)}"
