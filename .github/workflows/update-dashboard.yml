@@ -1,10 +1,10 @@
-name: Render Risk Dashboard (merged)
+name: Update Dashboard (MVP)
 
 on:
   workflow_dispatch: {}
   schedule:
-    # 11:50 Asia/Taipei = 03:50 UTC
-    - cron: "50 3 * * *"
+    # 23:10 Asia/Taipei = 15:10 UTC
+    - cron: "10 15 * * *"
 
 permissions:
   contents: write
@@ -14,9 +14,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  render:
+  dashboard:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -24,83 +24,37 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps (if requirements.txt exists)
+      - name: Render dashboard (market_cache)
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-
-      - name: Render dashboard (always to /dashboard)
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dashboard
           python scripts/render_dashboard.py \
-            --out dashboard/risk_dashboard_merged.md
+            --stats market_cache/stats_latest.json \
+            --history market_cache/history_lite.json \
+            --out-md dashboard/DASHBOARD.md \
+            --out-json dashboard/dashboard_latest.json \
+            --module market_cache \
+            --stale-hours 36
 
-      - name: Locate outputs (debug)
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "PWD=$(pwd)"
-          echo "---- dashboard listing ----"
-          ls -la dashboard || true
-          echo "---- find risk_dashboard_merged.md ----"
-          find . -maxdepth 4 -type f -name "risk_dashboard_merged.md" -print || true
-
-      - name: Show diff (debug)
-        shell: bash
-        run: |
-          set -euo pipefail
-          git status --porcelain || true
-          git diff -- dashboard/risk_dashboard_merged.md || true
-
-      - name: Commit changes (if any)
+      - name: Commit & push
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 先 add，才能捕捉「新檔案/未追蹤檔案」
-          git add dashboard/risk_dashboard_merged.md
+          git add dashboard/DASHBOARD.md dashboard/dashboard_latest.json
 
-          # 如果 staging 區沒有變更，就不 commit
           if git diff --cached --quiet; then
-            echo "No changes in dashboard output."
-            echo "DID_COMMIT=0" >> "$GITHUB_ENV"
+            echo "No changes"
             exit 0
           fi
 
-          git commit -m "dashboard: update merged risk dashboard"
-          echo "DID_COMMIT=1" >> "$GITHUB_ENV"
-
-      - name: Push with rebase-retry (only if committed)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ "${DID_COMMIT:-0}" != "1" ]; then
-            echo "No new commit created in this run; skip push."
-            exit 0
-          fi
-
-          for i in 1 2 3; do
-            if git push; then
-              exit 0
-            fi
-            echo "Push failed (attempt $i). Rebase and retry..."
-            git pull --rebase
-            sleep $((2 ** i))
-          done
-
-          echo "Push failed after retries."
-          exit 1
+          git commit -m "chore: update dashboard (mvp)"
+          git pull --rebase origin main
+          git push origin HEAD:main
