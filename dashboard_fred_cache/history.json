@@ -2,86 +2,6 @@
   "schema_version": "dash_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-01-18T11:56:36.608238+00:00",
-      "stats_as_of_ts": "2026-01-18T14:57:27+08:00",
-      "module": "fred_cache",
-      "series_signals": {
-        "DJIA": "NONE",
-        "NFCINONFINLEVERAGE": "NONE",
-        "SP500": "NONE",
-        "T10Y3M": "NONE",
-        "BAMLH0A0HYM2": "NONE",
-        "DCOILWTICO": "NONE",
-        "DGS10": "NONE",
-        "DGS2": "NONE",
-        "DTWEXBGS": "NONE",
-        "NASDAQCOM": "NONE",
-        "STLFSI4": "NONE",
-        "T10Y2Y": "NONE",
-        "VIXCLS": "NONE"
-      }
-    },
-    {
-      "run_ts_utc": "2026-01-18T12:36:14.547024+00:00",
-      "stats_as_of_ts": "2026-01-18T14:57:27+08:00",
-      "module": "fred_cache",
-      "series_signals": {
-        "STLFSI4": "WATCH",
-        "VIXCLS": "WATCH",
-        "BAMLH0A0HYM2": "NONE",
-        "DGS2": "NONE",
-        "DGS10": "NONE",
-        "DTWEXBGS": "NONE",
-        "DCOILWTICO": "WATCH",
-        "SP500": "NONE",
-        "NASDAQCOM": "NONE",
-        "DJIA": "NONE",
-        "NFCINONFINLEVERAGE": "WATCH",
-        "T10Y2Y": "WATCH",
-        "T10Y3M": "WATCH"
-      }
-    },
-    {
-      "run_ts_utc": "2026-01-18T13:02:33.215205+00:00",
-      "stats_as_of_ts": "2026-01-18T14:57:27+08:00",
-      "module": "fred_cache",
-      "series_signals": {
-        "BAMLH0A0HYM2": "NONE",
-        "DCOILWTICO": "WATCH",
-        "DGS10": "NONE",
-        "DGS2": "NONE",
-        "DJIA": "INFO",
-        "DTWEXBGS": "NONE",
-        "NASDAQCOM": "NONE",
-        "NFCINONFINLEVERAGE": "WATCH",
-        "SP500": "INFO",
-        "STLFSI4": "WATCH",
-        "T10Y2Y": "WATCH",
-        "T10Y3M": "WATCH",
-        "VIXCLS": "WATCH"
-      }
-    },
-    {
-      "run_ts_utc": "2026-01-18T13:08:36.712982+00:00",
-      "stats_as_of_ts": "2026-01-18T14:57:27+08:00",
-      "module": "fred_cache",
-      "series_signals": {
-        "BAMLH0A0HYM2": "NONE",
-        "DCOILWTICO": "WATCH",
-        "DGS10": "NONE",
-        "DGS2": "WATCH",
-        "DJIA": "INFO",
-        "DTWEXBGS": "WATCH",
-        "NASDAQCOM": "NONE",
-        "NFCINONFINLEVERAGE": "WATCH",
-        "SP500": "INFO",
-        "STLFSI4": "WATCH",
-        "T10Y2Y": "WATCH",
-        "T10Y3M": "WATCH",
-        "VIXCLS": "WATCH"
-      }
-    },
-    {
       "run_ts_utc": "2026-01-18T13:35:03.422560+00:00",
       "stats_as_of_ts": "2026-01-18T14:57:27+08:00",
       "module": "fred_cache",
@@ -105,6 +25,29 @@
       "run_ts_utc": "2026-01-18T13:43:07.472515+00:00",
       "stats_as_of_ts": "2026-01-18T21:40:12+08:00",
       "module": "fred_cache",
+      "series_signals": {
+        "BAMLH0A0HYM2": "NONE",
+        "DCOILWTICO": "WATCH",
+        "DGS10": "NONE",
+        "DGS2": "NONE",
+        "DJIA": "INFO",
+        "DTWEXBGS": "NONE",
+        "NASDAQCOM": "NONE",
+        "NFCINONFINLEVERAGE": "INFO",
+        "SP500": "INFO",
+        "STLFSI4": "WATCH",
+        "T10Y2Y": "NONE",
+        "T10Y3M": "WATCH",
+        "VIXCLS": "NONE"
+      }
+    },
+    {
+      "run_ts_utc": "2026-01-18T14:49:36.658723+00:00",
+      "module": "fred_cache",
+      "stats_as_of_ts": "2026-01-18T21:40:12+08:00",
+      "stats_generated_at_utc": "2026-01-18T13:40:15+00:00",
+      "data_commit_sha": "faf1d75aec4b45210ca7876e334027c7a10e7a11",
+      "snapshot_id": "commit:faf1d75aec4b45210ca7876e334027c7a10e7a11",
       "series_signals": {
         "BAMLH0A0HYM2": "NONE",
         "DCOILWTICO": "WATCH",
