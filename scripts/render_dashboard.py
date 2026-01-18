@@ -1,8 +1,36 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (v5.1: merge 2 feeds + Tag + Near + Streak)
-# Fix: history_lite.json top-level may be LIST (not dict). Build a robust history index.
+# Dashboard renderer (v5.2: merge 2 feeds + Tag + Near + Streak)
+#
+# Fixes included:
+# - history_lite.json top-level may be LIST (not dict)
+# - history list rows may have value as STRING (e.g. "2.68") -> parse to float
+# - robust parsing + never crash run (streak degrades to NA/0)
+#
+# Inputs:
+#   Feed1 (primary): --stats market_cache/stats_latest.json --history market_cache/history_lite.json
+#   Feed2 (secondary): --stats2 cache/stats_latest.json --history2 cache/history_lite.json
+#
+# Output:
+#   - dashboard/DASHBOARD.md
+#   - dashboard/dashboard_latest.json
+#
+# Signals (改法 B):
+# - Extreme: |Z60|>=2 (WATCH), |Z60|>=2.5 (ALERT)
+# - Long extreme: P252>=95 or <=5 (WATCH/INFO), very low tail P252<=2 (ALERT)
+# - Jump: |ZΔ60|>=0.75 OR |PΔ60|>=15 OR |ret1%60|>=2
+# - Near: within 10% of jump thresholds (but not crossing)
+# - INFO if only long-extreme and no jump and |Z60|<2
+#
+# Streak:
+# - PrevSignal: previous point's derived signal
+# - StreakWA: consecutive points (from latest backwards) that are WATCH/ALERT
+#
+# Audit note:
+# - Today signal uses stats_latest.json metrics (authoritative)
+# - PrevSignal/Streak are recomputed from history_lite values using same signal rules
+#   with rolling windows W60/W252 on last N points.
 
 import argparse
 import json
@@ -16,26 +44,36 @@ from typing import Any, Dict, List, Optional, Tuple
 # -------------------------
 DEFAULT_STALE_HOURS = 36.0
 
+# Per-series stale-hour overrides (avoid turning slow-updating series into constant STALE)
 STALE_OVERRIDES_HOURS: Dict[str, float] = {
-    "STLFSI4": 240.0,
-    "NFCINONFINLEVERAGE": 240.0,
-    "BAMLH0A0HYM2": 72.0,
+    "STLFSI4": 240.0,              # 10 days
+    "NFCINONFINLEVERAGE": 240.0,   # 10 days
+    "BAMLH0A0HYM2": 72.0,          # 3 days
+    # If curve series often stale in practice, consider 72h:
+    # "T10Y2Y": 72.0,
+    # "T10Y3M": 72.0,
 }
 
+# Extreme thresholds
 Z60_WATCH_ABS = 2.0
 Z60_ALERT_ABS = 2.5
 
 P252_EXTREME_HI = 95.0
 P252_EXTREME_LO = 5.0
-P252_ALERT_LO = 2.0
+P252_ALERT_LO = 2.0  # very extreme low tail
 
+# Jump thresholds
 ZDELTA60_JUMP_ABS = 0.75
 PDELTA60_JUMP_ABS = 15.0
-RET1PCT60_JUMP_ABS = 2.0
+RET1PCT60_JUMP_ABS = 2.0  # percent units
 
-NEAR_FRAC = 0.10
+# Near window: within X% of threshold
+NEAR_FRAC = 0.10  # 10%
+
+# Streak lookback
 STREAK_LOOKBACK_MAX = 30
 
+# Local recompute windows (match your stats policy)
 W60 = 60
 W252 = 252
 
@@ -111,6 +149,23 @@ def get_w(series_obj: Dict[str, Any], key: str) -> Dict[str, Any]:
     return wk if isinstance(wk, dict) else {}
 
 
+def to_float_or_none(v: Any) -> Optional[float]:
+    """Accept numeric or numeric-string; reject '.', '', None, non-numeric."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        s = v.strip()
+        if s in ("", ".", "NA", "N/A", "null", "None"):
+            return None
+        try:
+            return float(s)
+        except Exception:
+            return None
+    return None
+
+
 # -------------------------
 # Signal logic
 # -------------------------
@@ -130,6 +185,7 @@ def compute_signal_tag_near_from_metrics(
     apd = safe_abs(pdel60)
     ar1p = safe_abs(ret1pct60)
 
+    # Extreme checks
     z60_watch = False
     z60_alert = False
     if az60 is not None:
@@ -160,6 +216,7 @@ def compute_signal_tag_near_from_metrics(
 
     long_extreme_only = (p252_hi or p252_lo) and (not z60_watch)
 
+    # Jump checks
     jump_hits = 0
     has_zdelta_jump = False
 
@@ -188,6 +245,7 @@ def compute_signal_tag_near_from_metrics(
         if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
             nears.append("NEAR:ret1%60")
 
+    # Level assignment (改法 B)
     if long_extreme_only and jump_hits == 0:
         level = "INFO"
     else:
@@ -200,6 +258,7 @@ def compute_signal_tag_near_from_metrics(
 
     reason_str = ";".join(reasons) if reasons else "NA"
 
+    # Dedup tags preserving order
     seen = set()
     tags2: List[str] = []
     for t in tags:
@@ -213,32 +272,33 @@ def compute_signal_tag_near_from_metrics(
 
 
 # -------------------------
-# history_lite: build index (supports dict OR list top-level)
+# history_lite: build index (supports dict OR list top-level, string values)
 # -------------------------
 def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
     pts: List[Tuple[str, float]] = []
     for it in arr:
         if isinstance(it, dict):
-            d = it.get("date") or it.get("data_date") or it.get("d")
-            v = it.get("value") if "value" in it else it.get("v")
-            if isinstance(d, str) and isinstance(v, (int, float)):
-                pts.append((d, float(v)))
+            d = it.get("date") or it.get("data_date") or it.get("d") or it.get("Date")
+            raw_v = it.get("value") if "value" in it else it.get("v") or it.get("Value")
+            fv = to_float_or_none(raw_v)
+            if isinstance(d, str) and fv is not None:
+                pts.append((d, fv))
         elif isinstance(it, (list, tuple)) and len(it) >= 2:
-            d, v = it[0], it[1]
-            if isinstance(d, str) and isinstance(v, (int, float)):
-                pts.append((d, float(v)))
+            d, raw_v = it[0], it[1]
+            fv = to_float_or_none(raw_v)
+            if isinstance(d, str) and fv is not None:
+                pts.append((d, fv))
     pts.sort(key=lambda x: x[0])
     return pts
 
 
 def build_history_index(history_obj: Any) -> Dict[str, List[Tuple[str, float]]]:
     """
-    Returns: { series_id: [(date, value), ...] } sorted by date.
+    Returns {series_id: [(date, value), ...]} sorted by date.
     Supports:
       - dict with {"series": {sid: [...] / {...}}}
-      - list of rows like [{"series_id": "...", "date": "...", "value": ...}, ...]
-      - list of rows like [{"series":"...", "d":"...", "v":...}, ...]
-    Unknown schema -> empty dict.
+      - list of rows like [{"series_id": "...", "data_date": "...", "value": "2.68"}, ...]
+      - list of rows like [{"series":"...", "d":"...", "v":"..."}, ...]
     """
     idx: Dict[str, List[Tuple[str, float]]] = {}
 
@@ -259,8 +319,9 @@ def build_history_index(history_obj: Any) -> Dict[str, List[Tuple[str, float]]]:
                         if all(isinstance(k, str) for k in s.keys()):
                             tmp: List[Tuple[str, float]] = []
                             for k, v in s.items():
-                                if isinstance(v, (int, float)):
-                                    tmp.append((k, float(v)))
+                                fv = to_float_or_none(v)
+                                if fv is not None:
+                                    tmp.append((k, fv))
                             tmp.sort(key=lambda x: x[0])
                             pts = tmp
                 elif isinstance(s, list):
@@ -277,11 +338,11 @@ def build_history_index(history_obj: Any) -> Dict[str, List[Tuple[str, float]]]:
                 continue
             sid = it.get("series_id") or it.get("series") or it.get("id") or it.get("Series")
             d = it.get("date") or it.get("data_date") or it.get("d") or it.get("Date")
-            v = it.get("value") if "value" in it else it.get("v") or it.get("Value")
-            if isinstance(sid, str) and isinstance(d, str) and isinstance(v, (int, float)):
-                idx.setdefault(sid, []).append((d, float(v)))
+            raw_v = it.get("value") if "value" in it else (it.get("v") if "v" in it else it.get("Value"))
+            fv = to_float_or_none(raw_v)
+            if isinstance(sid, str) and isinstance(d, str) and fv is not None:
+                idx.setdefault(sid, []).append((d, fv))
 
-        # sort each series by date
         for sid, pts in idx.items():
             pts.sort(key=lambda x: x[0])
         return idx
@@ -385,12 +446,14 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- FEED1.stats: `{meta.get('feed1_stats','')}`")
     lines.append(f"- FEED1.history: `{meta.get('feed1_history','')}`")
     lines.append(f"- FEED1.history_schema: `{meta.get('feed1_history_schema','')}`")
+    lines.append(f"- FEED1.history_series_count: `{meta.get('feed1_history_series_count','')}`")
     lines.append(f"- FEED1.as_of_ts: `{meta.get('feed1_as_of_ts','')}`")
     lines.append(f"- FEED1.generated_at_utc: `{meta.get('feed1_generated_at_utc','')}`")
     lines.append(f"- FEED1.script_version: `{meta.get('feed1_script_version','')}`")
     lines.append(f"- FEED2.stats: `{meta.get('feed2_stats','')}`")
     lines.append(f"- FEED2.history: `{meta.get('feed2_history','')}`")
     lines.append(f"- FEED2.history_schema: `{meta.get('feed2_history_schema','')}`")
+    lines.append(f"- FEED2.history_series_count: `{meta.get('feed2_history_series_count','')}`")
     lines.append(f"- FEED2.as_of_ts: `{meta.get('feed2_as_of_ts','')}`")
     lines.append(f"- FEED2.generated_at_utc: `{meta.get('feed2_generated_at_utc','')}`")
     lines.append(f"- FEED2.script_version: `{meta.get('feed2_script_version','')}`")
@@ -476,7 +539,7 @@ def main() -> None:
         return
 
     hist1_index = build_history_index(hist1_raw)
-    hist2_index = build_history_index(hist2_raw) if stats2 is not None else {}
+    hist2_index = build_history_index(hist2_raw) if isinstance(stats2, dict) else {}
 
     meta = {
         "run_ts_utc": run_ts.isoformat(),
@@ -485,12 +548,14 @@ def main() -> None:
         "feed1_stats": args.stats,
         "feed1_history": args.history,
         "feed1_history_schema": type(hist1_raw).__name__ if hist1_raw is not None else "None",
+        "feed1_history_series_count": len(hist1_index),
         "feed1_as_of_ts": stats1.get("as_of_ts"),
         "feed1_generated_at_utc": stats1.get("generated_at_utc"),
         "feed1_script_version": stats1.get("script_version"),
         "feed2_stats": args.stats2 or "NA",
         "feed2_history": args.history2 or "NA",
         "feed2_history_schema": type(hist2_raw).__name__ if hist2_raw is not None else "None",
+        "feed2_history_series_count": len(hist2_index),
         "feed2_as_of_ts": (stats2.get("as_of_ts") if isinstance(stats2, dict) else None),
         "feed2_generated_at_utc": (stats2.get("generated_at_utc") if isinstance(stats2, dict) else None),
         "feed2_script_version": (stats2.get("script_version") if isinstance(stats2, dict) else None),
@@ -565,6 +630,11 @@ def main() -> None:
             "streak_wa": streak,
         })
 
+    # Sorting:
+    # 1) Signal: ALERT, WATCH, INFO, NONE
+    # 2) For WATCH: Near!=NA first, then higher streak first
+    # 3) DQ: MISSING, STALE, OK
+    # 4) Feed: market_cache first, then series
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
     feed_order = {"market_cache": 0, "cache": 1}
