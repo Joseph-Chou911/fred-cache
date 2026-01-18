@@ -143,7 +143,7 @@ PATH_HISTORY_LITE = "cache/history_lite.json"
 PATH_DQ_STATE = "cache/dq_state.json"  # optional
 
 OUT_DIR = "dashboard_fred_cache"
-OUT_MD = os.path.join(OUT_DIR, "dashboard.md")   # dashboard.md
+OUT_MD = os.path.join(OUT_DIR, "dashboard.md")
 OUT_HISTORY = os.path.join(OUT_DIR, "history.json")
 
 STALE_HOURS_DEFAULT = 72.0
@@ -151,8 +151,6 @@ STALE_HOURS_DEFAULT = 72.0
 TH_ZDELTA = 0.75
 TH_PDELTA = 20.0
 TH_RET1P = 2.0
-
-# NEAR_RATIO = 0.90 means "within 10% of thresholds"
 NEAR_RATIO = 0.90
 
 
@@ -330,57 +328,98 @@ def _load_dash_history(path: str) -> Dict[str, Any]:
     return {"schema_version": "dash_history_v1", "items": []}
 
 
-def _snapshot_key(it: Dict[str, Any]) -> Tuple[str, str, str]:
-    """
-    Key used to collapse reruns of the SAME snapshot.
-    We intentionally ignore run_ts_utc. We care about the data snapshot identity.
-    """
-    module = str(it.get("module") or "")
-    asof = str(it.get("stats_as_of_ts") or "")
-    ss = it.get("series_signals")
-    if not isinstance(ss, dict):
-        ss = {}
-    ss_norm = json.dumps(ss, sort_keys=True, ensure_ascii=False)
-    return (module, asof, ss_norm)
+def _get_data_commit_sha(stats: Any) -> Optional[str]:
+    # try multiple layouts (root/meta/stats_policy etc.)
+    try:
+        if isinstance(stats, dict):
+            v = stats.get("data_commit_sha")
+            if isinstance(v, str) and v:
+                return v
+            meta = stats.get("meta")
+            if isinstance(meta, dict):
+                v = meta.get("data_commit_sha")
+                if isinstance(v, str) and v:
+                    return v
+    except Exception:
+        pass
+    return None
 
 
-def _normalize_history_inplace(hist_obj: Dict[str, Any]) -> bool:
-    """
-    Compress consecutive duplicate snapshots so reruns do not inflate streak.
-    Also removes earlier duplicates across the file (keeps first occurrence per key order).
-    Returns True if modified.
-    """
-    items = hist_obj.get("items")
-    if not isinstance(items, list) or not items:
-        return False
+def _get_stats_generated_at_utc(stats: Any) -> Optional[str]:
+    try:
+        if isinstance(stats, dict):
+            v = stats.get("generated_at_utc")
+            if isinstance(v, str) and v:
+                return v
+            meta = stats.get("meta")
+            if isinstance(meta, dict):
+                v = meta.get("generated_at_utc")
+                if isinstance(v, str) and v:
+                    return v
+    except Exception:
+        pass
+    return None
 
-    new_items: List[Dict[str, Any]] = []
-    seen: set[Tuple[str, str, str]] = set()
 
+def _make_snapshot_id(stats_as_of_ts: str, stats_generated_at_utc: Optional[str], data_commit_sha: Optional[str]) -> str:
+    # priority: commit sha > generated_at_utc > as_of_ts
+    if data_commit_sha:
+        return f"commit:{data_commit_sha}"
+    if stats_generated_at_utc:
+        return f"gen:{stats_generated_at_utc}"
+    return f"asof:{stats_as_of_ts}"
+
+
+def _item_snapshot_id(item: Dict[str, Any]) -> str:
+    # backward compatible for old history items
+    if isinstance(item.get("snapshot_id"), str) and item["snapshot_id"]:
+        return item["snapshot_id"]
+    dc = item.get("data_commit_sha")
+    if isinstance(dc, str) and dc:
+        return f"commit:{dc}"
+    gen = item.get("stats_generated_at_utc")
+    if isinstance(gen, str) and gen:
+        return f"gen:{gen}"
+    asof = item.get("stats_as_of_ts")
+    if isinstance(asof, str) and asof:
+        return f"asof:{asof}"
+    return "asof:NA"
+
+
+def _item_key(item: Dict[str, Any]) -> Tuple[str, str]:
+    module = str(item.get("module") or "NA")
+    snap = _item_snapshot_id(item)
+    return (module, snap)
+
+
+def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
+    # keep order but upsert by (module, snapshot_id) so reruns don't inflate history
+    key_order: List[Tuple[str, str]] = []
+    last_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for it in items:
         if not isinstance(it, dict):
             continue
-        k = _snapshot_key(it)
-        # If you want to only collapse consecutive duplicates (not global),
-        # replace `seen` logic with `last_k` comparison.
-        if k in seen:
-            continue
-        seen.add(k)
-        new_items.append(it)
-
-    if len(new_items) != len(items):
-        hist_obj["items"] = new_items
-        hist_obj["schema_version"] = "dash_history_v1"
-        return True
-    return False
+        k = _item_key(it)
+        if k not in last_by_key:
+            key_order.append(k)
+        last_by_key[k] = it
+    return [last_by_key[k] for k in key_order]
 
 
-def _prev_signal_from_history(hist_obj: Dict[str, Any]) -> Dict[str, str]:
+def _prev_signal_from_history(hist_obj: Dict[str, Any], exclude_key: Tuple[str, str]) -> Dict[str, str]:
     items = hist_obj.get("items", [])
     if not isinstance(items, list) or not items:
         return {}
-    last = items[-1]
-    if not isinstance(last, dict):
+    # use normalized items
+    norm = _normalize_history_items(items)
+    # find last item whose key != exclude_key
+    last: Optional[Dict[str, Any]] = None
+    for it in reversed(norm):
+        if _item_key(it) == exclude_key:
+            continue
+        last = it
+        break
+    if not last:
         return {}
     series_signals = last.get("series_signals")
     if isinstance(series_signals, dict):
@@ -388,15 +427,18 @@ def _prev_signal_from_history(hist_obj: Dict[str, Any]) -> Dict[str, str]:
     return {}
 
 
-def _compute_streak(prev_hist_obj: Dict[str, Any], series: str, today_signal: str) -> int:
+def _compute_streak(hist_obj: Dict[str, Any], series: str, today_signal: str, exclude_key: Tuple[str, str]) -> int:
+    # streak should be counted on distinct snapshots only; reruns of same snapshot must not inflate streak
     if today_signal != "WATCH":
         return 0
-    items = prev_hist_obj.get("items", [])
+    items = hist_obj.get("items", [])
     if not isinstance(items, list) or not items:
         return 1
+    norm = _normalize_history_items(items)
+
     streak = 0
-    for it in reversed(items):
-        if not isinstance(it, dict):
+    for it in reversed(norm):
+        if _item_key(it) == exclude_key:
             continue
         ss = it.get("series_signals")
         if not isinstance(ss, dict):
@@ -417,25 +459,17 @@ def _delta_signal(prev: str, curr: str) -> str:
     return f"{prev}→{curr}"
 
 
-def _should_append_history(hist_obj: Dict[str, Any], new_item: Dict[str, Any]) -> bool:
-    """
-    Idempotent append: if last entry represents the same snapshot, don't append.
-    """
-    items = hist_obj.get("items", [])
-    if not isinstance(items, list) or not items:
-        return True
-    last = items[-1]
-    if not isinstance(last, dict):
-        return True
-    return _snapshot_key(last) != _snapshot_key(new_item)
-
-
 def main() -> None:
     run_ts_utc = datetime.now(timezone.utc)
 
     stats = _load_json(PATH_STATS)
-    stats_generated = _parse_dt(str(stats.get("generated_at_utc") or ""))
     stats_as_of_ts = str(stats.get("as_of_ts") or "NA")
+    stats_generated_at_utc = _get_stats_generated_at_utc(stats)  # string
+    data_commit_sha = _get_data_commit_sha(stats)  # string
+    snapshot_id = _make_snapshot_id(stats_as_of_ts, stats_generated_at_utc, data_commit_sha)
+    current_hist_key = (MODULE, snapshot_id)
+
+    stats_generated = _parse_dt(str(stats.get("generated_at_utc") or ""))
     script_version = str(stats.get("stats_policy", {}).get("script_version") or stats.get("script_version") or "NA")
 
     series_map = stats.get("series", {})
@@ -451,13 +485,12 @@ def main() -> None:
     hl_recs = _load_ndjson_or_json_array(PATH_HISTORY_LITE) if os.path.exists(PATH_HISTORY_LITE) else []
     hl_by = _group_history_lite(hl_recs)
 
-    # Load history then normalize BEFORE computing streak
     hist_obj = _load_dash_history(OUT_HISTORY)
-    modified = _normalize_history_inplace(hist_obj)
-    if modified:
-        _write_text(OUT_HISTORY, json.dumps(hist_obj, ensure_ascii=False, indent=2) + "\n")
+    # normalize in-memory to reduce noise
+    if isinstance(hist_obj.get("items"), list):
+        hist_obj["items"] = _normalize_history_items(hist_obj["items"])
 
-    prev_map = _prev_signal_from_history(hist_obj)
+    prev_map = _prev_signal_from_history(hist_obj, exclude_key=current_hist_key)
 
     rows: List[Row] = []
     series_signals_out: Dict[str, str] = {}
@@ -486,7 +519,7 @@ def main() -> None:
 
         prev_signal = prev_map.get(sid, "NA")
         delta_signal = _delta_signal(prev_signal, signal)
-        streak_wa = _compute_streak(hist_obj, sid, signal)
+        streak_wa = _compute_streak(hist_obj, sid, signal, exclude_key=current_hist_key)
 
         dq = dq_map.get(sid, "OK")
 
@@ -519,6 +552,11 @@ def main() -> None:
     md.append(f"- RUN_TS_UTC: `{run_ts_utc.isoformat()}`")
     md.append(f"- STATS.generated_at_utc: `{stats.get('generated_at_utc','NA')}`")
     md.append(f"- STATS.as_of_ts: `{stats_as_of_ts}`")
+    if stats_generated_at_utc:
+        md.append(f"- STATS.generated_at_utc(norm): `{stats_generated_at_utc}`")
+    if data_commit_sha:
+        md.append(f"- STATS.data_commit_sha: `{data_commit_sha}`")
+    md.append(f"- snapshot_id: `{snapshot_id}`")
     md.append(f"- script_version: `{script_version}`")
     md.append(f"- stale_hours: `{STALE_HOURS_DEFAULT}`")
     md.append(f"- dash_history: `{OUT_HISTORY}`")
@@ -551,11 +589,14 @@ def main() -> None:
 
     _write_text(OUT_MD, "\n".join(md) + "\n")
 
-    # Idempotent append using snapshot identity
+    # --- history upsert (dedupe by snapshot_id) ---
     new_item = {
         "run_ts_utc": run_ts_utc.isoformat(),
-        "stats_as_of_ts": stats_as_of_ts,
         "module": MODULE,
+        "stats_as_of_ts": stats_as_of_ts,
+        "stats_generated_at_utc": stats_generated_at_utc or None,
+        "data_commit_sha": data_commit_sha or None,
+        "snapshot_id": snapshot_id,
         "series_signals": series_signals_out,
     }
 
@@ -563,11 +604,27 @@ def main() -> None:
     if not isinstance(items, list):
         items = []
 
-    if _should_append_history(hist_obj, new_item):
-        items.append(new_item)
+    # upsert: keep order of first appearance, but overwrite latest for same key
+    key_order: List[Tuple[str, str]] = []
+    last_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        k = _item_key(it)
+        if k not in last_by_key:
+            key_order.append(k)
+        last_by_key[k] = it
+
+    new_k = (MODULE, snapshot_id)
+    if new_k not in last_by_key:
+        key_order.append(new_k)
+    last_by_key[new_k] = new_item
+
+    norm_items = [last_by_key[k] for k in key_order]
 
     hist_obj["schema_version"] = "dash_history_v1"
-    hist_obj["items"] = items
+    hist_obj["items"] = norm_items
     _write_text(OUT_HISTORY, json.dumps(hist_obj, ensure_ascii=False, indent=2) + "\n")
 
 
