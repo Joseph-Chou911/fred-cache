@@ -153,6 +153,8 @@ TH_PDELTA = 20.0
 TH_RET1P = 2.0
 NEAR_RATIO = 0.90
 
+STREAK_BASIS_TEXT = "distinct snapshots (snapshot_id); re-run same snapshot does not increment"
+
 
 def _load_dq_map() -> Dict[str, str]:
     if not os.path.exists(PATH_DQ_STATE):
@@ -410,7 +412,6 @@ def _migrate_asof_to_commit(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]
       - 舊格式(asof:...) item
     則把舊格式 item 補上 snapshot_id=commit:<sha>，讓 normalize/upsert 能收斂。
     """
-    # build mapping (module, stats_as_of_ts) -> commit_snapshot_id + sha
     m: Dict[Tuple[str, str], Tuple[str, str]] = {}
     for it in items:
         if not isinstance(it, dict):
@@ -430,7 +431,6 @@ def _migrate_asof_to_commit(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     for it in items:
         if not isinstance(it, dict):
             continue
-        # only migrate legacy ones without snapshot_id
         if isinstance(it.get("snapshot_id"), str) and it["snapshot_id"]:
             continue
         module = str(it.get("module") or "NA")
@@ -524,7 +524,6 @@ def main() -> None:
 
     hist_obj = _load_dash_history(OUT_HISTORY)
     if isinstance(hist_obj.get("items"), list):
-        # 先 migration：把同 as_of 的舊條目改成 commit key
         migrated = _migrate_asof_to_commit([x for x in hist_obj["items"] if isinstance(x, dict)])
         hist_obj["items"] = _normalize_history_items(migrated)
 
@@ -595,6 +594,8 @@ def main() -> None:
     if data_commit_sha:
         md.append(f"- STATS.data_commit_sha: `{data_commit_sha}`")
     md.append(f"- snapshot_id: `{snapshot_id}`")
+    md.append(f"- streak_basis: `{STREAK_BASIS_TEXT}`")
+    md.append(f"- streak_calc: `basis=snapshot_id; consecutive WATCH across prior distinct snapshots; re-run same snapshot excluded`")
     md.append(f"- script_version: `{script_version}`")
     md.append(f"- stale_hours: `{STALE_HOURS_DEFAULT}`")
     md.append(f"- dash_history: `{OUT_HISTORY}`")
@@ -641,7 +642,6 @@ def main() -> None:
     if not isinstance(items, list):
         items = []
 
-    # upsert by (module, snapshot_id)
     key_order: List[Tuple[str, str]] = []
     last_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
