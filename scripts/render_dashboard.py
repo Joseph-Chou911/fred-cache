@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP+signals v6: Tag + Near + Streak from dashboard history)
+# Dashboard renderer (MVP+signals v7: Tag + Near + PrevSignal/Streak from dashboard history + DeltaSignal)
 #
 # Inputs:
 #   - stats_latest.json (authoritative metrics for "today")
@@ -18,6 +18,11 @@
 # Streak logic (authoritative):
 #   - PrevSignal: most recent historical signal for the same series (from dashboard/history.json)
 #   - StreakWA: consecutive count of WATCH/ALERT including TODAY, based on history + today's signal
+#
+# DeltaSignal:
+#   - if PrevSignal == "NA" -> "NA"
+#   - else if PrevSignal == today -> "SAME"
+#   - else -> f"{PrevSignal}→{today}"
 #
 # Markdown table safety:
 #   - Escape '|' as '&#124;' and newlines as '<br>' for all cells.
@@ -224,7 +229,6 @@ def load_dashboard_history(path: Optional[str]) -> List[Dict[str, Any]]:
             obj = json.load(f)
         items = obj.get("items", [])
         if isinstance(items, list):
-            # Keep only dict snapshots
             snaps = [x for x in items if isinstance(x, dict)]
             return snaps[-STREAK_HISTORY_MAX:]
         return []
@@ -233,12 +237,7 @@ def load_dashboard_history(path: Optional[str]) -> List[Dict[str, Any]]:
 
 
 def build_series_signal_timeline(history_snaps: List[Dict[str, Any]], module: str) -> Dict[str, List[str]]:
-    """
-    Returns {series_id: [signal1, signal2, ...]} in chronological order,
-    filtered to the same module.
-    """
     timeline: Dict[str, List[str]] = {}
-
     for snap in history_snaps:
         if snap.get("module") != module:
             continue
@@ -246,12 +245,8 @@ def build_series_signal_timeline(history_snaps: List[Dict[str, Any]], module: st
         if not isinstance(sigs, dict):
             continue
         for sid, sig in sigs.items():
-            if not isinstance(sid, str):
-                continue
-            if not isinstance(sig, str):
-                continue
-            timeline.setdefault(sid, []).append(sig)
-
+            if isinstance(sid, str) and isinstance(sig, str):
+                timeline.setdefault(sid, []).append(sig)
     return timeline
 
 
@@ -260,10 +255,6 @@ def compute_prev_and_streak_from_history(
     today_signal: str,
     timeline: Dict[str, List[str]],
 ) -> Tuple[str, int]:
-    """
-    PrevSignal = last historical signal (if any)
-    StreakWA = consecutive count of WATCH/ALERT including today
-    """
     hist = timeline.get(sid, [])
     prev = hist[-1] if len(hist) >= 1 else "NA"
 
@@ -271,13 +262,20 @@ def compute_prev_and_streak_from_history(
         return prev, 0
 
     streak = 1
-    # Count backwards in history while WATCH/ALERT
     for s in reversed(hist):
         if s in ("WATCH", "ALERT"):
             streak += 1
         else:
             break
     return prev, streak
+
+
+def compute_delta_signal(prev: str, today: str) -> str:
+    if prev == "NA" or prev is None or prev == "":
+        return "NA"
+    if prev == today:
+        return "SAME"
+    return f"{prev}→{today}"
 
 
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
@@ -309,7 +307,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append("")
 
     header = [
-        "Signal", "Tag", "Near", "PrevSignal", "StreakWA",
+        "Signal", "Tag", "Near", "PrevSignal", "DeltaSignal", "StreakWA",
         "Series", "DQ", "age_h",
         "data_date", "value",
         "z60", "p252",
@@ -325,6 +323,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             md_escape_cell(r.get("tag", "NA")),
             md_escape_cell(r.get("near", "NA")),
             md_escape_cell(r.get("prev_signal", "NA")),
+            md_escape_cell(r.get("delta_signal", "NA")),
             md_escape_cell(fmt(r.get("streak_wa"), nd=0)),
             md_escape_cell(r.get("series", "")),
             md_escape_cell(r.get("dq", "")),
@@ -372,7 +371,6 @@ def main() -> None:
     with open(args.stats, "r", encoding="utf-8") as f:
         stats = json.load(f)
 
-    # Load dashboard history (past signals)
     history_snaps = load_dashboard_history(args.dash_history)
     timeline = build_series_signal_timeline(history_snaps, args.module)
 
@@ -405,7 +403,6 @@ def main() -> None:
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
         dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, args.stale_hours)
 
-        # Today's signal based on stats_latest metrics (authoritative)
         signal_level, reason, tag, near = compute_signal_tag_near_from_metrics(
             z60=w60.get("z"),
             p252=w252.get("p"),
@@ -420,6 +417,8 @@ def main() -> None:
             timeline=timeline,
         )
 
+        delta_signal = compute_delta_signal(prev_signal, signal_level)
+
         row: Dict[str, Any] = {
             "module": args.module,
             "series": sid,
@@ -430,32 +429,25 @@ def main() -> None:
             "dq": dq,
             "age_hours": age_hours,
 
-            # short window stats (w60)
             "z60": w60.get("z"),
             "ret1_pct_60": w60.get("ret1_pct"),
             "z_delta_60": w60.get("z_delta"),
             "p_delta_60": w60.get("p_delta"),
 
-            # long window stats (w252)
             "p252": w252.get("p"),
 
-            # signals
             "signal_level": signal_level,
             "reason": reason,
             "tag": tag,
             "near": near,
 
-            # streak
             "prev_signal": prev_signal,
+            "delta_signal": delta_signal,
             "streak_wa": streak_wa,
         }
         rows.append(row)
 
     # Sorting:
-    # 1) Signal (ALERT, WATCH, INFO, NONE)
-    # 2) For WATCH only: Near!=NA first, then higher streak first
-    # 3) DQ (MISSING, STALE, OK)
-    # 4) series name
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
 
@@ -470,8 +462,18 @@ def main() -> None:
         except Exception:
             return 0
 
+    # Optional: prioritize changes first inside same signal bucket
+    def delta_rank(r: Dict[str, Any]) -> int:
+        d = r.get("delta_signal")
+        if d == "NA":
+            return 2
+        if d == "SAME":
+            return 1
+        return 0  # changed
+
     rows.sort(key=lambda r: (
         sig_order.get(r.get("signal_level", "NONE"), 9),
+        delta_rank(r),
         watch_near_rank(r),
         streak_rank(r),
         dq_order.get(r.get("dq", "OK"), 9),
