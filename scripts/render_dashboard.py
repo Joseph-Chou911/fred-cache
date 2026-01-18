@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP+signals v4: Tag + Near + Streak from history_lite)
+# Dashboard renderer (v5: merge 2 feeds + Tag + Near + Streak)
 #
-# Inputs:
-#   - stats_latest.json (current day computed stats + sources)
-#   - history_lite.json (time series values) -> used to compute PrevSignal + StreakWA
+# Primary intent: keep the "fast dashboard" design, but allow adding essential macro series
+# without changing upstream pipelines:
+#   - Feed A: market_cache (stats_latest.json + history_lite.json)
+#   - Feed B: cache (FRED) (stats_latest.json + history_lite.json)
+#
+# Output:
+#   - dashboard/DASHBOARD.md
+#   - dashboard/dashboard_latest.json
 #
 # Signals: ALERT / WATCH / INFO / NONE (改法 B)
 # Tags: EXTREME_Z / JUMP_ZD / JUMP_P / JUMP_RET / LONG_EXTREME
 # Near: within 10% of jump thresholds (but not crossing)
+# StreakWA: consecutive points (from latest backwards) that are WATCH/ALERT
+# PrevSignal: signal at previous point
 #
-# IMPORTANT (audit note):
-#   - PrevSignal/StreakWA are computed locally from history_lite values by re-deriving:
-#       z60, p252, zΔ60, pΔ60, ret1%60
-#     then applying the same signal rules.
-#   - ret1% uses denom = abs(prev_value) when prev_value != 0; otherwise NA.
-#     This may differ from upstream edge-case handling when prev is near 0.
+# Audit notes:
+#   - "today" signal is computed from stats_latest.json (authoritative for that feed).
+#   - PrevSignal/Streak are computed locally from history_lite values by re-deriving:
+#       z60, p252, zΔ60, pΔ60, ret1%  then applying the same signal rules.
+#   - ret1% denom = abs(prev_value) else NA.
 #
 # DQ:
-#   - OK / STALE / MISSING based on latest.as_of_ts age
+#   - OK / STALE / MISSING based on latest.as_of_ts age and per-series stale overrides.
 
 import argparse
 import json
@@ -29,9 +35,20 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 # -------------------------
-# Tunables (defaults)
+# Tunables
 # -------------------------
 DEFAULT_STALE_HOURS = 36.0
+
+# Per-series stale-hour overrides (to avoid ruining fast dashboard with slow-updating series)
+# Adjust as you observe real update cadence.
+STALE_OVERRIDES_HOURS: Dict[str, float] = {
+    # weekly-ish / slower:
+    "STLFSI4": 240.0,              # 10 days
+    "NFCINONFINLEVERAGE": 240.0,   # 10 days
+    # credit spread can be delayed sometimes; slightly looser than fast feed default:
+    "BAMLH0A0HYM2": 72.0,          # 3 days
+    # others (T10Y2Y, T10Y3M) keep default 36h unless you see frequent false STALE.
+}
 
 # Extreme thresholds
 Z60_WATCH_ABS = 2.0
@@ -49,14 +66,17 @@ RET1PCT60_JUMP_ABS = 2.0  # percent units
 # Near window: within X% of threshold
 NEAR_FRAC = 0.10  # 10%
 
-# Streak lookback (number of most recent points to compute signals for)
+# Streak lookback
 STREAK_LOOKBACK_MAX = 30
 
-# Windows
+# Windows used for local recompute (match your stats policy window sizes)
 W60 = 60
 W252 = 252
 
 
+# -------------------------
+# Helpers
+# -------------------------
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
     if not ts:
         return None
@@ -67,19 +87,10 @@ def parse_iso(ts: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def dq_from_ts(run_ts: datetime, as_of_ts: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
-    if as_of_ts is None:
-        return "MISSING", None
-    age_hours = (run_ts - as_of_ts).total_seconds() / 3600.0
-    return ("STALE" if age_hours > stale_hours else "OK"), age_hours
-
-
-def get_w(series_obj: Dict[str, Any], key: str) -> Dict[str, Any]:
-    w = series_obj.get("windows", {})
-    if not isinstance(w, dict):
-        return {}
-    wk = w.get(key, {})
-    return wk if isinstance(wk, dict) else {}
+def safe_abs(x: Any) -> Optional[float]:
+    if isinstance(x, (int, float)):
+        return abs(float(x))
+    return None
 
 
 def fmt(x: Any, nd: int = 6) -> str:
@@ -89,12 +100,6 @@ def fmt(x: Any, nd: int = 6) -> str:
         s = f"{x:.{nd}f}"
         return s.rstrip("0").rstrip(".")
     return str(x)
-
-
-def safe_abs(x: Any) -> Optional[float]:
-    if isinstance(x, (int, float)):
-        return abs(float(x))
-    return None
 
 
 def is_near(abs_val: Optional[float], thr: float, near_frac: float) -> bool:
@@ -121,6 +126,28 @@ def percentile_leq(vals: List[float], x: float) -> float:
     return (c / n) * 100.0
 
 
+def stale_hours_for_series(series_id: str, default_hours: float) -> float:
+    return float(STALE_OVERRIDES_HOURS.get(series_id, default_hours))
+
+
+def dq_from_ts(run_ts: datetime, as_of_ts: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
+    if as_of_ts is None:
+        return "MISSING", None
+    age_hours = (run_ts - as_of_ts).total_seconds() / 3600.0
+    return ("STALE" if age_hours > stale_hours else "OK"), age_hours
+
+
+def get_w(series_obj: Dict[str, Any], key: str) -> Dict[str, Any]:
+    w = series_obj.get("windows", {})
+    if not isinstance(w, dict):
+        return {}
+    wk = w.get(key, {})
+    return wk if isinstance(wk, dict) else {}
+
+
+# -------------------------
+# Signal logic
+# -------------------------
 def compute_signal_tag_near_from_metrics(
     z60: Optional[float],
     p252: Optional[float],
@@ -128,10 +155,6 @@ def compute_signal_tag_near_from_metrics(
     pdel60: Optional[float],
     ret1pct60: Optional[float],
 ) -> Tuple[str, str, str, str]:
-    """
-    Returns (signal_level, reason_str, tag_str, near_str)
-    Same rules as your current dashboard, but takes metrics directly.
-    """
     reasons: List[str] = []
     tags: List[str] = []
     nears: List[str] = []
@@ -227,42 +250,9 @@ def compute_signal_tag_near_from_metrics(
     return level, reason_str, tag_str, near_str
 
 
-def parse_history_points(history_obj: Dict[str, Any], series_id: str) -> List[Tuple[str, float]]:
-    """
-    Attempt to extract [(date_str, value_float), ...] for a series from history_lite.json.
-    Supports several plausible schemas.
-    """
-    series = history_obj.get("series", {})
-    if not isinstance(series, dict):
-        return []
-
-    s = series.get(series_id)
-    if s is None:
-        return []
-
-    # Case A: s is dict with a list under common keys
-    if isinstance(s, dict):
-        for key in ("data", "history", "points", "values"):
-            arr = s.get(key)
-            if isinstance(arr, list):
-                return normalize_points(arr)
-        # Case B: s itself might be a dict with date->value mapping
-        if all(isinstance(k, str) for k in s.keys()):
-            # try date->value mapping
-            pts: List[Tuple[str, float]] = []
-            for k, v in s.items():
-                if isinstance(v, (int, float)):
-                    pts.append((k, float(v)))
-            pts.sort(key=lambda x: x[0])
-            return pts
-
-    # Case C: s is already a list of points
-    if isinstance(s, list):
-        return normalize_points(s)
-
-    return []
-
-
+# -------------------------
+# history_lite parsing + streak
+# -------------------------
 def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
     pts: List[Tuple[str, float]] = []
     for it in arr:
@@ -279,40 +269,59 @@ def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
     return pts
 
 
+def parse_history_points(history_obj: Dict[str, Any], series_id: str) -> List[Tuple[str, float]]:
+    series = history_obj.get("series", {})
+    if not isinstance(series, dict):
+        return []
+
+    s = series.get(series_id)
+    if s is None:
+        return []
+
+    if isinstance(s, dict):
+        for key in ("data", "history", "points", "values"):
+            arr = s.get(key)
+            if isinstance(arr, list):
+                return normalize_points(arr)
+        # date->value mapping
+        if all(isinstance(k, str) for k in s.keys()):
+            pts: List[Tuple[str, float]] = []
+            for k, v in s.items():
+                if isinstance(v, (int, float)):
+                    pts.append((k, float(v)))
+            pts.sort(key=lambda x: x[0])
+            return pts
+
+    if isinstance(s, list):
+        return normalize_points(s)
+
+    return []
+
+
 def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -> Tuple[str, int]:
-    """
-    From history values, compute signals for last STREAK_LOOKBACK_MAX points,
-    then return (PrevSignal, StreakWA).
-    """
     pts = parse_history_points(history_obj, series_id)
     if len(pts) < 2:
         return "NA", 0
 
-    # Use last lookback points
     pts = pts[-max(STREAK_LOOKBACK_MAX, 2):]
-
-    dates = [d for d, _ in pts]
     vals = [v for _, v in pts]
     n = len(vals)
 
-    # For each i, compute z60/p252/zΔ60/pΔ60/ret1%60 using value windows up to i
     signals: List[str] = []
     for i in range(n):
         x = vals[i]
         prev = vals[i - 1] if i - 1 >= 0 else None
 
-        # w60 window ending at i (last 60 valid points)
         w60_vals = vals[max(0, i - (W60 - 1)) : i + 1]
         m60, sd60 = mean_std_ddof0(w60_vals)
         z60 = None if sd60 == 0 else (x - m60) / sd60
 
-        # w252 percentile window ending at i
         w252_vals = vals[max(0, i - (W252 - 1)) : i + 1]
         p252 = percentile_leq(w252_vals, x)
 
-        # deltas based on previous day's z/p (computed with its own windows)
         if i - 1 >= 0:
             x_prev = vals[i - 1]
+
             w60_prev = vals[max(0, (i - 1) - (W60 - 1)) : (i - 1) + 1]
             m60p, sd60p = mean_std_ddof0(w60_prev)
             z60_prev = None if sd60p == 0 else (x_prev - m60p) / sd60p
@@ -326,25 +335,18 @@ def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -
             zdel60 = None
             pdel60 = None
 
-        # ret1%60 (percent units) based on prev value denom
         if prev is None or abs(prev) < 1e-12:
             ret1pct60 = None
         else:
             ret1pct60 = ((x - prev) / abs(prev)) * 100.0
 
         sig, _, _, _ = compute_signal_tag_near_from_metrics(
-            z60=z60,
-            p252=p252,
-            zdel60=zdel60,
-            pdel60=pdel60,
-            ret1pct60=ret1pct60,
+            z60=z60, p252=p252, zdel60=zdel60, pdel60=pdel60, ret1pct60=ret1pct60
         )
         signals.append(sig)
 
-    # PrevSignal is signal at previous point (n-2)
     prev_signal = signals[-2] if len(signals) >= 2 else "NA"
 
-    # StreakWA: count backwards from latest while signal in {WATCH, ALERT}
     streak = 0
     for s in reversed(signals):
         if s in ("WATCH", "ALERT"):
@@ -353,6 +355,26 @@ def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -
             break
 
     return prev_signal, streak
+
+
+# -------------------------
+# I/O + merge
+# -------------------------
+def load_json_if_exists(path: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not path:
+        return None
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def iter_series(stats: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    s = stats.get("series", {})
+    return s if isinstance(s, dict) else {}
 
 
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
@@ -364,15 +386,21 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
     lines: List[str] = []
-    lines.append(f"# Risk Dashboard ({meta.get('module','')})")
+    lines.append("# Risk Dashboard (merged)")
     lines.append("")
     lines.append(f"- RUN_TS_UTC: `{meta.get('run_ts_utc','')}`")
-    lines.append(f"- STATS.generated_at_utc: `{meta.get('stats_generated_at_utc','')}`")
-    lines.append(f"- STATS.as_of_ts: `{meta.get('stats_as_of_ts','')}`")
-    lines.append(f"- script_version: `{meta.get('script_version','')}`")
-    lines.append(f"- stale_hours: `{meta.get('stale_hours','')}`")
-    lines.append(f"- history_used_for_streak: `{meta.get('history_path','NA')}`")
-    lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
+    lines.append(f"- stale_hours_default: `{meta.get('stale_hours_default','')}`")
+    lines.append(f"- stale_overrides: `{meta.get('stale_overrides','')}`")
+    lines.append(f"- FEED1.stats: `{meta.get('feed1_stats','')}`")
+    lines.append(f"- FEED1.history: `{meta.get('feed1_history','')}`")
+    lines.append(f"- FEED1.as_of_ts: `{meta.get('feed1_as_of_ts','')}`")
+    lines.append(f"- FEED1.generated_at_utc: `{meta.get('feed1_generated_at_utc','')}`")
+    lines.append(f"- FEED1.script_version: `{meta.get('feed1_script_version','')}`")
+    lines.append(f"- FEED2.stats: `{meta.get('feed2_stats','')}`")
+    lines.append(f"- FEED2.history: `{meta.get('feed2_history','')}`")
+    lines.append(f"- FEED2.as_of_ts: `{meta.get('feed2_as_of_ts','')}`")
+    lines.append(f"- FEED2.generated_at_utc: `{meta.get('feed2_generated_at_utc','')}`")
+    lines.append(f"- FEED2.script_version: `{meta.get('feed2_script_version','')}`")
     lines.append(
         "- signal_rules: "
         f"`Extreme(|Z60|>={Z60_WATCH_ABS:g} (WATCH), |Z60|>={Z60_ALERT_ABS:g} (ALERT), "
@@ -385,7 +413,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 
     header = [
         "Signal", "Tag", "Near", "PrevSignal", "StreakWA",
-        "Series", "DQ", "age_h",
+        "Feed", "Series", "DQ", "age_h", "stale_h",
         "data_date", "value",
         "z60", "p252",
         "z_delta60", "p_delta60", "ret1_pct60",
@@ -401,9 +429,11 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             r.get("near", "NA"),
             r.get("prev_signal", "NA"),
             fmt(r.get("streak_wa"), nd=0),
+            r.get("feed", ""),
             r.get("series", ""),
             r.get("dq", ""),
             fmt(r.get("age_hours"), nd=2),
+            fmt(r.get("stale_hours"), nd=2),
             fmt(r.get("data_date")),
             fmt(r.get("value"), nd=6),
             fmt(r.get("z60"), nd=6),
@@ -422,71 +452,86 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stats", required=True, help="Path to stats_latest.json (repo path)")
-    ap.add_argument("--history", default=None, help="Path to history_lite.json (repo path). If omitted, streak disabled.")
+    ap.add_argument("--stats", required=True, help="Primary stats_latest.json (repo path)")
+    ap.add_argument("--history", required=True, help="Primary history_lite.json (repo path)")
+    ap.add_argument("--stats2", default=None, help="Secondary stats_latest.json (repo path)")
+    ap.add_argument("--history2", default=None, help="Secondary history_lite.json (repo path)")
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--out-json", required=True)
-    ap.add_argument("--module", default="market_cache")
     ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
     args = ap.parse_args()
 
     run_ts = datetime.now(timezone.utc)
 
-    history_obj: Optional[Dict[str, Any]] = None
-    if args.history and os.path.exists(args.history):
-        try:
-            with open(args.history, "r", encoding="utf-8") as f:
-                history_obj = json.load(f)
-        except Exception:
-            history_obj = None
+    stats1 = load_json_if_exists(args.stats)
+    hist1 = load_json_if_exists(args.history)
+    stats2 = load_json_if_exists(args.stats2) if args.stats2 else None
+    hist2 = load_json_if_exists(args.history2) if args.history2 else None
 
-    if not os.path.exists(args.stats):
+    if stats1 is None:
         meta = {
             "run_ts_utc": run_ts.isoformat(),
-            "module": args.module,
-            "stale_hours": args.stale_hours,
-            "history_path": args.history or "NA",
-            "streak_calc": "disabled (missing stats file)",
-            "error": f"stats file missing: {args.stats}",
+            "stale_hours_default": args.stale_hours,
+            "stale_overrides": json.dumps(STALE_OVERRIDES_HOURS, ensure_ascii=False),
+            "feed1_stats": args.stats,
+            "feed1_history": args.history,
+            "feed2_stats": args.stats2 or "NA",
+            "feed2_history": args.history2 or "NA",
+            "error": f"missing primary stats: {args.stats}",
         }
         write_outputs(args.out_md, args.out_json, meta, [])
         return
 
-    with open(args.stats, "r", encoding="utf-8") as f:
-        stats = json.load(f)
-
+    # meta
     meta = {
         "run_ts_utc": run_ts.isoformat(),
-        "module": args.module,
-        "stale_hours": args.stale_hours,
-        "stats_generated_at_utc": stats.get("generated_at_utc"),
-        "stats_as_of_ts": stats.get("as_of_ts"),
-        "script_version": stats.get("script_version"),
-        "series_count": stats.get("series_count"),
-        "history_path": args.history or "NA",
-        "streak_calc": (
-            "recompute z60/p252/zΔ60/pΔ60/ret1% from history_lite values; "
-            "ret1% denom = abs(prev_value) else NA"
-        ) if history_obj is not None else "disabled (history missing/unreadable)",
+        "stale_hours_default": args.stale_hours,
+        "stale_overrides": json.dumps(STALE_OVERRIDES_HOURS, ensure_ascii=False),
+        "feed1_stats": args.stats,
+        "feed1_history": args.history,
+        "feed1_as_of_ts": (stats1.get("as_of_ts") if isinstance(stats1, dict) else None),
+        "feed1_generated_at_utc": (stats1.get("generated_at_utc") if isinstance(stats1, dict) else None),
+        "feed1_script_version": (stats1.get("script_version") if isinstance(stats1, dict) else None),
+        "feed2_stats": args.stats2 or "NA",
+        "feed2_history": args.history2 or "NA",
+        "feed2_as_of_ts": (stats2.get("as_of_ts") if isinstance(stats2, dict) else None) if stats2 else None,
+        "feed2_generated_at_utc": (stats2.get("generated_at_utc") if isinstance(stats2, dict) else None) if stats2 else None,
+        "feed2_script_version": (stats2.get("script_version") if isinstance(stats2, dict) else None) if stats2 else None,
+        "streak_calc": "recompute from history_lite values; ret1% denom = abs(prev_value) else NA",
     }
 
-    series = stats.get("series", {})
-    if not isinstance(series, dict):
-        series = {}
+    s1 = iter_series(stats1)
+    s2 = iter_series(stats2) if stats2 else {}
+
+    # Merge rule: prefer primary feed for duplicate series_id
+    merged: List[Tuple[str, str, Dict[str, Any]]] = []
+    seen_ids = set()
+
+    for sid, sobj in s1.items():
+        if isinstance(sobj, dict):
+            merged.append(("market_cache", sid, sobj))
+            seen_ids.add(sid)
+
+    for sid, sobj in s2.items():
+        if sid in seen_ids:
+            continue
+        if isinstance(sobj, dict):
+            merged.append(("cache", sid, sobj))
+            seen_ids.add(sid)
 
     rows: List[Dict[str, Any]] = []
-    for sid, s in series.items():
-        if not isinstance(s, dict):
-            continue
-        latest = s.get("latest", {}) if isinstance(s.get("latest"), dict) else {}
+    for feed, sid, sobj in merged:
+        latest = sobj.get("latest", {}) if isinstance(sobj.get("latest"), dict) else {}
 
-        w60 = get_w(s, "w60")
-        w252 = get_w(s, "w252")
+        w60 = get_w(sobj, "w60")
+        w252 = get_w(sobj, "w252")
+
+        # per-series stale hours override
+        stale_h = stale_hours_for_series(sid, args.stale_hours)
 
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
-        dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, args.stale_hours)
+        dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, stale_h)
 
-        # Signal/Tag/Near based on stats_latest metrics (authoritative for "today")
         signal_level, reason, tag, near = compute_signal_tag_near_from_metrics(
             z60=w60.get("z"),
             p252=w252.get("p"),
@@ -495,42 +540,43 @@ def main() -> None:
             ret1pct60=w60.get("ret1_pct"),
         )
 
-        # PrevSignal/Streak from history_lite
+        # streak source selection
+        if feed == "market_cache":
+            history_obj = hist1
+        else:
+            history_obj = hist2
+
         if history_obj is not None:
             prev_signal, streak = compute_prevsignal_and_streak(history_obj, sid)
         else:
             prev_signal, streak = "NA", 0
 
         row: Dict[str, Any] = {
-            "module": args.module,
+            "feed": feed,
             "series": sid,
-            "value": latest.get("value"),
-            "data_date": latest.get("data_date"),
-            "as_of_ts": latest.get("as_of_ts"),
-            "source_url": latest.get("source_url"),
             "dq": dq,
             "age_hours": age_hours,
+            "stale_hours": stale_h,
 
-            # short window stats (w60)
+            "data_date": latest.get("data_date"),
+            "value": latest.get("value"),
+            "as_of_ts": latest.get("as_of_ts"),
+            "source_url": latest.get("source_url"),
+
+            # metrics
             "z60": w60.get("z"),
-            "p60": w60.get("p"),
-            "ret1_delta_60": w60.get("ret1_delta"),
-            "ret1_pct_60": w60.get("ret1_pct"),
-            "dev_ma_60": w60.get("dev_ma"),
+            "p252": w252.get("p"),
             "z_delta_60": w60.get("z_delta"),
             "p_delta_60": w60.get("p_delta"),
+            "ret1_pct_60": w60.get("ret1_pct"),
 
-            # long window stats (w252)
-            "z252": w252.get("z"),
-            "p252": w252.get("p"),
-
-            # signals
+            # signal fields
             "signal_level": signal_level,
             "reason": reason,
             "tag": tag,
             "near": near,
 
-            # streak
+            # streak fields
             "prev_signal": prev_signal,
             "streak_wa": streak,
         }
@@ -541,9 +587,10 @@ def main() -> None:
     # 1) Signal (ALERT, WATCH, INFO, NONE)
     # 2) For WATCH only: Near!=NA first, then higher streak first
     # 3) DQ (MISSING, STALE, OK)
-    # 4) series name
+    # 4) Feed (market_cache first), then series
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
+    feed_order = {"market_cache": 0, "cache": 1}
 
     def watch_near_rank(r: Dict[str, Any]) -> int:
         if r.get("signal_level") != "WATCH":
@@ -551,7 +598,6 @@ def main() -> None:
         return 0 if r.get("near") not in (None, "NA", "") else 1
 
     def streak_rank(r: Dict[str, Any]) -> int:
-        # higher streak first -> negative
         try:
             return -int(r.get("streak_wa") or 0)
         except Exception:
@@ -562,6 +608,7 @@ def main() -> None:
         watch_near_rank(r),
         streak_rank(r),
         dq_order.get(r.get("dq", "OK"), 9),
+        feed_order.get(r.get("feed", ""), 9),
         r.get("series", ""),
     ))
 
