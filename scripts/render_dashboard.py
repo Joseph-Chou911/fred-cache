@@ -1,29 +1,32 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP+signals v2)
+# Dashboard renderer (MVP+signals v3: Tag + Near)
 # - Reads stats_latest.json and flattens per-series rows
-# - Adds simple, auditable anomaly signals: ALERT / WATCH / INFO / NONE
-# - Avoids "market meaning" direction rules (no guessed per-series semantics)
+# - Signals: ALERT / WATCH / INFO / NONE (改法 B)
+# - Adds:
+#     Tag  : which class of trigger fired (EXTREME_Z / JUMP_RET / JUMP_P / JUMP_ZD / LONG_EXTREME)
+#     Near : near-threshold hints for jump metrics (within 10% of threshold)
 #
 # Signal logic (改法 B):
-#   1) Extreme checks (statical position):
-#        - |Z60| >= 2.0  (WATCH)
-#        - |Z60| >= 2.5  (ALERT)
-#        - P252 >= 95 or P252 <= 5  (WATCH by default)
-#        - P252 <= 2 (ALERT; very extreme low)
-#   2) Jump checks (short-term acceleration):
-#        - |ZΔ60| >= 0.75
-#        - |PΔ60| >= 15
-#        - |ret1%60| >= 2.0   (ret1_pct is already percent units; 2.0 == 2%)
-#   3) Level assignment:
-#        - ALERT if (|Z60|>=2.5) OR (P252<=2) OR (jump_hits>=2 and includes ZΔ60) OR (|Z60|>=2.0 and jump_hits>=1)
-#        - WATCH if (|Z60|>=2.0) OR (P252>=95 or <=5) OR (jump_hits>=1)
-#        - INFO  if ONLY long extreme (P252>=95 or <=5) and NO jump and |Z60|<2.0
-#        - NONE  otherwise
+#   Extreme:
+#     - |Z60| >= 2.0  (WATCH)
+#     - |Z60| >= 2.5  (ALERT)
+#     - P252 >= 95 or P252 <= 5  (WATCH/INFO)
+#     - P252 <= 2 (ALERT; very extreme low tail)
+#   Jump:
+#     - |ZΔ60| >= 0.75
+#     - |PΔ60| >= 15
+#     - |ret1%60| >= 2.0   (percent units; 2.0 == 2%)
+#   Level:
+#     - INFO  if ONLY long-extreme and no jump and |Z60|<2
+#     - ALERT if (|Z60|>=2.5) OR (P252<=2) OR (jump_hits>=2 and includes ZΔ60) OR (|Z60|>=2.0 and jump_hits>=1)
+#     - WATCH if (|Z60|>=2.0) OR (P252>=95 or <=5) OR (jump_hits>=1)
+#     - NONE  otherwise
 #
-# DQ:
-#   - OK / STALE / MISSING based on latest.as_of_ts age
+# Near logic:
+#   - within 10% of jump threshold but not crossing it:
+#       NEAR:ZΔ60, NEAR:PΔ60, NEAR:ret1%60
 
 import argparse
 import json
@@ -45,10 +48,13 @@ P252_EXTREME_HI = 95.0
 P252_EXTREME_LO = 5.0
 P252_ALERT_LO = 2.0  # very extreme low tail
 
-# Jump thresholds (stricter than v1)
+# Jump thresholds
 ZDELTA60_JUMP_ABS = 0.75
 PDELTA60_JUMP_ABS = 15.0
-RET1PCT60_JUMP_ABS = 2.0  # percent units; 2.0 == 2%
+RET1PCT60_JUMP_ABS = 2.0  # percent units
+
+# Near window: within X% of threshold
+NEAR_FRAC = 0.10  # 10%
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -91,12 +97,23 @@ def safe_abs(x: Any) -> Optional[float]:
     return None
 
 
-def compute_signal(row: Dict[str, Any]) -> Tuple[str, str]:
+def is_near(abs_val: Optional[float], thr: float, near_frac: float) -> bool:
     """
-    Returns (signal_level, reason_str)
-    signal_level in: ALERT, WATCH, INFO, NONE
+    True if abs_val is in [ (1-near_frac)*thr, thr ) .
+    """
+    if abs_val is None:
+        return False
+    lo = (1.0 - near_frac) * thr
+    return (abs_val >= lo) and (abs_val < thr)
+
+
+def compute_signal_tag_near(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
+    """
+    Returns (signal_level, reason_str, tag_str, near_str)
     """
     reasons: List[str] = []
+    tags: List[str] = []
+    nears: List[str] = []
 
     z60 = row.get("z60")
     p252 = row.get("p252")
@@ -104,19 +121,25 @@ def compute_signal(row: Dict[str, Any]) -> Tuple[str, str]:
     pdel = row.get("p_delta_60")
     r1p = row.get("ret1_pct_60")
 
+    az60 = safe_abs(z60)
+    azd = safe_abs(zdel)
+    apd = safe_abs(pdel)
+    ar1p = safe_abs(r1p)
+
     # -------------------------
     # Extreme checks
     # -------------------------
-    az60 = safe_abs(z60)
     z60_watch = False
     z60_alert = False
     if az60 is not None:
         if az60 >= Z60_WATCH_ABS:
             z60_watch = True
             reasons.append(f"|Z60|>={Z60_WATCH_ABS:g}")
+            tags.append("EXTREME_Z")
         if az60 >= Z60_ALERT_ABS:
             z60_alert = True
             reasons.append(f"|Z60|>={Z60_ALERT_ABS:g}")
+            # EXTREME_Z already tagged
 
     p252_hi = False
     p252_lo = False
@@ -126,12 +149,15 @@ def compute_signal(row: Dict[str, Any]) -> Tuple[str, str]:
         if p252_f >= P252_EXTREME_HI:
             p252_hi = True
             reasons.append(f"P252>={P252_EXTREME_HI:g}")
+            tags.append("LONG_EXTREME")
         if p252_f <= P252_EXTREME_LO:
             p252_lo = True
             reasons.append(f"P252<={P252_EXTREME_LO:g}")
+            tags.append("LONG_EXTREME")
         if p252_f <= P252_ALERT_LO:
             p252_alert_lo = True
             reasons.append(f"P252<={P252_ALERT_LO:g}")
+            # LONG_EXTREME already tagged
 
     long_extreme_only = (p252_hi or p252_lo) and (not z60_watch)
 
@@ -141,45 +167,57 @@ def compute_signal(row: Dict[str, Any]) -> Tuple[str, str]:
     jump_hits = 0
     has_zdelta_jump = False
 
-    azd = safe_abs(zdel)
     if azd is not None and azd >= ZDELTA60_JUMP_ABS:
         reasons.append(f"|ZΔ60|>={ZDELTA60_JUMP_ABS:g}")
+        tags.append("JUMP_ZD")
         jump_hits += 1
         has_zdelta_jump = True
+    else:
+        if is_near(azd, ZDELTA60_JUMP_ABS, NEAR_FRAC):
+            nears.append("NEAR:ZΔ60")
 
-    apd = safe_abs(pdel)
     if apd is not None and apd >= PDELTA60_JUMP_ABS:
         reasons.append(f"|PΔ60|>={PDELTA60_JUMP_ABS:g}")
+        tags.append("JUMP_P")
         jump_hits += 1
+    else:
+        if is_near(apd, PDELTA60_JUMP_ABS, NEAR_FRAC):
+            nears.append("NEAR:PΔ60")
 
-    ar1p = safe_abs(r1p)
     if ar1p is not None and ar1p >= RET1PCT60_JUMP_ABS:
         reasons.append(f"|ret1%60|>={RET1PCT60_JUMP_ABS:g}")
+        tags.append("JUMP_RET")
         jump_hits += 1
+    else:
+        if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
+            nears.append("NEAR:ret1%60")
 
     # -------------------------
     # Level assignment (改法 B)
     # -------------------------
-    # INFO: only long extreme (P252 hi/lo) and no jump and |Z60|<2
     if long_extreme_only and jump_hits == 0:
         level = "INFO"
     else:
-        # ALERT conditions:
-        # - very high short extreme (|Z60|>=2.5)
-        # - very extreme low tail (P252<=2)
-        # - acceleration cluster (jump_hits>=2 and includes z_delta jump)
-        # - short extreme + any jump
         if z60_alert or p252_alert_lo or (jump_hits >= 2 and has_zdelta_jump) or (z60_watch and jump_hits >= 1):
             level = "ALERT"
-        # WATCH conditions:
-        # - moderate short extreme OR long extreme OR any jump
         elif z60_watch or p252_hi or p252_lo or jump_hits >= 1:
             level = "WATCH"
         else:
             level = "NONE"
 
     reason_str = ";".join(reasons) if reasons else "NA"
-    return level, reason_str
+
+    # dedup tags while keeping order
+    seen = set()
+    tags2: List[str] = []
+    for t in tags:
+        if t not in seen:
+            tags2.append(t)
+            seen.add(t)
+    tag_str = ",".join(tags2) if tags2 else "NA"
+
+    near_str = ",".join(nears) if nears else "NA"
+    return level, reason_str, tag_str, near_str
 
 
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
@@ -203,12 +241,13 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
         f"`Extreme(|Z60|>={Z60_WATCH_ABS:g} (WATCH), |Z60|>={Z60_ALERT_ABS:g} (ALERT), "
         f"P252>={P252_EXTREME_HI:g} or <={P252_EXTREME_LO:g} (WATCH/INFO), P252<={P252_ALERT_LO:g} (ALERT)); "
         f"Jump(|ZΔ60|>={ZDELTA60_JUMP_ABS:g} OR |PΔ60|>={PDELTA60_JUMP_ABS:g} OR |ret1%60|>={RET1PCT60_JUMP_ABS:g}); "
+        f"Near(within {NEAR_FRAC*100:.0f}% of jump thresholds); "
         "INFO if only long-extreme and no jump and |Z60|<2`"
     )
     lines.append("")
 
     header = [
-        "Signal", "Series", "DQ", "age_h",
+        "Signal", "Tag", "Near", "Series", "DQ", "age_h",
         "data_date", "value",
         "z60", "p252",
         "z_delta60", "p_delta60", "ret1_pct60",
@@ -220,6 +259,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     for r in rows:
         lines.append("| " + " | ".join([
             r.get("signal_level", "NONE"),
+            r.get("tag", "NA"),
+            r.get("near", "NA"),
             r.get("series", ""),
             r.get("dq", ""),
             fmt(r.get("age_hours"), nd=2),
@@ -313,9 +354,11 @@ def main() -> None:
             "p252": w252.get("p"),
         }
 
-        signal_level, reason = compute_signal(row)
+        signal_level, reason, tag, near = compute_signal_tag_near(row)
         row["signal_level"] = signal_level
         row["reason"] = reason
+        row["tag"] = tag
+        row["near"] = near
 
         rows.append(row)
 
