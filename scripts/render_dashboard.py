@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (v5.3: merge 2 feeds + Tag + Near + Streak + cache-stats adapter)
-#
-# Key fixes vs v5.2:
-# - cache/stats_latest.json uses schema:
-#     series[sid].metrics.{z60,p252,ret1,...}
-#   not:
-#     series[sid].windows.w60.{z,p,...}
-# - cache latest lacks as_of_ts -> fallback to stats.as_of_ts (top-level)
-# - cache lacks z_delta/p_delta/ret1_pct -> recompute from history_lite for latest point
+# Dashboard renderer (v5.4: Jump = ZΔ60 only; keep PΔ/ret1% as tags/near; p_delta252 rename)
 #
 # Inputs:
 #   Feed1 (primary): --stats market_cache/stats_latest.json --history market_cache/history_lite.json
@@ -19,12 +11,18 @@
 #   - dashboard/DASHBOARD.md
 #   - dashboard/dashboard_latest.json
 #
-# Signals (改法 B):
-# - Extreme: |Z60|>=2 (WATCH), |Z60|>=2.5 (ALERT)
-# - Long extreme: P252>=95 or <=5 (WATCH/INFO), very low tail P252<=2 (ALERT)
-# - Jump: |ZΔ60|>=0.75 OR |PΔ60|>=15 OR |ret1%60|>=2
-# - Near: within 10% of jump thresholds (but not crossing)
-# - INFO if only long-extreme and no jump and |Z60|<2
+# Signals (改法 B, 降噪版):
+# - Extreme:
+#     |Z60|>=2 (WATCH), |Z60|>=2.5 (ALERT)
+# - Long extreme:
+#     P252>=95 or <=5 => INFO (if no |Z60|>=2 and no Jump)
+#     P252<=2 => ALERT (very extreme low tail)
+# - Jump:
+#     ONLY |ZΔ60|>=0.75
+# - Near:
+#     within 10% of thresholds for ZΔ60 / PΔ252 / ret1% (but PΔ/ret1% only informational)
+# - Note:
+#     PΔ252 and ret1% are retained as tags/near but no longer raise signal level by themselves.
 #
 # Streak:
 # - PrevSignal: previous point's derived signal (from history recompute)
@@ -42,7 +40,6 @@ from typing import Any, Dict, List, Optional, Tuple
 # -------------------------
 DEFAULT_STALE_HOURS = 36.0
 
-# Per-series stale-hour overrides (avoid turning slow-updating series into constant STALE)
 STALE_OVERRIDES_HOURS: Dict[str, float] = {
     "STLFSI4": 240.0,              # 10 days
     "NFCINONFINLEVERAGE": 240.0,   # 10 days
@@ -57,10 +54,12 @@ P252_EXTREME_HI = 95.0
 P252_EXTREME_LO = 5.0
 P252_ALERT_LO = 2.0  # very extreme low tail
 
-# Jump thresholds
+# Jump threshold (ONLY this affects signal escalation)
 ZDELTA60_JUMP_ABS = 0.75
-PDELTA60_JUMP_ABS = 15.0
-RET1PCT60_JUMP_ABS = 2.0  # percent units
+
+# Informational thresholds (do NOT escalate signal)
+PDELTA252_INFO_ABS = 15.0
+RET1PCT_INFO_ABS = 2.0
 
 # Near window: within X% of threshold
 NEAR_FRAC = 0.10  # 10%
@@ -68,7 +67,7 @@ NEAR_FRAC = 0.10  # 10%
 # Streak lookback
 STREAK_LOOKBACK_MAX = 30
 
-# Local recompute windows (match your stats policy)
+# Local recompute windows
 W60 = 60
 W252 = 252
 
@@ -137,7 +136,6 @@ def dq_from_ts(run_ts: datetime, as_of_ts: Optional[datetime], stale_hours: floa
 
 
 def to_float_or_none(v: Any) -> Optional[float]:
-    """Accept numeric or numeric-string; reject '.', '', None, non-numeric."""
     if v is None:
         return None
     if isinstance(v, (int, float)):
@@ -154,14 +152,14 @@ def to_float_or_none(v: Any) -> Optional[float]:
 
 
 # -------------------------
-# Signal logic
+# Signal logic (v5.4)
 # -------------------------
 def compute_signal_tag_near_from_metrics(
     z60: Optional[float],
     p252: Optional[float],
     zdel60: Optional[float],
-    pdel60: Optional[float],
-    ret1pct60: Optional[float],
+    pdel252: Optional[float],
+    ret1pct: Optional[float],
 ) -> Tuple[str, str, str, str]:
     reasons: List[str] = []
     tags: List[str] = []
@@ -169,10 +167,10 @@ def compute_signal_tag_near_from_metrics(
 
     az60 = safe_abs(z60)
     azd = safe_abs(zdel60)
-    apd = safe_abs(pdel60)
-    ar1p = safe_abs(ret1pct60)
+    apd = safe_abs(pdel252)
+    ar1p = safe_abs(ret1pct)
 
-    # Extreme checks
+    # --- Extreme (affects signal) ---
     z60_watch = False
     z60_alert = False
     if az60 is not None:
@@ -203,46 +201,41 @@ def compute_signal_tag_near_from_metrics(
 
     long_extreme_only = (p252_hi or p252_lo) and (not z60_watch)
 
-    # Jump checks
-    jump_hits = 0
-    has_zdelta_jump = False
-
+    # --- Jump (ONLY ZΔ60 affects signal) ---
+    jump = False
     if azd is not None and azd >= ZDELTA60_JUMP_ABS:
+        jump = True
         reasons.append(f"|ZΔ60|>={ZDELTA60_JUMP_ABS:g}")
         tags.append("JUMP_ZD")
-        jump_hits += 1
-        has_zdelta_jump = True
     else:
         if is_near(azd, ZDELTA60_JUMP_ABS, NEAR_FRAC):
             nears.append("NEAR:ZΔ60")
 
-    if apd is not None and apd >= PDELTA60_JUMP_ABS:
-        reasons.append(f"|PΔ60|>={PDELTA60_JUMP_ABS:g}")
-        tags.append("JUMP_P")
-        jump_hits += 1
+    # --- Informational tags (do NOT affect signal) ---
+    if apd is not None and apd >= PDELTA252_INFO_ABS:
+        tags.append("INFO_PΔ")
     else:
-        if is_near(apd, PDELTA60_JUMP_ABS, NEAR_FRAC):
-            nears.append("NEAR:PΔ60")
+        if is_near(apd, PDELTA252_INFO_ABS, NEAR_FRAC):
+            nears.append("NEAR:PΔ252")
 
-    if ar1p is not None and ar1p >= RET1PCT60_JUMP_ABS:
-        reasons.append(f"|ret1%60|>={RET1PCT60_JUMP_ABS:g}")
-        tags.append("JUMP_RET")
-        jump_hits += 1
+    if ar1p is not None and ar1p >= RET1PCT_INFO_ABS:
+        tags.append("INFO_RET")
     else:
-        if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
-            nears.append("NEAR:ret1%60")
+        if is_near(ar1p, RET1PCT_INFO_ABS, NEAR_FRAC):
+            nears.append("NEAR:ret1%")
 
-    # Level assignment (改法 B)
-    if long_extreme_only and jump_hits == 0:
+    # --- Level assignment (降噪版) ---
+    if long_extreme_only and (not jump):
         level = "INFO"
     else:
-        if z60_alert or p252_alert_lo or (jump_hits >= 2 and has_zdelta_jump) or (z60_watch and jump_hits >= 1):
+        if z60_alert or p252_alert_lo or (z60_watch and jump):
             level = "ALERT"
-        elif z60_watch or p252_hi or p252_lo or jump_hits >= 1:
+        elif z60_watch or p252_hi or p252_lo or jump:
             level = "WATCH"
         else:
             level = "NONE"
 
+    # Reason string:
     reason_str = ";".join(reasons) if reasons else "NA"
 
     # Dedup tags preserving order
@@ -259,7 +252,7 @@ def compute_signal_tag_near_from_metrics(
 
 
 # -------------------------
-# history_lite: build index (supports dict OR list top-level, string values)
+# history_lite: build index (supports dict OR list, numeric-string values)
 # -------------------------
 def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
     pts: List[Tuple[str, float]] = []
@@ -280,12 +273,6 @@ def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
 
 
 def build_history_index(history_obj: Any) -> Dict[str, List[Tuple[str, float]]]:
-    """
-    Returns {series_id: [(date, value), ...]} sorted by date.
-    Supports:
-      - dict with {"series": {sid: [...] / {...}}}
-      - list of rows like [{"series_id": "...", "data_date": "...", "value": "2.68"}, ...]
-    """
     idx: Dict[str, List[Tuple[str, float]]] = {}
 
     if isinstance(history_obj, dict):
@@ -364,18 +351,18 @@ def compute_prevsignal_and_streak(history_index: Dict[str, List[Tuple[str, float
             p252_prev = percentile_leq(w252_prev, x_prev)
 
             zdel60 = None if (z60 is None or z60_prev is None) else (z60 - z60_prev)
-            pdel60 = p252 - p252_prev
+            pdel252 = p252 - p252_prev
         else:
             zdel60 = None
-            pdel60 = None
+            pdel252 = None
 
         if prev is None or abs(prev) < 1e-12:
-            ret1pct60 = None
+            ret1pct = None
         else:
-            ret1pct60 = ((x - prev) / abs(prev)) * 100.0
+            ret1pct = ((x - prev) / abs(prev)) * 100.0
 
         sig, _, _, _ = compute_signal_tag_near_from_metrics(
-            z60=z60, p252=p252, zdel60=zdel60, pdel60=pdel60, ret1pct60=ret1pct60
+            z60=z60, p252=p252, zdel60=zdel60, pdel252=pdel252, ret1pct=ret1pct
         )
         signals.append(sig)
 
@@ -392,14 +379,9 @@ def compute_prevsignal_and_streak(history_index: Dict[str, List[Tuple[str, float
 
 
 def compute_current_metrics_from_history(history_index: Dict[str, List[Tuple[str, float]]], series_id: str) -> Dict[str, Optional[float]]:
-    """
-    Compute latest-point metrics for signal from history, to support schemas that don't provide:
-      z_delta60, p_delta60, ret1_pct60
-    Returns keys: z60, p252, z_delta_60, p_delta_60, ret1_pct_60
-    """
     pts = history_index.get(series_id, [])
     if not pts:
-        return {"z60": None, "p252": None, "z_delta_60": None, "p_delta_60": None, "ret1_pct_60": None}
+        return {"z60": None, "p252": None, "z_delta_60": None, "p_delta_252": None, "ret1_pct": None}
 
     vals = [v for _, v in pts]
     i = len(vals) - 1
@@ -424,22 +406,22 @@ def compute_current_metrics_from_history(history_index: Dict[str, List[Tuple[str
         p252_prev = percentile_leq(w252_prev, x_prev)
 
         zdel60 = None if (z60 is None or z60_prev is None) else (z60 - z60_prev)
-        pdel60 = p252 - p252_prev
+        pdel252 = p252 - p252_prev
     else:
         zdel60 = None
-        pdel60 = None
+        pdel252 = None
 
     if prev is None or abs(prev) < 1e-12:
-        ret1pct60 = None
+        ret1pct = None
     else:
-        ret1pct60 = ((x - prev) / abs(prev)) * 100.0
+        ret1pct = ((x - prev) / abs(prev)) * 100.0
 
     return {
         "z60": z60,
         "p252": p252,
         "z_delta_60": zdel60,
-        "p_delta_60": pdel60,
-        "ret1_pct_60": ret1pct60,
+        "p_delta_252": pdel252,
+        "ret1_pct": ret1pct,
     }
 
 
@@ -476,20 +458,15 @@ def get_script_version(stats: Dict[str, Any]) -> Optional[str]:
 
 
 def extract_latest_block(stats: Dict[str, Any], sobj: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Return a normalized latest dict with:
-      data_date, value, source_url, as_of_ts
-    """
     latest = sobj.get("latest") if isinstance(sobj.get("latest"), dict) else {}
     if not isinstance(latest, dict):
         latest = {}
 
-    # Some schemas don't put as_of_ts inside latest -> fallback to top-level
     as_of_ts = latest.get("as_of_ts")
     if not isinstance(as_of_ts, str) or not as_of_ts:
         top_asof = stats.get("as_of_ts")
         if isinstance(top_asof, str) and top_asof:
-            latest = dict(latest)  # copy
+            latest = dict(latest)
             latest["as_of_ts"] = top_asof
         else:
             gen = stats.get("generated_at_utc")
@@ -501,12 +478,9 @@ def extract_latest_block(stats: Dict[str, Any], sobj: Dict[str, Any]) -> Dict[st
 
 
 def extract_market_cache_metrics(sobj: Dict[str, Any]) -> Dict[str, Optional[float]]:
-    """
-    market_cache schema: series[sid].windows.w60.{z,p,z_delta,p_delta,ret1_pct}, windows.w252.p
-    """
     windows = sobj.get("windows", {})
     if not isinstance(windows, dict):
-        return {"z60": None, "p252": None, "z_delta_60": None, "p_delta_60": None, "ret1_pct_60": None}
+        return {"z60": None, "p252": None, "z_delta_60": None, "p_delta_252": None, "ret1_pct": None}
 
     w60 = windows.get("w60", {})
     w252 = windows.get("w252", {})
@@ -519,8 +493,8 @@ def extract_market_cache_metrics(sobj: Dict[str, Any]) -> Dict[str, Optional[flo
         "z60": to_float_or_none(w60.get("z")),
         "p252": to_float_or_none(w252.get("p")),
         "z_delta_60": to_float_or_none(w60.get("z_delta")),
-        "p_delta_60": to_float_or_none(w60.get("p_delta")),
-        "ret1_pct_60": to_float_or_none(w60.get("ret1_pct")),
+        "p_delta_252": to_float_or_none(w60.get("p_delta")),  # NOTE: this is p252-delta in our recompute logic
+        "ret1_pct": to_float_or_none(w60.get("ret1_pct")),
     }
 
 
@@ -552,13 +526,15 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- FEED2.as_of_ts: `{meta.get('feed2_as_of_ts','')}`")
     lines.append(f"- FEED2.generated_at_utc: `{meta.get('feed2_generated_at_utc','')}`")
     lines.append(f"- FEED2.script_version: `{meta.get('feed2_script_version','')}`")
+
     lines.append(
         "- signal_rules: "
         f"`Extreme(|Z60|>={Z60_WATCH_ABS:g} (WATCH), |Z60|>={Z60_ALERT_ABS:g} (ALERT), "
-        f"P252>={P252_EXTREME_HI:g} or <={P252_EXTREME_LO:g} (WATCH/INFO), P252<={P252_ALERT_LO:g} (ALERT)); "
-        f"Jump(|ZΔ60|>={ZDELTA60_JUMP_ABS:g} OR |PΔ60|>={PDELTA60_JUMP_ABS:g} OR |ret1%60|>={RET1PCT60_JUMP_ABS:g}); "
-        f"Near(within {NEAR_FRAC*100:.0f}% of jump thresholds); "
-        "INFO if only long-extreme and no jump and |Z60|<2`"
+        f"P252>={P252_EXTREME_HI:g} or <={P252_EXTREME_LO:g} (INFO if no |Z60|>=2 and no Jump), "
+        f"P252<={P252_ALERT_LO:g} (ALERT)); "
+        f"Jump(ONLY |ZΔ60|>={ZDELTA60_JUMP_ABS:g}); "
+        f"Near(within {NEAR_FRAC*100:.0f}% of thresholds: ZΔ60 / PΔ252 / ret1%); "
+        f"PΔ252>= {PDELTA252_INFO_ABS:g} and |ret1%|>= {RET1PCT_INFO_ABS:g} are INFO tags only (no escalation)`"
     )
     lines.append("")
 
@@ -567,7 +543,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
         "Feed", "Series", "DQ", "age_h", "stale_h",
         "data_date", "value",
         "z60", "p252",
-        "z_delta60", "p_delta60", "ret1_pct60",
+        "z_delta60", "p_delta252", "ret1_pct",
         "Reason", "Source", "as_of_ts"
     ]
     lines.append("| " + " | ".join(header) + " |")
@@ -590,8 +566,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             fmt(r.get("z60"), nd=6),
             fmt(r.get("p252"), nd=6),
             fmt(r.get("z_delta_60"), nd=6),
-            fmt(r.get("p_delta_60"), nd=6),
-            fmt(r.get("ret1_pct_60"), nd=6),
+            fmt(r.get("p_delta_252"), nd=6),
+            fmt(r.get("ret1_pct"), nd=6),
             fmt(r.get("reason")),
             fmt(r.get("source_url")),
             fmt(r.get("as_of_ts")),
@@ -654,7 +630,6 @@ def main() -> None:
         "feed2_as_of_ts": (stats2.get("as_of_ts") if isinstance(stats2, dict) else None),
         "feed2_generated_at_utc": (stats2.get("generated_at_utc") if isinstance(stats2, dict) else None),
         "feed2_script_version": (get_script_version(stats2) if isinstance(stats2, dict) else None),
-        "streak_calc": "recompute from history_lite values; ret1% denom = abs(prev_value) else NA",
         "warnings": [],
     }
 
@@ -687,38 +662,32 @@ def main() -> None:
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
         dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, stale_h)
 
-        # Metrics extraction / computation:
         if feed == "market_cache":
             m = extract_market_cache_metrics(sobj)
         else:
-            # For cache feed: use history to compute latest-point z60/p252/z_delta/p_delta/ret1_pct robustly
             m = compute_current_metrics_from_history(hist2_index, sid)
-            # If history is missing, fallback to cache metrics if present (z60/p252/ret1 only)
+
+            # fallback if history missing: keep z60/p252 from cache metrics if present
             if m["z60"] is None or m["p252"] is None:
                 metrics = sobj.get("metrics", {})
                 if isinstance(metrics, dict):
-                    z60_f = to_float_or_none(metrics.get("z60"))
-                    p252_f = to_float_or_none(metrics.get("p252"))
-                    # ret1 is delta; cannot safely convert to pct without prev -> leave None
                     if m["z60"] is None:
-                        m["z60"] = z60_f
+                        m["z60"] = to_float_or_none(metrics.get("z60"))
                     if m["p252"] is None:
-                        m["p252"] = p252_f
+                        m["p252"] = to_float_or_none(metrics.get("p252"))
 
         signal_level, reason, tag, near = compute_signal_tag_near_from_metrics(
             z60=m.get("z60"),
             p252=m.get("p252"),
             zdel60=m.get("z_delta_60"),
-            pdel60=m.get("p_delta_60"),
-            ret1pct60=m.get("ret1_pct_60"),
+            pdel252=m.get("p_delta_252"),
+            ret1pct=m.get("ret1_pct"),
         )
 
-        # Safety: if ALERT/WATCH but reason is NA, record warning
         if signal_level in ("ALERT", "WATCH") and (reason == "NA" or not reason):
             meta["warnings"].append(f"inconsistent_signal_no_reason:{feed}:{sid}")
             reason = "INCONSISTENT_SIGNAL_NO_REASON"
 
-        # Streak source selection; NEVER crash the whole run
         try:
             if feed == "market_cache":
                 prev_signal, streak = compute_prevsignal_and_streak(hist1_index, sid)
@@ -740,8 +709,8 @@ def main() -> None:
             "z60": m.get("z60"),
             "p252": m.get("p252"),
             "z_delta_60": m.get("z_delta_60"),
-            "p_delta_60": m.get("p_delta_60"),
-            "ret1_pct_60": m.get("ret1_pct_60"),
+            "p_delta_252": m.get("p_delta_252"),
+            "ret1_pct": m.get("ret1_pct"),
             "signal_level": signal_level,
             "reason": reason,
             "tag": tag,
@@ -750,11 +719,6 @@ def main() -> None:
             "streak_wa": streak,
         })
 
-    # Sorting:
-    # 1) Signal: ALERT, WATCH, INFO, NONE
-    # 2) For WATCH: Near!=NA first, then higher streak first
-    # 3) DQ: MISSING, STALE, OK
-    # 4) Feed: market_cache first, then series
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
     feed_order = {"market_cache": 0, "cache": 1}
