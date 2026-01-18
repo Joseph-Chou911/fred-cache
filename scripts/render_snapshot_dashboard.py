@@ -4,15 +4,15 @@
 # Snapshot dashboard renderer (方案A)
 # - Input: JSON array (list of {series_id,data_date,value,source_url,notes,as_of_ts,...})
 # - Output:
-#   - dashboard/DASHBOARD_SNAPSHOT.md
-#   - dashboard/dashboard_snapshot_latest.json
-# - Uses dashboard/history.json for PrevSignal/DeltaSignal/StreakWA (module-separated)
+#   - dashboard_snapshot/DASHBOARD_SNAPSHOT.md (or any --out-md)
+#   - dashboard_snapshot/dashboard_snapshot_latest.json (or any --out-json)
+# - Uses dash-history for PrevSignal/DeltaSignal/StreakWA (module-separated)
 #
 # Signal logic (穩健、低噪音、以不中斷為優先):
 #   1) DQ=MISSING -> ALERT (tag=MISSING)
 #   2) age_h > stale_hours -> WATCH (tag=STALE)；若 age_h >= 2*stale_hours -> ALERT
 #   3) notes startswith "ERROR:" -> ALERT
-#   4) notes startswith "WARN:" -> WATCH
+#   4) notes startswith "WARN:" -> INFO  (僅做資料品質提示，不上升風險燈號)
 #   5) else -> INFO
 #
 # Near:
@@ -57,6 +57,7 @@ def fmt(x: Any, nd: int = 6) -> str:
 
 def md_escape_cell(x: Any) -> str:
     s = str(x) if x is not None else "NA"
+    # Prevent breaking markdown table columns
     s = s.replace("|", "&#124;")
     s = s.replace("\n", "<br>")
     return s
@@ -117,6 +118,9 @@ def classify_notes_tag(notes: str) -> str:
 def compute_signal(dq: str, age_h: Optional[float], stale_hours: float, notes: str) -> Tuple[str, str]:
     """
     Returns (level, reason)
+
+    Key change vs earlier version:
+      - WARN:* does NOT promote to WATCH; it remains INFO (data-quality hint only).
     """
     if dq == "MISSING":
         return "ALERT", "DQ=MISSING"
@@ -127,11 +131,13 @@ def compute_signal(dq: str, age_h: Optional[float], stale_hours: float, notes: s
             return "ALERT", f"STALE>=2x({stale_hours:g}h)"
         return "WATCH", f"STALE>{stale_hours:g}h"
 
-    # Notes-based
+    # Notes-based: only ERROR escalates
     if notes.startswith("ERROR:"):
         return "ALERT", "NOTES=ERROR"
+
     if notes.startswith("WARN:"):
-        return "WATCH", "NOTES=WARN"
+        # Keep INFO; warn stays as data-quality indicator (Tag/notes) not risk level.
+        return "INFO", "NOTES=WARN"
 
     return "INFO", "OK"
 
@@ -171,6 +177,7 @@ def compute_prev_and_streak(sid: str, today: str, tl: Dict[str, List[str]]) -> T
     hist = tl.get(sid, [])
     prev = hist[-1] if hist else "NA"
 
+    # streak definition: consecutive days where signal is WATCH or ALERT, counting today
     if today not in ("WATCH", "ALERT"):
         return prev, 0
 
@@ -243,7 +250,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
     lines.append(
         "- signal_rules: "
-        "`DQ=MISSING->ALERT; STALE>stale_hours->WATCH; STALE>=2x->ALERT; NOTES:ERROR->ALERT; NOTES:WARN->WATCH; else INFO; "
+        "`DQ=MISSING->ALERT; STALE>stale_hours->WATCH; STALE>=2x->ALERT; NOTES:ERROR->ALERT; NOTES:WARN->INFO; else INFO; "
         "Near=within 10% below staleness threshold`"
     )
     lines.append("")
@@ -283,7 +290,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--snapshot", required=True, help="Path to snapshot JSON array (e.g., fallback_cache/latest.json)")
-    ap.add_argument("--dash-history", default="dashboard/history.json", help="Path to shared dashboard history.json")
+    ap.add_argument("--dash-history", default="dashboard_snapshot/history.json", help="Path to snapshot dashboard history.json")
     ap.add_argument("--module", default="snapshot_fast", help="Module name stored in history for separation")
     ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
     ap.add_argument("--out-md", required=True)
@@ -346,7 +353,7 @@ def main() -> None:
         "dash_history_path": args.dash_history,
         "snapshot_as_of_ts": snapshot_as_of_ts,
         "snapshot_script_version": snapshot_script_version or "NA",
-        "streak_calc": "PrevSignal/StreakWA derived from dashboard/history.json (past renderer outputs) + today's signal",
+        "streak_calc": "PrevSignal/StreakWA derived from dash_history file (past renderer outputs) + today's signal",
         "history_items_used": len(history_snaps),
     }
 
