@@ -3,8 +3,7 @@ name: Update Dashboard (fred_cache)
 on:
   workflow_dispatch: {}
   schedule:
-    # 15:20 Asia/Taipei = 07:20 UTC
-    - cron: "20 7 * * *"
+    - cron: "35 3 * * *"  # example: 03:35 UTC = 11:35 Asia/Taipei
 
 permissions:
   contents: write
@@ -14,9 +13,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dashboard_fred_cache:
+  update:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -24,15 +23,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+
+      # -----------------------
+      # Render dashboard (fred_cache)
+      # -----------------------
       - name: Render dashboard (fred_cache)
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p dashboard_fred_cache
 
           python scripts/render_dashboard_fred_cache.py \
             --stats cache/stats_latest.json \
@@ -43,34 +52,48 @@ jobs:
             --module fred_cache \
             --stale-hours 72
 
+      # -----------------------
+      # Sanity check dashboard_latest.json keys (critical)
+      # -----------------------
+      - name: Sanity check dashboard_latest.json meta keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dashboard_fred_cache/dashboard_latest.json
+          python - <<'PY'
+          import json
+          p="dashboard_fred_cache/dashboard_latest.json"
+          j=json.load(open(p,"r",encoding="utf-8"))
+          print("dashboard_latest.json keys =", sorted(list(j.keys())))
+          for k in ["run_ts_utc","stats_as_of_ts","module","series_signals"]:
+            print(k, "=>", "OK" if k in j else "MISSING")
+          PY
+
+      # -----------------------
+      # Append dashboard history
+      # -----------------------
       - name: Append dashboard history (fred_cache)
         shell: bash
         run: |
           set -euo pipefail
-
           python scripts/append_dashboard_history.py \
             --latest dashboard_fred_cache/dashboard_latest.json \
             --history dashboard_fred_cache/history.json \
             --max-items 180
 
-      - name: Commit & push
+      - name: Commit changes
         shell: bash
         run: |
           set -euo pipefail
-
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add \
-            dashboard_fred_cache/DASHBOARD.md \
-            dashboard_fred_cache/dashboard_latest.json \
-            dashboard_fred_cache/history.json
+          git add dashboard_fred_cache/DASHBOARD.md dashboard_fred_cache/dashboard_latest.json dashboard_fred_cache/history.json || true
 
           if git diff --cached --quiet; then
-            echo "No changes"
+            echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "chore: update dashboard (fred_cache)"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git commit -m "dashboard_fred_cache: update dashboard + history"
+          git push
