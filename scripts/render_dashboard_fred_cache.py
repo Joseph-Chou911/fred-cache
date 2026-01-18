@@ -155,6 +155,12 @@ NEAR_RATIO = 0.90
 
 STREAK_BASIS_TEXT = "distinct snapshots (snapshot_id); re-run same snapshot does not increment"
 
+# ----------------------------
+# NEW: ret1% guard (avoid blow-ups when prev is near 0)
+# ----------------------------
+RET1_DENOM_EPS = 1e-3  # safe default; prevents % explosion near zero
+RET1_GUARD_TEXT = "ret1% guard: if abs(prev_value)<1e-3 -> ret1%=NA (avoid near-zero denom blow-ups)"
+
 
 def _load_dq_map() -> Dict[str, str]:
     if not os.path.exists(PATH_DQ_STATE):
@@ -201,6 +207,13 @@ def _compute_prev_window_metrics(
     series_hist: List[Dict[str, Any]],
     window_n: int = 60
 ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    """
+    Returns:
+      prev_z60 (computed using window ending at prev)
+      prev_p60 (computed using window ending at prev)
+      ret1_pct = (last-prev)/abs(prev)*100, BUT guarded:
+        if abs(prev) < RET1_DENOM_EPS -> None
+    """
     if len(series_hist) < 2:
         return (None, None, None)
 
@@ -227,7 +240,8 @@ def _compute_prev_window_metrics(
         prev_z60 = _zscore_ddof0(win, prev_val)
         prev_p60 = _percentile_le(win, prev_val)
 
-    if prev_val == 0:
+    # NEW: guarded ret1%
+    if abs(prev_val) < RET1_DENOM_EPS:
         ret1_pct = None
     else:
         ret1_pct = (last_val - prev_val) / abs(prev_val) * 100.0
@@ -497,13 +511,10 @@ def _delta_signal(prev: str, curr: str) -> str:
 
 
 # ----------------------------
-# NEW: Alignment check
+# Alignment check
 # ----------------------------
 
 def _last_hist_value(series_hist: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[float]]:
-    """
-    Return (data_date, value) for the last record in history_lite series list.
-    """
     if not series_hist:
         return (None, None)
     last = series_hist[-1]
@@ -515,7 +526,6 @@ def _last_hist_value(series_hist: List[Dict[str, Any]]) -> Tuple[Optional[str], 
 def _values_equal(a: Optional[float], b: Optional[float], rel_tol: float = 1e-12, abs_tol: float = 1e-12) -> bool:
     if a is None or b is None:
         return False
-    # symmetric tolerance; safe for typical FRED numeric scale
     return abs(a - b) <= max(abs_tol, rel_tol * max(abs(a), abs(b)))
 
 
@@ -524,17 +534,6 @@ def _alignment_check(
     hl_by: Dict[str, List[Dict[str, Any]]],
     max_examples: int = 3
 ) -> Dict[str, Any]:
-    """
-    Compare stats_latest.latest (data_date, value) vs history_lite last (data_date, value) per series.
-    Output:
-      {
-        "alignment": "PASS" | "FAIL" | "NA",
-        "checked": int,
-        "mismatch": int,
-        "missing_hl": int,
-        "examples": ["SERIES: stats(data_date,value) vs hl(data_date,value)", ...]
-      }
-    """
     if not isinstance(series_map, dict) or not series_map:
         return {"alignment": "NA", "checked": 0, "mismatch": 0, "missing_hl": 0, "examples": []}
 
@@ -550,7 +549,6 @@ def _alignment_check(
         latest = item.get("latest", {}) if isinstance(item.get("latest"), dict) else {}
         s_dd = latest.get("data_date")
         s_v = _safe_float(latest.get("value"))
-
         s_dd_s = str(s_dd) if isinstance(s_dd, str) and s_dd else None
 
         hl_hist = hl_by.get(sid, [])
@@ -564,41 +562,22 @@ def _alignment_check(
         h_dd, h_v = _last_hist_value(hl_hist)
         checked += 1
 
-        # mismatch conditions:
-        # - data_date mismatch OR
-        # - value mismatch (with tolerance)
-        date_mismatch = (s_dd_s is not None and h_dd is not None and s_dd_s != h_dd)
-        val_mismatch = False
-        if s_v is not None and h_v is not None:
-            val_mismatch = not _values_equal(s_v, h_v)
-
-        # if either side missing, we treat as mismatch
         if s_dd_s is None or h_dd is None or s_v is None or h_v is None:
             mismatch += 1
             if len(examples) < max_examples:
-                examples.append(
-                    f"{sid}: stats({s_dd_s},{_fmt_num(s_v)}) vs hl({h_dd},{_fmt_num(h_v)})"
-                )
+                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v)}) vs hl({h_dd},{_fmt_num(h_v)})")
             continue
+
+        date_mismatch = (s_dd_s != h_dd)
+        val_mismatch = (not _values_equal(s_v, h_v))
 
         if date_mismatch or val_mismatch:
             mismatch += 1
             if len(examples) < max_examples:
-                examples.append(
-                    f"{sid}: stats({s_dd_s},{_fmt_num(s_v)}) vs hl({h_dd},{_fmt_num(h_v)})"
-                )
+                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v)}) vs hl({h_dd},{_fmt_num(h_v)})")
 
-    alignment = "PASS"
-    if mismatch > 0:
-        alignment = "FAIL"
-
-    return {
-        "alignment": alignment,
-        "checked": checked,
-        "mismatch": mismatch,
-        "missing_hl": missing_hl,
-        "examples": examples,
-    }
+    alignment = "PASS" if mismatch == 0 else "FAIL"
+    return {"alignment": alignment, "checked": checked, "mismatch": mismatch, "missing_hl": missing_hl, "examples": examples}
 
 
 def main() -> None:
@@ -627,7 +606,6 @@ def main() -> None:
     hl_recs = _load_ndjson_or_json_array(PATH_HISTORY_LITE) if os.path.exists(PATH_HISTORY_LITE) else []
     hl_by = _group_history_lite(hl_recs)
 
-    # NEW: alignment check summary
     align = _alignment_check(series_map, hl_by, max_examples=3)
 
     hist_obj = _load_dash_history(OUT_HISTORY)
@@ -709,14 +687,16 @@ def main() -> None:
     md.append(f"- dash_history: `{OUT_HISTORY}`")
     md.append(f"- history_lite_used_for_jump: `{PATH_HISTORY_LITE}`")
 
-    # NEW: alignment header lines
+    # NEW: ret1 guard line (audit-friendly)
+    md.append(f"- ret1_guard: `{RET1_GUARD_TEXT}`")
+
+    # alignment summary
     md.append(
         f"- alignment: `{align.get('alignment','NA')}`; checked={align.get('checked',0)}; "
         f"mismatch={align.get('mismatch',0)}; hl_missing={align.get('missing_hl',0)}"
     )
     ex = align.get("examples", [])
     if isinstance(ex, list) and ex:
-        # single line to keep header compact
         md.append(f"- alignment_examples: `{ ' | '.join(str(x) for x in ex) }`")
 
     md.append("- jump_calc: `ret1%=(latest-prev)/abs(prev)*100; zΔ60=z60(latest)-z60(prev); pΔ60=p60(latest)-p60(prev) (prev computed from window ending at prev)`")
