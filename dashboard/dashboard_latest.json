@@ -1,6 +1,6 @@
 {
   "meta": {
-    "run_ts_utc": "2026-01-18T09:46:37.487042+00:00",
+    "run_ts_utc": "2026-01-18T09:55:39.238913+00:00",
     "module": "market_cache",
     "stale_hours": 36.0,
     "stats_generated_at_utc": "2026-01-18T04:13:53Z",
@@ -9,7 +9,7 @@
     "series_count": 4,
     "dash_history_path": "dashboard/history.json",
     "streak_calc": "PrevSignal/StreakWA derived from dashboard/history.json (past renderer outputs) + today's signal",
-    "history_items_used": 0
+    "history_items_used": 1
   },
   "rows": [
     {
@@ -20,7 +20,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "DERIVED",
       "dq": "OK",
-      "age_hours": 5.545690845,
+      "age_hours": 5.696177475833333,
       "z60": 2.46496708281083,
       "ret1_pct_60": 0.4476337992833291,
       "z_delta_60": 0.7438652939966419,
@@ -30,8 +30,9 @@
       "reason": "|Z60|>=2",
       "tag": "EXTREME_Z",
       "near": "NEAR:ZΔ60",
-      "prev_signal": "NA",
-      "streak_wa": 1
+      "prev_signal": "WATCH",
+      "delta_signal": "SAME",
+      "streak_wa": 2
     },
     {
       "module": "market_cache",
@@ -41,7 +42,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
       "dq": "OK",
-      "age_hours": 5.545690845,
+      "age_hours": 5.696177475833333,
       "z60": -0.7091208189130702,
       "ret1_pct_60": 3.278084714548802,
       "z_delta_60": 0.27871816143743555,
@@ -51,8 +52,9 @@
       "reason": "|ret1%60|>=2",
       "tag": "JUMP_RET",
       "near": "NA",
-      "prev_signal": "NA",
-      "streak_wa": 1
+      "prev_signal": "WATCH",
+      "delta_signal": "SAME",
+      "streak_wa": 2
     },
     {
       "module": "market_cache",
@@ -62,7 +64,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
       "dq": "OK",
-      "age_hours": 5.545690845,
+      "age_hours": 5.696177475833333,
       "z60": 1.1849297043742244,
       "ret1_pct_60": -0.06422376365655026,
       "z_delta_60": -0.08868418860596838,
@@ -72,7 +74,8 @@
       "reason": "P252>=95",
       "tag": "LONG_EXTREME",
       "near": "NA",
-      "prev_signal": "NA",
+      "prev_signal": "INFO",
+      "delta_signal": "SAME",
       "streak_wa": 0
     },
     {
@@ -83,7 +86,7 @@
       "as_of_ts": "2026-01-18T04:13:53Z",
       "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
       "dq": "OK",
-      "age_hours": 5.545690845,
+      "age_hours": 5.696177475833333,
       "z60": -0.450182847841524,
       "ret1_pct_60": 0.12626262626262355,
       "z_delta_60": 0.02417817617707113,
@@ -93,7 +96,8 @@
       "reason": "NA",
       "tag": "NA",
       "near": "NA",
-      "prev_signal": "NA",
+      "prev_signal": "NONE",
+      "delta_signal": "SAME",
       "streak_wa": 0
     }
   ]

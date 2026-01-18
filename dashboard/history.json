@@ -2,7 +2,7 @@
   "schema_version": "dash_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-01-18T09:46:37.487042+00:00",
+      "run_ts_utc": "2026-01-18T09:55:39.238913+00:00",
       "stats_as_of_ts": "2026-01-18T04:13:53Z",
       "module": "market_cache",
       "series_signals": {
