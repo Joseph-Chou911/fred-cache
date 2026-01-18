@@ -11,6 +11,17 @@
         "SP500": "INFO",
         "VIX": "NONE"
       }
+    },
+    {
+      "run_ts_utc": "2026-01-18T15:38:58.467319+00:00",
+      "stats_as_of_ts": "2026-01-18T04:13:53Z",
+      "module": "market_cache",
+      "series_signals": {
+        "HYG_IEF_RATIO": "WATCH",
+        "OFR_FSI": "WATCH",
+        "SP500": "INFO",
+        "VIX": "NONE"
+      }
     }
   ]
 }
