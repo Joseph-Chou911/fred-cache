@@ -1,73 +1,72 @@
 {
-  "rows": {
-    "cache::BAMLH0A0HYM2": {
-      "signal": "NONE",
-      "streak": 1
+  "series": {
+    "cache:BAMLH0A0HYM2": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::DCOILWTICO": {
-      "signal": "INFO",
-      "streak": 1
+    "cache:DCOILWTICO": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::DGS10": {
-      "signal": "NONE",
-      "streak": 1
+    "cache:DGS10": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::DGS2": {
-      "signal": "WATCH",
-      "streak": 1
+    "cache:DGS2": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::DJIA": {
-      "signal": "INFO",
-      "streak": 1
+    "cache:DJIA": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::DTWEXBGS": {
-      "signal": "INFO",
-      "streak": 1
+    "cache:DTWEXBGS": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::NASDAQCOM": {
-      "signal": "NONE",
-      "streak": 1
+    "cache:NASDAQCOM": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::NFCINONFINLEVERAGE": {
-      "signal": "INFO",
-      "streak": 1
+    "cache:NFCINONFINLEVERAGE": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::SP500": {
-      "signal": "INFO",
-      "streak": 1
+    "cache:SP500": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::STLFSI4": {
-      "signal": "NONE",
-      "streak": 1
+    "cache:STLFSI4": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::T10Y2Y": {
-      "signal": "NONE",
-      "streak": 1
+    "cache:T10Y2Y": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::T10Y3M": {
-      "signal": "INFO",
-      "streak": 1
+    "cache:T10Y3M": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "cache::VIXCLS": {
-      "signal": "NONE",
-      "streak": 1
+    "cache:VIXCLS": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "market_cache::HYG_IEF_RATIO": {
-      "signal": "WATCH",
-      "streak": 1
+    "market_cache:HYG_IEF_RATIO": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "market_cache::OFR_FSI": {
-      "signal": "NONE",
-      "streak": 1
+    "market_cache:OFR_FSI": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "market_cache::SP500": {
-      "signal": "INFO",
-      "streak": 1
+    "market_cache:SP500": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     },
-    "market_cache::VIX": {
-      "signal": "NONE",
-      "streak": 1
+    "market_cache:VIX": {
+      "prev_signal": "NONE",
+      "streak_wa": 0
     }
-  },
-  "version": 1
+  }
 }
