@@ -125,6 +125,10 @@ class Row:
     z_delta60: Optional[float]
     p_delta60: Optional[float]
     ret1_pct: Optional[float]
+    # NEW
+    jump_hits: int
+    hitbits: str
+
     reason: str
     tag: str
     near: str
@@ -134,8 +138,6 @@ class Row:
     streak_wa: int
     source_url: str
     as_of_ts: str
-    # NEW: for JUMP_1of3_count auditing
-    jump_hits_3: int
 
 
 MODULE = "fred_cache"
@@ -155,13 +157,17 @@ TH_PDELTA = 20.0
 TH_RET1P = 2.0
 NEAR_RATIO = 0.90
 
+# NEW: boundary epsilon to avoid "prints as 20 but compares <20"
+EPS_Z = 1e-12
+EPS_P = 1e-9
+EPS_R = 1e-9
+
 STREAK_BASIS_TEXT = "distinct snapshots (snapshot_id); re-run same snapshot does not increment"
 
-# ----------------------------
 # ret1% guard (avoid blow-ups when prev is near 0)
-# ----------------------------
-RET1_DENOM_EPS = 1e-3  # prevents % explosion near zero
+RET1_DENOM_EPS = 1e-3
 RET1_GUARD_TEXT = "ret1% guard: if abs(prev_value)<1e-3 -> ret1%=NA (avoid near-zero denom blow-ups)"
+TH_EPS_TEXT = f"threshold_eps: Z={EPS_Z}, P={EPS_P}, R={EPS_R} (avoid rounding/float boundary mismatch)"
 
 
 def _load_dq_map() -> Dict[str, str]:
@@ -262,25 +268,41 @@ def _near_flags(z_delta60: Optional[float], p_delta60: Optional[float], ret1_pct
 
 
 # ----------------------------
-# NEW: expose "hits out of 3" for audit summary
+# NEW: hitbits / jump_hits (audit friendly)
 # ----------------------------
-def _jump_hits_3(
+def _jump_hits_and_reasons(
     z_delta60: Optional[float],
     p_delta60: Optional[float],
     ret1_pct: Optional[float]
-) -> Tuple[int, List[str]]:
+) -> Tuple[int, str, List[str]]:
     hits = 0
+    bits: List[str] = []
     reasons: List[str] = []
-    if z_delta60 is not None and abs(z_delta60) >= TH_ZDELTA:
+
+    if z_delta60 is not None and abs(z_delta60) + EPS_Z >= TH_ZDELTA:
         hits += 1
+        bits.append("Z")
         reasons.append("abs(zΔ60)>=0.75")
-    if p_delta60 is not None and abs(p_delta60) >= TH_PDELTA:
+    if p_delta60 is not None and abs(p_delta60) + EPS_P >= TH_PDELTA:
         hits += 1
+        bits.append("P")
         reasons.append("abs(pΔ60)>=20")
-    if ret1_pct is not None and abs(ret1_pct) >= TH_RET1P:
+    if ret1_pct is not None and abs(ret1_pct) + EPS_R >= TH_RET1P:
         hits += 1
+        bits.append("R")
         reasons.append("abs(ret1%)>=2")
-    return hits, reasons
+
+    hitbits = "+".join(bits) if bits else "NA"
+    return hits, hitbits, reasons
+
+
+def _jump_vote(
+    z_delta60: Optional[float],
+    p_delta60: Optional[float],
+    ret1_pct: Optional[float]
+) -> Tuple[bool, int, str, List[str]]:
+    hits, hitbits, reasons = _jump_hits_and_reasons(z_delta60, p_delta60, ret1_pct)
+    return (hits >= 2, hits, hitbits, reasons)
 
 
 def _signal_for_series(
@@ -289,7 +311,7 @@ def _signal_for_series(
     z_delta60: Optional[float],
     p_delta60: Optional[float],
     ret1_pct: Optional[float]
-) -> Tuple[str, str, str, str, int]:
+) -> Tuple[str, str, str, str, int, str]:
     reasons: List[str] = []
     signal = "NONE"
 
@@ -311,8 +333,7 @@ def _signal_for_series(
                 signal = "WATCH"
             reasons.append("abs(Z60)>=2")
 
-    jump_hits, jump_reasons = _jump_hits_3(z_delta60, p_delta60, ret1_pct)
-    jump_hit = (jump_hits >= 2)
+    jump_hit, jump_hits, hitbits, jump_reasons = _jump_vote(z_delta60, p_delta60, ret1_pct)
     if jump_hit and signal != "ALERT":
         if signal in ("NONE", "INFO"):
             signal = "WATCH"
@@ -326,15 +347,15 @@ def _signal_for_series(
     elif p252 is not None and (p252 >= 95 or p252 <= 5):
         tag = "LONG_EXTREME"
     else:
-        has_delta = any(r.startswith("abs(zΔ60)") or r.startswith("abs(pΔ60)") for r in jump_reasons)
-        has_ret = any(r.startswith("abs(ret1%)") for r in jump_reasons)
-        if has_delta:
-            tag = "JUMP_DELTA"
-        elif has_ret:
-            tag = "JUMP_RET"
+        # tag by jump type when not long/short extreme
+        if hitbits != "NA":
+            if "Z" in hitbits or "P" in hitbits:
+                tag = "JUMP_DELTA"
+            elif "R" in hitbits:
+                tag = "JUMP_RET"
 
     reason = ";".join(reasons) if reasons else "NA"
-    return (signal, tag, near, reason, jump_hits)
+    return (signal, tag, near, reason, jump_hits, hitbits)
 
 
 def _load_dash_history(path: str) -> Dict[str, Any]:
@@ -424,12 +445,6 @@ def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
 
 
 def _migrate_asof_to_commit(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    若同一 (module, stats_as_of_ts) 同時存在：
-      - 新格式(commit:...) item
-      - 舊格式(asof:...) item
-    則把舊格式 item 補上 snapshot_id=commit:<sha>，讓 normalize/upsert 能收斂。
-    """
     m: Dict[Tuple[str, str], Tuple[str, str]] = {}
     for it in items:
         if not isinstance(it, dict):
@@ -641,7 +656,7 @@ def main() -> None:
         z_delta60 = (z60 - prev_z60) if (z60 is not None and prev_z60 is not None) else None
         p_delta60 = (p60_latest - prev_p60) if (p60_latest is not None and prev_p60 is not None) else None
 
-        signal, tag, near, reason, jump_hits_3 = _signal_for_series(z60, p252, z_delta60, p_delta60, ret1_pct)
+        signal, tag, near, reason, jump_hits, hitbits = _signal_for_series(z60, p252, z_delta60, p_delta60, ret1_pct)
 
         prev_signal = prev_map.get(sid, "NA")
         delta_signal = _delta_signal(prev_signal, signal)
@@ -652,10 +667,10 @@ def main() -> None:
         rows.append(Row(
             series=sid, dq=dq, age_h=age_h, data_date=data_date, value=value,
             z60=z60, p252=p252, z_delta60=z_delta60, p_delta60=p_delta60, ret1_pct=ret1_pct,
+            jump_hits=jump_hits, hitbits=hitbits,
             reason=reason, tag=tag, near=near, signal=signal,
             prev_signal=prev_signal, delta_signal=delta_signal, streak_wa=streak_wa,
             source_url=source_url, as_of_ts=stats_as_of_ts,
-            jump_hits_3=jump_hits_3,
         ))
         series_signals_out[sid] = signal
 
@@ -670,12 +685,8 @@ def main() -> None:
     changed_n = sum(1 for r in rows if r.delta_signal not in ("NA", "SAME"))
     watch_streak_ge3 = sum(1 for r in rows if r.signal == "WATCH" and r.streak_wa >= 3)
 
-    # ----------------------------
-    # NEW: Summary counters you requested
-    # ----------------------------
-    near_count = sum(1 for r in rows if r.near != "NA")
-    # "命中 1/3，但沒到 WATCH"：排除 WATCH/ALERT，保留 INFO/NONE
-    jump_1of3_count = sum(1 for r in rows if r.jump_hits_3 == 1 and r.signal not in ("WATCH", "ALERT"))
+    near_n = sum(1 for r in rows if r.near != "NA")
+    jump_1of3_n = sum(1 for r in rows if r.jump_hits == 1 and r.signal not in ("WATCH", "ALERT"))
 
     order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     rows.sort(key=lambda r: (order.get(r.signal, 9), r.series))
@@ -684,8 +695,7 @@ def main() -> None:
     md.append(f"# Risk Dashboard ({MODULE})\n")
     md.append(
         f"- Summary: ALERT={alert_n} / WATCH={watch_n} / INFO={info_n} / NONE={none_n}; "
-        f"CHANGED={changed_n}; WATCH_STREAK>=3={watch_streak_ge3}; "
-        f"NEAR={near_count}; JUMP_1of3={jump_1of3_count}"
+        f"CHANGED={changed_n}; WATCH_STREAK>=3={watch_streak_ge3}; NEAR={near_n}; JUMP_1of3={jump_1of3_n}"
     )
     md.append(f"- RUN_TS_UTC: `{run_ts_utc.isoformat()}`")
     md.append(f"- STATS.generated_at_utc: `{stats.get('generated_at_utc','NA')}`")
@@ -701,8 +711,8 @@ def main() -> None:
     md.append(f"- stale_hours: `{STALE_HOURS_DEFAULT}`")
     md.append(f"- dash_history: `{OUT_HISTORY}`")
     md.append(f"- history_lite_used_for_jump: `{PATH_HISTORY_LITE}`")
-
     md.append(f"- ret1_guard: `{RET1_GUARD_TEXT}`")
+    md.append(f"- threshold_eps: `{TH_EPS_TEXT}`")
 
     md.append(
         f"- alignment: `{align.get('alignment','NA')}`; checked={align.get('checked',0)}; "
@@ -721,7 +731,9 @@ def main() -> None:
     )
 
     cols = [
-        "Signal", "Tag", "Near", "PrevSignal", "DeltaSignal", "StreakWA",
+        "Signal", "Tag", "Near",
+        "JUMP_HITS", "HITBITS",
+        "PrevSignal", "DeltaSignal", "StreakWA",
         "Series", "DQ", "age_h", "data_date", "value", "z60", "p252",
         "z_delta60", "p_delta60", "ret1_pct", "Reason", "Source", "as_of_ts"
     ]
@@ -730,7 +742,9 @@ def main() -> None:
 
     for r in rows:
         md.append("| " + " | ".join([
-            r.signal, r.tag, r.near, r.prev_signal, r.delta_signal, str(r.streak_wa),
+            r.signal, r.tag, r.near,
+            str(r.jump_hits), r.hitbits,
+            r.prev_signal, r.delta_signal, str(r.streak_wa),
             r.series, r.dq, _fmt_num(r.age_h, 2), r.data_date, _fmt_num(r.value, 6),
             _fmt_num(r.z60, 6), _fmt_num(r.p252, 6),
             _fmt_num(r.z_delta60, 6), _fmt_num(r.p_delta60, 6),
