@@ -1,32 +1,25 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP+signals v3: Tag + Near)
-# - Reads stats_latest.json and flattens per-series rows
-# - Signals: ALERT / WATCH / INFO / NONE (改法 B)
-# - Adds:
-#     Tag  : which class of trigger fired (EXTREME_Z / JUMP_RET / JUMP_P / JUMP_ZD / LONG_EXTREME)
-#     Near : near-threshold hints for jump metrics (within 10% of threshold)
+# Dashboard renderer (MVP+signals v4: Tag + Near + Streak from history_lite)
 #
-# Signal logic (改法 B):
-#   Extreme:
-#     - |Z60| >= 2.0  (WATCH)
-#     - |Z60| >= 2.5  (ALERT)
-#     - P252 >= 95 or P252 <= 5  (WATCH/INFO)
-#     - P252 <= 2 (ALERT; very extreme low tail)
-#   Jump:
-#     - |ZΔ60| >= 0.75
-#     - |PΔ60| >= 15
-#     - |ret1%60| >= 2.0   (percent units; 2.0 == 2%)
-#   Level:
-#     - INFO  if ONLY long-extreme and no jump and |Z60|<2
-#     - ALERT if (|Z60|>=2.5) OR (P252<=2) OR (jump_hits>=2 and includes ZΔ60) OR (|Z60|>=2.0 and jump_hits>=1)
-#     - WATCH if (|Z60|>=2.0) OR (P252>=95 or <=5) OR (jump_hits>=1)
-#     - NONE  otherwise
+# Inputs:
+#   - stats_latest.json (current day computed stats + sources)
+#   - history_lite.json (time series values) -> used to compute PrevSignal + StreakWA
 #
-# Near logic:
-#   - within 10% of jump threshold but not crossing it:
-#       NEAR:ZΔ60, NEAR:PΔ60, NEAR:ret1%60
+# Signals: ALERT / WATCH / INFO / NONE (改法 B)
+# Tags: EXTREME_Z / JUMP_ZD / JUMP_P / JUMP_RET / LONG_EXTREME
+# Near: within 10% of jump thresholds (but not crossing)
+#
+# IMPORTANT (audit note):
+#   - PrevSignal/StreakWA are computed locally from history_lite values by re-deriving:
+#       z60, p252, zΔ60, pΔ60, ret1%60
+#     then applying the same signal rules.
+#   - ret1% uses denom = abs(prev_value) when prev_value != 0; otherwise NA.
+#     This may differ from upstream edge-case handling when prev is near 0.
+#
+# DQ:
+#   - OK / STALE / MISSING based on latest.as_of_ts age
 
 import argparse
 import json
@@ -55,6 +48,13 @@ RET1PCT60_JUMP_ABS = 2.0  # percent units
 
 # Near window: within X% of threshold
 NEAR_FRAC = 0.10  # 10%
+
+# Streak lookback (number of most recent points to compute signals for)
+STREAK_LOOKBACK_MAX = 30
+
+# Windows
+W60 = 60
+W252 = 252
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -98,37 +98,50 @@ def safe_abs(x: Any) -> Optional[float]:
 
 
 def is_near(abs_val: Optional[float], thr: float, near_frac: float) -> bool:
-    """
-    True if abs_val is in [ (1-near_frac)*thr, thr ) .
-    """
     if abs_val is None:
         return False
     lo = (1.0 - near_frac) * thr
     return (abs_val >= lo) and (abs_val < thr)
 
 
-def compute_signal_tag_near(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
+def mean_std_ddof0(vals: List[float]) -> Tuple[float, float]:
+    n = len(vals)
+    if n == 0:
+        return 0.0, 0.0
+    m = sum(vals) / n
+    var = sum((x - m) ** 2 for x in vals) / n
+    return m, var ** 0.5
+
+
+def percentile_leq(vals: List[float], x: float) -> float:
+    n = len(vals)
+    if n == 0:
+        return 0.0
+    c = sum(1 for v in vals if v <= x)
+    return (c / n) * 100.0
+
+
+def compute_signal_tag_near_from_metrics(
+    z60: Optional[float],
+    p252: Optional[float],
+    zdel60: Optional[float],
+    pdel60: Optional[float],
+    ret1pct60: Optional[float],
+) -> Tuple[str, str, str, str]:
     """
     Returns (signal_level, reason_str, tag_str, near_str)
+    Same rules as your current dashboard, but takes metrics directly.
     """
     reasons: List[str] = []
     tags: List[str] = []
     nears: List[str] = []
 
-    z60 = row.get("z60")
-    p252 = row.get("p252")
-    zdel = row.get("z_delta_60")
-    pdel = row.get("p_delta_60")
-    r1p = row.get("ret1_pct_60")
-
     az60 = safe_abs(z60)
-    azd = safe_abs(zdel)
-    apd = safe_abs(pdel)
-    ar1p = safe_abs(r1p)
+    azd = safe_abs(zdel60)
+    apd = safe_abs(pdel60)
+    ar1p = safe_abs(ret1pct60)
 
-    # -------------------------
     # Extreme checks
-    # -------------------------
     z60_watch = False
     z60_alert = False
     if az60 is not None:
@@ -139,31 +152,27 @@ def compute_signal_tag_near(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
         if az60 >= Z60_ALERT_ABS:
             z60_alert = True
             reasons.append(f"|Z60|>={Z60_ALERT_ABS:g}")
-            # EXTREME_Z already tagged
 
     p252_hi = False
     p252_lo = False
     p252_alert_lo = False
     if isinstance(p252, (int, float)):
-        p252_f = float(p252)
-        if p252_f >= P252_EXTREME_HI:
+        p = float(p252)
+        if p >= P252_EXTREME_HI:
             p252_hi = True
             reasons.append(f"P252>={P252_EXTREME_HI:g}")
             tags.append("LONG_EXTREME")
-        if p252_f <= P252_EXTREME_LO:
+        if p <= P252_EXTREME_LO:
             p252_lo = True
             reasons.append(f"P252<={P252_EXTREME_LO:g}")
             tags.append("LONG_EXTREME")
-        if p252_f <= P252_ALERT_LO:
+        if p <= P252_ALERT_LO:
             p252_alert_lo = True
             reasons.append(f"P252<={P252_ALERT_LO:g}")
-            # LONG_EXTREME already tagged
 
     long_extreme_only = (p252_hi or p252_lo) and (not z60_watch)
 
-    # -------------------------
     # Jump checks
-    # -------------------------
     jump_hits = 0
     has_zdelta_jump = False
 
@@ -192,9 +201,7 @@ def compute_signal_tag_near(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
         if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
             nears.append("NEAR:ret1%60")
 
-    # -------------------------
     # Level assignment (改法 B)
-    # -------------------------
     if long_extreme_only and jump_hits == 0:
         level = "INFO"
     else:
@@ -207,7 +214,7 @@ def compute_signal_tag_near(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
 
     reason_str = ";".join(reasons) if reasons else "NA"
 
-    # dedup tags while keeping order
+    # dedup tags preserving order
     seen = set()
     tags2: List[str] = []
     for t in tags:
@@ -218,6 +225,134 @@ def compute_signal_tag_near(row: Dict[str, Any]) -> Tuple[str, str, str, str]:
 
     near_str = ",".join(nears) if nears else "NA"
     return level, reason_str, tag_str, near_str
+
+
+def parse_history_points(history_obj: Dict[str, Any], series_id: str) -> List[Tuple[str, float]]:
+    """
+    Attempt to extract [(date_str, value_float), ...] for a series from history_lite.json.
+    Supports several plausible schemas.
+    """
+    series = history_obj.get("series", {})
+    if not isinstance(series, dict):
+        return []
+
+    s = series.get(series_id)
+    if s is None:
+        return []
+
+    # Case A: s is dict with a list under common keys
+    if isinstance(s, dict):
+        for key in ("data", "history", "points", "values"):
+            arr = s.get(key)
+            if isinstance(arr, list):
+                return normalize_points(arr)
+        # Case B: s itself might be a dict with date->value mapping
+        if all(isinstance(k, str) for k in s.keys()):
+            # try date->value mapping
+            pts: List[Tuple[str, float]] = []
+            for k, v in s.items():
+                if isinstance(v, (int, float)):
+                    pts.append((k, float(v)))
+            pts.sort(key=lambda x: x[0])
+            return pts
+
+    # Case C: s is already a list of points
+    if isinstance(s, list):
+        return normalize_points(s)
+
+    return []
+
+
+def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
+    pts: List[Tuple[str, float]] = []
+    for it in arr:
+        if isinstance(it, dict):
+            d = it.get("date") or it.get("data_date") or it.get("d")
+            v = it.get("value") if "value" in it else it.get("v")
+            if isinstance(d, str) and isinstance(v, (int, float)):
+                pts.append((d, float(v)))
+        elif isinstance(it, (list, tuple)) and len(it) >= 2:
+            d, v = it[0], it[1]
+            if isinstance(d, str) and isinstance(v, (int, float)):
+                pts.append((d, float(v)))
+    pts.sort(key=lambda x: x[0])
+    return pts
+
+
+def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -> Tuple[str, int]:
+    """
+    From history values, compute signals for last STREAK_LOOKBACK_MAX points,
+    then return (PrevSignal, StreakWA).
+    """
+    pts = parse_history_points(history_obj, series_id)
+    if len(pts) < 2:
+        return "NA", 0
+
+    # Use last lookback points
+    pts = pts[-max(STREAK_LOOKBACK_MAX, 2):]
+
+    dates = [d for d, _ in pts]
+    vals = [v for _, v in pts]
+    n = len(vals)
+
+    # For each i, compute z60/p252/zΔ60/pΔ60/ret1%60 using value windows up to i
+    signals: List[str] = []
+    for i in range(n):
+        x = vals[i]
+        prev = vals[i - 1] if i - 1 >= 0 else None
+
+        # w60 window ending at i (last 60 valid points)
+        w60_vals = vals[max(0, i - (W60 - 1)) : i + 1]
+        m60, sd60 = mean_std_ddof0(w60_vals)
+        z60 = None if sd60 == 0 else (x - m60) / sd60
+
+        # w252 percentile window ending at i
+        w252_vals = vals[max(0, i - (W252 - 1)) : i + 1]
+        p252 = percentile_leq(w252_vals, x)
+
+        # deltas based on previous day's z/p (computed with its own windows)
+        if i - 1 >= 0:
+            x_prev = vals[i - 1]
+            w60_prev = vals[max(0, (i - 1) - (W60 - 1)) : (i - 1) + 1]
+            m60p, sd60p = mean_std_ddof0(w60_prev)
+            z60_prev = None if sd60p == 0 else (x_prev - m60p) / sd60p
+
+            w252_prev = vals[max(0, (i - 1) - (W252 - 1)) : (i - 1) + 1]
+            p252_prev = percentile_leq(w252_prev, x_prev)
+
+            zdel60 = None if (z60 is None or z60_prev is None) else (z60 - z60_prev)
+            pdel60 = p252 - p252_prev
+        else:
+            zdel60 = None
+            pdel60 = None
+
+        # ret1%60 (percent units) based on prev value denom
+        if prev is None or abs(prev) < 1e-12:
+            ret1pct60 = None
+        else:
+            ret1pct60 = ((x - prev) / abs(prev)) * 100.0
+
+        sig, _, _, _ = compute_signal_tag_near_from_metrics(
+            z60=z60,
+            p252=p252,
+            zdel60=zdel60,
+            pdel60=pdel60,
+            ret1pct60=ret1pct60,
+        )
+        signals.append(sig)
+
+    # PrevSignal is signal at previous point (n-2)
+    prev_signal = signals[-2] if len(signals) >= 2 else "NA"
+
+    # StreakWA: count backwards from latest while signal in {WATCH, ALERT}
+    streak = 0
+    for s in reversed(signals):
+        if s in ("WATCH", "ALERT"):
+            streak += 1
+        else:
+            break
+
+    return prev_signal, streak
 
 
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
@@ -236,6 +371,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- STATS.as_of_ts: `{meta.get('stats_as_of_ts','')}`")
     lines.append(f"- script_version: `{meta.get('script_version','')}`")
     lines.append(f"- stale_hours: `{meta.get('stale_hours','')}`")
+    lines.append(f"- history_used_for_streak: `{meta.get('history_path','NA')}`")
+    lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
     lines.append(
         "- signal_rules: "
         f"`Extreme(|Z60|>={Z60_WATCH_ABS:g} (WATCH), |Z60|>={Z60_ALERT_ABS:g} (ALERT), "
@@ -247,7 +384,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append("")
 
     header = [
-        "Signal", "Tag", "Near", "Series", "DQ", "age_h",
+        "Signal", "Tag", "Near", "PrevSignal", "StreakWA",
+        "Series", "DQ", "age_h",
         "data_date", "value",
         "z60", "p252",
         "z_delta60", "p_delta60", "ret1_pct60",
@@ -261,6 +399,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             r.get("signal_level", "NONE"),
             r.get("tag", "NA"),
             r.get("near", "NA"),
+            r.get("prev_signal", "NA"),
+            fmt(r.get("streak_wa"), nd=0),
             r.get("series", ""),
             r.get("dq", ""),
             fmt(r.get("age_hours"), nd=2),
@@ -283,6 +423,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stats", required=True, help="Path to stats_latest.json (repo path)")
+    ap.add_argument("--history", default=None, help="Path to history_lite.json (repo path). If omitted, streak disabled.")
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--module", default="market_cache")
@@ -291,11 +432,21 @@ def main() -> None:
 
     run_ts = datetime.now(timezone.utc)
 
+    history_obj: Optional[Dict[str, Any]] = None
+    if args.history and os.path.exists(args.history):
+        try:
+            with open(args.history, "r", encoding="utf-8") as f:
+                history_obj = json.load(f)
+        except Exception:
+            history_obj = None
+
     if not os.path.exists(args.stats):
         meta = {
             "run_ts_utc": run_ts.isoformat(),
             "module": args.module,
             "stale_hours": args.stale_hours,
+            "history_path": args.history or "NA",
+            "streak_calc": "disabled (missing stats file)",
             "error": f"stats file missing: {args.stats}",
         }
         write_outputs(args.out_md, args.out_json, meta, [])
@@ -312,6 +463,11 @@ def main() -> None:
         "stats_as_of_ts": stats.get("as_of_ts"),
         "script_version": stats.get("script_version"),
         "series_count": stats.get("series_count"),
+        "history_path": args.history or "NA",
+        "streak_calc": (
+            "recompute z60/p252/zΔ60/pΔ60/ret1% from history_lite values; "
+            "ret1% denom = abs(prev_value) else NA"
+        ) if history_obj is not None else "disabled (history missing/unreadable)",
     }
 
     series = stats.get("series", {})
@@ -329,6 +485,21 @@ def main() -> None:
 
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
         dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, args.stale_hours)
+
+        # Signal/Tag/Near based on stats_latest metrics (authoritative for "today")
+        signal_level, reason, tag, near = compute_signal_tag_near_from_metrics(
+            z60=w60.get("z"),
+            p252=w252.get("p"),
+            zdel60=w60.get("z_delta"),
+            pdel60=w60.get("p_delta"),
+            ret1pct60=w60.get("ret1_pct"),
+        )
+
+        # PrevSignal/Streak from history_lite
+        if history_obj is not None:
+            prev_signal, streak = compute_prevsignal_and_streak(history_obj, sid)
+        else:
+            prev_signal, streak = "NA", 0
 
         row: Dict[str, Any] = {
             "module": args.module,
@@ -352,23 +523,46 @@ def main() -> None:
             # long window stats (w252)
             "z252": w252.get("z"),
             "p252": w252.get("p"),
-        }
 
-        signal_level, reason, tag, near = compute_signal_tag_near(row)
-        row["signal_level"] = signal_level
-        row["reason"] = reason
-        row["tag"] = tag
-        row["near"] = near
+            # signals
+            "signal_level": signal_level,
+            "reason": reason,
+            "tag": tag,
+            "near": near,
+
+            # streak
+            "prev_signal": prev_signal,
+            "streak_wa": streak,
+        }
 
         rows.append(row)
 
-    # Sorting: Signal (ALERT, WATCH, INFO, NONE), then DQ (MISSING, STALE, OK), then series
+    # Sorting:
+    # 1) Signal (ALERT, WATCH, INFO, NONE)
+    # 2) For WATCH only: Near!=NA first, then higher streak first
+    # 3) DQ (MISSING, STALE, OK)
+    # 4) series name
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
+
+    def watch_near_rank(r: Dict[str, Any]) -> int:
+        if r.get("signal_level") != "WATCH":
+            return 9
+        return 0 if r.get("near") not in (None, "NA", "") else 1
+
+    def streak_rank(r: Dict[str, Any]) -> int:
+        # higher streak first -> negative
+        try:
+            return -int(r.get("streak_wa") or 0)
+        except Exception:
+            return 0
+
     rows.sort(key=lambda r: (
         sig_order.get(r.get("signal_level", "NONE"), 9),
+        watch_near_rank(r),
+        streak_rank(r),
         dq_order.get(r.get("dq", "OK"), 9),
-        r.get("series", "")
+        r.get("series", ""),
     ))
 
     write_outputs(args.out_md, args.out_json, meta, rows)
