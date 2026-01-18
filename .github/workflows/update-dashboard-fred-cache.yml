@@ -1,0 +1,73 @@
+name: Update Dashboard (dashboard_fred_cache)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 15:30 Asia/Taipei = 07:30 UTC
+    - cron: "30 7 * * *"
+
+permissions:
+  contents: write
+
+# 仍建議共用同一個 repo-writer-main，避免多個 workflow 同時 push 互相打架
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  dashboard_fred_cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Render dashboard (fred_cache -> dashboard_fred_cache/)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python dashboard_fred_cache/render_dashboard.py \
+            --stats cache/stats_latest.json \
+            --out-md dashboard_fred_cache/DASHBOARD.md \
+            --out-json dashboard_fred_cache/dashboard_latest.json \
+            --history dashboard_fred_cache/history.json \
+            --module fred_cache \
+            --stale-hours 72
+
+      - name: Append history (dashboard_fred_cache/history.json)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python dashboard_fred_cache/append_history.py \
+            --dash-latest dashboard_fred_cache/dashboard_latest.json \
+            --history dashboard_fred_cache/history.json \
+            --module fred_cache
+
+      - name: Commit & push
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add dashboard_fred_cache/DASHBOARD.md dashboard_fred_cache/dashboard_latest.json dashboard_fred_cache/history.json
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+
+          git commit -m "chore: update dashboard_fred_cache"
+          git pull --rebase origin main
+          git push origin HEAD:main
