@@ -29,16 +29,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render dashboard (market_cache)
+      - name: Render dashboard (market_cache + cache)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/render_dashboard.py \
             --stats market_cache/stats_latest.json \
             --history market_cache/history_lite.json \
+            --stats2 cache/stats_latest.json \
+            --history2 cache/history_lite.json \
             --out-md dashboard/DASHBOARD.md \
             --out-json dashboard/dashboard_latest.json \
-            --module market_cache \
             --stale-hours 36
 
       - name: Commit & push
