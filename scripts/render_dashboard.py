@@ -1,31 +1,8 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (v5: merge 2 feeds + Tag + Near + Streak)
-#
-# Primary intent: keep the "fast dashboard" design, but allow adding essential macro series
-# without changing upstream pipelines:
-#   - Feed A: market_cache (stats_latest.json + history_lite.json)
-#   - Feed B: cache (FRED) (stats_latest.json + history_lite.json)
-#
-# Output:
-#   - dashboard/DASHBOARD.md
-#   - dashboard/dashboard_latest.json
-#
-# Signals: ALERT / WATCH / INFO / NONE (改法 B)
-# Tags: EXTREME_Z / JUMP_ZD / JUMP_P / JUMP_RET / LONG_EXTREME
-# Near: within 10% of jump thresholds (but not crossing)
-# StreakWA: consecutive points (from latest backwards) that are WATCH/ALERT
-# PrevSignal: signal at previous point
-#
-# Audit notes:
-#   - "today" signal is computed from stats_latest.json (authoritative for that feed).
-#   - PrevSignal/Streak are computed locally from history_lite values by re-deriving:
-#       z60, p252, zΔ60, pΔ60, ret1%  then applying the same signal rules.
-#   - ret1% denom = abs(prev_value) else NA.
-#
-# DQ:
-#   - OK / STALE / MISSING based on latest.as_of_ts age and per-series stale overrides.
+# Dashboard renderer (v5.1: merge 2 feeds + Tag + Near + Streak)
+# Fix: history_lite.json top-level may be LIST (not dict). Build a robust history index.
 
 import argparse
 import json
@@ -39,37 +16,26 @@ from typing import Any, Dict, List, Optional, Tuple
 # -------------------------
 DEFAULT_STALE_HOURS = 36.0
 
-# Per-series stale-hour overrides (to avoid ruining fast dashboard with slow-updating series)
-# Adjust as you observe real update cadence.
 STALE_OVERRIDES_HOURS: Dict[str, float] = {
-    # weekly-ish / slower:
-    "STLFSI4": 240.0,              # 10 days
-    "NFCINONFINLEVERAGE": 240.0,   # 10 days
-    # credit spread can be delayed sometimes; slightly looser than fast feed default:
-    "BAMLH0A0HYM2": 72.0,          # 3 days
-    # others (T10Y2Y, T10Y3M) keep default 36h unless you see frequent false STALE.
+    "STLFSI4": 240.0,
+    "NFCINONFINLEVERAGE": 240.0,
+    "BAMLH0A0HYM2": 72.0,
 }
 
-# Extreme thresholds
 Z60_WATCH_ABS = 2.0
 Z60_ALERT_ABS = 2.5
 
 P252_EXTREME_HI = 95.0
 P252_EXTREME_LO = 5.0
-P252_ALERT_LO = 2.0  # very extreme low tail
+P252_ALERT_LO = 2.0
 
-# Jump thresholds
 ZDELTA60_JUMP_ABS = 0.75
 PDELTA60_JUMP_ABS = 15.0
-RET1PCT60_JUMP_ABS = 2.0  # percent units
+RET1PCT60_JUMP_ABS = 2.0
 
-# Near window: within X% of threshold
-NEAR_FRAC = 0.10  # 10%
-
-# Streak lookback
+NEAR_FRAC = 0.10
 STREAK_LOOKBACK_MAX = 30
 
-# Windows used for local recompute (match your stats policy window sizes)
 W60 = 60
 W252 = 252
 
@@ -164,7 +130,6 @@ def compute_signal_tag_near_from_metrics(
     apd = safe_abs(pdel60)
     ar1p = safe_abs(ret1pct60)
 
-    # Extreme checks
     z60_watch = False
     z60_alert = False
     if az60 is not None:
@@ -195,7 +160,6 @@ def compute_signal_tag_near_from_metrics(
 
     long_extreme_only = (p252_hi or p252_lo) and (not z60_watch)
 
-    # Jump checks
     jump_hits = 0
     has_zdelta_jump = False
 
@@ -224,7 +188,6 @@ def compute_signal_tag_near_from_metrics(
         if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
             nears.append("NEAR:ret1%60")
 
-    # Level assignment (改法 B)
     if long_extreme_only and jump_hits == 0:
         level = "INFO"
     else:
@@ -237,7 +200,6 @@ def compute_signal_tag_near_from_metrics(
 
     reason_str = ";".join(reasons) if reasons else "NA"
 
-    # dedup tags preserving order
     seen = set()
     tags2: List[str] = []
     for t in tags:
@@ -251,7 +213,7 @@ def compute_signal_tag_near_from_metrics(
 
 
 # -------------------------
-# history_lite parsing + streak
+# history_lite: build index (supports dict OR list top-level)
 # -------------------------
 def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
     pts: List[Tuple[str, float]] = []
@@ -269,37 +231,66 @@ def normalize_points(arr: List[Any]) -> List[Tuple[str, float]]:
     return pts
 
 
-def parse_history_points(history_obj: Dict[str, Any], series_id: str) -> List[Tuple[str, float]]:
-    series = history_obj.get("series", {})
-    if not isinstance(series, dict):
-        return []
+def build_history_index(history_obj: Any) -> Dict[str, List[Tuple[str, float]]]:
+    """
+    Returns: { series_id: [(date, value), ...] } sorted by date.
+    Supports:
+      - dict with {"series": {sid: [...] / {...}}}
+      - list of rows like [{"series_id": "...", "date": "...", "value": ...}, ...]
+      - list of rows like [{"series":"...", "d":"...", "v":...}, ...]
+    Unknown schema -> empty dict.
+    """
+    idx: Dict[str, List[Tuple[str, float]]] = {}
 
-    s = series.get(series_id)
-    if s is None:
-        return []
+    # Case 1: dict schema
+    if isinstance(history_obj, dict):
+        series = history_obj.get("series")
+        if isinstance(series, dict):
+            for sid, s in series.items():
+                pts: List[Tuple[str, float]] = []
+                if isinstance(s, dict):
+                    for key in ("data", "history", "points", "values"):
+                        arr = s.get(key)
+                        if isinstance(arr, list):
+                            pts = normalize_points(arr)
+                            break
+                    if not pts:
+                        # date->value mapping
+                        if all(isinstance(k, str) for k in s.keys()):
+                            tmp: List[Tuple[str, float]] = []
+                            for k, v in s.items():
+                                if isinstance(v, (int, float)):
+                                    tmp.append((k, float(v)))
+                            tmp.sort(key=lambda x: x[0])
+                            pts = tmp
+                elif isinstance(s, list):
+                    pts = normalize_points(s)
 
-    if isinstance(s, dict):
-        for key in ("data", "history", "points", "values"):
-            arr = s.get(key)
-            if isinstance(arr, list):
-                return normalize_points(arr)
-        # date->value mapping
-        if all(isinstance(k, str) for k in s.keys()):
-            pts: List[Tuple[str, float]] = []
-            for k, v in s.items():
-                if isinstance(v, (int, float)):
-                    pts.append((k, float(v)))
+                if pts:
+                    idx[sid] = pts
+        return idx
+
+    # Case 2: list schema (flat rows)
+    if isinstance(history_obj, list):
+        for it in history_obj:
+            if not isinstance(it, dict):
+                continue
+            sid = it.get("series_id") or it.get("series") or it.get("id") or it.get("Series")
+            d = it.get("date") or it.get("data_date") or it.get("d") or it.get("Date")
+            v = it.get("value") if "value" in it else it.get("v") or it.get("Value")
+            if isinstance(sid, str) and isinstance(d, str) and isinstance(v, (int, float)):
+                idx.setdefault(sid, []).append((d, float(v)))
+
+        # sort each series by date
+        for sid, pts in idx.items():
             pts.sort(key=lambda x: x[0])
-            return pts
+        return idx
 
-    if isinstance(s, list):
-        return normalize_points(s)
-
-    return []
+    return {}
 
 
-def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -> Tuple[str, int]:
-    pts = parse_history_points(history_obj, series_id)
+def compute_prevsignal_and_streak(history_index: Dict[str, List[Tuple[str, float]]], series_id: str) -> Tuple[str, int]:
+    pts = history_index.get(series_id, [])
     if len(pts) < 2:
         return "NA", 0
 
@@ -358,9 +349,9 @@ def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -
 
 
 # -------------------------
-# I/O + merge
+# I/O + render
 # -------------------------
-def load_json_if_exists(path: Optional[str]) -> Optional[Dict[str, Any]]:
+def load_json_if_exists(path: Optional[str]) -> Any:
     if not path:
         return None
     if not os.path.exists(path):
@@ -393,11 +384,13 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- stale_overrides: `{meta.get('stale_overrides','')}`")
     lines.append(f"- FEED1.stats: `{meta.get('feed1_stats','')}`")
     lines.append(f"- FEED1.history: `{meta.get('feed1_history','')}`")
+    lines.append(f"- FEED1.history_schema: `{meta.get('feed1_history_schema','')}`")
     lines.append(f"- FEED1.as_of_ts: `{meta.get('feed1_as_of_ts','')}`")
     lines.append(f"- FEED1.generated_at_utc: `{meta.get('feed1_generated_at_utc','')}`")
     lines.append(f"- FEED1.script_version: `{meta.get('feed1_script_version','')}`")
     lines.append(f"- FEED2.stats: `{meta.get('feed2_stats','')}`")
     lines.append(f"- FEED2.history: `{meta.get('feed2_history','')}`")
+    lines.append(f"- FEED2.history_schema: `{meta.get('feed2_history_schema','')}`")
     lines.append(f"- FEED2.as_of_ts: `{meta.get('feed2_as_of_ts','')}`")
     lines.append(f"- FEED2.generated_at_utc: `{meta.get('feed2_generated_at_utc','')}`")
     lines.append(f"- FEED2.script_version: `{meta.get('feed2_script_version','')}`")
@@ -452,10 +445,10 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stats", required=True, help="Primary stats_latest.json (repo path)")
-    ap.add_argument("--history", required=True, help="Primary history_lite.json (repo path)")
-    ap.add_argument("--stats2", default=None, help="Secondary stats_latest.json (repo path)")
-    ap.add_argument("--history2", default=None, help="Secondary history_lite.json (repo path)")
+    ap.add_argument("--stats", required=True)
+    ap.add_argument("--history", required=True)
+    ap.add_argument("--stats2", default=None)
+    ap.add_argument("--history2", default=None)
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
@@ -464,11 +457,11 @@ def main() -> None:
     run_ts = datetime.now(timezone.utc)
 
     stats1 = load_json_if_exists(args.stats)
-    hist1 = load_json_if_exists(args.history)
+    hist1_raw = load_json_if_exists(args.history)
     stats2 = load_json_if_exists(args.stats2) if args.stats2 else None
-    hist2 = load_json_if_exists(args.history2) if args.history2 else None
+    hist2_raw = load_json_if_exists(args.history2) if args.history2 else None
 
-    if stats1 is None:
+    if not isinstance(stats1, dict):
         meta = {
             "run_ts_utc": run_ts.isoformat(),
             "stale_hours_default": args.stale_hours,
@@ -477,33 +470,36 @@ def main() -> None:
             "feed1_history": args.history,
             "feed2_stats": args.stats2 or "NA",
             "feed2_history": args.history2 or "NA",
-            "error": f"missing primary stats: {args.stats}",
+            "error": f"missing/invalid primary stats: {args.stats}",
         }
         write_outputs(args.out_md, args.out_json, meta, [])
         return
 
-    # meta
+    hist1_index = build_history_index(hist1_raw)
+    hist2_index = build_history_index(hist2_raw) if stats2 is not None else {}
+
     meta = {
         "run_ts_utc": run_ts.isoformat(),
         "stale_hours_default": args.stale_hours,
         "stale_overrides": json.dumps(STALE_OVERRIDES_HOURS, ensure_ascii=False),
         "feed1_stats": args.stats,
         "feed1_history": args.history,
-        "feed1_as_of_ts": (stats1.get("as_of_ts") if isinstance(stats1, dict) else None),
-        "feed1_generated_at_utc": (stats1.get("generated_at_utc") if isinstance(stats1, dict) else None),
-        "feed1_script_version": (stats1.get("script_version") if isinstance(stats1, dict) else None),
+        "feed1_history_schema": type(hist1_raw).__name__ if hist1_raw is not None else "None",
+        "feed1_as_of_ts": stats1.get("as_of_ts"),
+        "feed1_generated_at_utc": stats1.get("generated_at_utc"),
+        "feed1_script_version": stats1.get("script_version"),
         "feed2_stats": args.stats2 or "NA",
         "feed2_history": args.history2 or "NA",
-        "feed2_as_of_ts": (stats2.get("as_of_ts") if isinstance(stats2, dict) else None) if stats2 else None,
-        "feed2_generated_at_utc": (stats2.get("generated_at_utc") if isinstance(stats2, dict) else None) if stats2 else None,
-        "feed2_script_version": (stats2.get("script_version") if isinstance(stats2, dict) else None) if stats2 else None,
+        "feed2_history_schema": type(hist2_raw).__name__ if hist2_raw is not None else "None",
+        "feed2_as_of_ts": (stats2.get("as_of_ts") if isinstance(stats2, dict) else None),
+        "feed2_generated_at_utc": (stats2.get("generated_at_utc") if isinstance(stats2, dict) else None),
+        "feed2_script_version": (stats2.get("script_version") if isinstance(stats2, dict) else None),
         "streak_calc": "recompute from history_lite values; ret1% denom = abs(prev_value) else NA",
     }
 
     s1 = iter_series(stats1)
-    s2 = iter_series(stats2) if stats2 else {}
+    s2 = iter_series(stats2) if isinstance(stats2, dict) else {}
 
-    # Merge rule: prefer primary feed for duplicate series_id
     merged: List[Tuple[str, str, Dict[str, Any]]] = []
     seen_ids = set()
 
@@ -522,13 +518,10 @@ def main() -> None:
     rows: List[Dict[str, Any]] = []
     for feed, sid, sobj in merged:
         latest = sobj.get("latest", {}) if isinstance(sobj.get("latest"), dict) else {}
-
         w60 = get_w(sobj, "w60")
         w252 = get_w(sobj, "w252")
 
-        # per-series stale hours override
         stale_h = stale_hours_for_series(sid, args.stale_hours)
-
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
         dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, stale_h)
 
@@ -540,54 +533,38 @@ def main() -> None:
             ret1pct60=w60.get("ret1_pct"),
         )
 
-        # streak source selection
-        if feed == "market_cache":
-            history_obj = hist1
-        else:
-            history_obj = hist2
-
-        if history_obj is not None:
-            prev_signal, streak = compute_prevsignal_and_streak(history_obj, sid)
-        else:
+        # Streak source selection; NEVER crash the whole run
+        try:
+            if feed == "market_cache":
+                prev_signal, streak = compute_prevsignal_and_streak(hist1_index, sid)
+            else:
+                prev_signal, streak = compute_prevsignal_and_streak(hist2_index, sid)
+        except Exception:
             prev_signal, streak = "NA", 0
 
-        row: Dict[str, Any] = {
+        rows.append({
             "feed": feed,
             "series": sid,
             "dq": dq,
             "age_hours": age_hours,
             "stale_hours": stale_h,
-
             "data_date": latest.get("data_date"),
             "value": latest.get("value"),
             "as_of_ts": latest.get("as_of_ts"),
             "source_url": latest.get("source_url"),
-
-            # metrics
             "z60": w60.get("z"),
             "p252": w252.get("p"),
             "z_delta_60": w60.get("z_delta"),
             "p_delta_60": w60.get("p_delta"),
             "ret1_pct_60": w60.get("ret1_pct"),
-
-            # signal fields
             "signal_level": signal_level,
             "reason": reason,
             "tag": tag,
             "near": near,
-
-            # streak fields
             "prev_signal": prev_signal,
             "streak_wa": streak,
-        }
+        })
 
-        rows.append(row)
-
-    # Sorting:
-    # 1) Signal (ALERT, WATCH, INFO, NONE)
-    # 2) For WATCH only: Near!=NA first, then higher streak first
-    # 3) DQ (MISSING, STALE, OK)
-    # 4) Feed (market_cache first), then series
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
     feed_order = {"market_cache": 0, "cache": 1}
