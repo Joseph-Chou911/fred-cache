@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard_fred_cache.py
 #
-# Standalone renderer for FRED cache dashboard (cache/stats_latest.json)
+# fred_cache dashboard renderer with "sudden move" support via cache/history_lite.json.
 #
-# Supports BOTH schemas:
-# A) market_cache-style: windows.w60.{z,p,z_delta,p_delta,ret1_pct} ...
-# B) fred_cache-style:  metrics.{z60,p252,ret1,...} with top-level as_of_ts and stats_policy.script_version
+# Inputs:
+#   --stats        cache/stats_latest.json (used for meta + as-of timestamps; metrics optional)
+#   --history      dashboard_fred_cache/history.json (dashboard output history for Prev/Delta/Streak)
+#   --history-lite cache/history_lite.json (for recomputing z60/p252 + zΔ60/pΔ60/ret1%60)
 #
-# Key fixes for fred_cache:
-# - script_version from stats_policy.script_version
-# - z60/p252/ret1 from series.metrics
-# - effective as_of_ts uses per-series latest.as_of_ts if present; else falls back to stats.as_of_ts
-# - DQ and age_h computed from effective as_of_ts, not from missing per-series as_of_ts
-#
-# PrevSignal/Streak:
-# - derived from dashboard_fred_cache/history.json (past renderer outputs)
-#
-# Outputs:
-# - dashboard_fred_cache/DASHBOARD.md
-# - dashboard_fred_cache/dashboard_latest.json
+# Key goals:
+# - Keep auditable, deterministic computation using repo files only (no external fetch).
+# - Recompute from history_lite values:
+#     z60, p252, zΔ60, pΔ60, ret1%60
+#   (ret1% denom = abs(prev_value) else NA)
+# - Fall back gracefully when history_lite missing or insufficient points.
 
 import argparse
 import json
@@ -29,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_STALE_HOURS = 72.0
 
+# ---- Signal thresholds (same family as market_cache) ----
 Z60_WATCH_ABS = 2.0
 Z60_ALERT_ABS = 2.5
 
@@ -41,9 +37,12 @@ PDELTA60_JUMP_ABS = 15.0
 RET1PCT60_JUMP_ABS = 2.0
 
 NEAR_FRAC = 0.10
-STREAK_HISTORY_MAX = 120
+STREAK_HISTORY_MAX = 180
 
 
+# -------------------------
+# Utils
+# -------------------------
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
     if not ts or not isinstance(ts, str):
         return None
@@ -72,7 +71,7 @@ def fmt(x: Any, nd: int = 6) -> str:
 
 def md_escape_cell(x: Any) -> str:
     s = str(x) if x is not None else "NA"
-    s = s.replace("|", "&#124;")  # keep table stable if any stray pipes appear
+    s = s.replace("|", "&#124;")  # protect markdown table
     s = s.replace("\n", "<br>")
     return s
 
@@ -90,6 +89,27 @@ def is_near(abs_val: Optional[float], thr: float, near_frac: float) -> bool:
     return (abs_val >= lo) and (abs_val < thr)
 
 
+def mean_std_ddof0(xs: List[float]) -> Tuple[Optional[float], Optional[float]]:
+    n = len(xs)
+    if n == 0:
+        return None, None
+    m = sum(xs) / n
+    var = sum((x - m) ** 2 for x in xs) / n
+    std = var ** 0.5
+    return m, std
+
+
+def percentile_le(xs: List[float], latest: float) -> Optional[float]:
+    n = len(xs)
+    if n == 0:
+        return None
+    c = sum(1 for x in xs if x <= latest)
+    return (c / n) * 100.0
+
+
+# -------------------------
+# Signal logic
+# -------------------------
 def compute_signal_tag_near(
     z60: Optional[float],
     p252: Optional[float],
@@ -97,20 +117,6 @@ def compute_signal_tag_near(
     pdel60: Optional[float],
     ret1pct60: Optional[float],
 ) -> Tuple[str, str, str, str]:
-    """
-    Rules (same as market_cache dashboard):
-      - Extreme:
-          abs(Z60)>=2 => WATCH
-          abs(Z60)>=2.5 => ALERT
-          P252>=95 or <=5 => WATCH/INFO
-          P252<=2 => ALERT
-      - Jump:
-          abs(ZΔ60)>=0.75 OR abs(PΔ60)>=15 OR abs(ret1%60)>=2
-      - Near:
-          within 10% of jump thresholds
-      - INFO special:
-          if ONLY long-extreme (P252 extreme) and no jump and abs(Z60)<2
-    """
     reasons: List[str] = []
     tags: List[str] = []
     nears: List[str] = []
@@ -178,6 +184,7 @@ def compute_signal_tag_near(
         if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
             nears.append("NEAR:ret1%60")
 
+    # INFO rule: long-extreme only + no jump + abs(Z60)<2
     if long_extreme_only and jump_hits == 0:
         level = "INFO"
     else:
@@ -202,7 +209,10 @@ def compute_signal_tag_near(
     return level, reason_str, tag_str, near_str
 
 
-def load_history(path: str) -> List[Dict[str, Any]]:
+# -------------------------
+# dashboard history (Prev/Delta/Streak)
+# -------------------------
+def load_dash_history(path: str) -> List[Dict[str, Any]]:
     if not path or not os.path.exists(path):
         return []
     try:
@@ -213,7 +223,7 @@ def load_history(path: str) -> List[Dict[str, Any]]:
             snaps = [x for x in items if isinstance(x, dict)]
             return snaps[-STREAK_HISTORY_MAX:]
     except Exception:
-        pass
+        return []
     return []
 
 
@@ -253,6 +263,200 @@ def delta_signal(prev: str, today: str) -> str:
     return f"{prev}→{today}"
 
 
+# -------------------------
+# history_lite parsing + recompute
+# -------------------------
+def parse_history_lite(path: str) -> Dict[str, List[Tuple[str, float]]]:
+    """
+    Returns: { series_id: [(data_date, value), ...] } sorted by data_date asc
+    Supports:
+      - NDJSON (one JSON object per line)
+      - JSON array of records
+      - JSON object containing list-like under known keys (best-effort)
+    Record expected keys:
+      - series_id or series
+      - data_date or date
+      - value
+    """
+    out: Dict[str, List[Tuple[str, float]]] = {}
+
+    if not path or (not os.path.exists(path)):
+        return out
+
+    def add_rec(series_id: str, data_date: str, value: Any) -> None:
+        if not isinstance(series_id, str) or not series_id:
+            return
+        if not isinstance(data_date, str) or not data_date:
+            return
+        if not isinstance(value, (int, float)):
+            return
+        out.setdefault(series_id, []).append((data_date, float(value)))
+
+    # Try to detect format by reading first non-empty bytes
+    with open(path, "r", encoding="utf-8") as f:
+        head = ""
+        while True:
+            ch = f.read(1)
+            if not ch:
+                break
+            if ch.strip():
+                head = ch
+                break
+
+    # JSON array
+    if head == "[":
+        with open(path, "r", encoding="utf-8") as f:
+            arr = json.load(f)
+        if isinstance(arr, list):
+            for r in arr:
+                if not isinstance(r, dict):
+                    continue
+                sid = r.get("series_id") or r.get("series")
+                dd = r.get("data_date") or r.get("date")
+                val = r.get("value")
+                add_rec(sid, dd, val)
+
+    # JSON object (might wrap records)
+    elif head == "{":
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        # common patterns: obj["data"] or obj["items"] or obj["records"]
+        cand = None
+        for k in ("data", "items", "records", "rows"):
+            if isinstance(obj.get(k), list):
+                cand = obj.get(k)
+                break
+        if cand is None and isinstance(obj.get("series"), dict):
+            # series -> list of points
+            for sid, s in obj["series"].items():
+                if isinstance(s, dict) and isinstance(s.get("values"), list):
+                    for p in s["values"]:
+                        if not isinstance(p, dict):
+                            continue
+                        dd = p.get("data_date") or p.get("date")
+                        val = p.get("value")
+                        add_rec(sid, dd, val)
+        else:
+            if isinstance(cand, list):
+                for r in cand:
+                    if not isinstance(r, dict):
+                        continue
+                    sid = r.get("series_id") or r.get("series")
+                    dd = r.get("data_date") or r.get("date")
+                    val = r.get("value")
+                    add_rec(sid, dd, val)
+
+    # NDJSON fallback
+    else:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(r, dict):
+                    continue
+                sid = r.get("series_id") or r.get("series")
+                dd = r.get("data_date") or r.get("date")
+                val = r.get("value")
+                add_rec(sid, dd, val)
+
+    # sort and keep unique by data_date (last wins)
+    for sid, pts in out.items():
+        # if duplicates exist, keep last
+        m: Dict[str, float] = {}
+        for dd, v in pts:
+            m[dd] = v
+        pts2 = sorted(m.items(), key=lambda t: t[0])
+        out[sid] = [(dd, v) for dd, v in pts2]
+
+    return out
+
+
+def compute_from_history(points: List[Tuple[str, float]]) -> Dict[str, Optional[float]]:
+    """
+    From full chronological points, compute:
+      z60, p252, zΔ60, pΔ60, ret1%60
+    Using "last N valid points" windows (not calendar days).
+    """
+    vals = [v for _, v in points if isinstance(v, (int, float))]
+    if len(vals) < 2:
+        return {"z60": None, "p252": None, "z_delta60": None, "p_delta60": None, "ret1_pct60": None}
+
+    latest = vals[-1]
+    prev = vals[-2]
+
+    # ret1%60
+    denom = abs(prev)
+    if denom > 0:
+        ret1_pct = ((latest - prev) / denom) * 100.0
+    else:
+        ret1_pct = None
+
+    # current windows
+    w60 = vals[-60:] if len(vals) >= 60 else []
+    w252 = vals[-252:] if len(vals) >= 252 else []
+
+    z60 = None
+    if len(w60) >= 60:
+        m, s = mean_std_ddof0(w60)
+        if m is not None and s is not None and s > 0:
+            z60 = (latest - m) / s
+
+    p252 = None
+    if len(w252) >= 252:
+        p252 = percentile_le(w252, latest)
+
+    # previous windows (exclude latest)
+    z60_prev = None
+    p60 = None
+    p60_prev = None
+
+    if len(vals) >= 61:
+        w60_prev = vals[-61:-1]  # 60 points ending at prev
+        m0, s0 = mean_std_ddof0(w60_prev)
+        if m0 is not None and s0 is not None and s0 > 0:
+            z60_prev = (prev - m0) / s0
+
+        # p60 today/prev for pΔ60 (consistent with market_cache idea)
+        p60 = percentile_le(w60, latest) if len(w60) == 60 else None
+        p60_prev = percentile_le(w60_prev, prev) if len(w60_prev) == 60 else None
+
+    z_delta = None
+    if z60 is not None and z60_prev is not None:
+        z_delta = z60 - z60_prev
+
+    p_delta = None
+    if p60 is not None and p60_prev is not None:
+        p_delta = p60 - p60_prev
+
+    return {
+        "z60": z60,
+        "p252": p252,
+        "z_delta60": z_delta,
+        "p_delta60": p_delta,
+        "ret1_pct60": ret1_pct,
+    }
+
+
+# -------------------------
+# Meta
+# -------------------------
+def pick_script_version(stats: Dict[str, Any]) -> Optional[str]:
+    sv = stats.get("script_version")
+    if isinstance(sv, str) and sv:
+        return sv
+    sp = stats.get("stats_policy")
+    if isinstance(sp, dict):
+        sv2 = sp.get("script_version")
+        if isinstance(sv2, str) and sv2:
+            return sv2
+    return None
+
+
 def summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     counts = {"ALERT": 0, "WATCH": 0, "INFO": 0, "NONE": 0}
     changed = 0
@@ -273,18 +477,6 @@ def summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     counts["CHANGED"] = changed
     counts["WATCH_STREAK_GE3"] = watch_ge3
     return counts
-
-
-def pick_script_version(stats: Dict[str, Any]) -> Optional[str]:
-    sv = stats.get("script_version")
-    if isinstance(sv, str) and sv:
-        return sv
-    sp = stats.get("stats_policy")
-    if isinstance(sp, dict):
-        sv2 = sp.get("script_version")
-        if isinstance(sv2, str) and sv2:
-            return sv2
-    return None
 
 
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
@@ -310,7 +502,9 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- script_version: `{meta.get('script_version','')}`")
     lines.append(f"- stale_hours: `{meta.get('stale_hours','')}`")
     lines.append(f"- dash_history: `{meta.get('history_path','NA')}`")
+    lines.append(f"- history_lite_used_for_jump: `{meta.get('history_lite_path','NA')}`")
     lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
+    lines.append(f"- jump_calc: `{meta.get('jump_calc','NA')}`")
     lines.append(
         "- signal_rules: "
         f"`Extreme(abs(Z60)>={Z60_WATCH_ABS:g} (WATCH), abs(Z60)>={Z60_ALERT_ABS:g} (ALERT), "
@@ -362,6 +556,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stats", required=True)
     ap.add_argument("--history", required=True)
+    ap.add_argument("--history-lite", required=True)
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--module", default="fred_cache")
@@ -376,7 +571,9 @@ def main() -> None:
             "module": args.module,
             "stale_hours": args.stale_hours,
             "history_path": args.history,
+            "history_lite_path": args.history_lite,
             "streak_calc": "disabled (missing stats file)",
+            "jump_calc": "disabled (missing stats file)",
             "error": f"stats missing: {args.stats}",
         }
         write_outputs(args.out_md, args.out_json, meta, [])
@@ -388,8 +585,12 @@ def main() -> None:
     stats_as_of_ts = stats.get("as_of_ts") if isinstance(stats.get("as_of_ts"), str) else None
     stats_as_of_dt = parse_iso(stats_as_of_ts)
 
-    snaps = load_history(args.history)
+    # dashboard history for Prev/Delta/Streak
+    snaps = load_dash_history(args.history)
     timeline = build_timeline(snaps, args.module)
+
+    # history_lite for sudden-move recompute
+    hl = parse_history_lite(args.history_lite)
 
     meta = {
         "run_ts_utc": run_ts.isoformat(),
@@ -400,8 +601,11 @@ def main() -> None:
         "script_version": pick_script_version(stats),
         "series_count": stats.get("series_count"),
         "history_path": args.history,
+        "history_lite_path": args.history_lite,
         "streak_calc": "PrevSignal/Streak derived from history.json (dashboard outputs)",
+        "jump_calc": "recompute z60/p252/zΔ60/pΔ60/ret1%60 from history_lite values; ret1% denom = abs(prev_value) else NA",
         "history_items_used": len(snaps),
+        "history_lite_series": len(hl),
     }
 
     series = stats.get("series", {})
@@ -415,51 +619,26 @@ def main() -> None:
             continue
 
         latest = s.get("latest", {}) if isinstance(s.get("latest"), dict) else {}
-        metrics = s.get("metrics", {}) if isinstance(s.get("metrics"), dict) else {}
-        windows = s.get("windows", {}) if isinstance(s.get("windows"), dict) else {}
 
-        # Determine schema: market_cache has windows.w60 with z/p, fred_cache has metrics.z60/p252
-        is_market_schema = False
-        w60 = None
-        w252 = None
-        if isinstance(windows, dict):
-            w60 = windows.get("w60") if isinstance(windows.get("w60"), dict) else None
-            w252 = windows.get("w252") if isinstance(windows.get("w252"), dict) else None
-
-        # market-style signals live under series.windows.w60.{z,p,z_delta,p_delta,ret1_pct}
-        # fred-style signals live under series.metrics.{z60,p252,ret1} (no deltas, no ret1_pct)
-        if isinstance(w60, dict) and ("z" in w60 or "p" in w60 or "z_delta" in w60 or "p_delta" in w60 or "ret1_pct" in w60):
-            is_market_schema = True
-
-        # Effective as_of_ts for DQ:
-        # - prefer per-series latest.as_of_ts if present
-        # - else fall back to top-level stats.as_of_ts (fred_cache)
+        # Effective as_of_ts:
+        # prefer per-series latest.as_of_ts if present; else fall back to stats.as_of_ts
         eff_as_of_ts = latest.get("as_of_ts") if isinstance(latest.get("as_of_ts"), str) else stats_as_of_ts
         eff_as_of_dt = parse_iso(eff_as_of_ts)
 
         dq, age_hours = dq_from_ts(run_ts, eff_as_of_dt or stats_as_of_dt, args.stale_hours)
 
-        if is_market_schema:
-            z60 = w60.get("z") if isinstance(w60, dict) else None
-            p252 = w252.get("p") if isinstance(w252, dict) else None
-            zdel60 = w60.get("z_delta") if isinstance(w60, dict) else None
-            pdel60 = w60.get("p_delta") if isinstance(w60, dict) else None
-            ret1pct60 = w60.get("ret1_pct") if isinstance(w60, dict) else None
-        else:
-            z60 = metrics.get("z60")
-            p252 = metrics.get("p252")
-            # fred_cache stats doesn't provide deltas or ret1_pct; keep NA
-            zdel60 = None
-            pdel60 = None
-            ret1pct60 = None
+        # Recompute signals from history_lite (if available)
+        comp = compute_from_history(hl.get(sid, [])) if sid in hl else {
+            "z60": None, "p252": None, "z_delta60": None, "p_delta60": None, "ret1_pct60": None
+        }
 
-        lvl, reason, tag, near = compute_signal_tag_near(
-            z60=z60,
-            p252=p252,
-            zdel60=zdel60,
-            pdel60=pdel60,
-            ret1pct60=ret1pct60,
-        )
+        z60 = comp.get("z60")
+        p252 = comp.get("p252")
+        zdel60 = comp.get("z_delta60")
+        pdel60 = comp.get("p_delta60")
+        ret1pct60 = comp.get("ret1_pct60")
+
+        lvl, reason, tag, near = compute_signal_tag_near(z60, p252, zdel60, pdel60, ret1pct60)
 
         prev, streak = prev_and_streak(sid, lvl, timeline)
         dlt = delta_signal(prev, lvl)
