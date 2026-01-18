@@ -3,7 +3,7 @@ name: Update dashboard (fred_cache)
 on:
   workflow_dispatch: {}
   schedule:
-    # daily at 13:10 UTC = 21:10 Asia/Taipei (adjust if you want)
+    # daily at 13:10 UTC = 21:10 Asia/Taipei
     - cron: "10 13 * * *"
 
 permissions:
@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add dashboard_fred_cache/README.md dashboard_fred_cache/history.json || true
+          git add dashboard_fred_cache/dashboard.md dashboard_fred_cache/history.json || true
           if git diff --cached --quiet; then
             echo "No changes."
             exit 0
