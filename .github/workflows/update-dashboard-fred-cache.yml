@@ -3,8 +3,7 @@ name: Update Dashboard (fred_cache)
 on:
   workflow_dispatch: {}
   schedule:
-    # Daily at 15:10 UTC = 23:10 Asia/Taipei (you can change later)
-    - cron: "10 15 * * *"
+    - cron: "35 3 * * *"  # example: 03:35 UTC = 11:35 Asia/Taipei
 
 permissions:
   contents: write
@@ -17,16 +16,6 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      TIMEZONE: Asia/Taipei
-      MODULE: fred_cache
-      STALE_HOURS: "72"
-      STATS_PATH: cache/stats_latest.json
-      HISTORY_LITE_PATH: cache/history_lite.json
-      DASH_DIR: dashboard_fred_cache
-      OUT_MD: dashboard_fred_cache/latest.md
-      LATEST_JSON: dashboard_fred_cache/dashboard_latest.json
-      DASH_HISTORY: dashboard_fred_cache/history.json
 
     steps:
       - name: Checkout
@@ -34,80 +23,77 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Prepare folders
+      - name: Install deps
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "${DASH_DIR}"
-          # Create an empty history.json if missing (append script can also do it, but this makes it explicit)
-          if [ ! -f "${DASH_HISTORY}" ]; then
-            cat > "${DASH_HISTORY}" <<'JSON'
-{"schema_version":"dash_history_v1","items":[]}
-JSON
-          fi
+          python -m pip install --upgrade pip
 
-      - name: Sanity check inputs exist
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f "${STATS_PATH}" || (echo "Missing ${STATS_PATH}. Did the cache update workflow run/commit?" && exit 1)
-          test -f "${HISTORY_LITE_PATH}" || (echo "Missing ${HISTORY_LITE_PATH}. Did the cache update workflow run/commit?" && exit 1)
-
+      # -----------------------
+      # Render dashboard (fred_cache)
+      # -----------------------
       - name: Render dashboard (fred_cache)
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p dashboard_fred_cache
+
           python scripts/render_dashboard_fred_cache.py \
-            --stats "${STATS_PATH}" \
-            --history-lite "${HISTORY_LITE_PATH}" \
-            --out-md "${OUT_MD}" \
-            --dash-history "${DASH_HISTORY}" \
-            --module "${MODULE}" \
-            --stale-hours "${STALE_HOURS}"
+            --stats cache/stats_latest.json \
+            --history-lite cache/history_lite.json \
+            --history dashboard_fred_cache/history.json \
+            --out-md dashboard_fred_cache/DASHBOARD.md \
+            --out-json dashboard_fred_cache/dashboard_latest.json \
+            --module fred_cache \
+            --stale-hours 72
 
-          # Defensive: ensure the renderer produced the JSON that append step needs.
-          # If your script writes JSON elsewhere, adjust LATEST_JSON accordingly.
-          if [ ! -f "${LATEST_JSON}" ]; then
-            echo "ERROR: expected latest JSON not found at ${LATEST_JSON}"
-            echo "Directory listing:"
-            ls -la "${DASH_DIR}" || true
-            exit 1
-          fi
+      # -----------------------
+      # Sanity check dashboard_latest.json keys (critical)
+      # -----------------------
+      - name: Sanity check dashboard_latest.json meta keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dashboard_fred_cache/dashboard_latest.json
+          python - <<'PY'
+          import json
+          p="dashboard_fred_cache/dashboard_latest.json"
+          j=json.load(open(p,"r",encoding="utf-8"))
+          print("dashboard_latest.json keys =", sorted(list(j.keys())))
+          for k in ["run_ts_utc","stats_as_of_ts","module","series_signals"]:
+            print(k, "=>", "OK" if k in j else "MISSING")
+          PY
 
+      # -----------------------
+      # Append dashboard history
+      # -----------------------
       - name: Append dashboard history (fred_cache)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
-            --latest "${LATEST_JSON}" \
-            --history "${DASH_HISTORY}" \
-            --max-items 400
+            --latest dashboard_fred_cache/dashboard_latest.json \
+            --history dashboard_fred_cache/history.json \
+            --max-items 180
 
-      - name: Configure git author
+      - name: Commit changes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit changes (if any)
-        shell: bash
-        run: |
-          set -euo pipefail
-          git add "${DASH_DIR}/latest.md" "${DASH_DIR}/dashboard_latest.json" "${DASH_DIR}/history.json" || true
+          git add dashboard_fred_cache/DASHBOARD.md dashboard_fred_cache/dashboard_latest.json dashboard_fred_cache/history.json || true
+
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "dashboard_fred_cache: update latest + history"
 
-      - name: Push
-        shell: bash
-        run: |
-          set -euo pipefail
+          git commit -m "dashboard_fred_cache: update dashboard + history"
           git push
