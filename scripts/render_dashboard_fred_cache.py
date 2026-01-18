@@ -329,7 +329,6 @@ def _load_dash_history(path: str) -> Dict[str, Any]:
 
 
 def _get_data_commit_sha(stats: Any) -> Optional[str]:
-    # try multiple layouts (root/meta/stats_policy etc.)
     try:
         if isinstance(stats, dict):
             v = stats.get("data_commit_sha")
@@ -362,7 +361,6 @@ def _get_stats_generated_at_utc(stats: Any) -> Optional[str]:
 
 
 def _make_snapshot_id(stats_as_of_ts: str, stats_generated_at_utc: Optional[str], data_commit_sha: Optional[str]) -> str:
-    # priority: commit sha > generated_at_utc > as_of_ts
     if data_commit_sha:
         return f"commit:{data_commit_sha}"
     if stats_generated_at_utc:
@@ -371,7 +369,6 @@ def _make_snapshot_id(stats_as_of_ts: str, stats_generated_at_utc: Optional[str]
 
 
 def _item_snapshot_id(item: Dict[str, Any]) -> str:
-    # backward compatible for old history items
     if isinstance(item.get("snapshot_id"), str) and item["snapshot_id"]:
         return item["snapshot_id"]
     dc = item.get("data_commit_sha")
@@ -393,7 +390,6 @@ def _item_key(item: Dict[str, Any]) -> Tuple[str, str]:
 
 
 def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
-    # keep order but upsert by (module, snapshot_id) so reruns don't inflate history
     key_order: List[Tuple[str, str]] = []
     last_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for it in items:
@@ -406,13 +402,55 @@ def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
     return [last_by_key[k] for k in key_order]
 
 
+def _migrate_asof_to_commit(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    關鍵修正：
+    若同一 (module, stats_as_of_ts) 同時存在：
+      - 新格式(commit:...) item
+      - 舊格式(asof:...) item
+    則把舊格式 item 補上 snapshot_id=commit:<sha>，讓 normalize/upsert 能收斂。
+    """
+    # build mapping (module, stats_as_of_ts) -> commit_snapshot_id + sha
+    m: Dict[Tuple[str, str], Tuple[str, str]] = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        module = str(it.get("module") or "NA")
+        asof = it.get("stats_as_of_ts")
+        if not isinstance(asof, str) or not asof:
+            continue
+        snap = it.get("snapshot_id")
+        sha = it.get("data_commit_sha")
+        if isinstance(snap, str) and snap.startswith("commit:") and isinstance(sha, str) and sha:
+            m[(module, asof)] = (snap, sha)
+
+    if not m:
+        return items
+
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        # only migrate legacy ones without snapshot_id
+        if isinstance(it.get("snapshot_id"), str) and it["snapshot_id"]:
+            continue
+        module = str(it.get("module") or "NA")
+        asof = it.get("stats_as_of_ts")
+        if not isinstance(asof, str) or not asof:
+            continue
+        key = (module, asof)
+        if key in m:
+            snap, sha = m[key]
+            it["snapshot_id"] = snap
+            if not (isinstance(it.get("data_commit_sha"), str) and it["data_commit_sha"]):
+                it["data_commit_sha"] = sha
+    return items
+
+
 def _prev_signal_from_history(hist_obj: Dict[str, Any], exclude_key: Tuple[str, str]) -> Dict[str, str]:
     items = hist_obj.get("items", [])
     if not isinstance(items, list) or not items:
         return {}
-    # use normalized items
     norm = _normalize_history_items(items)
-    # find last item whose key != exclude_key
     last: Optional[Dict[str, Any]] = None
     for it in reversed(norm):
         if _item_key(it) == exclude_key:
@@ -428,7 +466,6 @@ def _prev_signal_from_history(hist_obj: Dict[str, Any], exclude_key: Tuple[str, 
 
 
 def _compute_streak(hist_obj: Dict[str, Any], series: str, today_signal: str, exclude_key: Tuple[str, str]) -> int:
-    # streak should be counted on distinct snapshots only; reruns of same snapshot must not inflate streak
     if today_signal != "WATCH":
         return 0
     items = hist_obj.get("items", [])
@@ -464,8 +501,8 @@ def main() -> None:
 
     stats = _load_json(PATH_STATS)
     stats_as_of_ts = str(stats.get("as_of_ts") or "NA")
-    stats_generated_at_utc = _get_stats_generated_at_utc(stats)  # string
-    data_commit_sha = _get_data_commit_sha(stats)  # string
+    stats_generated_at_utc = _get_stats_generated_at_utc(stats)
+    data_commit_sha = _get_data_commit_sha(stats)
     snapshot_id = _make_snapshot_id(stats_as_of_ts, stats_generated_at_utc, data_commit_sha)
     current_hist_key = (MODULE, snapshot_id)
 
@@ -486,9 +523,10 @@ def main() -> None:
     hl_by = _group_history_lite(hl_recs)
 
     hist_obj = _load_dash_history(OUT_HISTORY)
-    # normalize in-memory to reduce noise
     if isinstance(hist_obj.get("items"), list):
-        hist_obj["items"] = _normalize_history_items(hist_obj["items"])
+        # 先 migration：把同 as_of 的舊條目改成 commit key
+        migrated = _migrate_asof_to_commit([x for x in hist_obj["items"] if isinstance(x, dict)])
+        hist_obj["items"] = _normalize_history_items(migrated)
 
     prev_map = _prev_signal_from_history(hist_obj, exclude_key=current_hist_key)
 
@@ -589,7 +627,6 @@ def main() -> None:
 
     _write_text(OUT_MD, "\n".join(md) + "\n")
 
-    # --- history upsert (dedupe by snapshot_id) ---
     new_item = {
         "run_ts_utc": run_ts_utc.isoformat(),
         "module": MODULE,
@@ -604,7 +641,7 @@ def main() -> None:
     if not isinstance(items, list):
         items = []
 
-    # upsert: keep order of first appearance, but overwrite latest for same key
+    # upsert by (module, snapshot_id)
     key_order: List[Tuple[str, str]] = []
     last_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
