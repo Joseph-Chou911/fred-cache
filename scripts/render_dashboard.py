@@ -7,10 +7,11 @@
 # - Read history_lite.json for streak + (when needed) deltas
 # - Clamp signals to INFO when data_date lag exceeds per-series threshold
 #
-# Fixes in this version:
-# 1) stale_h formatting bug: "240" was being printed as "24" due to rstrip("0")
-# 2) market_cache/history_lite.json schema: support {"series": {...}} wrapper (or {"history": {...}} just in case)
-#
+# Critical fixes:
+# 1) Robust history_lite.json schema detection (auto-detect series-map container key)
+# 2) stale_h formatting bug (240 -> 24) eliminated by safe integer formatting
+# 3) Add SCRIPT_FINGERPRINT to prove you are running this version
+
 from __future__ import annotations
 
 import argparse
@@ -20,6 +21,10 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone, date
 from typing import Any, Dict, List, Optional, Tuple
+
+
+SCRIPT_FINGERPRINT = "render_dashboard_py_fix_history_autodetect_and_staleh_2026-01-18"
+
 
 # -------------------------
 # Defaults
@@ -138,15 +143,15 @@ def _percentile_le(vals: List[float], x: float) -> Optional[float]:
 def _fmt(x: Optional[float], nd: int = 6) -> str:
     if x is None:
         return "NA"
-    # IMPORTANT: when nd==0 do NOT strip trailing zeros (would turn "240" -> "24")
     if nd == 0:
+        # IMPORTANT: never strip zeros for integer display
         return f"{x:.0f}"
     return f"{x:.{nd}f}".rstrip("0").rstrip(".")
 
 def _fmt_int(x: Optional[int]) -> str:
     if x is None:
         return "NA"
-    return str(x)
+    return str(int(x))
 
 def _signal_rank(sig: str) -> int:
     return {"ALERT": 3, "WATCH": 2, "INFO": 1, "NONE": 0}.get(sig, 0)
@@ -162,36 +167,90 @@ def _near_abs(th: float, val: Optional[float]) -> bool:
 
 
 # -------------------------
-# History loaders
+# History loaders (robust)
 # -------------------------
 
-def _unwrap_history_root(obj: Any) -> Any:
+def _looks_like_series_map_dict(d: Dict[str, Any]) -> bool:
     """
-    Support common wrappers:
-      - {"series": {...}}
-      - {"history": {...}}
-    Otherwise return as-is.
+    Heuristic: dict where values are lists of dicts containing data_date/value
+    Example:
+      {"SP500":[{"data_date":"2026-01-16","value":...}, ...], "VIX":[...], ...}
     """
-    if isinstance(obj, dict):
-        if isinstance(obj.get("series"), (dict, list)):
-            return obj["series"]
-        if isinstance(obj.get("history"), (dict, list)):
-            return obj["history"]
-    return obj
+    if not d:
+        return False
+    checked = 0
+    good = 0
+    for k, v in d.items():
+        if not isinstance(k, str):
+            continue
+        if not isinstance(v, list) or not v:
+            continue
+        # check first 1-2 items
+        sample = v[:2]
+        ok = True
+        for item in sample:
+            if not isinstance(item, dict):
+                ok = False
+                break
+            if "data_date" not in item or "value" not in item:
+                ok = False
+                break
+        checked += 1
+        if ok:
+            good += 1
+        if checked >= 5:
+            break
+    return good >= 1
 
-def _history_to_series_map(history_obj: Any) -> Dict[str, List[Tuple[date, float]]]:
+def _unwrap_history_root(obj: Any) -> Tuple[Any, str]:
+    """
+    Returns (unwrapped_obj, hint_key).
+    Supports:
+      - {"series": <series-map or list>}
+      - {"history": <...>}
+      - {"data": <...>} / {"rows": <...>} / {"items": <...>} (common variants)
+      - auto-detect: scan top-level values to find a series-map candidate
+    """
+    if not isinstance(obj, dict):
+        return obj, "root"
+
+    # Preferred keys
+    for key in ("series", "history", "data", "rows", "items"):
+        if key in obj:
+            v = obj.get(key)
+            if isinstance(v, dict) and _looks_like_series_map_dict(v):
+                return v, key
+            if isinstance(v, (dict, list)):
+                # may still be correct even if heuristic can't validate
+                return v, key
+
+    # Auto-detect among top-level dict values
+    for k, v in obj.items():
+        if isinstance(v, dict) and _looks_like_series_map_dict(v):
+            return v, f"autodetect:{k}"
+        if isinstance(v, dict) and "series" in v and isinstance(v["series"], dict) and _looks_like_series_map_dict(v["series"]):
+            return v["series"], f"autodetect:{k}.series"
+        if isinstance(v, dict) and "history" in v and isinstance(v["history"], dict) and _looks_like_series_map_dict(v["history"]):
+            return v["history"], f"autodetect:{k}.history"
+
+    return obj, "root"
+
+def _history_to_series_map(history_obj: Any) -> Tuple[Dict[str, List[Tuple[date, float]]], str, str]:
     """
     Support schemas:
     A) dict: {"SERIES":[{"data_date":..., "value":...}, ...], ...}
     B) list: [{"series_id":..., "data_date":..., "value":...}, ...]
-    plus wrapper: {"series": <A or B>}
-    Returns: series_id -> sorted list of (data_date, value)
+    Plus wrappers, auto-detected by _unwrap_history_root.
+    Returns: (series_map, schema_label, unwrap_hint)
     """
-    history_obj = _unwrap_history_root(history_obj)
-    out: Dict[str, List[Tuple[date, float]]] = {}
+    root, hint = _unwrap_history_root(history_obj)
 
-    if isinstance(history_obj, dict):
-        for sid, rows in history_obj.items():
+    out: Dict[str, List[Tuple[date, float]]] = {}
+    schema = "unknown"
+
+    if isinstance(root, dict):
+        schema = "dict"
+        for sid, rows in root.items():
             if not isinstance(rows, list):
                 continue
             pts: List[Tuple[date, float]] = []
@@ -206,10 +265,11 @@ def _history_to_series_map(history_obj: Any) -> Dict[str, List[Tuple[date, float
             pts.sort(key=lambda t: t[0])
             if pts:
                 out[sid] = pts
-        return out
+        return out, schema, hint
 
-    if isinstance(history_obj, list):
-        for r in history_obj:
+    if isinstance(root, list):
+        schema = "list"
+        for r in root:
             if not isinstance(r, dict):
                 continue
             sid = r.get("series_id")
@@ -222,9 +282,9 @@ def _history_to_series_map(history_obj: Any) -> Dict[str, List[Tuple[date, float
             out.setdefault(sid, []).append((dd, vv))
         for sid in list(out.keys()):
             out[sid].sort(key=lambda t: t[0])
-        return out
+        return out, schema, hint
 
-    return out
+    return out, schema, hint
 
 
 # -------------------------
@@ -442,7 +502,6 @@ def main() -> int:
 
     run_ts = datetime.now(timezone.utc)
 
-    # Load previous dashboard json for prevsignal/streak
     prev_map: Dict[str, Dict[str, Any]] = {}
     if os.path.exists(args.out_json):
         try:
@@ -453,18 +512,16 @@ def main() -> int:
         except Exception:
             prev_map = {}
 
-    # Load feed1
     stats1 = _read_json(args.stats)
     hist1_obj = _read_json(args.history)
-    hist1 = _history_to_series_map(hist1_obj)
-    feed1_asof = _parse_ts(stats1.get("as_of_ts") if isinstance(stats1.get("as_of_ts"), str) else stats1.get("generated_at_utc"))
+    hist1, feed1_schema, feed1_hint = _history_to_series_map(hist1_obj)
+
+    feed1_asof = _parse_ts(
+        stats1.get("as_of_ts") if isinstance(stats1.get("as_of_ts"), str) else stats1.get("generated_at_utc")
+    )
     feed1_gen = stats1.get("generated_at_utc")
     feed1_ver = stats1.get("script_version")
-    # Use original root for schema label, but unwrap doesn't change type usually
-    feed1_root = _unwrap_history_root(hist1_obj)
-    feed1_schema = "dict" if isinstance(feed1_root, dict) else ("list" if isinstance(feed1_root, list) else "unknown")
 
-    # Load feed2 (optional)
     stats2 = None
     hist2_obj = None
     hist2 = {}
@@ -472,20 +529,22 @@ def main() -> int:
     feed2_gen = None
     feed2_ver = None
     feed2_schema = None
+    feed2_hint = None
+
     if args.stats2 and args.history2:
         stats2 = _read_json(args.stats2)
         hist2_obj = _read_json(args.history2)
-        hist2 = _history_to_series_map(hist2_obj)
-        feed2_asof = _parse_ts(stats2.get("as_of_ts") if isinstance(stats2.get("as_of_ts"), str) else stats2.get("generated_at_utc"))
+        hist2, feed2_schema, feed2_hint = _history_to_series_map(hist2_obj)
+
+        feed2_asof = _parse_ts(
+            stats2.get("as_of_ts") if isinstance(stats2.get("as_of_ts"), str) else stats2.get("generated_at_utc")
+        )
         feed2_gen = stats2.get("generated_at_utc")
         if isinstance(stats2.get("stats_policy"), dict) and isinstance(stats2["stats_policy"].get("script_version"), str):
             feed2_ver = stats2["stats_policy"]["script_version"]
         else:
             feed2_ver = stats2.get("script_version")
-        feed2_root = _unwrap_history_root(hist2_obj)
-        feed2_schema = "dict" if isinstance(feed2_root, dict) else ("list" if isinstance(feed2_root, list) else "unknown")
 
-    # Series universe
     series_ids: List[Tuple[str, str]] = []
     for sid in (stats1.get("series", {}) or {}).keys():
         if isinstance(sid, str):
@@ -495,11 +554,9 @@ def main() -> int:
             if isinstance(sid, str):
                 series_ids.append(("cache", sid))
 
-    # Dedup (feed,sid)
     seen = set()
     series_ids = [x for x in series_ids if (x not in seen and not seen.add(x))]
 
-    # Build rows
     rows_out: Dict[str, Dict[str, Any]] = {}
     table_rows: List[Dict[str, Any]] = []
 
@@ -527,7 +584,6 @@ def main() -> int:
         if m is None:
             continue
 
-        # If deltas missing, compute from history (feed2 mainly)
         pts = hist_map.get(sid, [])
         if (m.z_delta60 is None or m.p_delta252 is None or m.ret1_pct is None) and pts:
             zd, pd, rp = _compute_deltas_from_history(m.data_date, pts)
@@ -551,14 +607,12 @@ def main() -> int:
                 prev_streak = 0
         streakWA = (prev_streak + 1) if signal_raw in {"WATCH", "ALERT"} else 0
 
-        # Age / DQ
         age_h = None
         if feed_asof is not None:
             age_h = (run_ts - feed_asof).total_seconds() / 3600.0
         stale_h = stale_h_for(sid)
         dq = "OK" if (age_h is not None and age_h <= stale_h) else ("MISSING" if age_h is None else "STALE")
 
-        # Data lag clamp
         data_lag_d = None
         if m.data_date is not None:
             data_lag_d = (run_ts.date() - m.data_date).days
@@ -609,23 +663,24 @@ def main() -> int:
         }
         table_rows.append(row)
 
-    # Sort
     def _sort_key(r: Dict[str, Any]) -> Tuple[int, str, str]:
         return (-_signal_rank(r["Signal"]), str(r["Feed"]), str(r["Series"]))
     table_rows.sort(key=_sort_key)
 
-    # Build MD
     md_lines: List[str] = []
     md_lines.append(f"# Risk Dashboard ({args.module})\n")
+    md_lines.append(f"- SCRIPT_FINGERPRINT: `{SCRIPT_FINGERPRINT}`")
     md_lines.append(f"- RUN_TS_UTC: `{run_ts.isoformat()}`")
     md_lines.append(f"- stale_hours_default: `{args.stale_hours}`")
     md_lines.append(f"- stale_overrides: `{json.dumps(stale_overrides, ensure_ascii=False)}`")
     md_lines.append(f"- data_lag_default_days: `{DATA_LAG_DEFAULT_DAYS}`")
     md_lines.append(f"- data_lag_overrides_days: `{json.dumps(data_lag_overrides, ensure_ascii=False)}`")
+
     md_lines.append(f"- FEED1.stats: `{args.stats}`")
     md_lines.append(f"- FEED1.history: `{args.history}`")
     md_lines.append(f"- FEED1.history_schema: `{feed1_schema}`")
-    md_lines.append(f"- FEED1.history_series_count: `{len(set(hist1.keys()))}`")
+    md_lines.append(f"- FEED1.history_unwrap: `{feed1_hint}`")
+    md_lines.append(f"- FEED1.history_series_count: `{len(hist1)}`")
     md_lines.append(f"- FEED1.as_of_ts: `{stats1.get('as_of_ts','NA')}`")
     md_lines.append(f"- FEED1.generated_at_utc: `{feed1_gen if isinstance(feed1_gen,str) else 'NA'}`")
     md_lines.append(f"- FEED1.script_version: `{feed1_ver if isinstance(feed1_ver,str) else 'None'}`")
@@ -634,7 +689,8 @@ def main() -> int:
         md_lines.append(f"- FEED2.stats: `{args.stats2}`")
         md_lines.append(f"- FEED2.history: `{args.history2}`")
         md_lines.append(f"- FEED2.history_schema: `{feed2_schema}`")
-        md_lines.append(f"- FEED2.history_series_count: `{len(set(hist2.keys()))}`")
+        md_lines.append(f"- FEED2.history_unwrap: `{feed2_hint}`")
+        md_lines.append(f"- FEED2.history_series_count: `{len(hist2)}`")
         md_lines.append(f"- FEED2.as_of_ts: `{stats2.get('as_of_ts','NA')}`")
         md_lines.append(f"- FEED2.generated_at_utc: `{feed2_gen if isinstance(feed2_gen,str) else 'NA'}`")
         md_lines.append(f"- FEED2.script_version: `{feed2_ver if isinstance(feed2_ver,str) else 'None'}`")
@@ -694,6 +750,7 @@ def main() -> int:
     out_obj = {
         "run_ts_utc": run_ts.isoformat(),
         "module": args.module,
+        "script_fingerprint": SCRIPT_FINGERPRINT,
         "stale_hours_default": args.stale_hours,
         "stale_overrides": stale_overrides,
         "data_lag_default_days": DATA_LAG_DEFAULT_DAYS,
