@@ -29,13 +29,32 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render dashboard
+      - name: Install deps (if requirements.txt exists)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Render dashboard (always to /dashboard)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dashboard
           python scripts/render_dashboard.py \
             --out dashboard/risk_dashboard_merged.md
+
+      - name: Locate outputs (debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PWD=$(pwd)"
+          echo "---- dashboard listing ----"
+          ls -la dashboard || true
+          echo "---- find risk_dashboard_merged.md ----"
+          find . -maxdepth 4 -type f -name "risk_dashboard_merged.md" -print || true
 
       - name: Show diff (debug)
         shell: bash
@@ -48,29 +67,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- dashboard/risk_dashboard_merged.md; then
-            echo "No changes in dashboard output."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dashboard/risk_dashboard_merged.md
-          git commit -m "dashboard: update merged risk dashboard"
 
-      - name: Push with rebase-retry
+          # 先 add，才能捕捉「新檔案/未追蹤檔案」
+          git add dashboard/risk_dashboard_merged.md
+
+          # 如果 staging 區沒有變更，就不 commit
+          if git diff --cached --quiet; then
+            echo "No changes in dashboard output."
+            echo "DID_COMMIT=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          git commit -m "dashboard: update merged risk dashboard"
+          echo "DID_COMMIT=1" >> "$GITHUB_ENV"
+
+      - name: Push with rebase-retry (only if committed)
         shell: bash
         run: |
           set -euo pipefail
 
-          # Nothing to push if no new commit created in this run
-          if [ "$(git rev-list --count HEAD --max-count=1)" = "0" ]; then
-            echo "No commits exist."
-            exit 0
-          fi
-
-          # If last commit isn't ours, we probably didn't commit anything this run
-          if ! git log -1 --pretty=%B | grep -q "^dashboard: update merged risk dashboard$"; then
-            echo "No new dashboard commit to push."
+          if [ "${DID_COMMIT:-0}" != "1" ]; then
+            echo "No new commit created in this run; skip push."
             exit 0
           fi
 
