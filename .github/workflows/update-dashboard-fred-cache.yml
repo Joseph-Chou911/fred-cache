@@ -3,8 +3,8 @@ name: Update Dashboard (fred_cache)
 on:
   workflow_dispatch: {}
   schedule:
-    # 15:30 Asia/Taipei = 07:30 UTC
-    - cron: "30 7 * * *"
+    # 15:20 Asia/Taipei = 07:20 UTC
+    - cron: "20 7 * * *"
 
 permissions:
   contents: write
@@ -29,28 +29,30 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render dashboard (fred_cache)
+      - name: Render dashboard (fred_cache) with sudden-move metrics
         shell: bash
         run: |
           set -euo pipefail
 
           python scripts/render_dashboard_fred_cache.py \
             --stats cache/stats_latest.json \
+            --history-lite cache/history_lite.json \
             --history dashboard_fred_cache/history.json \
             --out-md dashboard_fred_cache/DASHBOARD.md \
             --out-json dashboard_fred_cache/dashboard_latest.json \
             --module fred_cache \
             --stale-hours 72
 
-      - name: Append history (fred_cache)
+      - name: Append dashboard history (fred_cache)
         shell: bash
         run: |
           set -euo pipefail
 
-          python scripts/append_dashboard_history_fred_cache.py \
+          python scripts/append_dashboard_history.py \
             --dash-latest dashboard_fred_cache/dashboard_latest.json \
-            --history dashboard_fred_cache/history.json \
-            --module fred_cache
+            --dash-history dashboard_fred_cache/history.json \
+            --module fred_cache \
+            --stats-as-of-ts-from-meta
 
       - name: Commit & push
         shell: bash
@@ -60,7 +62,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add dashboard_fred_cache/DASHBOARD.md dashboard_fred_cache/dashboard_latest.json dashboard_fred_cache/history.json
+          git add \
+            dashboard_fred_cache/DASHBOARD.md \
+            dashboard_fred_cache/dashboard_latest.json \
+            dashboard_fred_cache/history.json
 
           if git diff --cached --quiet; then
             echo "No changes"
