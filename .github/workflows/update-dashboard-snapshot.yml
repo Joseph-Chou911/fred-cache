@@ -48,15 +48,15 @@ jobs:
             --dash-history dashboard_snapshot/history.json \
             --module snapshot_fast \
             --stale-hours 36 \
-            --out-md dashboard/DASHBOARD_SNAPSHOT.md \
-            --out-json dashboard/dashboard_snapshot_latest.json
+            --out-md dashboard_snapshot/DASHBOARD_SNAPSHOT.md \
+            --out-json dashboard_snapshot/dashboard_snapshot_latest.json
 
       - name: Append history (snapshot_fast)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history_snapshot.py \
-            --in-json dashboard/dashboard_snapshot_latest.json \
+            --in-json dashboard_snapshot/dashboard_snapshot_latest.json \
             --history dashboard_snapshot/history.json \
             --module snapshot_fast
 
@@ -68,8 +68,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add \
-            dashboard/DASHBOARD_SNAPSHOT.md \
-            dashboard/dashboard_snapshot_latest.json \
+            dashboard_snapshot/DASHBOARD_SNAPSHOT.md \
+            dashboard_snapshot/dashboard_snapshot_latest.json \
             dashboard_snapshot/history.json
 
           if git diff --cached --quiet; then
