@@ -3,8 +3,8 @@ name: Render Risk Dashboard (merged)
 on:
   workflow_dispatch: {}
   schedule:
-    # 00:20 UTC = 08:20 Asia/Taipei
-    - cron: "20 0 * * *"
+    # 11:50 Asia/Taipei = 03:50 UTC
+    - cron: "50 3 * * *"
 
 permissions:
   contents: write
@@ -29,67 +29,58 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render dashboard (to fred-cache/dashboard/)
+      - name: Render dashboard
         shell: bash
         run: |
           set -euo pipefail
-
-          OUT_DIR="fred-cache/dashboard"
-          mkdir -p "${OUT_DIR}"
-
+          mkdir -p dashboard
           python scripts/render_dashboard.py \
-            --feed market_cache \
-              --stats market_cache/stats_latest.json \
-              --history market_cache/history_lite.json \
-              --dq market_cache/dq_state.json \
-              --asof-field as_of_ts \
-            --feed cache \
-              --stats cache/stats_latest.json \
-              --history cache/history_lite.json \
-              --dq cache/dq_state.json \
-              --asof-field as_of_ts \
-            --state-file "${OUT_DIR}/dashboard_state.json" \
-            --script-fingerprint render_dashboard_py_fix_history_autodetect_and_staleh_2026-01-18 \
-            --out "${OUT_DIR}/dashboard.md"
+            --out dashboard/risk_dashboard_merged.md
 
-          test -s "${OUT_DIR}/dashboard.md"
-
-      - name: Configure git author
+      - name: Show diff (debug)
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --porcelain || true
+          git diff -- dashboard/risk_dashboard_merged.md || true
 
       - name: Commit changes (if any)
         shell: bash
         run: |
           set -euo pipefail
-
-          git add fred-cache/dashboard/dashboard.md fred-cache/dashboard/dashboard_state.json || true
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
+          if git diff --quiet -- dashboard/risk_dashboard_merged.md; then
+            echo "No changes in dashboard output."
             exit 0
           fi
-
-          git commit -m "chore(dashboard): update merged risk dashboard"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dashboard/risk_dashboard_merged.md
+          git commit -m "dashboard: update merged risk dashboard"
 
       - name: Push with rebase-retry
         shell: bash
         run: |
           set -euo pipefail
 
-          for attempt in 1 2 3; do
-            git pull --rebase origin main || true
+          # Nothing to push if no new commit created in this run
+          if [ "$(git rev-list --count HEAD --max-count=1)" = "0" ]; then
+            echo "No commits exist."
+            exit 0
+          fi
 
-            if git push origin HEAD:main; then
-              echo "Push succeeded."
+          # If last commit isn't ours, we probably didn't commit anything this run
+          if ! git log -1 --pretty=%B | grep -q "^dashboard: update merged risk dashboard$"; then
+            echo "No new dashboard commit to push."
+            exit 0
+          fi
+
+          for i in 1 2 3; do
+            if git push; then
               exit 0
             fi
-
-            echo "Push failed (attempt=$attempt). Retrying after backoff..."
-            sleep $((2 ** attempt))
+            echo "Push failed (attempt $i). Rebase and retry..."
+            git pull --rebase
+            sleep $((2 ** i))
           done
 
           echo "Push failed after retries."
