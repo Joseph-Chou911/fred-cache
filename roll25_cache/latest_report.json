@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-01-18T17:40:14.553451+08:00",
+  "generated_at": "2026-01-19T02:52:58.090981+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日非交易日；UsedDate=2026-01-16：未觸發 A) 規則；風險等級=低",
+  "summary": "今日資料未更新；UsedDate=2026-01-16：未觸發 A) 規則；風險等級=低",
   "numbers": {
     "UsedDate": "2026-01-16",
     "Close": 31408.7,
@@ -111,7 +111,7 @@
       "low": 29007.75
     }
   ],
-  "tag": "NON_TRADING_DAY",
+  "tag": "DATA_NOT_UPDATED",
   "freshness_ok": true,
   "risk_level": "低",
   "mode": "FULL",
