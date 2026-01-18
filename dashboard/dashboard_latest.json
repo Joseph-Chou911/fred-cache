@@ -17,106 +17,107 @@
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:DCOILWTICO": {
       "signal": "INFO",
       "signal_raw": "WATCH",
-      "streakWA": 2,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "streakWA": 3,
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:DGS10": {
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:DGS2": {
       "signal": "WATCH",
       "signal_raw": "WATCH",
-      "streakWA": 2,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "streakWA": 3,
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:DJIA": {
       "signal": "INFO",
       "signal_raw": "INFO",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:DTWEXBGS": {
       "signal": "INFO",
       "signal_raw": "WATCH",
-      "streakWA": 2,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "streakWA": 3,
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:NASDAQCOM": {
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:NFCINONFINLEVERAGE": {
       "signal": "INFO",
       "signal_raw": "INFO",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:SP500": {
       "signal": "INFO",
       "signal_raw": "INFO",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:STLFSI4": {
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:T10Y2Y": {
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:T10Y3M": {
       "signal": "INFO",
       "signal_raw": "INFO",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "cache:VIXCLS": {
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "market_cache:HYG_IEF_RATIO": {
       "signal": "WATCH",
       "signal_raw": "WATCH",
-      "streakWA": 2,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "streakWA": 3,
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "market_cache:OFR_FSI": {
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "market_cache:SP500": {
       "signal": "INFO",
       "signal_raw": "INFO",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     },
     "market_cache:VIX": {
       "signal": "NONE",
       "signal_raw": "NONE",
       "streakWA": 0,
-      "updated_at_utc": "2026-01-18T07:37:13.093129+00:00"
+      "updated_at_utc": "2026-01-18T07:44:13.527429+00:00"
     }
   },
-  "run_ts_utc": "2026-01-18T07:37:13.093129+00:00",
+  "run_ts_utc": "2026-01-18T07:44:13.527429+00:00",
+  "script_fingerprint": "render_dashboard_py_fix_history_autodetect_and_staleh_2026-01-18",
   "stale_hours_default": 36.0,
   "stale_overrides": {
     "BAMLH0A0HYM2": 72.0,
