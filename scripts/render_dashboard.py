@@ -1,31 +1,23 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP+signals v7: Tag + Near + PrevSignal/Streak from dashboard history + DeltaSignal)
+# Dashboard renderer (MVP+signals v8)
+# - Tag + Near
+# - PrevSignal/Streak from dashboard/history.json (past renderer outputs)
+# - DeltaSignal (Prev → Today, SAME, NA)
+# - Summary line counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
+# - Reason uses abs(...) (no '|' so no table break)
 #
 # Inputs:
 #   - stats_latest.json (authoritative metrics for "today")
 #   - dashboard/history.json (authoritative past signals produced by this renderer)
 #
-# Output:
+# Outputs:
 #   - dashboard/DASHBOARD.md
 #   - dashboard/dashboard_latest.json
 #
-# Signals: ALERT / WATCH / INFO / NONE (改法 B)
-# Tags: EXTREME_Z / JUMP_ZD / JUMP_P / JUMP_RET / LONG_EXTREME
-# Near: within 10% of jump thresholds (but not crossing)
-#
-# Streak logic (authoritative):
-#   - PrevSignal: most recent historical signal for the same series (from dashboard/history.json)
-#   - StreakWA: consecutive count of WATCH/ALERT including TODAY, based on history + today's signal
-#
-# DeltaSignal:
-#   - if PrevSignal == "NA" -> "NA"
-#   - else if PrevSignal == today -> "SAME"
-#   - else -> f"{PrevSignal}→{today}"
-#
-# Markdown table safety:
-#   - Escape '|' as '&#124;' and newlines as '<br>' for all cells.
+# Notes:
+# - Markdown table safety: still escape '|' just in case, but Reason no longer contains '|'.
 
 import argparse
 import json
@@ -94,6 +86,10 @@ def fmt(x: Any, nd: int = 6) -> str:
 
 
 def md_escape_cell(x: Any) -> str:
+    """
+    Escape content for GitHub-flavored Markdown tables.
+    Keep it even though Reason now uses abs(...) and won't contain '|'.
+    """
     s = str(x) if x is not None else "NA"
     s = s.replace("|", "&#124;")
     s = s.replace("\n", "<br>")
@@ -122,7 +118,7 @@ def compute_signal_tag_near_from_metrics(
 ) -> Tuple[str, str, str, str]:
     """
     Returns (signal_level, reason_str, tag_str, near_str)
-    Uses the same rules as your current dashboard (改法 B).
+    Uses "改法 B" rules, but Reason strings use abs(...) instead of |...|.
     """
     reasons: List[str] = []
     tags: List[str] = []
@@ -139,11 +135,11 @@ def compute_signal_tag_near_from_metrics(
     if az60 is not None:
         if az60 >= Z60_WATCH_ABS:
             z60_watch = True
-            reasons.append(f"|Z60|>={Z60_WATCH_ABS:g}")
+            reasons.append(f"abs(Z60)>={Z60_WATCH_ABS:g}")
             tags.append("EXTREME_Z")
         if az60 >= Z60_ALERT_ABS:
             z60_alert = True
-            reasons.append(f"|Z60|>={Z60_ALERT_ABS:g}")
+            reasons.append(f"abs(Z60)>={Z60_ALERT_ABS:g}")
 
     p252_hi = False
     p252_lo = False
@@ -169,7 +165,7 @@ def compute_signal_tag_near_from_metrics(
     has_zdelta_jump = False
 
     if azd is not None and azd >= ZDELTA60_JUMP_ABS:
-        reasons.append(f"|ZΔ60|>={ZDELTA60_JUMP_ABS:g}")
+        reasons.append(f"abs(ZΔ60)>={ZDELTA60_JUMP_ABS:g}")
         tags.append("JUMP_ZD")
         jump_hits += 1
         has_zdelta_jump = True
@@ -178,7 +174,7 @@ def compute_signal_tag_near_from_metrics(
             nears.append("NEAR:ZΔ60")
 
     if apd is not None and apd >= PDELTA60_JUMP_ABS:
-        reasons.append(f"|PΔ60|>={PDELTA60_JUMP_ABS:g}")
+        reasons.append(f"abs(PΔ60)>={PDELTA60_JUMP_ABS:g}")
         tags.append("JUMP_P")
         jump_hits += 1
     else:
@@ -186,7 +182,7 @@ def compute_signal_tag_near_from_metrics(
             nears.append("NEAR:PΔ60")
 
     if ar1p is not None and ar1p >= RET1PCT60_JUMP_ABS:
-        reasons.append(f"|ret1%60|>={RET1PCT60_JUMP_ABS:g}")
+        reasons.append(f"abs(ret1%60)>={RET1PCT60_JUMP_ABS:g}")
         tags.append("JUMP_RET")
         jump_hits += 1
     else:
@@ -278,6 +274,32 @@ def compute_delta_signal(prev: str, today: str) -> str:
     return f"{prev}→{today}"
 
 
+def compute_summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {"ALERT": 0, "WATCH": 0, "INFO": 0, "NONE": 0}
+    changed = 0
+    watch_streak_ge3 = 0
+
+    for r in rows:
+        lvl = r.get("signal_level", "NONE")
+        if lvl in counts:
+            counts[lvl] += 1
+
+        d = r.get("delta_signal", "NA")
+        if isinstance(d, str) and d not in ("NA", "SAME"):
+            changed += 1
+
+        if r.get("signal_level") == "WATCH":
+            try:
+                if int(r.get("streak_wa") or 0) >= 3:
+                    watch_streak_ge3 += 1
+            except Exception:
+                pass
+
+    counts["CHANGED"] = changed
+    counts["WATCH_STREAK_GE3"] = watch_streak_ge3
+    return counts
+
+
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
     os.makedirs(os.path.dirname(out_md), exist_ok=True)
     os.makedirs(os.path.dirname(out_json), exist_ok=True)
@@ -286,9 +308,18 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
+    summary = compute_summary_counts(rows)
+
     lines: List[str] = []
     lines.append(f"# Risk Dashboard ({meta.get('module','')})")
     lines.append("")
+
+    # Summary line (requested)
+    lines.append(
+        f"- Summary: ALERT={summary['ALERT']} / WATCH={summary['WATCH']} / INFO={summary['INFO']} / NONE={summary['NONE']}; "
+        f"CHANGED={summary['CHANGED']}; WATCH_STREAK>=3={summary['WATCH_STREAK_GE3']}"
+    )
+
     lines.append(f"- RUN_TS_UTC: `{meta.get('run_ts_utc','')}`")
     lines.append(f"- STATS.generated_at_utc: `{meta.get('stats_generated_at_utc','')}`")
     lines.append(f"- STATS.as_of_ts: `{meta.get('stats_as_of_ts','')}`")
@@ -298,11 +329,11 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
     lines.append(
         "- signal_rules: "
-        f"`Extreme(|Z60|>={Z60_WATCH_ABS:g} (WATCH), |Z60|>={Z60_ALERT_ABS:g} (ALERT), "
+        f"`Extreme(abs(Z60)>={Z60_WATCH_ABS:g} (WATCH), abs(Z60)>={Z60_ALERT_ABS:g} (ALERT), "
         f"P252>={P252_EXTREME_HI:g} or <={P252_EXTREME_LO:g} (WATCH/INFO), P252<={P252_ALERT_LO:g} (ALERT)); "
-        f"Jump(|ZΔ60|>={ZDELTA60_JUMP_ABS:g} OR |PΔ60|>={PDELTA60_JUMP_ABS:g} OR |ret1%60|>={RET1PCT60_JUMP_ABS:g}); "
+        f"Jump(abs(ZΔ60)>={ZDELTA60_JUMP_ABS:g} OR abs(PΔ60)>={PDELTA60_JUMP_ABS:g} OR abs(ret1%60)>={RET1PCT60_JUMP_ABS:g}); "
         f"Near(within {NEAR_FRAC*100:.0f}% of jump thresholds); "
-        "INFO if only long-extreme and no jump and |Z60|<2`"
+        "INFO if only long-extreme and no jump and abs(Z60)<2`"
     )
     lines.append("")
 
@@ -462,14 +493,13 @@ def main() -> None:
         except Exception:
             return 0
 
-    # Optional: prioritize changes first inside same signal bucket
     def delta_rank(r: Dict[str, Any]) -> int:
         d = r.get("delta_signal")
         if d == "NA":
             return 2
         if d == "SAME":
             return 1
-        return 0  # changed
+        return 0  # changed first
 
     rows.sort(key=lambda r: (
         sig_order.get(r.get("signal_level", "NONE"), 9),
