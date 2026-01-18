@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard_fred_cache.py
 #
-# Mode A (minimal change):
-# - z60/p252 read from stats_latest.json -> series[*].metrics.z60 / metrics.p252
-# - Jump uses history_lite last 2 points: ret1% = (latest-prev)/abs(prev)*100
-# - z_delta60 / p_delta60 remain NA (not computed)
-# - Emits:
-#   - markdown dashboard
-#   - dashboard_latest.json with meta.run_ts_utc / meta.stats_as_of_ts / meta.module
+# Adds zΔ60 / pΔ60 based on history_lite.json
+# - z_delta60 = z60_latest - z60_prev  (prev computed from window ending at prev point)
+# - p_delta60 = p60_latest - p60_prev  (p60 computed from window ending at each point)
+#
+# Requires >=61 valid points in history_lite for a series, else NA.
+# Jump rule:
+#   WATCH if abs(zΔ60)>=0.75 OR abs(pΔ60)>=15 OR abs(ret1%)>=2
+# Extreme rule (same as before):
+#   WATCH if abs(Z60)>=2
+#   ALERT if abs(Z60)>=2.5
+#   INFO if P252>=95 or <=5
+#   ALERT if P252<=2
+#
+# Notes:
+# - Uses ddof=0 as your stats_policy indicates.
+# - Percentile method: P = count(x<=value)/n * 100  (matches your stats_latest.json)
 
 import argparse
 import json
@@ -70,20 +79,47 @@ def _ret1_pct(prev: Optional[float], latest: Optional[float]) -> Optional[float]
     return (latest - prev) / denom * 100.0
 
 
+def _mean_std(vals: List[float], ddof: int = 0) -> Tuple[Optional[float], Optional[float]]:
+    n = len(vals)
+    if n == 0:
+        return None, None
+    mean = sum(vals) / n
+    var_denom = n - ddof
+    if var_denom <= 0:
+        return mean, None
+    var = sum((x - mean) ** 2 for x in vals) / var_denom
+    std = math.sqrt(var)
+    return mean, std
+
+def _zscore(latest: float, window: List[float], ddof: int = 0) -> Optional[float]:
+    mean, std = _mean_std(window, ddof=ddof)
+    if mean is None or std is None or std == 0:
+        return None
+    return (latest - mean) / std
+
+def _percentile_le(latest: float, window: List[float]) -> Optional[float]:
+    n = len(window)
+    if n == 0:
+        return None
+    cnt = sum(1 for x in window if x <= latest)
+    return cnt / n * 100.0
+
+
 def _signal_from_rules(
     z60: Optional[float],
     p252: Optional[float],
+    z_delta60: Optional[float],
+    p_delta60: Optional[float],
     ret1_pct: Optional[float],
 ) -> Tuple[str, str]:
     """
-    Mode A rules:
-    - Extreme:
-        WATCH if abs(Z60) >= 2
-        ALERT if abs(Z60) >= 2.5
-        INFO  if P252 >=95 or <=5 (but ALERT if <=2)
-        ALERT if P252 <= 2
-    - Jump:
-        WATCH if abs(ret1%) >= 2
+    Extreme:
+      WATCH if abs(Z60) >= 2
+      ALERT if abs(Z60) >= 2.5
+      INFO  if P252 >=95 or <=5
+      ALERT if P252 <=2
+    Jump:
+      WATCH if abs(zΔ60)>=0.75 OR abs(pΔ60)>=15 OR abs(ret1%)>=2
     Priority: ALERT > WATCH > INFO > NONE
     """
     reasons: List[str] = []
@@ -105,26 +141,36 @@ def _signal_from_rules(
         extreme = "NONE"
 
     # Jump
+    jump_hit = False
+    if z_delta60 is not None and abs(z_delta60) >= 0.75:
+        reasons.append("abs(zΔ60)>=0.75")
+        jump_hit = True
+    if p_delta60 is not None and abs(p_delta60) >= 15:
+        reasons.append("abs(pΔ60)>=15")
+        jump_hit = True
     if ret1_pct is not None and abs(ret1_pct) >= 2:
         reasons.append("abs(ret1%)>=2")
-        jump = "WATCH"
-    else:
-        jump = "NONE"
+        jump_hit = True
+
+    jump = "WATCH" if jump_hit else "NONE"
 
     order = {"ALERT": 3, "WATCH": 2, "INFO": 1, "NONE": 0}
     best = extreme if order[extreme] >= order[jump] else jump
-
     if best == "NONE":
         return "NONE", "NA"
+
+    # keep reasons short & stable
     return best, ";".join(reasons[:3])
 
 
 def _tag_from_reason(reason: str) -> str:
     if not reason or reason == "NA":
         return "NA"
-    if "abs(ret1%)>=2" in reason:
+    if "ret1%" in reason:
         return "JUMP_RET"
-    if "abs(Z60)>=" in reason:
+    if "zΔ60" in reason or "pΔ60" in reason:
+        return "JUMP_DELTA"
+    if "abs(Z60)" in reason:
         return "EXTREME_Z"
     if "P252" in reason:
         return "LONG_EXTREME"
@@ -132,11 +178,6 @@ def _tag_from_reason(reason: str) -> str:
 
 
 def _load_dash_history_last_signals(path: str) -> Dict[str, str]:
-    """
-    dashboard history schema:
-      {"schema_version":"dash_history_v1","items":[{...,"series_signals":{sid:"WATCH"...}}]}
-    We read ONLY the last item.
-    """
     if not os.path.exists(path):
         return {}
     try:
@@ -159,9 +200,9 @@ def _load_dash_history_last_signals(path: str) -> Dict[str, str]:
 
 def _extract_stats_series(stats: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
-    Your real schema (from your paste):
+    Real schema:
       stats["series"][sid]["latest"]{data_date,value,source_url}
-      stats["series"][sid]["metrics"]{z60,p252,ret1,...}
+      stats["series"][sid]["metrics"]{z60,p60,p252,ret1,...}
     """
     out: Dict[str, Dict[str, Any]] = {}
     series = stats.get("series", {})
@@ -184,22 +225,23 @@ def _extract_stats_series(stats: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             "data_date": latest.get("data_date"),
             "value": _to_float(latest.get("value")),
             "source_url": latest.get("source_url"),
-            # stats level as_of_ts is the authoritative timestamp you have
             "as_of_ts": stats.get("as_of_ts"),
             "z60": _to_float(metrics.get("z60")),
+            "p60": _to_float(metrics.get("p60")),
             "p252": _to_float(metrics.get("p252")),
         }
     return out
 
 
-def _extract_last2_from_history_lite(history_lite: Any) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+def _extract_series_values(history_lite: Any) -> Dict[str, List[float]]:
     """
+    Returns numeric values per series (ascending order assumed by source; we don't rely on dates for speed).
     Supports:
     - {"series": {sid: {"values":[{data_date,value},...]}}}
     - {"series": {sid: [{data_date,value}, ...]}}
     - list of records [{series_id,data_date,value},...]
     """
-    out: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    out: Dict[str, List[float]] = {}
 
     if isinstance(history_lite, dict) and isinstance(history_lite.get("series"), dict):
         for sid, node in history_lite["series"].items():
@@ -208,37 +250,68 @@ def _extract_last2_from_history_lite(history_lite: Any) -> Dict[str, Tuple[Optio
                 vals = node["values"]
             elif isinstance(node, list):
                 vals = node
-            if not isinstance(vals, list) or len(vals) < 2:
+            if not isinstance(vals, list):
                 continue
-            a = vals[-2] if isinstance(vals[-2], dict) else {}
-            b = vals[-1] if isinstance(vals[-1], dict) else {}
-            out[sid] = (_to_float(a.get("value")), _to_float(b.get("value")))
+            arr: List[float] = []
+            for r in vals:
+                if isinstance(r, dict):
+                    v = _to_float(r.get("value"))
+                    if v is not None:
+                        arr.append(v)
+            if arr:
+                out[sid] = arr
         return out
 
     if isinstance(history_lite, list):
-        grouped: Dict[str, List[Tuple[str, Optional[float]]]] = {}
+        grouped: Dict[str, List[Tuple[str, float]]] = {}
         for r in history_lite:
             if not isinstance(r, dict):
                 continue
             sid = r.get("series_id")
             dd = r.get("data_date")
-            val = _to_float(r.get("value"))
-            if isinstance(sid, str) and isinstance(dd, str):
-                grouped.setdefault(sid, []).append((dd, val))
+            v = _to_float(r.get("value"))
+            if isinstance(sid, str) and isinstance(dd, str) and v is not None:
+                grouped.setdefault(sid, []).append((dd, v))
         for sid, items in grouped.items():
             items.sort(key=lambda x: x[0])  # YYYY-MM-DD safe
-            if len(items) >= 2:
-                out[sid] = (items[-2][1], items[-1][1])
+            out[sid] = [v for _, v in items]
         return out
 
     return out
+
+
+def _compute_prev_z_p60(values: List[float], w: int = 60, ddof: int = 0) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]]:
+    """
+    Given series values (ascending), compute:
+      prev_value, latest_value, z_prev, p60_prev, ret1%
+    Also compute z_latest/p60_latest from history if needed, but we mainly need z_prev/p60_prev for delta.
+
+    Needs len(values) >= w+1 (>=61) to compute both windows:
+      prev window: values[-(w+1):-1]  (60 points ending at prev)
+      latest window: values[-w:]      (60 points ending at latest)
+    """
+    if len(values) < w + 1:
+        return None, None, None, None, None
+
+    prev_val = values[-2]
+    latest_val = values[-1]
+
+    prev_window = values[-(w+1):-1]
+    latest_window = values[-w:]
+
+    z_prev = _zscore(prev_val, prev_window, ddof=ddof)
+    p_prev = _percentile_le(prev_val, prev_window)
+    r1 = _ret1_pct(prev_val, latest_val)
+
+    # We don't return z_latest/p_latest here; delta will use stats_latest z60/p60 as "latest".
+    return prev_val, latest_val, z_prev, p_prev, r1
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stats", required=True)
     ap.add_argument("--history-lite", required=True)
-    ap.add_argument("--history", required=True)   # dashboard_fred_cache/history.json
+    ap.add_argument("--history", required=True)
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--module", required=True)
@@ -253,16 +326,30 @@ def main() -> int:
     hist_lite = _read_json(args.history_lite)
 
     stats_series = _extract_stats_series(stats)
-    last2 = _extract_last2_from_history_lite(hist_lite)
+    series_vals = _extract_series_values(hist_lite)
     prev_map = _load_dash_history_last_signals(args.history)
+
+    ddof = 0  # your stats_policy uses ddof=0
 
     rows: List[Dict[str, Any]] = []
     for sid in sorted(stats_series.keys()):
         s = stats_series[sid]
-        prev_v, last_v = last2.get(sid, (None, None))
-        r1 = _ret1_pct(prev_v, last_v)
+        vals = series_vals.get(sid, [])
 
-        signal, reason = _signal_from_rules(s.get("z60"), s.get("p252"), r1)
+        prev_val, latest_val, z_prev, p60_prev, r1 = _compute_prev_z_p60(vals, w=60, ddof=ddof)
+
+        z60_latest = s.get("z60")
+        p60_latest = s.get("p60")  # now available from stats_latest.json
+        p252 = s.get("p252")
+
+        z_delta60 = None
+        p_delta60 = None
+        if z60_latest is not None and z_prev is not None:
+            z_delta60 = z60_latest - z_prev
+        if p60_latest is not None and p60_prev is not None:
+            p_delta60 = p60_latest - p60_prev
+
+        signal, reason = _signal_from_rules(z60_latest, p252, z_delta60, p_delta60, r1)
         tag = _tag_from_reason(reason)
 
         prev_sig = prev_map.get(sid, "NA")
@@ -279,10 +366,11 @@ def main() -> int:
             "age_hours": age_h,
             "data_date": s.get("data_date"),
             "value": s.get("value"),
-            "z60": s.get("z60"),
-            "p252": s.get("p252"),
-            "z_delta_60": None,
-            "p_delta_60": None,
+            "z60": z60_latest,
+            "p60": p60_latest,
+            "p252": p252,
+            "z_delta_60": z_delta60,
+            "p_delta_60": p_delta60,
             "ret1_pct": r1,
             "reason": reason,
             "tag": tag,
@@ -317,11 +405,11 @@ def main() -> int:
         "history_path": args.history,
         "history_lite_path": args.history_lite,
         "history_lite_used_for_jump": args.history_lite,
-        "jump_calc": "ret1% = (latest-prev)/abs(prev)*100 (from history_lite last 2 points)",
+        "jump_calc": "ret1%=(latest-prev)/abs(prev)*100; zΔ60=z60(latest)-z60(prev); pΔ60=p60(latest)-p60(prev) (prev computed from window ending at prev)",
         "signal_rules": (
             "Extreme(abs(Z60)>=2 (WATCH), abs(Z60)>=2.5 (ALERT), "
             "P252>=95 or <=5 (INFO), P252<=2 (ALERT)); "
-            "Jump(abs(ret1%)>=2 -> WATCH)"
+            "Jump(abs(zΔ60)>=0.75 OR abs(pΔ60)>=15 OR abs(ret1%)>=2 -> WATCH)"
         ),
         "summary": {
             "ALERT": counts["ALERT"],
@@ -329,7 +417,8 @@ def main() -> int:
             "INFO": counts["INFO"],
             "NONE": counts["NONE"],
             "CHANGED": changed,
-        }
+        },
+        "history_lite_series": len(series_vals),
     }
 
     out_obj = {"meta": meta, "rows": rows}
@@ -370,8 +459,8 @@ def main() -> int:
             _fmt_num(_to_float(r["value"]), 6),
             _fmt_num(_to_float(r["z60"]), 6),
             _fmt_num(_to_float(r["p252"]), 6),
-            "NA",
-            "NA",
+            _fmt_num(_to_float(r["z_delta_60"]), 6),
+            _fmt_num(_to_float(r["p_delta_60"]), 6),
             _fmt_num(_to_float(r["ret1_pct"]), 6),
             _html_escape_pipes(str(r["reason"])),
             str(r["source_url"]),
