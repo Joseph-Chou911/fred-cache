@@ -143,7 +143,7 @@ PATH_HISTORY_LITE = "cache/history_lite.json"
 PATH_DQ_STATE = "cache/dq_state.json"  # optional
 
 OUT_DIR = "dashboard_fred_cache"
-OUT_MD = os.path.join(OUT_DIR, "dashboard.md")   # <-- 改這裡：dashboard.md
+OUT_MD = os.path.join(OUT_DIR, "dashboard.md")   # dashboard.md
 OUT_HISTORY = os.path.join(OUT_DIR, "history.json")
 
 STALE_HOURS_DEFAULT = 72.0
@@ -151,7 +151,19 @@ STALE_HOURS_DEFAULT = 72.0
 TH_ZDELTA = 0.75
 TH_PDELTA = 20.0
 TH_RET1P = 2.0
+
+# NEAR_RATIO = 0.90 means "within 10% of thresholds"
 NEAR_RATIO = 0.90
+
+
+def _near_pct_str() -> str:
+    # Example: NEAR_RATIO=0.90 => within 10%
+    try:
+        pct = (1.0 - float(NEAR_RATIO)) * 100.0
+        # Keep it integer-like for display
+        return f"{pct:.0f}%"
+    except Exception:
+        return "NA"
 
 
 def _load_dq_map() -> Dict[str, str]:
@@ -459,11 +471,13 @@ def main() -> None:
     md.append(f"- dash_history: `{OUT_HISTORY}`")
     md.append(f"- history_lite_used_for_jump: `{PATH_HISTORY_LITE}`")
     md.append("- jump_calc: `ret1%=(latest-prev)/abs(prev)*100; zΔ60=z60(latest)-z60(prev); pΔ60=p60(latest)-p60(prev) (prev computed from window ending at prev)`")
+
+    near_pct = _near_pct_str()
     md.append(
         "- signal_rules: "
         "`Extreme(abs(Z60)>=2 (WATCH), abs(Z60)>=2.5 (ALERT), P252>=95 or <=5 (INFO), P252<=2 (ALERT)); "
         "Jump(2/3 vote: abs(zΔ60)>=0.75, abs(pΔ60)>=20, abs(ret1%)>=2 -> WATCH); "
-        "Near(within 10% of jump thresholds)`\n"
+        f"Near(within {near_pct} of jump thresholds)`\n"
     )
 
     cols = [
