@@ -1,0 +1,24 @@
+{
+  "schema_version": "dash_history_v1",
+  "items": [
+    {
+      "run_ts_utc": "2026-01-18T10:43:41.094297+00:00",
+      "stats_as_of_ts": "2026-01-18T07:40:37Z",
+      "module": "snapshot_fast",
+      "series_signals": {
+        "BAMLH0A0HYM2": "WATCH",
+        "DCOILWTICO": "WATCH",
+        "DGS10": "WATCH",
+        "DGS2": "WATCH",
+        "DJIA": "WATCH",
+        "NASDAQCOM": "WATCH",
+        "NFCINONFINLEVERAGE": "WATCH",
+        "SP500": "WATCH",
+        "T10Y2Y": "WATCH",
+        "T10Y3M": "WATCH",
+        "UST3M": "WATCH",
+        "VIXCLS": "WATCH"
+      }
+    }
+  ]
+}
