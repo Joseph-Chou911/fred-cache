@@ -156,14 +156,6 @@ TH_RET1P = 2.0
 NEAR_RATIO = 0.90
 
 
-def _near_pct_str() -> str:
-    try:
-        pct = (1.0 - float(NEAR_RATIO)) * 100.0
-        return f"{pct:.0f}%"
-    except Exception:
-        return "NA"
-
-
 def _load_dq_map() -> Dict[str, str]:
     if not os.path.exists(PATH_DQ_STATE):
         return {}
@@ -338,6 +330,51 @@ def _load_dash_history(path: str) -> Dict[str, Any]:
     return {"schema_version": "dash_history_v1", "items": []}
 
 
+def _snapshot_key(it: Dict[str, Any]) -> Tuple[str, str, str]:
+    """
+    Key used to collapse reruns of the SAME snapshot.
+    We intentionally ignore run_ts_utc. We care about the data snapshot identity.
+    """
+    module = str(it.get("module") or "")
+    asof = str(it.get("stats_as_of_ts") or "")
+    ss = it.get("series_signals")
+    if not isinstance(ss, dict):
+        ss = {}
+    ss_norm = json.dumps(ss, sort_keys=True, ensure_ascii=False)
+    return (module, asof, ss_norm)
+
+
+def _normalize_history_inplace(hist_obj: Dict[str, Any]) -> bool:
+    """
+    Compress consecutive duplicate snapshots so reruns do not inflate streak.
+    Also removes earlier duplicates across the file (keeps first occurrence per key order).
+    Returns True if modified.
+    """
+    items = hist_obj.get("items")
+    if not isinstance(items, list) or not items:
+        return False
+
+    new_items: List[Dict[str, Any]] = []
+    seen: set[Tuple[str, str, str]] = set()
+
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        k = _snapshot_key(it)
+        # If you want to only collapse consecutive duplicates (not global),
+        # replace `seen` logic with `last_k` comparison.
+        if k in seen:
+            continue
+        seen.add(k)
+        new_items.append(it)
+
+    if len(new_items) != len(items):
+        hist_obj["items"] = new_items
+        hist_obj["schema_version"] = "dash_history_v1"
+        return True
+    return False
+
+
 def _prev_signal_from_history(hist_obj: Dict[str, Any]) -> Dict[str, str]:
     items = hist_obj.get("items", [])
     if not isinstance(items, list) or not items:
@@ -382,9 +419,7 @@ def _delta_signal(prev: str, curr: str) -> str:
 
 def _should_append_history(hist_obj: Dict[str, Any], new_item: Dict[str, Any]) -> bool:
     """
-    Prevent streak inflation on reruns:
-    If last history entry has same (module, stats_as_of_ts, series_signals), DO NOT append.
-    This makes rerun idempotent for the same data snapshot.
+    Idempotent append: if last entry represents the same snapshot, don't append.
     """
     items = hist_obj.get("items", [])
     if not isinstance(items, list) or not items:
@@ -392,19 +427,7 @@ def _should_append_history(hist_obj: Dict[str, Any], new_item: Dict[str, Any]) -
     last = items[-1]
     if not isinstance(last, dict):
         return True
-
-    if str(last.get("module")) != str(new_item.get("module")):
-        return True
-    if str(last.get("stats_as_of_ts")) != str(new_item.get("stats_as_of_ts")):
-        return True
-
-    last_ss = last.get("series_signals")
-    new_ss = new_item.get("series_signals")
-    if not isinstance(last_ss, dict) or not isinstance(new_ss, dict):
-        return True
-
-    # strict equality (order-independent for dict)
-    return last_ss != new_ss
+    return _snapshot_key(last) != _snapshot_key(new_item)
 
 
 def main() -> None:
@@ -428,7 +451,12 @@ def main() -> None:
     hl_recs = _load_ndjson_or_json_array(PATH_HISTORY_LITE) if os.path.exists(PATH_HISTORY_LITE) else []
     hl_by = _group_history_lite(hl_recs)
 
+    # Load history then normalize BEFORE computing streak
     hist_obj = _load_dash_history(OUT_HISTORY)
+    modified = _normalize_history_inplace(hist_obj)
+    if modified:
+        _write_text(OUT_HISTORY, json.dumps(hist_obj, ensure_ascii=False, indent=2) + "\n")
+
     prev_map = _prev_signal_from_history(hist_obj)
 
     rows: List[Row] = []
@@ -496,13 +524,11 @@ def main() -> None:
     md.append(f"- dash_history: `{OUT_HISTORY}`")
     md.append(f"- history_lite_used_for_jump: `{PATH_HISTORY_LITE}`")
     md.append("- jump_calc: `ret1%=(latest-prev)/abs(prev)*100; zΔ60=z60(latest)-z60(prev); pΔ60=p60(latest)-p60(prev) (prev computed from window ending at prev)`")
-
-    near_pct = f"{(1.0 - NEAR_RATIO) * 100.0:.0f}%"
     md.append(
         "- signal_rules: "
         "`Extreme(abs(Z60)>=2 (WATCH), abs(Z60)>=2.5 (ALERT), P252>=95 or <=5 (INFO), P252<=2 (ALERT)); "
         "Jump(2/3 vote: abs(zΔ60)>=0.75, abs(pΔ60)>=20, abs(ret1%)>=2 -> WATCH); "
-        f"Near(within {near_pct} of jump thresholds)`\n"
+        "Near(within 10% of jump thresholds)`\n"
     )
 
     cols = [
@@ -525,7 +551,7 @@ def main() -> None:
 
     _write_text(OUT_MD, "\n".join(md) + "\n")
 
-    # --- history append (idempotent for same snapshot) ---
+    # Idempotent append using snapshot identity
     new_item = {
         "run_ts_utc": run_ts_utc.isoformat(),
         "stats_as_of_ts": stats_as_of_ts,
