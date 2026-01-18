@@ -1,0 +1,82 @@
+name: Update Dashboard Snapshot (fallback_cache)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 23:20 Asia/Taipei = 15:20 UTC
+    - cron: "20 15 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  snapshot_dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate snapshot exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f fallback_cache/latest.json ]; then
+            echo "ERROR: missing fallback_cache/latest.json"
+            echo "HINT: confirm your snapshot task outputs this file path, or update the workflow path."
+            exit 1
+          fi
+
+      - name: Render dashboard snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/render_snapshot_dashboard.py \
+            --snapshot fallback_cache/latest.json \
+            --dash-history dashboard_snapshot/history.json \
+            --module snapshot_fast \
+            --stale-hours 36 \
+            --out-md dashboard/DASHBOARD_SNAPSHOT.md \
+            --out-json dashboard/dashboard_snapshot_latest.json
+
+      - name: Append history (snapshot_fast)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/append_dashboard_history_snapshot.py \
+            --in-json dashboard/dashboard_snapshot_latest.json \
+            --history dashboard_snapshot/history.json \
+            --module snapshot_fast
+
+      - name: Commit & push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            dashboard/DASHBOARD_SNAPSHOT.md \
+            dashboard/dashboard_snapshot_latest.json \
+            dashboard_snapshot/history.json
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+
+          git commit -m "chore: update snapshot dashboard (fallback_cache)"
+          git pull --rebase origin main
+          git push origin HEAD:main
