@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP+signals v4: Tag + Near + Streak from history_lite)
+# Dashboard renderer (MVP+signals v5: Tag + Near + Streak + Markdown-safe cells)
 #
 # Inputs:
 #   - stats_latest.json (current day computed stats + sources)
@@ -18,8 +18,9 @@
 #   - ret1% uses denom = abs(prev_value) when prev_value != 0; otherwise NA.
 #     This may differ from upstream edge-case handling when prev is near 0.
 #
-# DQ:
-#   - OK / STALE / MISSING based on latest.as_of_ts age
+# Markdown table safety:
+#   - Any cell content containing '|' must be escaped, otherwise GitHub Markdown tables break columns.
+#   - We escape '|' as '&#124;' and newlines as '<br>' for all cells in the table.
 
 import argparse
 import json
@@ -89,6 +90,18 @@ def fmt(x: Any, nd: int = 6) -> str:
         s = f"{x:.{nd}f}"
         return s.rstrip("0").rstrip(".")
     return str(x)
+
+
+def md_escape_cell(x: Any) -> str:
+    """
+    Escape content for GitHub-flavored Markdown tables.
+    - Prevent '|' from breaking columns
+    - Prevent newlines from breaking rows
+    """
+    s = str(x) if x is not None else "NA"
+    s = s.replace("|", "&#124;")
+    s = s.replace("\n", "<br>")
+    return s
 
 
 def safe_abs(x: Any) -> Optional[float]:
@@ -248,7 +261,6 @@ def parse_history_points(history_obj: Dict[str, Any], series_id: str) -> List[Tu
                 return normalize_points(arr)
         # Case B: s itself might be a dict with date->value mapping
         if all(isinstance(k, str) for k in s.keys()):
-            # try date->value mapping
             pts: List[Tuple[str, float]] = []
             for k, v in s.items():
                 if isinstance(v, (int, float)):
@@ -290,18 +302,15 @@ def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -
 
     # Use last lookback points
     pts = pts[-max(STREAK_LOOKBACK_MAX, 2):]
-
-    dates = [d for d, _ in pts]
     vals = [v for _, v in pts]
     n = len(vals)
 
-    # For each i, compute z60/p252/zΔ60/pΔ60/ret1%60 using value windows up to i
     signals: List[str] = []
     for i in range(n):
         x = vals[i]
         prev = vals[i - 1] if i - 1 >= 0 else None
 
-        # w60 window ending at i (last 60 valid points)
+        # w60 window ending at i
         w60_vals = vals[max(0, i - (W60 - 1)) : i + 1]
         m60, sd60 = mean_std_ddof0(w60_vals)
         z60 = None if sd60 == 0 else (x - m60) / sd60
@@ -310,7 +319,7 @@ def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -
         w252_vals = vals[max(0, i - (W252 - 1)) : i + 1]
         p252 = percentile_leq(w252_vals, x)
 
-        # deltas based on previous day's z/p (computed with its own windows)
+        # deltas based on previous day's z/p
         if i - 1 >= 0:
             x_prev = vals[i - 1]
             w60_prev = vals[max(0, (i - 1) - (W60 - 1)) : (i - 1) + 1]
@@ -326,7 +335,7 @@ def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -
             zdel60 = None
             pdel60 = None
 
-        # ret1%60 (percent units) based on prev value denom
+        # ret1% (percent units) based on abs(prev) denom
         if prev is None or abs(prev) < 1e-12:
             ret1pct60 = None
         else:
@@ -341,10 +350,8 @@ def compute_prevsignal_and_streak(history_obj: Dict[str, Any], series_id: str) -
         )
         signals.append(sig)
 
-    # PrevSignal is signal at previous point (n-2)
     prev_signal = signals[-2] if len(signals) >= 2 else "NA"
 
-    # StreakWA: count backwards from latest while signal in {WATCH, ALERT}
     streak = 0
     for s in reversed(signals):
         if s in ("WATCH", "ALERT"):
@@ -396,24 +403,24 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 
     for r in rows:
         lines.append("| " + " | ".join([
-            r.get("signal_level", "NONE"),
-            r.get("tag", "NA"),
-            r.get("near", "NA"),
-            r.get("prev_signal", "NA"),
-            fmt(r.get("streak_wa"), nd=0),
-            r.get("series", ""),
-            r.get("dq", ""),
-            fmt(r.get("age_hours"), nd=2),
-            fmt(r.get("data_date")),
-            fmt(r.get("value"), nd=6),
-            fmt(r.get("z60"), nd=6),
-            fmt(r.get("p252"), nd=6),
-            fmt(r.get("z_delta_60"), nd=6),
-            fmt(r.get("p_delta_60"), nd=6),
-            fmt(r.get("ret1_pct_60"), nd=6),
-            fmt(r.get("reason")),
-            fmt(r.get("source_url")),
-            fmt(r.get("as_of_ts")),
+            md_escape_cell(r.get("signal_level", "NONE")),
+            md_escape_cell(r.get("tag", "NA")),
+            md_escape_cell(r.get("near", "NA")),
+            md_escape_cell(r.get("prev_signal", "NA")),
+            md_escape_cell(fmt(r.get("streak_wa"), nd=0)),
+            md_escape_cell(r.get("series", "")),
+            md_escape_cell(r.get("dq", "")),
+            md_escape_cell(fmt(r.get("age_hours"), nd=2)),
+            md_escape_cell(fmt(r.get("data_date"))),
+            md_escape_cell(fmt(r.get("value"), nd=6)),
+            md_escape_cell(fmt(r.get("z60"), nd=6)),
+            md_escape_cell(fmt(r.get("p252"), nd=6)),
+            md_escape_cell(fmt(r.get("z_delta_60"), nd=6)),
+            md_escape_cell(fmt(r.get("p_delta_60"), nd=6)),
+            md_escape_cell(fmt(r.get("ret1_pct_60"), nd=6)),
+            md_escape_cell(r.get("reason")),
+            md_escape_cell(r.get("source_url")),
+            md_escape_cell(r.get("as_of_ts")),
         ]) + " |")
 
     with open(out_md, "w", encoding="utf-8") as f:
@@ -551,7 +558,6 @@ def main() -> None:
         return 0 if r.get("near") not in (None, "NA", "") else 1
 
     def streak_rank(r: Dict[str, Any]) -> int:
-        # higher streak first -> negative
         try:
             return -int(r.get("streak_wa") or 0)
         except Exception:
