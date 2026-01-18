@@ -157,10 +157,8 @@ NEAR_RATIO = 0.90
 
 
 def _near_pct_str() -> str:
-    # Example: NEAR_RATIO=0.90 => within 10%
     try:
         pct = (1.0 - float(NEAR_RATIO)) * 100.0
-        # Keep it integer-like for display
         return f"{pct:.0f}%"
     except Exception:
         return "NA"
@@ -382,6 +380,33 @@ def _delta_signal(prev: str, curr: str) -> str:
     return f"{prev}→{curr}"
 
 
+def _should_append_history(hist_obj: Dict[str, Any], new_item: Dict[str, Any]) -> bool:
+    """
+    Prevent streak inflation on reruns:
+    If last history entry has same (module, stats_as_of_ts, series_signals), DO NOT append.
+    This makes rerun idempotent for the same data snapshot.
+    """
+    items = hist_obj.get("items", [])
+    if not isinstance(items, list) or not items:
+        return True
+    last = items[-1]
+    if not isinstance(last, dict):
+        return True
+
+    if str(last.get("module")) != str(new_item.get("module")):
+        return True
+    if str(last.get("stats_as_of_ts")) != str(new_item.get("stats_as_of_ts")):
+        return True
+
+    last_ss = last.get("series_signals")
+    new_ss = new_item.get("series_signals")
+    if not isinstance(last_ss, dict) or not isinstance(new_ss, dict):
+        return True
+
+    # strict equality (order-independent for dict)
+    return last_ss != new_ss
+
+
 def main() -> None:
     run_ts_utc = datetime.now(timezone.utc)
 
@@ -472,7 +497,7 @@ def main() -> None:
     md.append(f"- history_lite_used_for_jump: `{PATH_HISTORY_LITE}`")
     md.append("- jump_calc: `ret1%=(latest-prev)/abs(prev)*100; zΔ60=z60(latest)-z60(prev); pΔ60=p60(latest)-p60(prev) (prev computed from window ending at prev)`")
 
-    near_pct = _near_pct_str()
+    near_pct = f"{(1.0 - NEAR_RATIO) * 100.0:.0f}%"
     md.append(
         "- signal_rules: "
         "`Extreme(abs(Z60)>=2 (WATCH), abs(Z60)>=2.5 (ALERT), P252>=95 or <=5 (INFO), P252<=2 (ALERT)); "
@@ -500,16 +525,21 @@ def main() -> None:
 
     _write_text(OUT_MD, "\n".join(md) + "\n")
 
+    # --- history append (idempotent for same snapshot) ---
     new_item = {
         "run_ts_utc": run_ts_utc.isoformat(),
         "stats_as_of_ts": stats_as_of_ts,
         "module": MODULE,
         "series_signals": series_signals_out,
     }
+
     items = hist_obj.get("items")
     if not isinstance(items, list):
         items = []
-    items.append(new_item)
+
+    if _should_append_history(hist_obj, new_item):
+        items.append(new_item)
+
     hist_obj["schema_version"] = "dash_history_v1"
     hist_obj["items"] = items
     _write_text(OUT_HISTORY, json.dumps(hist_obj, ensure_ascii=False, indent=2) + "\n")
