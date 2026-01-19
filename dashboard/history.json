@@ -1,5 +1,5 @@
 {
-  "schema_version": "dash_history_v3",
+  "schema_version": "dash_history_v2",
   "items": [
     {
       "run_ts_utc": "2026-01-19T01:56:44.024877+00:00",
@@ -42,26 +42,11 @@
       "series_signals_sig": "d794bffc3da6b1cf4c6b24acad508b2fd2d2d90f"
     },
     {
-      "run_ts_utc": "2026-01-19T06:34:07.935095+00:00",
+      "run_ts_utc": "2026-01-19T06:52:59.606025+00:00",
       "stats_as_of_ts": "2026-01-19T04:39:03Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@3ca6a8b",
-      "series_signals": {
-        "OFR_FSI": "WATCH",
-        "VIX": "NONE",
-        "SP500": "INFO",
-        "HYG_IEF_RATIO": "WATCH"
-      }
-    },
-    {
-      "run_ts_utc": "2026-01-19T06:47:16.124192+00:00",
-      "stats_as_of_ts": "2026-01-19T04:39:03Z",
-      "module": "market_cache",
-      "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@1274c3e",
-      "tz": "Asia/Taipei",
-      "bucket_date": "2026-01-19",
+      "script_fingerprint": "render_dashboard_py_signals_v8@c810777",
       "series_signals": {
         "OFR_FSI": "WATCH",
         "VIX": "NONE",
