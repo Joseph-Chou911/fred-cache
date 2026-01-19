@@ -1,4 +1,4 @@
-name: Update Dashboard (Market cache)
+name: Update Dashboard (market_cache)
 
 on:
   workflow_dispatch: {}
