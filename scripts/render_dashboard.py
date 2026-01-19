@@ -1,31 +1,34 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP + signals v8)  [DAILY history bucket]
+# Dashboard renderer (MVP + signals v8)  [A+B+C compatible]
 # - Tag + Near
-# - PrevSignal/Streak derived from dashboard/history.json
-#   * STRICT: only items with matching (module + ruleset_id)
-#   * DAILY: one item per day (bucket_date in Asia/Taipei), re-runs overwrite same day
+# - PrevSignal/Streak from dashboard/history.json
+#   * STRICT: only items with matching (module + ruleset_id) are used
+#   * Legacy items missing ruleset_id are ignored (方案 C)
 # - DeltaSignal (Prev → Today, SAME, NA)
 # - Summary counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
+# - Direction map (HIGH/LOW/RANGE/MOVE) + DirNote (risk-bias annotation)
 # - Markdown table safety: escape '|'
 #
 # Inputs:
 #   - stats_latest.json (authoritative metrics for "today")
-#   - dashboard/history.json (authoritative past DAILY signals)
+#   - dashboard/history.json (authoritative past signals produced by this renderer)
 #
 # Outputs:
 #   - dashboard/DASHBOARD.md
-#   - dashboard/dashboard_latest.json (meta, rows, series_signals)
+#   - dashboard/dashboard_latest.json  (includes: meta, rows, series_signals)
 #
 # Notes:
-# - Audit fields: RULESET_ID + SCRIPT_FINGERPRINT(+@GITHUB_SHA7), BUCKET_DATE (Asia/Taipei)
-# - This renderer expects append_dashboard_history.py to maintain one item per bucket_date.
+# - Audit fields:
+#   - RULESET_ID (args.ruleset_id)
+#   - SCRIPT_FINGERPRINT (args.script_fingerprint, optionally with @GITHUB_SHA7)
+# - Make sure your append_dashboard_history.py dedupes by (module, ruleset_id, stats_as_of_ts).
 
 import argparse
 import json
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 # -------------------------
@@ -49,27 +52,50 @@ RET1PCT60_JUMP_ABS = 2.0  # percent units
 # Near window: within X% of threshold
 NEAR_FRAC = 0.10  # 10%
 
-# How many history days to load for streak computation
-STREAK_HISTORY_MAX = 400
+# Max history snapshots to consider for streak computation
+STREAK_HISTORY_MAX = 120  # ~半年（每天一次）夠用了
 
 DEFAULT_RULESET_ID = "signals_v8"
 DEFAULT_SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8"
-DEFAULT_TZ = "Asia/Taipei"
-
 
 # -------------------------
-# Time helpers
+# Direction map (minimal extension)
 # -------------------------
-def _get_tzinfo(tz_name: str):
-    # Python 3.11 has zoneinfo; on any issue, fall back to fixed +08:00 for Asia/Taipei.
-    try:
-        from zoneinfo import ZoneInfo  # type: ignore
-        return ZoneInfo(tz_name)
-    except Exception:
-        # Asia/Taipei has no DST; fixed offset is acceptable as a fallback.
-        if tz_name == "Asia/Taipei":
-            return timezone(timedelta(hours=8))
-        return timezone.utc
+# HIGH: higher value => generally higher risk bias
+# LOW : lower value  => generally higher risk bias
+# RANGE: both tails can be risky (not used in MVP; reserved)
+# MOVE: treat as "movement-only" (do not infer up/down risk from direction)
+DIRECTION_MAP: Dict[str, str] = {
+    # credit / stress / leverage (higher => more stress)
+    "OFR_FSI": "HIGH",
+    "STLFSI4": "HIGH",
+    "BAMLH0A0HYM2": "HIGH",
+    "NFCINONFINLEVERAGE": "HIGH",
+
+    # equity (overheat/valuation crowding bias; higher => more fragile)
+    "SP500": "HIGH",
+    "DJIA": "HIGH",
+    "NASDAQCOM": "HIGH",
+
+    # vol (higher => more risk)
+    "VIX": "HIGH",
+    "VIXCLS": "HIGH",
+
+    # FX index (if you interpret USD strength as tighter conditions)
+    "DTWEXBGS": "HIGH",
+
+    # oil (cost/inflation pressure bias)
+    "DCOILWTICO": "HIGH",
+
+    # credit proxy ratio: ratio down => credit stress => risk (LOW)
+    "HYG_IEF_RATIO": "LOW",
+
+    # rates: MVP treat as MOVE-only (avoid "rate down = risk up" misread)
+    "DGS2": "MOVE",
+    "DGS10": "MOVE",
+    "T10Y2Y": "MOVE",
+    "T10Y3M": "MOVE",
+}
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -77,31 +103,11 @@ def parse_iso(ts: Optional[str]) -> Optional[datetime]:
         return None
     ts2 = ts.replace("Z", "+00:00")
     try:
-        dt = datetime.fromisoformat(ts2)
-        # ensure tz-aware
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
+        return datetime.fromisoformat(ts2)
     except Exception:
         return None
 
 
-def bucket_date_from_stats_asof(stats_as_of_ts: Optional[str], tz_name: str, run_ts_utc: datetime) -> str:
-    """
-    Daily bucket date in tz_name (YYYY-MM-DD), derived from stats_as_of_ts if possible.
-    Fallback: run_ts_utc converted to tz_name.
-    """
-    tzinfo = _get_tzinfo(tz_name)
-    dt = parse_iso(stats_as_of_ts)
-    if dt is None:
-        dt = run_ts_utc
-    local = dt.astimezone(tzinfo)
-    return local.date().isoformat()
-
-
-# -------------------------
-# Formatting helpers
-# -------------------------
 def dq_from_ts(run_ts: datetime, as_of_ts: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
     if as_of_ts is None:
         return "MISSING", None
@@ -146,9 +152,6 @@ def is_near(abs_val: Optional[float], thr: float, near_frac: float) -> bool:
     return (abs_val >= lo) and (abs_val < thr)
 
 
-# -------------------------
-# Signals v8
-# -------------------------
 def compute_signal_tag_near_from_metrics(
     z60: Optional[float],
     p252: Optional[float],
@@ -255,9 +258,6 @@ def compute_signal_tag_near_from_metrics(
     return level, reason_str, tag_str, near_str
 
 
-# -------------------------
-# History helpers (DAILY)
-# -------------------------
 def load_dashboard_history(path: Optional[str]) -> List[Dict[str, Any]]:
     if not path:
         return []
@@ -275,89 +275,43 @@ def load_dashboard_history(path: Optional[str]) -> List[Dict[str, Any]]:
         return []
 
 
-def build_series_signal_timeline_daily(
+def build_series_signal_timeline(
     history_snaps: List[Dict[str, Any]],
     module: str,
     ruleset_id: str,
-) -> Dict[str, List[Tuple[str, str]]]:
+) -> Dict[str, List[str]]:
     """
-    Returns: sid -> list of (bucket_date, signal) sorted by bucket_date asc.
-    Only items matching (module + ruleset_id) are included.
+    方案 C：忽略 legacy（缺 ruleset_id）items。
+    只使用 item.module==module AND item.ruleset_id==ruleset_id
     """
-    per_series: Dict[str, List[Tuple[str, str]]] = {}
+    timeline: Dict[str, List[str]] = {}
     for snap in history_snaps:
         if snap.get("module") != module:
             continue
         if snap.get("ruleset_id") != ruleset_id:
             continue
-        bucket_date = snap.get("bucket_date")
         sigs = snap.get("series_signals")
-        if not isinstance(bucket_date, str) or not bucket_date:
-            continue
         if not isinstance(sigs, dict):
             continue
-
         for sid, sig in sigs.items():
             if isinstance(sid, str) and isinstance(sig, str):
-                per_series.setdefault(sid, []).append((bucket_date, sig))
-
-    for sid in list(per_series.keys()):
-        per_series[sid].sort(key=lambda x: x[0])
-    return per_series
+                timeline.setdefault(sid, []).append(sig)
+    return timeline
 
 
-def compute_prev_and_streak_daily(
+def compute_prev_and_streak_from_history(
     sid: str,
     today_signal: str,
-    today_bucket_date: str,
-    timeline: Dict[str, List[Tuple[str, str]]],
+    timeline: Dict[str, List[str]],
 ) -> Tuple[str, int]:
-    """
-    Daily streak:
-      - prev = last signal from the latest bucket_date < today_bucket_date
-      - streak counts consecutive days ending today where signal in {WATCH, ALERT}
-    Note: history should NOT include today's bucket if appender runs after renderer.
-    """
     hist = timeline.get(sid, [])
-    prev = "NA"
-    # find last before today
-    for d, s in reversed(hist):
-        if d < today_bucket_date:
-            prev = s
-            break
+    prev = hist[-1] if len(hist) >= 1 else "NA"
 
     if today_signal not in ("WATCH", "ALERT"):
         return prev, 0
 
-    # streak: count consecutive prior days with WATCH/ALERT immediately before today
     streak = 1
-    expected_prev_date = None  # we'll infer by scanning backwards by date strings; strict calendar continuity is optional
-    # We implement strict calendar continuity using actual date arithmetic:
-    try:
-        y, m, dd = [int(x) for x in today_bucket_date.split("-")]
-        cur = datetime(y, m, dd, tzinfo=timezone.utc).date()
-    except Exception:
-        # if parsing fails, fall back to "consecutive records" (still daily items, but no gap detection)
-        cur = None
-
-    if cur is not None:
-        # Walk back day-by-day and check if those dates exist and are WATCH/ALERT
-        # Build a map from date->signal for faster lookup
-        mp: Dict[str, str] = {}
-        for d, s in hist:
-            mp[d] = s
-        while True:
-            cur = cur - timedelta(days=1)
-            dstr = cur.isoformat()
-            s = mp.get(dstr)
-            if s in ("WATCH", "ALERT"):
-                streak += 1
-            else:
-                break
-        return prev, streak
-
-    # fallback: consecutive records (no gap check)
-    for d, s in reversed(hist):
+    for s in reversed(hist):
         if s in ("WATCH", "ALERT"):
             streak += 1
         else:
@@ -399,14 +353,75 @@ def compute_summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
-def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]], series_signals: Dict[str, str]) -> None:
+def get_direction(series_id: str) -> str:
+    d = DIRECTION_MAP.get(series_id)
+    if d in ("HIGH", "LOW", "RANGE", "MOVE"):
+        return d
+    return "MOVE"
+
+
+def parse_tags(tag_str: str) -> List[str]:
+    if not tag_str or tag_str == "NA":
+        return []
+    parts = [p.strip() for p in tag_str.split(",")]
+    return [p for p in parts if p]
+
+
+def parse_p252_tail(reason: str) -> str:
+    # reason examples: "P252>=95" or "P252<=5" (may be combined with other reasons)
+    if not reason or reason == "NA":
+        return "NA"
+    if "P252>=" in reason:
+        return "HI"
+    if "P252<=" in reason:
+        return "LO"
+    return "NA"
+
+
+def compute_dir_note(direction: str, reason: str, tags: List[str]) -> str:
+    """
+    Conservative annotation:
+    - If direction is MOVE => MOVE_ONLY
+    - If P252 tail exists, we can infer a bias (up/down risk) for HIGH/LOW signals
+    - For abs(...) based triggers (Z60/JUMP), do NOT infer up/down; mark DIR_UNCERTAIN_ABS
+    """
+    if direction == "MOVE":
+        return "MOVE_ONLY"
+
+    if direction == "RANGE":
+        return "RANGE_SENSITIVE"
+
+    p_tail = parse_p252_tail(reason)
+
+    # When we do have a P252 tail, we can infer direction bias for HIGH/LOW indicators.
+    if direction in ("HIGH", "LOW") and p_tail in ("HI", "LO"):
+        if direction == "HIGH":
+            return "RISK_BIAS_UP" if p_tail == "HI" else "RISK_BIAS_DOWN"
+        # LOW: low tail is risk-up, high tail is risk-down
+        return "RISK_BIAS_UP" if p_tail == "LO" else "RISK_BIAS_DOWN"
+
+    # Jump/extreme abs triggers: explicitly avoid claiming risk direction
+    if direction in ("HIGH", "LOW"):
+        if any(t.startswith("JUMP_") for t in tags) or ("abs(" in (reason or "")):
+            return "DIR_UNCERTAIN_ABS"
+
+    return "NA"
+
+
+def write_outputs(
+    out_md: str,
+    out_json: str,
+    meta: Dict[str, Any],
+    rows: List[Dict[str, Any]],
+    series_signals: Dict[str, str],
+) -> None:
     os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
 
     payload = {
         "meta": meta,
         "rows": rows,
-        "series_signals": series_signals,
+        "series_signals": series_signals,  # convenient for appender
     }
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -422,7 +437,6 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     )
     lines.append(f"- SCRIPT_FINGERPRINT: `{meta.get('script_fingerprint','')}`")
     lines.append(f"- RULESET_ID: `{meta.get('ruleset_id','')}`")
-    lines.append(f"- BUCKET_DATE({meta.get('tz','')}): `{meta.get('bucket_date','')}`")
     lines.append(f"- RUN_TS_UTC: `{meta.get('run_ts_utc','')}`")
     lines.append(f"- STATS.generated_at_utc: `{meta.get('stats_generated_at_utc','')}`")
     lines.append(f"- STATS.as_of_ts: `{meta.get('stats_as_of_ts','')}`")
@@ -443,7 +457,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 
     header = [
         "Signal", "Tag", "Near",
-        "PrevSignal", "DeltaSignal", "StreakWA(days)",
+        "Dir", "DirNote",
+        "PrevSignal", "DeltaSignal", "StreakWA",
         "Series", "DQ", "age_h",
         "data_date", "value",
         "z60", "p252",
@@ -458,6 +473,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             md_escape_cell(r.get("signal_level", "NONE")),
             md_escape_cell(r.get("tag", "NA")),
             md_escape_cell(r.get("near", "NA")),
+            md_escape_cell(r.get("dir", "MOVE")),
+            md_escape_cell(r.get("dir_note", "NA")),
             md_escape_cell(r.get("prev_signal", "NA")),
             md_escape_cell(r.get("delta_signal", "NA")),
             md_escape_cell(fmt(r.get("streak_wa"), nd=0)),
@@ -488,9 +505,10 @@ def main() -> None:
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--module", default="market_cache")
     ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
+
+    # A+B+C audit keys
     ap.add_argument("--ruleset-id", default=DEFAULT_RULESET_ID)
     ap.add_argument("--script-fingerprint", default=DEFAULT_SCRIPT_FINGERPRINT)
-    ap.add_argument("--tz", default=DEFAULT_TZ, help="Timezone name for daily bucket (e.g., Asia/Taipei)")
     args = ap.parse_args()
 
     run_ts = datetime.now(timezone.utc)
@@ -510,8 +528,6 @@ def main() -> None:
             "script_fingerprint": script_fingerprint,
             "stale_hours": args.stale_hours,
             "stats_path": args.stats,
-            "tz": args.tz,
-            "bucket_date": bucket_date_from_stats_asof(None, args.tz, run_ts),
             "dash_history_path": args.dash_history or "NA",
             "streak_calc": "disabled (missing stats file)",
             "error": f"stats file missing: {args.stats}",
@@ -522,11 +538,8 @@ def main() -> None:
     with open(args.stats, "r", encoding="utf-8") as f:
         stats = json.load(f)
 
-    stats_as_of_ts = stats.get("as_of_ts")
-    today_bucket_date = bucket_date_from_stats_asof(stats_as_of_ts, args.tz, run_ts)
-
     history_snaps = load_dashboard_history(args.dash_history)
-    timeline = build_series_signal_timeline_daily(history_snaps, args.module, args.ruleset_id)
+    timeline = build_series_signal_timeline(history_snaps, args.module, args.ruleset_id)
 
     meta = {
         "run_ts_utc": run_ts.isoformat(),
@@ -535,14 +548,12 @@ def main() -> None:
         "script_fingerprint": script_fingerprint,
         "stale_hours": args.stale_hours,
         "stats_path": args.stats,
-        "tz": args.tz,
-        "bucket_date": today_bucket_date,
         "stats_generated_at_utc": stats.get("generated_at_utc"),
-        "stats_as_of_ts": stats_as_of_ts,
+        "stats_as_of_ts": stats.get("as_of_ts"),
         "script_version": stats.get("script_version"),
         "series_count": stats.get("series_count"),
         "dash_history_path": args.dash_history or "NA",
-        "streak_calc": "PrevSignal/StreakWA derived from dashboard/history.json filtered by (module + ruleset_id), DAILY bucket_date",
+        "streak_calc": "PrevSignal/StreakWA derived from dashboard/history.json filtered by (module + ruleset_id) + today's signal",
         "history_items_loaded": len(history_snaps),
     }
 
@@ -572,23 +583,26 @@ def main() -> None:
             ret1pct60=w60.get("ret1_pct"),
         )
 
-        prev_signal, streak_wa = compute_prev_and_streak_daily(
+        prev_signal, streak_wa = compute_prev_and_streak_from_history(
             sid=str(sid),
             today_signal=signal_level,
-            today_bucket_date=today_bucket_date,
             timeline=timeline,
         )
         delta_signal = compute_delta_signal(prev_signal, signal_level)
 
         series_signals[str(sid)] = str(signal_level)
 
+        # direction annotation (no effect on signal)
+        direction = get_direction(str(sid))
+        tags_list = parse_tags(tag)
+        dir_note = compute_dir_note(direction, reason, tags_list)
+
         row: Dict[str, Any] = {
             "module": args.module,
             "ruleset_id": args.ruleset_id,
             "script_fingerprint": script_fingerprint,
-            "bucket_date": today_bucket_date,
 
-            "series": sid,
+            "series": str(sid),
             "value": latest.get("value"),
             "data_date": latest.get("data_date"),
             "as_of_ts": latest.get("as_of_ts"),
@@ -607,13 +621,16 @@ def main() -> None:
             "tag": tag,
             "near": near,
 
+            "dir": direction,
+            "dir_note": dir_note,
+
             "prev_signal": prev_signal,
             "delta_signal": delta_signal,
-            "streak_wa": streak_wa,  # DAILY streak
+            "streak_wa": streak_wa,
         }
         rows.append(row)
 
-    # Sorting
+    # Sorting:
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
 
@@ -634,7 +651,7 @@ def main() -> None:
             return 2
         if d == "SAME":
             return 1
-        return 0
+        return 0  # changed first
 
     rows.sort(key=lambda r: (
         sig_order.get(r.get("signal_level", "NONE"), 9),
@@ -642,7 +659,7 @@ def main() -> None:
         watch_near_rank(r),
         streak_rank(r),
         dq_order.get(r.get("dq", "OK"), 9),
-        str(r.get("series", "")),
+        r.get("series", ""),
     ))
 
     write_outputs(args.out_md, args.out_json, meta, rows, series_signals)
