@@ -15,38 +15,11 @@
       }
     },
     {
-      "run_ts_utc": "2026-01-19T02:22:57.285514+00:00",
-      "stats_as_of_ts": "2026-01-19T02:10:12Z",
-      "module": "market_cache",
-      "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@1527ef2",
-      "series_signals": {
-        "OFR_FSI": "WATCH",
-        "VIX": "NONE",
-        "SP500": "INFO",
-        "HYG_IEF_RATIO": "WATCH"
-      }
-    },
-    {
-      "run_ts_utc": "2026-01-19T02:42:33.248534+00:00",
-      "stats_as_of_ts": "2026-01-19T02:40:29Z",
-      "module": "market_cache",
-      "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@9e1ce49",
-      "series_signals": {
-        "OFR_FSI": "WATCH",
-        "VIX": "NONE",
-        "SP500": "INFO",
-        "HYG_IEF_RATIO": "WATCH"
-      },
-      "series_signals_sig": "d794bffc3da6b1cf4c6b24acad508b2fd2d2d90f"
-    },
-    {
-      "run_ts_utc": "2026-01-19T06:52:59.606025+00:00",
+      "run_ts_utc": "2026-01-19T06:57:01.704988+00:00",
       "stats_as_of_ts": "2026-01-19T04:39:03Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@c810777",
+      "script_fingerprint": "render_dashboard_py_signals_v8@5121e45",
       "series_signals": {
         "OFR_FSI": "WATCH",
         "VIX": "NONE",
