@@ -11,6 +11,7 @@
 # - Direction map (HIGH/LOW/RANGE/MOVE) + DirNote (risk-bias annotation)
 # - ORDER-SAFE: auto-detect if history already contains "today" (same day key),
 #               then compute Prev/Streak against history-excluding-today.
+# - Aux columns: p60, z252 (diagnostics only; NOT used by ruleset/sorting)
 # - Markdown table safety: escape '|'
 #
 # Inputs:
@@ -486,6 +487,7 @@ def write_outputs(
     )
     lines.append("")
 
+    # NOTE: Added p60 and z252 as diagnostic-only columns (not used in rules/sorting).
     header = [
         "Signal", "Tag", "Near",
         "Dir", "DirNote",
@@ -493,7 +495,7 @@ def write_outputs(
         "StreakHist", "StreakWA",
         "Series", "DQ", "age_h",
         "data_date", "value",
-        "z60", "p252",
+        "z60", "p60", "p252", "z252",
         "z_delta60", "p_delta60", "ret1_pct60",
         "Reason", "Source", "as_of_ts"
     ]
@@ -517,7 +519,9 @@ def write_outputs(
             md_escape_cell(fmt(r.get("data_date"))),
             md_escape_cell(fmt(r.get("value"), nd=6)),
             md_escape_cell(fmt(r.get("z60"), nd=6)),
+            md_escape_cell(fmt(r.get("p60"), nd=6)),
             md_escape_cell(fmt(r.get("p252"), nd=6)),
+            md_escape_cell(fmt(r.get("z252"), nd=6)),
             md_escape_cell(fmt(r.get("z_delta60"), nd=6)),
             md_escape_cell(fmt(r.get("p_delta60"), nd=6)),
             md_escape_cell(fmt(r.get("ret1_pct60"), nd=6)),
@@ -628,6 +632,7 @@ def main() -> None:
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
         dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, args.stale_hours)
 
+        # NOTE: signal rules remain unchanged; p60/z252 are diagnostics only.
         signal_level, reason, tag, near = compute_signal_tag_near_from_metrics(
             z60=w60.get("z"),
             p252=w252.get("p"),
@@ -664,11 +669,16 @@ def main() -> None:
             "dq": dq,
             "age_hours": age_hours,
 
+            # existing metrics used by signals_v8
             "z60": w60.get("z"),
             "ret1_pct60": w60.get("ret1_pct"),
             "z_delta60": w60.get("z_delta"),
             "p_delta60": w60.get("p_delta"),
             "p252": w252.get("p"),
+
+            # ADDED (diagnostics only; NOT used in rules/sorting)
+            "p60": w60.get("p"),
+            "z252": w252.get("z"),
 
             "signal_level": signal_level,
             "reason": reason,
@@ -685,7 +695,7 @@ def main() -> None:
         }
         rows.append(row)
 
-    # Sorting:
+    # Sorting (unchanged):
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
 
