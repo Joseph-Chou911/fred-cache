@@ -19,30 +19,14 @@ def dump_json(path: str, obj: Any) -> None:
 
 
 def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Accept render output schema:
-      {
-        "meta": {
-          "run_ts_utc": "...",
-          "stats_as_of_ts": "...",
-          "module": "...",
-          "ruleset_id": "...",
-          "script_fingerprint": "..."
-        },
-        "rows": [...],
-        "series_signals": {...}
-      }
-
-    Also accept legacy flat schema if needed.
-    """
-    # 1) flat (legacy)
+    # legacy flat
     run_ts_utc = latest.get("run_ts_utc")
     stats_as_of_ts = latest.get("stats_as_of_ts")
     module = latest.get("module")
     ruleset_id = latest.get("ruleset_id")
     script_fingerprint = latest.get("script_fingerprint")
 
-    # 2) nested meta preferred
+    # nested meta preferred
     m = latest.get("meta") if isinstance(latest.get("meta"), dict) else {}
     if not run_ts_utc:
         run_ts_utc = m.get("run_ts_utc")
@@ -55,9 +39,13 @@ def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
     if not script_fingerprint:
         script_fingerprint = m.get("script_fingerprint")
 
+    # derive date key (YYYY-MM-DD)
+    stats_as_of_date = str(stats_as_of_ts)[:10] if stats_as_of_ts else None
+
     return {
         "run_ts_utc": run_ts_utc,
         "stats_as_of_ts": stats_as_of_ts,
+        "stats_as_of_date": stats_as_of_date,
         "module": module,
         "ruleset_id": ruleset_id,
         "script_fingerprint": script_fingerprint,
@@ -65,10 +53,6 @@ def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
-    """
-    Prefer latest["series_signals"] if exists; else derive from rows:
-      rows[i].series + rows[i].signal_level
-    """
     ss = latest.get("series_signals")
     if isinstance(ss, dict) and ss:
         out: Dict[str, str] = {}
@@ -80,7 +64,7 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
 
     rows = latest.get("rows")
     if isinstance(rows, list) and rows:
-        out = {}
+        out: Dict[str, str] = {}
         for r in rows:
             if not isinstance(r, dict):
                 continue
@@ -109,19 +93,19 @@ def load_or_init_history(path: str) -> Dict[str, Any]:
     if "items" not in h or not isinstance(h["items"], list):
         h["items"] = []
 
-    # normalize schema_version
     h["schema_version"] = "dash_history_v2"
     return h
 
 
-def same_key(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+def same_key_daily(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
     """
-    Dedupe key: (module, ruleset_id, stats_as_of_ts)
+    Daily dedupe key: (module, ruleset_id, stats_as_of_date)
+    This prevents streak inflation when stats_as_of_ts updates multiple times per day.
     """
     return (
         a.get("module") == b.get("module")
         and a.get("ruleset_id") == b.get("ruleset_id")
-        and a.get("stats_as_of_ts") == b.get("stats_as_of_ts")
+        and str(a.get("stats_as_of_ts", ""))[:10] == str(b.get("stats_as_of_ts", ""))[:10]
     )
 
 
@@ -138,21 +122,14 @@ def main():
 
     meta = pick_meta(latest)
 
-    required = ["run_ts_utc", "stats_as_of_ts", "module", "ruleset_id", "script_fingerprint"]
+    required = ["run_ts_utc", "stats_as_of_ts", "stats_as_of_date", "module", "ruleset_id", "script_fingerprint"]
     missing = [k for k in required if not meta.get(k)]
     if missing:
-        raise SystemExit(
-            "dashboard_latest.json meta missing "
-            + "/".join(missing)
-            + " (expects meta.*; legacy top-level accepted for some fields)"
-        )
+        raise SystemExit("dashboard_latest.json meta missing " + "/".join(missing))
 
     series_signals = build_series_signals(latest)
     if not series_signals:
-        raise SystemExit(
-            "dashboard_latest.json missing series signals: "
-            "need either top-level series_signals{} or rows[].(series, signal_level)"
-        )
+        raise SystemExit("dashboard_latest.json missing series_signals or rows[].(series,signal_level)")
 
     history = load_or_init_history(args.history)
     items = history.get("items", [])
@@ -166,18 +143,16 @@ def main():
         "series_signals": series_signals,
     }
 
-    # --- DEDUPE (critical for streak meaning) ---
-    kept: list = []
+    kept = []
     removed = 0
     for it in items:
-        if isinstance(it, dict) and same_key(it, new_item):
+        if isinstance(it, dict) and same_key_daily(it, new_item):
             removed += 1
             continue
         kept.append(it)
 
     kept.append(new_item)
 
-    # cap
     if args.max_items > 0 and len(kept) > args.max_items:
         kept = kept[-args.max_items :]
 
@@ -185,7 +160,7 @@ def main():
     history["items"] = kept
     dump_json(args.history, history)
 
-    print(f"OK: appended history item. removed_same_key={removed} total_items={len(kept)}")
+    print(f"OK: appended history item. removed_same_day_key={removed} total_items={len(kept)}")
 
 
 if __name__ == "__main__":
