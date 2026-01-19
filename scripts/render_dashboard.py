@@ -6,7 +6,10 @@
 # - PrevSignal/Streak from dashboard/history.json (past renderer outputs)
 # - DeltaSignal (Prev → Today, SAME, NA)
 # - Summary line counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
-# - Reason uses abs(...) (no '|' so no table break)
+# - Reason uses abs(...) (no table break)
+# - NEW: ruleset_id + script_fingerprint in meta
+# - NEW: streak timeline filtered by (module + ruleset_id) to avoid cross-version contamination
+# - NEW: output top-level "series_signals" for append_history convenience
 #
 # Inputs:
 #   - stats_latest.json (authoritative metrics for "today")
@@ -15,9 +18,6 @@
 # Outputs:
 #   - dashboard/DASHBOARD.md
 #   - dashboard/dashboard_latest.json
-#
-# Notes:
-# - Markdown table safety: still escape '|' just in case, but Reason no longer contains '|'.
 
 import argparse
 import json
@@ -25,6 +25,12 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+
+# -------------------------
+# Identity (versioning)
+# -------------------------
+RULESET_ID = "signals_v8"
+SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8_2026-01-19"
 
 # -------------------------
 # Tunables (defaults)
@@ -88,7 +94,6 @@ def fmt(x: Any, nd: int = 6) -> str:
 def md_escape_cell(x: Any) -> str:
     """
     Escape content for GitHub-flavored Markdown tables.
-    Keep it even though Reason now uses abs(...) and won't contain '|'.
     """
     s = str(x) if x is not None else "NA"
     s = s.replace("|", "&#124;")
@@ -232,10 +237,20 @@ def load_dashboard_history(path: Optional[str]) -> List[Dict[str, Any]]:
         return []
 
 
-def build_series_signal_timeline(history_snaps: List[Dict[str, Any]], module: str) -> Dict[str, List[str]]:
+def build_series_signal_timeline(
+    history_snaps: List[Dict[str, Any]],
+    module: str,
+    ruleset_id: str,
+) -> Dict[str, List[str]]:
+    """
+    Build per-series signal timeline filtered by module + ruleset_id.
+    This prevents cross-version streak contamination.
+    """
     timeline: Dict[str, List[str]] = {}
     for snap in history_snaps:
         if snap.get("module") != module:
+            continue
+        if snap.get("ruleset_id") != ruleset_id:
             continue
         sigs = snap.get("series_signals")
         if not isinstance(sigs, dict):
@@ -257,6 +272,7 @@ def compute_prev_and_streak_from_history(
     if today_signal not in ("WATCH", "ALERT"):
         return prev, 0
 
+    # streak includes today + consecutive prior WATCH/ALERT
     streak = 1
     for s in reversed(hist):
         if s in ("WATCH", "ALERT"):
@@ -301,10 +317,22 @@ def compute_summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
 
 
 def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
-    os.makedirs(os.path.dirname(out_md), exist_ok=True)
-    os.makedirs(os.path.dirname(out_json), exist_ok=True)
+    os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
 
-    payload = {"meta": meta, "rows": rows}
+    # Top-level series_signals for append_history convenience / audit
+    series_signals: Dict[str, str] = {}
+    for r in rows:
+        sid = r.get("series")
+        sig = r.get("signal_level")
+        if isinstance(sid, str) and isinstance(sig, str):
+            series_signals[sid] = sig
+
+    payload = {
+        "meta": meta,
+        "rows": rows,
+        "series_signals": series_signals,
+    }
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
@@ -314,17 +342,19 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append(f"# Risk Dashboard ({meta.get('module','')})")
     lines.append("")
 
-    # Summary line (requested)
     lines.append(
         f"- Summary: ALERT={summary['ALERT']} / WATCH={summary['WATCH']} / INFO={summary['INFO']} / NONE={summary['NONE']}; "
         f"CHANGED={summary['CHANGED']}; WATCH_STREAK>=3={summary['WATCH_STREAK_GE3']}"
     )
 
+    lines.append(f"- SCRIPT_FINGERPRINT: `{meta.get('script_fingerprint','')}`")
+    lines.append(f"- RULESET_ID: `{meta.get('ruleset_id','')}`")
     lines.append(f"- RUN_TS_UTC: `{meta.get('run_ts_utc','')}`")
     lines.append(f"- STATS.generated_at_utc: `{meta.get('stats_generated_at_utc','')}`")
     lines.append(f"- STATS.as_of_ts: `{meta.get('stats_as_of_ts','')}`")
     lines.append(f"- script_version: `{meta.get('script_version','')}`")
     lines.append(f"- stale_hours: `{meta.get('stale_hours','')}`")
+    lines.append(f"- stats_path: `{meta.get('stats_path','')}`")
     lines.append(f"- dash_history: `{meta.get('dash_history_path','NA')}`")
     lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
     lines.append(
@@ -391,7 +421,10 @@ def main() -> None:
         meta = {
             "run_ts_utc": run_ts.isoformat(),
             "module": args.module,
+            "ruleset_id": RULESET_ID,
+            "script_fingerprint": SCRIPT_FINGERPRINT,
             "stale_hours": args.stale_hours,
+            "stats_path": args.stats,
             "dash_history_path": args.dash_history or "NA",
             "streak_calc": "disabled (missing stats file)",
             "error": f"stats file missing: {args.stats}",
@@ -403,18 +436,21 @@ def main() -> None:
         stats = json.load(f)
 
     history_snaps = load_dashboard_history(args.dash_history)
-    timeline = build_series_signal_timeline(history_snaps, args.module)
+    timeline = build_series_signal_timeline(history_snaps, args.module, RULESET_ID)
 
     meta = {
         "run_ts_utc": run_ts.isoformat(),
         "module": args.module,
+        "ruleset_id": RULESET_ID,
+        "script_fingerprint": SCRIPT_FINGERPRINT,
         "stale_hours": args.stale_hours,
+        "stats_path": args.stats,
         "stats_generated_at_utc": stats.get("generated_at_utc"),
         "stats_as_of_ts": stats.get("as_of_ts"),
         "script_version": stats.get("script_version"),
         "series_count": stats.get("series_count"),
         "dash_history_path": args.dash_history or "NA",
-        "streak_calc": "PrevSignal/StreakWA derived from dashboard/history.json (past renderer outputs) + today's signal",
+        "streak_calc": "PrevSignal/StreakWA derived from dashboard/history.json filtered by (module + ruleset_id) + today's signal",
         "history_items_used": len(history_snaps),
     }
 
@@ -464,7 +500,6 @@ def main() -> None:
             "ret1_pct_60": w60.get("ret1_pct"),
             "z_delta_60": w60.get("z_delta"),
             "p_delta_60": w60.get("p_delta"),
-
             "p252": w252.get("p"),
 
             "signal_level": signal_level,
