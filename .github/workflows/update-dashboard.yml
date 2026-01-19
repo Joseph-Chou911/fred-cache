@@ -45,14 +45,15 @@ jobs:
             --ruleset-id signals_v8 \
             --script-fingerprint render_dashboard_py_signals_v8
 
-      - name: Append dashboard history (dedupe by module+ruleset+stats_as_of_ts)
+      - name: Append dashboard history (dedupe by module+ruleset+signals)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
             --latest dashboard/dashboard_latest.json \
             --history dashboard/history.json \
-            --max-items 400
+            --max-items 400 \
+            --dedupe signals
 
       - name: Show diff (debug)
         shell: bash
