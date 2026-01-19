@@ -8,6 +8,7 @@
 #   * Legacy items missing ruleset_id are ignored (方案 C)
 # - DeltaSignal (Prev → Today, SAME, NA)
 # - Summary counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
+# - Direction map (HIGH/LOW/RANGE/MOVE) + DirNote (risk-bias annotation)
 # - Markdown table safety: escape '|'
 #
 # Inputs:
@@ -56,6 +57,45 @@ STREAK_HISTORY_MAX = 120  # ~半年（每天一次）夠用了
 
 DEFAULT_RULESET_ID = "signals_v8"
 DEFAULT_SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8"
+
+# -------------------------
+# Direction map (minimal extension)
+# -------------------------
+# HIGH: higher value => generally higher risk bias
+# LOW : lower value  => generally higher risk bias
+# RANGE: both tails can be risky (not used in MVP; reserved)
+# MOVE: treat as "movement-only" (do not infer up/down risk from direction)
+DIRECTION_MAP: Dict[str, str] = {
+    # credit / stress / leverage (higher => more stress)
+    "OFR_FSI": "HIGH",
+    "STLFSI4": "HIGH",
+    "BAMLH0A0HYM2": "HIGH",
+    "NFCINONFINLEVERAGE": "HIGH",
+
+    # equity (overheat/valuation crowding bias; higher => more fragile)
+    "SP500": "HIGH",
+    "DJIA": "HIGH",
+    "NASDAQCOM": "HIGH",
+
+    # vol (higher => more risk)
+    "VIX": "HIGH",
+    "VIXCLS": "HIGH",
+
+    # FX index (if you interpret USD strength as tighter conditions)
+    "DTWEXBGS": "HIGH",
+
+    # oil (cost/inflation pressure bias)
+    "DCOILWTICO": "HIGH",
+
+    # credit proxy ratio: ratio down => credit stress => risk (LOW)
+    "HYG_IEF_RATIO": "LOW",
+
+    # rates: MVP treat as MOVE-only (avoid "rate down = risk up" misread)
+    "DGS2": "MOVE",
+    "DGS10": "MOVE",
+    "T10Y2Y": "MOVE",
+    "T10Y3M": "MOVE",
+}
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -249,7 +289,6 @@ def build_series_signal_timeline(
         if snap.get("module") != module:
             continue
         if snap.get("ruleset_id") != ruleset_id:
-            # legacy items missing ruleset_id will be ignored here automatically
             continue
         sigs = snap.get("series_signals")
         if not isinstance(sigs, dict):
@@ -314,7 +353,68 @@ def compute_summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
-def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]], series_signals: Dict[str, str]) -> None:
+def get_direction(series_id: str) -> str:
+    d = DIRECTION_MAP.get(series_id)
+    if d in ("HIGH", "LOW", "RANGE", "MOVE"):
+        return d
+    return "MOVE"
+
+
+def parse_tags(tag_str: str) -> List[str]:
+    if not tag_str or tag_str == "NA":
+        return []
+    parts = [p.strip() for p in tag_str.split(",")]
+    return [p for p in parts if p]
+
+
+def parse_p252_tail(reason: str) -> str:
+    # reason examples: "P252>=95" or "P252<=5" (may be combined with other reasons)
+    if not reason or reason == "NA":
+        return "NA"
+    if "P252>=" in reason:
+        return "HI"
+    if "P252<=" in reason:
+        return "LO"
+    return "NA"
+
+
+def compute_dir_note(direction: str, reason: str, tags: List[str]) -> str:
+    """
+    Conservative annotation:
+    - If direction is MOVE => MOVE_ONLY
+    - If P252 tail exists, we can infer a bias (up/down risk) for HIGH/LOW signals
+    - For abs(...) based triggers (Z60/JUMP), do NOT infer up/down; mark DIR_UNCERTAIN_ABS
+    """
+    if direction == "MOVE":
+        return "MOVE_ONLY"
+
+    if direction == "RANGE":
+        return "RANGE_SENSITIVE"
+
+    p_tail = parse_p252_tail(reason)
+
+    # When we do have a P252 tail, we can infer direction bias for HIGH/LOW indicators.
+    if direction in ("HIGH", "LOW") and p_tail in ("HI", "LO"):
+        if direction == "HIGH":
+            return "RISK_BIAS_UP" if p_tail == "HI" else "RISK_BIAS_DOWN"
+        # LOW: low tail is risk-up, high tail is risk-down
+        return "RISK_BIAS_UP" if p_tail == "LO" else "RISK_BIAS_DOWN"
+
+    # Jump/extreme abs triggers: explicitly avoid claiming risk direction
+    if direction in ("HIGH", "LOW"):
+        if any(t.startswith("JUMP_") for t in tags) or ("abs(" in (reason or "")):
+            return "DIR_UNCERTAIN_ABS"
+
+    return "NA"
+
+
+def write_outputs(
+    out_md: str,
+    out_json: str,
+    meta: Dict[str, Any],
+    rows: List[Dict[str, Any]],
+    series_signals: Dict[str, str],
+) -> None:
     os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
 
@@ -357,6 +457,7 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
 
     header = [
         "Signal", "Tag", "Near",
+        "Dir", "DirNote",
         "PrevSignal", "DeltaSignal", "StreakWA",
         "Series", "DQ", "age_h",
         "data_date", "value",
@@ -372,6 +473,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             md_escape_cell(r.get("signal_level", "NONE")),
             md_escape_cell(r.get("tag", "NA")),
             md_escape_cell(r.get("near", "NA")),
+            md_escape_cell(r.get("dir", "MOVE")),
+            md_escape_cell(r.get("dir_note", "NA")),
             md_escape_cell(r.get("prev_signal", "NA")),
             md_escape_cell(r.get("delta_signal", "NA")),
             md_escape_cell(fmt(r.get("streak_wa"), nd=0)),
@@ -481,7 +584,7 @@ def main() -> None:
         )
 
         prev_signal, streak_wa = compute_prev_and_streak_from_history(
-            sid=sid,
+            sid=str(sid),
             today_signal=signal_level,
             timeline=timeline,
         )
@@ -489,12 +592,17 @@ def main() -> None:
 
         series_signals[str(sid)] = str(signal_level)
 
+        # direction annotation (no effect on signal)
+        direction = get_direction(str(sid))
+        tags_list = parse_tags(tag)
+        dir_note = compute_dir_note(direction, reason, tags_list)
+
         row: Dict[str, Any] = {
             "module": args.module,
             "ruleset_id": args.ruleset_id,
             "script_fingerprint": script_fingerprint,
 
-            "series": sid,
+            "series": str(sid),
             "value": latest.get("value"),
             "data_date": latest.get("data_date"),
             "as_of_ts": latest.get("as_of_ts"),
@@ -506,13 +614,15 @@ def main() -> None:
             "ret1_pct60": w60.get("ret1_pct"),
             "z_delta60": w60.get("z_delta"),
             "p_delta60": w60.get("p_delta"),
-
             "p252": w252.get("p"),
 
             "signal_level": signal_level,
             "reason": reason,
             "tag": tag,
             "near": near,
+
+            "dir": direction,
+            "dir_note": dir_note,
 
             "prev_signal": prev_signal,
             "delta_signal": delta_signal,
