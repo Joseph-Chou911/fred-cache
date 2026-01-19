@@ -29,12 +29,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render dashboard (market_cache)
+      - name: Ensure dashboard dir
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dashboard
 
+      - name: Render dashboard (market_cache)
+        shell: bash
+        run: |
+          set -euo pipefail
           python scripts/render_dashboard.py \
             --stats market_cache/stats_latest.json \
             --dash-history dashboard/history.json \
@@ -45,24 +49,16 @@ jobs:
             --ruleset-id signals_v8 \
             --script-fingerprint render_dashboard_py_signals_v8
 
-      - name: Append dashboard history (dedupe by module+ruleset+signals)
+      - name: Append dashboard history
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
             --latest dashboard/dashboard_latest.json \
             --history dashboard/history.json \
-            --max-items 400 \
-            --dedupe signals
+            --max-items 400
 
-      - name: Show diff (debug)
-        shell: bash
-        run: |
-          set -euo pipefail
-          git status --porcelain || true
-          git diff -- dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json || true
-
-      - name: Commit & push (rebase-retry)
+      - name: Commit & push
         shell: bash
         run: |
           set -euo pipefail
@@ -77,15 +73,5 @@ jobs:
           fi
 
           git commit -m "chore: update dashboard (mvp)"
-
-          for i in 1 2 3; do
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-            echo "Push failed (attempt $i). Rebase and retry..."
-            git pull --rebase origin main
-            sleep $((2 ** i))
-          done
-
-          echo "Push failed after retries."
-          exit 1
+          git pull --rebase origin main
+          git push origin HEAD:main
