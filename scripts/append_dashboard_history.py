@@ -1,25 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#
-# A+B+C compatible:
-# - Always write ruleset_id + script_fingerprint into history items (if present in latest/meta)
-# - Deduplicate / overwrite by key:
-#   A) rerun guard (same snapshot): (module, ruleset_id, stats_as_of_ts)
-#   B) daily guard (same day): (module, ruleset_id, YYYY-MM-DD(stats_as_of_ts))
-#     * This prevents streak inflation when stats_as_of_ts updates multiple times per day.
-# - If a matching item exists, replace the LAST matching item (keep chronology)
-# - Else append new
-#
-# History schema: dash_history_v2
-# {
-#   "schema_version": "dash_history_v2",
-#   "items": [ { ... } ]
-# }
 
 import argparse
 import json
 import os
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional
 
 
 def load_json(path: str) -> Any:
@@ -54,6 +39,7 @@ def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
     if not script_fingerprint:
         script_fingerprint = m.get("script_fingerprint")
 
+    # derive date key (YYYY-MM-DD)
     stats_as_of_date = str(stats_as_of_ts)[:10] if stats_as_of_ts else None
 
     return {
@@ -78,7 +64,7 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
 
     rows = latest.get("rows")
     if isinstance(rows, list) and rows:
-        out2: Dict[str, str] = {}
+        out: Dict[str, str] = {}
         for r in rows:
             if not isinstance(r, dict):
                 continue
@@ -86,8 +72,8 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
             sig = r.get("signal_level")
             if not sid or not sig:
                 continue
-            out2[str(sid)] = str(sig)
-        return out2 if out2 else None
+            out[str(sid)] = str(sig)
+        return out if out else None
 
     return None
 
@@ -111,15 +97,11 @@ def load_or_init_history(path: str) -> Dict[str, Any]:
     return h
 
 
-def key_same_snapshot(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
-    return (
-        a.get("module") == b.get("module")
-        and a.get("ruleset_id") == b.get("ruleset_id")
-        and a.get("stats_as_of_ts") == b.get("stats_as_of_ts")
-    )
-
-
-def key_same_day(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+def same_key_daily(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+    """
+    Daily dedupe key: (module, ruleset_id, stats_as_of_date)
+    This prevents streak inflation when stats_as_of_ts updates multiple times per day.
+    """
     return (
         a.get("module") == b.get("module")
         and a.get("ruleset_id") == b.get("ruleset_id")
@@ -127,42 +109,7 @@ def key_same_day(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
     )
 
 
-def replace_last_matching(items: List[Dict[str, Any]], new_item: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Replace LAST matching item by:
-      1) same snapshot key
-      2) else same-day key
-    Otherwise append.
-
-    Returns stats about what happened.
-    """
-    # 1) exact snapshot rerun guard
-    last_idx = None
-    for i in range(len(items) - 1, -1, -1):
-        it = items[i]
-        if isinstance(it, dict) and key_same_snapshot(it, new_item):
-            last_idx = i
-            break
-    if last_idx is not None:
-        items[last_idx] = new_item
-        return {"action": "replace_same_snapshot", "index": last_idx}
-
-    # 2) same-day guard (prevents streak inflation)
-    last_idx = None
-    for i in range(len(items) - 1, -1, -1):
-        it = items[i]
-        if isinstance(it, dict) and key_same_day(it, new_item):
-            last_idx = i
-            break
-    if last_idx is not None:
-        items[last_idx] = new_item
-        return {"action": "replace_same_day", "index": last_idx}
-
-    items.append(new_item)
-    return {"action": "append", "index": len(items) - 1}
-
-
-def main() -> None:
+def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True, help="dashboard_latest.json (render output)")
     ap.add_argument("--history", required=True, help="dashboard/history.json")
@@ -174,6 +121,7 @@ def main() -> None:
         raise SystemExit("dashboard_latest.json must be a JSON object")
 
     meta = pick_meta(latest)
+
     required = ["run_ts_utc", "stats_as_of_ts", "stats_as_of_date", "module", "ruleset_id", "script_fingerprint"]
     missing = [k for k in required if not meta.get(k)]
     if missing:
@@ -185,11 +133,6 @@ def main() -> None:
 
     history = load_or_init_history(args.history)
     items = history.get("items", [])
-    if not isinstance(items, list):
-        items = []
-
-    # keep only dict items (defensive)
-    items2: List[Dict[str, Any]] = [it for it in items if isinstance(it, dict)]
 
     new_item = {
         "run_ts_utc": meta["run_ts_utc"],
@@ -200,19 +143,24 @@ def main() -> None:
         "series_signals": series_signals,
     }
 
-    result = replace_last_matching(items2, new_item)
+    kept = []
+    removed = 0
+    for it in items:
+        if isinstance(it, dict) and same_key_daily(it, new_item):
+            removed += 1
+            continue
+        kept.append(it)
 
-    if args.max_items > 0 and len(items2) > args.max_items:
-        items2 = items2[-args.max_items :]
+    kept.append(new_item)
+
+    if args.max_items > 0 and len(kept) > args.max_items:
+        kept = kept[-args.max_items :]
 
     history["schema_version"] = "dash_history_v2"
-    history["items"] = items2
+    history["items"] = kept
     dump_json(args.history, history)
 
-    print(
-        "OK: history updated. "
-        f"action={result.get('action')} index={result.get('index')} total_items={len(items2)}"
-    )
+    print(f"OK: appended history item. removed_same_day_key={removed} total_items={len(kept)}")
 
 
 if __name__ == "__main__":
