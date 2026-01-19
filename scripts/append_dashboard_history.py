@@ -1,10 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#
+# scripts/append_dashboard_history.py
+#
+# A+B compatible:
+# - Always write ruleset_id + script_fingerprint into history items (if present in latest/meta)
+# - Deduplicate / overwrite by key: (module, ruleset_id, stats_as_of_ts)
+#   * If a matching item exists, replace the LAST matching item (rerun guard)
+#   * Else append new
+#
+# C compatible:
+# - Renderer ignores legacy items missing ruleset_id, so this appender should always populate it.
+#
+# History schema: dash_history_v2
+# {
+#   "schema_version": "dash_history_v2",
+#   "items": [
+#     {
+#       "run_ts_utc": "...",
+#       "stats_as_of_ts": "...",
+#       "module": "...",
+#       "ruleset_id": "signals_v8",
+#       "script_fingerprint": "...",
+#       "series_signals": {...}
+#     }
+#   ]
+# }
 
 import argparse
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 
 def load_json(path: str) -> Any:
@@ -34,25 +60,19 @@ def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
 
     B) Render output schema:
       {
-        "meta": {
-          "run_ts_utc": "...",
-          "stats_as_of_ts": "...",
-          "module": "...",
-          "ruleset_id": "...",
-          "script_fingerprint": "..."
-        },
+        "meta": {...},
         "rows": [...],
         "series_signals": {...}
       }
     """
-    # 1) flat
+    # top-level
     run_ts_utc = latest.get("run_ts_utc")
     stats_as_of_ts = latest.get("stats_as_of_ts")
     module = latest.get("module")
     ruleset_id = latest.get("ruleset_id")
     script_fingerprint = latest.get("script_fingerprint")
 
-    # 2) nested meta fallback
+    # nested meta fallback
     m = latest.get("meta") if isinstance(latest.get("meta"), dict) else {}
     if not run_ts_utc:
         run_ts_utc = m.get("run_ts_utc")
@@ -90,7 +110,7 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
 
     rows = latest.get("rows")
     if isinstance(rows, list) and rows:
-        out2: Dict[str, str] = {}
+        out: Dict[str, str] = {}
         for r in rows:
             if not isinstance(r, dict):
                 continue
@@ -98,8 +118,8 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
             sig = r.get("signal_level")
             if not sid or not sig:
                 continue
-            out2[str(sid)] = str(sig)
-        return out2 if out2 else None
+            out[str(sid)] = str(sig)
+        return out if out else None
 
     return None
 
@@ -115,39 +135,25 @@ def load_or_init_history(path: str) -> Dict[str, Any]:
 
     if not isinstance(h, dict):
         return {"schema_version": "dash_history_v2", "items": []}
-    if "items" not in h or not isinstance(h["items"], list):
+
+    items = h.get("items")
+    if not isinstance(items, list):
         h["items"] = []
-    if "schema_version" not in h:
-        h["schema_version"] = "dash_history_v2"
+
+    # force schema_version to v2 (upgrade in place)
+    h["schema_version"] = "dash_history_v2"
     return h
 
 
-def should_replace_last(items: list, module: str, stats_as_of_ts: str, ruleset_id: Optional[str]) -> bool:
-    """
-    Rerun guard:
-    If the last item has the same (module + stats_as_of_ts + ruleset_id),
-    replace it instead of appending. This prevents streak inflation on reruns.
-    """
-    if not items:
-        return False
-    last = items[-1]
-    if not isinstance(last, dict):
-        return False
-    if last.get("module") != module:
-        return False
-    if last.get("stats_as_of_ts") != stats_as_of_ts:
-        return False
-    # ruleset_id may be None for legacy; still handle safely
-    if ruleset_id is not None:
-        return last.get("ruleset_id") == ruleset_id
-    return True
+def dedupe_key(module: str, ruleset_id: str, stats_as_of_ts: str) -> Tuple[str, str, str]:
+    return (str(module), str(ruleset_id), str(stats_as_of_ts))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True, help="dashboard_latest.json (render output)")
     ap.add_argument("--history", required=True, help="dashboard/history.json")
-    ap.add_argument("--max-items", type=int, default=180)
+    ap.add_argument("--max-items", type=int, default=400)
     args = ap.parse_args()
 
     latest = load_json(args.latest)
@@ -170,8 +176,6 @@ def main():
         missing.append("module")
     if not ruleset_id:
         missing.append("ruleset_id")
-    if not script_fingerprint:
-        missing.append("script_fingerprint")
 
     if missing:
         raise SystemExit(
@@ -188,36 +192,47 @@ def main():
 
     history = load_or_init_history(args.history)
     items = history.get("items", [])
+    if not isinstance(items, list):
+        items = []
 
-    new_item = {
+    new_item: Dict[str, Any] = {
         "run_ts_utc": run_ts_utc,
         "stats_as_of_ts": stats_as_of_ts,
         "module": module,
         "ruleset_id": ruleset_id,
-        "script_fingerprint": script_fingerprint,
+        "script_fingerprint": script_fingerprint or "NA",
         "series_signals": series_signals,
     }
 
-    # Rerun guard: replace last if same stats snapshot
-    replaced = False
-    if should_replace_last(items, module, stats_as_of_ts, ruleset_id):
-        items[-1] = new_item
-        replaced = True
-    else:
+    # ---- A) dedupe / overwrite by (module, ruleset_id, stats_as_of_ts) ----
+    k_new = dedupe_key(module, ruleset_id, stats_as_of_ts)
+
+    last_match_idx: Optional[int] = None
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            continue
+        # Only consider items that have ruleset_id; legacy items won't match anyway
+        m = it.get("module")
+        r = it.get("ruleset_id")
+        s = it.get("stats_as_of_ts")
+        if m and r and s and dedupe_key(m, r, s) == k_new:
+            last_match_idx = i
+
+    if last_match_idx is None:
         items.append(new_item)
+        action = "append"
+    else:
+        items[last_match_idx] = new_item
+        action = f"overwrite@index={last_match_idx}"
 
     # cap
     if args.max_items > 0 and len(items) > args.max_items:
         items = items[-args.max_items :]
 
     history["items"] = items
-    history["schema_version"] = "dash_history_v2"
     dump_json(args.history, history)
 
-    if replaced:
-        print(f"OK: replaced last history item (rerun guard). total_items={len(items)}")
-    else:
-        print(f"OK: appended history item. total_items={len(items)}")
+    print(f"OK: {action}. total_items={len(items)}")
 
 
 if __name__ == "__main__":
