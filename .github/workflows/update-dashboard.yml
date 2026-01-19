@@ -34,19 +34,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dashboard
+
           python scripts/render_dashboard.py \
             --stats market_cache/stats_latest.json \
             --dash-history dashboard/history.json \
             --out-md dashboard/DASHBOARD.md \
             --out-json dashboard/dashboard_latest.json \
             --module market_cache \
-            --stale-hours 36
+            --stale-hours 36 \
+            --ruleset-id signals_v8 \
+            --script-fingerprint render_dashboard_py_signals_v8
 
-      - name: Append dashboard history
+      - name: Append dashboard history (dedupe by module+ruleset+stats_as_of_ts)
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dashboard
           python scripts/append_dashboard_history.py \
             --latest dashboard/dashboard_latest.json \
             --history dashboard/history.json \
@@ -63,7 +65,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -77,11 +78,11 @@ jobs:
           git commit -m "chore: update dashboard (mvp)"
 
           for i in 1 2 3; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
-              echo "Push OK"
+            if git push origin HEAD:main; then
               exit 0
             fi
-            echo "Push failed (attempt $i). Retry with backoff..."
+            echo "Push failed (attempt $i). Rebase and retry..."
+            git pull --rebase origin main
             sleep $((2 ** i))
           done
 
