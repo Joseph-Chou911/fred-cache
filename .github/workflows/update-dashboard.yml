@@ -33,6 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p dashboard
           python scripts/render_dashboard.py \
             --stats market_cache/stats_latest.json \
             --dash-history dashboard/history.json \
@@ -45,15 +46,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p dashboard
           python scripts/append_dashboard_history.py \
             --latest dashboard/dashboard_latest.json \
             --history dashboard/history.json \
             --max-items 400
 
-      - name: Commit & push
+      - name: Show diff (debug)
         shell: bash
         run: |
           set -euo pipefail
+          git status --porcelain || true
+          git diff -- dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json || true
+
+      - name: Commit & push (rebase-retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -65,5 +75,15 @@ jobs:
           fi
 
           git commit -m "chore: update dashboard (mvp)"
-          git pull --rebase origin main
-          git push origin HEAD:main
+
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Push OK"
+              exit 0
+            fi
+            echo "Push failed (attempt $i). Retry with backoff..."
+            sleep $((2 ** i))
+          done
+
+          echo "Push failed after retries."
+          exit 1
