@@ -17,6 +17,8 @@ jobs:
   dashboard:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      TIMEZONE: Asia/Taipei
 
     steps:
       - name: Checkout
@@ -45,18 +47,20 @@ jobs:
             --out-md dashboard/DASHBOARD.md \
             --out-json dashboard/dashboard_latest.json \
             --module market_cache \
-            --stale-hours 36 \
             --ruleset-id signals_v8 \
-            --script-fingerprint render_dashboard_py_signals_v8
+            --script-fingerprint render_dashboard_py_signals_v8 \
+            --stale-hours 36 \
+            --tz "${TIMEZONE}"
 
-      - name: Append dashboard history
+      - name: Append dashboard history (DAILY bucket, Asia/Taipei)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
             --latest dashboard/dashboard_latest.json \
             --history dashboard/history.json \
-            --max-items 400
+            --max-items 400 \
+            --tz "${TIMEZONE}"
 
       - name: Commit & push
         shell: bash
@@ -64,6 +68,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Rebase first to reduce non-fast-forward failures
+          git pull --rebase origin main
 
           git add dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json
 
@@ -73,5 +80,4 @@ jobs:
           fi
 
           git commit -m "chore: update dashboard (mvp)"
-          git pull --rebase origin main
           git push origin HEAD:main
