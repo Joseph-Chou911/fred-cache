@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-01-19T07:55:10Z",
-  "as_of_ts": "2026-01-19T07:55:10Z",
+  "generated_at_utc": "2026-01-19T22:56:40Z",
+  "as_of_ts": "2026-01-19T22:56:40Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "dq": "OK",
   "checks": [
@@ -43,8 +43,8 @@
       "series_id": "OFR_FSI",
       "check": "staleness_days",
       "status": "OK",
-      "staleness_days": 5,
-      "latest_date": "2026-01-14",
+      "staleness_days": 4,
+      "latest_date": "2026-01-15",
       "threshold_warn_days": 7,
       "threshold_err_days": 14
     },
@@ -79,8 +79,8 @@
       "series_id": "OFR_FSI",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 0.08899999999999997,
-      "std60": 0.3499403675390042,
+      "ret1_delta": -0.06400000000000006,
+      "std60": 0.35181496517661415,
       "threshold": "8*std60"
     },
     {
