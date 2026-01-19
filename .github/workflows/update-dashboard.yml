@@ -17,8 +17,6 @@ jobs:
   dashboard:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      TIMEZONE: Asia/Taipei
 
     steps:
       - name: Checkout
@@ -30,13 +28,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      # ✅ 關鍵修正：先 rebase 同步（此時 working tree 乾淨）
-      - name: Sync with main (rebase)
-        shell: bash
-        run: |
-          set -euo pipefail
-          git pull --rebase origin main
 
       - name: Ensure dashboard dir
         shell: bash
@@ -54,29 +45,20 @@ jobs:
             --out-md dashboard/DASHBOARD.md \
             --out-json dashboard/dashboard_latest.json \
             --module market_cache \
-            --ruleset-id signals_v8 \
-            --script-fingerprint render_dashboard_py_signals_v8 \
             --stale-hours 36 \
-            --tz "${TIMEZONE}"
+            --ruleset-id signals_v8 \
+            --script-fingerprint render_dashboard_py_signals_v8
 
-      - name: Append dashboard history (DAILY bucket, Asia/Taipei)
+      - name: Append dashboard history
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
             --latest dashboard/dashboard_latest.json \
             --history dashboard/history.json \
-            --max-items 400 \
-            --tz "${TIMEZONE}"
+            --max-items 400
 
-      - name: Show diff (debug)
-        shell: bash
-        run: |
-          set -euo pipefail
-          git status --porcelain || true
-          git diff -- dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json || true
-
-      - name: Commit changes (if any)
+      - name: Commit & push
         shell: bash
         run: |
           set -euo pipefail
@@ -91,27 +73,5 @@ jobs:
           fi
 
           git commit -m "chore: update dashboard (mvp)"
-
-      # ✅ push 失敗時再 rebase，且用 --autostash 避免 dirty tree 卡住
-      - name: Push with rebase-retry
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # 如果本次沒有 commit，就不用 push
-          if ! git log -1 --pretty=%B | grep -q "^chore: update dashboard (mvp)$"; then
-            echo "No new commit created in this run."
-            exit 0
-          fi
-
-          for i in 1 2 3; do
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-            echo "Push failed (attempt $i). Rebase with autostash and retry..."
-            git pull --rebase --autostash origin main
-            sleep $((2 ** i))
-          done
-
-          echo "Push failed after retries."
-          exit 1
+          git pull --rebase origin main
+          git push origin HEAD:main
