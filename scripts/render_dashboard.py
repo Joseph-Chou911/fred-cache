@@ -11,7 +11,6 @@
 # - Direction map (HIGH/LOW/RANGE/MOVE) + DirNote (risk-bias annotation)
 # - ORDER-SAFE: auto-detect if history already contains "today" (same day key),
 #               then compute Prev/Streak against history-excluding-today.
-# - Aux columns: p60, z252 (diagnostics only; NOT used by ruleset/sorting)
 # - Markdown table safety: escape '|'
 #
 # Inputs:
@@ -485,9 +484,11 @@ def write_outputs(
         f"Near(within {NEAR_FRAC*100:.0f}% of jump thresholds); "
         "INFO if only long-extreme and no jump and abs(Z60)<2`"
     )
+
+    # ✅ Added: explicit diagnostics-only note for extra columns
+    lines.append("- diag_cols: p60 (w60 percentile), z252 (w252 z-score); diagnostics only, NOT used in rules/sorting")
     lines.append("")
 
-    # NOTE: Added p60 and z252 as diagnostic-only columns (not used in rules/sorting).
     header = [
         "Signal", "Tag", "Near",
         "Dir", "DirNote",
@@ -632,7 +633,6 @@ def main() -> None:
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
         dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, args.stale_hours)
 
-        # NOTE: signal rules remain unchanged; p60/z252 are diagnostics only.
         signal_level, reason, tag, near = compute_signal_tag_near_from_metrics(
             z60=w60.get("z"),
             p252=w252.get("p"),
@@ -669,14 +669,14 @@ def main() -> None:
             "dq": dq,
             "age_hours": age_hours,
 
-            # existing metrics used by signals_v8
+            # core metrics (rules/sorting may use some of these)
             "z60": w60.get("z"),
             "ret1_pct60": w60.get("ret1_pct"),
             "z_delta60": w60.get("z_delta"),
             "p_delta60": w60.get("p_delta"),
             "p252": w252.get("p"),
 
-            # ADDED (diagnostics only; NOT used in rules/sorting)
+            # diagnostics-only (not used in rules/sorting)
             "p60": w60.get("p"),
             "z252": w252.get("z"),
 
@@ -695,7 +695,7 @@ def main() -> None:
         }
         rows.append(row)
 
-    # Sorting (unchanged):
+    # Sorting:
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
 
