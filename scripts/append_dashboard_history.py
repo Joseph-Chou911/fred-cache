@@ -27,6 +27,8 @@ def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
         "run_ts_utc": "...",
         "stats_as_of_ts": "...",
         "module": "...",
+        "ruleset_id": "...",
+        "script_fingerprint": "...",
         "series_signals": {...}
       }
 
@@ -35,15 +37,20 @@ def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
         "meta": {
           "run_ts_utc": "...",
           "stats_as_of_ts": "...",
-          "module": "..."
+          "module": "...",
+          "ruleset_id": "...",
+          "script_fingerprint": "..."
         },
-        "rows": [...]
+        "rows": [...],
+        "series_signals": {...}
       }
     """
     # 1) flat
     run_ts_utc = latest.get("run_ts_utc")
     stats_as_of_ts = latest.get("stats_as_of_ts")
     module = latest.get("module")
+    ruleset_id = latest.get("ruleset_id")
+    script_fingerprint = latest.get("script_fingerprint")
 
     # 2) nested meta fallback
     m = latest.get("meta") if isinstance(latest.get("meta"), dict) else {}
@@ -53,11 +60,17 @@ def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
         stats_as_of_ts = m.get("stats_as_of_ts")
     if not module:
         module = m.get("module")
+    if not ruleset_id:
+        ruleset_id = m.get("ruleset_id")
+    if not script_fingerprint:
+        script_fingerprint = m.get("script_fingerprint")
 
     return {
         "run_ts_utc": run_ts_utc,
         "stats_as_of_ts": stats_as_of_ts,
         "module": module,
+        "ruleset_id": ruleset_id,
+        "script_fingerprint": script_fingerprint,
     }
 
 
@@ -68,8 +81,7 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
     """
     ss = latest.get("series_signals")
     if isinstance(ss, dict) and ss:
-        # normalize values to str
-        out = {}
+        out: Dict[str, str] = {}
         for k, v in ss.items():
             if k is None:
                 continue
@@ -78,7 +90,7 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
 
     rows = latest.get("rows")
     if isinstance(rows, list) and rows:
-        out: Dict[str, str] = {}
+        out2: Dict[str, str] = {}
         for r in rows:
             if not isinstance(r, dict):
                 continue
@@ -86,28 +98,49 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
             sig = r.get("signal_level")
             if not sid or not sig:
                 continue
-            out[str(sid)] = str(sig)
-        return out if out else None
+            out2[str(sid)] = str(sig)
+        return out2 if out2 else None
 
     return None
 
 
 def load_or_init_history(path: str) -> Dict[str, Any]:
     if not os.path.exists(path):
-        return {"schema_version": "dash_history_v1", "items": []}
+        return {"schema_version": "dash_history_v2", "items": []}
 
     try:
         h = load_json(path)
     except Exception:
-        return {"schema_version": "dash_history_v1", "items": []}
+        return {"schema_version": "dash_history_v2", "items": []}
 
     if not isinstance(h, dict):
-        return {"schema_version": "dash_history_v1", "items": []}
+        return {"schema_version": "dash_history_v2", "items": []}
     if "items" not in h or not isinstance(h["items"], list):
         h["items"] = []
     if "schema_version" not in h:
-        h["schema_version"] = "dash_history_v1"
+        h["schema_version"] = "dash_history_v2"
     return h
+
+
+def should_replace_last(items: list, module: str, stats_as_of_ts: str, ruleset_id: Optional[str]) -> bool:
+    """
+    Rerun guard:
+    If the last item has the same (module + stats_as_of_ts + ruleset_id),
+    replace it instead of appending. This prevents streak inflation on reruns.
+    """
+    if not items:
+        return False
+    last = items[-1]
+    if not isinstance(last, dict):
+        return False
+    if last.get("module") != module:
+        return False
+    if last.get("stats_as_of_ts") != stats_as_of_ts:
+        return False
+    # ruleset_id may be None for legacy; still handle safely
+    if ruleset_id is not None:
+        return last.get("ruleset_id") == ruleset_id
+    return True
 
 
 def main():
@@ -125,6 +158,8 @@ def main():
     run_ts_utc = meta.get("run_ts_utc")
     stats_as_of_ts = meta.get("stats_as_of_ts")
     module = meta.get("module")
+    ruleset_id = meta.get("ruleset_id")
+    script_fingerprint = meta.get("script_fingerprint")
 
     missing = []
     if not run_ts_utc:
@@ -133,6 +168,10 @@ def main():
         missing.append("stats_as_of_ts")
     if not module:
         missing.append("module")
+    if not ruleset_id:
+        missing.append("ruleset_id")
+    if not script_fingerprint:
+        missing.append("script_fingerprint")
 
     if missing:
         raise SystemExit(
@@ -154,19 +193,31 @@ def main():
         "run_ts_utc": run_ts_utc,
         "stats_as_of_ts": stats_as_of_ts,
         "module": module,
+        "ruleset_id": ruleset_id,
+        "script_fingerprint": script_fingerprint,
         "series_signals": series_signals,
     }
 
-    items.append(new_item)
+    # Rerun guard: replace last if same stats snapshot
+    replaced = False
+    if should_replace_last(items, module, stats_as_of_ts, ruleset_id):
+        items[-1] = new_item
+        replaced = True
+    else:
+        items.append(new_item)
 
     # cap
     if args.max_items > 0 and len(items) > args.max_items:
         items = items[-args.max_items :]
 
     history["items"] = items
+    history["schema_version"] = "dash_history_v2"
     dump_json(args.history, history)
 
-    print(f"OK: appended history item. total_items={len(items)}")
+    if replaced:
+        print(f"OK: replaced last history item (rerun guard). total_items={len(items)}")
+    else:
+        print(f"OK: appended history item. total_items={len(items)}")
 
 
 if __name__ == "__main__":
