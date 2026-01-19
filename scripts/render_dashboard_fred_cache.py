@@ -139,8 +139,9 @@ class Row:
 
     # from stats_latest.json (metrics)
     z60: Optional[float]
-    p252: Optional[float]
+    z252: Optional[float]
     p60_latest: Optional[float]
+    p252: Optional[float]
 
     # computed from history_lite window ending at prev
     prev_value: Optional[float]
@@ -747,8 +748,9 @@ def main() -> None:
         source_url = str(latest.get("source_url") or "NA")
 
         z60 = _safe_float(metrics.get("z60"))
-        p252 = _safe_float(metrics.get("p252"))
+        z252 = _safe_float(metrics.get("z252"))
         p60_latest = _safe_float(metrics.get("p60"))
+        p252 = _safe_float(metrics.get("p252"))
 
         prev_z60, prev_p60, ret1_pct, prev_value, last_value = _compute_prev_window_metrics(
             hl_by.get(sid, []),
@@ -784,7 +786,7 @@ def main() -> None:
 
         rows.append(Row(
             series=sid, dq=dq, age_h=age_h, data_date=data_date, value=value,
-            z60=z60, p252=p252, p60_latest=p60_latest,
+            z60=z60, z252=z252, p60_latest=p60_latest, p252=p252,
             prev_value=prev_value, last_value=last_value, prev_z60=prev_z60, prev_p60=prev_p60,
             z_delta60=z_delta60, p_delta60=p_delta60, ret1_pct=ret1_pct,
             jump_hits=jump_hits, hitbits=hitbits, dbg=dbg,
@@ -856,7 +858,7 @@ def main() -> None:
         "Signal", "Tag", "Near",
         "JUMP_HITS", "HITBITS", "DBG",
         "PrevSignal", "DeltaSignal", "StreakWA",
-        "Series", "DQ", "age_h", "data_date", "value", "z60", "p252",
+        "Series", "DQ", "age_h", "data_date", "value", "z60", "z252", "p60", "p252",
         "z_delta60", "p_delta60", "ret1_pct", "Reason", "Source", "as_of_ts"
     ]
     md.append("| " + " | ".join(cols) + " |")
@@ -868,7 +870,7 @@ def main() -> None:
             str(r.jump_hits), r.hitbits, r.dbg,
             r.prev_signal, r.delta_signal, str(r.streak_wa),
             r.series, r.dq, _fmt_num(r.age_h, AGE_ND), r.data_date, _fmt_num(r.value, VALUE_ND),
-            _fmt_num(r.z60, Z_ND), _fmt_num(r.p252, P_ND),
+            _fmt_num(r.z60, Z_ND), _fmt_num(r.z252, Z_ND), _fmt_num(r.p60_latest, P_ND), _fmt_num(r.p252, P_ND),
             _fmt_num(r.z_delta60, DELTA_ND), _fmt_num(r.p_delta60, DELTA_ND),
             _fmt_num(r.ret1_pct, RET1_ND),
             r.reason, r.source_url, r.as_of_ts
