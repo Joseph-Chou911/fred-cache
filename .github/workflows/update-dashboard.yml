@@ -37,6 +37,8 @@ jobs:
 
       - name: Render dashboard (market_cache)
         shell: bash
+        env:
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           python scripts/render_dashboard.py \
@@ -58,7 +60,14 @@ jobs:
             --history dashboard/history.json \
             --max-items 400
 
-      - name: Commit & push
+      - name: Show diff (debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --porcelain || true
+          git diff -- dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json || true
+
+      - name: Commit changes (if any)
         shell: bash
         run: |
           set -euo pipefail
@@ -72,6 +81,27 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore: update dashboard (mvp)"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git commit -m "chore: update dashboard (market_cache)"
+
+      - name: Push with rebase-retry
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # If last commit isn't ours, we probably didn't commit anything in this run
+          if ! git log -1 --pretty=%B | grep -q "^chore: update dashboard (market_cache)$"; then
+            echo "No new dashboard commit to push."
+            exit 0
+          fi
+
+          for i in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push failed (attempt $i). Rebase and retry..."
+            git pull --rebase origin main
+            sleep $((2 ** i))
+          done
+
+          echo "Push failed after retries."
+          exit 1
