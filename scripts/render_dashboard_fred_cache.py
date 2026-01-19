@@ -60,20 +60,6 @@ def _parse_dt(s: str) -> Optional[datetime]:
         return None
 
 
-def _fmt_num(x: Optional[float], nd: int = 6) -> str:
-    if x is None:
-        return "NA"
-    try:
-        if math.isnan(x) or math.isinf(x):
-            return "NA"
-    except Exception:
-        return "NA"
-    s = f"{x:.{nd}f}"
-    if s.startswith("-0." + "0" * nd):
-        s = s.replace("-0." + "0" * nd, "0." + "0" * nd)
-    return s.rstrip("0").rstrip(".") if "." in s else s
-
-
 def _safe_float(v: Any) -> Optional[float]:
     try:
         if v is None:
@@ -84,6 +70,36 @@ def _safe_float(v: Any) -> Optional[float]:
         return x
     except Exception:
         return None
+
+
+def _fmt_num(x: Optional[float], nd: int = 6) -> str:
+    if x is None:
+        return "NA"
+    try:
+        if math.isnan(x) or math.isinf(x):
+            return "NA"
+    except Exception:
+        return "NA"
+    s = f"{x:.{nd}f}"
+    if s.startswith("-0.000000"):
+        s = s.replace("-0.000000", "0.000000")
+    # trim
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def _fmt_dbg(x: Optional[float], nd: int = 12) -> str:
+    """Debug format: keep high precision (bounded to nd), but still trim trailing zeros."""
+    if x is None:
+        return "NA"
+    try:
+        if math.isnan(x) or math.isinf(x):
+            return "NA"
+    except Exception:
+        return "NA"
+    s = f"{x:.{nd}f}"
+    if s.startswith("-0.000000000000"):
+        s = s.replace("-0.000000000000", "0.000000000000")
+    return s.rstrip("0").rstrip(".") if "." in s else s
 
 
 def _percentile_le(window: List[float], x: float) -> Optional[float]:
@@ -120,14 +136,27 @@ class Row:
     age_h: Optional[float]
     data_date: str
     value: Optional[float]
+
+    # from stats_latest.json (metrics)
     z60: Optional[float]
     p252: Optional[float]
+    p60_latest: Optional[float]
+
+    # computed from history_lite window ending at prev
+    prev_value: Optional[float]
+    last_value: Optional[float]
+    prev_z60: Optional[float]
+    prev_p60: Optional[float]
+
+    # derived deltas / returns
     z_delta60: Optional[float]
     p_delta60: Optional[float]
     ret1_pct: Optional[float]
+
+    # jump audit
     jump_hits: int
     hitbits: str
-    dbg: str  # NEW: raw debug string only when needed
+    dbg: str
 
     reason: str
     tag: str
@@ -169,18 +198,18 @@ RET1_DENOM_EPS = 1e-3
 RET1_GUARD_TEXT = "ret1% guard: if abs(prev_value)<1e-3 -> ret1%=NA (avoid near-zero denom blow-ups)"
 TH_EPS_TEXT = f"threshold_eps: Z={EPS_Z}, P={EPS_P}, R={EPS_R} (avoid rounding/float boundary mismatch)"
 
-# ----------------------------
-# Output formatting policy
-#   - Human display: fewer decimals
-#   - Audit debug: high precision ONLY when Near/JUMP hits
-# ----------------------------
-ND_AGE = 2
-ND_VAL = 4
-ND_Z = 4
-ND_P = 3
-ND_D = 4
-ND_RET = 3
-ND_DBG = 12
+# output format control
+AGE_ND = 2
+VALUE_ND = 4
+Z_ND = 4
+P_ND = 3
+DELTA_ND = 4
+RET1_ND = 3
+DBG_ND = 12
+OUTPUT_FORMAT_TEXT = (
+    f"display_nd: age={AGE_ND}, value={VALUE_ND}, z={Z_ND}, p={P_ND}, delta={DELTA_ND}, ret1={RET1_ND}; "
+    f"dbg_nd={DBG_ND} (dbg only for Near/Jump)"
+)
 
 
 def _load_dq_map() -> Dict[str, str]:
@@ -227,16 +256,20 @@ def _group_history_lite(recs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, 
 def _compute_prev_window_metrics(
     series_hist: List[Dict[str, Any]],
     window_n: int = 60
-) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+) -> Tuple[
+    Optional[float], Optional[float], Optional[float],  # prev_z60, prev_p60, ret1_pct
+    Optional[float], Optional[float]                    # prev_value, last_value
+]:
     """
     Returns:
       prev_z60 (computed using window ending at prev)
       prev_p60 (computed using window ending at prev)
       ret1_pct = (last-prev)/abs(prev)*100, BUT guarded:
         if abs(prev) < RET1_DENOM_EPS -> None
+      prev_value, last_value (audit)
     """
     if len(series_hist) < 2:
-        return (None, None, None)
+        return (None, None, None, None, None)
 
     prev_rec = series_hist[-2]
     last_rec = series_hist[-1]
@@ -244,8 +277,9 @@ def _compute_prev_window_metrics(
     prev_val = _safe_float(prev_rec.get("value"))
     last_val = _safe_float(last_rec.get("value"))
     if prev_val is None or last_val is None:
-        return (None, None, None)
+        return (None, None, None, prev_val, last_val)
 
+    # window up to (and including) prev
     upto_prev = series_hist[: len(series_hist) - 1]
     vals: List[float] = []
     for rec in upto_prev:
@@ -266,7 +300,7 @@ def _compute_prev_window_metrics(
     else:
         ret1_pct = (last_val - prev_val) / abs(prev_val) * 100.0
 
-    return (prev_z60, prev_p60, ret1_pct)
+    return (prev_z60, prev_p60, ret1_pct, prev_val, last_val)
 
 
 def _near_flags(z_delta60: Optional[float], p_delta60: Optional[float], ret1_pct: Optional[float]) -> str:
@@ -538,9 +572,6 @@ def _delta_signal(prev: str, curr: str) -> str:
     return f"{prev}→{curr}"
 
 
-# ----------------------------
-# Alignment check
-# ----------------------------
 def _last_hist_value(series_hist: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[float]]:
     if not series_hist:
         return (None, None)
@@ -583,7 +614,7 @@ def _alignment_check(
             checked += 1
             missing_hl += 1
             if len(examples) < max_examples:
-                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v, ND_VAL)}) vs hl(MISSING)")
+                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v, VALUE_ND)}) vs hl(MISSING)")
             continue
 
         h_dd, h_v = _last_hist_value(hl_hist)
@@ -592,7 +623,7 @@ def _alignment_check(
         if s_dd_s is None or h_dd is None or s_v is None or h_v is None:
             mismatch += 1
             if len(examples) < max_examples:
-                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v, ND_VAL)}) vs hl({h_dd},{_fmt_num(h_v, ND_VAL)})")
+                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v, VALUE_ND)}) vs hl({h_dd},{_fmt_num(h_v, VALUE_ND)})")
             continue
 
         date_mismatch = (s_dd_s != h_dd)
@@ -601,24 +632,43 @@ def _alignment_check(
         if date_mismatch or val_mismatch:
             mismatch += 1
             if len(examples) < max_examples:
-                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v, ND_VAL)}) vs hl({h_dd},{_fmt_num(h_v, ND_VAL)})")
+                examples.append(f"{sid}: stats({s_dd_s},{_fmt_num(s_v, VALUE_ND)}) vs hl({h_dd},{_fmt_num(h_v, VALUE_ND)})")
 
     alignment = "PASS" if mismatch == 0 else "FAIL"
     return {"alignment": alignment, "checked": checked, "mismatch": mismatch, "missing_hl": missing_hl, "examples": examples}
 
 
-def _make_dbg(near: str, jump_hits: int, z_delta60: Optional[float], p_delta60: Optional[float], ret1_pct: Optional[float]) -> str:
+def _dbg_for_row(
+    near: str,
+    jump_hits: int,
+    z_delta60: Optional[float],
+    p_delta60: Optional[float],
+    ret1_pct: Optional[float],
+    p60_latest: Optional[float],
+    prev_p60: Optional[float],
+    z60: Optional[float],
+    prev_z60: Optional[float],
+    prev_value: Optional[float],
+    last_value: Optional[float],
+) -> str:
     """
-    Only emit high-precision values when needed (Near or Jump hits),
-    to avoid bloating normal reports but still keep auditability at boundaries.
+    Emit DBG only when Near!=NA or jump_hits>0, to keep the table quiet in normal cases.
+    Include p60 / prev_p60 / prev_z60 / prev_value / last_value for audit of edge cases.
     """
     if near == "NA" and jump_hits <= 0:
         return "NA"
-    return (
-        f"zΔ60={_fmt_num(z_delta60, ND_DBG)};"
-        f"pΔ60={_fmt_num(p_delta60, ND_DBG)};"
-        f"ret1%={_fmt_num(ret1_pct, ND_DBG)}"
-    )
+
+    parts: List[str] = []
+    parts.append(f"p60={_fmt_dbg(p60_latest, DBG_ND)}")
+    parts.append(f"prev_p60={_fmt_dbg(prev_p60, DBG_ND)}")
+    parts.append(f"z60={_fmt_dbg(z60, DBG_ND)}")
+    parts.append(f"prev_z60={_fmt_dbg(prev_z60, DBG_ND)}")
+    parts.append(f"prev_v={_fmt_dbg(prev_value, DBG_ND)}")
+    parts.append(f"last_v={_fmt_dbg(last_value, DBG_ND)}")
+    parts.append(f"zΔ60={_fmt_dbg(z_delta60, DBG_ND)}")
+    parts.append(f"pΔ60={_fmt_dbg(p_delta60, DBG_ND)}")
+    parts.append(f"ret1%={_fmt_dbg(ret1_pct, DBG_ND)}")
+    return ";".join(parts)
 
 
 def main() -> None:
@@ -675,11 +725,29 @@ def main() -> None:
         p252 = _safe_float(metrics.get("p252"))
         p60_latest = _safe_float(metrics.get("p60"))
 
-        prev_z60, prev_p60, ret1_pct = _compute_prev_window_metrics(hl_by.get(sid, []), window_n=60)
+        prev_z60, prev_p60, ret1_pct, prev_value, last_value = _compute_prev_window_metrics(
+            hl_by.get(sid, []),
+            window_n=60
+        )
+
         z_delta60 = (z60 - prev_z60) if (z60 is not None and prev_z60 is not None) else None
         p_delta60 = (p60_latest - prev_p60) if (p60_latest is not None and prev_p60 is not None) else None
 
         signal, tag, near, reason, jump_hits, hitbits = _signal_for_series(z60, p252, z_delta60, p_delta60, ret1_pct)
+
+        dbg = _dbg_for_row(
+            near=near,
+            jump_hits=jump_hits,
+            z_delta60=z_delta60,
+            p_delta60=p_delta60,
+            ret1_pct=ret1_pct,
+            p60_latest=p60_latest,
+            prev_p60=prev_p60,
+            z60=z60,
+            prev_z60=prev_z60,
+            prev_value=prev_value,
+            last_value=last_value,
+        )
 
         prev_signal = prev_map.get(sid, "NA")
         delta_signal = _delta_signal(prev_signal, signal)
@@ -687,11 +755,11 @@ def main() -> None:
 
         dq = dq_map.get(sid, "OK")
 
-        dbg = _make_dbg(near, jump_hits, z_delta60, p_delta60, ret1_pct)
-
         rows.append(Row(
             series=sid, dq=dq, age_h=age_h, data_date=data_date, value=value,
-            z60=z60, p252=p252, z_delta60=z_delta60, p_delta60=p_delta60, ret1_pct=ret1_pct,
+            z60=z60, p252=p252, p60_latest=p60_latest,
+            prev_value=prev_value, last_value=last_value, prev_z60=prev_z60, prev_p60=prev_p60,
+            z_delta60=z_delta60, p_delta60=p_delta60, ret1_pct=ret1_pct,
             jump_hits=jump_hits, hitbits=hitbits, dbg=dbg,
             reason=reason, tag=tag, near=near, signal=signal,
             prev_signal=prev_signal, delta_signal=delta_signal, streak_wa=streak_wa,
@@ -738,10 +806,7 @@ def main() -> None:
     md.append(f"- history_lite_used_for_jump: `{PATH_HISTORY_LITE}`")
     md.append(f"- ret1_guard: `{RET1_GUARD_TEXT}`")
     md.append(f"- threshold_eps: `{TH_EPS_TEXT}`")
-    md.append(
-        f"- output_format: `display_nd: age={ND_AGE}, value={ND_VAL}, z={ND_Z}, p={ND_P}, delta={ND_D}, ret1={ND_RET}; "
-        f"dbg_nd={ND_DBG} (dbg only for Near/Jump)`"
-    )
+    md.append(f"- output_format: `{OUTPUT_FORMAT_TEXT}`")
 
     md.append(
         f"- alignment: `{align.get('alignment','NA')}`; checked={align.get('checked',0)}; "
@@ -761,12 +826,10 @@ def main() -> None:
 
     cols = [
         "Signal", "Tag", "Near",
-        "JUMP_HITS", "HITBITS",
-        "DBG",  # NEW
+        "JUMP_HITS", "HITBITS", "DBG",
         "PrevSignal", "DeltaSignal", "StreakWA",
-        "Series", "DQ", "age_h", "data_date",
-        "value", "z60", "p252", "z_delta60", "p_delta60", "ret1_pct",
-        "Reason", "Source", "as_of_ts"
+        "Series", "DQ", "age_h", "data_date", "value", "z60", "p252",
+        "z_delta60", "p_delta60", "ret1_pct", "Reason", "Source", "as_of_ts"
     ]
     md.append("| " + " | ".join(cols) + " |")
     md.append("|" + "|".join(["---"] * len(cols)) + "|")
@@ -774,16 +837,12 @@ def main() -> None:
     for r in rows:
         md.append("| " + " | ".join([
             r.signal, r.tag, r.near,
-            str(r.jump_hits), r.hitbits,
-            r.dbg,
+            str(r.jump_hits), r.hitbits, r.dbg,
             r.prev_signal, r.delta_signal, str(r.streak_wa),
-            r.series, r.dq, _fmt_num(r.age_h, ND_AGE), r.data_date,
-            _fmt_num(r.value, ND_VAL),
-            _fmt_num(r.z60, ND_Z),
-            _fmt_num(r.p252, ND_P),
-            _fmt_num(r.z_delta60, ND_D),
-            _fmt_num(r.p_delta60, ND_D),
-            _fmt_num(r.ret1_pct, ND_RET),
+            r.series, r.dq, _fmt_num(r.age_h, AGE_ND), r.data_date, _fmt_num(r.value, VALUE_ND),
+            _fmt_num(r.z60, Z_ND), _fmt_num(r.p252, P_ND),
+            _fmt_num(r.z_delta60, DELTA_ND), _fmt_num(r.p_delta60, DELTA_ND),
+            _fmt_num(r.ret1_pct, RET1_ND),
             r.reason, r.source_url, r.as_of_ts
         ]) + " |")
 
