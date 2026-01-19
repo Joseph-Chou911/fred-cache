@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # scripts/render_dashboard.py
 #
-# Dashboard renderer (MVP+signals v8)
+# Dashboard renderer (MVP + signals v8)  [A+B+C compatible]
 # - Tag + Near
-# - PrevSignal/Streak from dashboard/history.json (past renderer outputs)
+# - PrevSignal/Streak from dashboard/history.json
+#   * STRICT: only items with matching (module + ruleset_id) are used
+#   * Legacy items missing ruleset_id are ignored (方案 C)
 # - DeltaSignal (Prev → Today, SAME, NA)
-# - Summary line counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
-# - Reason uses abs(...) (no table break)
-# - NEW: ruleset_id + script_fingerprint in meta
-# - NEW: streak timeline filtered by (module + ruleset_id) to avoid cross-version contamination
-# - NEW: output top-level "series_signals" for append_history convenience
+# - Summary counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
+# - Markdown table safety: escape '|'
 #
 # Inputs:
 #   - stats_latest.json (authoritative metrics for "today")
@@ -17,20 +16,19 @@
 #
 # Outputs:
 #   - dashboard/DASHBOARD.md
-#   - dashboard/dashboard_latest.json
+#   - dashboard/dashboard_latest.json  (includes: meta, rows, series_signals)
+#
+# Notes:
+# - Audit fields:
+#   - RULESET_ID (args.ruleset_id)
+#   - SCRIPT_FINGERPRINT (args.script_fingerprint, optionally with @GITHUB_SHA7)
+# - Make sure your append_dashboard_history.py dedupes by (module, ruleset_id, stats_as_of_ts).
 
 import argparse
 import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
-
-
-# -------------------------
-# Identity (versioning)
-# -------------------------
-RULESET_ID = "signals_v8"
-SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8_2026-01-19"
 
 # -------------------------
 # Tunables (defaults)
@@ -53,8 +51,11 @@ RET1PCT60_JUMP_ABS = 2.0  # percent units
 # Near window: within X% of threshold
 NEAR_FRAC = 0.10  # 10%
 
-# Max history snapshots to consider for streak computation (most recent N)
+# Max history snapshots to consider for streak computation
 STREAK_HISTORY_MAX = 120  # ~半年（每天一次）夠用了
+
+DEFAULT_RULESET_ID = "signals_v8"
+DEFAULT_SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8"
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -92,9 +93,6 @@ def fmt(x: Any, nd: int = 6) -> str:
 
 
 def md_escape_cell(x: Any) -> str:
-    """
-    Escape content for GitHub-flavored Markdown tables.
-    """
     s = str(x) if x is not None else "NA"
     s = s.replace("|", "&#124;")
     s = s.replace("\n", "<br>")
@@ -123,7 +121,7 @@ def compute_signal_tag_near_from_metrics(
 ) -> Tuple[str, str, str, str]:
     """
     Returns (signal_level, reason_str, tag_str, near_str)
-    Uses "改法 B" rules, but Reason strings use abs(...) instead of |...|.
+    Ruleset: signals_v8 (改法 B)
     """
     reasons: List[str] = []
     tags: List[str] = []
@@ -243,14 +241,15 @@ def build_series_signal_timeline(
     ruleset_id: str,
 ) -> Dict[str, List[str]]:
     """
-    Build per-series signal timeline filtered by module + ruleset_id.
-    This prevents cross-version streak contamination.
+    方案 C：忽略 legacy（缺 ruleset_id）items。
+    只使用 item.module==module AND item.ruleset_id==ruleset_id
     """
     timeline: Dict[str, List[str]] = {}
     for snap in history_snaps:
         if snap.get("module") != module:
             continue
         if snap.get("ruleset_id") != ruleset_id:
+            # legacy items missing ruleset_id will be ignored here automatically
             continue
         sigs = snap.get("series_signals")
         if not isinstance(sigs, dict):
@@ -272,7 +271,6 @@ def compute_prev_and_streak_from_history(
     if today_signal not in ("WATCH", "ALERT"):
         return prev, 0
 
-    # streak includes today + consecutive prior WATCH/ALERT
     streak = 1
     for s in reversed(hist):
         if s in ("WATCH", "ALERT"):
@@ -316,22 +314,14 @@ def compute_summary_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
-def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
+def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[Dict[str, Any]], series_signals: Dict[str, str]) -> None:
     os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
-
-    # Top-level series_signals for append_history convenience / audit
-    series_signals: Dict[str, str] = {}
-    for r in rows:
-        sid = r.get("series")
-        sig = r.get("signal_level")
-        if isinstance(sid, str) and isinstance(sig, str):
-            series_signals[sid] = sig
 
     payload = {
         "meta": meta,
         "rows": rows,
-        "series_signals": series_signals,
+        "series_signals": series_signals,  # convenient for appender
     }
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -341,12 +331,10 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines: List[str] = []
     lines.append(f"# Risk Dashboard ({meta.get('module','')})")
     lines.append("")
-
     lines.append(
         f"- Summary: ALERT={summary['ALERT']} / WATCH={summary['WATCH']} / INFO={summary['INFO']} / NONE={summary['NONE']}; "
         f"CHANGED={summary['CHANGED']}; WATCH_STREAK>=3={summary['WATCH_STREAK_GE3']}"
     )
-
     lines.append(f"- SCRIPT_FINGERPRINT: `{meta.get('script_fingerprint','')}`")
     lines.append(f"- RULESET_ID: `{meta.get('ruleset_id','')}`")
     lines.append(f"- RUN_TS_UTC: `{meta.get('run_ts_utc','')}`")
@@ -368,7 +356,8 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
     lines.append("")
 
     header = [
-        "Signal", "Tag", "Near", "PrevSignal", "DeltaSignal", "StreakWA",
+        "Signal", "Tag", "Near",
+        "PrevSignal", "DeltaSignal", "StreakWA",
         "Series", "DQ", "age_h",
         "data_date", "value",
         "z60", "p252",
@@ -393,9 +382,9 @@ def write_outputs(out_md: str, out_json: str, meta: Dict[str, Any], rows: List[D
             md_escape_cell(fmt(r.get("value"), nd=6)),
             md_escape_cell(fmt(r.get("z60"), nd=6)),
             md_escape_cell(fmt(r.get("p252"), nd=6)),
-            md_escape_cell(fmt(r.get("z_delta_60"), nd=6)),
-            md_escape_cell(fmt(r.get("p_delta_60"), nd=6)),
-            md_escape_cell(fmt(r.get("ret1_pct_60"), nd=6)),
+            md_escape_cell(fmt(r.get("z_delta60"), nd=6)),
+            md_escape_cell(fmt(r.get("p_delta60"), nd=6)),
+            md_escape_cell(fmt(r.get("ret1_pct60"), nd=6)),
             md_escape_cell(r.get("reason")),
             md_escape_cell(r.get("source_url")),
             md_escape_cell(r.get("as_of_ts")),
@@ -413,36 +402,47 @@ def main() -> None:
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--module", default="market_cache")
     ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
+
+    # A+B+C audit keys
+    ap.add_argument("--ruleset-id", default=DEFAULT_RULESET_ID)
+    ap.add_argument("--script-fingerprint", default=DEFAULT_SCRIPT_FINGERPRINT)
     args = ap.parse_args()
 
     run_ts = datetime.now(timezone.utc)
+
+    # Enhance fingerprint with GITHUB_SHA if available (stable per commit)
+    sha = os.getenv("GITHUB_SHA", "")
+    sha7 = sha[:7] if isinstance(sha, str) and len(sha) >= 7 else ""
+    script_fingerprint = args.script_fingerprint
+    if sha7 and ("@" not in script_fingerprint):
+        script_fingerprint = f"{script_fingerprint}@{sha7}"
 
     if not os.path.exists(args.stats):
         meta = {
             "run_ts_utc": run_ts.isoformat(),
             "module": args.module,
-            "ruleset_id": RULESET_ID,
-            "script_fingerprint": SCRIPT_FINGERPRINT,
+            "ruleset_id": args.ruleset_id,
+            "script_fingerprint": script_fingerprint,
             "stale_hours": args.stale_hours,
             "stats_path": args.stats,
             "dash_history_path": args.dash_history or "NA",
             "streak_calc": "disabled (missing stats file)",
             "error": f"stats file missing: {args.stats}",
         }
-        write_outputs(args.out_md, args.out_json, meta, [])
+        write_outputs(args.out_md, args.out_json, meta, [], {})
         return
 
     with open(args.stats, "r", encoding="utf-8") as f:
         stats = json.load(f)
 
     history_snaps = load_dashboard_history(args.dash_history)
-    timeline = build_series_signal_timeline(history_snaps, args.module, RULESET_ID)
+    timeline = build_series_signal_timeline(history_snaps, args.module, args.ruleset_id)
 
     meta = {
         "run_ts_utc": run_ts.isoformat(),
         "module": args.module,
-        "ruleset_id": RULESET_ID,
-        "script_fingerprint": SCRIPT_FINGERPRINT,
+        "ruleset_id": args.ruleset_id,
+        "script_fingerprint": script_fingerprint,
         "stale_hours": args.stale_hours,
         "stats_path": args.stats,
         "stats_generated_at_utc": stats.get("generated_at_utc"),
@@ -451,7 +451,7 @@ def main() -> None:
         "series_count": stats.get("series_count"),
         "dash_history_path": args.dash_history or "NA",
         "streak_calc": "PrevSignal/StreakWA derived from dashboard/history.json filtered by (module + ruleset_id) + today's signal",
-        "history_items_used": len(history_snaps),
+        "history_items_loaded": len(history_snaps),
     }
 
     series = stats.get("series", {})
@@ -459,11 +459,13 @@ def main() -> None:
         series = {}
 
     rows: List[Dict[str, Any]] = []
+    series_signals: Dict[str, str] = {}
+
     for sid, s in series.items():
         if not isinstance(s, dict):
             continue
-        latest = s.get("latest", {}) if isinstance(s.get("latest"), dict) else {}
 
+        latest = s.get("latest", {}) if isinstance(s.get("latest"), dict) else {}
         w60 = get_w(s, "w60")
         w252 = get_w(s, "w252")
 
@@ -483,11 +485,15 @@ def main() -> None:
             today_signal=signal_level,
             timeline=timeline,
         )
-
         delta_signal = compute_delta_signal(prev_signal, signal_level)
+
+        series_signals[str(sid)] = str(signal_level)
 
         row: Dict[str, Any] = {
             "module": args.module,
+            "ruleset_id": args.ruleset_id,
+            "script_fingerprint": script_fingerprint,
+
             "series": sid,
             "value": latest.get("value"),
             "data_date": latest.get("data_date"),
@@ -497,9 +503,10 @@ def main() -> None:
             "age_hours": age_hours,
 
             "z60": w60.get("z"),
-            "ret1_pct_60": w60.get("ret1_pct"),
-            "z_delta_60": w60.get("z_delta"),
-            "p_delta_60": w60.get("p_delta"),
+            "ret1_pct60": w60.get("ret1_pct"),
+            "z_delta60": w60.get("z_delta"),
+            "p_delta60": w60.get("p_delta"),
+
             "p252": w252.get("p"),
 
             "signal_level": signal_level,
@@ -545,7 +552,7 @@ def main() -> None:
         r.get("series", ""),
     ))
 
-    write_outputs(args.out_md, args.out_json, meta, rows)
+    write_outputs(args.out_md, args.out_json, meta, rows, series_signals)
 
 
 if __name__ == "__main__":
