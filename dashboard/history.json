@@ -2,11 +2,11 @@
   "schema_version": "dash_history_v2",
   "items": [
     {
-      "run_ts_utc": "2026-01-19T07:31:51.272871+00:00",
-      "stats_as_of_ts": "2026-01-19T07:26:59Z",
+      "run_ts_utc": "2026-01-19T07:33:46.364421+00:00",
+      "stats_as_of_ts": "2026-01-19T07:33:11Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@ef42795",
+      "script_fingerprint": "render_dashboard_py_signals_v8@8fbdadb",
       "series_signals": {
         "OFR_FSI": "WATCH",
         "VIX": "NONE",
