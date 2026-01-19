@@ -13,6 +13,19 @@
         "SP500": "INFO",
         "HYG_IEF_RATIO": "WATCH"
       }
+    },
+    {
+      "run_ts_utc": "2026-01-19T02:11:57.822097+00:00",
+      "stats_as_of_ts": "2026-01-19T02:10:12Z",
+      "module": "market_cache",
+      "ruleset_id": "signals_v8",
+      "script_fingerprint": "render_dashboard_py_signals_v8@a7ce0a9",
+      "series_signals": {
+        "OFR_FSI": "WATCH",
+        "VIX": "NONE",
+        "SP500": "INFO",
+        "HYG_IEF_RATIO": "WATCH"
+      }
     }
   ]
 }
