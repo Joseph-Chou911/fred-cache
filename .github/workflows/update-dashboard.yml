@@ -31,6 +31,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      # ✅ 關鍵修正：先 rebase 同步（此時 working tree 乾淨）
+      - name: Sync with main (rebase)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+
       - name: Ensure dashboard dir
         shell: bash
         run: |
@@ -62,15 +69,19 @@ jobs:
             --max-items 400 \
             --tz "${TIMEZONE}"
 
-      - name: Commit & push
+      - name: Show diff (debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --porcelain || true
+          git diff -- dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json || true
+
+      - name: Commit changes (if any)
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Rebase first to reduce non-fast-forward failures
-          git pull --rebase origin main
 
           git add dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json
 
@@ -80,4 +91,27 @@ jobs:
           fi
 
           git commit -m "chore: update dashboard (mvp)"
-          git push origin HEAD:main
+
+      # ✅ push 失敗時再 rebase，且用 --autostash 避免 dirty tree 卡住
+      - name: Push with rebase-retry
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 如果本次沒有 commit，就不用 push
+          if ! git log -1 --pretty=%B | grep -q "^chore: update dashboard (mvp)$"; then
+            echo "No new commit created in this run."
+            exit 0
+          fi
+
+          for i in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push failed (attempt $i). Rebase with autostash and retry..."
+            git pull --rebase --autostash origin main
+            sleep $((2 ** i))
+          done
+
+          echo "Push failed after retries."
+          exit 1
