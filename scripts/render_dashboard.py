@@ -9,16 +9,25 @@
 # - DeltaSignal (Prev → Today, SAME, NA)
 # - Summary counts (ALERT/WATCH/INFO/NONE, CHANGED, WATCH_STREAK>=3)
 # - Direction map (HIGH/LOW/RANGE/MOVE) + DirNote (risk-bias annotation)
-# - Adds StreakHist (history-only) to make audit clearer
+# - ORDER-SAFE: auto-detect if history already contains "today" (same day key),
+#               then compute Prev/Streak against history-excluding-today.
 # - Markdown table safety: escape '|'
 #
 # Inputs:
-#   - stats_latest.json
-#   - dashboard/history.json
+#   - stats_latest.json (authoritative metrics for "today")
+#   - dashboard/history.json (authoritative past signals produced by this renderer)
 #
 # Outputs:
 #   - dashboard/DASHBOARD.md
-#   - dashboard/dashboard_latest.json  (meta, rows, series_signals)
+#   - dashboard/dashboard_latest.json  (includes: meta, rows, series_signals)
+#
+# Notes:
+# - Audit fields:
+#   - RULESET_ID (args.ruleset_id)
+#   - SCRIPT_FINGERPRINT (args.script_fingerprint, optionally with @GITHUB_SHA7)
+# - Append script should dedupe by daily key (module, ruleset_id, stats_as_of_date).
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -26,6 +35,9 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+# -------------------------
+# Tunables (defaults)
+# -------------------------
 DEFAULT_STALE_HOURS = 36.0
 
 # Extreme thresholds
@@ -34,15 +46,18 @@ Z60_ALERT_ABS = 2.5
 
 P252_EXTREME_HI = 95.0
 P252_EXTREME_LO = 5.0
-P252_ALERT_LO = 2.0
+P252_ALERT_LO = 2.0  # very extreme low tail
 
 # Jump thresholds
 ZDELTA60_JUMP_ABS = 0.75
 PDELTA60_JUMP_ABS = 15.0
-RET1PCT60_JUMP_ABS = 2.0
+RET1PCT60_JUMP_ABS = 2.0  # percent units
 
-NEAR_FRAC = 0.10
-STREAK_HISTORY_MAX = 120
+# Near window: within X% of threshold
+NEAR_FRAC = 0.10  # 10%
+
+# Max history snapshots to consider for streak computation
+STREAK_HISTORY_MAX = 120  # ~半年（每天一次）夠用了
 
 DEFAULT_RULESET_ID = "signals_v8"
 DEFAULT_SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8"
@@ -50,25 +65,36 @@ DEFAULT_SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8"
 # -------------------------
 # Direction map (minimal extension)
 # -------------------------
+# HIGH: higher value => generally higher risk bias
+# LOW : lower value  => generally higher risk bias
+# RANGE: both tails can be risky (reserved)
+# MOVE: treat as "movement-only" (do not infer up/down risk from direction)
 DIRECTION_MAP: Dict[str, str] = {
+    # credit / stress / leverage (higher => more stress)
     "OFR_FSI": "HIGH",
     "STLFSI4": "HIGH",
     "BAMLH0A0HYM2": "HIGH",
     "NFCINONFINLEVERAGE": "HIGH",
 
+    # equity (overheat/valuation crowding bias; higher => more fragile)
     "SP500": "HIGH",
     "DJIA": "HIGH",
     "NASDAQCOM": "HIGH",
 
+    # vol (higher => more risk)
     "VIX": "HIGH",
     "VIXCLS": "HIGH",
 
+    # FX index (if you interpret USD strength as tighter conditions)
     "DTWEXBGS": "HIGH",
+
+    # oil (cost/inflation pressure bias)
     "DCOILWTICO": "HIGH",
 
+    # credit proxy ratio: ratio down => credit stress => risk (LOW)
     "HYG_IEF_RATIO": "LOW",
 
-    # rates: movement-only in MVP to avoid direction misread
+    # rates: MVP treat as MOVE-only (avoid "rate down = risk up" misread)
     "DGS2": "MOVE",
     "DGS10": "MOVE",
     "T10Y2Y": "MOVE",
@@ -84,6 +110,13 @@ def parse_iso(ts: Optional[str]) -> Optional[datetime]:
         return datetime.fromisoformat(ts2)
     except Exception:
         return None
+
+
+def iso_day(ts: Optional[str]) -> Optional[str]:
+    if not ts:
+        return None
+    s = str(ts)
+    return s[:10] if len(s) >= 10 else None
 
 
 def dq_from_ts(run_ts: datetime, as_of_ts: Optional[datetime], stale_hours: float) -> Tuple[str, Optional[float]]:
@@ -137,6 +170,10 @@ def compute_signal_tag_near_from_metrics(
     pdel60: Optional[float],
     ret1pct60: Optional[float],
 ) -> Tuple[str, str, str, str]:
+    """
+    Returns (signal_level, reason_str, tag_str, near_str)
+    Ruleset: signals_v8
+    """
     reasons: List[str] = []
     tags: List[str] = []
     nears: List[str] = []
@@ -206,7 +243,7 @@ def compute_signal_tag_near_from_metrics(
         if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
             nears.append("NEAR:ret1%60")
 
-    # Level assignment (signals_v8 / 改法 B)
+    # Level assignment
     if long_extreme_only and jump_hits == 0:
         level = "INFO"
     else:
@@ -249,17 +286,33 @@ def load_dashboard_history(path: Optional[str]) -> List[Dict[str, Any]]:
         return []
 
 
+def same_key_daily_item(
+    item: Dict[str, Any],
+    module: str,
+    ruleset_id: str,
+    today_stats_as_of_ts: Optional[str],
+) -> bool:
+    if item.get("module") != module:
+        return False
+    if item.get("ruleset_id") != ruleset_id:
+        return False
+    return iso_day(item.get("stats_as_of_ts")) == iso_day(today_stats_as_of_ts)
+
+
 def build_series_signal_timeline(
     history_snaps: List[Dict[str, Any]],
     module: str,
     ruleset_id: str,
 ) -> Dict[str, List[str]]:
+    """
+    Only use item.module==module AND item.ruleset_id==ruleset_id.
+    Legacy items missing ruleset_id are ignored by design.
+    """
     timeline: Dict[str, List[str]] = {}
     for snap in history_snaps:
         if snap.get("module") != module:
             continue
         if snap.get("ruleset_id") != ruleset_id:
-            # legacy items missing ruleset_id ignored
             continue
         sigs = snap.get("series_signals")
         if not isinstance(sigs, dict):
@@ -273,21 +326,18 @@ def build_series_signal_timeline(
 def compute_prev_and_streaks(
     sid: str,
     today_signal: str,
-    timeline: Dict[str, List[str]],
+    timeline_hist_excl_today: Dict[str, List[str]],
 ) -> Tuple[str, int, int]:
     """
-    Returns (prev_signal, streak_hist, streak_incl_today)
-
-    streak_hist:
-      - history-only consecutive WATCH/ALERT ending at last history item
-    streak_incl_today:
-      - if today is WATCH/ALERT: 1 + (history tail consecutive WATCH/ALERT)
-      - else 0
+    Returns (prev_signal, streak_hist, streak_wa)
+    - prev_signal: last signal from history (excluding today)
+    - streak_hist: consecutive WATCH/ALERT ending at history end (excluding today)
+    - streak_wa: streak_hist + 1 if today is WATCH/ALERT else 0
     """
-    hist = timeline.get(sid, [])
-    prev = hist[-1] if len(hist) >= 1 else "NA"
+    hist = timeline_hist_excl_today.get(sid, [])
+    prev = hist[-1] if hist else "NA"
 
-    # history-only streak
+    # streak_hist: count consecutive WATCH/ALERT at tail of hist
     streak_hist = 0
     for s in reversed(hist):
         if s in ("WATCH", "ALERT"):
@@ -295,13 +345,12 @@ def compute_prev_and_streaks(
         else:
             break
 
-    # incl-today streak (your previous StreakWA behavior)
-    if today_signal not in ("WATCH", "ALERT"):
-        streak_incl_today = 0
+    if today_signal in ("WATCH", "ALERT"):
+        streak_wa = streak_hist + 1
     else:
-        streak_incl_today = 1 + streak_hist
+        streak_wa = 0
 
-    return prev, streak_hist, streak_incl_today
+    return prev, streak_hist, streak_wa
 
 
 def compute_delta_signal(prev: str, today: str) -> str:
@@ -363,6 +412,13 @@ def parse_p252_tail(reason: str) -> str:
 
 
 def compute_dir_note(direction: str, reason: str, tags: List[str]) -> str:
+    """
+    Conservative annotation:
+    - MOVE => MOVE_ONLY
+    - RANGE => RANGE_SENSITIVE
+    - If P252 tail exists, infer bias for HIGH/LOW
+    - For abs(...) triggers, do NOT infer up/down; mark DIR_UNCERTAIN_ABS
+    """
     if direction == "MOVE":
         return "MOVE_ONLY"
     if direction == "RANGE":
@@ -373,6 +429,7 @@ def compute_dir_note(direction: str, reason: str, tags: List[str]) -> str:
     if direction in ("HIGH", "LOW") and p_tail in ("HI", "LO"):
         if direction == "HIGH":
             return "RISK_BIAS_UP" if p_tail == "HI" else "RISK_BIAS_DOWN"
+        # LOW: low tail is risk-up, high tail is risk-down
         return "RISK_BIAS_UP" if p_tail == "LO" else "RISK_BIAS_DOWN"
 
     if direction in ("HIGH", "LOW"):
@@ -392,7 +449,11 @@ def write_outputs(
     os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
 
-    payload = {"meta": meta, "rows": rows, "series_signals": series_signals}
+    payload = {
+        "meta": meta,
+        "rows": rows,
+        "series_signals": series_signals,
+    }
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
@@ -471,18 +532,21 @@ def write_outputs(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stats", required=True)
-    ap.add_argument("--dash-history", default=None)
+    ap.add_argument("--stats", required=True, help="Path to stats_latest.json (repo path)")
+    ap.add_argument("--dash-history", default=None, help="Path to dashboard/history.json (repo path).")
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--module", default="market_cache")
     ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
+
+    # A+B+C audit keys
     ap.add_argument("--ruleset-id", default=DEFAULT_RULESET_ID)
     ap.add_argument("--script-fingerprint", default=DEFAULT_SCRIPT_FINGERPRINT)
     args = ap.parse_args()
 
     run_ts = datetime.now(timezone.utc)
 
+    # Enhance fingerprint with GITHUB_SHA if available (stable per commit)
     sha = os.getenv("GITHUB_SHA", "")
     sha7 = sha[:7] if isinstance(sha, str) and len(sha) >= 7 else ""
     script_fingerprint = args.script_fingerprint
@@ -507,8 +571,23 @@ def main() -> None:
     with open(args.stats, "r", encoding="utf-8") as f:
         stats = json.load(f)
 
-    history_snaps = load_dashboard_history(args.dash_history)
-    timeline = build_series_signal_timeline(history_snaps, args.module, args.ruleset_id)
+    today_stats_as_of_ts = stats.get("as_of_ts")
+    today_day = iso_day(today_stats_as_of_ts)
+
+    # Load full history
+    history_all = load_dashboard_history(args.dash_history)
+
+    # ORDER-SAFE:
+    # If history already contains same-day key (module+ruleset_id+day), exclude it for prev/streak baseline.
+    history_excl_today: List[Dict[str, Any]] = []
+    excluded_count = 0
+    for it in history_all:
+        if isinstance(it, dict) and today_day and same_key_daily_item(it, args.module, args.ruleset_id, str(today_stats_as_of_ts)):
+            excluded_count += 1
+            continue
+        history_excl_today.append(it)
+
+    timeline_hist = build_series_signal_timeline(history_excl_today, args.module, args.ruleset_id)
 
     meta = {
         "run_ts_utc": run_ts.isoformat(),
@@ -518,12 +597,17 @@ def main() -> None:
         "stale_hours": args.stale_hours,
         "stats_path": args.stats,
         "stats_generated_at_utc": stats.get("generated_at_utc"),
-        "stats_as_of_ts": stats.get("as_of_ts"),
+        "stats_as_of_ts": today_stats_as_of_ts,
         "script_version": stats.get("script_version"),
         "series_count": stats.get("series_count"),
         "dash_history_path": args.dash_history or "NA",
-        "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today",
-        "history_items_loaded": len(history_snaps),
+        "streak_calc": (
+            "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); "
+            "StreakWA includes today; StreakHist excludes today; "
+            "ORDER_SAFE: if history already contains same-day key, it is excluded from baseline"
+        ),
+        "history_items_loaded": len(history_all),
+        "history_excluded_same_day": excluded_count,
     }
 
     series = stats.get("series", {})
@@ -537,7 +621,6 @@ def main() -> None:
         if not isinstance(s, dict):
             continue
 
-        sid_str = str(sid)
         latest = s.get("latest", {}) if isinstance(s.get("latest"), dict) else {}
         w60 = get_w(s, "w60")
         w252 = get_w(s, "w252")
@@ -553,16 +636,18 @@ def main() -> None:
             ret1pct60=w60.get("ret1_pct"),
         )
 
+        # prev/streaks against history excluding today
         prev_signal, streak_hist, streak_wa = compute_prev_and_streaks(
-            sid=sid_str,
+            sid=str(sid),
             today_signal=signal_level,
-            timeline=timeline,
+            timeline_hist_excl_today=timeline_hist,
         )
         delta_signal = compute_delta_signal(prev_signal, signal_level)
 
-        series_signals[sid_str] = str(signal_level)
+        series_signals[str(sid)] = str(signal_level)
 
-        direction = get_direction(sid_str)
+        # direction annotation (no effect on signal)
+        direction = get_direction(str(sid))
         tags_list = parse_tags(tag)
         dir_note = compute_dir_note(direction, reason, tags_list)
 
@@ -571,7 +656,7 @@ def main() -> None:
             "ruleset_id": args.ruleset_id,
             "script_fingerprint": script_fingerprint,
 
-            "series": sid_str,
+            "series": str(sid),
             "value": latest.get("value"),
             "data_date": latest.get("data_date"),
             "as_of_ts": latest.get("as_of_ts"),
@@ -600,6 +685,7 @@ def main() -> None:
         }
         rows.append(row)
 
+    # Sorting:
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
 
@@ -620,7 +706,7 @@ def main() -> None:
             return 2
         if d == "SAME":
             return 1
-        return 0
+        return 0  # changed first
 
     rows.sort(key=lambda r: (
         sig_order.get(r.get("signal_level", "NONE"), 9),
