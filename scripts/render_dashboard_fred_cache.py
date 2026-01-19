@@ -9,6 +9,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 
 def _read_text(path: str) -> str:
@@ -83,7 +84,6 @@ def _fmt_num(x: Optional[float], nd: int = 6) -> str:
     s = f"{x:.{nd}f}"
     if s.startswith("-0.000000"):
         s = s.replace("-0.000000", "0.000000")
-    # trim
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
@@ -178,6 +178,22 @@ PATH_DQ_STATE = "cache/dq_state.json"  # optional
 OUT_DIR = "dashboard_fred_cache"
 OUT_MD = os.path.join(OUT_DIR, "dashboard.md")
 OUT_HISTORY = os.path.join(OUT_DIR, "history.json")
+
+# --- one history item per local day (Asia/Taipei) ---
+TZ_LOCAL = "Asia/Taipei"
+
+
+def _day_key_local(run_ts_utc: datetime) -> str:
+    """
+    Return YYYY-MM-DD in Asia/Taipei for "one item per day" history bucketing.
+    """
+    try:
+        local_dt = run_ts_utc.astimezone(ZoneInfo(TZ_LOCAL))
+        return local_dt.date().isoformat()
+    except Exception:
+        # Fallback: use UTC date if ZoneInfo fails (should not happen on GitHub runners).
+        return run_ts_utc.date().isoformat()
+
 
 STALE_HOURS_DEFAULT = 72.0
 
@@ -279,7 +295,6 @@ def _compute_prev_window_metrics(
     if prev_val is None or last_val is None:
         return (None, None, None, prev_val, last_val)
 
-    # window up to (and including) prev
     upto_prev = series_hist[: len(series_hist) - 1]
     vals: List[float] = []
     for rec in upto_prev:
@@ -453,25 +468,32 @@ def _make_snapshot_id(stats_as_of_ts: str, stats_generated_at_utc: Optional[str]
     return f"asof:{stats_as_of_ts}"
 
 
-def _item_snapshot_id(item: Dict[str, Any]) -> str:
-    if isinstance(item.get("snapshot_id"), str) and item["snapshot_id"]:
-        return item["snapshot_id"]
-    dc = item.get("data_commit_sha")
-    if isinstance(dc, str) and dc:
-        return f"commit:{dc}"
-    gen = item.get("stats_generated_at_utc")
-    if isinstance(gen, str) and gen:
-        return f"gen:{gen}"
-    asof = item.get("stats_as_of_ts")
-    if isinstance(asof, str) and asof:
-        return f"asof:{asof}"
-    return "asof:NA"
+def _item_day_key(item: Dict[str, Any]) -> str:
+    """
+    History key for dedup: prefer explicit day_key_local, else derive from run_ts_utc (Asia/Taipei),
+    else fallback to 'NA'.
+    """
+    dk = item.get("day_key_local")
+    if isinstance(dk, str) and dk:
+        return dk
+    rts = item.get("run_ts_utc")
+    if isinstance(rts, str) and rts:
+        dt = _parse_dt(rts)
+        if dt is not None:
+            # dt may be timezone-aware already; normalize for safety
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return _day_key_local(dt.astimezone(timezone.utc))
+    return "NA"
 
 
 def _item_key(item: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Dedup key: (module, day_key_local)
+    """
     module = str(item.get("module") or "NA")
-    snap = _item_snapshot_id(item)
-    return (module, snap)
+    day_key = _item_day_key(item)
+    return (module, day_key)
 
 
 def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
@@ -488,6 +510,10 @@ def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
 
 
 def _migrate_asof_to_commit(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Keep this migration (snapshot_id/data_commit_sha fill) as-is.
+    It does NOT change keying; keying is handled by _item_key (day_key_local).
+    """
     m: Dict[Tuple[str, str], Tuple[str, str]] = {}
     for it in items:
         if not isinstance(it, dict):
@@ -651,10 +677,6 @@ def _dbg_for_row(
     prev_value: Optional[float],
     last_value: Optional[float],
 ) -> str:
-    """
-    Emit DBG only when Near!=NA or jump_hits>0, to keep the table quiet in normal cases.
-    Include p60 / prev_p60 / prev_z60 / prev_value / last_value for audit of edge cases.
-    """
     if near == "NA" and jump_hits <= 0:
         return "NA"
 
@@ -679,7 +701,10 @@ def main() -> None:
     stats_generated_at_utc = _get_stats_generated_at_utc(stats)
     data_commit_sha = _get_data_commit_sha(stats)
     snapshot_id = _make_snapshot_id(stats_as_of_ts, stats_generated_at_utc, data_commit_sha)
-    current_hist_key = (MODULE, snapshot_id)
+
+    # bucket key: one history item per Asia/Taipei day
+    day_key = _day_key_local(run_ts_utc)
+    current_hist_key = (MODULE, day_key)
 
     stats_generated = _parse_dt(str(stats.get("generated_at_utc") or ""))
     script_version = str(stats.get("stats_policy", {}).get("script_version") or stats.get("script_version") or "NA")
@@ -733,7 +758,9 @@ def main() -> None:
         z_delta60 = (z60 - prev_z60) if (z60 is not None and prev_z60 is not None) else None
         p_delta60 = (p60_latest - prev_p60) if (p60_latest is not None and prev_p60 is not None) else None
 
-        signal, tag, near, reason, jump_hits, hitbits = _signal_for_series(z60, p252, z_delta60, p_delta60, ret1_pct)
+        signal, tag, near, reason, jump_hits, hitbits = _signal_for_series(
+            z60, p252, z_delta60, p_delta60, ret1_pct
+        )
 
         dbg = _dbg_for_row(
             near=near,
@@ -791,6 +818,7 @@ def main() -> None:
         f"CHANGED={changed_n}; WATCH_STREAK>=3={watch_streak_ge3}; NEAR={near_n}; JUMP_1of3={jump_1of3_n}"
     )
     md.append(f"- RUN_TS_UTC: `{run_ts_utc.isoformat()}`")
+    md.append(f"- day_key_local: `{day_key}`")
     md.append(f"- STATS.generated_at_utc: `{stats.get('generated_at_utc','NA')}`")
     md.append(f"- STATS.as_of_ts: `{stats_as_of_ts}`")
     if stats_generated_at_utc:
@@ -799,7 +827,7 @@ def main() -> None:
         md.append(f"- STATS.data_commit_sha: `{data_commit_sha}`")
     md.append(f"- snapshot_id: `{snapshot_id}`")
     md.append(f"- streak_basis: `{STREAK_BASIS_TEXT}`")
-    md.append(f"- streak_calc: `basis=snapshot_id; consecutive WATCH across prior distinct snapshots; re-run same snapshot excluded`")
+    md.append(f"- streak_calc: `basis=snapshot_id; consecutive WATCH across prior distinct daily buckets; same-day rerun overwrites`")
     md.append(f"- script_version: `{script_version}`")
     md.append(f"- stale_hours: `{STALE_HOURS_DEFAULT}`")
     md.append(f"- dash_history: `{OUT_HISTORY}`")
@@ -850,6 +878,7 @@ def main() -> None:
 
     new_item = {
         "run_ts_utc": run_ts_utc.isoformat(),
+        "day_key_local": day_key,
         "module": MODULE,
         "stats_as_of_ts": stats_as_of_ts,
         "stats_generated_at_utc": stats_generated_at_utc or None,
@@ -873,7 +902,7 @@ def main() -> None:
             key_order.append(k)
         last_by_key[k] = it
 
-    new_k = (MODULE, snapshot_id)
+    new_k = (MODULE, day_key)
     if new_k not in last_by_key:
         key_order.append(new_k)
     last_by_key[new_k] = new_item
