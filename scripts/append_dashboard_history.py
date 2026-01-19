@@ -1,39 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#
-# append_dashboard_history.py (DAILY bucket)
-# - Reads dashboard_latest.json (renderer output)
-# - Appends/Upserts into dashboard/history.json with DAILY bucket_date (Asia/Taipei)
-#
-# Key (DAILY):
-#   (module, ruleset_id, bucket_date)
-#
-# Behavior:
-# - If same key exists, overwrite it (so re-runs in same day do NOT increase streak)
-# - Otherwise append
-# - Keep max-items (default 400)
-#
-# Schema:
-#   dash_history_v3: items[*] include bucket_date + audit keys
 
 import argparse
 import json
 import os
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, Optional, List
-
-
-DEFAULT_TZ = "Asia/Taipei"
-
-
-def _get_tzinfo(tz_name: str):
-    try:
-        from zoneinfo import ZoneInfo  # type: ignore
-        return ZoneInfo(tz_name)
-    except Exception:
-        if tz_name == "Asia/Taipei":
-            return timezone(timedelta(hours=8))
-        return timezone.utc
+from typing import Any, Dict, Optional
 
 
 def load_json(path: str) -> Any:
@@ -47,51 +18,57 @@ def dump_json(path: str, obj: Any) -> None:
         json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
-def parse_iso(ts: Optional[str]) -> Optional[datetime]:
-    if not ts:
-        return None
-    ts2 = ts.replace("Z", "+00:00")
-    try:
-        dt = datetime.fromisoformat(ts2)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except Exception:
-        return None
-
-
-def bucket_date_from_stats_asof(stats_as_of_ts: Optional[str], tz_name: str, run_ts_utc: datetime) -> str:
-    tzinfo = _get_tzinfo(tz_name)
-    dt = parse_iso(stats_as_of_ts)
-    if dt is None:
-        dt = run_ts_utc
-    return dt.astimezone(tzinfo).date().isoformat()
-
-
 def pick_meta(latest: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Expect renderer output schema:
+    Accept render output schema:
       {
-        "meta": {...},
+        "meta": {
+          "run_ts_utc": "...",
+          "stats_as_of_ts": "...",
+          "module": "...",
+          "ruleset_id": "...",
+          "script_fingerprint": "..."
+        },
         "rows": [...],
         "series_signals": {...}
       }
-    But keep some compatibility fallbacks.
+
+    Also accept legacy flat schema if needed.
     """
+    # 1) flat (legacy)
+    run_ts_utc = latest.get("run_ts_utc")
+    stats_as_of_ts = latest.get("stats_as_of_ts")
+    module = latest.get("module")
+    ruleset_id = latest.get("ruleset_id")
+    script_fingerprint = latest.get("script_fingerprint")
+
+    # 2) nested meta preferred
     m = latest.get("meta") if isinstance(latest.get("meta"), dict) else {}
+    if not run_ts_utc:
+        run_ts_utc = m.get("run_ts_utc")
+    if not stats_as_of_ts:
+        stats_as_of_ts = m.get("stats_as_of_ts")
+    if not module:
+        module = m.get("module")
+    if not ruleset_id:
+        ruleset_id = m.get("ruleset_id")
+    if not script_fingerprint:
+        script_fingerprint = m.get("script_fingerprint")
 
     return {
-        "run_ts_utc": m.get("run_ts_utc") or latest.get("run_ts_utc"),
-        "stats_as_of_ts": m.get("stats_as_of_ts") or latest.get("stats_as_of_ts"),
-        "module": m.get("module") or latest.get("module"),
-        "ruleset_id": m.get("ruleset_id") or latest.get("ruleset_id"),
-        "script_fingerprint": m.get("script_fingerprint") or latest.get("script_fingerprint"),
-        "tz": m.get("tz") or latest.get("tz"),
-        "bucket_date": m.get("bucket_date") or latest.get("bucket_date"),
+        "run_ts_utc": run_ts_utc,
+        "stats_as_of_ts": stats_as_of_ts,
+        "module": module,
+        "ruleset_id": ruleset_id,
+        "script_fingerprint": script_fingerprint,
     }
 
 
 def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """
+    Prefer latest["series_signals"] if exists; else derive from rows:
+      rows[i].series + rows[i].signal_level
+    """
     ss = latest.get("series_signals")
     if isinstance(ss, dict) and ss:
         out: Dict[str, str] = {}
@@ -103,7 +80,7 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
 
     rows = latest.get("rows")
     if isinstance(rows, list) and rows:
-        out2: Dict[str, str] = {}
+        out = {}
         for r in rows:
             if not isinstance(r, dict):
                 continue
@@ -111,77 +88,48 @@ def build_series_signals(latest: Dict[str, Any]) -> Optional[Dict[str, str]]:
             sig = r.get("signal_level")
             if not sid or not sig:
                 continue
-            out2[str(sid)] = str(sig)
-        return out2 if out2 else None
+            out[str(sid)] = str(sig)
+        return out if out else None
 
     return None
 
 
 def load_or_init_history(path: str) -> Dict[str, Any]:
     if not os.path.exists(path):
-        return {"schema_version": "dash_history_v3", "items": []}
+        return {"schema_version": "dash_history_v2", "items": []}
 
     try:
         h = load_json(path)
     except Exception:
-        return {"schema_version": "dash_history_v3", "items": []}
+        return {"schema_version": "dash_history_v2", "items": []}
 
     if not isinstance(h, dict):
-        return {"schema_version": "dash_history_v3", "items": []}
+        return {"schema_version": "dash_history_v2", "items": []}
 
     if "items" not in h or not isinstance(h["items"], list):
         h["items"] = []
 
-    # Upgrade schema_version if missing/older; keep items as-is
-    sv = h.get("schema_version")
-    if not isinstance(sv, str) or not sv:
-        h["schema_version"] = "dash_history_v3"
-
+    # normalize schema_version
+    h["schema_version"] = "dash_history_v2"
     return h
 
 
-def upsert_daily_item(items: List[Dict[str, Any]], new_item: Dict[str, Any]) -> List[Dict[str, Any]]:
+def same_key(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
     """
-    Upsert by (module, ruleset_id, bucket_date).
-    If found, overwrite existing (keep position or replace by rewriting).
+    Dedupe key: (module, ruleset_id, stats_as_of_ts)
     """
-    k_module = new_item.get("module")
-    k_ruleset = new_item.get("ruleset_id")
-    k_bucket = new_item.get("bucket_date")
-
-    out: List[Dict[str, Any]] = []
-    replaced = False
-
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        if (
-            it.get("module") == k_module
-            and it.get("ruleset_id") == k_ruleset
-            and it.get("bucket_date") == k_bucket
-        ):
-            out.append(new_item)
-            replaced = True
-        else:
-            out.append(it)
-
-    if not replaced:
-        out.append(new_item)
-
-    # sort by bucket_date asc, tie-break by run_ts_utc asc
-    def _key(x: Dict[str, Any]):
-        return (str(x.get("bucket_date", "")), str(x.get("run_ts_utc", "")))
-
-    out.sort(key=_key)
-    return out
+    return (
+        a.get("module") == b.get("module")
+        and a.get("ruleset_id") == b.get("ruleset_id")
+        and a.get("stats_as_of_ts") == b.get("stats_as_of_ts")
+    )
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True, help="dashboard_latest.json (render output)")
     ap.add_argument("--history", required=True, help="dashboard/history.json")
-    ap.add_argument("--max-items", type=int, default=400)
-    ap.add_argument("--tz", default=DEFAULT_TZ)
+    ap.add_argument("--max-items", type=int, default=180)
     args = ap.parse_args()
 
     latest = load_json(args.latest)
@@ -190,67 +138,54 @@ def main():
 
     meta = pick_meta(latest)
 
-    run_ts_utc = meta.get("run_ts_utc")
-    stats_as_of_ts = meta.get("stats_as_of_ts")
-    module = meta.get("module")
-    ruleset_id = meta.get("ruleset_id")
-    script_fingerprint = meta.get("script_fingerprint")
-    tz_name = meta.get("tz") or args.tz
-
-    missing = []
-    if not run_ts_utc:
-        missing.append("run_ts_utc")
-    if not stats_as_of_ts:
-        missing.append("stats_as_of_ts")
-    if not module:
-        missing.append("module")
-    if not ruleset_id:
-        missing.append("ruleset_id")
-    if not script_fingerprint:
-        missing.append("script_fingerprint")
-
+    required = ["run_ts_utc", "stats_as_of_ts", "module", "ruleset_id", "script_fingerprint"]
+    missing = [k for k in required if not meta.get(k)]
     if missing:
-        raise SystemExit("dashboard_latest.json meta missing: " + "/".join(missing))
-
-    # derive bucket_date (authoritative: meta.bucket_date; else from stats_as_of_ts)
-    bucket_date = meta.get("bucket_date")
-    if not bucket_date:
-        rt = parse_iso(run_ts_utc) or datetime.now(timezone.utc)
-        bucket_date = bucket_date_from_stats_asof(stats_as_of_ts, tz_name, rt)
+        raise SystemExit(
+            "dashboard_latest.json meta missing "
+            + "/".join(missing)
+            + " (expects meta.*; legacy top-level accepted for some fields)"
+        )
 
     series_signals = build_series_signals(latest)
     if not series_signals:
         raise SystemExit(
-            "dashboard_latest.json missing series signals: need either series_signals{} or rows[].(series, signal_level)"
+            "dashboard_latest.json missing series signals: "
+            "need either top-level series_signals{} or rows[].(series, signal_level)"
         )
 
     history = load_or_init_history(args.history)
     items = history.get("items", [])
-    if not isinstance(items, list):
-        items = []
 
     new_item = {
-        "run_ts_utc": run_ts_utc,
-        "stats_as_of_ts": stats_as_of_ts,
-        "module": module,
-        "ruleset_id": ruleset_id,
-        "script_fingerprint": script_fingerprint,
-        "tz": tz_name,
-        "bucket_date": bucket_date,
+        "run_ts_utc": meta["run_ts_utc"],
+        "stats_as_of_ts": meta["stats_as_of_ts"],
+        "module": meta["module"],
+        "ruleset_id": meta["ruleset_id"],
+        "script_fingerprint": meta["script_fingerprint"],
         "series_signals": series_signals,
     }
 
-    items2 = upsert_daily_item(items, new_item)
+    # --- DEDUPE (critical for streak meaning) ---
+    kept: list = []
+    removed = 0
+    for it in items:
+        if isinstance(it, dict) and same_key(it, new_item):
+            removed += 1
+            continue
+        kept.append(it)
+
+    kept.append(new_item)
 
     # cap
-    if args.max_items > 0 and len(items2) > args.max_items:
-        items2 = items2[-args.max_items :]
+    if args.max_items > 0 and len(kept) > args.max_items:
+        kept = kept[-args.max_items :]
 
-    history["schema_version"] = "dash_history_v3"
-    history["items"] = items2
-
+    history["schema_version"] = "dash_history_v2"
+    history["items"] = kept
     dump_json(args.history, history)
-    print(f"OK: upserted daily history item. bucket_date={bucket_date} total_items={len(items2)}")
+
+    print(f"OK: appended history item. removed_same_key={removed} total_items={len(kept)}")
 
 
 if __name__ == "__main__":
