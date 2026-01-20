@@ -15,11 +15,11 @@
       }
     },
     {
-      "run_ts_utc": "2026-01-20T01:11:18.235092+00:00",
-      "stats_as_of_ts": "2026-01-20T00:46:45Z",
+      "run_ts_utc": "2026-01-20T16:01:03.274046+00:00",
+      "stats_as_of_ts": "2026-01-20T04:15:42Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@a95cedc",
+      "script_fingerprint": "render_dashboard_py_signals_v8@f1f156d",
       "series_signals": {
         "OFR_FSI": "WATCH",
         "VIX": "NONE",
