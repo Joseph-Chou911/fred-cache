@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-01-20T02:59:47.511598+08:00",
+  "generated_at": "2026-01-20T12:12:46.227046+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日資料未更新；UsedDate=2026-01-16：未觸發 A) 規則；風險等級=低",
+  "summary": "今日資料未更新；UsedDate=2026-01-19：未觸發 A) 規則；風險等級=低",
   "numbers": {
-    "UsedDate": "2026-01-16",
-    "Close": 31408.7,
-    "PctChange": 1.941,
-    "TradeValue": 851452408675,
-    "VolumeMultiplier": 1.165,
-    "AmplitudePct": 2.047,
-    "VolMultiplier": 1.598
+    "UsedDate": "2026-01-19",
+    "Close": 31639.29,
+    "PctChange": 0.734,
+    "TradeValue": 823428003269,
+    "VolumeMultiplier": 1.11,
+    "AmplitudePct": 1.725,
+    "VolMultiplier": 1.271
   },
   "signal": {
     "DownDay": false,
@@ -20,8 +20,16 @@
     "OhlcMissing": false
   },
   "action": "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。",
-  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nMode=FULL | UsedDate=2026-01-16 | UsedDminus1=2026-01-15 | LookbackNTarget=20 | LookbackNActual=11 | LookbackOldest=2026-01-02 | OHLC=OK",
+  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nMode=FULL | UsedDate=2026-01-19 | UsedDminus1=2026-01-16 | LookbackNTarget=20 | LookbackNActual=12 | LookbackOldest=2026-01-02 | OHLC=OK",
   "cache_roll25": [
+    {
+      "date": "2026-01-19",
+      "close": 31639.29,
+      "change": 230.59,
+      "trade_value": 823428003269,
+      "high": 31827.39,
+      "low": 31285.53
+    },
     {
       "date": "2026-01-16",
       "close": 31408.7,
@@ -116,8 +124,8 @@
   "risk_level": "低",
   "mode": "FULL",
   "ohlc_status": "OK",
-  "used_date": "2026-01-16",
-  "used_dminus1": "2026-01-15",
-  "lookback_n_actual": 11,
+  "used_date": "2026-01-19",
+  "used_dminus1": "2026-01-16",
+  "lookback_n_actual": 12,
   "lookback_oldest": "2026-01-02"
 }
