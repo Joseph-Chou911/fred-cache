@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2026-01-19T23:03:05Z",
-  "as_of_ts": "2026-01-19T23:03:05Z",
+  "generated_at_utc": "2026-01-20T00:46:45Z",
+  "as_of_ts": "2026-01-20T00:46:45Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
-  "dq": "OK",
+  "dq": "WARN",
   "checks": [
     {
       "series_id": "GLOBAL",
@@ -43,7 +43,7 @@
       "series_id": "OFR_FSI",
       "check": "staleness_days",
       "status": "OK",
-      "staleness_days": 4,
+      "staleness_days": 5,
       "latest_date": "2026-01-15",
       "threshold_warn_days": 7,
       "threshold_err_days": 14
@@ -51,8 +51,8 @@
     {
       "series_id": "VIX",
       "check": "staleness_days",
-      "status": "OK",
-      "staleness_days": 3,
+      "status": "WARN",
+      "staleness_days": 4,
       "latest_date": "2026-01-16",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
@@ -60,8 +60,8 @@
     {
       "series_id": "SP500",
       "check": "staleness_days",
-      "status": "OK",
-      "staleness_days": 3,
+      "status": "WARN",
+      "staleness_days": 4,
       "latest_date": "2026-01-16",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
@@ -69,8 +69,8 @@
     {
       "series_id": "HYG_IEF_RATIO",
       "check": "staleness_days",
-      "status": "OK",
-      "staleness_days": 3,
+      "status": "WARN",
+      "staleness_days": 4,
       "latest_date": "2026-01-16",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
