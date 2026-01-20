@@ -1,34 +1,34 @@
 [
   {
-    "as_of_ts": "2026-01-20T01:02:43+08:00",
+    "as_of_ts": "2026-01-20T17:49:36+08:00",
     "series_id": "GLD.US_CLOSE",
     "data_date": "2026-01-16",
     "value": "421.29",
-    "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20251220&d2=20260119&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20251221&d2=20260120&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-20T01:02:43+08:00",
+    "as_of_ts": "2026-01-20T17:49:36+08:00",
     "series_id": "IAU.US_CLOSE",
     "data_date": "2026-01-16",
     "value": "86.27",
-    "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20251220&d2=20260119&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20251221&d2=20260120&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-20T01:02:43+08:00",
+    "as_of_ts": "2026-01-20T17:49:36+08:00",
     "series_id": "VNQ.US_CLOSE",
     "data_date": "2026-01-16",
     "value": "92.62",
-    "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20251220&d2=20260119&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20251221&d2=20260120&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-20T01:02:43+08:00",
+    "as_of_ts": "2026-01-20T17:49:36+08:00",
     "series_id": "IYR.US_CLOSE",
     "data_date": "2026-01-16",
     "value": "98.31",
-    "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20251220&d2=20260119&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20251221&d2=20260120&i=d",
     "notes": "NA"
   }
 ]
