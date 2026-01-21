@@ -28,14 +28,14 @@
       }
     },
     {
-      "run_ts_utc": "2026-01-21T00:54:36.316558+00:00",
-      "stats_as_of_ts": "2026-01-21T00:52:04Z",
+      "run_ts_utc": "2026-01-21T16:03:03.415319+00:00",
+      "stats_as_of_ts": "2026-01-21T04:15:13Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@440c298",
+      "script_fingerprint": "render_dashboard_py_signals_v8@4b754d9",
       "series_signals": {
         "OFR_FSI": "NONE",
-        "VIX": "ALERT",
+        "VIX": "WATCH",
         "SP500": "ALERT",
         "HYG_IEF_RATIO": "ALERT"
       }
