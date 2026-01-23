@@ -34,7 +34,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests pandas lxml html5lib
+          # bs4 -> 套件名是 beautifulsoup4
+          pip install requests pandas lxml html5lib beautifulsoup4
 
       - name: "Ensure dirs"
         shell: bash
@@ -43,7 +44,6 @@ jobs:
           mkdir -p taiwan_margin_cache
           mkdir -p dashboard
 
-      # 注意：這行 name 內含 "priority:"，必須加引號，否則 YAML 會爆
       - name: "Fetch Taiwan margin-financing (priority: Yahoo -> WantGoo -> HiStock -> Official)"
         shell: bash
         run: |
@@ -75,7 +75,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 如果沒有檔案變更就結束
           if git diff --quiet; then
             echo "No changes."
             exit 0
