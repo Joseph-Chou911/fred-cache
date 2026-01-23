@@ -1,27 +1,35 @@
 {
-  "generated_at": "2026-01-23T03:04:20.562196+08:00",
+  "generated_at": "2026-01-23T12:09:28.860972+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日資料未更新；UsedDate=2026-01-21：未觸發 A) 規則；風險等級=低",
+  "summary": "今日資料未更新；UsedDate=2026-01-22：未觸發 A) 規則；風險等級=低",
   "numbers": {
-    "UsedDate": "2026-01-21",
-    "Close": 31246.37,
-    "PctChange": -1.617,
-    "TradeValue": 899309076186,
-    "VolumeMultiplier": 1.195,
-    "AmplitudePct": 1.727,
-    "VolMultiplier": 1.246
+    "UsedDate": "2026-01-22",
+    "Close": 31746.08,
+    "PctChange": 1.599,
+    "TradeValue": 814595841360,
+    "VolumeMultiplier": 1.068,
+    "AmplitudePct": 1.663,
+    "VolMultiplier": 1.178
   },
   "signal": {
-    "DownDay": true,
+    "DownDay": false,
     "VolumeAmplified": false,
-    "VolAmplified": true,
+    "VolAmplified": false,
     "NewLow_N": false,
     "ConsecutiveBreak": false,
     "OhlcMissing": false
   },
   "action": "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。",
-  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nMode=FULL | UsedDate=2026-01-21 | UsedDminus1=2026-01-20 | LookbackNTarget=20 | LookbackNActual=14 | LookbackOldest=2026-01-02 | OHLC=OK",
+  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nMode=FULL | UsedDate=2026-01-22 | UsedDminus1=2026-01-21 | LookbackNTarget=20 | LookbackNActual=15 | LookbackOldest=2026-01-02 | OHLC=OK",
   "cache_roll25": [
+    {
+      "date": "2026-01-22",
+      "close": 31746.08,
+      "change": 499.71,
+      "trade_value": 814595841360,
+      "high": 31890.62,
+      "low": 31371.13
+    },
     {
       "date": "2026-01-21",
       "close": 31246.37,
@@ -140,8 +148,8 @@
   "risk_level": "低",
   "mode": "FULL",
   "ohlc_status": "OK",
-  "used_date": "2026-01-21",
-  "used_dminus1": "2026-01-20",
-  "lookback_n_actual": 14,
+  "used_date": "2026-01-22",
+  "used_dminus1": "2026-01-21",
+  "lookback_n_actual": 15,
   "lookback_oldest": "2026-01-02"
 }
