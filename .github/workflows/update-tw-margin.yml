@@ -43,6 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "OUTDIR=${OUTDIR}"
           mkdir -p "${OUTDIR}"
 
       - name: Fetch latest (Scheme2 = HiStock)
@@ -62,6 +63,26 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/tw_margin_render_dashboard.py --outdir "${OUTDIR}"
+
+      - name: Verify outputs exist (hard fail if missing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "==== ls -al ${OUTDIR} ===="
+          ls -al "${OUTDIR}" || true
+          echo "==== required files ===="
+          test -s "${OUTDIR}/latest.json"
+          test -s "${OUTDIR}/history.json"
+          test -s "${OUTDIR}/dashboard.md"
+          echo "OK: outputs are present."
+
+      - name: Git status (debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --porcelain=v1
+          echo "----"
+          git status
 
       - name: Commit & push (if changed)
         shell: bash
