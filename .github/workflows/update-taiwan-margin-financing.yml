@@ -16,9 +16,9 @@ concurrency:
 jobs:
   taiwan_margin:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
-      TIMEZONE: Asia/Taipei
+      TZ: Asia/Taipei
 
     steps:
       - name: Checkout
@@ -36,17 +36,16 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests pandas lxml
+          pip install requests pandas lxml html5lib beautifulsoup4 python-dateutil
 
-      - name: Ensure dirs (and keepfiles)
+      - name: Ensure dirs
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p taiwan_margin_cache dashboard
-          : > taiwan_margin_cache/.gitkeep
-          : > dashboard/.gitkeep
+          mkdir -p taiwan_margin_cache
+          mkdir -p dashboard
 
-      - name: Fetch Taiwan margin-financing series (Plan B = Yahoo first)
+      - name: Fetch Taiwan margin-financing series (Plan B)
         shell: bash
         run: |
           set -euo pipefail
@@ -54,14 +53,14 @@ jobs:
             --out taiwan_margin_cache/latest.json \
             --min_rows 21
 
-      - name: Append history (dedup by date)
+      - name: Append history (dedup by data_date)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_taiwan_margin_history.py \
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
-            --max_items 800
+            --max_items 600
 
       - name: Render dashboard (Taiwan margin-financing)
         shell: bash
@@ -76,18 +75,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git status --porcelain
-
           if git diff --quiet; then
             echo "No changes."
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # 关键：用資料夾 add，避免「指定檔案不存在」導致失敗
           git add -A taiwan_margin_cache dashboard
-
-          git commit -m "chore: update taiwan margin-financing cache/dashboard"
+          git commit -m "chore: update taiwan margin-financing dashboard"
           git push
