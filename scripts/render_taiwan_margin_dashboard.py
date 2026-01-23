@@ -8,160 +8,208 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
-
-def _read_json(path: str) -> Any:
+def read_json(path: str) -> Any:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
-def _write_text(path: str, text: str) -> None:
+def write_text(path: str, text: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
 
-
-def _fmt_num(x: Any, nd: int = 2) -> str:
+def fmt_num(x: Optional[float], nd: int = 2) -> str:
     if x is None:
         return "NA"
     try:
-        return f"{float(x):,.{nd}f}"
+        return f"{x:,.{nd}f}"
     except Exception:
         return "NA"
 
+def pct(change: Optional[float], base: Optional[float]) -> Optional[float]:
+    if change is None or base is None:
+        return None
+    if base == 0:
+        return None
+    return change / base * 100.0
 
-def _calc_change(rows: List[Dict[str, Any]], back_n: int) -> Tuple[Optional[float], Optional[float]]:
+def calc_changes(rows: List[Dict[str, Any]]) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
     """
-    rows: 最新在前（index 0 最新）
-    回傳：(delta_abs, delta_pct)
-    delta_abs = latest_balance - base_balance
-    delta_pct = delta_abs / base_balance * 100
+    rows are in descending date order (latest first).
+    Return:
+      "1D": (abs, pct)
+      "5D": (abs, pct) where base is rows[5]
+      "20D": (abs, pct) where base is rows[20]
     """
-    if not rows or len(rows) <= back_n:
-        return None, None
-    latest = rows[0].get("financing_balance_bil")
-    base = rows[back_n].get("financing_balance_bil")
-    if latest is None or base is None or base == 0:
-        return None, None
-    delta_abs = float(latest) - float(base)
-    delta_pct = delta_abs / float(base) * 100.0
-    return delta_abs, delta_pct
+    out: Dict[str, Tuple[Optional[float], Optional[float]]] = {"1D": (None, None), "5D": (None, None), "20D": (None, None)}
+    if not rows:
+        return out
 
+    latest = rows[0].get("balance_yi")
+    # 1D: base rows[1]
+    if len(rows) >= 2:
+        base = rows[1].get("balance_yi")
+        if latest is not None and base is not None:
+            chg = latest - base
+            out["1D"] = (chg, pct(chg, base))
 
-def main() -> None:
+    # 5D base rows[5]
+    if len(rows) >= 6:
+        base = rows[5].get("balance_yi")
+        if latest is not None and base is not None:
+            chg = latest - base
+            out["5D"] = (chg, pct(chg, base))
+
+    # 20D base rows[20]
+    if len(rows) >= 21:
+        base = rows[20].get("balance_yi")
+        if latest is not None and base is not None:
+            chg = latest - base
+            out["20D"] = (chg, pct(chg, base))
+
+    return out
+
+def pick_series_latest(latest: Dict[str, Any], market: str) -> Tuple[Optional[str], Optional[float], Optional[float], str, str]:
+    s = latest["series"].get(market, {})
+    data_date = s.get("data_date")
+    rows = s.get("rows", [])
+    source = s.get("source", "NA")
+    url = s.get("source_url", "NA")
+    if not data_date or not rows:
+        return (data_date, None, None, source, url)
+    r0 = rows[0]
+    return (data_date, r0.get("balance_yi"), r0.get("chg_yi"), source, url)
+
+def build_market_rows_from_history(history: Dict[str, Any], market: str, want_n: int = 21) -> List[Dict[str, Any]]:
+    items = history.get("items", [])
+    # filter market, sort by data_date desc
+    filt = [x for x in items if x.get("market") == market and x.get("data_date")]
+    filt.sort(key=lambda x: x["data_date"], reverse=True)
+    # dedup by data_date keeping first (latest run_ts)
+    seen = set()
+    out = []
+    for x in filt:
+        d = x["data_date"]
+        if d in seen:
+            continue
+        seen.add(d)
+        out.append({"date": d, "balance_yi": x.get("balance_yi")})
+        if len(out) >= want_n:
+            break
+    return out
+
+def data_quality(latest: Dict[str, Any], hist: Dict[str, Any]) -> str:
+    twse_date = latest["series"].get("TWSE", {}).get("data_date")
+    tpex_date = latest["series"].get("TPEX", {}).get("data_date")
+    if not twse_date or not tpex_date:
+        return "LOW"
+    twse_rows = build_market_rows_from_history(hist, "TWSE", 21)
+    tpex_rows = build_market_rows_from_history(hist, "TPEX", 21)
+    if len(twse_rows) >= 21 and len(tpex_rows) >= 21:
+        return "OK"
+    return "PARTIAL"
+
+def summary_word(change_1d_twse: Optional[float], change_1d_tpex: Optional[float]) -> str:
+    # conservative: only decide if both available; else use available; else "NA"
+    vals = [v for v in [change_1d_twse, change_1d_tpex] if v is not None]
+    if not vals:
+        return "NA"
+    total = sum(vals)
+    if abs(total) < 0.01:
+        return "持平"
+    return "擴張" if total > 0 else "收縮"
+
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
     ap.add_argument("--history", required=True)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
-    latest = _read_json(args.latest)
-    series = latest.get("series", {})
+    latest = read_json(args.latest)
+    hist = read_json(args.history)
 
-    def market_block(market: str) -> Dict[str, Any]:
-        s = series.get(market, {})
-        rows = s.get("rows") or []
-        data_date = s.get("data_date")
-        bal = rows[0].get("financing_balance_bil") if rows else None
-        chg = rows[0].get("financing_change_bil") if rows else None
+    # latest snapshot values
+    twse_date, twse_bal, twse_chg, twse_src, twse_url = pick_series_latest(latest, "TWSE")
+    tpex_date, tpex_bal, tpex_chg, tpex_src, tpex_url = pick_series_latest(latest, "TPEX")
 
-        d1_abs, d1_pct = _calc_change(rows, 1)
-        d5_abs, d5_pct = _calc_change(rows, 5)
-        d20_abs, d20_pct = _calc_change(rows, 20)
+    # history windows for calc (use trading-day index by row order)
+    twse_hist21 = build_market_rows_from_history(hist, "TWSE", 21)
+    tpex_hist21 = build_market_rows_from_history(hist, "TPEX", 21)
 
-        return {
-            "market": market,
-            "data_date": data_date,
-            "source": s.get("source"),
-            "source_url": s.get("source_url"),
-            "bal": bal,
-            "chg": chg,
-            "deltas": {
-                "1D": (d1_abs, d1_pct),
-                "5D": (d5_abs, d5_pct),
-                "20D": (d20_abs, d20_pct),
-            },
-            "row_count": len(rows),
-            "notes": s.get("notes") or [],
-        }
+    twse_changes = calc_changes(twse_hist21)
+    tpex_changes = calc_changes(tpex_hist21)
 
-    twse = market_block("TWSE")
-    tpex = market_block("TPEX")
+    # total (only if same date)
+    can_total = (twse_date is not None and tpex_date is not None and twse_date == tpex_date
+                 and twse_bal is not None and tpex_bal is not None)
 
-    # 合計規則：只有日期相同才算
-    total_ok = (twse["data_date"] is not None) and (twse["data_date"] == tpex["data_date"])
-    total = {
-        "market": "TOTAL",
-        "data_date": twse["data_date"] if total_ok else None,
-        "bal": (float(twse["bal"]) + float(tpex["bal"])) if total_ok and twse["bal"] is not None and tpex["bal"] is not None else None,
-        "chg": (float(twse["chg"]) + float(tpex["chg"])) if total_ok and twse["chg"] is not None and tpex["chg"] is not None else None,
-        "deltas": {"1D": (None, None), "5D": (None, None), "20D": (None, None)},
-        "notes": [],
-    }
-    if not total_ok:
-        total["notes"].append(f"上市資料日期={twse['data_date']}，上櫃資料日期={tpex['data_date']}，日期不一致 => 合計欄位依規則 NA")
+    total_date = twse_date if can_total else None
+    total_bal = (twse_bal + tpex_bal) if can_total else None
 
-    # data-quality
-    def has_latest(m: Dict[str, Any]) -> bool:
-        return m["data_date"] is not None and m["bal"] is not None
+    # For total changes, we need aligned dates; otherwise NA by rule.
+    total_changes = {"1D": (None, None), "5D": (None, None), "20D": (None, None)}
+    total_chg_1d = None
+    if can_total:
+        # build total series by date intersection of both history lists, then take latest 21 trading days by shared dates
+        tw_map = {r["date"]: r["balance_yi"] for r in twse_hist21}
+        tp_map = {r["date"]: r["balance_yi"] for r in tpex_hist21}
+        common_dates = [d for d in tw_map.keys() if d in tp_map]
+        common_dates.sort(reverse=True)
+        total_series = [{"date": d, "balance_yi": (tw_map[d] + tp_map[d])} for d in common_dates[:21]]
+        total_changes = calc_changes(total_series)
+        total_chg_1d = total_changes["1D"][0]
 
-    def has_21(m: Dict[str, Any]) -> bool:
-        return m["row_count"] >= 21
+    q = data_quality(latest, hist)
 
-    if has_latest(twse) and has_latest(tpex) and has_21(twse) and has_21(tpex):
-        dq = "OK"
-    elif has_latest(twse) and has_latest(tpex):
-        dq = "PARTIAL"
+    # 1) 結論
+    s_word = summary_word(twse_changes["1D"][0], tpex_changes["1D"][0])
+    conclusion = f"{s_word}（以 1D 合計方向判讀；若缺市場資料則以可得者近似） + 資料品質 {q}"
+
+    # 2) 資料段（含日期一致性說明）
+    lines: List[str] = []
+    lines.append("# Taiwan Margin Financing Dashboard\n")
+    lines.append("## 1) 結論\n")
+    lines.append(f"- {conclusion}\n")
+
+    lines.append("## 2) 資料\n")
+    lines.append(f"- 上市(TWSE)：融資餘額 {fmt_num(twse_bal)} 億元；融資增減 {fmt_num(twse_chg)} 億元（%：NA；此欄需基期才可算）｜資料日期 {twse_date or 'NA'}｜來源：{twse_src}（{twse_url}）\n")
+    lines.append(f"- 上櫃(TPEX)：融資餘額 {fmt_num(tpex_bal)} 億元；融資增減 {fmt_num(tpex_chg)} 億元（%：NA；此欄需基期才可算）｜資料日期 {tpex_date or 'NA'}｜來源：{tpex_src}（{tpex_url}）\n")
+    if can_total:
+        lines.append(f"- 合計：融資餘額 {fmt_num(total_bal)} 億元；融資增減（億元、%）將於 3) 計算段以 1D/5D/20D 定義計算｜資料日期 {total_date}\n")
     else:
-        dq = "LOW"
+        lines.append(f"- 合計：NA（上市資料日期={twse_date or 'NA'}；上櫃資料日期={tpex_date or 'NA'}；日期不一致或缺值，依規則不得合計）\n")
 
-    # 一句話摘要（擴張/收縮/持平）：用「最新日融資增減(億)」判斷
-    def expand_label(chg: Any) -> str:
-        if chg is None:
-            return "NA"
-        try:
-            x = float(chg)
-        except Exception:
-            return "NA"
-        if x > 0:
-            return "擴張"
-        if x < 0:
-            return "收縮"
-        return "持平"
+    # 3) 計算段
+    def render_calc_block(name: str, changes: Dict[str, Tuple[Optional[float], Optional[float]]]) -> List[str]:
+        out: List[str] = []
+        out.append(f"### {name}\n")
+        for k in ["1D", "5D", "20D"]:
+            a, p = changes.get(k, (None, None))
+            out.append(f"- {k}：{fmt_num(a)} 億元；{fmt_num(p)} %\n")
+        return out
 
-    summary = f"融資{expand_label(total['chg'] if total_ok else twse['chg'])} / 資料品質 {dq}"
+    lines.append("## 3) 計算\n")
+    lines += render_calc_block("上市(TWSE)", twse_changes)
+    lines += render_calc_block("上櫃(TPEX)", tpex_changes)
+    if can_total:
+        lines += render_calc_block("合計(上市+上櫃)", total_changes)
+    else:
+        lines.append("### 合計(上市+上櫃)\n- 1D：NA\n- 5D：NA\n- 20D：NA\n")
 
-    md = []
-    md.append(f"# Taiwan Margin Financing Dashboard\n")
-    md.append(f"- Summary: {summary}\n")
-    md.append(f"- generated_at_utc: `{latest.get('generated_at_utc')}`\n")
-    md.append("\n")
+    # 4) 主要觸發原因（不猜；只給“資料面”原因）
+    lines.append("## 4) 主要觸發原因\n")
+    lines.append("- 若出現 403/解析失敗：多半為站點反爬/前端載入導致無法取得歷史表。\n")
+    lines.append("- 若 5D/20D 為 NA：代表 history 交易日筆數不足（未滿 6/21 筆）。\n")
+    lines.append("- 若合計為 NA：上市與上櫃資料日期不一致，依你的防誤判規則禁止合計。\n")
 
-    def render_one(m: Dict[str, Any]) -> None:
-        md.append(f"## {m['market']}\n")
-        md.append(f"- data_date: `{m['data_date']}`\n")
-        md.append(f"- source: `{m.get('source')}`\n")
-        md.append(f"- source_url: {m.get('source_url')}\n")
-        md.append(f"- 融資餘額(億): **{_fmt_num(m.get('bal'))}**\n")
-        md.append(f"- 融資增減(億): **{_fmt_num(m.get('chg'))}**\n")
-        md.append(f"- rows: {m.get('row_count')}\n")
-        if m.get("notes"):
-            md.append(f"- notes:\n")
-            for n in m["notes"]:
-                md.append(f"  - {n}\n")
-        md.append("\n")
-        md.append("| Window | 變化(億) | 變化(%) |\n")
-        md.append("|---:|---:|---:|\n")
-        for w in ("1D", "5D", "20D"):
-            a, p = m["deltas"][w]
-            md.append(f"| {w} | {_fmt_num(a)} | {_fmt_num(p)} |\n")
-        md.append("\n")
+    # 5) 下一步觀察重點
+    lines.append("## 5) 下一步觀察重點\n")
+    lines.append("- 先把來源穩定下來：優先確保 TWSE/TPEX 都能穩定抓到 >=21 交易日，再談 z60/p60 等統計。\n")
+    lines.append("- 若 WantGoo 長期 403：建議直接移除 WantGoo 或改成“只做人為備援”，避免每天浪費重試時間。\n")
+    lines.append("- 一旦資料連續：再擴充 dashboard 加入 z60/p60/zΔ60/pΔ60（基於 history 交易日序列），並加上異常門檻通知。\n")
 
-    render_one(twse)
-    render_one(tpex)
-    render_one(total)
-
-    _write_text(args.out, "".join(md))
-
+    write_text(args.out, "".join(lines))
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
