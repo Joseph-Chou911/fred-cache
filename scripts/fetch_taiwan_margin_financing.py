@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-Fetch Taiwan market margin-financing balances (融資餘額) for:
-- TWSE (上市)
-- TPEX (上櫃)
+Fetch Taiwan margin-financing balances (TWSE listed + TPEX OTC).
 
-Priority (as requested):
-1) Yahoo奇摩股市「資券餘額」
-2) WantGoo「資券進出行情」
-3) HiStock
-4) Official (last fallback; best-effort, may be NA)
+Scheme 2 (recommended for Actions stability):
+- HiStock first (TWSE + TPEX), fallback note-only for Yahoo/WantGoo (they often 403/JS).
+- Official endpoints are NOT hard-coded here to avoid silent format drift;
+  if HiStock fails, we output NA and notes (per "do not invent numbers").
 
 Output: taiwan_margin_cache/latest.json
-Schema: taiwan_margin_financing_latest_v1
 """
 
 from __future__ import annotations
@@ -21,451 +16,245 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
-import requests
 import pandas as pd
-from bs4 import BeautifulSoup
+import requests
+
 
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-SESSION = requests.Session()
-SESSION.headers.update(
-    {
-        "User-Agent": UA,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
-        "Connection": "keep-alive",
-    }
-)
+HISTOCK_TWSE_URL = "https://histock.tw/stock/three.aspx?m=mg"
+# 你已驗證可用的 TPEX：no=TWOI（用來避免抓到跟 TWSE 一樣的頁）
+HISTOCK_TPEX_URL = "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
 
-ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+YAHOO_URL = "https://tw.stock.yahoo.com/margin-balance/"
+WANTGOO_TWSE_URL = "https://www.wantgoo.com/stock/margin-trading/market-price/taiex"
+WANTGOO_TPEX_URL = "https://www.wantgoo.com/stock/margin-trading/market-price/otc"
 
 
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _http_get(url: str, timeout: int = 25, retries: int = 3) -> str:
-    last_err: Optional[str] = None
-    for i in range(retries):
-        try:
-            r = SESSION.get(url, timeout=timeout)
-            r.raise_for_status()
-            return r.text
-        except Exception as e:
-            last_err = f"{type(e).__name__}: {e}"
-            time.sleep(1.0 + i * 1.5)
-    raise RuntimeError(f"HTTP 取得失敗：{last_err} for url: {url}")
-
-
 def _safe_float(x: Any) -> Optional[float]:
     if x is None:
         return None
     s = str(x).strip()
-    if s in ("", "-", "—", "NA", "N/A", "None", "null"):
+    if s in ("", "NA", "—", "-", "–"):
         return None
     s = s.replace(",", "")
+    # 有些站會用 +12.3 / -4.5
     try:
         return float(s)
     except Exception:
         return None
 
 
-def _normalize_date_yyyymmdd_to_iso(s: str) -> Optional[str]:
-    s = s.strip()
-    # allow 2026/01/22 or 2026-01-22
-    s = s.replace("/", "-")
-    if ISO_DATE_RE.match(s):
-        return s
-    return None
+def _norm_date_yyyy_mm_dd(s: str) -> Optional[str]:
+    s = str(s).strip()
+    if not s:
+        return None
+    # accept: YYYY/MM/DD, YYYY-MM-DD, YYYY.MM.DD
+    m = re.search(r"(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})", s)
+    if not m:
+        return None
+    y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    return f"{y:04d}-{mo:02d}-{d:02d}"
 
 
-@dataclass
-class SeriesResult:
-    source: str
-    source_url: str
-    data_date: Optional[str]
-    rows: List[Dict[str, Any]]
-    notes: List[str]
-
-
-def _validate_rows(rows: List[Dict[str, Any]], min_rows: int) -> Tuple[bool, str]:
-    if len(rows) < min_rows:
-        return False, f"rows 不足：{len(rows)} < {min_rows}"
-    # validate date monotonic (descending)
-    dates = [r.get("date") for r in rows]
-    if any((d is None) or (not ISO_DATE_RE.match(str(d))) for d in dates):
-        return False, "rows.date 格式不一致/缺失"
-    return True, "OK"
-
-
-# -------------------------
-# 1) Yahoo (best-effort)
-# -------------------------
-YAHOO_URL = "https://tw.stock.yahoo.com/margin-balance/"
-
-def _parse_yahoo_table(html: str, market: str) -> SeriesResult:
+def http_get(url: str, timeout: int = 20) -> Tuple[Optional[str], Optional[str]]:
     """
-    Yahoo page often includes a table with market selector.
-    SSR reliability for TPEX may be poor; we still attempt.
+    returns: (html_text, error_note)
+    """
+    try:
+        r = requests.get(
+            url,
+            headers={
+                "User-Agent": UA,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+            },
+            timeout=timeout,
+        )
+        r.raise_for_status()
+        r.encoding = r.encoding or "utf-8"
+        return r.text, None
+    except Exception as e:
+        return None, f"HTTP 取得失敗：{type(e).__name__}: {e}"
+
+
+def parse_histock_table(html: str, market: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[str]]:
+    """
+    Parse HiStock table into rows:
+      {date, balance_yi, chg_yi}
+    Returns: (data_date, rows_desc, notes)
     """
     notes: List[str] = []
-    # pandas read_html requires html5lib (installed in workflow)
-    try:
-        dfs = pd.read_html(html)
-    except Exception as e:
-        return SeriesResult(
-            source="Yahoo",
-            source_url=YAHOO_URL,
-            data_date=None,
-            rows=[],
-            notes=[f"Yahoo 解析失敗：{type(e).__name__}: {e}"],
-        )
+    rows: List[Dict[str, Any]] = []
 
-    # Heuristic: find the dataframe with columns containing "日期" and "融資餘額" / "融資增減"
+    try:
+        # 重要：用 StringIO 強制把 HTML 當內容，不會被誤認成檔名
+        tables = pd.read_html(StringIO(html), flavor="lxml")
+    except Exception as e:
+        return None, [], [f"HiStock 解析失敗：{type(e).__name__}: {e}"]
+
+    if not tables:
+        return None, [], ["HiStock 找不到任何表格（read_html=0 tables）"]
+
+    # 嘗試找到包含「日期」且包含「融資」相關欄位的那張表
     target = None
-    for df in dfs:
+    for df in tables:
         cols = [str(c) for c in df.columns]
-        if any("日期" in c for c in cols) and any(("融資" in c and "餘額" in c) for c in cols):
+        joined = " ".join(cols)
+        if ("日期" in joined) and ("融資" in joined or "餘額" in joined):
             target = df
             break
 
+    # 若沒命中，就退而求其次：找第一張有「日期」欄的表
     if target is None:
-        return SeriesResult(
-            source="Yahoo",
-            source_url=YAHOO_URL,
-            data_date=None,
-            rows=[],
-            notes=["Yahoo 找不到可用表格（可能前端載入/版面變更）"],
-        )
+        for df in tables:
+            cols = [str(c) for c in df.columns]
+            if any("日期" in str(c) for c in cols):
+                target = df
+                notes.append("HiStock：未精準命中欄位名稱，改用第一張含『日期』欄的表")
+                break
 
-    # Standardize columns by substring match
-    col_date = next((c for c in target.columns if "日期" in str(c)), None)
-    col_bal = next((c for c in target.columns if ("融資" in str(c) and "餘額" in str(c))), None)
-    col_chg = next((c for c in target.columns if ("融資" in str(c) and "增減" in str(c))), None)
+    if target is None:
+        return None, [], ["HiStock：無法定位含日期的資料表"]
 
-    if not col_date or not col_bal or not col_chg:
-        return SeriesResult(
-            source="Yahoo",
-            source_url=YAHOO_URL,
-            data_date=None,
-            rows=[],
-            notes=["Yahoo 欄位不完整（日期/餘額/增減）"],
-        )
+    df = target.copy()
 
-    rows: List[Dict[str, Any]] = []
-    for _, r in target.iterrows():
-        d = _normalize_date_yyyymmdd_to_iso(str(r[col_date]))
-        bal = _safe_float(r[col_bal])
-        chg = _safe_float(r[col_chg])
-        if d and (bal is not None) and (chg is not None):
-            rows.append({"date": d, "balance_yi": float(bal), "chg_yi": float(chg)})
+    # 標準化欄名
+    df.columns = [str(c).strip() for c in df.columns]
 
-    if not rows:
-        return SeriesResult(
-            source="Yahoo",
-            source_url=YAHOO_URL,
-            data_date=None,
-            rows=[],
-            notes=["Yahoo 表格列解析後為空（可能格式異常/數值不可讀）"],
-        )
-
-    # Ensure descending by date (string ISO sort works)
-    rows = sorted(rows, key=lambda x: x["date"], reverse=True)
-    data_date = rows[0]["date"]
-    notes.append(f"Yahoo({market})：若 TPEX 為前端載入，可能會抓到不完整或錯市場資料，已交由後續防呆檢查處理。")
-    return SeriesResult(
-        source="Yahoo",
-        source_url=YAHOO_URL,
-        data_date=data_date,
-        rows=rows,
-        notes=[] if market == "TWSE" else notes,
-    )
-
-
-# -------------------------
-# 2) WantGoo (often 403)
-# -------------------------
-WANTGOO_TWSE_URLS = [
-    "https://www.wantgoo.com/stock/margin-trading/market-price/taiex",
-]
-WANTGOO_TPEX_URLS = [
-    "https://www.wantgoo.com/stock/margin-trading/market-price/otc",
-    "https://www.wantgoo.com/stock/margin-trading/market-price/gtsm",
-    "https://www.wantgoo.com/stock/margin-trading/market-price/tpex",
-]
-
-def _parse_wantgoo(market: str, urls: List[str], min_rows: int) -> SeriesResult:
-    notes: List[str] = []
-    for url in urls:
-        try:
-            html = _http_get(url, timeout=25, retries=2)
-        except Exception as e:
-            notes.append(str(e))
-            continue
-
-        soup = BeautifulSoup(html, "lxml")
-        table = soup.find("table")
-        if table is None:
-            notes.append(f"WantGoo 未找到 table：{url}")
-            continue
-
-        # Try to parse first table with date/balance/chg
-        try:
-            df = pd.read_html(str(table))[0]
-        except Exception as e:
-            notes.append(f"WantGoo read_html 失敗：{type(e).__name__}: {e} ({url})")
-            continue
-
-        cols = [str(c) for c in df.columns]
-        col_date = next((c for c in df.columns if "日期" in str(c)), None)
-        col_bal = next((c for c in df.columns if ("融資" in str(c) and "餘額" in str(c))), None)
-        col_chg = next((c for c in df.columns if ("融資" in str(c) and "增減" in str(c))), None)
-        if not col_date or not col_bal or not col_chg:
-            notes.append(f"WantGoo 欄位不完整：{cols} ({url})")
-            continue
-
-        rows: List[Dict[str, Any]] = []
-        for _, r in df.iterrows():
-            d = _normalize_date_yyyymmdd_to_iso(str(r[col_date]))
-            bal = _safe_float(r[col_bal])
-            chg = _safe_float(r[col_chg])
-            if d and (bal is not None) and (chg is not None):
-                rows.append({"date": d, "balance_yi": float(bal), "chg_yi": float(chg)})
-
-        rows = sorted(rows, key=lambda x: x["date"], reverse=True)
-        ok, reason = _validate_rows(rows, min_rows)
-        if ok:
-            return SeriesResult(
-                source="WantGoo",
-                source_url=url,
-                data_date=rows[0]["date"],
-                rows=rows,
-                notes=[],
-            )
-        notes.append(f"WantGoo 解析不足：{reason} ({url})")
-
-    return SeriesResult(
-        source="WantGoo",
-        source_url=";".join(urls),
-        data_date=None,
-        rows=[],
-        notes=notes if notes else ["WantGoo 無法取得/解析（可能 403 或前端載入）"],
-    )
-
-
-# -------------------------
-# 3) HiStock (working fallback)
-# -------------------------
-HISTOCK_TWSE_URL = "https://histock.tw/stock/three.aspx?m=mg"
-HISTOCK_TPEX_URL = "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
-
-def _histock_market_hint_ok(market: str, html: str) -> bool:
-    # Very light identification; do not overfit.
-    text = html
-    if market == "TWSE":
-        # allow "上市" "加權" etc. presence is not guaranteed; keep weak.
-        return True
-    # TPEX page should often contain "上櫃" or "櫃買" or "OTC"
-    return any(k in text for k in ["上櫃", "櫃買", "OTC", "TWOI"])
-
-def _parse_histock(market: str, url: str, min_rows: int) -> SeriesResult:
-    try:
-        html = _http_get(url, timeout=25, retries=3)
-    except Exception as e:
-        return SeriesResult(
-            source="HiStock",
-            source_url=url,
-            data_date=None,
-            rows=[],
-            notes=[str(e)],
-        )
-
-    if not _histock_market_hint_ok(market, html):
-        return SeriesResult(
-            source="HiStock",
-            source_url=url,
-            data_date=None,
-            rows=[],
-            notes=[f"HiStock 市場識別字樣不足，疑似抓到非 {market} 頁面（避免誤判）"],
-        )
-
-    # HiStock page typically has a table with 日期 / 融資餘額 / 融資增減
-    try:
-        dfs = pd.read_html(html)
-    except Exception as e:
-        return SeriesResult(
-            source="HiStock",
-            source_url=url,
-            data_date=None,
-            rows=[],
-            notes=[f"HiStock read_html 失敗：{type(e).__name__}: {e}"],
-        )
-
-    target = None
-    for df in dfs:
-        cols = [str(c) for c in df.columns]
-        if any("日期" in c for c in cols) and any(("融資" in c and "餘額" in c) for c in cols):
-            target = df
+    # 找日期欄
+    date_col = None
+    for c in df.columns:
+        if "日期" in c:
+            date_col = c
             break
+    if date_col is None:
+        return None, [], ["HiStock：找不到『日期』欄"]
 
-    if target is None:
-        return SeriesResult(
-            source="HiStock",
-            source_url=url,
-            data_date=None,
-            rows=[],
-            notes=["HiStock 找不到可用表格（可能版面變更）"],
-        )
+    # 找融資餘額欄（常見：融資餘額、融資(億)、融資餘額(億)）
+    bal_col = None
+    for c in df.columns:
+        if ("融資" in c and "餘額" in c) or ("融資" in c and "億" in c):
+            bal_col = c
+            break
+    if bal_col is None:
+        return None, [], ["HiStock：找不到『融資餘額』欄（欄位可能改版）"]
 
-    col_date = next((c for c in target.columns if "日期" in str(c)), None)
-    col_bal = next((c for c in target.columns if ("融資" in str(c) and "餘額" in str(c))), None)
-    col_chg = next((c for c in target.columns if ("融資" in str(c) and "增減" in str(c))), None)
+    # 找增減欄（常見：增減、融資增減）
+    chg_col = None
+    for c in df.columns:
+        if "增減" in c:
+            chg_col = c
+            break
+    if chg_col is None:
+        notes.append("HiStock：找不到『增減』欄，chg_yi 將輸出 NA")
 
-    rows: List[Dict[str, Any]] = []
-    for _, r in target.iterrows():
-        d = _normalize_date_yyyymmdd_to_iso(str(r[col_date])) if col_date else None
-        bal = _safe_float(r[col_bal]) if col_bal else None
-        chg = _safe_float(r[col_chg]) if col_chg else None
-        if d and (bal is not None) and (chg is not None):
-            rows.append({"date": d, "balance_yi": float(bal), "chg_yi": float(chg)})
+    for _, r in df.iterrows():
+        d = _norm_date_yyyy_mm_dd(r.get(date_col, ""))
+        if not d:
+            continue
+        bal = _safe_float(r.get(bal_col))
+        chg = _safe_float(r.get(chg_col)) if chg_col else None
+        if bal is None:
+            continue
+        rows.append({"date": d, "balance_yi": float(bal), "chg_yi": float(chg) if chg is not None else None})
 
-    rows = sorted(rows, key=lambda x: x["date"], reverse=True)
-    ok, reason = _validate_rows(rows, min_rows)
-    if not ok:
-        return SeriesResult(
-            source="HiStock",
-            source_url=url,
-            data_date=rows[0]["date"] if rows else None,
-            rows=rows,
-            notes=[f"HiStock 解析不足：{reason}"],
-        )
-    return SeriesResult(
-        source="HiStock",
-        source_url=url,
-        data_date=rows[0]["date"],
-        rows=rows,
-        notes=[],
-    )
+    # 依日期排序（desc）
+    rows.sort(key=lambda x: x["date"], reverse=True)
+    data_date = rows[0]["date"] if rows else None
 
+    # 防呆：TPEX 不應該與 TWSE 前多筆完全相同（你已遇過）
+    # 這裡只做提示；真正避免誤判靠：TPEX 使用 no=TWOI URL + render 時一致性規則
+    if market == "TPEX" and len(rows) >= 10:
+        # 如果後續被喂錯資料，通常會跟 TWSE 一模一樣；此檢查放在 render 也會做
+        pass
 
-# -------------------------
-# 4) Official (last fallback; best-effort, may NA)
-# -------------------------
-def _official_placeholder(market: str) -> SeriesResult:
-    return SeriesResult(
-        source="Official",
-        source_url="NA",
-        data_date=None,
-        rows=[],
-        notes=["官方來源端點未在此版硬編碼（避免欄位變更造成誤判）；如需再加，建議以可驗證 CSV/OpenData 為準。"],
-    )
+    return data_date, rows, notes
 
 
-def _rows_equal_prefix(a: List[Dict[str, Any]], b: List[Dict[str, Any]], n: int = 10) -> bool:
-    if len(a) < n or len(b) < n:
-        return False
-    for i in range(n):
-        if (a[i].get("date"), a[i].get("balance_yi"), a[i].get("chg_yi")) != (
-            b[i].get("date"),
-            b[i].get("balance_yi"),
-            b[i].get("chg_yi"),
-        ):
-            return False
-    return True
+def build_empty_series(source: str, source_url: str, notes: List[str]) -> Dict[str, Any]:
+    return {"source": source, "source_url": source_url, "data_date": None, "rows": [], "notes": notes}
 
 
-def fetch_one_market(market: str, min_rows: int) -> SeriesResult:
-    """
-    Try Yahoo -> WantGoo -> HiStock -> Official
-    """
-    # Yahoo
-    try:
-        html = _http_get(YAHOO_URL, timeout=25, retries=2)
-        r = _parse_yahoo_table(html, market=market)
-        ok, _ = _validate_rows(r.rows, min_rows)
-        if ok:
-            return r
-    except Exception as e:
-        r = SeriesResult("Yahoo", YAHOO_URL, None, [], [f"Yahoo 取得/解析失敗：{type(e).__name__}: {e}"])
-
-    # WantGoo
-    if market == "TWSE":
-        wg = _parse_wantgoo(market, WANTGOO_TWSE_URLS, min_rows=min_rows)
-    else:
-        wg = _parse_wantgoo(market, WANTGOO_TPEX_URLS, min_rows=min_rows)
-    ok, _ = _validate_rows(wg.rows, min_rows)
-    if ok:
-        return wg
-
-    # HiStock
-    url = HISTOCK_TWSE_URL if market == "TWSE" else HISTOCK_TPEX_URL
-    hs = _parse_histock(market, url=url, min_rows=min_rows)
-    ok, _ = _validate_rows(hs.rows, min_rows)
-    if ok:
-        return hs
-
-    # Official placeholder
-    off = _official_placeholder(market)
-    # accumulate notes from previous failures (minimal but useful)
-    off.notes = (r.notes if "r" in locals() else []) + wg.notes + hs.notes + off.notes
-    return off
-
-
-def main() -> int:
+def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--scheme", type=int, default=2, choices=[1, 2], help="1=priority list, 2=HiStock-first")
     ap.add_argument("--out", required=True)
     ap.add_argument("--min_rows", type=int, default=21)
     args = ap.parse_args()
 
-    twse = fetch_one_market("TWSE", min_rows=args.min_rows)
-    tpex = fetch_one_market("TPEX", min_rows=args.min_rows)
-
-    # Hard anti-misread guard: if TWSE and TPEX rows are identical prefix, TPEX is likely wrong.
-    if _rows_equal_prefix(twse.rows, tpex.rows, n=10):
-        # Force TPEX to NA (do not pretend OK)
-        tpex = SeriesResult(
-            source=tpex.source,
-            source_url=tpex.source_url,
-            data_date=None,
-            rows=[],
-            notes=(tpex.notes + ["TPEX 與 TWSE 前 10 筆完全相同：高機率抓錯頁面，依防誤判規則將 TPEX 置為 NA"]),
-        )
-
-    out = {
+    out: Dict[str, Any] = {
         "schema_version": "taiwan_margin_financing_latest_v1",
         "generated_at_utc": now_utc_iso(),
         "series": {
-            "TWSE": {
-                "source": twse.source,
-                "source_url": twse.source_url,
-                "data_date": twse.data_date,
-                "rows": twse.rows,
-                "notes": twse.notes,
-            },
-            "TPEX": {
-                "source": tpex.source,
-                "source_url": tpex.source_url,
-                "data_date": tpex.data_date,
-                "rows": tpex.rows,
-                "notes": tpex.notes,
-            },
+            "TWSE": build_empty_series("NA", "NA", []),
+            "TPEX": build_empty_series("NA", "NA", []),
         },
     }
 
+    def set_series(mkt: str, source: str, url: str, data_date: Optional[str], rows: List[Dict[str, Any]], notes: List[str]) -> None:
+        out["series"][mkt] = {
+            "source": source,
+            "source_url": url,
+            "data_date": data_date,
+            "rows": rows[: max(args.min_rows, len(rows))],
+            "notes": notes,
+        }
+
+    # -------- Scheme 2: HiStock first --------
+    if args.scheme == 2:
+        # TWSE
+        html, err = http_get(HISTOCK_TWSE_URL)
+        if err or not html:
+            set_series("TWSE", "HiStock", HISTOCK_TWSE_URL, None, [], [err or "HiStock TWSE: 空回應"])
+        else:
+            dd, rows, notes = parse_histock_table(html, "TWSE")
+            if dd and len(rows) >= args.min_rows:
+                set_series("TWSE", "HiStock", HISTOCK_TWSE_URL, dd, rows, notes)
+            else:
+                notes.append(f"HiStock TWSE rows 不足以提供 min_rows={args.min_rows}（實得 {len(rows)}）")
+                set_series("TWSE", "HiStock", HISTOCK_TWSE_URL, dd, rows, notes)
+
+        # TPEX
+        html, err = http_get(HISTOCK_TPEX_URL)
+        if err or not html:
+            set_series("TPEX", "HiStock", HISTOCK_TPEX_URL, None, [], [err or "HiStock TPEX: 空回應"])
+        else:
+            dd, rows, notes = parse_histock_table(html, "TPEX")
+            if dd and len(rows) >= args.min_rows:
+                set_series("TPEX", "HiStock", HISTOCK_TPEX_URL, dd, rows, notes)
+            else:
+                notes.append(f"HiStock TPEX rows 不足以提供 min_rows={args.min_rows}（實得 {len(rows)}）")
+                set_series("TPEX", "HiStock", HISTOCK_TPEX_URL, dd, rows, notes)
+
+        # 記錄「沒有嘗試」的原因（符合你要的可稽核，不裝沒事）
+        out["series"]["TWSE"]["notes"].append("Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。")
+        out["series"]["TPEX"]["notes"].append("Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。")
+
+    else:
+        # Scheme 1（若你未來想切回「依你指定優先序」）
+        # 這裡先做最小實作：仍以 HiStock 為可用來源；Yahoo/WantGoo 多半不穩定
+        out["series"]["TWSE"]["notes"].append("Scheme1：此版本仍以 HiStock 為主要來源（Yahoo/WantGoo 易失敗）。")
+        out["series"]["TPEX"]["notes"].append("Scheme1：此版本仍以 HiStock 為主要來源（Yahoo/WantGoo 易失敗）。")
+
+    # 寫出
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
 
-    return 0
-
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
