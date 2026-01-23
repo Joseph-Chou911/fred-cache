@@ -1,12 +1,12 @@
 # Taiwan Margin Financing Dashboard
 
 ## 1) 結論
-- NA + 資料品質 PARTIAL
+- NA + 資料品質 LOW
 
 ## 2) 資料
-- 上市(TWSE)：融資餘額 3717.30 億元；融資增減 39.90 億元（%：NA）｜資料日期 2026-01-22｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-- 上櫃(TPEX)：融資餘額 1301.40 億元；融資增減 9.60 億元（%：NA）｜資料日期 2026-01-22｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-- 合計：融資餘額 5018.70 億元；融資增減 49.50 億元（%：NA）｜資料日期 2026-01-22｜來源：TWSE=HiStock / TPEX=HiStock
+- 上市(TWSE)：融資餘額 NA 億元；融資增減 NA 億元（%：NA）｜資料日期 NA｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+- 上櫃(TPEX)：融資餘額 NA 億元；融資增減 NA 億元（%：NA）｜資料日期 NA｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+- 合計：NA（上市資料日期=NA；上櫃資料日期=NA；日期不一致或缺值，依規則不得合計）
 
 ## 3) 計算
 ### 上市(TWSE)
@@ -25,13 +25,13 @@
 - 20D：NA 億元；NA %（基期日=NA）
 
 ## 4) 主要觸發原因
-- 若出現 NA：通常是來源頁面改版/反爬，或交易日列數不足（<6 / <21），或 history 缺該市場。
-- 合計嚴格規則：僅在 TWSE 與 TPEX 最新資料日期一致時才允許合計；且各 horizon 基期日需一致，否則該 horizon 合計輸出 NA。
-- 若出現 TWSE/TPEX 數列異常相同：高機率抓錯頁面或市場識別失敗，應立即降級或停用該來源。
+- Yahoo/WantGoo 常見 JS/403 或反爬，會導致抓取不穩；Scheme2 以 HiStock 優先降低失敗率。
+- 合計嚴格規則：只要上市/上櫃最新日或基期日不一致，就不計算合計（避免跨日錯配）。
+- 5D/20D 若為 NA：代表該市場 rows 不足（<6 / <21）或基期缺值，依規則不補猜。
 
 ## 5) 下一步觀察重點
-- 先確保 TWSE/TPEX 兩市場都能穩定連續抓到 >=21 交易日（才有資格維持 OK）。
-- 若未來加入 z60/p60/zΔ60/pΔ60：務必基於「交易日序列」且缺值不補，否則容易產生假訊號。
-- 若你要做泡沫監控：建議再加「融資餘額/成交金額」或「融資餘額/市值」類的比值指標，單看餘額容易受盤勢規模放大影響。
+- 先確保 TWSE/TPEX 都能穩定抓到 >=21 交易日，再往 z60/p60/zΔ60/pΔ60 擴充，避免斷資料假訊號。
+- 若未來要回到 Yahoo/WantGoo：必須保留『市場識別驗證』與『TPEX≠TWSE』防呆，否則很容易誤判。
+- 若 HiStock 偶發失敗，可再加一個“官方 OpenData”備援，但要把資料品質降級為 PARTIAL 並在資料段標示。
 
-_generated_at_utc: 2026-01-23T02:34:37Z_
+_generated_at_utc: 2026-01-23T03:11:29Z_
