@@ -69,16 +69,31 @@ jobs:
             --history taiwan_margin_cache/history.json \
             --out dashboard/taiwan_margin_financing.md
 
+      - name: Debug outputs (list files)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== taiwan_margin_cache ==="
+          ls -la taiwan_margin_cache || true
+          echo "=== dashboard ==="
+          ls -la dashboard || true
+
       - name: Commit updates
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 先把所有變更（含 untracked 新檔）加入 index
+          git add -A
+
+          # 用 status 檢查是否真的有變更（包含新檔）
+          if [ -z "$(git status --porcelain)" ]; then
             echo "No changes."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add taiwan_margin_cache/latest.json taiwan_margin_cache/history.json dashboard/taiwan_margin_financing.md
+
           git commit -m "chore: update taiwan margin-financing dashboard"
           git push
