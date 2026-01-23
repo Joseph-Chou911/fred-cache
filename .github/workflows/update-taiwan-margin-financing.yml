@@ -1,4 +1,4 @@
-name: "Update Taiwan Margin Financing (TWSE+TPEX)"
+name: Update Taiwan Margin Financing (TWSE+TPEX)
 
 on:
   workflow_dispatch: {}
@@ -19,48 +19,49 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: "Checkout"
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: "Setup Python"
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: "Install deps"
+      - name: Install deps
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests pandas lxml html5lib beautifulsoup4
+          pip install requests pandas lxml html5lib
 
-      - name: "Ensure dirs"
+      - name: Ensure dirs
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p taiwan_margin_cache
           mkdir -p dashboard
 
-      - name: "Fetch Taiwan margin-financing (priority: Yahoo -> WantGoo -> HiStock -> Official)"
+      - name: "Fetch Taiwan margin-financing (Scheme 2: HiStock-first)"
         shell: bash
         run: |
           set -euo pipefail
           python scripts/fetch_taiwan_margin_financing.py \
+            --scheme 2 \
             --out taiwan_margin_cache/latest.json \
             --min_rows 21
 
-      - name: "Append history (seed from latest.rows; dedup by market+date)"
+      - name: Append history (seed from latest.rows if empty)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_taiwan_margin_history.py \
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
-            --max_items 800
+            --max_items 400
 
-      - name: "Render dashboard (Taiwan margin-financing)"
+      - name: Render dashboard (Taiwan margin-financing)
         shell: bash
         run: |
           set -euo pipefail
@@ -69,19 +70,16 @@ jobs:
             --history taiwan_margin_cache/history.json \
             --out dashboard/taiwan_margin_financing.md
 
-      - name: "Commit updates"
+      - name: Commit updates
         shell: bash
         run: |
           set -euo pipefail
-
           if git diff --quiet; then
             echo "No changes."
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add taiwan_margin_cache/latest.json taiwan_margin_cache/history.json dashboard/taiwan_margin_financing.md
-          git commit -m "chore: update taiwan margin-financing dashboard"
+          git commit -m "chore: update taiwan margin-financing"
           git push
