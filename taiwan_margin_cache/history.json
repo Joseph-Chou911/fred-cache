@@ -1,5 +1,15 @@
 {
   "schema_version": "taiwan_margin_financing_history_v1",
   "generated_at_utc": "2026-01-23T01:11:38Z",
-  "items": []
+  "items": [
+    {
+      "run_ts_utc": "2026-01-23T01:28:06Z",
+      "market": "TWSE",
+      "source": "Yahoo",
+      "source_url": "https://tw.stock.yahoo.com/margin-balance/",
+      "data_date": "2026-01-22",
+      "balance_yi": 3717.34,
+      "chg_yi": 39.89
+    }
+  ]
 }
