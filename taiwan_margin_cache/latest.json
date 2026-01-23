@@ -1,26 +1,23 @@
 {
   "schema_version": "taiwan_margin_financing_latest_v1",
-  "generated_at_utc": "2026-01-23T00:32:27Z",
+  "generated_at_utc": "2026-01-23T01:11:37Z",
   "series": {
     "TWSE": {
-      "source": "WantGoo",
-      "source_url": "https://www.wantgoo.com/stock/margin-trading/market-price/taiex",
+      "source": "Yahoo",
+      "source_url": "https://tw.stock.yahoo.com/margin-balance/",
       "data_date": null,
       "rows": [],
       "notes": [
-        "HTTP 取得失敗：HTTPError: 403 Client Error: Forbidden for url: https://www.wantgoo.com/stock/margin-trading/market-price/taiex",
-        "降級：WantGoo 不足以提供 min_rows；改用官方來源。",
-        "官方 TWSE 端點嘗試失敗或無法可靠解析合計融資餘額（可能 API/欄位已變更）。"
+        "Yahoo 解析失敗：ImportError: `Import html5lib` failed.  Use pip or conda to install the html5lib package."
       ]
     },
     "TPEX": {
-      "source": "WantGoo/Official",
-      "source_url": "https://www.wantgoo.com/stock/margin-trading/market-price/otc;https://www.wantgoo.com/stock/margin-trading/market-price/gtsm;https://www.wantgoo.com/stock/margin-trading/market-price/tpex",
+      "source": "Yahoo",
+      "source_url": "https://tw.stock.yahoo.com/margin-balance/",
       "data_date": null,
       "rows": [],
       "notes": [
-        "WantGoo(猜測URL)與官方來源皆無法可靠取得。",
-        "官方 TPEX 端點嘗試失敗或無法可靠解析合計融資餘額（可能 CSV 格式/欄位已變更）。"
+        "Yahoo 解析失敗：ImportError: `Import html5lib` failed.  Use pip or conda to install the html5lib package."
       ]
     }
   }
