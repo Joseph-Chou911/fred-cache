@@ -1,167 +1,310 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Plan B: Taiwan margin-financing (TWSE + TPEX) daily totals.
+
+Source priority (per market):
+1) Yahoo奇摩股市「資券餘額」
+2) WantGoo「資券進出行情」
+3) HiStock
+4) Official (last fallback)
+
+Output: latest.json (audit-friendly)
+- records actual source used per market
+- records source_url(s), data_date, extracted rows (>=min_rows if possible), notes with downgrade reasons
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import re
+import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 
+# ---------- utils ----------
 
-YAHOO_MARGIN_BALANCE_URL = "https://tw.stock.yahoo.com/margin-balance/"
-
-
-def _utc_now_iso() -> str:
+def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+def write_json(path: str, obj: Any) -> None:
+    import os
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
 
-def _to_float(x: Any) -> Optional[float]:
-    if x is None:
+def _session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Connection": "keep-alive",
+    })
+    return s
+
+def http_get_text(url: str, timeout: int = 20) -> str:
+    s = _session()
+    r = s.get(url, timeout=timeout)
+    r.raise_for_status()
+    r.encoding = r.apparent_encoding or "utf-8"
+    return r.text
+
+def http_get_bytes(url: str, timeout: int = 20) -> bytes:
+    s = _session()
+    r = s.get(url, timeout=timeout)
+    r.raise_for_status()
+    return r.content
+
+def safe_float(s: str) -> Optional[float]:
+    # allow "2,925.89" "-2.97"
+    s = s.strip().replace(",", "")
+    if not s:
         return None
-    s = str(x).strip()
-    if s in ("", "-", "—", "NA", "N/A", "null", "None"):
-        return None
-    s = s.replace(",", "")
     try:
         return float(s)
     except Exception:
         return None
 
+def norm_date_yyyy_mm_dd(raw: str) -> Optional[str]:
+    raw = raw.strip()
+    # Yahoo uses YYYY/MM/DD
+    m = re.match(r"^(\d{4})/(\d{2})/(\d{2})$", raw)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    # also accept YYYY-MM-DD
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", raw)
+    if m:
+        return raw
+    return None
 
-def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
-    # pandas.read_html 有時會給 MultiIndex 欄位
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = ["".join([str(c) for c in col if str(c) != "nan"]).strip() for col in df.columns.values]
-    else:
-        df.columns = [str(c).strip() for c in df.columns]
-    return df
+# ---------- data model ----------
 
+@dataclass
+class SeriesResult:
+    source: str
+    source_url: str
+    data_date: Optional[str]
+    rows: List[Dict[str, Any]]  # each: {date, balance_yi, chg_yi, chg_pct? (optional)}
+    notes: List[str]
 
-def _pick_financing_cols(df: pd.DataFrame) -> Tuple[str, str, str]:
-    # 尋找「日期 / 融資增減 / 融資餘額」欄位
-    date_col = None
-    delta_col = None
-    bal_col = None
+def empty_result(source: str, url: str, note: str) -> SeriesResult:
+    return SeriesResult(source=source, source_url=url, data_date=None, rows=[], notes=[note])
 
-    for c in df.columns:
-        if date_col is None and ("日期" in c):
-            date_col = c
+# ---------- Yahoo parser ----------
 
-    # 可能是 "融資增減(億)" / "融資增減" / "融資增減(億)"（MultiIndex flatten 後）
-    for c in df.columns:
-        if delta_col is None and ("融資" in c and "增減" in c):
-            delta_col = c
-        if bal_col is None and ("融資" in c and "餘額" in c):
-            bal_col = c
+YAHOO_URL = "https://tw.stock.yahoo.com/margin-balance/"
 
-    if not (date_col and delta_col and bal_col):
-        raise ValueError(f"無法辨識必要欄位：date={date_col}, delta={delta_col}, bal={bal_col}; cols={list(df.columns)}")
+def parse_yahoo_twse_table(html: str, min_rows: int) -> SeriesResult:
+    """
+    Yahoo page renders TWSE table in HTML; OTC tab often lazy-loaded (may not be present).
+    We extract the first table rows:
+      date
+      融資增減(億元)  融資餘額(億元)
+    """
+    notes: List[str] = []
+    soup = BeautifulSoup(html, "lxml")
 
-    return date_col, delta_col, bal_col
+    # Heuristic: find rows that look like YYYY/MM/DD in text, then read subsequent numeric bullets.
+    # Yahoo's SSR markup is not stable; we use robust regex scan on text blocks.
+    text = soup.get_text("\n", strip=True)
 
+    # Capture blocks: date then next two numbers (chg, balance) in that order
+    # Example sequence in text: 2026/01/20  -9.61  3,388.44 ...
+    pattern = re.compile(
+        r"(\d{4}/\d{2}/\d{2})\s+([+-]?\d+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)"
+    )
+    rows: List[Dict[str, Any]] = []
+    for m in pattern.finditer(text):
+        d = norm_date_yyyy_mm_dd(m.group(1))
+        chg = safe_float(m.group(2))
+        bal = safe_float(m.group(3))
+        if d and chg is not None and bal is not None:
+            rows.append({"date": d, "chg_yi": chg, "balance_yi": bal})
 
-def _fetch_html(url: str, timeout: int = 20) -> str:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.6",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Connection": "close",
-    }
-    r = requests.get(url, headers=headers, timeout=timeout)
-    r.raise_for_status()
-    return r.text
+    # Deduplicate by date keeping first occurrence (page may repeat content in nav/SEO blocks)
+    seen = set()
+    dedup: List[Dict[str, Any]] = []
+    for r in rows:
+        if r["date"] in seen:
+            continue
+        seen.add(r["date"])
+        dedup.append(r)
 
+    if len(dedup) < min_rows:
+        notes.append(f"Yahoo(TWSE) 抽取列數不足：{len(dedup)} < {min_rows}（可能頁面結構變更或抓到重複/非表格文字）")
 
-def _parse_yahoo_tables(html: str) -> Dict[str, List[Dict[str, Any]]]:
-    # 讀出頁面上所有 tables（通常：集中市場表一張、櫃買市場表一張）
-    dfs = pd.read_html(StringIO(html))
-    out: Dict[str, List[Dict[str, Any]]] = {}
+    data_date = dedup[0]["date"] if dedup else None
+    return SeriesResult(
+        source="Yahoo",
+        source_url=YAHOO_URL,
+        data_date=data_date,
+        rows=dedup[:max(min_rows, len(dedup))],
+        notes=notes,
+    )
 
-    # 過濾掉不相關 table：以是否包含「日期」「融資」「餘額」來判定
-    candidates: List[pd.DataFrame] = []
-    for df in dfs:
-        df = _flatten_columns(df)
-        cols = " ".join(df.columns)
-        if ("日期" in cols) and ("融資" in cols) and ("餘額" in cols) and ("增減" in cols):
-            candidates.append(df)
+# ---------- WantGoo / HiStock (light wrappers; may fail with 403 or no market totals) ----------
 
-    if len(candidates) < 2:
-        raise ValueError(f"Yahoo table 數量不足（預期>=2：集中+櫃買），實際={len(candidates)}")
+WANTGOO_TWSE = "https://www.wantgoo.com/stock/margin-trading/market-price/taiex"
+WANTGOO_TPEX = "https://www.wantgoo.com/stock/margin-trading/market-price/otc"
 
-    # 依頁面常見順序：第 1 張 = 集中市場(TWSE)，第 2 張 = 櫃買市場(TPEX)
-    mapping = [("TWSE", candidates[0]), ("TPEX", candidates[1])]
-
-    for market, df in mapping:
-        date_col, delta_col, bal_col = _pick_financing_cols(df)
+def try_wantgoo(url: str, min_rows: int) -> SeriesResult:
+    try:
+        html = http_get_text(url, timeout=20)
+        soup = BeautifulSoup(html, "lxml")
+        # Expect a table with date + margin balance; since layout may change, we implement a generic scan:
+        text = soup.get_text("\n", strip=True)
+        # Try: YYYY/MM/DD then ... balance (億元) maybe.
+        pattern = re.compile(r"(\d{4}/\d{2}/\d{2}).{0,40}?([+-]?\d+(?:\.\d+)?).{0,20}?([\d,]+(?:\.\d+)?)")
         rows: List[Dict[str, Any]] = []
-        for _, r in df.iterrows():
-            d = str(r[date_col]).strip()
-            # 日期格式通常是 YYYY/MM/DD
-            if not re.match(r"^\d{4}/\d{2}/\d{2}$", d):
+        for m in pattern.finditer(text):
+            d = norm_date_yyyy_mm_dd(m.group(1))
+            chg = safe_float(m.group(2))
+            bal = safe_float(m.group(3))
+            if d and chg is not None and bal is not None:
+                rows.append({"date": d, "chg_yi": chg, "balance_yi": bal})
+        # dedup
+        seen = set()
+        out = []
+        for r in rows:
+            if r["date"] in seen:
                 continue
-            delta = _to_float(r[delta_col])
-            bal = _to_float(r[bal_col])
-            rows.append({"date": d, "financing_change_bil": delta, "financing_balance_bil": bal})
+            seen.add(r["date"])
+            out.append(r)
+        data_date = out[0]["date"] if out else None
+        notes = []
+        if len(out) < min_rows:
+            notes.append(f"WantGoo 抽取列數不足：{len(out)} < {min_rows}")
+        return SeriesResult("WantGoo", url, data_date, out, notes)
+    except Exception as e:
+        return empty_result("WantGoo", url, f"HTTP/解析失敗：{type(e).__name__}: {e}")
 
-        if not rows:
-            raise ValueError(f"{market} 解析後 rows 為空")
+def try_histock_market_totals(market: str, min_rows: int) -> SeriesResult:
+    # HiStock沒有穩定公開「市場融資餘額(億元)歷史表」的保證入口；這裡先保留結構，避免你誤以為一定可用。
+    return empty_result("HiStock", f"(NA:{market})", "未實作：HiStock 無穩定可審計的市場總額歷史表入口（避免誤抓個股頁）")
 
-        out[market] = rows
+# ---------- Official fallback (last resort) ----------
+# Note: Official endpoints vary; we keep placeholders + explicit NA if unreliable.
 
-    return out
+def try_official_twse(min_rows: int) -> SeriesResult:
+    # Placeholder: implement only if you decide to pin down TWSE API format and test it.
+    return empty_result(
+        "Official",
+        "https://www.twse.com.tw/exchangeReport/MI_MARGN",
+        "未啟用：官方 TWSE 端點需要釐清欄位/格式後再啟用（避免錯算市場總額）"
+    )
 
+def try_official_tpex(min_rows: int) -> SeriesResult:
+    # Placeholder: implement only if you decide to pin down TPEx API format and test it.
+    return empty_result(
+        "Official",
+        "https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php",
+        "未啟用：官方 TPEX 端點需要釐清參數/格式後再啟用（避免錯算市場總額）"
+    )
 
-def main() -> None:
+# ---------- orchestrator ----------
+
+def fetch_twse(min_rows: int) -> SeriesResult:
+    # 1) Yahoo
+    try:
+        html = http_get_text(YAHOO_URL, timeout=20)
+        r = parse_yahoo_twse_table(html, min_rows=min_rows)
+        if r.rows and len(r.rows) >= min_rows and r.data_date:
+            return r
+    except Exception as e:
+        r = empty_result("Yahoo", YAHOO_URL, f"Yahoo 解析失敗：{type(e).__name__}: {e}")
+
+    # 2) WantGoo
+    wg = try_wantgoo(WANTGOO_TWSE, min_rows=min_rows)
+    if wg.rows and len(wg.rows) >= min_rows and wg.data_date:
+        return wg
+
+    # 3) HiStock
+    hs = try_histock_market_totals("TWSE", min_rows=min_rows)
+    if hs.rows and len(hs.rows) >= min_rows and hs.data_date:
+        return hs
+
+    # 4) Official
+    off = try_official_twse(min_rows=min_rows)
+    return off if off.rows else SeriesResult(
+        source=off.source,
+        source_url=off.source_url,
+        data_date=None,
+        rows=[],
+        notes=[*r.notes, *wg.notes, *hs.notes, *off.notes] if "r" in locals() else [*wg.notes, *hs.notes, *off.notes],
+    )
+
+def fetch_tpex(min_rows: int) -> SeriesResult:
+    # 1) Yahoo (OTC often lazy-loaded; likely not available in SSR => will fail)
+    try:
+        html = http_get_text(YAHOO_URL, timeout=20)
+        # Try to parse OTC as well; if SSR doesn't include, rows will be insufficient => fall through.
+        r = parse_yahoo_twse_table(html, min_rows=min_rows)  # same parser; will mostly be TWSE SSR
+        # Guard: If we can't prove it's OTC, do not accept it.
+        # (We require explicit evidence; otherwise treat as not available.)
+        return empty_result("Yahoo", YAHOO_URL, "Yahoo(OTC) 多數情況為前端載入，SSR 無法可靠取得（避免把 TWSE 當 OTC）")
+    except Exception as e:
+        _ = e  # continue
+
+    # 2) WantGoo
+    wg = try_wantgoo(WANTGOO_TPEX, min_rows=min_rows)
+    if wg.rows and len(wg.rows) >= min_rows and wg.data_date:
+        return wg
+
+    # 3) HiStock (not implemented)
+    hs = try_histock_market_totals("TPEX", min_rows=min_rows)
+    if hs.rows and len(hs.rows) >= min_rows and hs.data_date:
+        return hs
+
+    # 4) Official (placeholder)
+    off = try_official_tpex(min_rows=min_rows)
+    return off if off.rows else SeriesResult(
+        source=off.source,
+        source_url=off.source_url,
+        data_date=None,
+        rows=[],
+        notes=[*wg.notes, *hs.notes, *off.notes],
+    )
+
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--min_rows", type=int, default=21)
     args = ap.parse_args()
 
-    payload: Dict[str, Any] = {
+    out: Dict[str, Any] = {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": _utc_now_iso(),
-        "series": {
-            "TWSE": {"source": None, "source_url": None, "data_date": None, "rows": [], "notes": []},
-            "TPEX": {"source": None, "source_url": None, "data_date": None, "rows": [], "notes": []},
-        },
+        "generated_at_utc": utc_now_iso(),
+        "series": {}
     }
 
-    try:
-        html = _fetch_html(YAHOO_MARGIN_BALANCE_URL)
-        parsed = _parse_yahoo_tables(html)
+    twse = fetch_twse(args.min_rows)
+    tpex = fetch_tpex(args.min_rows)
 
-        for market in ("TWSE", "TPEX"):
-            rows = parsed[market][: max(args.min_rows, 1)]
-            payload["series"][market]["source"] = "Yahoo"
-            payload["series"][market]["source_url"] = YAHOO_MARGIN_BALANCE_URL
-            payload["series"][market]["rows"] = rows
-            payload["series"][market]["data_date"] = rows[0]["date"] if rows else None
+    out["series"]["TWSE"] = {
+        "source": twse.source,
+        "source_url": twse.source_url,
+        "data_date": twse.data_date,
+        "rows": twse.rows,
+        "notes": twse.notes,
+    }
+    out["series"]["TPEX"] = {
+        "source": tpex.source,
+        "source_url": tpex.source_url,
+        "data_date": tpex.data_date,
+        "rows": tpex.rows,
+        "notes": tpex.notes,
+    }
 
-            if len(rows) < args.min_rows:
-                payload["series"][market]["notes"].append(
-                    f"Yahoo 可用交易日筆數不足：rows={len(rows)} < min_rows={args.min_rows}；後續 5D/20D 可能為 NA"
-                )
-
-    except Exception as e:
-        # 失敗就留下可追溯訊息，不要 silent fail
-        for market in ("TWSE", "TPEX"):
-            payload["series"][market]["source"] = "Yahoo"
-            payload["series"][market]["source_url"] = YAHOO_MARGIN_BALANCE_URL
-            payload["series"][market]["notes"].append(f"Yahoo 解析失敗：{type(e).__name__}: {e}")
-
-    # 寫出（確保就算抓不到也會有 latest.json，可 commit 可追查）
-    import os
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-
+    write_json(args.out, out)
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
