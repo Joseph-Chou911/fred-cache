@@ -1,0 +1,84 @@
+name: Update Taiwan Margin Financing (TWSE+TPEX)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 22:30 Asia/Taipei = 14:30 UTC
+    - cron: "30 14 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  taiwan_margin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install requests pandas lxml
+
+      - name: Ensure dirs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p taiwan_margin_cache
+          mkdir -p dashboard
+
+      - name: Fetch Taiwan margin-financing series (Plan B)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/fetch_taiwan_margin_financing_plan_b.py \
+            --out taiwan_margin_cache/latest.json \
+            --min_rows 21
+
+      - name: Append history (dedup by date)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/append_taiwan_margin_history.py \
+            --latest taiwan_margin_cache/latest.json \
+            --history taiwan_margin_cache/history.json \
+            --max_items 400
+
+      - name: Render dashboard (Taiwan margin-financing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/render_taiwan_margin_dashboard.py \
+            --latest taiwan_margin_cache/latest.json \
+            --history taiwan_margin_cache/history.json \
+            --out dashboard/taiwan_margin_financing.md
+
+      - name: Commit updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add taiwan_margin_cache/latest.json taiwan_margin_cache/history.json dashboard/taiwan_margin_financing.md
+          git commit -m "chore: update taiwan margin-financing dashboard"
+          git push
