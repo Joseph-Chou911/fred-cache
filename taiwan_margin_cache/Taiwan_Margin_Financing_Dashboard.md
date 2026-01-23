@@ -34,12 +34,12 @@
 ## 5) 反方審核檢查（任一失敗 → PARTIAL）
 - Check-1 TWSE meta_date==series[0].date：✅（OK）
 - Check-1 TPEX meta_date==series[0].date：✅（OK）
-- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）（OK）
-- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（OK）（OK）
-- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（OK）（OK）
-- Check-4 TWSE rows>=21：✅（OK）（OK）
-- Check-4 TPEX rows>=21：✅（OK）（OK）
-- Check-5 TWSE 20D base_date 存在於 series：✅（OK）（OK）
-- Check-5 TPEX 20D base_date 存在於 series：✅（OK）（OK）
+- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
+- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（OK）
+- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（OK）
+- Check-4 TWSE rows>=21：✅（OK）（rows=30）
+- Check-4 TPEX rows>=21：✅（OK）（rows=30）
+- Check-5 TWSE 20D base_date 存在於 series：✅（OK）
+- Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 
-_generated_at_utc: 2026-01-23T06:08:35Z_
+_generated_at_utc: 2026-01-23T06:16:14Z_
