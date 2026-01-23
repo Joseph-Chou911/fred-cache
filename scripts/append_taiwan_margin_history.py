@@ -1,34 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-Append + seed history for Taiwan margin financing.
-
-Rules:
-- If history file doesn't exist OR items is empty:
-  => SEED using latest.series[MARKET].rows (ALL rows; newest->oldest)
-- Otherwise:
-  => append only the latest row (rows[0]) per market.
-
-Dedup:
-- Key = (market, data_date)
-- Keep the LAST written item for the same key.
-
-Outputs:
-- taiwan_margin_cache/history.json
-"""
-
 from __future__ import annotations
 
 import argparse
 import json
 import os
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
-
-
-def _now_utc_iso() -> str:
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Tuple
 
 
 def _read_json(path: str) -> Any:
@@ -42,124 +21,100 @@ def _write_json(path: str, obj: Any) -> None:
         json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
-def _load_history(path: str) -> Dict[str, Any]:
-    if not os.path.exists(path):
-        return {
-            "schema_version": "taiwan_margin_financing_history_v1",
-            "generated_at_utc": _now_utc_iso(),
-            "items": [],
-        }
-    try:
-        obj = _read_json(path)
-        if not isinstance(obj, dict):
-            raise ValueError("history is not dict")
-        if "items" not in obj or not isinstance(obj["items"], list):
-            obj["items"] = []
-        if "schema_version" not in obj:
-            obj["schema_version"] = "taiwan_margin_financing_history_v1"
-        return obj
-    except Exception:
-        # if corrupted, start fresh but keep safe
-        return {
-            "schema_version": "taiwan_margin_financing_history_v1",
-            "generated_at_utc": _now_utc_iso(),
-            "items": [],
-        }
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _dedup_keep_last(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    # Replace last matching key (market, data_date)
-    out: List[Dict[str, Any]] = []
-    idx: Dict[Tuple[str, str], int] = {}
-    for it in items:
-        mkt = str(it.get("market", ""))
-        dt = str(it.get("data_date", ""))
-        if not mkt or not dt:
-            # keep malformed too, but no dedup key
-            out.append(it)
-            continue
-        key = (mkt, dt)
-        if key in idx:
-            out[idx[key]] = it
-        else:
-            idx[key] = len(out)
-            out.append(it)
-    return out
-
-
-def _make_item(run_ts_utc: str, market: str, source: str, source_url: str, row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    dt = row.get("date")
-    bal = row.get("balance_yi")
-    chg = row.get("chg_yi")
-    if not dt or bal is None or chg is None:
-        return None
-    try:
-        bal_f = float(bal)
-        chg_f = float(chg)
-    except Exception:
-        return None
-    return {
-        "run_ts_utc": run_ts_utc,
-        "market": market,
-        "source": source,
-        "source_url": source_url,
-        "data_date": dt,
-        "balance_yi": round(bal_f, 2),
-        "chg_yi": round(chg_f, 2),
-    }
+def _key(item: Dict[str, Any]) -> Tuple[str, str]:
+    # unique by (market, data_date)
+    return (str(item.get("market")), str(item.get("data_date")))
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
     ap.add_argument("--history", required=True)
-    ap.add_argument("--max_items", type=int, default=800)
+    ap.add_argument("--max_items", type=int, default=400)
     args = ap.parse_args()
 
     latest = _read_json(args.latest)
-    hist = _load_history(args.history)
+    series = latest.get("series", {})
 
-    items: List[Dict[str, Any]] = hist.get("items", [])
-    run_ts = _now_utc_iso()
+    hist: Dict[str, Any]
+    if os.path.exists(args.history):
+        hist = _read_json(args.history)
+        if hist.get("schema_version") != "taiwan_margin_financing_history_v1":
+            # 若你曾用過舊 schema，直接重建（避免混亂）
+            hist = {"schema_version": "taiwan_margin_financing_history_v1", "generated_at_utc": _utc_now_iso(), "items": []}
+    else:
+        hist = {"schema_version": "taiwan_margin_financing_history_v1", "generated_at_utc": _utc_now_iso(), "items": []}
 
-    def _get_series(market: str) -> Dict[str, Any]:
-        return (latest.get("series") or {}).get(market) or {}
+    items: List[Dict[str, Any]] = [x for x in hist.get("items", []) if isinstance(x, dict)]
 
-    def _seed_or_append(market: str) -> List[Dict[str, Any]]:
-        s = _get_series(market)
-        source = s.get("source") or "NA"
-        source_url = s.get("source_url") or "NA"
+    # 既有索引
+    idx: Dict[Tuple[str, str], int] = {}
+    for i, it in enumerate(items):
+        idx[_key(it)] = i
+
+    run_ts = _utc_now_iso()
+
+    def market_has_any(mkt: str) -> bool:
+        return any(it.get("market") == mkt for it in items)
+
+    # ✅ 逐 market seed：該市場在 history 沒有任何紀錄 → 用 latest.rows 一次補滿
+    for mkt in ("TWSE", "TPEX"):
+        s = series.get(mkt, {})
         rows = s.get("rows") or []
-        out_new: List[Dict[str, Any]] = []
-        if not isinstance(rows, list) or not rows:
-            return out_new
+        if not rows:
+            continue
 
-        # seed if history empty
-        if len(items) == 0:
+        if not market_has_any(mkt):
+            # seed all available rows (from latest snapshot)
             for r in rows:
-                it = _make_item(run_ts, market, source, source_url, r)
-                if it:
-                    out_new.append(it)
+                it = {
+                    "run_ts_utc": run_ts,
+                    "market": mkt,
+                    "source": s.get("source"),
+                    "source_url": s.get("source_url"),
+                    "data_date": r.get("date"),
+                    "balance_yi": r.get("balance_yi"),
+                    "chg_yi": r.get("chg_yi"),
+                }
+                k = _key(it)
+                if k in idx:
+                    items[idx[k]] = it
+                else:
+                    idx[k] = len(items)
+                    items.append(it)
+
         else:
-            it = _make_item(run_ts, market, source, source_url, rows[0])
-            if it:
-                out_new.append(it)
-        return out_new
+            # normal append latest day only
+            r0 = rows[0]
+            it = {
+                "run_ts_utc": run_ts,
+                "market": mkt,
+                "source": s.get("source"),
+                "source_url": s.get("source_url"),
+                "data_date": r0.get("date"),
+                "balance_yi": r0.get("balance_yi"),
+                "chg_yi": r0.get("chg_yi"),
+            }
+            k = _key(it)
+            if k in idx:
+                items[idx[k]] = it
+            else:
+                idx[k] = len(items)
+                items.append(it)
 
-    new_items: List[Dict[str, Any]] = []
-    new_items.extend(_seed_or_append("TWSE"))
-    new_items.extend(_seed_or_append("TPEX"))
+    # sort by date desc within market, but keep markets mixed OK
+    items = sorted(items, key=lambda x: (x.get("market", ""), x.get("data_date", "")), reverse=True)
 
-    items2 = items + new_items
-    items2 = _dedup_keep_last(items2)
+    # cap
+    if len(items) > args.max_items:
+        items = items[: args.max_items]
 
-    # Keep only last max_items (by insertion order). This is stable and audit-friendly.
-    if len(items2) > args.max_items:
-        items2 = items2[-args.max_items :]
-
-    hist["generated_at_utc"] = run_ts
-    hist["items"] = items2
-
+    hist["generated_at_utc"] = _utc_now_iso()
+    hist["items"] = items
     _write_json(args.history, hist)
 
 
