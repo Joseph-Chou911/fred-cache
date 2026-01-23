@@ -51,6 +51,15 @@ def yesno(ok: bool) -> str:
     return "✅（OK）" if ok else "❌（FAIL）"
 
 
+def fmt_check_line(title: str, ok: bool, msg: str = "") -> str:
+    """
+    Print msg only when non-empty to avoid '✅(OK)(OK)' duplication.
+    """
+    if msg:
+        return f"- {title}：{yesno(ok)}（{msg}）"
+    return f"- {title}：{yesno(ok)}"
+
+
 # ---------------------------
 # Data build / calc
 # ---------------------------
@@ -105,8 +114,13 @@ def calc_horizon(series: List[Tuple[str, float]], n: int) -> Dict[str, Any]:
     }
 
 
-def total_calc(twse_s: List[Tuple[str, float]], tpex_s: List[Tuple[str, float]], n: int,
-               twse_meta_date: Optional[str], tpex_meta_date: Optional[str]) -> Dict[str, Any]:
+def total_calc(
+    twse_s: List[Tuple[str, float]],
+    tpex_s: List[Tuple[str, float]],
+    n: int,
+    twse_meta_date: Optional[str],
+    tpex_meta_date: Optional[str],
+) -> Dict[str, Any]:
     """
     合計 only if:
     - latest meta dates exist and match
@@ -177,9 +191,12 @@ def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
 
 
 def check_min_rows(series: List[Tuple[str, float]], min_rows: int) -> Tuple[bool, str]:
-    if len(series) < min_rows:
-        return False, f"rows<{min_rows} (rows={len(series)})"
-    return True, "OK"
+    ok = len(series) >= min_rows
+    # 成功也回傳可稽核的行為（rows=xx），避免只是 "OK"
+    msg = f"rows={len(series)}"
+    if not ok:
+        msg = f"rows<{min_rows} (rows={len(series)})"
+    return ok, msg
 
 
 def check_base_date_in_series(series: List[Tuple[str, float]], base_date: Optional[str], tag: str) -> Tuple[bool, str]:
@@ -188,21 +205,19 @@ def check_base_date_in_series(series: List[Tuple[str, float]], base_date: Option
     dates = {d for d, _ in series}
     if base_date not in dates:
         return False, f"{tag}.base_date({base_date}) not found in series dates"
-    return True, "OK"
+    return True, ""  # success => empty msg
 
 
 def check_head5_strict_desc_unique(dates: List[str]) -> Tuple[bool, str]:
     head = dates[:5]
     if len(head) < 2:
         return False, "head5 insufficient"
-    # unique
     if len(set(head)) != len(head):
         return False, "duplicates in head5"
-    # strict decreasing (YYYY-MM-DD string compare)
     for i in range(len(head) - 1):
         if not (head[i] > head[i + 1]):
             return False, f"not strictly decreasing at i={i} ({head[i]} !> {head[i+1]})"
-    return True, "OK"
+    return True, ""  # success => empty msg
 
 
 def main() -> None:
@@ -285,17 +300,16 @@ def main() -> None:
         return out
 
     c3_ok = True
-    c3_msg = "OK"
+    c3_msg = ""
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
         if head5_pairs(twse_rows) == head5_pairs(tpex_rows):
             c3_ok = False
             c3_msg = "head5 identical (date+balance) => likely wrong page"
     else:
-        # if insufficient rows to compare, treat as fail under medium rule
         c3_ok = False
         c3_msg = "insufficient rows for head5 comparison"
 
-    # Check-4: rows>=21 (use history series length; this is what Δ/Δ% actually depends on)
+    # Check-4: rows>=21 (use history series length; Δ/Δ% depends on this)
     c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
     c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
 
@@ -326,16 +340,12 @@ def main() -> None:
     md.append(
         f"- 上市(TWSE)：融資餘額 {fmt_num(latest_balance_from_series(twse_s),2)} 億元｜資料日期 {twse_meta_date or 'NA'}｜來源：{twse_src}（{twse_url}）"
     )
-    md.append(
-        f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}"
-    )
+    md.append(f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}")
 
     md.append(
         f"- 上櫃(TPEX)：融資餘額 {fmt_num(latest_balance_from_series(tpex_s),2)} 億元｜資料日期 {tpex_meta_date or 'NA'}｜來源：{tpex_src}（{tpex_url}）"
     )
-    md.append(
-        f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}"
-    )
+    md.append(f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}")
 
     # total balance (only if latest dates match and both latest balances exist)
     if (twse_meta_date is not None) and (twse_meta_date == tpex_meta_date) and \
@@ -391,15 +401,15 @@ def main() -> None:
     md.append("")
 
     md.append("## 5) 反方審核檢查（任一失敗 → PARTIAL）")
-    md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
-    md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
-    md.append(f"- Check-2 TWSE head5 dates 嚴格遞減且無重複：{yesno(c2_tw_ok)}（{c2_tw_msg}）")
-    md.append(f"- Check-2 TPEX head5 dates 嚴格遞減且無重複：{yesno(c2_tp_ok)}（{c2_tp_msg}）")
-    md.append(f"- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：{yesno(c3_ok)}（{c3_msg}）")
-    md.append(f"- Check-4 TWSE rows>=21：{yesno(c4_tw_ok)}（{c4_tw_msg}）")
-    md.append(f"- Check-4 TPEX rows>=21：{yesno(c4_tp_ok)}（{c4_tp_msg}）")
-    md.append(f"- Check-5 TWSE 20D base_date 存在於 series：{yesno(c5_tw_ok)}（{c5_tw_msg}）")
-    md.append(f"- Check-5 TPEX 20D base_date 存在於 series：{yesno(c5_tp_ok)}（{c5_tp_msg}）")
+    md.append(fmt_check_line("Check-1 TWSE meta_date==series[0].date", c1_tw_ok))
+    md.append(fmt_check_line("Check-1 TPEX meta_date==series[0].date", c1_tp_ok))
+    md.append(fmt_check_line("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
+    md.append(fmt_check_line("Check-2 TPEX head5 dates 嚴格遞減且無重複", c2_tp_ok, c2_tp_msg))
+    md.append(fmt_check_line("Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁", c3_ok, c3_msg))
+    md.append(fmt_check_line("Check-4 TWSE rows>=21", c4_tw_ok, c4_tw_msg))
+    md.append(fmt_check_line("Check-4 TPEX rows>=21", c4_tp_ok, c4_tp_msg))
+    md.append(fmt_check_line("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
+    md.append(fmt_check_line("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
     md.append("")
 
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
