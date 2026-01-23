@@ -1,4 +1,4 @@
-name: Update Taiwan Margin Financing (TWSE+TPEX)
+name: Update Taiwan Margin Financing (TWSE+TPEX) - Scheme2 HiStock
 
 on:
   workflow_dispatch: {}
@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests pandas lxml html5lib
+          pip install requests pandas lxml
 
       - name: Ensure dirs
         shell: bash
@@ -43,7 +43,7 @@ jobs:
           mkdir -p taiwan_margin_cache
           mkdir -p dashboard
 
-      - name: "Fetch Taiwan margin-financing (Scheme 2: HiStock-first)"
+      - name: Fetch Taiwan margin-financing (Scheme2 HiStock)
         shell: bash
         run: |
           set -euo pipefail
@@ -59,7 +59,7 @@ jobs:
           python scripts/append_taiwan_margin_history.py \
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
-            --max_items 400
+            --max_items 800
 
       - name: Render dashboard (Taiwan margin-financing)
         shell: bash
@@ -81,5 +81,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add taiwan_margin_cache/latest.json taiwan_margin_cache/history.json dashboard/taiwan_margin_financing.md
-          git commit -m "chore: update taiwan margin-financing"
+          git commit -m "chore: update taiwan margin-financing (scheme2 histock)"
           git push
