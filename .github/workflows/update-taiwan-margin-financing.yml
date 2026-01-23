@@ -41,7 +41,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p taiwan_margin_cache dashboard
-          # Ensure folders are visible in git even if output files are missing/ignored
           : > taiwan_margin_cache/.gitkeep
           : > dashboard/.gitkeep
 
@@ -63,14 +62,14 @@ jobs:
             --history taiwan_margin_cache/history.json \
             --max_items 800
 
-      - name: Render dashboard (Taiwan margin-financing)
+      - name: Render dashboard (Taiwan margin-financing) -> taiwan_margin_cache/
         shell: bash
         run: |
           set -euo pipefail
           python scripts/render_taiwan_margin_dashboard.py \
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
-            --out dashboard/taiwan_margin_financing.md
+            --out taiwan_margin_cache/Taiwan_Margin_Financing_Dashboard.md
 
       - name: Debug list outputs
         shell: bash
@@ -91,7 +90,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Add folders to avoid missing files due to path mistakes
+          # 你要的輸出都在 taiwan_margin_cache，直接 add 該資料夾即可
           git add -A taiwan_margin_cache dashboard
 
           if git diff --cached --quiet; then
