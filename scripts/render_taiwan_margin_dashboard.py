@@ -12,6 +12,10 @@ Principles
 
 品質降級（中等規則）
 - 任一 Check 失敗 → PARTIAL
+
+方案 A（Checks 訊息規則）
+- 成功：只顯示 ✅（OK），msg 一律空白
+- 失敗：顯示 ❌（FAIL）（原因）
 """
 
 from __future__ import annotations
@@ -51,6 +55,16 @@ def yesno(ok: bool) -> str:
     return "✅（OK）" if ok else "❌（FAIL）"
 
 
+def render_check_line(title: str, ok: bool, msg: str) -> str:
+    """
+    方案 A：成功 msg 空白；失敗才附帶原因（括號）
+    """
+    base = f"- {title}：{yesno(ok)}"
+    if msg:
+        return f"{base}（{msg}）"
+    return base
+
+
 # ---------------------------
 # Data build / calc
 # ---------------------------
@@ -68,8 +82,7 @@ def build_series_from_history(history_items: List[Dict[str, Any]], market: str) 
         b = it.get("balance_yi")
         if d and isinstance(b, (int, float)):
             tmp[str(d)] = float(b)
-    # YYYY-MM-DD sorts fine as string
-    out = sorted(tmp.items(), key=lambda x: x[0], reverse=True)
+    out = sorted(tmp.items(), key=lambda x: x[0], reverse=True)  # YYYY-MM-DD sorts fine as string
     return out
 
 
@@ -91,7 +104,7 @@ def calc_horizon(series: List[Tuple[str, float]], n: int) -> Dict[str, Any]:
     if len(series) < need:
         return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None}
 
-    latest_d, latest_v = series[0]
+    _, latest_v = series[0]
     base_d, base_v = series[n]
 
     delta = latest_v - base_v
@@ -117,53 +130,38 @@ def total_calc(
     合計 only if:
     - latest meta dates exist and match
     - both series have n+1 points
-    - base_date for horizon matches (i.e., same base date)
+    - base_date for horizon matches
     """
     tw = calc_horizon(twse_s, n)
     tp = calc_horizon(tpex_s, n)
 
     if (twse_meta_date is None) or (tpex_meta_date is None) or (twse_meta_date != tpex_meta_date):
-        return {
-            "delta": None, "pct": None, "base_date": None, "latest": None, "base": None,
-            "ok": False, "reason": "latest date mismatch/NA",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "latest date mismatch/NA"}
 
     if tw["base_date"] is None or tp["base_date"] is None:
-        return {
-            "delta": None, "pct": None, "base_date": None, "latest": None, "base": None,
-            "ok": False, "reason": "insufficient history",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "insufficient history"}
 
     if tw["base_date"] != tp["base_date"]:
-        return {
-            "delta": None, "pct": None, "base_date": None, "latest": None, "base": None,
-            "ok": False, "reason": "base_date mismatch",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "base_date mismatch"}
 
     if len(twse_s) < n + 1 or len(tpex_s) < n + 1:
-        return {
-            "delta": None, "pct": None, "base_date": None, "latest": None, "base": None,
-            "ok": False, "reason": "insufficient history",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "insufficient history"}
 
     latest_tot = twse_s[0][1] + tpex_s[0][1]
     base_tot = twse_s[n][1] + tpex_s[n][1]
     delta = latest_tot - base_tot
     pct = (delta / base_tot * 100.0) if base_tot != 0 else None
 
-    return {
-        "delta": delta,
-        "pct": pct,
-        "base_date": tw["base_date"],
-        "latest": latest_tot,
-        "base": base_tot,
-        "ok": True,
-        "reason": "",
-    }
+    return {"delta": delta, "pct": pct, "base_date": tw["base_date"], "latest": latest_tot, "base": base_tot,
+            "ok": True, "reason": ""}
 
 
 # ---------------------------
-# Checks (any fail => PARTIAL)
+# Checks (any fail => PARTIAL)  -- Scheme A for messages
 # ---------------------------
 
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
@@ -190,23 +188,25 @@ def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
     return str(src), str(url)
 
 
-# 方案 A：成功時 msg 一律空白；失敗才顯示原因
 def check_min_rows(series: List[Tuple[str, float]], min_rows: int) -> Tuple[bool, str]:
+    # Scheme A: ok -> "", fail -> reason
     if len(series) < min_rows:
         return False, f"rows<{min_rows} (rows={len(series)})"
     return True, ""
 
 
 def check_base_date_in_series(series: List[Tuple[str, float]], base_date: Optional[str], tag: str) -> Tuple[bool, str]:
+    # Scheme A: ok -> "", fail -> reason
     if base_date is None:
         return False, f"{tag}.base_date=NA"
     dates = {d for d, _ in series}
     if base_date not in dates:
         return False, f"{tag}.base_date({base_date}) not found in series dates"
-    return True, "OK"
+    return True, ""
 
 
 def check_head5_strict_desc_unique(dates: List[str]) -> Tuple[bool, str]:
+    # Scheme A: ok -> "", fail -> reason
     head = dates[:5]
     if len(head) < 2:
         return False, "head5 insufficient"
@@ -215,7 +215,7 @@ def check_head5_strict_desc_unique(dates: List[str]) -> Tuple[bool, str]:
     for i in range(len(head) - 1):
         if not (head[i] > head[i + 1]):
             return False, f"not strictly decreasing at i={i} ({head[i]} !> {head[i+1]})"
-    return True, "OK"
+    return True, ""
 
 
 def main() -> None:
@@ -289,6 +289,8 @@ def main() -> None:
         and (latest_date_from_series(tpex_s) is not None)
         and (tpex_meta_date == latest_date_from_series(tpex_s))
     )
+    c1_tw_msg = "" if c1_tw_ok else "meta_date != series[0].date"
+    c1_tp_msg = "" if c1_tp_ok else "meta_date != series[0].date"
 
     # Check-2: head5 dates strictly decreasing and unique (use latest.rows)
     twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
@@ -305,18 +307,18 @@ def main() -> None:
             out.append((str(d) if d else "NA", float(b) if isinstance(b, (int, float)) else None))
         return out
 
-    c3_ok = True
-    c3_msg = "OK"
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
         if head5_pairs(twse_rows) == head5_pairs(tpex_rows):
             c3_ok = False
             c3_msg = "head5 identical (date+balance) => likely wrong page"
+        else:
+            c3_ok = True
+            c3_msg = ""  # Scheme A
     else:
-        # insufficient to compare => fail under medium rule
         c3_ok = False
         c3_msg = "insufficient rows for head5 comparison"
 
-    # Check-4: rows>=21 (use history series length; this is what Δ/Δ% depends on)
+    # Check-4: rows>=21 (use history series length)
     c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
     c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
 
@@ -411,25 +413,15 @@ def main() -> None:
     md.append("")
 
     md.append("## 5) 反方審核檢查（任一失敗 → PARTIAL）")
-    md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
-    md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
-    md.append(f"- Check-2 TWSE head5 dates 嚴格遞減且無重複：{yesno(c2_tw_ok)}（{c2_tw_msg}）")
-    md.append(f"- Check-2 TPEX head5 dates 嚴格遞減且無重複：{yesno(c2_tp_ok)}（{c2_tp_msg}）")
-    md.append(f"- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：{yesno(c3_ok)}（{c3_msg}）")
-
-    # Check-4：方案 A 之後，成功 msg 會是空字串，所以這兩行成功時只會印 ✅（OK）
-    if c4_tw_msg:
-        md.append(f"- Check-4 TWSE rows>=21：{yesno(c4_tw_ok)}（{c4_tw_msg}）")
-    else:
-        md.append(f"- Check-4 TWSE rows>=21：{yesno(c4_tw_ok)}")
-
-    if c4_tp_msg:
-        md.append(f"- Check-4 TPEX rows>=21：{yesno(c4_tp_ok)}（{c4_tp_msg}）")
-    else:
-        md.append(f"- Check-4 TPEX rows>=21：{yesno(c4_tp_ok)}")
-
-    md.append(f"- Check-5 TWSE 20D base_date 存在於 series：{yesno(c5_tw_ok)}（{c5_tw_msg}）")
-    md.append(f"- Check-5 TPEX 20D base_date 存在於 series：{yesno(c5_tp_ok)}（{c5_tp_msg}）")
+    md.append(render_check_line("Check-1 TWSE meta_date==series[0].date", c1_tw_ok, c1_tw_msg))
+    md.append(render_check_line("Check-1 TPEX meta_date==series[0].date", c1_tp_ok, c1_tp_msg))
+    md.append(render_check_line("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
+    md.append(render_check_line("Check-2 TPEX head5 dates 嚴格遞減且無重複", c2_tp_ok, c2_tp_msg))
+    md.append(render_check_line("Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁", c3_ok, c3_msg))
+    md.append(render_check_line("Check-4 TWSE rows>=21", c4_tw_ok, c4_tw_msg))
+    md.append(render_check_line("Check-4 TPEX rows>=21", c4_tp_ok, c4_tp_msg))
+    md.append(render_check_line("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
+    md.append(render_check_line("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
     md.append("")
 
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
