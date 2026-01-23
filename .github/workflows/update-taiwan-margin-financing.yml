@@ -34,8 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          # requests + lxml 足夠；pandas 只用在少數情況可移除，但保留方便你後續擴充
-          pip install requests lxml pandas
+          pip install requests pandas lxml html5lib beautifulsoup4
 
       - name: Ensure dirs
         shell: bash
@@ -44,7 +43,7 @@ jobs:
           mkdir -p taiwan_margin_cache
           mkdir -p dashboard
 
-      - name: Fetch Taiwan margin-financing series
+      - name: Fetch Taiwan margin-financing (priority: Yahoo -> WantGoo -> HiStock -> Official)
         shell: bash
         run: |
           set -euo pipefail
@@ -52,14 +51,14 @@ jobs:
             --out taiwan_margin_cache/latest.json \
             --min_rows 21
 
-      - name: Append history (seed per market + dedup by date)
+      - name: Append/Seed history (seed from latest.rows when history empty)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_taiwan_margin_history.py \
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
-            --max_items 400
+            --max_items 800
 
       - name: Render dashboard (Taiwan margin-financing)
         shell: bash
@@ -67,7 +66,6 @@ jobs:
           set -euo pipefail
           python scripts/render_taiwan_margin_dashboard.py \
             --latest taiwan_margin_cache/latest.json \
-            --history taiwan_margin_cache/history.json \
             --out dashboard/taiwan_margin_financing.md
 
       - name: Commit updates
