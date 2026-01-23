@@ -4,7 +4,7 @@
 - 狀態：擴張｜信號：WATCH｜資料品質：OK
   - rationale: 20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)
 
-## 判定標準（本 dashboard 內建規則）
+## 1.1) 判定標準（本 dashboard 內建規則）
 ### 1) WATCH（升溫）
 - 條件：20D% ≥ 8 且 (1D% ≥ 0.8 或 Spread20 ≥ 3 或 Accel ≥ 0.25)
 - 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。
@@ -60,4 +60,4 @@
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 
-_generated_at_utc: 2026-01-23T07:20:17Z_
+_generated_at_utc: 2026-01-23T07:38:00Z_
