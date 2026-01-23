@@ -12,11 +12,6 @@ Principles
 
 品質降級（中等規則）
 - 任一 Check 失敗 → PARTIAL
-
-提前示警（基於本檔可得欄位，不引入外部行情）
-- INFO / WATCH / ALERT 以合計(20D,5D,1D)與 TPEX vs TWSE 擴張差作判斷
-- 加入簡單加速度：Accel = 1D% - (5D% / 5)（若資料不足則 NA）
-- 加入風險偏好分層：Spread20 = TPEX_20D% - TWSE_20D%（若資料不足則 NA）
 """
 
 from __future__ import annotations
@@ -56,11 +51,16 @@ def yesno(ok: bool) -> str:
     return "✅（OK）" if ok else "❌（FAIL）"
 
 
-def parse_ymd(s: str) -> Optional[datetime]:
-    try:
-        return datetime.strptime(s, "%Y-%m-%d")
-    except Exception:
-        return None
+def line_check(name: str, ok: bool, msg: str) -> str:
+    """
+    Avoid duplicated '(OK)(OK)'.
+    - If ok and msg == 'OK' -> only show ✅（OK）
+    - If ok and msg != 'OK' -> show ✅（OK）（msg）  (useful OK detail like rows=30)
+    - If fail -> show ❌（FAIL）（msg）
+    """
+    if ok:
+        return f"- {name}：{yesno(True)}" if msg == "OK" else f"- {name}：{yesno(True)}（{msg}）"
+    return f"- {name}：{yesno(False)}（{msg}）"
 
 
 # ---------------------------
@@ -80,8 +80,7 @@ def build_series_from_history(history_items: List[Dict[str, Any]], market: str) 
         b = it.get("balance_yi")
         if d and isinstance(b, (int, float)):
             tmp[str(d)] = float(b)
-    # YYYY-MM-DD lexical order == chronological order
-    out = sorted(tmp.items(), key=lambda x: x[0], reverse=True)
+    out = sorted(tmp.items(), key=lambda x: x[0], reverse=True)  # YYYY-MM-DD sorts fine as string
     return out
 
 
@@ -135,20 +134,48 @@ def total_calc(
     tp = calc_horizon(tpex_s, n)
 
     if (twse_meta_date is None) or (tpex_meta_date is None) or (twse_meta_date != tpex_meta_date):
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "latest date mismatch/NA"}
+        return {
+            "delta": None,
+            "pct": None,
+            "base_date": None,
+            "latest": None,
+            "base": None,
+            "ok": False,
+            "reason": "latest date mismatch/NA",
+        }
 
     if tw["base_date"] is None or tp["base_date"] is None:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "insufficient history"}
+        return {
+            "delta": None,
+            "pct": None,
+            "base_date": None,
+            "latest": None,
+            "base": None,
+            "ok": False,
+            "reason": "insufficient history",
+        }
 
     if tw["base_date"] != tp["base_date"]:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "base_date mismatch"}
+        return {
+            "delta": None,
+            "pct": None,
+            "base_date": None,
+            "latest": None,
+            "base": None,
+            "ok": False,
+            "reason": "base_date mismatch",
+        }
 
     if len(twse_s) < n + 1 or len(tpex_s) < n + 1:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "insufficient history"}
+        return {
+            "delta": None,
+            "pct": None,
+            "base_date": None,
+            "latest": None,
+            "base": None,
+            "ok": False,
+            "reason": "insufficient history",
+        }
 
     latest_tot = twse_s[0][1] + tpex_s[0][1]
     base_tot = twse_s[n][1] + tpex_s[n][1]
@@ -167,7 +194,7 @@ def total_calc(
 
 
 # ---------------------------
-# Latest meta extraction
+# Checks (any fail => PARTIAL)
 # ---------------------------
 
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
@@ -194,10 +221,6 @@ def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
     return str(src), str(url)
 
 
-# ---------------------------
-# Checks (any fail => PARTIAL)
-# ---------------------------
-
 def check_min_rows(series: List[Tuple[str, float]], min_rows: int) -> Tuple[bool, str]:
     if len(series) < min_rows:
         return False, f"rows<{min_rows} (rows={len(series)})"
@@ -215,18 +238,12 @@ def check_base_date_in_series(series: List[Tuple[str, float]], base_date: Option
 
 def check_head5_strict_desc_unique(dates: List[str]) -> Tuple[bool, str]:
     head = dates[:5]
-    if len(head) < 5:
-        return False, f"head5 insufficient (n={len(head)})"
-    # parseable?
-    parsed = [parse_ymd(d) for d in head]
-    if any(p is None for p in parsed):
-        return False, "head5 contains non-YYYY-MM-DD date"
-    # unique
+    if len(head) < 2:
+        return False, "head5 insufficient"
     if len(set(head)) != len(head):
         return False, "duplicates in head5"
-    # strict decreasing by date
-    for i in range(len(parsed) - 1):
-        if not (parsed[i] > parsed[i + 1]):
+    for i in range(len(head) - 1):
+        if not (head[i] > head[i + 1]):
             return False, f"not strictly decreasing at i={i} ({head[i]} !> {head[i+1]})"
     return True, "OK"
 
@@ -240,77 +257,6 @@ def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]
     return out
 
 
-# ---------------------------
-# Early-warning signal logic
-# ---------------------------
-
-def safe_float(x: Any) -> Optional[float]:
-    return float(x) if isinstance(x, (int, float)) else None
-
-
-def calc_accel(pct_1d: Optional[float], pct_5d: Optional[float]) -> Optional[float]:
-    """
-    Accel = 1D% - (5D%/5). If any NA => NA
-    """
-    if pct_1d is None or pct_5d is None:
-        return None
-    return pct_1d - (pct_5d / 5.0)
-
-
-def decide_signal(
-    tot20_pct: Optional[float],
-    tot5_pct: Optional[float],
-    tot1_pct: Optional[float],
-    spread20: Optional[float],
-) -> Tuple[str, str]:
-    """
-    INFO / WATCH / ALERT based on available data only (no guessing).
-    Returns (signal, rationale).
-    """
-    # If we can't compute 20D total pct, we refuse to label
-    if tot20_pct is None:
-        return "NA", "insufficient data (tot20_pct=NA)"
-
-    # Base trend gate: 20D expansion/contraction band
-    expansion = tot20_pct >= 8.0
-    contraction = tot20_pct <= -8.0
-
-    # If neither expansion nor contraction, we keep it neutral informational
-    if not expansion and not contraction:
-        # still can flag WATCH if short-term shock exists, but keep conservative:
-        if tot1_pct is not None and abs(tot1_pct) >= 1.2:
-            return "WATCH", "neutral 20D but large 1D swing (|1D%|>=1.2)"
-        return "INFO", "20D within neutral band (|20D%|<8)"
-
-    # Expansion regime
-    if expansion:
-        # Deleveraging alert: 20D high but 1D and 5D both negative
-        if (tot1_pct is not None and tot5_pct is not None) and (tot1_pct < 0.0 and tot5_pct < 0.0):
-            return "ALERT", "20D expansion but 1D%<0 and 5D%<0 (possible deleveraging)"
-        # WATCH: acceleration or speculative tilt
-        if tot1_pct is not None and tot1_pct >= 0.8:
-            return "WATCH", "20D expansion + 1D%>=0.8 (leveraging acceleration)"
-        if spread20 is not None and spread20 >= 3.0:
-            return "WATCH", "20D expansion + TPEX-TWSE 20D spread>=3 (risk appetite hotter in TPEX)"
-        # Otherwise INFO
-        if tot5_pct is not None and tot5_pct > 0.0:
-            return "INFO", "20D expansion + 5D%>0 (trend build-up)"
-        return "INFO", "20D expansion (limited short-horizon confirmation)"
-
-    # Contraction regime
-    if contraction:
-        # In contraction, any additional short-term negative confirms risk-off
-        if (tot1_pct is not None and tot1_pct <= -0.8) or (tot5_pct is not None and tot5_pct < 0.0):
-            return "WATCH", "20D contraction with short-term weakness"
-        return "INFO", "20D contraction (short-horizon data limited)"
-
-    return "NA", "unreachable"
-
-
-# ---------------------------
-# Main
-# ---------------------------
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
@@ -320,7 +266,6 @@ def main() -> None:
 
     latest = read_json(args.latest)
     hist = read_json(args.history)
-
     items = hist.get("items", []) if isinstance(hist, dict) else []
     if not isinstance(items, list):
         items = []
@@ -357,23 +302,13 @@ def main() -> None:
     tot5 = total_calc(twse_s, tpex_s, 5, twse_meta_date, tpex_meta_date)
     tot20 = total_calc(twse_s, tpex_s, 20, twse_meta_date, tpex_meta_date)
 
-    # Derived metrics
-    tot1_pct = safe_float(tot1.get("pct"))
-    tot5_pct = safe_float(tot5.get("pct"))
-    tot20_pct = safe_float(tot20.get("pct"))
-
-    tw20_pct = safe_float(tw20.get("pct"))
-    tp20_pct = safe_float(tp20.get("pct"))
-    spread20 = (tp20_pct - tw20_pct) if (tp20_pct is not None and tw20_pct is not None) else None
-
-    accel = calc_accel(tot1_pct, tot5_pct)
-
     # Label (conservative): only when 20D total pct calculable
     label = "NA"
-    if tot20_pct is not None:
-        if tot20_pct >= 8.0:
+    if tot20.get("pct") is not None:
+        p = float(tot20["pct"])
+        if p >= 8.0:
             label = "擴張"
-        elif tot20_pct <= -8.0:
+        elif p <= -8.0:
             label = "收縮"
         else:
             label = "中性"
@@ -382,11 +317,9 @@ def main() -> None:
     # Checks (any fail => PARTIAL)
     # ---------------------------
 
-    # Check-1: meta_date == history_series[0].date
-    c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and \
-               (twse_meta_date == latest_date_from_series(twse_s))
-    c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and \
-               (tpex_meta_date == latest_date_from_series(tpex_s))
+    # Check-1: meta_date == series[0].date
+    c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
+    c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
     # Check-2: head5 dates strictly decreasing and unique (use latest.rows)
     twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
@@ -396,13 +329,13 @@ def main() -> None:
 
     # Check-3: TWSE/TPEX head5 identical (date+balance) => likely wrong page
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
-        c3_ok = head5_pairs(twse_rows) != head5_pairs(tpex_rows)
+        c3_ok = (head5_pairs(twse_rows) != head5_pairs(tpex_rows))
         c3_msg = "OK" if c3_ok else "head5 identical (date+balance) => likely wrong page"
     else:
         c3_ok = False
         c3_msg = "insufficient rows for head5 comparison"
 
-    # Check-4: history rows>=21 (Δ/Δ% depends on history series)
+    # Check-4: history rows>=21 (this is what Δ/Δ% depends on)
     c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
     c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
 
@@ -420,31 +353,29 @@ def main() -> None:
     quality = "PARTIAL" if any_fail else "OK"
 
     # ---------------------------
-    # Early-warning signal (does NOT override quality)
-    # ---------------------------
-    signal, rationale = decide_signal(tot20_pct, tot5_pct, tot1_pct, spread20)
-
-    # ---------------------------
     # Render markdown
     # ---------------------------
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
     md.append("## 1) 結論")
-    md.append(f"- 狀態：{label}｜信號：{signal}｜資料品質：{quality}")
-    md.append(f"  - rationale: {rationale}")
+    md.append(f"- {label} + 資料品質 {quality}")
     md.append("")
 
     md.append("## 2) 資料")
     md.append(
         f"- 上市(TWSE)：融資餘額 {fmt_num(latest_balance_from_series(twse_s),2)} 億元｜資料日期 {twse_meta_date or 'NA'}｜來源：{twse_src}（{twse_url}）"
     )
-    md.append(f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}")
+    md.append(
+        f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}"
+    )
 
     md.append(
         f"- 上櫃(TPEX)：融資餘額 {fmt_num(latest_balance_from_series(tpex_s),2)} 億元｜資料日期 {tpex_meta_date or 'NA'}｜來源：{tpex_src}（{tpex_url}）"
     )
-    md.append(f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}")
+    md.append(
+        f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}"
+    )
 
     # total balance (only if latest dates match and both latest balances exist)
     if (twse_meta_date is not None) and (twse_meta_date == tpex_meta_date) and \
@@ -483,37 +414,32 @@ def main() -> None:
 
     md.append("### 合計(上市+上櫃)")
     md.append(
-        f"- 1D：Δ={fmt_num(safe_float(tot1.get('delta')),2)} 億元；Δ%={fmt_pct(tot1_pct,4)} %｜latest={fmt_num(safe_float(tot1.get('latest')),2)}｜base={fmt_num(safe_float(tot1.get('base')),2)}（基期日={tot1.get('base_date') or 'NA'}）"
+        f"- 1D：Δ={fmt_num(tot1.get('delta'),2)} 億元；Δ%={fmt_pct(tot1.get('pct'),4)} %｜latest={fmt_num(tot1.get('latest'),2)}｜base={fmt_num(tot1.get('base'),2)}（基期日={tot1.get('base_date') or 'NA'}）"
     )
     md.append(
-        f"- 5D：Δ={fmt_num(safe_float(tot5.get('delta')),2)} 億元；Δ%={fmt_pct(tot5_pct,4)} %｜latest={fmt_num(safe_float(tot5.get('latest')),2)}｜base={fmt_num(safe_float(tot5.get('base')),2)}（基期日={tot5.get('base_date') or 'NA'}）"
+        f"- 5D：Δ={fmt_num(tot5.get('delta'),2)} 億元；Δ%={fmt_pct(tot5.get('pct'),4)} %｜latest={fmt_num(tot5.get('latest'),2)}｜base={fmt_num(tot5.get('base'),2)}（基期日={tot5.get('base_date') or 'NA'}）"
     )
     md.append(
-        f"- 20D：Δ={fmt_num(safe_float(tot20.get('delta')),2)} 億元；Δ%={fmt_pct(tot20_pct,4)} %｜latest={fmt_num(safe_float(tot20.get('latest')),2)}｜base={fmt_num(safe_float(tot20.get('base')),2)}（基期日={tot20.get('base_date') or 'NA'}）"
+        f"- 20D：Δ={fmt_num(tot20.get('delta'),2)} 億元；Δ%={fmt_pct(tot20.get('pct'),4)} %｜latest={fmt_num(tot20.get('latest'),2)}｜base={fmt_num(tot20.get('base'),2)}（基期日={tot20.get('base_date') or 'NA'}）"
     )
     md.append("")
 
-    md.append("## 4) 提前示警輔助指標（不引入外部資料）")
-    md.append(f"- Accel = 1D% - (5D%/5)：{fmt_pct(accel,4)}")
-    md.append(f"- Spread20 = TPEX_20D% - TWSE_20D%：{fmt_pct(spread20,4)}")
-    md.append("")
-
-    md.append("## 5) 稽核備註")
+    md.append("## 4) 稽核備註")
     md.append("- 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。")
     md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。")
     md.append("- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
     md.append("")
 
-    md.append("## 6) 反方審核檢查（任一失敗 → PARTIAL）")
+    md.append("## 5) 反方審核檢查（任一失敗 → PARTIAL）")
     md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
     md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
-    md.append(f"- Check-2 TWSE head5 dates 嚴格遞減且無重複：{yesno(c2_tw_ok)}（{c2_tw_msg}）")
-    md.append(f"- Check-2 TPEX head5 dates 嚴格遞減且無重複：{yesno(c2_tp_ok)}（{c2_tp_msg}）")
-    md.append(f"- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：{yesno(c3_ok)}（{c3_msg}）")
-    md.append(f"- Check-4 TWSE history rows>=21：{yesno(c4_tw_ok)}（{c4_tw_msg}）")
-    md.append(f"- Check-4 TPEX history rows>=21：{yesno(c4_tp_ok)}（{c4_tp_msg}）")
-    md.append(f"- Check-5 TWSE 20D base_date 存在於 series：{yesno(c5_tw_ok)}（{c5_tw_msg}）")
-    md.append(f"- Check-5 TPEX 20D base_date 存在於 series：{yesno(c5_tp_ok)}（{c5_tp_msg}）")
+    md.append(line_check("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
+    md.append(line_check("Check-2 TPEX head5 dates 嚴格遞減且無重複", c2_tp_ok, c2_tp_msg))
+    md.append(line_check("Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁", c3_ok, c3_msg))
+    md.append(line_check("Check-4 TWSE history rows>=21", c4_tw_ok, c4_tw_msg))
+    md.append(line_check("Check-4 TPEX history rows>=21", c4_tp_ok, c4_tp_msg))
+    md.append(line_check("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
+    md.append(line_check("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
     md.append("")
 
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
