@@ -1,523 +1,322 @@
 {
   "schema_version": "taiwan_margin_financing_latest_v1",
-  "generated_at_utc": "2026-01-23T01:28:04Z",
+  "generated_at_utc": "2026-01-23T01:47:01Z",
   "series": {
     "TWSE": {
-      "source": "Yahoo",
-      "source_url": "https://tw.stock.yahoo.com/margin-balance/",
+      "source": "HiStock",
+      "source_url": "https://histock.tw/stock/three.aspx?m=mg",
       "data_date": "2026-01-22",
       "rows": [
         {
           "date": "2026-01-22",
-          "chg_yi": 39.89,
-          "balance_yi": 3717.34
+          "balance_yi": 3717.3,
+          "chg_yi": 39.9
         },
         {
           "date": "2026-01-21",
-          "chg_yi": -34.76,
-          "balance_yi": 3677.5
+          "balance_yi": 3677.5,
+          "chg_yi": -34.8
         },
         {
           "date": "2026-01-20",
-          "chg_yi": 18.1,
-          "balance_yi": 3712.26
+          "balance_yi": 3712.3,
+          "chg_yi": 18.1
         },
         {
           "date": "2026-01-19",
-          "chg_yi": 60.24,
-          "balance_yi": 3694.16
+          "balance_yi": 3694.2,
+          "chg_yi": 60.2
         },
         {
           "date": "2026-01-16",
-          "chg_yi": 40.93,
-          "balance_yi": 3633.92
+          "balance_yi": 3633.9,
+          "chg_yi": 40.9
         },
         {
           "date": "2026-01-15",
-          "chg_yi": 8.46,
-          "balance_yi": 3592.99
+          "balance_yi": 3593.0,
+          "chg_yi": 8.5
         },
         {
           "date": "2026-01-14",
-          "chg_yi": 28.14,
-          "balance_yi": 3584.53
+          "balance_yi": 3584.5,
+          "chg_yi": 28.1
         },
         {
           "date": "2026-01-13",
-          "chg_yi": -8.51,
-          "balance_yi": 3556.39
+          "balance_yi": 3556.4,
+          "chg_yi": -8.5
         },
         {
           "date": "2026-01-12",
-          "chg_yi": 49.97,
-          "balance_yi": 3564.9
+          "balance_yi": 3564.9,
+          "chg_yi": 50.0
         },
         {
           "date": "2026-01-09",
-          "chg_yi": -8.95,
-          "balance_yi": 3514.93
+          "balance_yi": 3514.9,
+          "chg_yi": -8.9
         },
         {
           "date": "2026-01-08",
-          "chg_yi": -46.71,
-          "balance_yi": 3523.88
+          "balance_yi": 3523.9,
+          "chg_yi": -46.7
         },
         {
           "date": "2026-01-07",
-          "chg_yi": 25.08,
-          "balance_yi": 3570.59
+          "balance_yi": 3570.6,
+          "chg_yi": 25.1
         },
         {
           "date": "2026-01-06",
-          "chg_yi": 36.01,
-          "balance_yi": 3545.49
+          "balance_yi": 3545.5,
+          "chg_yi": 36.0
         },
         {
           "date": "2026-01-05",
-          "chg_yi": 43.15,
-          "balance_yi": 3509.48
+          "balance_yi": 3509.5,
+          "chg_yi": 43.2
         },
         {
           "date": "2026-01-02",
-          "chg_yi": 32.25,
-          "balance_yi": 3466.34
+          "balance_yi": 3466.3,
+          "chg_yi": 32.2
         },
         {
           "date": "2025-12-31",
-          "chg_yi": 20.42,
-          "balance_yi": 3434.1
+          "balance_yi": 3434.1,
+          "chg_yi": 20.4
         },
         {
           "date": "2025-12-30",
-          "chg_yi": 14.81,
-          "balance_yi": 3413.68
+          "balance_yi": 3413.7,
+          "chg_yi": 14.8
         },
         {
           "date": "2025-12-29",
-          "chg_yi": -4.5,
-          "balance_yi": 3398.87
+          "balance_yi": 3398.9,
+          "chg_yi": -4.5
         },
         {
           "date": "2025-12-26",
-          "chg_yi": 14.34,
-          "balance_yi": 3403.37
+          "balance_yi": 3403.4,
+          "chg_yi": 14.3
         },
         {
           "date": "2025-12-24",
-          "chg_yi": 13.14,
-          "balance_yi": 3389.03
+          "balance_yi": 3389.0,
+          "chg_yi": 13.1
         },
         {
           "date": "2025-12-23",
-          "chg_yi": 23.92,
-          "balance_yi": 3375.88
+          "balance_yi": 3375.9,
+          "chg_yi": 23.9
         },
         {
           "date": "2025-12-22",
-          "chg_yi": 18.87,
-          "balance_yi": 3351.96
+          "balance_yi": 3352.0,
+          "chg_yi": 18.9
         },
         {
           "date": "2025-12-19",
-          "chg_yi": 9.29,
-          "balance_yi": 3333.09
+          "balance_yi": 3333.1,
+          "chg_yi": 9.3
         },
         {
           "date": "2025-12-18",
-          "chg_yi": 2.05,
-          "balance_yi": 3323.8
+          "balance_yi": 3323.8,
+          "chg_yi": 2.1
         },
         {
           "date": "2025-12-17",
-          "chg_yi": 33.85,
-          "balance_yi": 3321.75
+          "balance_yi": 3321.7,
+          "chg_yi": 33.9
         },
         {
           "date": "2025-12-16",
-          "chg_yi": -30.7,
-          "balance_yi": 3287.89
+          "balance_yi": 3287.9,
+          "chg_yi": -30.7
         },
         {
           "date": "2025-12-15",
-          "chg_yi": 25.1,
-          "balance_yi": 3318.59
+          "balance_yi": 3318.6,
+          "chg_yi": 25.1
         },
         {
           "date": "2025-12-12",
-          "chg_yi": 26.78,
-          "balance_yi": 3293.5
+          "balance_yi": 3293.5,
+          "chg_yi": 26.8
         },
         {
           "date": "2025-12-11",
-          "chg_yi": -10.23,
-          "balance_yi": 3266.72
+          "balance_yi": 3266.7,
+          "chg_yi": -10.2
         },
         {
           "date": "2025-12-10",
-          "chg_yi": 8.1,
-          "balance_yi": 3276.95
-        },
-        {
-          "date": "2025-12-09",
-          "chg_yi": 21.45,
-          "balance_yi": 3268.84
-        },
-        {
-          "date": "2025-12-08",
-          "chg_yi": 18.23,
-          "balance_yi": 3247.39
-        },
-        {
-          "date": "2025-12-05",
-          "chg_yi": 0.9,
-          "balance_yi": 3229.17
-        },
-        {
-          "date": "2025-12-04",
-          "chg_yi": 14.01,
-          "balance_yi": 3228.26
-        },
-        {
-          "date": "2025-12-03",
-          "chg_yi": 16.88,
-          "balance_yi": 3214.25
-        },
-        {
-          "date": "2025-12-02",
-          "chg_yi": 3.77,
-          "balance_yi": 3197.37
-        },
-        {
-          "date": "2025-12-01",
-          "chg_yi": 21.78,
-          "balance_yi": 3193.6
-        },
-        {
-          "date": "2025-11-28",
-          "chg_yi": 31.76,
-          "balance_yi": 3171.82
-        },
-        {
-          "date": "2025-11-27",
-          "chg_yi": 29.46,
-          "balance_yi": 3140.06
-        },
-        {
-          "date": "2025-11-26",
-          "chg_yi": -3.08,
-          "balance_yi": 3110.61
-        },
-        {
-          "date": "2025-11-25",
-          "chg_yi": 49.89,
-          "balance_yi": 3113.69
-        },
-        {
-          "date": "2025-11-24",
-          "chg_yi": 26.73,
-          "balance_yi": 3063.8
-        },
-        {
-          "date": "2025-11-21",
-          "chg_yi": -59.58,
-          "balance_yi": 3037.08
-        },
-        {
-          "date": "2025-11-20",
-          "chg_yi": 34.61,
-          "balance_yi": 3096.65
-        },
-        {
-          "date": "2025-11-19",
-          "chg_yi": -1.24,
-          "balance_yi": 3062.05
-        },
-        {
-          "date": "2025-11-18",
-          "chg_yi": -47.62,
-          "balance_yi": 3063.29
-        },
-        {
-          "date": "2025-11-17",
-          "chg_yi": 0.82,
-          "balance_yi": 3110.9
-        },
-        {
-          "date": "2025-11-14",
-          "chg_yi": -29.42,
-          "balance_yi": 3110.08
-        },
-        {
-          "date": "2025-11-13",
-          "chg_yi": 9.98,
-          "balance_yi": 3139.5
-        },
-        {
-          "date": "2025-11-12",
-          "chg_yi": 31.37,
-          "balance_yi": 3129.53
-        },
-        {
-          "date": "2025-11-11",
-          "chg_yi": -3.13,
-          "balance_yi": 3098.15
-        },
-        {
-          "date": "2025-11-10",
-          "chg_yi": 23.68,
-          "balance_yi": 3101.29
-        },
-        {
-          "date": "2025-11-07",
-          "chg_yi": -1.48,
-          "balance_yi": 3077.61
-        },
-        {
-          "date": "2025-11-06",
-          "chg_yi": 50.22,
-          "balance_yi": 3079.08
-        },
-        {
-          "date": "2025-11-05",
-          "chg_yi": 25.68,
-          "balance_yi": 3028.86
-        },
-        {
-          "date": "2025-11-04",
-          "chg_yi": -40.18,
-          "balance_yi": 3003.18
-        },
-        {
-          "date": "2025-11-03",
-          "chg_yi": 25.85,
-          "balance_yi": 3043.36
-        },
-        {
-          "date": "2025-10-31",
-          "chg_yi": 33.59,
-          "balance_yi": 3017.51
-        },
-        {
-          "date": "2025-10-30",
-          "chg_yi": -21.97,
-          "balance_yi": 2983.92
-        },
-        {
-          "date": "2025-10-29",
-          "chg_yi": 42.16,
-          "balance_yi": 3005.89
-        },
-        {
-          "date": "2025-10-28",
-          "chg_yi": 3.89,
-          "balance_yi": 2963.73
-        },
-        {
-          "date": "2025-10-27",
-          "chg_yi": 33.95,
-          "balance_yi": 2959.84
-        },
-        {
-          "date": "2025-10-23",
-          "chg_yi": -2.97,
-          "balance_yi": 2925.89
-        },
-        {
-          "date": "2025-10-22",
-          "chg_yi": 19.01,
-          "balance_yi": 2928.85
-        },
-        {
-          "date": "2025-10-21",
-          "chg_yi": 14.6,
-          "balance_yi": 2909.84
-        },
-        {
-          "date": "2025-10-20",
-          "chg_yi": 43.26,
-          "balance_yi": 2895.24
-        },
-        {
-          "date": "2025-10-17",
-          "chg_yi": -0.82,
-          "balance_yi": 2851.99
-        },
-        {
-          "date": "2025-10-16",
-          "chg_yi": 50.29,
-          "balance_yi": 2852.8
-        },
-        {
-          "date": "2025-10-15",
-          "chg_yi": 49.06,
-          "balance_yi": 2802.51
-        },
-        {
-          "date": "2025-10-14",
-          "chg_yi": -78.22,
-          "balance_yi": 2753.45
-        },
-        {
-          "date": "2025-10-13",
-          "chg_yi": -24.46,
-          "balance_yi": 2831.67
-        },
-        {
-          "date": "2025-10-09",
-          "chg_yi": 20.23,
-          "balance_yi": 2856.13
-        },
-        {
-          "date": "2025-10-08",
-          "chg_yi": 3.63,
-          "balance_yi": 2835.89
-        },
-        {
-          "date": "2025-10-07",
-          "chg_yi": 13.47,
-          "balance_yi": 2832.26
-        },
-        {
-          "date": "2025-10-03",
-          "chg_yi": 28.95,
-          "balance_yi": 2818.8
-        },
-        {
-          "date": "2025-10-02",
-          "chg_yi": 27.48,
-          "balance_yi": 2789.85
-        },
-        {
-          "date": "2025-10-01",
-          "chg_yi": 8.08,
-          "balance_yi": 2762.37
-        },
-        {
-          "date": "2025-09-30",
-          "chg_yi": 38.82,
-          "balance_yi": 2754.3
-        },
-        {
-          "date": "2025-09-26",
-          "chg_yi": -37.18,
-          "balance_yi": 2715.47
-        },
-        {
-          "date": "2025-09-25",
-          "chg_yi": 6.14,
-          "balance_yi": 2752.65
-        },
-        {
-          "date": "2025-09-24",
-          "chg_yi": 18.49,
-          "balance_yi": 2746.51
-        },
-        {
-          "date": "2025-09-23",
-          "chg_yi": 3.43,
-          "balance_yi": 2728.01
-        },
-        {
-          "date": "2025-09-22",
-          "chg_yi": 36.24,
-          "balance_yi": 2724.58
-        },
-        {
-          "date": "2025-09-19",
-          "chg_yi": 20.26,
-          "balance_yi": 2688.35
-        },
-        {
-          "date": "2025-09-18",
-          "chg_yi": 19.39,
-          "balance_yi": 2668.09
-        },
-        {
-          "date": "2025-09-17",
-          "chg_yi": -9.87,
-          "balance_yi": 2648.69
-        },
-        {
-          "date": "2025-09-16",
-          "chg_yi": 16.46,
-          "balance_yi": 2658.57
-        },
-        {
-          "date": "2025-09-15",
-          "chg_yi": -14.04,
-          "balance_yi": 2642.11
-        },
-        {
-          "date": "2025-09-12",
-          "chg_yi": -2.4,
-          "balance_yi": 2656.15
-        },
-        {
-          "date": "2025-09-11",
-          "chg_yi": -41.08,
-          "balance_yi": 2658.55
-        },
-        {
-          "date": "2025-09-10",
-          "chg_yi": 24.27,
-          "balance_yi": 2699.63
-        },
-        {
-          "date": "2025-09-09",
-          "chg_yi": 10.27,
-          "balance_yi": 2675.37
-        },
-        {
-          "date": "2025-09-08",
-          "chg_yi": 20.08,
-          "balance_yi": 2665.1
-        },
-        {
-          "date": "2025-09-05",
-          "chg_yi": 29.4,
-          "balance_yi": 2644.82
-        },
-        {
-          "date": "2025-09-04",
-          "chg_yi": 5.09,
-          "balance_yi": 2615.42
-        },
-        {
-          "date": "2025-09-03",
-          "chg_yi": 20.2,
-          "balance_yi": 2610.33
-        },
-        {
-          "date": "2025-09-02",
-          "chg_yi": -1.34,
-          "balance_yi": 2590.13
-        },
-        {
-          "date": "2025-09-01",
-          "chg_yi": -31.8,
-          "balance_yi": 2591.47
-        },
-        {
-          "date": "2025-08-29",
-          "chg_yi": 20.95,
-          "balance_yi": 2623.27
-        },
-        {
-          "date": "2025-08-28",
-          "chg_yi": 19.26,
-          "balance_yi": 2602.32
+          "balance_yi": 3276.9,
+          "chg_yi": 8.1
         }
       ],
       "notes": []
     },
     "TPEX": {
-      "source": "Yahoo",
-      "source_url": "https://tw.stock.yahoo.com/margin-balance/",
-      "data_date": null,
-      "rows": [],
-      "notes": [
-        "Yahoo(OTC) 多數情況為前端載入，SSR 無法可靠取得（避免把 TWSE 當 OTC）"
-      ]
+      "source": "HiStock",
+      "source_url": "https://histock.tw/stock/three.aspx?m=mg&o=otc",
+      "data_date": "2026-01-22",
+      "rows": [
+        {
+          "date": "2026-01-22",
+          "balance_yi": 3717.3,
+          "chg_yi": 39.9
+        },
+        {
+          "date": "2026-01-21",
+          "balance_yi": 3677.5,
+          "chg_yi": -34.8
+        },
+        {
+          "date": "2026-01-20",
+          "balance_yi": 3712.3,
+          "chg_yi": 18.1
+        },
+        {
+          "date": "2026-01-19",
+          "balance_yi": 3694.2,
+          "chg_yi": 60.2
+        },
+        {
+          "date": "2026-01-16",
+          "balance_yi": 3633.9,
+          "chg_yi": 40.9
+        },
+        {
+          "date": "2026-01-15",
+          "balance_yi": 3593.0,
+          "chg_yi": 8.5
+        },
+        {
+          "date": "2026-01-14",
+          "balance_yi": 3584.5,
+          "chg_yi": 28.1
+        },
+        {
+          "date": "2026-01-13",
+          "balance_yi": 3556.4,
+          "chg_yi": -8.5
+        },
+        {
+          "date": "2026-01-12",
+          "balance_yi": 3564.9,
+          "chg_yi": 50.0
+        },
+        {
+          "date": "2026-01-09",
+          "balance_yi": 3514.9,
+          "chg_yi": -8.9
+        },
+        {
+          "date": "2026-01-08",
+          "balance_yi": 3523.9,
+          "chg_yi": -46.7
+        },
+        {
+          "date": "2026-01-07",
+          "balance_yi": 3570.6,
+          "chg_yi": 25.1
+        },
+        {
+          "date": "2026-01-06",
+          "balance_yi": 3545.5,
+          "chg_yi": 36.0
+        },
+        {
+          "date": "2026-01-05",
+          "balance_yi": 3509.5,
+          "chg_yi": 43.2
+        },
+        {
+          "date": "2026-01-02",
+          "balance_yi": 3466.3,
+          "chg_yi": 32.2
+        },
+        {
+          "date": "2025-12-31",
+          "balance_yi": 3434.1,
+          "chg_yi": 20.4
+        },
+        {
+          "date": "2025-12-30",
+          "balance_yi": 3413.7,
+          "chg_yi": 14.8
+        },
+        {
+          "date": "2025-12-29",
+          "balance_yi": 3398.9,
+          "chg_yi": -4.5
+        },
+        {
+          "date": "2025-12-26",
+          "balance_yi": 3403.4,
+          "chg_yi": 14.3
+        },
+        {
+          "date": "2025-12-24",
+          "balance_yi": 3389.0,
+          "chg_yi": 13.1
+        },
+        {
+          "date": "2025-12-23",
+          "balance_yi": 3375.9,
+          "chg_yi": 23.9
+        },
+        {
+          "date": "2025-12-22",
+          "balance_yi": 3352.0,
+          "chg_yi": 18.9
+        },
+        {
+          "date": "2025-12-19",
+          "balance_yi": 3333.1,
+          "chg_yi": 9.3
+        },
+        {
+          "date": "2025-12-18",
+          "balance_yi": 3323.8,
+          "chg_yi": 2.1
+        },
+        {
+          "date": "2025-12-17",
+          "balance_yi": 3321.7,
+          "chg_yi": 33.9
+        },
+        {
+          "date": "2025-12-16",
+          "balance_yi": 3287.9,
+          "chg_yi": -30.7
+        },
+        {
+          "date": "2025-12-15",
+          "balance_yi": 3318.6,
+          "chg_yi": 25.1
+        },
+        {
+          "date": "2025-12-12",
+          "balance_yi": 3293.5,
+          "chg_yi": 26.8
+        },
+        {
+          "date": "2025-12-11",
+          "balance_yi": 3266.7,
+          "chg_yi": -10.2
+        },
+        {
+          "date": "2025-12-10",
+          "balance_yi": 3276.9,
+          "chg_yi": 8.1
+        }
+      ],
+      "notes": []
     }
   }
 }
