@@ -1,63 +1,57 @@
-# Taiwan Margin Financing Dashboard
+1) 結論
+	•	狀態：擴張｜信號：WATCH｜資料品質：OK
+	◦	rationale: 20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)
 
-## 1) 結論
-- 狀態：擴張｜信號：WATCH｜資料品質：OK
-  - rationale: 20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)
+1.1) 判定標準（本 dashboard 內建規則）
+1) WATCH（升溫）
+	•	條件：20D% ≥ 8 且 (1D% ≥ 0.8 或 Spread20 ≥ 3 或 Accel ≥ 0.25)
+	•	行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。
+2) ALERT（疑似去槓桿）
+	•	條件：20D% ≥ 8 且 1D% < 0 且 5D% < 0
+	•	行動：優先看『是否出現連續負值』，因為可能開始踩踏。
+3) 解除 WATCH（降溫）
+	•	條件：20D% 仍高，但 Accel ≤ 0 且 1D% 回到 < 0.3（需連 2–3 次確認）
+	•	行動：代表短線槓桿加速結束，回到『擴張但不加速』。
 
-## 1.1) 判定標準（本 dashboard 內建規則）
-### 1) WATCH（升溫）
-- 條件：20D% ≥ 8 且 (1D% ≥ 0.8 或 Spread20 ≥ 3 或 Accel ≥ 0.25)
-- 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。
+2) 資料
+	•	上市(TWSE)：融資餘額 3717.30 億元｜資料日期 2026-01-22｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+	◦	rows=30｜head_dates=['2026-01-22', '2026-01-21', '2026-01-20']｜tail_dates=['2025-12-12', '2025-12-11', '2025-12-10']
+	•	上櫃(TPEX)：融資餘額 1301.40 億元｜資料日期 2026-01-22｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+	◦	rows=30｜head_dates=['2026-01-22', '2026-01-21', '2026-01-20']｜tail_dates=['2025-12-12', '2025-12-11', '2025-12-10']
+	•	合計：融資餘額 5018.70 億元｜資料日期 2026-01-22｜來源：TWSE=HiStock / TPEX=HiStock
 
-### 2) ALERT（疑似去槓桿）
-- 條件：20D% ≥ 8 且 1D% < 0 且 5D% < 0
-- 行動：優先看『是否出現連續負值』，因為可能開始踩踏。
+3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
+上市(TWSE)
+	•	1D：Δ=39.80 億元；Δ%=1.0823 %｜latest=3717.30｜base=3677.50（基期日=2026-01-21）
+	•	5D：Δ=124.30 億元；Δ%=3.4595 %｜latest=3717.30｜base=3593.00（基期日=2026-01-15）
+	•	20D：Δ=341.40 億元；Δ%=10.1129 %｜latest=3717.30｜base=3375.90（基期日=2025-12-23）
+上櫃(TPEX)
+	•	1D：Δ=9.60 億元；Δ%=0.7431 %｜latest=1301.40｜base=1291.80（基期日=2026-01-21）
+	•	5D：Δ=19.10 億元；Δ%=1.4895 %｜latest=1301.40｜base=1282.30（基期日=2026-01-15）
+	•	20D：Δ=155.60 億元；Δ%=13.5800 %｜latest=1301.40｜base=1145.80（基期日=2025-12-23）
+合計(上市+上櫃)
+	•	1D：Δ=49.40 億元；Δ%=0.9941 %｜latest=5018.70｜base=4969.30（基期日=2026-01-21）
+	•	5D：Δ=143.40 億元；Δ%=2.9414 %｜latest=5018.70｜base=4875.30（基期日=2026-01-15）
+	•	20D：Δ=497.00 億元；Δ%=10.9914 %｜latest=5018.70｜base=4521.70（基期日=2025-12-23）
 
-### 3) 解除 WATCH（降溫）
-- 條件：20D% 仍高，但 Accel ≤ 0 且 1D% 回到 < 0.3（需連 2–3 次確認）
-- 行動：代表短線槓桿加速結束，回到『擴張但不加速』。
+4) 提前示警輔助指標（不引入外部資料）
+	•	Accel = 1D% - (5D%/5)：0.4058
+	•	Spread20 = TPEX_20D% - TWSE_20D%：3.4672
 
-## 2) 資料
-- 上市(TWSE)：融資餘額 3717.30 億元｜資料日期 2026-01-22｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows=30｜head_dates=['2026-01-22', '2026-01-21', '2026-01-20']｜tail_dates=['2025-12-12', '2025-12-11', '2025-12-10']
-- 上櫃(TPEX)：融資餘額 1301.40 億元｜資料日期 2026-01-22｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows=30｜head_dates=['2026-01-22', '2026-01-21', '2026-01-20']｜tail_dates=['2025-12-12', '2025-12-11', '2025-12-10']
-- 合計：融資餘額 5018.70 億元｜資料日期 2026-01-22｜來源：TWSE=HiStock / TPEX=HiStock
+5) 稽核備註
+	•	合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。
+	•	即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
+	•	rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 
-## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
-### 上市(TWSE)
-- 1D：Δ=39.80 億元；Δ%=1.0823 %｜latest=3717.30｜base=3677.50（基期日=2026-01-21）
-- 5D：Δ=124.30 億元；Δ%=3.4595 %｜latest=3717.30｜base=3593.00（基期日=2026-01-15）
-- 20D：Δ=341.40 億元；Δ%=10.1129 %｜latest=3717.30｜base=3375.90（基期日=2025-12-23）
+6) 反方審核檢查（任一失敗 → PARTIAL）
+	•	Check-1 TWSE meta_date==series[0].date：✅（OK）
+	•	Check-1 TPEX meta_date==series[0].date：✅（OK）
+	•	Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
+	•	Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（OK）
+	•	Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（OK）
+	•	Check-4 TWSE history rows>=21：✅（OK）（rows=30）
+	•	Check-4 TPEX history rows>=21：✅（OK）（rows=30）
+	•	Check-5 TWSE 20D base_date 存在於 series：✅（OK）
+	•	Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 
-### 上櫃(TPEX)
-- 1D：Δ=9.60 億元；Δ%=0.7431 %｜latest=1301.40｜base=1291.80（基期日=2026-01-21）
-- 5D：Δ=19.10 億元；Δ%=1.4895 %｜latest=1301.40｜base=1282.30（基期日=2026-01-15）
-- 20D：Δ=155.60 億元；Δ%=13.5800 %｜latest=1301.40｜base=1145.80（基期日=2025-12-23）
-
-### 合計(上市+上櫃)
-- 1D：Δ=49.40 億元；Δ%=0.9941 %｜latest=5018.70｜base=4969.30（基期日=2026-01-21）
-- 5D：Δ=143.40 億元；Δ%=2.9414 %｜latest=5018.70｜base=4875.30（基期日=2026-01-15）
-- 20D：Δ=497.00 億元；Δ%=10.9914 %｜latest=5018.70｜base=4521.70（基期日=2025-12-23）
-
-## 4) 提前示警輔助指標（不引入外部資料）
-- Accel = 1D% - (5D%/5)：0.4058
-- Spread20 = TPEX_20D% - TWSE_20D%：3.4672
-
-## 5) 稽核備註
-- 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。
-- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
-- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
-
-## 6) 反方審核檢查（任一失敗 → PARTIAL）
-- Check-1 TWSE meta_date==series[0].date：✅（OK）
-- Check-1 TPEX meta_date==series[0].date：✅（OK）
-- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
-- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（OK）
-- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（OK）
-- Check-4 TWSE history rows>=21：✅（OK）（rows=30）
-- Check-4 TPEX history rows>=21：✅（OK）（rows=30）
-- Check-5 TWSE 20D base_date 存在於 series：✅（OK）
-- Check-5 TPEX 20D base_date 存在於 series：✅（OK）
-
-_generated_at_utc: 2026-01-23T07:38:00Z_
+generated_at_utc: 2026-01-23T07:44:25Z
