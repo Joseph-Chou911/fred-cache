@@ -1,4 +1,4 @@
-name: Update Taiwan Margin Financing (TWSE+TPEX)
+name: Update Taiwan Margin Financing (TWSE+TPEX) - Plan B (HiStock)
 
 on:
   workflow_dispatch: {}
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   taiwan_margin:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       TZ: Asia/Taipei
 
@@ -36,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests pandas lxml html5lib beautifulsoup4 python-dateutil
+          pip install requests pandas lxml beautifulsoup4 html5lib
 
       - name: Ensure dirs
         shell: bash
@@ -45,7 +45,7 @@ jobs:
           mkdir -p taiwan_margin_cache
           mkdir -p dashboard
 
-      - name: Fetch Taiwan margin-financing series (Plan B)
+      - name: Fetch latest (Plan B / HiStock)
         shell: bash
         run: |
           set -euo pipefail
@@ -53,16 +53,16 @@ jobs:
             --out taiwan_margin_cache/latest.json \
             --min_rows 21
 
-      - name: Append history (dedup by data_date)
+      - name: Append history (seed by latest.rows if empty)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/append_taiwan_margin_history.py \
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
-            --max_items 600
+            --max_items 800
 
-      - name: Render dashboard (Taiwan margin-financing)
+      - name: Render dashboard
         shell: bash
         run: |
           set -euo pipefail
@@ -81,6 +81,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A taiwan_margin_cache dashboard
-          git commit -m "chore: update taiwan margin-financing dashboard"
+          git add taiwan_margin_cache/latest.json taiwan_margin_cache/history.json dashboard/taiwan_margin_financing.md
+          git commit -m "chore: update taiwan margin financing (TWSE+TPEX)"
           git push
