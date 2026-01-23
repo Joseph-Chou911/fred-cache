@@ -45,6 +45,7 @@ jobs:
           set -euo pipefail
           echo "OUTDIR=${OUTDIR}"
           mkdir -p "${OUTDIR}"
+          ls -al
 
       - name: Fetch latest (Scheme2 = HiStock)
         shell: bash
@@ -69,31 +70,44 @@ jobs:
         run: |
           set -euo pipefail
           echo "==== ls -al ${OUTDIR} ===="
-          ls -al "${OUTDIR}" || true
+          ls -al "${OUTDIR}"
           echo "==== required files ===="
           test -s "${OUTDIR}/latest.json"
           test -s "${OUTDIR}/history.json"
           test -s "${OUTDIR}/dashboard.md"
           echo "OK: outputs are present."
 
-      - name: Git status (debug)
+      - name: Check .gitignore (debug)
         shell: bash
         run: |
           set -euo pipefail
-          git status --porcelain=v1
-          echo "----"
-          git status
+          echo "==== git check-ignore ===="
+          git check-ignore -v "${OUTDIR}/latest.json" || true
+          git check-ignore -v "${OUTDIR}/history.json" || true
+          git check-ignore -v "${OUTDIR}/dashboard.md" || true
 
-      - name: Commit & push (if changed)
+      - name: Git status before add (debug)
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo "No changes."
+          echo "==== git status --porcelain ===="
+          git status --porcelain=v1 || true
+
+      - name: Commit & push (include untracked)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 先 add，確保 untracked 檔案會進入 staged
+          git add "${OUTDIR}/latest.json" "${OUTDIR}/history.json" "${OUTDIR}/dashboard.md"
+
+          # staged 沒變化才算真的沒變
+          if git diff --cached --quiet; then
+            echo "No staged changes. Nothing to commit."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${OUTDIR}/latest.json" "${OUTDIR}/history.json" "${OUTDIR}/dashboard.md"
           git commit -m "Update taiwan margin financing cache"
           git push
