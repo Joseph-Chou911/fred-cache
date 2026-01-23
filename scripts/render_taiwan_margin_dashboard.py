@@ -1,77 +1,76 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Render Taiwan margin financing dashboard from latest.json + history.json
-
-Principles:
-- Use balance series from history for Δ and Δ% (not site-provided chg_yi).
-- 合計 only if TWSE/TPEX latest date matches AND baseline dates for horizon match.
-- Output audit-friendly markdown with NA handling.
-"""
 
 from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 
-def now_utc_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def read_json(path: str) -> Any:
+def _read_json(path: str) -> Any:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def fmt_num(x: Optional[float], nd: int = 2) -> str:
+def _fmt_num(x: Optional[float], nd: int = 2) -> str:
     if x is None:
         return "NA"
-    return f"{x:.{nd}f}"
-
-
-def fmt_pct(x: Optional[float], nd: int = 4) -> str:
-    if x is None:
+    try:
+        return f"{float(x):.{nd}f}"
+    except Exception:
         return "NA"
-    return f"{x:.{nd}f}"
 
 
-def build_series_from_history(history_items: List[Dict[str, Any]], market: str) -> List[Tuple[str, float]]:
-    """
-    Return list of (date, balance) sorted desc by date.
-    """
+def _pct(delta: Optional[float], base: Optional[float]) -> Optional[float]:
+    if delta is None or base is None:
+        return None
+    try:
+        b = float(base)
+        if b == 0:
+            return None
+        return float(delta) / abs(b) * 100.0
+    except Exception:
+        return None
+
+
+def _series_from_history(history_items: List[Dict[str, Any]], market: str) -> List[Tuple[str, float]]:
+    # 回傳按日期排序的 (date, balance_yi)
     out: List[Tuple[str, float]] = []
     for it in history_items:
-        if it.get("market") != market:
+        if str(it.get("market", "")).upper() != market:
             continue
         d = it.get("data_date")
         b = it.get("balance_yi")
-        if d and isinstance(b, (int, float)):
+        if not d or b is None:
+            continue
+        try:
             out.append((str(d), float(b)))
-    # dedup by date keep last
-    tmp: Dict[str, float] = {}
-    for d, b in out:
-        tmp[d] = b
-    out2 = sorted(tmp.items(), key=lambda x: x[0], reverse=True)
-    return out2
+        except Exception:
+            continue
+    # sort by date string YYYY-MM-DD（lexicographic OK）
+    out.sort(key=lambda x: x[0])
+    return out
 
 
-def calc_horizon(series: List[Tuple[str, float]], n: int) -> Dict[str, Any]:
-    """
-    n=1 -> 1D (need 2 points)
-    n=5 -> 5D (need 6 points)
-    n=20 -> 20D (need 21 points)
-    """
+def _horizon_delta(series: List[Tuple[str, float]], n: int) -> Tuple[Optional[float], Optional[float], Optional[str]]:
+    # n=1 => 1D (need 2 points), n=5 => 5D (need 6 points) ...
     need = n + 1
     if len(series) < need:
-        return {"delta": None, "pct": None, "base_date": None}
-    latest_d, latest_v = series[0]
-    base_d, base_v = series[n]
-    delta = latest_v - base_v
-    pct = (delta / base_v * 100.0) if base_v != 0 else None
-    return {"delta": delta, "pct": pct, "base_date": base_d}
+        return None, None, None
+    latest_date, latest_val = series[-1]
+    base_date, base_val = series[-(n + 1)]
+    delta = latest_val - base_val
+    pct = _pct(delta, base_val)
+    return delta, pct, base_date
+
+
+def _quality(tw_len: int, tp_len: int) -> str:
+    if tw_len >= 21 and tp_len >= 21:
+        return "OK"
+    if tw_len >= 2 or tp_len >= 2:
+        return "PARTIAL"
+    return "LOW"
 
 
 def main() -> None:
@@ -81,125 +80,106 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
-    latest = read_json(args.latest)
-    hist = read_json(args.history)
-    items = hist.get("items", []) if isinstance(hist, dict) else []
+    latest = _read_json(args.latest)
+    hist = _read_json(args.history)
 
-    twse_s = build_series_from_history(items, "TWSE")
-    tpex_s = build_series_from_history(items, "TPEX")
+    items = hist.get("items") or []
+    tw = _series_from_history(items, "TWSE")
+    tp = _series_from_history(items, "TPEX")
 
-    # latest snapshot info (for display)
-    L = latest.get("series") or {}
-    twse_meta = L.get("TWSE") or {}
-    tpex_meta = L.get("TPEX") or {}
-    twse_date = twse_meta.get("data_date")
-    tpex_date = tpex_meta.get("data_date")
+    quality = _quality(len(tw), len(tp))
 
-    def latest_balance(series: List[Tuple[str, float]]) -> Optional[float]:
-        return series[0][1] if series else None
+    # latest info
+    s = latest.get("series") or {}
+    tw_meta = s.get("TWSE") or {}
+    tp_meta = s.get("TPEX") or {}
+    tw_date = tw_meta.get("data_date")
+    tp_date = tp_meta.get("data_date")
 
-    # compute horizons
-    tw1 = calc_horizon(twse_s, 1)
-    tw5 = calc_horizon(twse_s, 5)
-    tw20 = calc_horizon(twse_s, 20)
+    # deltas
+    horizons = [("1D", 1), ("5D", 5), ("20D", 20)]
 
-    tp1 = calc_horizon(tpex_s, 1)
-    tp5 = calc_horizon(tpex_s, 5)
-    tp20 = calc_horizon(tpex_s, 20)
+    def market_block(name: str, series: List[Tuple[str, float]]) -> List[str]:
+        lines: List[str] = []
+        lines.append(f"### {name}")
+        for label, n in horizons:
+            d, p, base = _horizon_delta(series, n)
+            lines.append(f"- {label}：{_fmt_num(d, 2)} 億元；{_fmt_num(p, 4)} %（基期日={base or 'NA'}）")
+        return lines
 
-    # total only if latest date matches and base dates match per horizon
-    total_ok_latest = (twse_date is not None) and (twse_date == tpex_date)
+    # total (strict alignment)
+    total_lines: List[str] = []
+    total_lines.append("### 合計(上市+上櫃)")
+    for label, n in horizons:
+        tw_d, tw_p, tw_base = _horizon_delta(tw, n)
+        tp_d, tp_p, tp_base = _horizon_delta(tp, n)
 
-    def total_h(tw: Dict[str, Any], tp: Dict[str, Any]) -> Dict[str, Any]:
-        if not total_ok_latest:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "latest date mismatch/NA"}
-        if tw.get("base_date") is None or tp.get("base_date") is None:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "insufficient history"}
-        if tw["base_date"] != tp["base_date"]:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "base_date mismatch"}
-        # build totals
-        latest_tot = (latest_balance(twse_s) or 0.0) + (latest_balance(tpex_s) or 0.0)
-        base_tot = (twse_s[{"1":1,"5":5,"20":20}.get(str(len([tw])),"1")][1] if False else None)  # dummy
-        # compute directly from series indexes
-        # infer n from base_date position in twse_s
-        n = next((i for i, (d, _) in enumerate(twse_s) if d == tw["base_date"]), None)
-        if n is None:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "index not found"}
-        base_tot = twse_s[n][1] + tpex_s[n][1]
-        delta = latest_tot - base_tot
-        pct = (delta / base_tot * 100.0) if base_tot != 0 else None
-        return {"delta": delta, "pct": pct, "base_date": tw["base_date"], "ok": True, "reason": ""}
+        # 合計只在「最新日一致 + 基期日一致」時成立
+        if not tw or not tp:
+            total_lines.append(f"- {label}：NA")
+            continue
 
-    # safer total calc using n explicitly
-    def total_calc(n: int) -> Dict[str, Any]:
-        tw = calc_horizon(twse_s, n)
-        tp = calc_horizon(tpex_s, n)
-        if not total_ok_latest:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "latest date mismatch/NA"}
-        if tw["base_date"] is None or tp["base_date"] is None:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "insufficient history"}
-        if tw["base_date"] != tp["base_date"]:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "base_date mismatch"}
-        if len(twse_s) < n + 1 or len(tpex_s) < n + 1:
-            return {"delta": None, "pct": None, "base_date": None, "ok": False, "reason": "insufficient history"}
-        latest_tot = twse_s[0][1] + tpex_s[0][1]
-        base_tot = twse_s[n][1] + tpex_s[n][1]
-        delta = latest_tot - base_tot
-        pct = (delta / base_tot * 100.0) if base_tot != 0 else None
-        return {"delta": delta, "pct": pct, "base_date": tw["base_date"], "ok": True, "reason": ""}
+        tw_latest_date = tw[-1][0]
+        tp_latest_date = tp[-1][0]
+        if tw_latest_date != tp_latest_date or (tw_base or "") != (tp_base or ""):
+            total_lines.append(f"- {label}：NA（日期錯配：latest {tw_latest_date}/{tp_latest_date} 或 base {tw_base}/{tp_base}）")
+            continue
 
-    tot1 = total_calc(1)
-    tot5 = total_calc(5)
-    tot20 = total_calc(20)
+        if tw_d is None or tp_d is None:
+            total_lines.append(f"- {label}：NA")
+            continue
 
-    # simple qualitative label (expansion if 20D pct >= 8%, else neutral)
-    # keep conservative; only when calculable
-    label = "NA"
-    if tot20["pct"] is not None:
-        label = "擴張" if tot20["pct"] >= 8.0 else ("收縮" if tot20["pct"] <= -8.0 else "中性")
+        delta = tw_d + tp_d
+        # 合計% 用合計基期餘額
+        tw_base_val = tw[-(n + 1)][1] if len(tw) >= n + 1 else None
+        tp_base_val = tp[-(n + 1)][1] if len(tp) >= n + 1 else None
+        base_sum = (tw_base_val + tp_base_val) if (tw_base_val is not None and tp_base_val is not None) else None
+        pct = _pct(delta, base_sum)
+        total_lines.append(f"- {label}：{_fmt_num(delta,2)} 億元；{_fmt_num(pct,4)} %（基期日={tw_base or 'NA'}）")
 
-    quality = "OK" if (twse_date and tpex_date and total_ok_latest) else "PARTIAL"
-
-    twse_src = f'{twse_meta.get("source")}（{twse_meta.get("source_url")}）'
-    tpex_src = f'{tpex_meta.get("source")}（{tpex_meta.get("source_url")}）'
-
-    md = []
-    md.append("# Taiwan Margin Financing Dashboard\n")
-    md.append("## 1) 結論")
-    md.append(f"- {label} + 資料品質 {quality}\n")
-
-    md.append("## 2) 資料")
-    md.append(f"- 上市(TWSE)：融資餘額 {fmt_num(latest_balance(twse_s),2)} 億元｜資料日期 {twse_date or 'NA'}｜來源：{twse_src}")
-    md.append(f"- 上櫃(TPEX)：融資餘額 {fmt_num(latest_balance(tpex_s),2)} 億元｜資料日期 {tpex_date or 'NA'}｜來源：{tpex_src}")
-    if total_ok_latest and latest_balance(twse_s) is not None and latest_balance(tpex_s) is not None:
-        md.append(f"- 合計：融資餘額 {fmt_num(latest_balance(twse_s)+latest_balance(tpex_s),2)} 億元｜資料日期 {twse_date}｜來源：TWSE/TPEX=HiStock")
+    # summary (direction by 1D delta sign if available)
+    tw_1d, _, _ = _horizon_delta(tw, 1)
+    tp_1d, _, _ = _horizon_delta(tp, 1)
+    if tw_1d is None and tp_1d is None:
+        direction = "NA"
     else:
-        md.append(f"- 合計：NA（日期不一致或缺值，依規則不得合計）")
-    md.append("")
+        sgn = 0.0
+        if tw_1d is not None:
+            sgn += tw_1d
+        if tp_1d is not None:
+            sgn += tp_1d
+        direction = "擴張" if sgn > 0 else ("收縮" if sgn < 0 else "持平")
 
-    md.append("## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）")
-    md.append("### 上市(TWSE)")
-    md.append(f"- 1D：{fmt_num(tw1['delta'],2)} 億元；{fmt_pct(tw1['pct'],4)} %（基期日={tw1['base_date'] or 'NA'}）")
-    md.append(f"- 5D：{fmt_num(tw5['delta'],2)} 億元；{fmt_pct(tw5['pct'],4)} %（基期日={tw5['base_date'] or 'NA'}）")
-    md.append(f"- 20D：{fmt_num(tw20['delta'],2)} 億元；{fmt_pct(tw20['pct'],4)} %（基期日={tw20['base_date'] or 'NA'}）\n")
+    out_lines: List[str] = []
+    out_lines.append("# Taiwan Margin Financing Dashboard\n")
+    out_lines.append("## 1) 結論")
+    out_lines.append(f"- {direction} + 資料品質 {quality}\n")
 
-    md.append("### 上櫃(TPEX)")
-    md.append(f"- 1D：{fmt_num(tp1['delta'],2)} 億元；{fmt_pct(tp1['pct'],4)} %（基期日={tp1['base_date'] or 'NA'}）")
-    md.append(f"- 5D：{fmt_num(tp5['delta'],2)} 億元；{fmt_pct(tp5['pct'],4)} %（基期日={tp5['base_date'] or 'NA'}）")
-    md.append(f"- 20D：{fmt_num(tp20['delta'],2)} 億元；{fmt_pct(tp20['pct'],4)} %（基期日={tp20['base_date'] or 'NA'}）\n")
+    out_lines.append("## 2) 資料")
+    out_lines.append(f"- 上市(TWSE)：融資餘額 {_fmt_num(tw[-1][1],2) if tw else 'NA'} 億元｜資料日期 {tw_date or 'NA'}｜來源：{tw_meta.get('source','NA')}（{tw_meta.get('source_url','NA')}）")
+    out_lines.append(f"- 上櫃(TPEX)：融資餘額 {_fmt_num(tp[-1][1],2) if tp else 'NA'} 億元｜資料日期 {tp_date or 'NA'}｜來源：{tp_meta.get('source','NA')}（{tp_meta.get('source_url','NA')}）")
+    if tw and tp and (tw[-1][0] == tp[-1][0]):
+        out_lines.append(f"- 合計：融資餘額 {_fmt_num(tw[-1][1] + tp[-1][1],2)} 億元｜資料日期 {tw[-1][0]}｜來源：TWSE/TPEX={tw_meta.get('source','NA')}")
+    else:
+        out_lines.append("- 合計：NA（上市/上櫃日期不一致或缺值，依規則禁止合計）")
+    out_lines.append("")
 
-    md.append("### 合計(上市+上櫃)")
-    md.append(f"- 1D：{fmt_num(tot1['delta'],2)} 億元；{fmt_pct(tot1['pct'],4)} %（基期日={tot1['base_date'] or 'NA'}）")
-    md.append(f"- 5D：{fmt_num(tot5['delta'],2)} 億元；{fmt_pct(tot5['pct'],4)} %（基期日={tot5['base_date'] or 'NA'}）")
-    md.append(f"- 20D：{fmt_num(tot20['delta'],2)} 億元；{fmt_pct(tot20['pct'],4)} %（基期日={tot20['base_date'] or 'NA'}）\n")
+    out_lines.append("## 3) 計算（以 history.balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）")
+    out_lines.extend(market_block("上市(TWSE)", tw))
+    out_lines.append("")
+    out_lines.extend(market_block("上櫃(TPEX)", tp))
+    out_lines.append("")
+    out_lines.extend(total_lines)
+    out_lines.append("")
 
-    md.append("## 4) 稽核備註")
-    md.append("- 若 HiStock 改版導致欄名變動：fetch 會在 latest.json 的 notes 輸出欄名，方便定位。")
-    md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算變化，避免依賴單一欄位。")
-    md.append(f"\n_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_\n")
+    out_lines.append("## 4) 稽核備註")
+    out_lines.append("- 若 1D/5D/20D 為 NA：代表 history 該市場交易日筆數不足（<2/<6/<21），或合計日期錯配（防誤判規則）。")
+    out_lines.append("- 若 HiStock 改版導致欄名/表格結構變動：請先看 latest.json 的 notes 以定位。")
+    out_lines.append("")
+    out_lines.append(f"_generated_at_utc: {latest.get('generated_at_utc','NA')}_\n")
 
     with open(args.out, "w", encoding="utf-8") as f:
-        f.write("\n".join(md))
+        f.write("\n".join(out_lines))
 
 
 if __name__ == "__main__":
