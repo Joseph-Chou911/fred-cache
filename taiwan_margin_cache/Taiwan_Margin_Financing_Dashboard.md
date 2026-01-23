@@ -31,4 +31,11 @@
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 
-_generated_at_utc: 2026-01-23T05:50:29Z_
+## 5) 反方審核檢查（任一失敗 → PARTIAL）
+- Check-1 TWSE meta_date==series[0].date：✅（OK）
+- Check-1 TPEX meta_date==series[0].date：✅（OK）
+- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
+- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（OK）
+- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（OK）
+
+_generated_at_utc: 2026-01-23T06:00:04Z_
