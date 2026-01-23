@@ -1,6 +1,6 @@
 {
   "schema_version": "taiwan_margin_financing_latest_v1",
-  "generated_at_utc": "2026-01-23T03:17:47Z",
+  "generated_at_utc": "2026-01-23T03:30:54Z",
   "series": {
     "TWSE": {
       "source": "HiStock",
@@ -10,157 +10,156 @@
         {
           "date": "2026-01-22",
           "balance_yi": 3717.3,
-          "chg_yi": null
+          "chg_yi": 39.9
         },
         {
           "date": "2026-01-21",
           "balance_yi": 3677.5,
-          "chg_yi": null
+          "chg_yi": -34.8
         },
         {
           "date": "2026-01-20",
           "balance_yi": 3712.3,
-          "chg_yi": null
+          "chg_yi": 18.1
         },
         {
           "date": "2026-01-19",
           "balance_yi": 3694.2,
-          "chg_yi": null
+          "chg_yi": 60.2
         },
         {
           "date": "2026-01-16",
           "balance_yi": 3633.9,
-          "chg_yi": null
+          "chg_yi": 40.9
         },
         {
           "date": "2026-01-15",
           "balance_yi": 3593.0,
-          "chg_yi": null
+          "chg_yi": 8.5
         },
         {
           "date": "2026-01-14",
           "balance_yi": 3584.5,
-          "chg_yi": null
+          "chg_yi": 28.1
         },
         {
           "date": "2026-01-13",
           "balance_yi": 3556.4,
-          "chg_yi": null
+          "chg_yi": -8.5
         },
         {
           "date": "2026-01-12",
           "balance_yi": 3564.9,
-          "chg_yi": null
+          "chg_yi": 50.0
         },
         {
           "date": "2026-01-09",
           "balance_yi": 3514.9,
-          "chg_yi": null
+          "chg_yi": -8.9
         },
         {
           "date": "2026-01-08",
           "balance_yi": 3523.9,
-          "chg_yi": null
+          "chg_yi": -46.7
         },
         {
           "date": "2026-01-07",
           "balance_yi": 3570.6,
-          "chg_yi": null
+          "chg_yi": 25.1
         },
         {
           "date": "2026-01-06",
           "balance_yi": 3545.5,
-          "chg_yi": null
+          "chg_yi": 36.0
         },
         {
           "date": "2026-01-05",
           "balance_yi": 3509.5,
-          "chg_yi": null
+          "chg_yi": 43.2
         },
         {
           "date": "2026-01-02",
           "balance_yi": 3466.3,
-          "chg_yi": null
+          "chg_yi": 32.2
         },
         {
           "date": "2025-12-31",
           "balance_yi": 3434.1,
-          "chg_yi": null
+          "chg_yi": 20.4
         },
         {
           "date": "2025-12-30",
           "balance_yi": 3413.7,
-          "chg_yi": null
+          "chg_yi": 14.8
         },
         {
           "date": "2025-12-29",
           "balance_yi": 3398.9,
-          "chg_yi": null
+          "chg_yi": -4.5
         },
         {
           "date": "2025-12-26",
           "balance_yi": 3403.4,
-          "chg_yi": null
+          "chg_yi": 14.3
         },
         {
           "date": "2025-12-24",
           "balance_yi": 3389.0,
-          "chg_yi": null
+          "chg_yi": 13.1
         },
         {
           "date": "2025-12-23",
           "balance_yi": 3375.9,
-          "chg_yi": null
+          "chg_yi": 23.9
         },
         {
           "date": "2025-12-22",
           "balance_yi": 3352.0,
-          "chg_yi": null
+          "chg_yi": 18.9
         },
         {
           "date": "2025-12-19",
           "balance_yi": 3333.1,
-          "chg_yi": null
+          "chg_yi": 9.3
         },
         {
           "date": "2025-12-18",
           "balance_yi": 3323.8,
-          "chg_yi": null
+          "chg_yi": 2.1
         },
         {
           "date": "2025-12-17",
           "balance_yi": 3321.7,
-          "chg_yi": null
+          "chg_yi": 33.9
         },
         {
           "date": "2025-12-16",
           "balance_yi": 3287.9,
-          "chg_yi": null
+          "chg_yi": -30.7
         },
         {
           "date": "2025-12-15",
           "balance_yi": 3318.6,
-          "chg_yi": null
+          "chg_yi": 25.1
         },
         {
           "date": "2025-12-12",
           "balance_yi": 3293.5,
-          "chg_yi": null
+          "chg_yi": 26.8
         },
         {
           "date": "2025-12-11",
           "balance_yi": 3266.7,
-          "chg_yi": null
+          "chg_yi": -10.2
         },
         {
           "date": "2025-12-10",
           "balance_yi": 3276.9,
-          "chg_yi": null
+          "chg_yi": 8.1
         }
       ],
       "notes": [
         "HiStock 欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-        "HiStock：找不到『增減/變動』欄，chg_yi 將輸出 NA",
         "HiStock 原始日期樣本：01/22, 01/21, 01/20, 01/19, 01/16",
         "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
       ]
@@ -173,157 +172,156 @@
         {
           "date": "2026-01-22",
           "balance_yi": 1301.4,
-          "chg_yi": null
+          "chg_yi": 9.6
         },
         {
           "date": "2026-01-21",
           "balance_yi": 1291.8,
-          "chg_yi": null
+          "chg_yi": -10.3
         },
         {
           "date": "2026-01-20",
           "balance_yi": 1302.0,
-          "chg_yi": null
+          "chg_yi": 12.5
         },
         {
           "date": "2026-01-19",
           "balance_yi": 1289.5,
-          "chg_yi": null
+          "chg_yi": -2.6
         },
         {
           "date": "2026-01-16",
           "balance_yi": 1292.1,
-          "chg_yi": null
+          "chg_yi": 9.7
         },
         {
           "date": "2026-01-15",
           "balance_yi": 1282.3,
-          "chg_yi": null
+          "chg_yi": 4.2
         },
         {
           "date": "2026-01-14",
           "balance_yi": 1278.1,
-          "chg_yi": null
+          "chg_yi": 18.0
         },
         {
           "date": "2026-01-13",
           "balance_yi": 1260.2,
-          "chg_yi": null
+          "chg_yi": 0.6
         },
         {
           "date": "2026-01-12",
           "balance_yi": 1259.6,
-          "chg_yi": null
+          "chg_yi": 25.4
         },
         {
           "date": "2026-01-09",
           "balance_yi": 1234.2,
-          "chg_yi": null
+          "chg_yi": 10.5
         },
         {
           "date": "2026-01-08",
           "balance_yi": 1223.7,
-          "chg_yi": null
+          "chg_yi": 8.3
         },
         {
           "date": "2026-01-07",
           "balance_yi": 1215.4,
-          "chg_yi": null
+          "chg_yi": -0.3
         },
         {
           "date": "2026-01-06",
           "balance_yi": 1215.6,
-          "chg_yi": null
+          "chg_yi": 12.8
         },
         {
           "date": "2026-01-05",
           "balance_yi": 1202.8,
-          "chg_yi": null
+          "chg_yi": 12.4
         },
         {
           "date": "2026-01-02",
           "balance_yi": 1190.4,
-          "chg_yi": null
+          "chg_yi": 15.1
         },
         {
           "date": "2025-12-31",
           "balance_yi": 1175.2,
-          "chg_yi": null
+          "chg_yi": 9.1
         },
         {
           "date": "2025-12-30",
           "balance_yi": 1166.1,
-          "chg_yi": null
+          "chg_yi": 8.4
         },
         {
           "date": "2025-12-29",
           "balance_yi": 1157.7,
-          "chg_yi": null
+          "chg_yi": 4.0
         },
         {
           "date": "2025-12-26",
           "balance_yi": 1153.7,
-          "chg_yi": null
+          "chg_yi": 5.6
         },
         {
           "date": "2025-12-24",
           "balance_yi": 1148.1,
-          "chg_yi": null
+          "chg_yi": 2.3
         },
         {
           "date": "2025-12-23",
           "balance_yi": 1145.8,
-          "chg_yi": null
+          "chg_yi": 12.0
         },
         {
           "date": "2025-12-22",
           "balance_yi": 1133.8,
-          "chg_yi": null
+          "chg_yi": 14.7
         },
         {
           "date": "2025-12-19",
           "balance_yi": 1119.1,
-          "chg_yi": null
+          "chg_yi": 3.5
         },
         {
           "date": "2025-12-18",
           "balance_yi": 1115.6,
-          "chg_yi": null
+          "chg_yi": -1.9
         },
         {
           "date": "2025-12-17",
           "balance_yi": 1117.5,
-          "chg_yi": null
+          "chg_yi": 0.4
         },
         {
           "date": "2025-12-16",
           "balance_yi": 1117.1,
-          "chg_yi": null
+          "chg_yi": -6.4
         },
         {
           "date": "2025-12-15",
           "balance_yi": 1123.5,
-          "chg_yi": null
+          "chg_yi": -1.4
         },
         {
           "date": "2025-12-12",
           "balance_yi": 1124.9,
-          "chg_yi": null
+          "chg_yi": 13.9
         },
         {
           "date": "2025-12-11",
           "balance_yi": 1111.0,
-          "chg_yi": null
+          "chg_yi": 1.0
         },
         {
           "date": "2025-12-10",
           "balance_yi": 1110.0,
-          "chg_yi": null
+          "chg_yi": 3.8
         }
       ],
       "notes": [
         "HiStock 欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-        "HiStock：找不到『增減/變動』欄，chg_yi 將輸出 NA",
         "HiStock 原始日期樣本：01/22, 01/21, 01/20, 01/19, 01/16",
         "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
       ]
