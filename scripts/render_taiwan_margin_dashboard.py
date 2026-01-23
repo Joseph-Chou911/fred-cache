@@ -55,7 +55,7 @@ def line_check(name: str, ok: bool, msg: str) -> str:
     """
     Avoid duplicated '(OK)(OK)'.
     - If ok and msg == 'OK' -> only show ✅（OK）
-    - If ok and msg != 'OK' -> show ✅（OK）（msg）  (useful OK detail like rows=30)
+    - If ok and msg != 'OK' -> show ✅（OK）（msg）
     - If fail -> show ❌（FAIL）（msg）
     """
     if ok:
@@ -257,6 +257,76 @@ def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]
     return out
 
 
+# ---------------------------
+# Signal rules (your criteria)
+# ---------------------------
+
+def calc_accel(one_d_pct: Optional[float], five_d_pct: Optional[float]) -> Optional[float]:
+    # Accel = 1D% - (5D%/5)
+    if one_d_pct is None or five_d_pct is None:
+        return None
+    return one_d_pct - (five_d_pct / 5.0)
+
+
+def calc_spread20(tpex_20d_pct: Optional[float], twse_20d_pct: Optional[float]) -> Optional[float]:
+    if tpex_20d_pct is None or twse_20d_pct is None:
+        return None
+    return tpex_20d_pct - twse_20d_pct
+
+
+def determine_signal(
+    tot20_pct: Optional[float],
+    tot1_pct: Optional[float],
+    tot5_pct: Optional[float],
+    accel: Optional[float],
+    spread20: Optional[float],
+) -> Tuple[str, str, str]:
+    """
+    Returns (state_label, signal, rationale)
+
+    Your rules:
+    1) WATCH（升溫）
+       - 20D% ≥ 8 AND (1D% ≥ 0.8 OR Spread20 ≥ 3 OR Accel ≥ 0.25)
+    2) ALERT（疑似去槓桿）
+       - 20D% ≥ 8 AND 1D% < 0 AND 5D% < 0
+    3) 解除 WATCH（降溫）
+       - 20D% still high BUT Accel ≤ 0 AND 1D% < 0.3 (needs 2–3 times; dashboard only shows "candidate")
+    """
+    if tot20_pct is None:
+        return ("NA", "NA", "insufficient total_20D% (NA)")
+
+    # state label
+    if tot20_pct >= 8.0:
+        state = "擴張"
+    elif tot20_pct <= -8.0:
+        state = "收縮"
+    else:
+        state = "中性"
+
+    # ALERT first (more urgent)
+    if (tot20_pct >= 8.0) and (tot1_pct is not None) and (tot5_pct is not None) and (tot1_pct < 0.0) and (tot5_pct < 0.0):
+        return (state, "ALERT", "20D expansion + 1D%<0 and 5D%<0 (possible deleveraging)")
+
+    # WATCH
+    watch_cond = False
+    if tot20_pct >= 8.0:
+        if (tot1_pct is not None and tot1_pct >= 0.8):
+            watch_cond = True
+        if (spread20 is not None and spread20 >= 3.0):
+            watch_cond = True
+        if (accel is not None and accel >= 0.25):
+            watch_cond = True
+    if watch_cond:
+        return (state, "WATCH", "20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)")
+
+    # Cool-down candidate (cannot confirm 2–3 times within one snapshot)
+    if (tot20_pct >= 8.0) and (accel is not None) and (tot1_pct is not None):
+        if (accel <= 0.0) and (tot1_pct < 0.3):
+            return (state, "INFO", "cool-down candidate: Accel<=0 and 1D%<0.3 (needs 2–3 consecutive confirmations)")
+
+    return (state, "NONE", "no rule triggered")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
@@ -302,16 +372,18 @@ def main() -> None:
     tot5 = total_calc(twse_s, tpex_s, 5, twse_meta_date, tpex_meta_date)
     tot20 = total_calc(twse_s, tpex_s, 20, twse_meta_date, tpex_meta_date)
 
-    # Label (conservative): only when 20D total pct calculable
-    label = "NA"
-    if tot20.get("pct") is not None:
-        p = float(tot20["pct"])
-        if p >= 8.0:
-            label = "擴張"
-        elif p <= -8.0:
-            label = "收縮"
-        else:
-            label = "中性"
+    # Early-warning helpers (only when computable)
+    accel = calc_accel(tot1.get("pct"), tot5.get("pct"))
+    spread20 = calc_spread20(tp20.get("pct"), tw20.get("pct"))
+
+    # Signal determination (your criteria)
+    state_label, signal, rationale = determine_signal(
+        tot20_pct=tot20.get("pct"),
+        tot1_pct=tot1.get("pct"),
+        tot5_pct=tot5.get("pct"),
+        accel=accel,
+        spread20=spread20,
+    )
 
     # ---------------------------
     # Checks (any fail => PARTIAL)
@@ -359,7 +431,23 @@ def main() -> None:
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
     md.append("## 1) 結論")
-    md.append(f"- {label} + 資料品質 {quality}")
+    md.append(f"- 狀態：{state_label}｜信號：{signal}｜資料品質：{quality}")
+    md.append(f"  - rationale: {rationale}")
+    md.append("")
+
+    # Keep explicit criteria in output (what you asked to preserve)
+    md.append("## 判定標準（本 dashboard 內建規則）")
+    md.append("### 1) WATCH（升溫）")
+    md.append("- 條件：20D% ≥ 8 且 (1D% ≥ 0.8 或 Spread20 ≥ 3 或 Accel ≥ 0.25)")
+    md.append("- 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。")
+    md.append("")
+    md.append("### 2) ALERT（疑似去槓桿）")
+    md.append("- 條件：20D% ≥ 8 且 1D% < 0 且 5D% < 0")
+    md.append("- 行動：優先看『是否出現連續負值』，因為可能開始踩踏。")
+    md.append("")
+    md.append("### 3) 解除 WATCH（降溫）")
+    md.append("- 條件：20D% 仍高，但 Accel ≤ 0 且 1D% 回到 < 0.3（需連 2–3 次確認）")
+    md.append("- 行動：代表短線槓桿加速結束，回到『擴張但不加速』。")
     md.append("")
 
     md.append("## 2) 資料")
@@ -424,13 +512,18 @@ def main() -> None:
     )
     md.append("")
 
-    md.append("## 4) 稽核備註")
+    md.append("## 4) 提前示警輔助指標（不引入外部資料）")
+    md.append(f"- Accel = 1D% - (5D%/5)：{fmt_pct(accel,4)}")
+    md.append(f"- Spread20 = TPEX_20D% - TWSE_20D%：{fmt_pct(spread20,4)}")
+    md.append("")
+
+    md.append("## 5) 稽核備註")
     md.append("- 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。")
     md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。")
     md.append("- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
     md.append("")
 
-    md.append("## 5) 反方審核檢查（任一失敗 → PARTIAL）")
+    md.append("## 6) 反方審核檢查（任一失敗 → PARTIAL）")
     md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
     md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
     md.append(line_check("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
