@@ -134,48 +134,20 @@ def total_calc(
     tp = calc_horizon(tpex_s, n)
 
     if (twse_meta_date is None) or (tpex_meta_date is None) or (twse_meta_date != tpex_meta_date):
-        return {
-            "delta": None,
-            "pct": None,
-            "base_date": None,
-            "latest": None,
-            "base": None,
-            "ok": False,
-            "reason": "latest date mismatch/NA",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "latest date mismatch/NA"}
 
     if tw["base_date"] is None or tp["base_date"] is None:
-        return {
-            "delta": None,
-            "pct": None,
-            "base_date": None,
-            "latest": None,
-            "base": None,
-            "ok": False,
-            "reason": "insufficient history",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "insufficient history"}
 
     if tw["base_date"] != tp["base_date"]:
-        return {
-            "delta": None,
-            "pct": None,
-            "base_date": None,
-            "latest": None,
-            "base": None,
-            "ok": False,
-            "reason": "base_date mismatch",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "base_date mismatch"}
 
     if len(twse_s) < n + 1 or len(tpex_s) < n + 1:
-        return {
-            "delta": None,
-            "pct": None,
-            "base_date": None,
-            "latest": None,
-            "base": None,
-            "ok": False,
-            "reason": "insufficient history",
-        }
+        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
+                "reason": "insufficient history"}
 
     latest_tot = twse_s[0][1] + tpex_s[0][1]
     base_tot = twse_s[n][1] + tpex_s[n][1]
@@ -194,7 +166,7 @@ def total_calc(
 
 
 # ---------------------------
-# Checks (any fail => PARTIAL)
+# Extract / Checks
 # ---------------------------
 
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
@@ -258,11 +230,10 @@ def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]
 
 
 # ---------------------------
-# Signal rules (your criteria)
+# Signal rules
 # ---------------------------
 
 def calc_accel(one_d_pct: Optional[float], five_d_pct: Optional[float]) -> Optional[float]:
-    # Accel = 1D% - (5D%/5)
     if one_d_pct is None or five_d_pct is None:
         return None
     return one_d_pct - (five_d_pct / 5.0)
@@ -281,21 +252,9 @@ def determine_signal(
     accel: Optional[float],
     spread20: Optional[float],
 ) -> Tuple[str, str, str]:
-    """
-    Returns (state_label, signal, rationale)
-
-    Your rules:
-    1) WATCH（升溫）
-       - 20D% ≥ 8 AND (1D% ≥ 0.8 OR Spread20 ≥ 3 OR Accel ≥ 0.25)
-    2) ALERT（疑似去槓桿）
-       - 20D% ≥ 8 AND 1D% < 0 AND 5D% < 0
-    3) 解除 WATCH（降溫）
-       - 20D% still high BUT Accel ≤ 0 AND 1D% < 0.3 (needs 2–3 times; dashboard only shows "candidate")
-    """
     if tot20_pct is None:
         return ("NA", "NA", "insufficient total_20D% (NA)")
 
-    # state label
     if tot20_pct >= 8.0:
         state = "擴張"
     elif tot20_pct <= -8.0:
@@ -303,11 +262,9 @@ def determine_signal(
     else:
         state = "中性"
 
-    # ALERT first (more urgent)
     if (tot20_pct >= 8.0) and (tot1_pct is not None) and (tot5_pct is not None) and (tot1_pct < 0.0) and (tot5_pct < 0.0):
         return (state, "ALERT", "20D expansion + 1D%<0 and 5D%<0 (possible deleveraging)")
 
-    # WATCH
     watch_cond = False
     if tot20_pct >= 8.0:
         if (tot1_pct is not None and tot1_pct >= 0.8):
@@ -319,7 +276,6 @@ def determine_signal(
     if watch_cond:
         return (state, "WATCH", "20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)")
 
-    # Cool-down candidate (cannot confirm 2–3 times within one snapshot)
     if (tot20_pct >= 8.0) and (accel is not None) and (tot1_pct is not None):
         if (accel <= 0.0) and (tot1_pct < 0.3):
             return (state, "INFO", "cool-down candidate: Accel<=0 and 1D%<0.3 (needs 2–3 consecutive confirmations)")
@@ -340,11 +296,9 @@ def main() -> None:
     if not isinstance(items, list):
         items = []
 
-    # Build history series (used for Δ/Δ%)
     twse_s = build_series_from_history(items, "TWSE")
     tpex_s = build_series_from_history(items, "TPEX")
 
-    # Latest meta + rows (used for quick sanity)
     twse_rows = extract_latest_rows(latest, "TWSE")
     tpex_rows = extract_latest_rows(latest, "TPEX")
 
@@ -359,7 +313,6 @@ def main() -> None:
     tpex_head_dates = [str(r.get("date")) for r in tpex_rows[:3] if r.get("date")]
     tpex_tail_dates = [str(r.get("date")) for r in tpex_rows[-3:] if r.get("date")]
 
-    # Horizons (from history series)
     tw1 = calc_horizon(twse_s, 1)
     tw5 = calc_horizon(twse_s, 5)
     tw20 = calc_horizon(twse_s, 20)
@@ -372,11 +325,9 @@ def main() -> None:
     tot5 = total_calc(twse_s, tpex_s, 5, twse_meta_date, tpex_meta_date)
     tot20 = total_calc(twse_s, tpex_s, 20, twse_meta_date, tpex_meta_date)
 
-    # Early-warning helpers (only when computable)
     accel = calc_accel(tot1.get("pct"), tot5.get("pct"))
     spread20 = calc_spread20(tp20.get("pct"), tw20.get("pct"))
 
-    # Signal determination (your criteria)
     state_label, signal, rationale = determine_signal(
         tot20_pct=tot20.get("pct"),
         tot1_pct=tot1.get("pct"),
@@ -385,21 +336,15 @@ def main() -> None:
         spread20=spread20,
     )
 
-    # ---------------------------
-    # Checks (any fail => PARTIAL)
-    # ---------------------------
-
-    # Check-1: meta_date == series[0].date
+    # Checks
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
     c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
-    # Check-2: head5 dates strictly decreasing and unique (use latest.rows)
     twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
     tpex_dates_from_rows = [str(r.get("date")) for r in tpex_rows if r.get("date")]
     c2_tw_ok, c2_tw_msg = check_head5_strict_desc_unique(twse_dates_from_rows)
     c2_tp_ok, c2_tp_msg = check_head5_strict_desc_unique(tpex_dates_from_rows)
 
-    # Check-3: TWSE/TPEX head5 identical (date+balance) => likely wrong page
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
         c3_ok = (head5_pairs(twse_rows) != head5_pairs(tpex_rows))
         c3_msg = "OK" if c3_ok else "head5 identical (date+balance) => likely wrong page"
@@ -407,11 +352,9 @@ def main() -> None:
         c3_ok = False
         c3_msg = "insufficient rows for head5 comparison"
 
-    # Check-4: history rows>=21 (this is what Δ/Δ% depends on)
     c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
     c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
 
-    # Check-5: 20D base_date exists in series
     c5_tw_ok, c5_tw_msg = check_base_date_in_series(twse_s, tw20.get("base_date"), "TWSE_20D")
     c5_tp_ok, c5_tp_msg = check_base_date_in_series(tpex_s, tp20.get("base_date"), "TPEX_20D")
 
@@ -424,9 +367,7 @@ def main() -> None:
     )
     quality = "PARTIAL" if any_fail else "OK"
 
-    # ---------------------------
-    # Render markdown
-    # ---------------------------
+    # Render markdown (ONLY layout tweaks here)
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
@@ -435,8 +376,7 @@ def main() -> None:
     md.append(f"  - rationale: {rationale}")
     md.append("")
 
-    # Keep explicit criteria in output (what you asked to preserve)
-    md.append("## 判定標準（本 dashboard 內建規則）")
+    md.append("## 1.1) 判定標準（本 dashboard 內建規則）")
     md.append("### 1) WATCH（升溫）")
     md.append("- 條件：20D% ≥ 8 且 (1D% ≥ 0.8 或 Spread20 ≥ 3 或 Accel ≥ 0.25)")
     md.append("- 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。")
@@ -454,18 +394,12 @@ def main() -> None:
     md.append(
         f"- 上市(TWSE)：融資餘額 {fmt_num(latest_balance_from_series(twse_s),2)} 億元｜資料日期 {twse_meta_date or 'NA'}｜來源：{twse_src}（{twse_url}）"
     )
-    md.append(
-        f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}"
-    )
-
+    md.append(f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}")
     md.append(
         f"- 上櫃(TPEX)：融資餘額 {fmt_num(latest_balance_from_series(tpex_s),2)} 億元｜資料日期 {tpex_meta_date or 'NA'}｜來源：{tpex_src}（{tpex_url}）"
     )
-    md.append(
-        f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}"
-    )
+    md.append(f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}")
 
-    # total balance (only if latest dates match and both latest balances exist)
     if (twse_meta_date is not None) and (twse_meta_date == tpex_meta_date) and \
        (latest_balance_from_series(twse_s) is not None) and (latest_balance_from_series(tpex_s) is not None):
         md.append(
