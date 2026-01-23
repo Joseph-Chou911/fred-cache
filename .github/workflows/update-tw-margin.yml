@@ -1,0 +1,78 @@
+name: Update Taiwan Margin Financing Cache
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 11:50 Asia/Taipei = 03:50 UTC
+    - cron: "50 3 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TIMEZONE: Asia/Taipei
+      OUTDIR: taiwan_margin_cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install requests pandas lxml beautifulsoup4
+
+      - name: Ensure output dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${OUTDIR}"
+
+      - name: Fetch latest (Scheme2 = HiStock)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/tw_margin_fetch.py --outdir "${OUTDIR}"
+
+      - name: Append history (seed once from latest.rows)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/tw_margin_append_history.py --outdir "${OUTDIR}"
+
+      - name: Render dashboard (from history.balance_yi)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/tw_margin_render_dashboard.py --outdir "${OUTDIR}"
+
+      - name: Commit & push (if changed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${OUTDIR}/latest.json" "${OUTDIR}/history.json" "${OUTDIR}/dashboard.md"
+          git commit -m "Update taiwan margin financing cache"
+          git push
