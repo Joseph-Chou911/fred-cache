@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-Append / Seed taiwan_margin_cache/history.json from latest.json.
+Append taiwan margin financing history.
 
-Rules:
-- If history missing or empty -> seed ALL latest.rows for each market (bulk seed).
-- Else -> append only the latest day row (rows[0]) for each market.
-- Deduplicate by (market, data_date): keep LAST (newest run replaces older).
-- Keep at most --max_items newest items by run_ts_utc order after dedup (safe).
+Key behavior:
+- If history is empty OR missing a market, seed from latest.series[market].rows (all rows, not just latest day).
+- Deduplicate by (market, data_date) keep the newest run_ts_utc.
+- Keep max_items.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
@@ -24,111 +21,102 @@ def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _read_json(path: str) -> Any:
-    if not os.path.exists(path):
+def load_json(path: str) -> Any:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
         return None
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
-def _write_json(path: str, obj: Any) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+def save_json(path: str, obj: Any) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
-def _history_items(obj: Any) -> List[Dict[str, Any]]:
-    if not isinstance(obj, dict):
-        return []
-    items = obj.get("items")
-    if isinstance(items, list):
-        return [x for x in items if isinstance(x, dict)]
-    return []
-
-
-def _make_item(run_ts_utc: str, market: str, source: str, source_url: str, row: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "run_ts_utc": run_ts_utc,
-        "market": market,
-        "source": source,
-        "source_url": source_url,
-        "data_date": row.get("date"),
-        "balance_yi": row.get("balance_yi"),
-        "chg_yi": row.get("chg_yi"),
-    }
-
-
-def main() -> int:
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
     ap.add_argument("--history", required=True)
-    ap.add_argument("--max_items", type=int, default=800)
+    ap.add_argument("--max_items", type=int, default=400)
     args = ap.parse_args()
 
-    latest = _read_json(args.latest)
-    if not isinstance(latest, dict) or "series" not in latest:
-        raise SystemExit("latest.json 格式錯誤或缺 series")
+    latest = load_json(args.latest)
+    if not latest or "series" not in latest:
+        raise SystemExit("latest.json 缺少 series")
 
-    hist = _read_json(args.history)
-    items = _history_items(hist)
-    history_is_empty = len(items) == 0
+    hist = load_json(args.history)
+    if not hist:
+        hist = {"schema_version": "taiwan_margin_financing_history_v1", "generated_at_utc": now_utc_iso(), "items": []}
 
-    run_ts_utc = now_utc_iso()
+    items: List[Dict[str, Any]] = [x for x in hist.get("items", []) if isinstance(x, dict)]
 
-    new_items: List[Dict[str, Any]] = []
-    series = latest.get("series", {})
-
-    for market in ["TWSE", "TPEX"]:
-        s = series.get(market, {})
-        source = s.get("source", "NA")
-        source_url = s.get("source_url", "NA")
-        rows = s.get("rows", [])
-        if not isinstance(rows, list) or len(rows) == 0:
-            # no append for this market
-            continue
-
-        if history_is_empty:
-            # seed ALL rows (bulk)
-            for r in rows:
-                if isinstance(r, dict) and r.get("date") is not None:
-                    new_items.append(_make_item(run_ts_utc, market, source, source_url, r))
-        else:
-            # append only latest row
-            r0 = rows[0]
-            if isinstance(r0, dict) and r0.get("date") is not None:
-                new_items.append(_make_item(run_ts_utc, market, source, source_url, r0))
-
-    merged = items + new_items
-
-    # Dedup by (market, data_date): keep LAST occurrence
-    dedup: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    order: List[Tuple[str, str]] = []
-    for it in merged:
+    # 建索引：最後一次出現的位置（用於覆蓋）
+    index: Dict[Tuple[str, str], int] = {}
+    for i, it in enumerate(items):
         m = it.get("market")
         d = it.get("data_date")
-        if not m or not d:
-            continue
-        key = (str(m), str(d))
-        if key not in dedup:
-            order.append(key)
-        dedup[key] = it
+        if isinstance(m, str) and isinstance(d, str):
+            index[(m, d)] = i
 
-    # preserve original order, but with last write wins
-    out_items = [dedup[k] for k in order if k in dedup]
+    run_ts = now_utc_iso()
 
-    # If too many, keep tail (most recent appended are at end)
-    if len(out_items) > args.max_items:
-        out_items = out_items[-args.max_items :]
+    def upsert_one(market: str, source: str, source_url: str, data_date: str, balance_yi: float, chg_yi: float | None) -> None:
+        nonlocal items, index
+        key = (market, data_date)
+        obj = {
+            "run_ts_utc": run_ts,
+            "market": market,
+            "source": source,
+            "source_url": source_url,
+            "data_date": data_date,
+            "balance_yi": float(balance_yi),
+            "chg_yi": float(chg_yi) if chg_yi is not None else None,
+        }
+        if key in index:
+            items[index[key]] = obj
+        else:
+            items.append(obj)
+            index[key] = len(items) - 1
 
-    out = {
-        "schema_version": "taiwan_margin_financing_history_v1",
-        "generated_at_utc": run_ts_utc,
-        "items": out_items,
-    }
+    # 先判斷目前 history 是否已包含某市場的任何資料；若沒有就用 latest.rows 全量 seed
+    existing_markets = set([it.get("market") for it in items if isinstance(it.get("market"), str)])
 
-    _write_json(args.history, out)
-    return 0
+    for market in ("TWSE", "TPEX"):
+        s = latest["series"].get(market, {})
+        source = s.get("source", "NA")
+        source_url = s.get("source_url", "NA")
+        rows = s.get("rows", []) or []
+
+        if market not in existing_markets and rows:
+            # 種子：把 latest.rows 全塞進 history（你要求的）
+            for r in rows:
+                d = r.get("date")
+                bal = r.get("balance_yi")
+                chg = r.get("chg_yi", None)
+                if isinstance(d, str) and isinstance(bal, (int, float)):
+                    upsert_one(market, source, source_url, d, float(bal), float(chg) if isinstance(chg, (int, float)) else None)
+
+        # 日常：至少 upsert 最新一筆（若有）
+        if rows:
+            r0 = rows[0]
+            d0 = r0.get("date")
+            bal0 = r0.get("balance_yi")
+            chg0 = r0.get("chg_yi", None)
+            if isinstance(d0, str) and isinstance(bal0, (int, float)):
+                upsert_one(market, source, source_url, d0, float(bal0), float(chg0) if isinstance(chg0, (int, float)) else None)
+
+    # 以日期排序（同市場先後不重要，但整體可讀性好）
+    # 注意：這裡用字串排序 YYYY-MM-DD OK
+    items.sort(key=lambda it: (it.get("market", ""), it.get("data_date", "")), reverse=True)
+
+    # 截斷
+    items = items[: args.max_items]
+
+    hist["generated_at_utc"] = now_utc_iso()
+    hist["items"] = items
+    save_json(args.history, hist)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
