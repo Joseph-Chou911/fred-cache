@@ -36,12 +36,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas lxml
 
-      - name: Ensure dirs
+      - name: Ensure dirs (and keep files)
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p taiwan_margin_cache
-          mkdir -p dashboard
+          mkdir -p taiwan_margin_cache dashboard
+          # Ensure folders are visible in git even if output files are missing/ignored
+          : > taiwan_margin_cache/.gitkeep
+          : > dashboard/.gitkeep
 
       - name: Fetch Taiwan margin-financing (Scheme2 HiStock)
         shell: bash
@@ -70,16 +72,32 @@ jobs:
             --history taiwan_margin_cache/history.json \
             --out dashboard/taiwan_margin_financing.md
 
+      - name: Debug list outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== taiwan_margin_cache ==="
+          ls -la taiwan_margin_cache || true
+          echo "=== dashboard ==="
+          ls -la dashboard || true
+          echo "=== git status (porcelain) ==="
+          git status --porcelain
+
       - name: Commit updates
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Add folders to avoid missing files due to path mistakes
+          git add -A taiwan_margin_cache dashboard
+
+          if git diff --cached --quiet; then
             echo "No changes."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add taiwan_margin_cache/latest.json taiwan_margin_cache/history.json dashboard/taiwan_margin_financing.md
+
           git commit -m "chore: update taiwan margin-financing (scheme2 histock)"
           git push
