@@ -1,437 +1,374 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-scripts/build_unified_dashboard_latest.py
+Build unified dashboard JSON from module outputs.
 
-Goal (audit-first):
-- Merge modules: market_cache / fred_cache / taiwan_margin_financing / roll25_cache
-- Add deterministic cross-module consistency (Margin × Roll25) into:
-  modules.taiwan_margin_financing.cross_module
+Adds:
+- roll25_derived: N-day realized volatility (annualized) + max drawdown
+- fx_usdtwd: USD/TWD spot mid (BOT) + ret1/chg_5d + deterministic signal rule
 
-Deterministic rules (no guessing, rules are explicit):
+NO external fetch here. Pure merge + deterministic calculations.
 
-A) roll25_heated:
-    - If tag == "NON_TRADING_DAY" => heated=False
-    - Else heated := (risk_level in {"中","高"})
-                  OR any of signals {VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak} is True
-    - Confidence downgrade:
-        LookbackNActual < LookbackNTarget => confidence="DOWNGRADED" (note only)
+Inputs (default paths are aligned with your unified_dashboard_latest_v1 sample):
+- dashboard/dashboard_latest.json
+- dashboard_fred_cache/dashboard_latest.json
+- taiwan_margin_cache/latest.json
+- roll25_cache/latest_report.json
+- fx_cache/latest.json (+ fx_cache/history.json)
 
-B) margin_signal (two-stage):
-    1) Prefer structured fields inside taiwan_margin_cache/latest.json:
-       ["summary"]["signal"], ["signal"], ["status"]["signal"], ["result"]["signal"],
-       ["meta"]["summary"]["signal"], ["meta"]["signal"]
-       If found => use it.
-    2) If not found (as in your current JSON), derive deterministically from chg_yi with rule_v1:
-       - Compute TWSE last5 chg_yi: sum_last5, pos_days_last5, latest_chg
-       - Rule_v1:
-           ALERT if (sum_last5 >= 200) OR (pos_days_last5 >= 4 AND sum_last5 >= 150)
-           WATCH if (sum_last5 >= 100) OR (pos_days_last5 >= 4 AND latest_chg >= 40)
-           else NONE
-       - Evidence path recorded as "DERIVED.rule_v1(TWSE_chg_yi_last5)"
-
-C) consistency (Margin × Roll25):
-    if margin_signal in {"WATCH","ALERT"} and roll25_heated: "RESONANCE"
-    if margin_signal in {"WATCH","ALERT"} and not roll25_heated: "DIVERGENCE"
-    if margin_signal not in {"WATCH","ALERT"} and roll25_heated: "MARKET_SHOCK_ONLY"
-    else: "QUIET"
-  If margin_signal=="NA" or roll25 unavailable => "NA"
+Output:
+- unified_dashboard/latest.json (or any path you pass)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
-from pathlib import Path
+import math
+import os
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
-NA = "NA"
 
-def now_utc() -> str:
+def _read_text(path: str) -> str:
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _write_text(path: str, text: str) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _load_json(path: str) -> Any:
+    return json.loads(_read_text(path))
+
+
+def _dump_json(path: str, obj: Any) -> None:
+    _write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
+
+
+def _now_utc_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-def try_read(path: str) -> Dict[str, Any]:
-    p = Path(path)
-    try:
-        obj = json.loads(p.read_text(encoding="utf-8"))
-        return obj if isinstance(obj, dict) else {}
-    except Exception:
-        return {}
 
-def outcome_to_status(outcome: str) -> str:
-    if outcome in ("present", "success", "ok", "OK"):
-        return "OK"
-    if outcome in ("failure", "cancelled", "FAILED"):
-        return "FAILED"
-    return "MISSING"
-
-def safe_get(d: Any, *keys: str) -> Any:
+def _safe_get(d: Any, *keys: str) -> Any:
     cur = d
     for k in keys:
-        if isinstance(cur, dict) and k in cur:
-            cur = cur[k]
-        else:
+        if not isinstance(cur, dict):
             return None
+        cur = cur.get(k)
     return cur
 
-def as_bool(x: Any) -> Optional[bool]:
-    if isinstance(x, bool):
-        return x
-    return None
 
-def normalize_signal(x: Any) -> str:
-    if not isinstance(x, str):
-        return NA
-    s = x.strip().upper()
-    if s in ("ALERT", "WATCH", "INFO", "NONE"):
-        return s
-    return NA
+# ---------- Roll25 derived metrics ----------
 
-# -----------------------
-# Margin: pick or derive
-# -----------------------
-def pick_margin_signal_structured(twm: Dict[str, Any]) -> Tuple[str, str]:
-    candidates = [
-        ("summary.signal", safe_get(twm, "summary", "signal")),
-        ("signal", safe_get(twm, "signal")),
-        ("status.signal", safe_get(twm, "status", "signal")),
-        ("result.signal", safe_get(twm, "result", "signal")),
-        ("meta.summary.signal", safe_get(twm, "meta", "summary", "signal")),
-        ("meta.signal", safe_get(twm, "meta", "signal")),
-    ]
-    for path, val in candidates:
-        s = normalize_signal(val)
-        if s != NA:
-            return s, path
-    return NA, "NA"
-
-def _extract_chg_lastn(twm: Dict[str, Any], which: str, n: int = 5) -> List[float]:
-    rows = safe_get(twm, "series", which, "rows")
+def _extract_roll25_closes(roll25_latest_report: Dict[str, Any]) -> List[float]:
+    # Prefer cache_roll25 (already ordered newest->oldest in your sample)
+    arr = roll25_latest_report.get("cache_roll25")
     out: List[float] = []
-    if isinstance(rows, list):
-        for r in rows[:n]:
-            try:
-                v = r.get("chg_yi")
+    if isinstance(arr, list):
+        for it in arr:
+            if isinstance(it, dict):
+                v = it.get("close")
                 if isinstance(v, (int, float)):
                     out.append(float(v))
-                elif isinstance(v, str) and v.strip():
-                    out.append(float(v.strip()))
-            except Exception:
-                pass
+    # cache_roll25 in sample is newest first; keep that order
     return out
 
-def derive_margin_signal_rule_v1(twm: Dict[str, Any]) -> Tuple[str, str, Dict[str, Any]]:
+
+def _realized_vol_annualized_pct(closes_newest_first: List[float], n: int) -> Tuple[Optional[float], int]:
     """
-    Deterministic derivation from TWSE last5 chg_yi.
-    Returns (signal, source, rationale)
+    Compute annualized realized volatility (pct) from last n returns.
+    Uses log returns; annualization sqrt(252).
+    Need at least n+1 closes.
+    Returns (vol_pct, points_used).
     """
-    chg = _extract_chg_lastn(twm, "TWSE", 5)
-    if not chg:
-        return NA, "NA", {"reason": "no_chg_yi_last5"}
+    if n <= 0:
+        return None, 0
+    if len(closes_newest_first) < n + 1:
+        return None, 0
 
-    sum_last5 = float(sum(chg))
-    pos_days = int(sum(1 for x in chg if x > 0))
-    latest_chg = float(chg[0])
+    # take most recent (n+1) closes, newest->oldest
+    closes = closes_newest_first[: n + 1]
+    # compute log returns for n intervals: r_t = ln(C_t / C_{t-1}) where t is newer
+    rets: List[float] = []
+    for i in range(n):
+        c_new = closes[i]
+        c_old = closes[i + 1]
+        if c_new <= 0 or c_old <= 0:
+            return None, 0
+        rets.append(math.log(c_new / c_old))
 
-    # rule_v1 thresholds (explicit constants)
-    if (sum_last5 >= 200.0) or (pos_days >= 4 and sum_last5 >= 150.0):
-        sig = "ALERT"
-        rule_hit = "ALERT if sum_last5>=200 OR (pos_days>=4 AND sum_last5>=150)"
-    elif (sum_last5 >= 100.0) or (pos_days >= 4 and latest_chg >= 40.0):
-        sig = "WATCH"
-        rule_hit = "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)"
-    else:
-        sig = "NONE"
-        rule_hit = "NONE otherwise"
+    if len(rets) < 2:
+        return None, len(rets)
 
-    rationale = {
-        "basis": "TWSE chg_yi last5",
-        "chg_last5": chg,
-        "sum_last5": sum_last5,
-        "pos_days_last5": pos_days,
-        "latest_chg": latest_chg,
-        "rule_version": "rule_v1",
-        "rule_hit": rule_hit,
+    mean = sum(rets) / len(rets)
+    var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)  # sample var
+    vol_daily = math.sqrt(max(var, 0.0))
+    vol_ann = vol_daily * math.sqrt(252.0)
+    return vol_ann * 100.0, len(rets)
+
+
+def _max_drawdown_pct(closes_newest_first: List[float], n: int) -> Tuple[Optional[float], int]:
+    """
+    Max drawdown over last n closes (not returns).
+    Use series ordered newest->oldest; we evaluate on chronological order oldest->newest.
+    Returns (max_drawdown_pct as negative number, points_used).
+    """
+    if n <= 1:
+        return None, 0
+    if len(closes_newest_first) < n:
+        return None, 0
+
+    # convert to oldest->newest
+    series = list(reversed(closes_newest_first[:n]))
+    peak = -1e100
+    max_dd = 0.0  # negative or 0
+    for c in series:
+        if c > peak:
+            peak = c
+        if peak > 0:
+            dd = (c / peak) - 1.0
+            if dd < max_dd:
+                max_dd = dd
+    return max_dd * 100.0, len(series)
+
+
+# ---------- FX derived metrics ----------
+
+def _load_fx_history(path: str) -> List[Dict[str, Any]]:
+    if not os.path.exists(path):
+        return []
+    try:
+        obj = _load_json(path)
+        items = obj.get("items") if isinstance(obj, dict) else None
+        if isinstance(items, list):
+            # ensure sorted ascending by date (fetcher already does)
+            return [x for x in items if isinstance(x, dict) and isinstance(x.get("date"), str)]
+    except Exception:
+        return []
+    return []
+
+
+def _fx_ret1_and_chg5(history_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Compute ret1% and 5d change% from history (ascending by date).
+    ret1%: last vs prev
+    chg_5d%: last vs 5 trading days ago (index -6)
+    """
+    mids: List[float] = []
+    dates: List[str] = []
+    for it in history_items:
+        mid = it.get("mid")
+        if isinstance(mid, (int, float)):
+            mids.append(float(mid))
+            dates.append(it["date"])
+
+    out: Dict[str, Any] = {
+        "ret1_pct": None,
+        "ret1_from": None,
+        "ret1_to": None,
+        "chg_5d_pct": None,
+        "chg_5d_from": None,
+        "chg_5d_to": None,
+        "points": len(mids),
     }
-    return sig, "DERIVED.rule_v1(TWSE_chg_yi_last5)", rationale
+    if len(mids) >= 2:
+        prev = mids[-2]
+        last = mids[-1]
+        if prev != 0:
+            out["ret1_pct"] = (last - prev) / abs(prev) * 100.0
+            out["ret1_from"] = dates[-2]
+            out["ret1_to"] = dates[-1]
+    if len(mids) >= 6:
+        base = mids[-6]
+        last = mids[-1]
+        if base != 0:
+            out["chg_5d_pct"] = (last - base) / abs(base) * 100.0
+            out["chg_5d_from"] = dates[-6]
+            out["chg_5d_to"] = dates[-1]
+    return out
 
-def pick_or_derive_margin_signal(twm: Dict[str, Any]) -> Tuple[str, str, Dict[str, Any]]:
-    s, path = pick_margin_signal_structured(twm)
-    if s != NA:
-        return s, path, {"method": "structured_field", "path": path}
 
-    s2, src2, rat2 = derive_margin_signal_rule_v1(twm)
-    if s2 != NA:
-        return s2, src2, {"method": "derived_rule", **rat2}
-
-    return NA, "NA", {"method": "unavailable"}
-
-# -----------------------
-# Roll25 core extraction
-# -----------------------
-def _extract_lookback_from_caveats(caveats: Any) -> Tuple[Any, Any]:
+def _fx_signal_rule_v1(ret1_pct: Optional[float], chg_5d_pct: Optional[float], points: int) -> Dict[str, Any]:
     """
-    Parse LookbackNTarget / LookbackNActual from caveats string if present.
-    Deterministic regex parse; if not found => NA.
+    Deterministic FX pressure signal (v1).
+    - WATCH if abs(chg_5d_pct) >= 1.5 OR abs(ret1_pct) >= 1.0
+    - INFO  if abs(chg_5d_pct) >= 1.0 OR abs(ret1_pct) >= 0.7
+    - NONE  otherwise
+    Confidence:
+    - DOWNGRADED if points < 6 (cannot compute chg_5d) OR ret1 unavailable
     """
-    if not isinstance(caveats, str):
-        return NA, NA
-    m_t = re.search(r"LookbackNTarget=(\d+)", caveats)
-    m_a = re.search(r"LookbackNActual=(\d+)", caveats)
-    t = int(m_t.group(1)) if m_t else NA
-    a = int(m_a.group(1)) if m_a else NA
-    return t, a
+    def _abs(x: Optional[float]) -> Optional[float]:
+        return None if x is None else abs(float(x))
 
-def pick_roll25_core(roll25: Dict[str, Any]) -> Dict[str, Any]:
-    numbers = safe_get(roll25, "numbers")
-    if not isinstance(numbers, dict):
-        numbers = {}
+    a1 = _abs(ret1_pct)
+    a5 = _abs(chg_5d_pct)
 
-    sigs = safe_get(roll25, "signal")
-    if not isinstance(sigs, dict):
-        sigs = safe_get(roll25, "signals")
-    if not isinstance(sigs, dict):
-        sigs = {}
+    signal = "NA"
+    reason = "NA"
+    if a1 is not None or a5 is not None:
+        # Apply thresholds only on available metrics
+        hit_watch = ((a5 is not None and a5 >= 1.5) or (a1 is not None and a1 >= 1.0))
+        hit_info = ((a5 is not None and a5 >= 1.0) or (a1 is not None and a1 >= 0.7))
+        if hit_watch:
+            signal = "WATCH"
+            reason = "abs(chg_5d%)>=1.5 OR abs(ret1%)>=1.0"
+        elif hit_info:
+            signal = "INFO"
+            reason = "abs(chg_5d%)>=1.0 OR abs(ret1%)>=0.7"
+        else:
+            signal = "NONE"
+            reason = "below thresholds"
 
-    used_date = (
-        numbers.get("UsedDate")
-        or safe_get(roll25, "UsedDate")
-        or safe_get(roll25, "used_date")
-        or safe_get(roll25, "meta", "UsedDate")
-        or safe_get(roll25, "meta", "used_date")
-    )
-
-    risk_level = safe_get(roll25, "risk_level") or safe_get(roll25, "riskLevel") or safe_get(roll25, "meta", "risk_level")
-    tag = safe_get(roll25, "tag") or safe_get(roll25, "meta", "tag")
-
-    # lookback (prefer explicit fields; else parse caveats)
-    n_target = safe_get(roll25, "LookbackNTarget") or safe_get(roll25, "lookback_n_target") or safe_get(roll25, "meta", "LookbackNTarget")
-    n_actual = safe_get(roll25, "LookbackNActual") or safe_get(roll25, "lookback_n_actual") or safe_get(roll25, "meta", "LookbackNActual")
-
-    if n_target is None or n_actual is None:
-        t2, a2 = _extract_lookback_from_caveats(safe_get(roll25, "caveats"))
-        if n_target is None:
-            n_target = t2
-        if n_actual is None:
-            n_actual = a2
+    confidence = "OK"
+    if points < 2 or a1 is None:
+        confidence = "DOWNGRADED"
+    elif points < 6 or a5 is None:
+        confidence = "DOWNGRADED"
 
     return {
-        "UsedDate": used_date if used_date is not None else NA,
-        "tag": tag if tag is not None else NA,
-        "risk_level": risk_level if risk_level is not None else NA,
-
-        # turnover & related (numbers)
-        "turnover_twd": numbers.get("TradeValue", NA),
-        "turnover_unit": "TWD",
-        "volume_multiplier": numbers.get("VolumeMultiplier", NA),
-        "vol_multiplier": numbers.get("VolMultiplier", NA),
-        "amplitude_pct": numbers.get("AmplitudePct", NA),
-        "pct_change": numbers.get("PctChange", NA),
-        "close": numbers.get("Close", NA),
-
-        # signals
-        "signals": {
-            "DownDay": sigs.get("DownDay", NA),
-            "VolumeAmplified": sigs.get("VolumeAmplified", NA),
-            "VolAmplified": sigs.get("VolAmplified", NA),
-            "NewLow_N": sigs.get("NewLow_N", NA),
-            "ConsecutiveBreak": sigs.get("ConsecutiveBreak", NA),
-            "OhlcMissing": sigs.get("OhlcMissing", NA),
-        },
-        "LookbackNTarget": n_target if n_target is not None else NA,
-        "LookbackNActual": n_actual if n_actual is not None else NA,
+        "fx_signal": signal,
+        "fx_reason": reason,
+        "fx_rule_version": "rule_v1",
+        "fx_confidence": confidence,
     }
 
-def window_confidence(core: Dict[str, Any]) -> Tuple[str, str]:
-    n_target = core.get("LookbackNTarget", NA)
-    n_actual = core.get("LookbackNActual", NA)
 
-    def to_int(x: Any) -> Optional[int]:
-        try:
-            if isinstance(x, bool):
-                return None
-            if isinstance(x, int):
-                return x
-            if isinstance(x, float):
-                return int(x)
-            if isinstance(x, str) and x.strip() and x.strip().upper() != NA:
-                return int(float(x.strip()))
-        except Exception:
-            return None
-        return None
-
-    t = to_int(n_target)
-    a = to_int(n_actual)
-    if t is not None and a is not None:
-        if a < t:
-            return "DOWNGRADED", f"LookbackNActual={a}/{t} (window_not_full)"
-        return "OK", f"LookbackNActual={a}/{t} (window_full)"
-    return "OK", "window_info_unavailable"
-
-def roll25_heated_and_confidence(roll25: Dict[str, Any]) -> Tuple[Optional[bool], str, Dict[str, Any]]:
-    if not isinstance(roll25, dict) or not roll25:
-        return None, NA, {"reason": "roll25_missing"}
-
-    core = pick_roll25_core(roll25)
-    tag = core.get("tag", NA)
-    risk_level = core.get("risk_level", NA)
-    sigs = core.get("signals", {}) if isinstance(core.get("signals"), dict) else {}
-
-    # NON_TRADING_DAY => forced not heated
-    if isinstance(tag, str) and tag.strip().upper() == "NON_TRADING_DAY":
-        confidence, window_note = window_confidence(core)
-        return False, confidence, {
-            "rule": "NON_TRADING_DAY => heated=False",
-            "tag": tag,
-            "risk_level": risk_level,
-            "window_note": window_note,
-            "signals_used": sigs,
-        }
-
-    def is_true(v: Any) -> bool:
-        b = as_bool(v)
-        return b is True
-
-    rl_heated = (isinstance(risk_level, str) and risk_level in ("中", "高"))
-    s_volume = is_true(sigs.get("VolumeAmplified"))
-    s_vol = is_true(sigs.get("VolAmplified"))
-    s_newlow = is_true(sigs.get("NewLow_N"))
-    s_break = is_true(sigs.get("ConsecutiveBreak"))
-
-    heated_flags = [
-        ("risk_level_in_{中,高}", rl_heated),
-        ("VolumeAmplified", s_volume),
-        ("VolAmplified", s_vol),
-        ("NewLow_N", s_newlow),
-        ("ConsecutiveBreak", s_break),
-    ]
-    heated = any(v for _, v in heated_flags)
-
-    confidence, window_note = window_confidence(core)
-    return heated, confidence, {
-        "rule": "heated := risk_level∈{中,高} OR any(signal in {VolumeAmplified,VolAmplified,NewLow_N,ConsecutiveBreak})",
-        "risk_level": risk_level,
-        "tag": tag,
-        "heated_flags": [{"name": n, "value": v} for n, v in heated_flags],
-        "window_note": window_note,
-        "signals_used": sigs,
-    }
-
-def consistency_decision(margin_signal: str, roll25_heated: Optional[bool]) -> str:
-    if margin_signal == NA or roll25_heated is None:
-        return NA
-    if margin_signal in ("WATCH", "ALERT") and roll25_heated:
-        return "RESONANCE"
-    if margin_signal in ("WATCH", "ALERT") and (not roll25_heated):
-        return "DIVERGENCE"
-    if margin_signal not in ("WATCH", "ALERT") and roll25_heated:
-        return "MARKET_SHOCK_ONLY"
-    return "QUIET"
-
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--market_in", required=True)
-    ap.add_argument("--fred_in", required=True)
-    ap.add_argument("--twmargin_in", required=True)
-    ap.add_argument("--roll25_in", required=False, default="roll25_cache/latest_report.json")
-    ap.add_argument("--market_outcome", required=True)
-    ap.add_argument("--fred_outcome", required=True)
-    ap.add_argument("--twmargin_outcome", required=True)
-    ap.add_argument("--roll25_outcome", required=False, default="missing")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--market-in", default="dashboard/dashboard_latest.json")
+    ap.add_argument("--fred-in", default="dashboard_fred_cache/dashboard_latest.json")
+    ap.add_argument("--twmargin-in", default="taiwan_margin_cache/latest.json")
+    ap.add_argument("--roll25-in", default="roll25_cache/latest_report.json")
+    ap.add_argument("--fx-in", default="fx_cache/latest.json")
+    ap.add_argument("--fx-history", default="fx_cache/history.json")
+    ap.add_argument("--out", default="unified_dashboard/latest.json")
+
+    ap.add_argument("--roll25-vol-n", type=int, default=int(os.getenv("ROLL25_VOL_N", "10")))
+    ap.add_argument("--roll25-dd-n", type=int, default=int(os.getenv("ROLL25_DD_N", "10")))
     args = ap.parse_args()
 
-    market_ok = outcome_to_status(args.market_outcome) == "OK"
-    fred_ok = outcome_to_status(args.fred_outcome) == "OK"
-    twm_ok = outcome_to_status(args.twmargin_outcome) == "OK"
-    roll_ok = outcome_to_status(args.roll25_outcome) == "OK"
+    generated_at_utc = _now_utc_z()
 
-    market = try_read(args.market_in) if market_ok else {}
-    fred = try_read(args.fred_in) if fred_ok else {}
-    twm = try_read(args.twmargin_in) if twm_ok else {}
-    roll25 = try_read(args.roll25_in) if roll_ok else {}
+    def _load_or_fail(path: str) -> Tuple[str, Any]:
+        try:
+            return "OK", _load_json(path)
+        except Exception as e:
+            return f"ERROR: {e}", None
 
-    # margin signal (pick or derive)
-    margin_signal, margin_signal_src, margin_rationale = (NA, NA, {"method": "unavailable"})
-    if twm:
-        margin_signal, margin_signal_src, margin_rationale = pick_or_derive_margin_signal(twm)
+    market_status, market_obj = _load_or_fail(args.market_in)
+    fred_status, fred_obj = _load_or_fail(args.fred_in)
+    twm_status, twm_obj = _load_or_fail(args.twmargin_in)
+    roll_status, roll_obj = _load_or_fail(args.roll25_in)
+    fx_status, fx_obj = _load_or_fail(args.fx_in)
 
-    # roll25 heated
-    r_heated, r_conf, r_rationale = roll25_heated_and_confidence(roll25) if roll25 else (None, NA, {"reason": "roll25_missing"})
-    cons = consistency_decision(margin_signal, r_heated)
+    # roll25 derived
+    roll25_derived: Dict[str, Any] = {"status": "NA"}
+    if roll_status == "OK" and isinstance(roll_obj, dict):
+        closes_newest = _extract_roll25_closes(roll_obj)
+        vol_pct, vol_pts = _realized_vol_annualized_pct(closes_newest, args.roll25_vol_n)
+        dd_pct, dd_pts = _max_drawdown_pct(closes_newest, args.roll25_dd_n)
 
-    roll_core = pick_roll25_core(roll25) if roll25 else {}
-    roll_used_date = roll_core.get("UsedDate", NA) if isinstance(roll_core, dict) else NA
+        # Confidence downgrade if window not full (you already track LookbackNActual/Target)
+        lookback_actual = _safe_get(roll_obj, "lookback_n_actual")
+        lookback_target = _safe_get(roll_obj, "numbers", "LookbackNTarget")  # may be absent in report
+        if lookback_target is None:
+            lookback_target = _safe_get(roll_obj, "LookbackNTarget")
+        confidence = "OK"
+        if isinstance(lookback_actual, int) and isinstance(lookback_target, int) and lookback_actual < lookback_target:
+            confidence = "DOWNGRADED"
 
-    twm_date = (
-        safe_get(twm, "meta", "data_date")
-        or safe_get(twm, "data_date")
-        or safe_get(twm, "series", "TWSE", "data_date")
-        or safe_get(twm, "twse", "data_date")
-    )
-    twm_date = twm_date if isinstance(twm_date, str) and twm_date.strip() else NA
-    used_date_match = (twm_date != NA and roll_used_date != NA and twm_date == roll_used_date)
+        roll25_derived = {
+            "status": "OK",
+            "params": {"vol_n": args.roll25_vol_n, "dd_n": args.roll25_dd_n},
+            "realized_vol_N_annualized_pct": vol_pct,
+            "realized_vol_points_used": vol_pts,
+            "max_drawdown_N_pct": dd_pct,
+            "max_drawdown_points_used": dd_pts,
+            "confidence": confidence,
+            "notes": [
+                "Realized vol uses log returns, sample std (ddof=1), annualized by sqrt(252).",
+                "Max drawdown computed on chronological closes within N points.",
+            ],
+        }
+
+    # fx derived
+    fx_derived: Dict[str, Any] = {"status": "NA"}
+    fx_hist_items = _load_fx_history(args.fx_history)
+    if fx_status == "OK" and isinstance(fx_obj, dict):
+        data_date = fx_obj.get("data_date")
+        mid = _safe_get(fx_obj, "usd_twd", "mid")
+        spot_buy = _safe_get(fx_obj, "usd_twd", "spot_buy")
+        spot_sell = _safe_get(fx_obj, "usd_twd", "spot_sell")
+        src_url = fx_obj.get("source_url")
+
+        mom = _fx_ret1_and_chg5(fx_hist_items)
+        sig = _fx_signal_rule_v1(mom.get("ret1_pct"), mom.get("chg_5d_pct"), mom.get("points", 0))
+
+        # Directional label (NOT a forecast): USD/TWD down => TWD stronger
+        dir_label = "NA"
+        if isinstance(mom.get("ret1_pct"), (int, float)):
+            dir_label = "TWD_STRONG" if mom["ret1_pct"] < 0 else "TWD_WEAK"
+
+        fx_derived = {
+            "status": "OK",
+            "source": fx_obj.get("source"),
+            "source_url": src_url,
+            "data_date": data_date,
+            "usd_twd": {"spot_buy": spot_buy, "spot_sell": spot_sell, "mid": mid},
+            "momentum": mom,
+            "dir": dir_label,
+            **sig,
+        }
 
     unified = {
         "schema_version": "unified_dashboard_latest_v1",
-        "generated_at_utc": now_utc(),
+        "generated_at_utc": generated_at_utc,
         "inputs": {
             "market_in": args.market_in,
             "fred_in": args.fred_in,
             "twmargin_in": args.twmargin_in,
             "roll25_in": args.roll25_in,
+            "fx_in": args.fx_in,
+            "fx_history": args.fx_history,
         },
         "modules": {
             "market_cache": {
-                "status": outcome_to_status(args.market_outcome),
-                "dashboard_latest": market if market else None,
+                "status": "OK" if market_status == "OK" else market_status,
+                "dashboard_latest": market_obj,
             },
             "fred_cache": {
-                "status": outcome_to_status(args.fred_outcome),
-                "dashboard_latest": fred if fred else None,
+                "status": "OK" if fred_status == "OK" else fred_status,
+                "dashboard_latest": fred_obj,
             },
             "roll25_cache": {
-                "status": outcome_to_status(args.roll25_outcome),
-                "latest_report": roll25 if roll25 else None,
-                "core": roll_core if roll_core else None,
+                "status": "OK" if roll_status == "OK" else roll_status,
+                "latest_report": roll_obj,
+                "derived": roll25_derived,
             },
             "taiwan_margin_financing": {
-                "status": outcome_to_status(args.twmargin_outcome),
-                "latest": twm if twm else None,
-                "cross_module": {
-                    "margin_signal": margin_signal,
-                    "margin_signal_source": margin_signal_src,
-                    "margin_rationale": margin_rationale,
-                    "roll25_heated": r_heated if r_heated is not None else NA,
-                    "roll25_confidence": r_conf,
-                    "consistency": cons,
-                    "rationale": {
-                        "consistency_rule": "Deterministic Margin×Roll25 (see script header).",
-                        "roll25_rationale": r_rationale,
-                        "date_alignment": {
-                            "twmargin_date": twm_date,
-                            "roll25_used_date": roll_used_date,
-                            "used_date_match": used_date_match if (twm_date != NA and roll_used_date != NA) else NA,
-                            "note": "confirm-only; does not change signal",
-                        },
-                    },
-                },
+                "status": "OK" if twm_status == "OK" else twm_status,
+                "latest": twm_obj,
+            },
+            "fx_usdtwd": {
+                "status": "OK" if fx_status == "OK" else fx_status,
+                "latest": fx_obj,
+                "derived": fx_derived,
             },
         },
         "audit_notes": [
-            "roll25_heated is computed deterministically from roll25 JSON only (risk_level + explicit signal booleans); NON_TRADING_DAY forces heated=False.",
-            "roll25_confidence is DOWNGRADED only when LookbackNActual < LookbackNTarget (info-note only).",
-            "margin_signal: prefer structured field; if missing, derive by rule_v1 from TWSE chg_yi last5 (explicit thresholds, deterministic).",
-            "No external data fetch in this step.",
+            "Roll25 derived metrics are computed from roll25_cache/latest_report.json only (no external fetch).",
+            "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
+            "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
         ],
     }
 
-    outp = Path(args.out)
-    outp.parent.mkdir(parents=True, exist_ok=True)
-    outp.write_text(json.dumps(unified, ensure_ascii=False, indent=2), encoding="utf-8")
+    _dump_json(args.out, unified)
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
