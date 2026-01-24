@@ -29,13 +29,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Ensure output dir
+      - name: Ensure output dirs
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p unified_dashboard
+          mkdir -p fx_cache
 
-      - name: Verify required inputs exist
+      - name: Verify required inputs exist (except fx_cache, which will be refreshed)
         shell: bash
         run: |
           set -euo pipefail
@@ -44,8 +45,7 @@ jobs:
             "dashboard_fred_cache/dashboard_latest.json"
             "taiwan_margin_cache/latest.json"
             "roll25_cache/latest_report.json"
-            "fx_cache/latest.json"
-            "fx_cache/history.json"
+            "scripts/fetch_fx_usdtwd_bot.py"
             "scripts/build_unified_dashboard_latest.py"
             "scripts/render_unified_report_md.py"
           )
@@ -62,6 +62,45 @@ jobs:
             echo "Required files missing. Stop."
             exit 1
           fi
+
+      - name: Update FX cache (BOT USD/TWD)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/fetch_fx_usdtwd_bot.py \
+            --tz "Asia/Taipei" \
+            --latest-out "fx_cache/latest.json" \
+            --history "fx_cache/history.json" \
+            --max-back 10 \
+            --timeout 20
+
+          test -s fx_cache/latest.json
+          echo "OK: fx_cache/latest.json size=$(wc -c < fx_cache/latest.json)"
+          # history may be absent if never got valid mid; but with guard below we expect it eventually
+
+      - name: Guard FX validity (audit-first)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - << 'PY'
+          import json, os, sys
+          p="fx_cache/latest.json"
+          obj=json.load(open(p,"r",encoding="utf-8"))
+          http=obj.get("http",{}) or {}
+          sc=http.get("status_code",0)
+          dd=obj.get("data_date")
+          usd=obj.get("usd_twd",{}) or {}
+          mid=usd.get("mid")
+          err=http.get("error")
+          if sc!=200 or not dd or mid is None:
+            raise SystemExit(f"FX GUARD FAIL: status_code={sc}, data_date={dd}, mid={mid}, error={err}")
+          # require history.json exists & non-empty after at least one successful fetch
+          # (if you want to allow first run without history, relax this)
+          hp="fx_cache/history.json"
+          if not os.path.isfile(hp) or os.path.getsize(hp)==0:
+            raise SystemExit("FX GUARD FAIL: fx_cache/history.json missing or empty")
+          print(f"FX GUARD OK: status_code={sc}, data_date={dd}, mid={mid}")
+          PY
 
       - name: Build unified_dashboard/latest.json
         shell: bash
@@ -91,7 +130,6 @@ jobs:
           out_path="unified_dashboard/report.md"
 
           # Pre-guard: root report.md should NOT exist before render.
-          # If it exists, fail fast (audit-first). Do not silently delete.
           if [[ -f "report.md" ]]; then
             echo "ERROR: root report.md exists BEFORE render. This indicates stale/duplicate output."
             echo "       Please remove it in repo or fix upstream steps. Refusing to proceed."
@@ -99,12 +137,10 @@ jobs:
             exit 1
           fi
 
-          # Render into the unified_dashboard folder (NOT repo root)
           python scripts/render_unified_report_md.py \
             --in "$in_path" \
             --out "$out_path"
 
-          # Post-guard: output must exist and be non-empty.
           test -s "$out_path"
           echo "OK: $out_path size=$(wc -c < "$out_path")"
 
@@ -123,6 +159,9 @@ jobs:
           echo "---- git status ----"
           git status --porcelain || true
 
+          echo "---- fx_cache/latest.json (head 40) ----"
+          sed -n '1,40p' fx_cache/latest.json || true
+
           echo "---- unified_dashboard/latest.json (head 30) ----"
           sed -n '1,30p' unified_dashboard/latest.json || true
 
@@ -138,14 +177,17 @@ jobs:
           set -euo pipefail
 
           # Fail fast if outputs are ignored
-          if git check-ignore -q unified_dashboard/latest.json; then
-            echo "ERROR: unified_dashboard/latest.json is ignored by .gitignore"
-            exit 1
-          fi
-          if git check-ignore -q unified_dashboard/report.md; then
-            echo "ERROR: unified_dashboard/report.md is ignored by .gitignore"
-            exit 1
-          fi
+          for f in \
+            unified_dashboard/latest.json \
+            unified_dashboard/report.md \
+            fx_cache/latest.json \
+            fx_cache/history.json
+          do
+            if git check-ignore -q "$f"; then
+              echo "ERROR: $f is ignored by .gitignore"
+              exit 1
+            fi
+          done
 
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes. Skip commit."
@@ -155,15 +197,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Only stage intended outputs + any necessary deletions tracked by git.
-          git add unified_dashboard/latest.json unified_dashboard/report.md
+          # Stage intended outputs
+          git add unified_dashboard/latest.json unified_dashboard/report.md fx_cache/latest.json fx_cache/history.json
           git add -u
 
-          # Optional hard-guard: refuse to commit if staged changes include paths outside unified_dashboard/
+          # Hard-guard: only allow staged changes in unified_dashboard/ or fx_cache/
           staged_paths="$(git diff --cached --name-only || true)"
-          bad_paths="$(echo "$staged_paths" | awk 'NF && $0 !~ /^unified_dashboard\// {print $0}')"
+          bad_paths="$(echo "$staged_paths" | awk 'NF && $0 !~ /^(unified_dashboard|fx_cache)\// {print $0}')"
           if [[ -n "$bad_paths" ]]; then
-            echo "ERROR: Refusing to commit staged changes outside unified_dashboard/:"
+            echo "ERROR: Refusing to commit staged changes outside unified_dashboard/ or fx_cache/:"
             echo "$bad_paths"
             echo "Hint: remove unintended changes or adjust staging rules."
             exit 1
