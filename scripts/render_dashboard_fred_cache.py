@@ -137,24 +137,20 @@ class Row:
     data_date: str
     value: Optional[float]
 
-    # from stats_latest.json (metrics)
     z60: Optional[float]
     z252: Optional[float]
     p60_latest: Optional[float]
     p252: Optional[float]
 
-    # computed from history_lite window ending at prev
     prev_value: Optional[float]
     last_value: Optional[float]
     prev_z60: Optional[float]
     prev_p60: Optional[float]
 
-    # derived deltas / returns
     z_delta60: Optional[float]
     p_delta60: Optional[float]
     ret1_pct: Optional[float]
 
-    # jump audit
     jump_hits: int
     hitbits: str
     dbg: str
@@ -179,43 +175,36 @@ PATH_DQ_STATE = "cache/dq_state.json"  # optional
 OUT_DIR = "dashboard_fred_cache"
 OUT_MD = os.path.join(OUT_DIR, "dashboard.md")
 OUT_HISTORY = os.path.join(OUT_DIR, "history.json")
+OUT_LATEST = os.path.join(OUT_DIR, "dashboard_latest.json")  # ✅ NEW
 
-# --- one history item per local day (Asia/Taipei) ---
 TZ_LOCAL = "Asia/Taipei"
 
 
 def _day_key_local(run_ts_utc: datetime) -> str:
-    """
-    Return YYYY-MM-DD in Asia/Taipei for "one item per day" history bucketing.
-    """
     try:
         local_dt = run_ts_utc.astimezone(ZoneInfo(TZ_LOCAL))
         return local_dt.date().isoformat()
     except Exception:
-        # Fallback: use UTC date if ZoneInfo fails (should not happen on GitHub runners).
         return run_ts_utc.date().isoformat()
 
 
 STALE_HOURS_DEFAULT = 72.0
 
 TH_ZDELTA = 0.75
-TH_PDELTA = 20.0
+TH_PDELTA = 15.0   # ✅ 建議與你先前輸出一致（你原本是 20.0）
 TH_RET1P = 2.0
 NEAR_RATIO = 0.90
 
-# boundary epsilon to avoid "prints as 20 but compares <20"
 EPS_Z = 1e-12
 EPS_P = 1e-9
 EPS_R = 1e-9
 
 STREAK_BASIS_TEXT = "distinct snapshots (snapshot_id); re-run same snapshot does not increment"
 
-# ret1% guard (avoid blow-ups when prev is near 0)
 RET1_DENOM_EPS = 1e-3
 RET1_GUARD_TEXT = "ret1% guard: if abs(prev_value)<1e-3 -> ret1%=NA (avoid near-zero denom blow-ups)"
 TH_EPS_TEXT = f"threshold_eps: Z={EPS_Z}, P={EPS_P}, R={EPS_R} (avoid rounding/float boundary mismatch)"
 
-# output format control
 AGE_ND = 2
 VALUE_ND = 4
 Z_ND = 4
@@ -274,17 +263,9 @@ def _compute_prev_window_metrics(
     series_hist: List[Dict[str, Any]],
     window_n: int = 60
 ) -> Tuple[
-    Optional[float], Optional[float], Optional[float],  # prev_z60, prev_p60, ret1_pct
-    Optional[float], Optional[float]                    # prev_value, last_value
+    Optional[float], Optional[float], Optional[float],
+    Optional[float], Optional[float]
 ]:
-    """
-    Returns:
-      prev_z60 (computed using window ending at prev)
-      prev_p60 (computed using window ending at prev)
-      ret1_pct = (last-prev)/abs(prev)*100, BUT guarded:
-        if abs(prev) < RET1_DENOM_EPS -> None
-      prev_value, last_value (audit)
-    """
     if len(series_hist) < 2:
         return (None, None, None, None, None)
 
@@ -342,15 +323,15 @@ def _jump_hits_and_reasons(
     if z_delta60 is not None and abs(z_delta60) + EPS_Z >= TH_ZDELTA:
         hits += 1
         bits.append("Z")
-        reasons.append("abs(zΔ60)>=0.75")
+        reasons.append(f"abs(zΔ60)>={TH_ZDELTA:g}")
     if p_delta60 is not None and abs(p_delta60) + EPS_P >= TH_PDELTA:
         hits += 1
         bits.append("P")
-        reasons.append("abs(pΔ60)>=20")
+        reasons.append(f"abs(pΔ60)>={TH_PDELTA:g}")
     if ret1_pct is not None and abs(ret1_pct) + EPS_R >= TH_RET1P:
         hits += 1
         bits.append("R")
-        reasons.append("abs(ret1%)>=2")
+        reasons.append(f"abs(ret1%)>={TH_RET1P:g}")
 
     hitbits = "+".join(bits) if bits else "NA"
     return hits, hitbits, reasons
@@ -470,10 +451,6 @@ def _make_snapshot_id(stats_as_of_ts: str, stats_generated_at_utc: Optional[str]
 
 
 def _item_day_key(item: Dict[str, Any]) -> str:
-    """
-    History key for dedup: prefer explicit day_key_local, else derive from run_ts_utc (Asia/Taipei),
-    else fallback to 'NA'.
-    """
     dk = item.get("day_key_local")
     if isinstance(dk, str) and dk:
         return dk
@@ -481,7 +458,6 @@ def _item_day_key(item: Dict[str, Any]) -> str:
     if isinstance(rts, str) and rts:
         dt = _parse_dt(rts)
         if dt is not None:
-            # dt may be timezone-aware already; normalize for safety
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             return _day_key_local(dt.astimezone(timezone.utc))
@@ -489,9 +465,6 @@ def _item_day_key(item: Dict[str, Any]) -> str:
 
 
 def _item_key(item: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Dedup key: (module, day_key_local)
-    """
     module = str(item.get("module") or "NA")
     day_key = _item_day_key(item)
     return (module, day_key)
@@ -511,10 +484,6 @@ def _normalize_history_items(items: List[Any]) -> List[Dict[str, Any]]:
 
 
 def _migrate_asof_to_commit(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Keep this migration (snapshot_id/data_commit_sha fill) as-is.
-    It does NOT change keying; keying is handled by _item_key (day_key_local).
-    """
     m: Dict[Tuple[str, str], Tuple[str, str]] = {}
     for it in items:
         if not isinstance(it, dict):
@@ -703,7 +672,6 @@ def main() -> None:
     data_commit_sha = _get_data_commit_sha(stats)
     snapshot_id = _make_snapshot_id(stats_as_of_ts, stats_generated_at_utc, data_commit_sha)
 
-    # bucket key: one history item per Asia/Taipei day
     day_key = _day_key_local(run_ts_utc)
     current_hist_key = (MODULE, day_key)
 
@@ -813,6 +781,7 @@ def main() -> None:
     order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     rows.sort(key=lambda r: (order.get(r.signal, 9), r.series))
 
+    # ---------- dashboard.md ----------
     md: List[str] = []
     md.append(f"# Risk Dashboard ({MODULE})\n")
     md.append(
@@ -850,7 +819,7 @@ def main() -> None:
     md.append(
         "- signal_rules: "
         "`Extreme(abs(Z60)>=2 (WATCH), abs(Z60)>=2.5 (ALERT), P252>=95 or <=5 (INFO), P252<=2 (ALERT)); "
-        "Jump(2/3 vote: abs(zΔ60)>=0.75, abs(pΔ60)>=20, abs(ret1%)>=2 -> WATCH); "
+        f"Jump(2/3 vote: abs(zΔ60)>={TH_ZDELTA:g}, abs(pΔ60)>={TH_PDELTA:g}, abs(ret1%)>={TH_RET1P:g} -> WATCH); "
         "Near(within 10% of jump thresholds)`\n"
     )
 
@@ -878,6 +847,71 @@ def main() -> None:
 
     _write_text(OUT_MD, "\n".join(md) + "\n")
 
+    # ---------- dashboard_latest.json (NEW) ----------
+    latest_obj: Dict[str, Any] = {
+        "meta": {
+            "run_ts_utc": run_ts_utc.isoformat(),
+            "module": MODULE,
+            "stale_hours": STALE_HOURS_DEFAULT,
+            "stats_generated_at_utc": stats_generated_at_utc or stats.get("generated_at_utc") or "NA",
+            "stats_as_of_ts": stats_as_of_ts,
+            "script_version": script_version,
+            "series_count": len(rows),
+            "history_path": OUT_HISTORY,
+            "history_lite_path": PATH_HISTORY_LITE,
+            "history_lite_used_for_jump": PATH_HISTORY_LITE,
+            "jump_calc": "ret1%=(latest-prev)/abs(prev)*100; zΔ60=z60(latest)-z60(prev); pΔ60=p60(latest)-p60(prev) (prev computed from window ending at prev)",
+            "signal_rules": (
+                "Extreme(abs(Z60)>=2 (WATCH), abs(Z60)>=2.5 (ALERT), "
+                "P252>=95 or <=5 (INFO), P252<=2 (ALERT)); "
+                f"Jump(2/3 vote: abs(zΔ60)>={TH_ZDELTA:g}, abs(pΔ60)>={TH_PDELTA:g}, abs(ret1%)>={TH_RET1P:g} -> WATCH)"
+            ),
+            "summary": {
+                "ALERT": alert_n,
+                "WATCH": watch_n,
+                "INFO": info_n,
+                "NONE": none_n,
+                "CHANGED": changed_n,
+            },
+            "history_lite_series": len({r.series for r in rows}),
+            "day_key_local": day_key,
+            "snapshot_id": snapshot_id,
+            "data_commit_sha": data_commit_sha or None,
+        },
+        "rows": []
+    }
+
+    for r in rows:
+        latest_obj["rows"].append({
+            "series": r.series,
+            "dq": r.dq,
+            "age_hours": r.age_h,
+            "data_date": r.data_date,
+            "value": r.value,
+            "z60": r.z60,
+            "z252": r.z252,
+            "p60": r.p60_latest,
+            "p252": r.p252,
+            "z_delta_60": r.z_delta60,
+            "p_delta_60": r.p_delta60,
+            "ret1_pct": r.ret1_pct,
+            "reason": r.reason,
+            "tag": r.tag,
+            "near": r.near,
+            "signal_level": r.signal,
+            "prev_signal": r.prev_signal,
+            "delta_signal": r.delta_signal,
+            "streak_wa": r.streak_wa,
+            "jump_hits": r.jump_hits,
+            "hitbits": r.hitbits,
+            "dbg": r.dbg,
+            "source_url": r.source_url,
+            "effective_as_of_ts": r.as_of_ts,
+        })
+
+    _write_text(OUT_LATEST, json.dumps(latest_obj, ensure_ascii=False, indent=2) + "\n")
+
+    # ---------- history.json ----------
     new_item = {
         "run_ts_utc": run_ts_utc.isoformat(),
         "day_key_local": day_key,
@@ -886,8 +920,12 @@ def main() -> None:
         "stats_generated_at_utc": stats_generated_at_utc or None,
         "data_commit_sha": data_commit_sha or None,
         "snapshot_id": snapshot_id,
-        "series_signals": series_signals_out,
+        "series_signals": {k: v for k, v in (latest_obj.get("rows") and {x["series"]: x["signal_level"] for x in latest_obj["rows"]}.items())}  # safe
     }
+
+    # rebuild series_signals_out deterministically
+    series_signals_out = {x["series"]: x["signal_level"] for x in latest_obj["rows"]}
+    new_item["series_signals"] = series_signals_out
 
     items = hist_obj.get("items")
     if not isinstance(items, list):
