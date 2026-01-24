@@ -6,6 +6,7 @@ Render unified_dashboard/latest.json into report.md
 Adds:
 - roll25_derived (realized vol / max drawdown)
 - fx_usdtwd section (BOT USD/TWD mid + deterministic signal)
+- taiwan_margin_financing.cross_module section (Margin×Roll25 consistency)
 
 This renderer does NOT recompute; it only formats fields already in unified JSON.
 If a field is missing => prints NA.
@@ -15,8 +16,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def _read_text(path: str) -> str:
@@ -70,6 +72,34 @@ def _md_table(headers: List[str], rows: List[List[str]]) -> str:
     return "\n".join(out)
 
 
+def _extract_lookback_target_from_roll25_report(roll_obj: Dict[str, Any]) -> Any:
+    for path in [
+        ("core", "LookbackNTarget"),
+        ("numbers", "LookbackNTarget"),
+    ]:
+        v = _safe_get(roll_obj, *path)
+        if isinstance(v, int):
+            return v
+        if isinstance(v, float) and v.is_integer():
+            return int(v)
+
+    v2 = roll_obj.get("LookbackNTarget")
+    if isinstance(v2, int):
+        return v2
+    if isinstance(v2, float) and v2.is_integer():
+        return int(v2)
+
+    cav = roll_obj.get("caveats")
+    if isinstance(cav, str):
+        m = re.search(r"LookbackNTarget=(\d+)", cav)
+        if m:
+            try:
+                return int(m.group(1))
+            except Exception:
+                return "NA"
+    return "NA"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", default="unified_dashboard/latest.json")
@@ -98,7 +128,7 @@ def main() -> int:
     lines.append(f"- fx_usdtwd: {_safe_get(fx,'status') or 'NA'}")
     lines.append(f"- unified_generated_at_utc: {uni.get('generated_at_utc','NA')}\n")
 
-    # market_cache detailed (reuse your existing style; minimal fields)
+    # market_cache detailed
     m_dash = _safe_get(market, "dashboard_latest") or {}
     m_meta = _safe_get(m_dash, "meta") or {}
     m_rows = _safe_get(m_dash, "rows") or []
@@ -170,7 +200,6 @@ def main() -> int:
     else:
         lines.append("")
 
-    # Keep your full-table behavior: print all rows
     if isinstance(f_rows, list) and f_rows:
         hdr = ["series","signal","fred_dir","fred_class","value","data_date","age_h","z60","p60","p252","zΔ60","pΔ60","ret1%","reason","tag","prev","delta","source"]
         rws: List[List[str]] = []
@@ -211,11 +240,13 @@ def main() -> int:
 
     # roll25_cache (core fields from latest report)
     r_latest = _safe_get(roll25, "latest_report") or {}
-    r_core = _safe_get(roll25, "core") or {}  # if you still have core elsewhere, keep NA
+    r_core = _safe_get(roll25, "core") or {}
+
+    # derive minimal core from report if missing
     if not r_core and isinstance(r_latest, dict):
-        # derive minimal core from report itself
         nums = r_latest.get("numbers", {}) if isinstance(r_latest.get("numbers"), dict) else {}
         sigs = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
+        lb_target = _extract_lookback_target_from_roll25_report(r_latest)
         r_core = {
             "UsedDate": nums.get("UsedDate") or r_latest.get("used_date"),
             "tag": r_latest.get("tag"),
@@ -228,7 +259,7 @@ def main() -> int:
             "pct_change": nums.get("PctChange"),
             "close": nums.get("Close"),
             "signals": sigs,
-            "LookbackNTarget": 20,
+            "LookbackNTarget": lb_target,
             "LookbackNActual": r_latest.get("lookback_n_actual"),
         }
 
@@ -286,13 +317,38 @@ def main() -> int:
     lines.append(f"- fx_confidence: {fx_der.get('fx_confidence','NA')}")
     lines.append("")
 
-    # taiwan margin financing (keep your existing; minimal print)
+    # taiwan margin financing
     tw_latest = _safe_get(twm, "latest") or {}
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
     lines.append(f"- status: {_safe_get(twm,'status') or 'NA'}")
     lines.append(f"- schema_version: {tw_latest.get('schema_version','NA')}")
     lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
+
+    # cross_module output (Margin×Roll25)
+    cm = _safe_get(twm, "cross_module") or {}
+    lines.append("### cross_module (Margin × Roll25 consistency)")
+    if isinstance(cm, dict) and cm:
+        lines.append(f"- margin_signal: {cm.get('margin_signal','NA')}")
+        lines.append(f"- margin_signal_source: {cm.get('margin_signal_source','NA')}")
+        mr = cm.get("margin_rationale", {}) if isinstance(cm.get("margin_rationale"), dict) else {}
+        lines.append(f"- margin_rule_version: {mr.get('rule_version','NA')}")
+        lines.append(f"- chg_last5: {mr.get('chg_last5','NA')}")
+        lines.append(f"- sum_last5: {_fmt(mr.get('sum_last5'),3)}")
+        lines.append(f"- pos_days_last5: {_fmt_int(mr.get('pos_days_last5'))}")
+        lines.append(f"- latest_chg: {_fmt(mr.get('latest_chg'),3)}")
+        lines.append(f"- margin_confidence: {mr.get('confidence','NA')}")
+        lines.append(f"- roll25_heated: {_fmt(cm.get('roll25_heated'),0)}")
+        lines.append(f"- roll25_confidence: {cm.get('roll25_confidence','NA')}")
+        lines.append(f"- consistency: {cm.get('consistency','NA')}")
+
+        rat = cm.get("rationale", {}) if isinstance(cm.get("rationale"), dict) else {}
+        align = rat.get("date_alignment", {}) if isinstance(rat.get("date_alignment"), dict) else {}
+        lines.append(f"- date_alignment: twmargin_date={align.get('twmargin_date','NA')}, roll25_used_date={align.get('roll25_used_date','NA')}, match={_fmt(align.get('used_date_match'),0)}")
+        lines.append("")
+    else:
+        lines.append("- cross_module: NA (not generated)")
+        lines.append("")
 
     # footer
     lines.append(f"<!-- rendered_at_utc: {rendered_at_utc} -->\n")
