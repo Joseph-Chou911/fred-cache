@@ -45,7 +45,6 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
 - 判定：DIVERGENCE（Margin(WATCH/ALERT) but roll25 not heated）
-- 信心降級：LookbackNActual=16/20（window 未滿 → 信心降級）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -87,4 +86,4 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（LookbackNActual=16/20（window 未滿 → 信心降級））
 
-_generated_at_utc: 2026-01-24T08:51:33Z_
+_generated_at_utc: 2026-01-24T08:56:53Z_
