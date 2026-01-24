@@ -37,7 +37,6 @@
 - caveats: Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | LookbackNActual=16 | LookbackOldest=2026-01-02 | OHLC=OK
 - generated_at: 2026-01-24T11:53:00.541598+08:00 (Asia/Taipei)
-- lookback_note: LookbackNActual=16/20（window 未滿 → 信心降級）
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -75,7 +74,7 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
 - roll25 LookbackNActual 未滿 target 時：只做『信心降級註記』，不改 margin 資料品質。
 
-## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL）
+## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25 僅供一致性判定）
 - Check-1 TWSE meta_date==series[0].date：✅（OK）
 - Check-1 TPEX meta_date==series[0].date：✅（OK）
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
@@ -86,6 +85,6 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）
-- Check-7 roll25 Lookback window：⚠️（NOTE）（LookbackNActual=16/20（window 未滿 → 信心降級））
+- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（LookbackNActual=16/20（window 未滿 → 信心降級））
 
-_generated_at_utc: 2026-01-24T08:46:02Z_
+_generated_at_utc: 2026-01-24T08:51:33Z_
