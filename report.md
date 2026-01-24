@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-24T12:03:41Z
+- unified_generated_at_utc: 2026-01-24T12:10:26Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -101,4 +101,4 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-01-24T08:56:53Z
 
-<!-- rendered_at_utc: 2026-01-24T12:03:41Z -->
+<!-- rendered_at_utc: 2026-01-24T12:10:26Z -->
