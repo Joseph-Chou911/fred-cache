@@ -29,6 +29,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Ensure output dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p unified_dashboard
+
       - name: Verify required inputs exist
         shell: bash
         run: |
@@ -53,14 +59,13 @@ jobs:
             fi
           done
           if [[ "$missing" -ne 0 ]]; then
-            echo "One or more required files are missing. Stop."
+            echo "Required files missing. Stop."
             exit 1
           fi
 
       - name: Build unified_dashboard/latest.json
         shell: bash
         env:
-          # optional tuning (defaults in script are 10/10)
           ROLL25_VOL_N: "10"
           ROLL25_DD_N: "10"
         run: |
@@ -74,28 +79,59 @@ jobs:
             --fx-history "fx_cache/history.json" \
             --out "unified_dashboard/latest.json"
 
-      - name: Render report.md
+          test -s unified_dashboard/latest.json
+          echo "OK: unified_dashboard/latest.json size=$(wc -c < unified_dashboard/latest.json)"
+
+      - name: Render unified_dashboard/report.md
         shell: bash
         run: |
           set -euo pipefail
+
+          # Render into the unified_dashboard folder (NOT repo root)
           python scripts/render_unified_report_md.py \
             --in "unified_dashboard/latest.json" \
-            --out "report.md"
+            --out "unified_dashboard/report.md"
 
-      - name: Show brief diff (for logs)
+          test -s unified_dashboard/report.md
+          echo "OK: unified_dashboard/report.md size=$(wc -c < unified_dashboard/report.md)"
+
+          # Guardrail: if old root report.md exists, remove it to avoid confusion
+          if [[ -f "report.md" ]]; then
+            echo "WARN: root report.md exists; removing to prevent stale duplicates."
+            rm -f report.md
+          fi
+
+      - name: Show brief outputs (for logs)
         shell: bash
         run: |
           set -euo pipefail
-          git status --porcelain
-          echo "---- unified_dashboard/latest.json (head 60) ----"
-          sed -n '1,60p' unified_dashboard/latest.json || true
-          echo "---- report.md (head 80) ----"
-          sed -n '1,80p' report.md || true
+          echo "---- git status ----"
+          git status --porcelain || true
+
+          echo "---- unified_dashboard/latest.json (head 30) ----"
+          sed -n '1,30p' unified_dashboard/latest.json || true
+
+          echo "---- unified_dashboard/report.md (head 60) ----"
+          sed -n '1,60p' unified_dashboard/report.md || true
+
+          echo "---- unified_dashboard/report.md (tail 15) ----"
+          tail -n 15 unified_dashboard/report.md || true
 
       - name: Commit & push if changed
         shell: bash
         run: |
           set -euo pipefail
+
+          # Fail fast if outputs are ignored
+          if git check-ignore -q unified_dashboard/latest.json; then
+            echo "ERROR: unified_dashboard/latest.json is ignored by .gitignore"
+            exit 1
+          fi
+          if git check-ignore -q unified_dashboard/report.md; then
+            echo "ERROR: unified_dashboard/report.md is ignored by .gitignore"
+            exit 1
+          fi
+
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes. Skip commit."
             exit 0
@@ -104,6 +140,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add unified_dashboard/latest.json report.md
+          git add unified_dashboard/latest.json unified_dashboard/report.md
+          # (optional) also add removal of root report.md if it existed
+          git add -u
+
           git commit -m "Update unified dashboard + report"
           git push
