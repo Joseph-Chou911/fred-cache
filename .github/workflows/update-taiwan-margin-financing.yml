@@ -62,19 +62,18 @@ jobs:
             --history taiwan_margin_cache/history.json \
             --max_items 800
 
-      - name: Audit: list roll25_cache (confirm-only input)
+      - name: "Audit: list roll25_cache (confirm-only input)"
         shell: bash
         run: |
           set -euo pipefail
           echo "=== roll25_cache (if exists) ==="
           ls -la roll25_cache || true
           echo "=== roll25_cache candidate files ==="
-          for f in roll25_cache/dashboard_latest.json roll25_cache/stats_latest.json roll25_cache/latest.json; do
-            if [ -f "$f" ]; then
-              echo "FOUND: $f"
-              wc -c "$f" || true
+          for f in latest_report.json manifest.json roll25.json twse_schema.json; do
+            if [ -f "roll25_cache/$f" ]; then
+              echo "OK: roll25_cache/$f"
             else
-              echo "MISS:  $f"
+              echo "MISSING: roll25_cache/$f"
             fi
           done
 
@@ -85,6 +84,7 @@ jobs:
           python scripts/render_taiwan_margin_dashboard.py \
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
+            --roll25 roll25_cache/latest_report.json \
             --out taiwan_margin_cache/Taiwan_Margin_Financing_Dashboard.md
 
       - name: Debug list outputs
@@ -106,7 +106,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 你要的輸出都在 taiwan_margin_cache
           git add -A taiwan_margin_cache dashboard
 
           if git diff --cached --quiet; then
