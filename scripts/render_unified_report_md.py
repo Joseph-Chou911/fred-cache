@@ -1,15 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+scripts/render_unified_report_md.py
+
+Audit-first renderer for dashboard_unified/report.md
+
+What this version adds (no guessing):
+- Add roll25_cache block (TW turnover) from unified.modules.roll25_cache.core/latest_report
+- Add roll25_heated/confidence + Margin×Roll25 consistency block from unified.modules.taiwan_margin_financing.cross_module
+- Add margin rationale details:
+    * Prefer cross_module.margin_rationale if present
+    * Else derive deterministic stats from modules.taiwan_margin_financing.latest.series.TWSE.rows (last 5 chg_yi)
+  NOTE: This derivation is clearly labeled as DERIVED_FROM_LATEST_ROWS (renderer-side), not used to infer signal.
+- Add Unified Risk Judgment summary (Market + FRED + Roll25), derived deterministically from parsed rows + roll25_heated
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 NA = "NA"
 
+# -----------------------
+# helpers
+# -----------------------
 def read_json(path: str) -> Dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -24,10 +42,10 @@ def fmt(x: Any) -> str:
         return f"{x:.6f}".rstrip("0").rstrip(".")
     return str(x)
 
-def g(d: Dict[str, Any], key: str, default: Any = None) -> Any:
+def g(d: Any, key: str, default: Any = None) -> Any:
     return d.get(key, default) if isinstance(d, dict) else default
 
-def safe_path(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
+def safe_path(d: Any, keys: List[str], default: Any = None) -> Any:
     cur: Any = d
     for k in keys:
         if isinstance(cur, dict) and k in cur:
@@ -50,11 +68,114 @@ def split_csvish(s: Any) -> List[str]:
         return []
     return [x.strip() for x in s.split(",") if x.strip()]
 
+def to_float(x: Any) -> Optional[float]:
+    try:
+        if isinstance(x, bool):
+            return None
+        if isinstance(x, (int, float)):
+            return float(x)
+        if isinstance(x, str) and x.strip() and x.strip().upper() != NA:
+            return float(x.strip())
+    except Exception:
+        return None
+    return None
+
+def to_int(x: Any) -> Optional[int]:
+    try:
+        if isinstance(x, bool):
+            return None
+        if isinstance(x, int):
+            return x
+        if isinstance(x, float):
+            return int(x)
+        if isinstance(x, str) and x.strip() and x.strip().upper() != NA:
+            return int(float(x.strip()))
+    except Exception:
+        return None
+    return None
+
+# -----------------------
+# margin stats (for report)
+# -----------------------
+def margin_stats(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
+    series = g(twm_latest, "series", {})
+    blk = g(series, which, {})
+    rows = g(blk, "rows", [])
+    chgs: List[float] = []
+    if isinstance(rows, list):
+        for r in rows[:5]:
+            v = to_float(g(r, "chg_yi", None))
+            if v is not None:
+                chgs.append(v)
+
+    s = sum(chgs) if chgs else 0.0
+    n = len(chgs)
+    pos = sum(1 for x in chgs if x > 0) if chgs else 0
+    neg = sum(1 for x in chgs if x < 0) if chgs else 0
+    mx = max(chgs) if chgs else None
+    mn = min(chgs) if chgs else None
+
+    latest = rows[0] if isinstance(rows, list) and rows else None
+
+    return {
+        "data_date": g(blk, "data_date", NA),
+        "source_url": g(blk, "source_url", NA),
+        "latest": latest,
+        "sum_last5": s,
+        "avg_last5": (s / n) if n else None,
+        "pos_days_last5": pos,
+        "neg_days_last5": neg,
+        "max_chg_last5": mx,
+        "min_chg_last5": mn,
+        "n_used": n,
+    }
+
+def derive_margin_rationale_from_latest_rows(twm_latest: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Renderer-side deterministic stats from TWSE rows only.
+    This does NOT infer signal; it only prints evidence for audit.
+    """
+    series = g(twm_latest, "series", {})
+    twse = g(series, "TWSE", {})
+    rows = g(twse, "rows", [])
+    chgs: List[float] = []
+    if isinstance(rows, list):
+        for r in rows[:5]:
+            v = to_float(g(r, "chg_yi", None))
+            if v is not None:
+                chgs.append(v)
+
+    latest = rows[0] if isinstance(rows, list) and rows else {}
+    s = sum(chgs) if chgs else 0.0
+    n = len(chgs)
+    pos = sum(1 for x in chgs if x > 0) if chgs else 0
+    neg = sum(1 for x in chgs if x < 0) if chgs else 0
+    mx = max(chgs) if chgs else None
+    mn = min(chgs) if chgs else None
+
+    return {
+        "renderer_rationale_source": "DERIVED_FROM_LATEST_ROWS(TWSE.rows[:5].chg_yi)",
+        "twse_data_date": g(twse, "data_date", NA),
+        "latest_date": g(latest, "date", NA),
+        "latest_chg_yi": g(latest, "chg_yi", NA),
+        "sum_chg_yi_last5": s,
+        "avg_chg_yi_last5": (s / n) if n else None,
+        "pos_days_last5": pos,
+        "neg_days_last5": neg,
+        "max_chg_last5": mx,
+        "min_chg_last5": mn,
+        "n_used": n,
+    }
+
 # -----------------------
 # extraction
 # -----------------------
-def extract_rows(latest: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows = g(latest, "rows", [])
+def extract_market_rows(market_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = g(market_latest, "rows", [])
+    return rows if isinstance(rows, list) else []
+
+def extract_fred_rows(fred_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = g(fred_latest, "rows", [])
     return rows if isinstance(rows, list) else []
 
 def rank_signal(level: str) -> int:
@@ -66,8 +187,16 @@ def pick_rows(rows: List[Dict[str, Any]], allowed_levels: Tuple[str, ...]) -> Li
     out.sort(key=lambda r: (-rank_signal(g(r, "signal_level", "")), str(g(r, "series", ""))))
     return out
 
+def count_levels(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    c = {"ALERT": 0, "WATCH": 0, "INFO": 0, "NONE": 0}
+    for r in rows:
+        lv = str(g(r, "signal_level", "")).strip().upper()
+        if lv in c:
+            c[lv] += 1
+    return c
+
 # -----------------------
-# fred_dir mapping (audit-table)
+# (2) fred_dir mapping (audit-table)
 # -----------------------
 FRED_DIR_MAP: Dict[str, str] = {
     "VIXCLS": "HIGH",
@@ -93,10 +222,11 @@ def derive_fred_dir(series: Any) -> str:
     return FRED_DIR_MAP.get(s, NA)
 
 # -----------------------
-# class from tag (deterministic)
+# (3) class from tag (deterministic; audit-safe)
 # -----------------------
 def classify_row(tag: Any, reason: Any) -> str:
     tags = set(split_csvish(tag))
+
     is_long = "LONG_EXTREME" in tags
     is_level = "EXTREME_Z" in tags
     is_jump = any(t.startswith("JUMP") for t in tags) or ("JUMP_DELTA" in tags) or ("JUMP_RET" in tags)
@@ -108,12 +238,19 @@ def classify_row(tag: Any, reason: Any) -> str:
         parts.append("LEVEL")
     if is_jump:
         parts.append("JUMP")
+
     return "+".join(parts) if parts else "NONE"
 
+# -----------------------
+# alias mapping
+# -----------------------
 ALIASES: List[Tuple[str, str, str]] = [
     ("VIX", "VIXCLS", "VIX↔VIXCLS"),
 ]
 
+# -----------------------
+# resonance
+# -----------------------
 def resonance_level(market_signal: str, fred_signal: str, market_class: str, fred_class: str) -> str:
     ms = market_signal or NA
     fs = fred_signal or NA
@@ -205,6 +342,8 @@ def build_resonance_pairs(market_rows: List[Dict[str, Any]], fred_rows: List[Dic
             continue
         if ms not in m_by or fs not in f_by:
             continue
+        if ms == fs and ("STRICT", ms, fs) in seen:
+            continue
 
         mr, fr = m_by[ms], f_by[fs]
 
@@ -261,58 +400,42 @@ def build_resonance_pairs(market_rows: List[Dict[str, Any]], fred_rows: List[Dic
     return out
 
 # -----------------------
-# margin stats (renderer side, for TWSE/TPEX block)
+# unified state (deterministic)
 # -----------------------
-def margin_stats(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
-    blk = safe_path(twm_latest, ["series", which], {}) if isinstance(twm_latest, dict) else {}
-    rows = g(blk, "rows", [])
-    chgs: List[float] = []
-    if isinstance(rows, list):
-        for r in rows[:5]:
-            try:
-                chgs.append(float(r.get("chg_yi")))
-            except Exception:
-                pass
+def parse_bool_or_na(x: Any) -> Any:
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, str) and x.strip().upper() == NA:
+        return NA
+    return x
 
-    s = sum(chgs) if chgs else 0.0
-    n = len(chgs)
-    pos = sum(1 for x in chgs if x > 0) if chgs else 0
-    neg = sum(1 for x in chgs if x < 0) if chgs else 0
-    mx = max(chgs) if chgs else None
-    mn = min(chgs) if chgs else None
-    latest = rows[0] if isinstance(rows, list) and rows else None
+def unified_state(m_has: bool, f_has: bool, roll_heated: Any) -> str:
+    """
+    Deterministic mapping:
+      - roll_heated: True/False/NA
+      - if roll_heated is NA -> ignore roll dimension
+    """
+    rh = parse_bool_or_na(roll_heated)
+    if rh == NA:
+        if m_has and f_has:
+            return "RESONANCE_MF"
+        if m_has and not f_has:
+            return "RESONANCE_M"
+        if (not m_has) and f_has:
+            return "RESONANCE_F"
+        return "QUIET"
 
-    return {
-        "data_date": g(blk, "data_date", NA),
-        "source_url": g(blk, "source_url", NA),
-        "latest": latest,
-        "sum_last5": s,
-        "avg_last5": (s / n) if n else None,
-        "pos_days_last5": pos,
-        "neg_days_last5": neg,
-        "max_chg_last5": mx,
-        "min_chg_last5": mn,
-        "n_used": n,
-    }
-
-# -----------------------
-# Unified Risk Judgment (deterministic)
-# -----------------------
-def count_levels(rows: List[Dict[str, Any]]) -> Tuple[int, int]:
-    w = sum(1 for r in rows if g(r, "signal_level") == "WATCH")
-    a = sum(1 for r in rows if g(r, "signal_level") == "ALERT")
-    return w, a
-
-def derive_unified_state(m_has: bool, f_has: bool, r_heated: Any) -> str:
-    r = True if str(r_heated).lower() == "true" else False if str(r_heated).lower() == "false" else None
     if m_has and f_has:
-        return "RESONANCE_MFR" if r is True else "RESONANCE_MF"
-    if m_has and (not f_has):
-        return "MARKET_ONLY_HOT" if r is True else "MARKET_ONLY"
+        return "RESONANCE_MF_R25" if rh is True else "RESONANCE_MF"
+    if m_has and not f_has:
+        return "RESONANCE_M_R25" if rh is True else "RESONANCE_M"
     if (not m_has) and f_has:
-        return "FRED_ONLY_HOT" if r is True else "FRED_ONLY"
-    return "ROLL25_ONLY" if r is True else "QUIET"
+        return "RESONANCE_F_R25" if rh is True else "RESONANCE_F"
+    return "R25_ONLY" if rh is True else "QUIET"
 
+# -----------------------
+# render
+# -----------------------
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="inp", required=True)
@@ -329,6 +452,9 @@ def main() -> None:
     lines.append("# Unified Risk Dashboard Report")
     lines.append("")
 
+    # -----------------------
+    # Module Status
+    # -----------------------
     lines.append("## Module Status")
     md_kv(lines, "market_cache", status("market_cache"))
     md_kv(lines, "fred_cache", status("fred_cache"))
@@ -353,7 +479,8 @@ def main() -> None:
         md_kv(lines, "series_count", g(meta, "series_count", NA))
         lines.append("")
 
-        market_rows = extract_rows(m)
+        market_rows = extract_market_rows(m)
+
         headers = [
             "series","signal","dir","market_class","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%60",
@@ -412,7 +539,7 @@ def main() -> None:
             md_kv(lines, "CHANGED", summ.get("CHANGED"))
         lines.append("")
 
-        fred_rows = extract_rows(f)
+        fred_rows = extract_fred_rows(f)
         focus = pick_rows(fred_rows, ("WATCH", "INFO", "ALERT"))
 
         headers = [
@@ -464,6 +591,7 @@ def main() -> None:
         "otherwise NONE."
     )
     lines.append("- roll25_heated/roll25_confidence are COMPUTED in build_unified_dashboard_latest.py from roll25 JSON only; renderer does not recompute.")
+    lines.append("- margin rationale evidence is either READ from unified.cross_module.margin_rationale or DERIVED deterministically from latest TWSE rows (report-only).")
     lines.append("")
 
     # -----------------------
@@ -483,9 +611,9 @@ def main() -> None:
             "market_date","fred_date",
             "market_source","fred_source"
         ]
-        rows2: List[List[Any]] = []
+        rows: List[List[Any]] = []
         for r in resonance:
-            rows2.append([
+            rows.append([
                 r.get("resonance_level", NA),
                 r.get("pair_type", NA),
                 r.get("series", NA),
@@ -506,77 +634,174 @@ def main() -> None:
                 r.get("market_source", NA),
                 r.get("fred_source", NA),
             ])
-        md_table(lines, headers, rows2)
+        md_table(lines, headers, rows)
         lines.append("")
     else:
         lines.append(f"- {NA} (no overlapping/alias pairs)")
         lines.append("")
 
     # -----------------------
-    # roll25_cache block
+    # roll25_cache (TW turnover)
     # -----------------------
-    rcore = safe_path(modules, ["roll25_cache", "core"], None)
+    roll_core = safe_path(modules, ["roll25_cache", "core"], None)
+    roll_latest = safe_path(modules, ["roll25_cache", "latest_report"], None)
+
     lines.append("## roll25_cache (TW turnover)")
-    if isinstance(rcore, dict):
+    if safe_path(modules, ["roll25_cache", "status"], NA) == "OK":
         md_kv(lines, "status", status("roll25_cache"))
-        for k in [
-            "UsedDate","tag","risk_level",
-            "turnover_twd","turnover_unit",
-            "volume_multiplier","vol_multiplier","amplitude_pct","pct_change","close",
-            "LookbackNTarget","LookbackNActual",
-        ]:
-            md_kv(lines, k, g(rcore, k, NA))
-
-        sigs = g(rcore, "signals", {})
-        if isinstance(sigs, dict):
-            md_kv(lines, "signals.DownDay", sigs.get("DownDay"))
-            md_kv(lines, "signals.VolumeAmplified", sigs.get("VolumeAmplified"))
-            md_kv(lines, "signals.VolAmplified", sigs.get("VolAmplified"))
-            md_kv(lines, "signals.NewLow_N", sigs.get("NewLow_N"))
-            md_kv(lines, "signals.ConsecutiveBreak", sigs.get("ConsecutiveBreak"))
-            md_kv(lines, "signals.OhlcMissing", sigs.get("OhlcMissing"))
-        lines.append("")
-
-        # roll25_heated/confidence/consistency/margin_signal (from build)
-        cross = safe_path(modules, ["taiwan_margin_financing", "cross_module"], {})
-        lines.append("### roll25_heated / confidence (from build)")
-        md_kv(lines, "roll25_heated", g(cross, "roll25_heated", NA))
-        md_kv(lines, "roll25_confidence", g(cross, "roll25_confidence", NA))
-        md_kv(lines, "consistency(Margin×Roll25)", g(cross, "consistency", NA))
-        md_kv(lines, "margin_signal", g(cross, "margin_signal", NA))
-        md_kv(lines, "margin_signal_source", g(cross, "margin_signal_source", NA))
-        lines.append("")
     else:
-        lines.append(f"- {NA} (missing/failed)")
+        md_kv(lines, "status", status("roll25_cache"))
+
+    # Prefer core (build-side extracted); fallback to latest_report where possible
+    used_date = g(roll_core, "UsedDate", None) if isinstance(roll_core, dict) else None
+    if used_date is None and isinstance(roll_latest, dict):
+        used_date = safe_path(roll_latest, ["numbers", "UsedDate"], None) or g(roll_latest, "used_date", None) or g(roll_latest, "UsedDate", None)
+
+    tag = g(roll_core, "tag", None) if isinstance(roll_core, dict) else None
+    if tag is None and isinstance(roll_latest, dict):
+        tag = g(roll_latest, "tag", None)
+
+    risk_level = g(roll_core, "risk_level", None) if isinstance(roll_core, dict) else None
+    if risk_level is None and isinstance(roll_latest, dict):
+        risk_level = g(roll_latest, "risk_level", None)
+
+    md_kv(lines, "UsedDate", used_date if used_date is not None else NA)
+    md_kv(lines, "tag", tag if tag is not None else NA)
+    md_kv(lines, "risk_level", risk_level if risk_level is not None else NA)
+
+    # numbers block
+    if isinstance(roll_latest, dict):
+        nums = g(roll_latest, "numbers", {})
+        if isinstance(nums, dict):
+            md_kv(lines, "turnover_twd", nums.get("TradeValue"))
+            md_kv(lines, "turnover_unit", "TWD")
+            md_kv(lines, "volume_multiplier", nums.get("VolumeMultiplier"))
+            md_kv(lines, "vol_multiplier", nums.get("VolMultiplier"))
+            md_kv(lines, "amplitude_pct", nums.get("AmplitudePct"))
+            md_kv(lines, "pct_change", nums.get("PctChange"))
+            md_kv(lines, "close", nums.get("Close"))
+
+    # lookback + signals (from core preferred)
+    lb_t = g(roll_core, "LookbackNTarget", NA) if isinstance(roll_core, dict) else NA
+    lb_a = g(roll_core, "LookbackNActual", NA) if isinstance(roll_core, dict) else NA
+    md_kv(lines, "LookbackNTarget", lb_t)
+    md_kv(lines, "LookbackNActual", lb_a)
+
+    sigs = g(roll_core, "signals", {}) if isinstance(roll_core, dict) else {}
+    if not isinstance(sigs, dict) and isinstance(roll_latest, dict):
+        # fallback: roll_latest.signal
+        sigs = g(roll_latest, "signal", {})
+    if not isinstance(sigs, dict):
+        sigs = {}
+
+    md_kv(lines, "signals.DownDay", sigs.get("DownDay", NA))
+    md_kv(lines, "signals.VolumeAmplified", sigs.get("VolumeAmplified", NA))
+    md_kv(lines, "signals.VolAmplified", sigs.get("VolAmplified", NA))
+    md_kv(lines, "signals.NewLow_N", sigs.get("NewLow_N", NA))
+    md_kv(lines, "signals.ConsecutiveBreak", sigs.get("ConsecutiveBreak", NA))
+    md_kv(lines, "signals.OhlcMissing", sigs.get("OhlcMissing", NA))
+    lines.append("")
+
+    # -----------------------
+    # roll25_heated / confidence + Margin×Roll25 consistency + margin rationale
+    # -----------------------
+    cross = safe_path(modules, ["taiwan_margin_financing", "cross_module"], {})
+    lines.append("### roll25_heated / confidence (from build)")
+    md_kv(lines, "roll25_heated", g(cross, "roll25_heated", NA))
+    md_kv(lines, "roll25_confidence", g(cross, "roll25_confidence", NA))
+    md_kv(lines, "consistency(Margin×Roll25)", g(cross, "consistency", NA))
+    md_kv(lines, "margin_signal", g(cross, "margin_signal", NA))
+    md_kv(lines, "margin_signal_source", g(cross, "margin_signal_source", NA))
+
+    # margin rationale: prefer cross_module.margin_rationale, else derive from latest rows (audit evidence only)
+    mr = g(cross, "margin_rationale", None)
+    if isinstance(mr, dict) and mr:
         lines.append("")
+        lines.append("#### margin_rationale (from build)")
+        # print common fields if exist; else dump key-values (stable order)
+        prefer_keys = [
+            "rule_id",
+            "rule_hit",
+            "twse_data_date",
+            "latest_date",
+            "latest_chg_yi",
+            "sum_chg_yi_last5",
+            "avg_chg_yi_last5",
+            "pos_days_last5",
+            "neg_days_last5",
+            "max_chg_last5",
+            "min_chg_last5",
+            "n_used",
+        ]
+        printed = set()
+        for k in prefer_keys:
+            if k in mr:
+                md_kv(lines, k, mr.get(k))
+                printed.add(k)
+        # print remaining keys (if any)
+        for k in sorted([k for k in mr.keys() if k not in printed]):
+            md_kv(lines, k, mr.get(k))
+    else:
+        # derive from latest json (report-only)
+        t_latest = safe_path(modules, ["taiwan_margin_financing", "latest"], None)
+        if isinstance(t_latest, dict):
+            der = derive_margin_rationale_from_latest_rows(t_latest)
+            lines.append("")
+            lines.append("#### margin_rationale (renderer-derived evidence; NOT used to infer signal)")
+            for k in [
+                "renderer_rationale_source",
+                "twse_data_date",
+                "latest_date",
+                "latest_chg_yi",
+                "sum_chg_yi_last5",
+                "avg_chg_yi_last5",
+                "pos_days_last5",
+                "neg_days_last5",
+                "max_chg_last5",
+                "min_chg_last5",
+                "n_used",
+            ]:
+                md_kv(lines, k, der.get(k, NA))
+
+    # date alignment (confirm-only)
+    da = safe_path(cross, ["rationale", "date_alignment"], None)
+    if isinstance(da, dict):
+        lines.append("")
+        lines.append("#### date_alignment (confirm-only; does not change signal)")
+        md_kv(lines, "twmargin_date", da.get("twmargin_date", NA))
+        md_kv(lines, "roll25_used_date", da.get("roll25_used_date", NA))
+        md_kv(lines, "used_date_match", da.get("used_date_match", NA))
+        md_kv(lines, "note", da.get("note", NA))
+
+    lines.append("")
 
     # -----------------------
     # Unified Risk Judgment (Market + FRED + Roll25)
     # -----------------------
     lines.append("## Unified Risk Judgment (Market + FRED + Roll25)")
-    m_w, m_a = count_levels(market_rows)
-    f_w, f_a = count_levels(fred_rows)
-    cross = safe_path(modules, ["taiwan_margin_financing", "cross_module"], {})
-    roll25_heated = g(cross, "roll25_heated", NA)
-    roll25_conf = g(cross, "roll25_confidence", NA)
+    mc = count_levels(market_rows)
+    fc = count_levels(fred_rows)
+    roll_heated = g(cross, "roll25_heated", NA)
 
-    m_has = (m_w + m_a) > 0
-    f_has = (f_w + f_a) > 0
-    ustate = derive_unified_state(m_has, f_has, roll25_heated)
+    md_kv(lines, "market_WATCH", mc.get("WATCH", 0))
+    md_kv(lines, "market_ALERT", mc.get("ALERT", 0))
+    md_kv(lines, "fred_WATCH", fc.get("WATCH", 0))
+    md_kv(lines, "fred_ALERT", fc.get("ALERT", 0))
+    md_kv(lines, "roll25_heated", roll_heated)
+    md_kv(lines, "roll25_confidence", g(cross, "roll25_confidence", NA))
 
-    md_kv(lines, "market_WATCH", m_w)
-    md_kv(lines, "market_ALERT", m_a)
-    md_kv(lines, "fred_WATCH", f_w)
-    md_kv(lines, "fred_ALERT", f_a)
-    md_kv(lines, "roll25_heated", roll25_heated)
-    md_kv(lines, "roll25_confidence", roll25_conf)
+    m_has = (mc.get("WATCH", 0) + mc.get("ALERT", 0)) > 0
+    f_has = (fc.get("WATCH", 0) + fc.get("ALERT", 0)) > 0
+    ustate = unified_state(m_has, f_has, roll_heated)
     md_kv(lines, "UnifiedState", ustate)
     lines.append("")
     lines.append("- Rule: UnifiedState is derived deterministically from (market has WATCH/ALERT?, fred has WATCH/ALERT?, roll25_heated). No forecast inference.")
+    # additional note to avoid burying margin
+    lines.append(f"- Note: Margin×Roll25 consistency={fmt(g(cross,'consistency',NA))}, margin_signal={fmt(g(cross,'margin_signal',NA))} (audit context; does not alter UnifiedState here).")
     lines.append("")
 
     # -----------------------
-    # taiwan margin block
+    # taiwan margin
     # -----------------------
     t = safe_path(modules, ["taiwan_margin_financing", "latest"], None)
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
