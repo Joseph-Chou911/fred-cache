@@ -12,10 +12,9 @@ Key guarantees
 - Deterministic Margin × Roll25 resonance classification (no guessing).
 - roll25 lookback inadequacy -> confidence NOTE (does NOT affect margin_quality).
 
-Output noise control (this version)
-- roll25 window NOTE printed ONCE only (in section 2.2).
-- 2.1 roll25 raw block does NOT repeat lookback note.
-- Summary does NOT repeat lookback note.
+Noise control (this version)
+- roll25 window NOTE appears once only (in Summary).
+- 2.2 does NOT repeat the same window note again.
 """
 
 from __future__ import annotations
@@ -25,10 +24,6 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-
-# ---------------------------
-# IO / formatting helpers
-# ---------------------------
 
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -56,26 +51,12 @@ def yesno(ok: bool) -> str:
 
 
 def line_check(name: str, ok: bool, msg: str) -> str:
-    """
-    Avoid duplicated '(OK)(OK)'.
-    - If ok and msg == 'OK' -> only show ✅（OK）
-    - If ok and msg != 'OK' -> show ✅（OK）（msg）
-    - If fail -> show ❌（FAIL）（msg）
-    """
     if ok:
         return f"- {name}：{yesno(True)}" if msg == "OK" else f"- {name}：{yesno(True)}（{msg}）"
     return f"- {name}：{yesno(False)}（{msg}）"
 
 
-# ---------------------------
-# Data build / calc
-# ---------------------------
-
 def build_series_from_history(history_items: List[Dict[str, Any]], market: str) -> List[Tuple[str, float]]:
-    """
-    Return list of (date, balance) sorted desc by date.
-    Dedup by date (keep last seen).
-    """
     tmp: Dict[str, float] = {}
     for it in history_items:
         if it.get("market") != market:
@@ -96,11 +77,6 @@ def latest_date_from_series(series: List[Tuple[str, float]]) -> Optional[str]:
 
 
 def calc_horizon(series: List[Tuple[str, float]], n: int) -> Dict[str, Any]:
-    """
-    n=1 -> 1D (need 2 points)
-    n=5 -> 5D (need 6 points)
-    n=20 -> 20D (need 21 points)
-    """
     need = n + 1
     if len(series) < need:
         return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None}
@@ -111,13 +87,7 @@ def calc_horizon(series: List[Tuple[str, float]], n: int) -> Dict[str, Any]:
     delta = latest_v - base_v
     pct = (delta / base_v * 100.0) if base_v != 0 else None
 
-    return {
-        "delta": delta,
-        "pct": pct,
-        "base_date": base_d,
-        "latest": latest_v,
-        "base": base_v,
-    }
+    return {"delta": delta, "pct": pct, "base_date": base_d, "latest": latest_v, "base": base_v}
 
 
 def total_calc(
@@ -127,12 +97,6 @@ def total_calc(
     twse_meta_date: Optional[str],
     tpex_meta_date: Optional[str],
 ) -> Dict[str, Any]:
-    """
-    合計 only if:
-    - latest meta dates exist and match
-    - both series have n+1 points
-    - base_date for horizon matches
-    """
     tw = calc_horizon(twse_s, n)
     tp = calc_horizon(tpex_s, n)
 
@@ -153,20 +117,9 @@ def total_calc(
     delta = latest_tot - base_tot
     pct = (delta / base_tot * 100.0) if base_tot != 0 else None
 
-    return {
-        "delta": delta,
-        "pct": pct,
-        "base_date": tw["base_date"],
-        "latest": latest_tot,
-        "base": base_tot,
-        "ok": True,
-        "reason": "",
-    }
+    return {"delta": delta, "pct": pct, "base_date": tw["base_date"], "latest": latest_tot, "base": base_tot,
+            "ok": True, "reason": ""}
 
-
-# ---------------------------
-# Extract / Checks (HiStock latest.json)
-# ---------------------------
 
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
     series = latest_obj.get("series") or {}
@@ -187,9 +140,7 @@ def extract_meta_date(latest_obj: Dict[str, Any], market: str) -> Optional[str]:
 def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
     series = latest_obj.get("series") or {}
     meta = series.get(market) or {}
-    src = meta.get("source") or "NA"
-    url = meta.get("source_url") or "NA"
-    return str(src), str(url)
+    return str(meta.get("source") or "NA"), str(meta.get("source_url") or "NA")
 
 
 def check_min_rows(series: List[Tuple[str, float]], min_rows: int) -> Tuple[bool, str]:
@@ -228,10 +179,6 @@ def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]
     return out
 
 
-# ---------------------------
-# roll25 (confirm-only) helpers
-# ---------------------------
-
 def _get(d: Dict[str, Any], k: str, default: Any = None) -> Any:
     return d.get(k, default) if isinstance(d, dict) else default
 
@@ -254,13 +201,6 @@ def roll25_used_date(roll: Dict[str, Any]) -> Optional[str]:
 
 
 def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
-    """
-    Deterministic:
-    heated if:
-      - risk_level in {"中","高"} OR
-      - any of (VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak) is True
-    Return None if not enough information.
-    """
     risk = _get(roll, "risk_level", None)
     sig = _get(roll, "signal", {})
     if risk is None and not isinstance(sig, dict):
@@ -279,10 +219,6 @@ def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
 
 
 def roll25_lookback_note(roll: Dict[str, Any], default_target: int = 20) -> Tuple[Optional[bool], str]:
-    """
-    Confidence note only. OK if lookback_n_actual >= target else downgrade.
-    Return (ok_or_none, msg).
-    """
     n_actual = _get(roll, "lookback_n_actual", None)
     n_target = _get(roll, "lookback_n_target", None)
     if n_target is None:
@@ -300,10 +236,6 @@ def roll25_lookback_note(roll: Dict[str, Any], default_target: int = 20) -> Tupl
         return True, f"LookbackNActual={na}/{nt}（OK）"
     return False, f"LookbackNActual={na}/{nt}（window 未滿 → 信心降級）"
 
-
-# ---------------------------
-# Signal rules (margin)
-# ---------------------------
 
 def calc_accel(one_d_pct: Optional[float], five_d_pct: Optional[float]) -> Optional[float]:
     if one_d_pct is None or five_d_pct is None:
@@ -327,26 +259,21 @@ def determine_signal(
     if tot20_pct is None:
         return ("NA", "NA", "insufficient total_20D% (NA)")
 
-    if tot20_pct >= 8.0:
-        state = "擴張"
-    elif tot20_pct <= -8.0:
-        state = "收縮"
-    else:
-        state = "中性"
+    state = "擴張" if tot20_pct >= 8.0 else ("收縮" if tot20_pct <= -8.0 else "中性")
 
     if (tot20_pct >= 8.0) and (tot1_pct is not None) and (tot5_pct is not None) and (tot1_pct < 0.0) and (tot5_pct < 0.0):
         return (state, "ALERT", "20D expansion + 1D%<0 and 5D%<0 (possible deleveraging)")
 
-    watch_cond = False
+    watch = False
     if tot20_pct >= 8.0:
         if (tot1_pct is not None and tot1_pct >= 0.8):
-            watch_cond = True
+            watch = True
         if (spread20 is not None and spread20 >= 3.0):
-            watch_cond = True
+            watch = True
         if (accel is not None and accel >= 0.25):
-            watch_cond = True
+            watch = True
 
-    if watch_cond:
+    if watch:
         return (state, "WATCH", "20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)")
 
     if (tot20_pct >= 8.0) and (accel is not None) and (tot1_pct is not None):
@@ -356,19 +283,7 @@ def determine_signal(
     return (state, "NONE", "no rule triggered")
 
 
-# ---------------------------
-# Resonance (Margin × Roll25)
-# ---------------------------
-
 def determine_resonance(margin_signal: str, roll: Optional[Dict[str, Any]], strict_ok: bool) -> Tuple[str, str]:
-    """
-    Deterministic:
-      1) Margin∈{WATCH,ALERT} and roll25 heated -> RESONANCE
-      2) Margin∈{WATCH,ALERT} and roll25 not heated -> DIVERGENCE
-      3) Margin not heated and roll25 heated -> MARKET_SHOCK_ONLY
-      4) else -> QUIET
-    strict_ok requires roll25 exists AND UsedDate == TWSE latest date.
-    """
     if roll is None or not strict_ok:
         return ("NA", "roll25 missing/mismatch => resonance NA (strict)")
 
@@ -393,7 +308,7 @@ def main() -> None:
     ap.add_argument("--latest", required=True)
     ap.add_argument("--history", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--roll25", default="roll25_cache/latest_report.json", help="confirm-only roll25 json path")
+    ap.add_argument("--roll25", default="roll25_cache/latest_report.json")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -442,9 +357,7 @@ def main() -> None:
         spread20=spread20,
     )
 
-    # ---------------------------
-    # Margin checks -> margin_quality
-    # ---------------------------
+    # margin checks
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
     c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
@@ -457,8 +370,7 @@ def main() -> None:
         c3_ok = (head5_pairs(twse_rows) != head5_pairs(tpex_rows))
         c3_msg = "OK" if c3_ok else "head5 identical (date+balance) => likely wrong page"
     else:
-        c3_ok = False
-        c3_msg = "insufficient rows for head5 comparison"
+        c3_ok, c3_msg = False, "insufficient rows for head5 comparison"
 
     c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
     c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
@@ -475,14 +387,12 @@ def main() -> None:
     )
     margin_quality = "PARTIAL" if margin_any_fail else "OK"
 
-    # ---------------------------
-    # roll25 confirm-only + strict matching + confidence note
-    # ---------------------------
+    # roll25 confirm-only
     roll, roll_err = load_roll25(args.roll25)
     roll_ok = (roll is not None and roll_err is None)
-
     roll_used = roll25_used_date(roll) if roll else None
     strict_roll_match = bool(roll_ok and twse_meta_date and roll_used and (roll_used == twse_meta_date))
+
     c6_roll_ok = strict_roll_match
     c6_roll_msg = "OK" if c6_roll_ok else f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'}) or roll25 missing"
 
@@ -491,20 +401,14 @@ def main() -> None:
     if roll_ok and roll is not None:
         c7_lb_ok, c7_lb_msg = roll25_lookback_note(roll, default_target=20)
 
-    resonance_label, resonance_rationale = determine_resonance(
-        margin_signal=margin_signal,
-        roll=roll,
-        strict_ok=strict_roll_match,
-    )
+    resonance_label, resonance_rationale = determine_resonance(margin_signal, roll, strict_roll_match)
 
-    # Decide whether to print roll25_window_note (only once)
+    # roll25 window note shown ONCE in Summary only
     roll25_window_note: Optional[str] = None
     if strict_roll_match and (c7_lb_ok is False or c7_lb_ok is None):
         roll25_window_note = c7_lb_msg
 
-    # ---------------------------
-    # Render markdown
-    # ---------------------------
+    # render
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
@@ -557,7 +461,6 @@ def main() -> None:
         md.append("- 合計：NA（日期不一致或缺值，依規則不得合計）")
     md.append("")
 
-    # roll25 raw (confirm-only) - NO lookback note here to reduce duplication
     md.append("## 2.1) 台股成交量/波動（roll25_cache；confirm-only）")
     md.append(f"- roll25_path: {args.roll25}")
     if roll_ok and roll is not None:
@@ -597,8 +500,6 @@ def main() -> None:
     md.append("  3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）")
     md.append("  4. 其餘 → QUIET")
     md.append(f"- 判定：{resonance_label}（{resonance_rationale}）")
-    if roll25_window_note:
-        md.append(f"- 信心降級：{roll25_window_note}")
     md.append("")
 
     md.append("## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）")
@@ -662,7 +563,6 @@ def main() -> None:
     md.append(line_check("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
     md.append(line_check("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
     md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_roll_ok, c6_roll_msg))
-    # Check-7 is informational only (never flips margin_quality)
     if strict_roll_match and c7_lb_ok is True:
         md.append(f"- Check-7 roll25 Lookback window（info）：✅（OK）（{c7_lb_msg}）")
     elif strict_roll_match:
