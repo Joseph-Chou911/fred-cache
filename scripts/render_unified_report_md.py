@@ -4,15 +4,16 @@
 """
 scripts/render_unified_report_md.py
 
-- Renders unified report.md from unified_latest.json (or similar unified input)
-- Adds:
-  (2) fred_dir (derived heuristic, audit-noted)
-  (3) market_class / fred_class in Resonance Matrix for auditability
+需求：你說「2、3都要」
+我這版把「2=fed_dir」與「3=market_class/fred_class」做到三個地方都一致出現：
 
-Design choices (audit-first):
-- fred_dir is NOT guessed from data; it is derived from a fixed, explicit mapping table
-  (series -> risk direction HIGH/LOW). Anything not in the map => NA.
-- market_class/fred_class is derived from tag/reason only, with explicit rules.
+(1) market_cache 表：新增 market_class 欄位
+(2) fred_cache 表：新增 fred_dir + fred_class 欄位
+(3) Resonance Matrix：保留 market_dir + fred_dir + market_class + fred_class
+
+原則：audit-first
+- fred_dir = 只從固定 mapping table (FRED_DIR_MAP) 產生，不從數值推論；未列入 => NA
+- class = 只從 tag / reason 做 deterministic 分類：LONG / JUMP / LONG+JUMP / NONE
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 NA = "NA"
 
@@ -105,7 +106,7 @@ def margin_stats(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
     }
 
 # -----------------------
-# signal extraction
+# extraction
 # -----------------------
 def extract_market_rows(market_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = g(market_latest, "rows", [])
@@ -125,54 +126,35 @@ def pick_rows(rows: List[Dict[str, Any]], allowed_levels: Tuple[str, ...]) -> Li
     return out
 
 # -----------------------
-# Derived dir for FRED (explicit mapping)
+# (2) fred_dir mapping (audit-table)
 # -----------------------
-# NOTE: This is heuristic, not inferred from data.
-# Anything not listed here returns NA.
 FRED_DIR_MAP: Dict[str, str] = {
-    # Risk increases when HIGH:
     "VIXCLS": "HIGH",
     "DGS10": "HIGH",
     "DGS2": "HIGH",
-    "T10Y2Y": "HIGH",     # term spread level interpretation can be debated; keep explicit and auditable
-    "T10Y3M": "HIGH",     # likewise, keep explicit
+    "T10Y2Y": "HIGH",
+    "T10Y3M": "HIGH",
     "STLFSI4": "HIGH",
     "OFR_FSI": "HIGH",
-    "BAMLH0A0HYM2": "HIGH",  # HY OAS higher => risk higher
-    "DTWEXBGS": "HIGH",      # broad dollar index higher often = tighter USD conditions; treat as HIGH-risk direction for consistency
-    # Risk increases when LOW:
-    "NFCINONFINLEVERAGE": "LOW",  # more negative can indicate tighter conditions / riskier (your previous convention may differ)
-    # Equities: "higher" isn't directly "risk", but you often use "extension" as risk. Keep explicit:
+    "BAMLH0A0HYM2": "HIGH",
+    "DTWEXBGS": "HIGH",
     "SP500": "HIGH",
     "DJIA": "HIGH",
     "NASDAQCOM": "HIGH",
-    "DCOILWTICO": "HIGH",  # oil higher can be inflation/pressure; explicit heuristic
+    "DCOILWTICO": "HIGH",
+    "NFCINONFINLEVERAGE": "LOW",
 }
 
-def derive_fred_dir(series: str) -> str:
-    if not isinstance(series, str):
+def derive_fred_dir(series: Any) -> str:
+    s = str(series or "").strip()
+    if not s:
         return NA
-    return FRED_DIR_MAP.get(series, NA)
+    return FRED_DIR_MAP.get(s, NA)
 
 # -----------------------
-# Alias mapping between modules
-# -----------------------
-# pair_type=ALIAS uses this mapping (market_series -> fred_series)
-ALIASES: List[Tuple[str, str, str]] = [
-    ("VIX", "VIXCLS", "VIX↔VIXCLS"),
-    # Add more if needed, but keep explicit and auditable.
-]
-
-# -----------------------
-# Classification (LONG / JUMP) from tag/reason
+# (3) class from tag/reason
 # -----------------------
 def classify_row(tag: Any, reason: Any) -> str:
-    """
-    Returns one of: LONG, JUMP, LONG+JUMP, NONE
-    Rule (explicit):
-      - LONG if tag contains LONG_EXTREME
-      - JUMP if tag contains 'JUMP' OR reason contains 'abs(' thresholds (delta/ret1 style)
-    """
     tags = set(split_csvish(tag))
     rsn = str(reason) if isinstance(reason, str) else ""
 
@@ -188,28 +170,22 @@ def classify_row(tag: Any, reason: Any) -> str:
     return "NONE"
 
 # -----------------------
-# Resonance logic
+# alias mapping
 # -----------------------
-def resonance_level(
-    market_signal: str,
-    fred_signal: str,
-    market_class: str,
-    fred_class: str,
-) -> str:
-    """
-    Output resonance_level (audit-friendly, deterministic):
-    - CONCORD_STRONG: same signal level AND same class (e.g., WATCH+WATCH and JUMP+JUMP)
-    - CONCORD_WEAK:   same signal level but different class
-    - STRUCTURAL_VS_SHOCK: one side LONG-only, other side JUMP-only, regardless of signal mismatch
-    - DISCORD_LEVEL: different signal level but same class
-    - DISCORD_MIXED: everything else
-    """
+ALIASES: List[Tuple[str, str, str]] = [
+    ("VIX", "VIXCLS", "VIX↔VIXCLS"),
+]
+
+# -----------------------
+# resonance
+# -----------------------
+def resonance_level(market_signal: str, fred_signal: str, market_class: str, fred_class: str) -> str:
     ms = market_signal or NA
     fs = fred_signal or NA
     mc = market_class or "NONE"
     fc = fred_class or "NONE"
 
-    # structural vs shock: explicit mismatch in class type
+    # structural vs shock (explicit)
     if (mc == "LONG" and fc == "JUMP") or (mc == "JUMP" and fc == "LONG"):
         return "STRUCTURAL_VS_SHOCK"
 
@@ -221,33 +197,26 @@ def resonance_level(
 
     return "DISCORD_MIXED"
 
-def series_key(series: str) -> str:
+def series_key(series: Any) -> str:
     return str(series or "").strip()
 
-def build_resonance_pairs(
-    market_rows: List[Dict[str, Any]],
-    fred_rows: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """
-    Build resonance matrix rows:
-    - STRICT pairs: same series name exists in both
-    - ALIAS pairs: based on ALIASES mapping, if both exist
-    Dedup: do not include ALIAS if it maps identical names already in STRICT (e.g., SP500->SP500).
-    """
-    m_by_series = {series_key(g(r, "series")): r for r in market_rows if series_key(g(r, "series"))}
-    f_by_series = {series_key(g(r, "series")): r for r in fred_rows if series_key(g(r, "series"))}
+def build_resonance_pairs(market_rows: List[Dict[str, Any]], fred_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    m_by = {series_key(g(r, "series")): r for r in market_rows if series_key(g(r, "series"))}
+    f_by = {series_key(g(r, "series")): r for r in fred_rows if series_key(g(r, "series"))}
 
     out: List[Dict[str, Any]] = []
-    seen_pairs: set[Tuple[str, str, str]] = set()  # (pair_type, m_series, f_series)
+    seen: set[Tuple[str, str, str]] = set()
 
-    # STRICT intersections
-    for s in sorted(set(m_by_series.keys()) & set(f_by_series.keys())):
-        mr = m_by_series[s]
-        fr = f_by_series[s]
+    # STRICT
+    for s in sorted(set(m_by.keys()) & set(f_by.keys())):
+        mr, fr = m_by[s], f_by[s]
+
         m_sig = g(mr, "signal_level", NA)
         f_sig = g(fr, "signal_level", NA)
+
         m_tag = g(mr, "tag", NA)
         f_tag = g(fr, "tag", NA)
+
         m_reason = g(mr, "reason", NA)
         f_reason = g(fr, "reason", NA)
 
@@ -264,12 +233,12 @@ def build_resonance_pairs(
             "fred_series": s,
             "market_signal": m_sig,
             "fred_signal": f_sig,
+            "market_class": m_class,
+            "fred_class": f_class,
             "market_tag": m_tag,
             "fred_tag": f_tag,
             "market_dir": m_dir,
             "fred_dir": f_dir,
-            "market_class": m_class,
-            "fred_class": f_class,
             "market_reason": m_reason,
             "fred_reason": f_reason,
             "market_date": g(mr, "data_date", NA),
@@ -280,30 +249,28 @@ def build_resonance_pairs(
         row["resonance_level"] = resonance_level(m_sig, f_sig, m_class, f_class)
 
         key = ("STRICT", s, s)
-        if key not in seen_pairs:
+        if key not in seen:
             out.append(row)
-            seen_pairs.add(key)
+            seen.add(key)
 
-    # ALIAS mappings
+    # ALIAS
     for m_name, f_name, label in ALIASES:
-        ms = series_key(m_name)
-        fs = series_key(f_name)
+        ms, fs = series_key(m_name), series_key(f_name)
         if not ms or not fs:
             continue
-        if ms not in m_by_series or fs not in f_by_series:
+        if ms not in m_by or fs not in f_by:
+            continue
+        if ms == fs and ("STRICT", ms, fs) in seen:
             continue
 
-        # Do not add alias duplicates of STRICT identical naming
-        if ms == fs and ("STRICT", ms, fs) in seen_pairs:
-            continue
-
-        mr = m_by_series[ms]
-        fr = f_by_series[fs]
+        mr, fr = m_by[ms], f_by[fs]
 
         m_sig = g(mr, "signal_level", NA)
         f_sig = g(fr, "signal_level", NA)
+
         m_tag = g(mr, "tag", NA)
         f_tag = g(fr, "tag", NA)
+
         m_reason = g(mr, "reason", NA)
         f_reason = g(fr, "reason", NA)
 
@@ -320,12 +287,12 @@ def build_resonance_pairs(
             "fred_series": fs,
             "market_signal": m_sig,
             "fred_signal": f_sig,
+            "market_class": m_class,
+            "fred_class": f_class,
             "market_tag": m_tag,
             "fred_tag": f_tag,
             "market_dir": m_dir,
             "fred_dir": f_dir,
-            "market_class": m_class,
-            "fred_class": f_class,
             "market_reason": m_reason,
             "fred_reason": f_reason,
             "market_date": g(mr, "data_date", NA),
@@ -336,11 +303,11 @@ def build_resonance_pairs(
         row["resonance_level"] = resonance_level(m_sig, f_sig, m_class, f_class)
 
         key = ("ALIAS", ms, fs)
-        if key not in seen_pairs:
+        if key not in seen:
             out.append(row)
-            seen_pairs.add(key)
+            seen.add(key)
 
-    # Sort: most important resonance first, then pair_type, then series label
+    # sort by resonance importance
     order = {
         "CONCORD_STRONG": 1,
         "CONCORD_WEAK": 2,
@@ -378,7 +345,7 @@ def main() -> None:
     lines.append("")
 
     # -----------------------
-    # market_cache (detailed)
+    # market_cache (detailed)  -> add market_class
     # -----------------------
     m = safe_path(modules, ["market_cache", "dashboard_latest"], None)
     lines.append("## market_cache (detailed)")
@@ -396,16 +363,18 @@ def main() -> None:
         market_rows = extract_market_rows(m)
 
         headers = [
-            "series","signal","dir","value","data_date","age_h",
+            "series","signal","dir","market_class","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%60",
             "reason","tag","prev","delta","streak_hist","streak_wa","source"
         ]
         table_rows: List[List[Any]] = []
         for r in market_rows:
+            m_class = classify_row(g(r, "tag", NA), g(r, "reason", NA))
             table_rows.append([
                 g(r,"series"),
                 g(r,"signal_level"),
                 g(r,"dir"),
+                m_class,
                 g(r,"value"),
                 g(r,"data_date"),
                 g(r,"age_hours"),
@@ -426,11 +395,11 @@ def main() -> None:
         md_table(lines, headers, table_rows)
         lines.append("")
     else:
-        lines.append("- NA (missing/failed)")
+        lines.append(f"- {NA} (missing/failed)")
         lines.append("")
 
     # -----------------------
-    # fred_cache (ALERT+WATCH+INFO)
+    # fred_cache (ALERT+WATCH+INFO) -> add fred_dir + fred_class
     # -----------------------
     f = safe_path(modules, ["fred_cache", "dashboard_latest"], None)
     lines.append("## fred_cache (ALERT+WATCH+INFO)")
@@ -455,15 +424,20 @@ def main() -> None:
         focus = pick_rows(fred_rows, ("WATCH", "INFO", "ALERT"))
 
         headers = [
-            "series","signal","value","data_date","age_h",
+            "series","signal","fred_dir","fred_class","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%",
             "reason","tag","prev","delta","source"
         ]
         table_rows = []
         for r in focus:
+            s = g(r, "series", NA)
+            f_dir = derive_fred_dir(s)
+            f_class = classify_row(g(r, "tag", NA), g(r, "reason", NA))
             table_rows.append([
-                g(r,"series"),
+                s,
                 g(r,"signal_level"),
+                f_dir,
+                f_class,
                 g(r,"value"),
                 g(r,"data_date"),
                 g(r,"age_hours"),
@@ -482,11 +456,11 @@ def main() -> None:
         md_table(lines, headers, table_rows)
         lines.append("")
     else:
-        lines.append("- NA (missing/failed)")
+        lines.append(f"- {NA} (missing/failed)")
         lines.append("")
 
     # -----------------------
-    # Audit Notes (for derived fields)
+    # Audit Notes
     # -----------------------
     lines.append("## Audit Notes")
     lines.append(f"- fred_dir is DERIVED (heuristic) from a fixed mapping table in this script (FRED_DIR_MAP). Unmapped series => {NA}.")
@@ -540,7 +514,7 @@ def main() -> None:
         lines.append("")
 
     # -----------------------
-    # taiwan margin (richer)
+    # taiwan margin
     # -----------------------
     t = safe_path(modules, ["taiwan_margin_financing", "latest"], None)
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
