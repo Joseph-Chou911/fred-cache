@@ -29,13 +29,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps (requests)
+      - name: Install Python deps (requests)
         shell: bash
         run: |
           set -euo pipefail
           python -V
           python -m pip install --upgrade pip
-          python -m pip install --no-cache-dir requests
+          python -m pip install --upgrade requests
+          python -c "import requests; print('requests_version=', requests.__version__)"
 
       - name: Ensure output dirs
         shell: bash
@@ -43,7 +44,7 @@ jobs:
           set -euo pipefail
           mkdir -p unified_dashboard fx_cache
 
-      - name: Verify required inputs exist (excluding FX cache files)
+      - name: Verify required inputs exist
         shell: bash
         run: |
           set -euo pipefail
@@ -52,9 +53,9 @@ jobs:
             "dashboard_fred_cache/dashboard_latest.json"
             "taiwan_margin_cache/latest.json"
             "roll25_cache/latest_report.json"
-            "scripts/fetch_fx_usdtwd_bot.py"
             "scripts/build_unified_dashboard_latest.py"
             "scripts/render_unified_report_md.py"
+            "scripts/fetch_fx_usdtwd_bot.py"
           )
           missing=0
           for f in "${req[@]}"; do
@@ -70,11 +71,12 @@ jobs:
             exit 1
           fi
 
-      - name: Update FX cache (BOT USD/TWD)
+      - name: Update FX cache (BOT USD/TWD) [STRICT]
         shell: bash
         run: |
           set -euo pipefail
 
+          # Run fetcher. It should exit non-zero if strict sanity fails.
           python scripts/fetch_fx_usdtwd_bot.py \
             --tz "Asia/Taipei" \
             --latest-out "fx_cache/latest.json" \
@@ -82,15 +84,15 @@ jobs:
             --max-back 10 \
             --timeout 20
 
-          # Must exist & non-empty
+          # Hard guards: outputs must exist and be non-empty
           test -s fx_cache/latest.json
           test -s fx_cache/history.json
 
           echo "OK: fx_cache/latest.json size=$(wc -c < fx_cache/latest.json)"
           echo "OK: fx_cache/history.json size=$(wc -c < fx_cache/history.json)"
 
-          echo "---- fx_cache/latest.json (head 80) ----"
-          sed -n '1,80p' fx_cache/latest.json || true
+          echo "---- fx_cache/latest.json (head 120) ----"
+          sed -n '1,120p' fx_cache/latest.json || true
 
       - name: Build unified_dashboard/latest.json
         shell: bash
@@ -99,6 +101,11 @@ jobs:
           ROLL25_DD_N: "10"
         run: |
           set -euo pipefail
+
+          # Require FX inputs produced by previous step
+          test -s fx_cache/latest.json
+          test -s fx_cache/history.json
+
           python scripts/build_unified_dashboard_latest.py \
             --market-in "dashboard/dashboard_latest.json" \
             --fred-in "dashboard_fred_cache/dashboard_latest.json" \
@@ -156,18 +163,31 @@ jobs:
           echo "---- unified_dashboard/report.md (tail 15) ----"
           tail -n 15 unified_dashboard/report.md || true
 
+          echo "---- fx_cache/latest.json (head 80) ----"
+          sed -n '1,80p' fx_cache/latest.json || true
+
       - name: Commit & push if changed
         shell: bash
         run: |
           set -euo pipefail
 
           # Fail fast if outputs are ignored
-          for f in unified_dashboard/latest.json unified_dashboard/report.md fx_cache/latest.json fx_cache/history.json; do
-            if git check-ignore -q "$f"; then
-              echo "ERROR: $f is ignored by .gitignore"
-              exit 1
-            fi
-          done
+          if git check-ignore -q unified_dashboard/latest.json; then
+            echo "ERROR: unified_dashboard/latest.json is ignored by .gitignore"
+            exit 1
+          fi
+          if git check-ignore -q unified_dashboard/report.md; then
+            echo "ERROR: unified_dashboard/report.md is ignored by .gitignore"
+            exit 1
+          fi
+          if git check-ignore -q fx_cache/latest.json; then
+            echo "ERROR: fx_cache/latest.json is ignored by .gitignore"
+            exit 1
+          fi
+          if git check-ignore -q fx_cache/history.json; then
+            echo "ERROR: fx_cache/history.json is ignored by .gitignore"
+            exit 1
+          fi
 
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes. Skip commit."
@@ -177,19 +197,20 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage intended outputs
+          # Only stage intended outputs
           git add unified_dashboard/latest.json unified_dashboard/report.md
           git add fx_cache/latest.json fx_cache/history.json
           git add -u
 
-          # Hard-guard: only allow changes under unified_dashboard/ or fx_cache/
+          # Hard-guard: refuse to commit staged changes outside unified_dashboard/ or fx_cache/
           staged_paths="$(git diff --cached --name-only || true)"
           bad_paths="$(echo "$staged_paths" | awk 'NF && $0 !~ /^(unified_dashboard|fx_cache)\// {print $0}')"
           if [[ -n "$bad_paths" ]]; then
             echo "ERROR: Refusing to commit staged changes outside unified_dashboard/ or fx_cache/:"
             echo "$bad_paths"
+            echo "Hint: remove unintended changes or adjust staging rules."
             exit 1
           fi
 
-          git commit -m "Update unified dashboard + report + fx cache"
+          git commit -m "Update unified dashboard + report + FX cache"
           git push
