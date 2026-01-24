@@ -31,7 +31,6 @@ def safe_path(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
     return cur
 
 def margin_5d_sum(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
-    # expects schema: taiwan_margin_financing_latest_v1
     series = g(twm_latest, "series", {})
     blk = g(series, which, {})
     rows = g(blk, "rows", [])
