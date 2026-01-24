@@ -35,31 +35,36 @@ jobs:
         run: |
           set -euo pipefail
 
-          m="missing"; f="missing"; t="missing"
+          m="missing"; f="missing"; t="missing"; r="missing"
 
           [ -f dashboard/dashboard_latest.json ] && m="present"
           [ -f dashboard_fred_cache/dashboard_latest.json ] && f="present"
           [ -f taiwan_margin_cache/latest.json ] && t="present"
+          [ -f roll25_cache/latest_report.json ] && r="present"
 
           echo "market_file=$m" >> $GITHUB_OUTPUT
           echo "fred_file=$f" >> $GITHUB_OUTPUT
           echo "twmargin_file=$t" >> $GITHUB_OUTPUT
+          echo "roll25_file=$r" >> $GITHUB_OUTPUT
 
           echo "market_file=$m"
           echo "fred_file=$f"
           echo "twmargin_file=$t"
+          echo "roll25_file=$r"
 
       - name: Build unified dashboard_latest.json
         shell: bash
         run: |
           set -euo pipefail
           python scripts/build_unified_dashboard_latest.py \
-            --market_in  dashboard/dashboard_latest.json \
-            --fred_in    dashboard_fred_cache/dashboard_latest.json \
+            --market_in   dashboard/dashboard_latest.json \
+            --fred_in     dashboard_fred_cache/dashboard_latest.json \
             --twmargin_in taiwan_margin_cache/latest.json \
-            --market_outcome "${{ steps.check.outputs.market_file }}" \
-            --fred_outcome "${{ steps.check.outputs.fred_file }}" \
+            --roll25_in   roll25_cache/latest_report.json \
+            --market_outcome  "${{ steps.check.outputs.market_file }}" \
+            --fred_outcome    "${{ steps.check.outputs.fred_file }}" \
             --twmargin_outcome "${{ steps.check.outputs.twmargin_file }}" \
+            --roll25_outcome  "${{ steps.check.outputs.roll25_file }}" \
             --out dashboard_unified/dashboard_latest.json
 
       - name: Render unified report.md
