@@ -1,12 +1,17 @@
 {
   "schema_version": "taiwan_margin_financing_latest_v1",
-  "generated_at_utc": "2026-01-23T07:56:18Z",
+  "generated_at_utc": "2026-01-24T00:01:15Z",
   "series": {
     "TWSE": {
       "source": "HiStock",
       "source_url": "https://histock.tw/stock/three.aspx?m=mg",
-      "data_date": "2026-01-22",
+      "data_date": "2026-01-23",
       "rows": [
+        {
+          "date": "2026-01-23",
+          "balance_yi": 3760.8,
+          "chg_yi": 43.4
+        },
         {
           "date": "2026-01-22",
           "balance_yi": 3717.3,
@@ -151,24 +156,24 @@
           "date": "2025-12-11",
           "balance_yi": 3266.7,
           "chg_yi": -10.2
-        },
-        {
-          "date": "2025-12-10",
-          "balance_yi": 3276.9,
-          "chg_yi": 8.1
         }
       ],
       "notes": [
         "HiStock 欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-        "HiStock 原始日期樣本：01/22, 01/21, 01/20, 01/19, 01/16",
+        "HiStock 原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
         "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
       ]
     },
     "TPEX": {
       "source": "HiStock",
       "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-      "data_date": "2026-01-22",
+      "data_date": "2026-01-23",
       "rows": [
+        {
+          "date": "2026-01-23",
+          "balance_yi": 1312.5,
+          "chg_yi": 11.1
+        },
         {
           "date": "2026-01-22",
           "balance_yi": 1301.4,
@@ -313,16 +318,11 @@
           "date": "2025-12-11",
           "balance_yi": 1111.0,
           "chg_yi": 1.0
-        },
-        {
-          "date": "2025-12-10",
-          "balance_yi": 1110.0,
-          "chg_yi": 3.8
         }
       ],
       "notes": [
         "HiStock 欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-        "HiStock 原始日期樣本：01/22, 01/21, 01/20, 01/19, 01/16",
+        "HiStock 原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
         "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
       ]
     }
