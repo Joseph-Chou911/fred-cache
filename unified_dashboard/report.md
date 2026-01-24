@@ -6,22 +6,22 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-24T15:07:14Z
+- unified_generated_at_utc: 2026-01-24T16:05:15Z
 
 ## market_cache (detailed)
-- as_of_ts: 2026-01-24T04:04:09Z
-- run_ts_utc: 2026-01-24T13:22:38.175834+00:00
+- as_of_ts: 2026-01-24T13:27:02Z
+- run_ts_utc: 2026-01-24T15:40:05.488487+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@0cefcdd
+- script_fingerprint: render_dashboard_py_signals_v8@e5caa24
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
 
 | series | signal | dir | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| OFR_FSI | WATCH | HIGH | JUMP | -2.445000 | 2026-01-21 | 9.308104 | -0.168536 | 48.333333 | 15.079365 | -0.703891 | -28.333333 | -11.389522 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 2 | 3 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
-| VIX | WATCH | HIGH | JUMP | 16.090000 | 2026-01-23 | 9.308104 | -0.388096 | 43.333333 | 28.571429 | 0.172147 | 13.333333 | 2.877238 | abs(ret1%60)>=2 | JUMP_RET | WATCH | SAME | 3 | 4 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| SP500 | INFO | HIGH | LONG | 6915.610000 | 2026-01-23 | 9.308104 | 0.867814 | 81.666667 | 95.634921 | 0.012874 | 0.000000 | 0.032690 | P252>=95 | LONG_EXTREME | WATCH | WATCH→INFO | 3 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| HYG_IEF_RATIO | NONE | LOW | NONE | 0.845649 | 2026-01-23 | 9.308104 | 1.972317 | 95.000000 | 78.968254 | -0.477955 | -5.000000 | -0.215945 | NA | NA | WATCH | WATCH→NONE | 5 | 0 | DERIVED |
+| OFR_FSI | WATCH | HIGH | JUMP | -2.445000 | 2026-01-21 | 2.217636 | -0.168536 | 48.333333 | 15.079365 | -0.703891 | -28.333333 | -11.389522 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 2 | 3 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| VIX | WATCH | HIGH | JUMP | 16.090000 | 2026-01-23 | 2.217636 | -0.388096 | 43.333333 | 28.571429 | 0.172147 | 13.333333 | 2.877238 | abs(ret1%60)>=2 | JUMP_RET | WATCH | SAME | 3 | 4 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
+| SP500 | INFO | HIGH | LONG | 6915.610000 | 2026-01-23 | 2.217636 | 0.867814 | 81.666667 | 95.634921 | 0.012874 | 0.000000 | 0.032690 | P252>=95 | LONG_EXTREME | WATCH | WATCH→INFO | 3 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
+| HYG_IEF_RATIO | NONE | LOW | NONE | 0.845649 | 2026-01-23 | 2.217636 | 1.972317 | 95.000000 | 78.968254 | -0.477955 | -5.000000 | -0.215945 | NA | NA | WATCH | WATCH→NONE | 5 | 0 | DERIVED |
 
 ## fred_cache (ALERT+WATCH+INFO)
 - as_of_ts: 2026-01-24T21:43:14+08:00
@@ -115,7 +115,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-24T15:07:14Z -->
+<!-- rendered_at_utc: 2026-01-24T16:05:15Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
