@@ -49,7 +49,6 @@ def md_table(lines: List[str], headers: List[str], rows: List[List[Any]]) -> Non
         lines.append("| " + " | ".join(fmt(x) for x in r) + " |")
 
 def rank_signal(level: str) -> int:
-    # higher = more important
     order = {"ALERT": 4, "WATCH": 3, "INFO": 2, "NONE": 1}
     return order.get((level or "").upper(), 0)
 
@@ -130,12 +129,11 @@ def index_by_series(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
 # -----------------------
 # ALIAS + Resonance
 # -----------------------
-# Extend this safely as you add more overlap between market_cache and fred_cache.
+# NOTE:
+# - Only put truly different-name mappings here.
+# - Same-name pairs are automatically ignored.
 ALIAS_PAIRS: List[Tuple[str, str]] = [
-    ("VIX", "VIXCLS"),   # market VIX vs FRED VIXCLS
-    ("SP500", "SP500"),  # strict but kept here for unified handling
-    # ("DJIA", "DJIA"),
-    # ("NASDAQCOM", "NASDAQCOM"),
+    ("VIX", "VIXCLS"),
 ]
 
 def normalize_series_key(s: str) -> str:
@@ -179,6 +177,17 @@ def resonance_level(
 
     return "NA"
 
+def _dedup_pairs(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen: set = set()
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        key = (r.get("pair_type"), r.get("market_series"), r.get("fred_series"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
 def build_resonance_rows(
     market_rows: List[Dict[str, Any]],
     fred_rows: List[Dict[str, Any]],
@@ -187,15 +196,14 @@ def build_resonance_rows(
     f_idx = index_by_series(fred_rows)
 
     out: List[Dict[str, Any]] = []
-    seen: set = set()
+    strict_pairs: set = set()  # (market_series, fred_series) for STRICT
 
     # 1) STRICT intersection (same series name)
     strict_keys = sorted(set(m_idx.keys()).intersection(set(f_idx.keys())))
     for s in strict_keys:
         mr = m_idx.get(s, {})
         fr = f_idx.get(s, {})
-        key = ("STRICT", s, s)
-        seen.add(key)
+        strict_pairs.add((s, s))
         out.append({
             "pair_type": "STRICT",
             "series": s,
@@ -221,9 +229,15 @@ def build_resonance_rows(
         f_s = normalize_series_key(f_s)
         if not m_s or not f_s:
             continue
-        key = ("ALIAS", m_s, f_s)
-        if key in seen:
+
+        # HARD GUARD #1: same-name alias is never allowed
+        if m_s == f_s:
             continue
+
+        # HARD GUARD #2: if this pair is already STRICT-equivalent, skip
+        if (m_s, f_s) in strict_pairs:
+            continue
+
         if m_s in m_idx and f_s in f_idx:
             mr = m_idx[m_s]
             fr = f_idx[f_s]
@@ -246,7 +260,10 @@ def build_resonance_rows(
                 "fred_dir": g(fr, "dir", NA),
             })
 
-    # compute resonance level
+    # final de-dup (protect against accidental alias duplicates)
+    out = _dedup_pairs(out)
+
+    # compute resonance
     for r in out:
         r["resonance_level"] = resonance_level(
             r.get("market_signal", NA),
