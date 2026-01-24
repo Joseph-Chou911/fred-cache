@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-24T14:04:14Z
+- unified_generated_at_utc: 2026-01-24T15:07:14Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-24T04:04:09Z
@@ -87,8 +87,8 @@
 - data_date: 2026-01-23
 - source_url: https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23
 - spot_buy: 31.500000
-- spot_sell: 31.483000
-- mid: 31.491500
+- spot_sell: 31.600000
+- mid: 31.550000
 - ret1_pct: NA (from None to None)
 - chg_5d_pct: NA (from None to None)
 - dir: NA
@@ -115,7 +115,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-24T14:04:14Z -->
+<!-- rendered_at_utc: 2026-01-24T15:07:14Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
