@@ -245,15 +245,35 @@ def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]])
 def _latest_date(dates: List[str]) -> Optional[str]:
     return max(dates) if dates else None
 
-def _pick_used_date(today: date, fmt_dates: List[str]) -> Tuple[str, str]:
+def _pick_used_date(today: date, fmt_dates: List[str]) -> Tuple[str, str, str]:
+    """
+    Return: (used_date, run_day_tag, used_date_status)
+
+    - run_day_tag describes the runner "today" status:
+        * NON_TRADING_DAY  -> weekend (or later you may extend to holidays)
+        * TRADING_DAY      -> otherwise
+
+    - used_date_status describes how used_date was selected:
+        * OK_TODAY         -> today exists in fmt_dates
+        * OK_LATEST        -> used latest available date (e.g., weekend run)
+        * DATA_NOT_UPDATED -> today not in fmt_dates; used latest available
+        * FMTQIK_EMPTY     -> no usable dates
+    """
     if not fmt_dates:
-        return ("NA", "FMTQIK_EMPTY")
+        return ("NA", "FMTQIK_EMPTY", "FMTQIK_EMPTY")
+
     today_iso = today.isoformat()
+    latest = _latest_date(fmt_dates) or fmt_dates[-1]
+
     if _is_weekend(today):
-        return (_latest_date(fmt_dates) or fmt_dates[-1], "NON_TRADING_DAY")
+        # Run day is non-trading day; used_date is latest available trading day in feed
+        return (latest, "NON_TRADING_DAY", "OK_LATEST")
+
+    # Run day is a trading day (calendar-wise). Data may still lag.
     if today_iso not in fmt_dates:
-        return (_latest_date(fmt_dates) or fmt_dates[-1], "DATA_NOT_UPDATED")
-    return (today_iso, "OK_TODAY")
+        return (latest, "TRADING_DAY", "DATA_NOT_UPDATED")
+
+    return (today_iso, "TRADING_DAY", "OK_TODAY")
 
 def _extract_lookback(roll: List[Dict[str, Any]], used_date: str) -> List[Dict[str, Any]]:
     eligible = [r for r in roll if isinstance(r, dict) and str(r.get("date", "")) <= used_date]
@@ -311,7 +331,7 @@ def main() -> None:
     fmt_dates = sorted(fmt_by_date.keys())
 
     today = _today_tz(tz)
-    used_date, tag = _pick_used_date(today, fmt_dates)
+    used_date, run_day_tag, used_date_status = _pick_used_date(today, fmt_dates)
     if used_date == "NA":
         print("[FATAL] UsedDate could not be determined.")
         _diag_payload("FMTQIK", fmt_raw)
@@ -457,10 +477,11 @@ def main() -> None:
                 risk_level = "未知（資料不足：OHLC缺失）"
                 signal_text = "OHLC缺失，無法套用完整模式"
 
+    # Prefix based on RUN-DAY + SELECTION status (avoid semantic confusion)
     prefix = ""
-    if tag == "NON_TRADING_DAY":
+    if run_day_tag == "NON_TRADING_DAY":
         prefix = "今日非交易日；"
-    elif tag == "DATA_NOT_UPDATED":
+    elif used_date_status == "DATA_NOT_UPDATED":
         prefix = "今日資料未更新；"
 
     if mode == "MISSING_OHLC":
@@ -508,7 +529,8 @@ def main() -> None:
     caveats_lines.append(
         f"Mode={mode} | UsedDate={used_date} | UsedDminus1={used_dminus1} | "
         f"LookbackNTarget={LOOKBACK_TARGET} | LookbackNActual={n_actual} | "
-        f"LookbackOldest={oldest} | OHLC={ohlc_status}"
+        f"LookbackOldest={oldest} | OHLC={ohlc_status} | "
+        f"RunDayTag={run_day_tag} | UsedDateStatus={used_date_status}"
     )
 
     latest_report = {
@@ -520,7 +542,15 @@ def main() -> None:
         "action": action,
         "caveats": "\n".join(caveats_lines),
         "cache_roll25": merged_roll,
-        "tag": tag,
+
+        # New, unambiguous fields:
+        "run_day_tag": run_day_tag,
+        "used_date_status": used_date_status,
+
+        # Keep backward compatibility if downstream still expects "tag"
+        # (tag previously mixed semantics; now map to run_day_tag)
+        "tag": run_day_tag,
+
         "freshness_ok": freshness_ok,
         "risk_level": risk_level,
         "mode": mode,
@@ -537,6 +567,7 @@ def main() -> None:
 
     print("TWSE sidecar updated:")
     print(f"  UsedDate={used_date}  Mode={mode}  Risk={risk_level}  LookbackNActual={n_actual}")
+    print(f"  run_day_tag={run_day_tag}  used_date_status={used_date_status}")
     print(f"  roll25_records={len(merged_roll)}  dedupe_ok={dedupe_ok}")
 
 
