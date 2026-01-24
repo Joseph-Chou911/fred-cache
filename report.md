@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-24T12:10:26Z
+- unified_generated_at_utc: 2026-01-24T12:36:43Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -80,7 +80,7 @@
 - dd_n: 10
 - max_drawdown_N_pct: -1.617192
 - max_drawdown_points_used: 10
-- confidence: OK
+- confidence: DOWNGRADED
 
 ## FX (USD/TWD)
 - status: OK
@@ -101,4 +101,18 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-01-24T08:56:53Z
 
-<!-- rendered_at_utc: 2026-01-24T12:10:26Z -->
+### cross_module (Margin × Roll25 consistency)
+- margin_signal: WATCH
+- margin_signal_source: DERIVED.rule_v1(TWSE_chg_yi_last5)
+- margin_rule_version: rule_v1
+- chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2]
+- sum_last5: 126.800
+- pos_days_last5: 4
+- latest_chg: 43.400
+- margin_confidence: OK
+- roll25_heated: false
+- roll25_confidence: DOWNGRADED
+- consistency: DIVERGENCE
+- date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
+
+<!-- rendered_at_utc: 2026-01-24T12:36:43Z -->

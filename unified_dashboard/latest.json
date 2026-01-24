@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T12:10:26Z",
+  "generated_at_utc": "2026-01-24T12:36:43Z",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",
@@ -700,11 +700,15 @@
         "realized_vol_points_used": 10,
         "max_drawdown_N_pct": -1.6171919449596839,
         "max_drawdown_points_used": 10,
-        "confidence": "OK",
+        "confidence": "DOWNGRADED",
         "notes": [
           "Realized vol uses log returns, sample std (ddof=1), annualized by sqrt(252).",
           "Max drawdown computed on chronological closes within N points."
-        ]
+        ],
+        "lookback": {
+          "LookbackNActual": 16,
+          "LookbackNTarget": 20
+        }
       }
     },
     "taiwan_margin_financing": {
@@ -1048,6 +1052,55 @@
             "rows_count": 30
           }
         }
+      },
+      "cross_module": {
+        "margin_signal": "WATCH",
+        "margin_signal_source": "DERIVED.rule_v1(TWSE_chg_yi_last5)",
+        "margin_rationale": {
+          "method": "derived_rule",
+          "basis": "TWSE chg_yi last5",
+          "chg_last5": [
+            43.4,
+            39.9,
+            -34.8,
+            18.1,
+            60.2
+          ],
+          "sum_last5": 126.8,
+          "pos_days_last5": 4,
+          "latest_chg": 43.4,
+          "rule_version": "rule_v1",
+          "rule_hit": "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)",
+          "confidence": "OK",
+          "twse_data_date": "2026-01-23"
+        },
+        "roll25_heated": false,
+        "roll25_confidence": "DOWNGRADED",
+        "consistency": "DIVERGENCE",
+        "rationale": {
+          "consistency_rule": "Deterministic Margin×Roll25 (rule_v1).",
+          "roll25_rationale": {
+            "rule": "NON_TRADING_DAY => heated=False",
+            "tag": "NON_TRADING_DAY",
+            "risk_level": "低",
+            "window_note": "LookbackNActual=16/20 (window_not_full)",
+            "signals_used": {
+              "DownDay": false,
+              "VolumeAmplified": false,
+              "VolAmplified": false,
+              "NewLow_N": false,
+              "ConsecutiveBreak": false,
+              "OhlcMissing": false
+            },
+            "used_date": "2026-01-23"
+          },
+          "date_alignment": {
+            "twmargin_date": "2026-01-23",
+            "roll25_used_date": "2026-01-23",
+            "used_date_match": true,
+            "note": "confirm-only; does not change signal"
+          }
+        }
       }
     },
     "fx_usdtwd": {
@@ -1106,6 +1159,7 @@
   "audit_notes": [
     "Roll25 derived metrics are computed from roll25_cache/latest_report.json only (no external fetch).",
     "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
+    "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
     "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing)."
   ]
 }
