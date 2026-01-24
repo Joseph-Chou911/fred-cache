@@ -4,7 +4,7 @@
 - market_cache: OK
 - fred_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T06:24:20Z
+- unified_generated_at_utc: 2026-01-24T06:31:45Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -18,7 +18,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | SP500 | WATCH | HIGH | LONG+JUMP | 6913.35 | 2026-01-22 | 11.693831 | 0.854939 | 81.666667 | 95.634921 | 0.380407 | 15 | 0.548751 | P252>=95;abs(PΔ60)>=15 | LONG_EXTREME,JUMP_P | ALERT | ALERT→WATCH | 2 | 3 | https://stooq.com/q/d/l/?s=^spx&i=d |
 | VIX | WATCH | HIGH | JUMP | 15.64 | 2026-01-22 | 11.693831 | -0.560243 | 30 | 20.238095 | -0.461344 | -25 | -7.455621 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | ALERT | ALERT→WATCH | 2 | 3 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| HYG_IEF_RATIO | WATCH | LOW | JUMP | 0.847479 | 2026-01-22 | 11.693831 | 2.450272 | 100 | 83.730159 | -0.026976 | 0 | 0.084412 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | 4 | 5 | DERIVED |
+| HYG_IEF_RATIO | WATCH | LOW | LEVEL | 0.847479 | 2026-01-22 | 11.693831 | 2.450272 | 100 | 83.730159 | -0.026976 | 0 | 0.084412 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | 4 | 5 | DERIVED |
 | OFR_FSI | WATCH | HIGH | JUMP | -2.195 | 2026-01-20 | 11.693831 | 0.535354 | 76.666667 | 36.904762 | 0.669266 | 25 | 9.930242 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 1 | 2 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
 
 ## fred_cache (ALERT+WATCH+INFO)
@@ -36,7 +36,7 @@
 | series | signal | fred_dir | fred_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1% | reason | tag | prev | delta | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | BAMLH0A0HYM2 | ALERT | HIGH | LONG | 2.64 | 2026-01-22 | 10.463624 | -1.947339 | 1.666667 | 1.587302 | -0.278774 | -1.666667 | -1.858736 | P252<=2 | LONG_EXTREME | NONE | NONE→ALERT | https://api.stlouisfed.org/fred/series/observations?series_id=BAMLH0A0HYM2&file_type=json&sort_order=desc&limit=1 |
-| DGS10 | WATCH | HIGH | JUMP | 4.26 | 2026-01-21 | 10.463624 | 2.093672 | 98.333333 | 50.793651 | -0.676696 | -1.666667 | -0.930233 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1 |
+| DGS10 | WATCH | HIGH | LEVEL | 4.26 | 2026-01-21 | 10.463624 | 2.093672 | 98.333333 | 50.793651 | -0.676696 | -1.666667 | -0.930233 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1 |
 | VIXCLS | WATCH | HIGH | JUMP | 15.64 | 2026-01-22 | 10.463624 | -0.564433 | 30 | 20.238095 | -0.465988 | -25 | -7.455621 | abs(pΔ60)>=15;abs(ret1%)>=2 | JUMP_DELTA | WATCH | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
 | DJIA | INFO | HIGH | LONG | 49384.01 | 2026-01-22 | 10.463624 | 1.528194 | 93.333333 | 98.412698 | 0.273801 | 6.666667 | 0.625096 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DJIA&file_type=json&sort_order=desc&limit=1 |
 | NFCINONFINLEVERAGE | INFO | LOW | LONG | -0.50568 | 2026-01-16 | 10.463624 | 1.237692 | 90 | 97.619048 | 0.02007 | 1.666667 | 0.850947 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1 |
@@ -45,13 +45,13 @@
 
 ## Audit Notes
 - fred_dir is DERIVED (heuristic) from a fixed mapping table in this script (FRED_DIR_MAP). Unmapped series => NA.
-- market_class/fred_class are DERIVED from tag/reason only: LONG if tag contains LONG_EXTREME; JUMP if tag contains JUMP* or reason contains 'abs(' thresholds; otherwise NONE.
+- market_class/fred_class are DERIVED from tag only (deterministic): LONG if tag contains LONG_EXTREME; LEVEL if tag contains EXTREME_Z; JUMP if tag contains JUMP* (incl. JUMP_DELTA/JUMP_RET); otherwise NONE.
 
 ## Resonance Matrix (strict + alias)
 | resonance_level | pair_type | series | market_series | fred_series | market_signal | fred_signal | market_class | fred_class | market_tag | fred_tag | market_dir | fred_dir | market_reason | fred_reason | market_date | fred_date | market_source | fred_source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CONCORD_STRONG | ALIAS | VIX↔VIXCLS | VIX | VIXCLS | WATCH | WATCH | JUMP | JUMP | JUMP_P,JUMP_RET | JUMP_DELTA | HIGH | HIGH | abs(PΔ60)>=15;abs(ret1%60)>=2 | abs(pΔ60)>=15;abs(ret1%)>=2 | 2026-01-22 | 2026-01-22 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
-| DISCORD_MIXED | STRICT | SP500 | SP500 | SP500 | WATCH | INFO | LONG+JUMP | LONG | LONG_EXTREME,JUMP_P | LONG_EXTREME | HIGH | HIGH | P252>=95;abs(PΔ60)>=15 | P252>=95 | 2026-01-22 | 2026-01-22 | https://stooq.com/q/d/l/?s=^spx&i=d | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
+| STRUCTURAL_VS_SHOCK | STRICT | SP500 | SP500 | SP500 | WATCH | INFO | LONG+JUMP | LONG | LONG_EXTREME,JUMP_P | LONG_EXTREME | HIGH | HIGH | P252>=95;abs(PΔ60)>=15 | P252>=95 | 2026-01-22 | 2026-01-22 | https://stooq.com/q/d/l/?s=^spx&i=d | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
 
 ## taiwan_margin_financing (TWSE/TPEX)
 ### TWSE (data_date=2026-01-23)
