@@ -7,7 +7,7 @@ Design goals:
 - Deterministic, auditable, minimal fetch: 1 request per run.
 - Persist history locally to compute ret1 / chg_5d without extra network calls.
 - Weekend/holiday safe: backtrack date until data exists (max_back).
-- Encoding tolerant: try utf-8-sig, then cp950.
+- Encoding tolerant: try utf-8-sig, then utf-8, then cp950.
 
 Source:
 - Daily CSV: https://rate.bot.com.tw/xrt/flcsv/0/YYYY-MM-DD
@@ -28,7 +28,7 @@ Schema (latest):
      "spot_sell": float|null,
      "mid": float|null
   },
-  "raw": { "currency_label": "...", "row": {...} },
+  "raw": { "currency_label": "...", "row": {...}, "parse_error": str|null, "header": [...]|null },
   "http": { "status_code": int, "error": str|null }
 }
 
@@ -39,6 +39,14 @@ Schema (history):
      {"date":"YYYY-MM-DD","mid":float,"spot_buy":float,"spot_sell":float,"source_url":"..."}
   ]
 }
+
+STRICT FAIL mode:
+- Default strict is ON.
+- If strict and we cannot produce a valid USD spot_buy/spot_sell/mid for ANY backtracked date:
+  => write latest.json with error context and exit code 1.
+- If strict and parsed spot_buy > spot_sell (clearly wrong column mapping):
+  => treat as parse failure and continue backtracking; if no valid date => exit 1.
+- If strict and required headers not found => parse failure (no fallback to hard-coded indices).
 """
 
 from __future__ import annotations
@@ -47,7 +55,6 @@ import argparse
 import csv
 import json
 import os
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
@@ -92,7 +99,6 @@ def _try_decode(b: bytes) -> str:
             return b.decode(enc)
         except Exception:
             continue
-    # last resort
     return b.decode("utf-8", errors="replace")
 
 
@@ -106,39 +112,42 @@ def _to_float(x: str) -> Optional[float]:
         return None
 
 
-def _parse_bot_csv(text: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _find_idx(header: List[str], keys: List[str]) -> Optional[int]:
     """
-    Return: (usd_row_dict, currency_label)
-    BOT CSV columns typically include:
-    幣別, 現金買入, 現金賣出, 即期買入, 即期賣出, ...
-    Sometimes English headings appear depending on locale; we match by position.
+    Find the first column index whose header contains any of the keys.
+    """
+    for k in keys:
+        for i, h in enumerate(header):
+            if k in h:
+                return i
+    return None
+
+
+def _parse_bot_csv_strict(text: str) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str], Optional[List[str]]]:
+    """
+    STRICT parse:
+    - Must find required headers for currency + spot buy + spot sell.
+    - Must find USD row with non-null spot_buy & spot_sell.
+    - Must satisfy spot_buy <= spot_sell (sanity check).
+    Return: (usd_row_dict, currency_label, parse_error, header_list)
     """
     sio = StringIO(text)
     reader = csv.reader(sio)
     rows = list(reader)
     if not rows or len(rows) < 2:
-        return None, None
+        return None, None, "CSV_EMPTY_OR_TOO_SHORT", None
 
-    header = [h.strip() for h in rows[0]]
-    # Heuristic: identify indices by header keywords; fallback to common BOT layout
-    def _find_idx(keys: List[str]) -> Optional[int]:
-        for k in keys:
-            for i, h in enumerate(header):
-                if k in h:
-                    return i
-        return None
+    header = [h.strip() for h in rows[0] if h is not None]
+    if not header:
+        return None, None, "CSV_HEADER_EMPTY", None
 
-    idx_ccy = _find_idx(["幣別", "Currency"])
-    idx_spot_buy = _find_idx(["即期買入", "Spot Buying", "SpotBuy"])
-    idx_spot_sell = _find_idx(["即期賣出", "Spot Selling", "SpotSell"])
+    idx_ccy = _find_idx(header, ["幣別", "Currency"])
+    idx_spot_buy = _find_idx(header, ["即期買入", "Spot Buying"])
+    idx_spot_sell = _find_idx(header, ["即期賣出", "Spot Selling"])
 
-    # Fallback to known BOT layout if not found
-    if idx_ccy is None:
-        idx_ccy = 0
-    if idx_spot_buy is None:
-        idx_spot_buy = 3
-    if idx_spot_sell is None:
-        idx_spot_sell = 4
+    # STRICT: no fallback indices
+    if idx_ccy is None or idx_spot_buy is None or idx_spot_sell is None:
+        return None, None, f"HEADER_MISSING_REQUIRED_COLS idx_ccy={idx_ccy} idx_spot_buy={idx_spot_buy} idx_spot_sell={idx_spot_sell}", header
 
     usd_row: Optional[Dict[str, Any]] = None
     usd_label: Optional[str] = None
@@ -146,23 +155,30 @@ def _parse_bot_csv(text: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     for r in rows[1:]:
         if not r:
             continue
+
         ccy = (r[idx_ccy] if idx_ccy < len(r) else "").strip()
         if not ccy:
             continue
 
-        # match USD row (possible: "美金 (USD)" or "USD" or includes "(USD)")
+        # match USD row: often "USD" or contains "(USD)"
         if "USD" in ccy:
             usd_label = ccy
             spot_buy = _to_float(r[idx_spot_buy] if idx_spot_buy < len(r) else "")
             spot_sell = _to_float(r[idx_spot_sell] if idx_spot_sell < len(r) else "")
-            usd_row = {
-                "currency": ccy,
-                "spot_buy": spot_buy,
-                "spot_sell": spot_sell,
-            }
+            usd_row = {"currency": ccy, "spot_buy": spot_buy, "spot_sell": spot_sell}
             break
 
-    return usd_row, usd_label
+    if not usd_row:
+        return None, usd_label, "USD_ROW_NOT_FOUND", header
+
+    if usd_row.get("spot_buy") is None or usd_row.get("spot_sell") is None:
+        return None, usd_label, "USD_VALUES_MISSING", header
+
+    # STRICT sanity check: bank buys cheaper than sells
+    if float(usd_row["spot_buy"]) > float(usd_row["spot_sell"]):
+        return None, usd_label, f"BUY_GT_SELL spot_buy={usd_row['spot_buy']} spot_sell={usd_row['spot_sell']}", header
+
+    return usd_row, usd_label, None, header
 
 
 def _fetch_for_date(session: requests.Session, date_str: str, timeout: int) -> Tuple[int, bytes, Optional[str], str]:
@@ -183,7 +199,6 @@ def _load_history(path: str) -> Dict[str, Any]:
             return obj
     except Exception:
         pass
-    # if malformed, keep safe
     return {"schema_version": "fx_usdtwd_history_v1", "items": []}
 
 
@@ -196,9 +211,7 @@ def _upsert_history(history: Dict[str, Any], item: Dict[str, Any]) -> None:
         if isinstance(it, dict) and isinstance(it.get("date"), str):
             by_date[it["date"]] = it
     by_date[item["date"]] = item
-    # sort ascending by date
-    out = [by_date[k] for k in sorted(by_date.keys())]
-    history["items"] = out
+    history["items"] = [by_date[k] for k in sorted(by_date.keys())]
 
 
 def main() -> int:
@@ -208,11 +221,26 @@ def main() -> int:
     ap.add_argument("--history", default="fx_cache/history.json")
     ap.add_argument("--max-back", type=int, default=10)
     ap.add_argument("--timeout", type=int, default=20)
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="Strict mode: fail (exit 1) if cannot produce valid USD spot/mid.",
+    )
+    ap.add_argument(
+        "--no-strict",
+        action="store_true",
+        help="Disable strict mode (for debugging only).",
+    )
     args = ap.parse_args()
+
+    strict = True
+    if args.no_strict:
+        strict = False
+    if args.strict:
+        strict = True
 
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     local_now = _today_local(args.tz)
-    # try "today" first; BOT often has data same day; if not, backtrack
     d0 = local_now.date()
 
     session = requests.Session()
@@ -221,31 +249,42 @@ def main() -> int:
     chosen_url: Optional[str] = None
     status_code: int = 0
     http_err: Optional[str] = None
+
     usd_row: Optional[Dict[str, Any]] = None
     usd_label: Optional[str] = None
+    parse_err: Optional[str] = None
+    last_header: Optional[List[str]] = None
 
     for i in range(max(args.max_back, 1)):
         d = d0 - timedelta(days=i)
         date_str = d.strftime("%Y-%m-%d")
         sc, content, err, url = _fetch_for_date(session, date_str, args.timeout)
+
         status_code = sc
         chosen_url = url
         http_err = err
+
         if sc != 200 or not content:
+            # keep backtracking
             continue
+
         text = _try_decode(content)
-        row, label = _parse_bot_csv(text)
-        if row and row.get("spot_buy") is not None and row.get("spot_sell") is not None:
+        row, label, perr, header = _parse_bot_csv_strict(text)
+        usd_label = label or usd_label
+        parse_err = perr
+        last_header = header
+
+        if perr is None and row:
             usd_row = row
-            usd_label = label
             chosen_date = date_str
             break
+        # else parse failed -> keep backtracking to earlier date
 
     mid: Optional[float] = None
     spot_buy = usd_row.get("spot_buy") if usd_row else None
     spot_sell = usd_row.get("spot_sell") if usd_row else None
     if spot_buy is not None and spot_sell is not None:
-        mid = (spot_buy + spot_sell) / 2.0
+        mid = (float(spot_buy) + float(spot_sell)) / 2.0
 
     latest = {
         "schema_version": "fx_usdtwd_latest_v1",
@@ -261,9 +300,12 @@ def main() -> int:
         "raw": {
             "currency_label": usd_label,
             "row": usd_row,
+            "parse_error": parse_err,
+            "header": last_header,
         },
         "http": {"status_code": status_code, "error": http_err},
     }
+
     _dump_json(args.latest_out, latest)
 
     # Update history only if we got a valid mid
@@ -280,6 +322,13 @@ def main() -> int:
             },
         )
         _dump_json(args.history, history)
+
+    # STRICT FAIL: fail pipeline if data invalid/unavailable
+    if strict:
+        if not chosen_date or mid is None or spot_buy is None or spot_sell is None:
+            return 1
+        if float(spot_buy) > float(spot_sell):
+            return 1
 
     return 0
 
