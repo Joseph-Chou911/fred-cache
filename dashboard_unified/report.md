@@ -4,7 +4,7 @@
 - market_cache: OK
 - fred_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T05:52:44Z
+- unified_generated_at_utc: 2026-01-24T06:02:38Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -43,12 +43,12 @@
 | SP500 | INFO | 6913.35 | 2026-01-22 | 10.463624 | 0.854939 | 81.666667 | 95.634921 | 0.380407 | 15 | 0.548751 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
 | T10Y3M | INFO | 0.55 | 2026-01-22 | 10.463624 | 1.089838 | 90 | 97.619048 | -0.088016 | -5 | -1.785714 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1 |
 
-## Audit Notes
-
-## Resonance Matrix (strict: same series)
-| series | market_signal | fred_signal | market_reason | fred_reason | market_date | fred_date | market_source | fred_source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SP500 | WATCH | INFO | P252>=95;abs(PΔ60)>=15 | P252>=95 | 2026-01-22 | 2026-01-22 | https://stooq.com/q/d/l/?s=^spx&i=d | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
+## Resonance Matrix (strict + alias)
+| resonance_level | pair_type | series | market_series | fred_series | market_signal | fred_signal | market_tag | fred_tag | market_dir | fred_dir | market_reason | fred_reason | market_date | fred_date | market_source | fred_source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CONCORD_STRONG | ALIAS | VIX↔VIXCLS | VIX | VIXCLS | WATCH | WATCH | JUMP_P,JUMP_RET | JUMP_DELTA | HIGH | NA | abs(PΔ60)>=15;abs(ret1%60)>=2 | abs(pΔ60)>=15;abs(ret1%)>=2 | 2026-01-22 | 2026-01-22 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
+| STRUCTURAL_VS_SHOCK | STRICT | SP500 | SP500 | SP500 | WATCH | INFO | LONG_EXTREME,JUMP_P | LONG_EXTREME | HIGH | NA | P252>=95;abs(PΔ60)>=15 | P252>=95 | 2026-01-22 | 2026-01-22 | https://stooq.com/q/d/l/?s=^spx&i=d | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
+| STRUCTURAL_VS_SHOCK | ALIAS | SP500↔SP500 | SP500 | SP500 | WATCH | INFO | LONG_EXTREME,JUMP_P | LONG_EXTREME | HIGH | NA | P252>=95;abs(PΔ60)>=15 | P252>=95 | 2026-01-22 | 2026-01-22 | https://stooq.com/q/d/l/?s=^spx&i=d | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
 
 ## taiwan_margin_financing (TWSE/TPEX)
 ### TWSE (data_date=2026-01-23)
