@@ -4,11 +4,14 @@
 - market_cache: OK
 - fred_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T05:32:39Z
+- unified_generated_at_utc: 2026-01-24T05:52:44Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
 - run_ts_utc: 2026-01-23T15:54:00.791123+00:00
+- ruleset_id: signals_v8
+- script_fingerprint: render_dashboard_py_signals_v8@b94000a
+- script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
 
 | series | signal | dir | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
@@ -18,9 +21,12 @@
 | HYG_IEF_RATIO | WATCH | LOW | 0.847479 | 2026-01-22 | 11.693831 | 2.450272 | 100 | 83.730159 | -0.026976 | 0 | 0.084412 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | 4 | 5 | DERIVED |
 | OFR_FSI | WATCH | HIGH | -2.195 | 2026-01-20 | 11.693831 | 0.535354 | 76.666667 | 36.904762 | 0.669266 | 25 | 9.930242 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 1 | 2 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
 
-## fred_cache (WATCH+INFO)
+## fred_cache (ALERT+WATCH+INFO)
 - as_of_ts: 2026-01-24T03:03:42+08:00
 - run_ts_utc: 2026-01-24T05:31:32.048101+00:00
+- ruleset_id: NA
+- script_fingerprint: NA
+- script_version: stats_v1_ddof0_w60_w252_pct_le_ret1_delta
 - ALERT: 1
 - WATCH: 2
 - INFO: 4
@@ -36,6 +42,13 @@
 | NFCINONFINLEVERAGE | INFO | -0.50568 | 2026-01-16 | 10.463624 | 1.237692 | 90 | 97.619048 | 0.02007 | 1.666667 | 0.850947 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1 |
 | SP500 | INFO | 6913.35 | 2026-01-22 | 10.463624 | 0.854939 | 81.666667 | 95.634921 | 0.380407 | 15 | 0.548751 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
 | T10Y3M | INFO | 0.55 | 2026-01-22 | 10.463624 | 1.089838 | 90 | 97.619048 | -0.088016 | -5 | -1.785714 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1 |
+
+## Audit Notes
+
+## Resonance Matrix (strict: same series)
+| series | market_signal | fred_signal | market_reason | fred_reason | market_date | fred_date | market_source | fred_source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SP500 | WATCH | INFO | P252>=95;abs(PΔ60)>=15 | P252>=95 | 2026-01-22 | 2026-01-22 | https://stooq.com/q/d/l/?s=^spx&i=d | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
 
 ## taiwan_margin_financing (TWSE/TPEX)
 ### TWSE (data_date=2026-01-23)
