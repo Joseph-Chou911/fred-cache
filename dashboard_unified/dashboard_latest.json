@@ -1,10 +1,11 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T09:07:55Z",
+  "generated_at_utc": "2026-01-24T09:28:20Z",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",
-    "twmargin_in": "taiwan_margin_cache/latest.json"
+    "twmargin_in": "taiwan_margin_cache/latest.json",
+    "roll25_in": "roll25_cache/latest_report.json"
   },
   "modules": {
     "market_cache": {
@@ -522,6 +523,187 @@
         ]
       }
     },
+    "roll25_cache": {
+      "status": "OK",
+      "latest_report": {
+        "generated_at": "2026-01-24T11:53:00.541598+08:00",
+        "timezone": "Asia/Taipei",
+        "summary": "今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低",
+        "numbers": {
+          "UsedDate": "2026-01-23",
+          "Close": 31961.51,
+          "PctChange": 0.679,
+          "TradeValue": 818428930073,
+          "VolumeMultiplier": 1.068,
+          "AmplitudePct": 1.1,
+          "VolMultiplier": 0.77
+        },
+        "signal": {
+          "DownDay": false,
+          "VolumeAmplified": false,
+          "VolAmplified": false,
+          "NewLow_N": false,
+          "ConsecutiveBreak": false,
+          "OhlcMissing": false
+        },
+        "action": "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。",
+        "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nMode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | LookbackNActual=16 | LookbackOldest=2026-01-02 | OHLC=OK",
+        "cache_roll25": [
+          {
+            "date": "2026-01-23",
+            "close": 31961.51,
+            "change": 215.43,
+            "trade_value": 818428930073,
+            "high": 32042.44,
+            "low": 31693.15
+          },
+          {
+            "date": "2026-01-22",
+            "close": 31746.08,
+            "change": 499.71,
+            "trade_value": 814595841360,
+            "high": 31890.62,
+            "low": 31371.13
+          },
+          {
+            "date": "2026-01-21",
+            "close": 31246.37,
+            "change": -513.62,
+            "trade_value": 899309076186,
+            "high": 31749.14,
+            "low": 31200.76
+          },
+          {
+            "date": "2026-01-20",
+            "close": 31759.99,
+            "change": 120.7,
+            "trade_value": 799639371793,
+            "high": 31759.99,
+            "low": 31340.1
+          },
+          {
+            "date": "2026-01-19",
+            "close": 31639.29,
+            "change": 230.59,
+            "trade_value": 823428003269,
+            "high": 31827.39,
+            "low": 31285.53
+          },
+          {
+            "date": "2026-01-16",
+            "close": 31408.7,
+            "change": 598.12,
+            "trade_value": 851452408675,
+            "high": 31475.22,
+            "low": 30844.63
+          },
+          {
+            "date": "2026-01-15",
+            "close": 30810.58,
+            "change": -131.2,
+            "trade_value": 671953720007,
+            "high": 30877.31,
+            "low": 30663.87
+          },
+          {
+            "date": "2026-01-14",
+            "close": 30941.78,
+            "change": 234.56,
+            "trade_value": 681983353722,
+            "high": 30994.81,
+            "low": 30742.53
+          },
+          {
+            "date": "2026-01-13",
+            "close": 30707.22,
+            "change": 139.93,
+            "trade_value": 749179436618,
+            "high": 30973.85,
+            "low": 30529.33
+          },
+          {
+            "date": "2026-01-12",
+            "close": 30567.29,
+            "change": 278.33,
+            "trade_value": 626408176303,
+            "high": 30681.99,
+            "low": 30472.7
+          },
+          {
+            "date": "2026-01-09",
+            "close": 30288.96,
+            "change": -71.59,
+            "trade_value": 704371387415,
+            "high": 30500.42,
+            "low": 29925.49
+          },
+          {
+            "date": "2026-01-08",
+            "close": 30360.55,
+            "change": -74.92,
+            "trade_value": 759270755036,
+            "high": 30593.49,
+            "low": 30268.36
+          },
+          {
+            "date": "2026-01-07",
+            "close": 30435.47,
+            "change": -140.83,
+            "trade_value": 881736707216,
+            "high": 30570.26,
+            "low": 30306.16
+          },
+          {
+            "date": "2026-01-06",
+            "close": 30576.3,
+            "change": 471.26,
+            "trade_value": 763236739665,
+            "high": 30576.3,
+            "low": 29933.65
+          },
+          {
+            "date": "2026-01-05",
+            "close": 30105.04,
+            "change": 755.23,
+            "trade_value": 800793653955,
+            "high": 30339.32,
+            "low": 29779.7
+          },
+          {
+            "date": "2026-01-02",
+            "close": 29349.81,
+            "change": 386.21,
+            "trade_value": 669781989470,
+            "high": 29363.43,
+            "low": 29007.75
+          }
+        ],
+        "tag": "NON_TRADING_DAY",
+        "freshness_ok": true,
+        "risk_level": "低",
+        "mode": "FULL",
+        "ohlc_status": "OK",
+        "used_date": "2026-01-23",
+        "used_dminus1": "2026-01-22",
+        "lookback_n_actual": 16,
+        "lookback_oldest": "2026-01-02"
+      },
+      "core": {
+        "UsedDate": "2026-01-23",
+        "risk_level": "低",
+        "tag": "NON_TRADING_DAY",
+        "signals": {
+          "DownDay": "NA",
+          "VolumeAmplified": "NA",
+          "VolAmplified": "NA",
+          "NewLow_N": "NA",
+          "ConsecutiveBreak": "NA",
+          "OhlcMissing": "NA"
+        },
+        "LookbackNTarget": "NA",
+        "LookbackNActual": "NA"
+      }
+    },
     "taiwan_margin_financing": {
       "status": "OK",
       "latest": {
@@ -863,7 +1045,43 @@
             "rows_count": 30
           }
         }
+      },
+      "cross_module": {
+        "margin_signal": "NA",
+        "margin_signal_source": "NA",
+        "roll25_heated": false,
+        "roll25_confidence": "OK",
+        "consistency": "NA",
+        "rationale": {
+          "consistency_rule": "See script header; deterministic Margin×Roll25",
+          "roll25_rationale": {
+            "rule": "NON_TRADING_DAY => heated=False",
+            "tag": "NON_TRADING_DAY",
+            "risk_level": "低",
+            "window_note": "window_info_unavailable",
+            "signals_used": {
+              "DownDay": "NA",
+              "VolumeAmplified": "NA",
+              "VolAmplified": "NA",
+              "NewLow_N": "NA",
+              "ConsecutiveBreak": "NA",
+              "OhlcMissing": "NA"
+            }
+          },
+          "date_alignment": {
+            "twmargin_date": "2026-01-23",
+            "roll25_used_date": "2026-01-23",
+            "used_date_match": true,
+            "note": "confirm-only; does not change signal"
+          }
+        }
       }
     }
-  }
+  },
+  "audit_notes": [
+    "roll25_heated is computed deterministically from roll25 JSON only (risk_level + explicit signal booleans); NON_TRADING_DAY forces heated=False.",
+    "roll25_confidence is DOWNGRADED only when LookbackNActual < LookbackNTarget (info-note only).",
+    "margin_signal is read from taiwan_margin_cache/latest.json structured fields; if missing => NA and consistency => NA.",
+    "No markdown parsing; no external data fetch in this step."
+  ]
 }
