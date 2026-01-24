@@ -22,6 +22,11 @@ Small audit-focused enhancements:
     - used_date_status (e.g., OK_TODAY / OK_LATEST / DATA_NOT_UPDATED / ...)
     - tag (legacy) kept for backward compatibility
 - Display OhlcMissing even if signals lacks it, by inferring from ohlc_status when possible.
+
+2026-01-25 (follow-up fix):
+- Align field names with unified JSON:
+    roll25.core.used_date_status, roll25.core.tag_legacy
+- Prefer unified top-level run_day_tag for run-day context.
 """
 
 from __future__ import annotations
@@ -292,13 +297,15 @@ def main() -> int:
     # roll25_cache (core fields from latest report)
     r_latest = _safe_get(roll25, "latest_report") or {}
     r_core = _safe_get(roll25, "core") or {}
+
+    # Backward-compat: if unified builder didn't provide "core", reconstruct from latest_report
     if not r_core and isinstance(r_latest, dict):
         nums = r_latest.get("numbers", {}) if isinstance(r_latest.get("numbers"), dict) else {}
         sigs = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
         r_core = {
             "UsedDate": nums.get("UsedDate") or r_latest.get("used_date"),
-            # legacy tag may have been overloaded; keep it but do NOT treat it as used-date trading tag
-            "tag": r_latest.get("tag"),
+            "tag_legacy": r_latest.get("tag"),
+            "used_date_status": r_latest.get("used_date_status") or r_latest.get("tag_used_date_status"),
             "risk_level": r_latest.get("risk_level"),
             "turnover_twd": nums.get("TradeValue"),
             "turnover_unit": "TWD",
@@ -310,19 +317,33 @@ def main() -> int:
             "signals": sigs,
             "LookbackNTarget": 20,
             "LookbackNActual": r_latest.get("lookback_n_actual"),
+            "ohlc_status": r_latest.get("ohlc_status"),
         }
 
     # New: separate tag semantics (prefer structured fields; fallback to legacy)
+    # 1) run_day_tag: prefer unified top-level run_day_tag (workflow run-day context)
     run_day_tag = (
-        _safe_get(r_latest, "run_day_tag")
-        or _safe_get(r_latest, "tag")  # legacy fallback (may represent run-day tag)
+        uni.get("run_day_tag")
+        or _safe_get(r_latest, "run_day_tag")
+        or _safe_get(r_latest, "tag")         # legacy fallback (often run-day tag on weekend)
+        or _safe_get(r_core, "run_day_tag")
+        or _safe_get(r_core, "tag_legacy")
         or _safe_get(r_core, "tag")
     )
+
+    # 2) used_date_status: prefer roll25.core.used_date_status (your unified JSON has it)
     used_date_status = (
-        _safe_get(r_latest, "used_date_status")
-        or _safe_get(r_latest, "tag_used_date_status")  # optional future alias
+        _safe_get(r_core, "used_date_status")
+        or _safe_get(r_latest, "used_date_status")
+        or _safe_get(r_latest, "tag_used_date_status")
     )
-    legacy_tag = _safe_get(r_core, "tag") or "NA"
+
+    # 3) legacy tag: unified JSON uses core.tag_legacy (not core.tag)
+    legacy_tag = (
+        _safe_get(r_core, "tag_legacy")
+        or _safe_get(r_core, "tag")
+        or "NA"
+    )
 
     lines.append("## roll25_cache (TW turnover)")
     lines.append(f"- status: {_safe_get(roll25,'status') or 'NA'}")
@@ -425,7 +446,10 @@ def main() -> int:
     lines.append(f"<!-- rendered_at_utc: {rendered_at_utc} -->")
     lines.append(f"<!-- input_path: {args.in_path} | input_abs: {residue['input_abs']} -->")
     lines.append(f"<!-- output_path: {args.out_path} | output_abs: {residue['output_abs']} -->")
-    lines.append(f"<!-- root_report_exists: {str(residue['root_report_exists']).lower()} | root_report_is_output: {str(residue['root_report_is_output']).lower()} -->")
+    lines.append(
+        f"<!-- root_report_exists: {str(residue['root_report_exists']).lower()} | "
+        f"root_report_is_output: {str(residue['root_report_is_output']).lower()} -->"
+    )
     if residue["warn_root_report_residue"]:
         lines.append("<!-- WARNING: repo root has report.md but output is not root/report.md; likely residue file. -->")
     lines.append("")
