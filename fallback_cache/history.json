@@ -585,7 +585,7 @@
     "value": -0.505681236958139,
     "source_url": "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv",
     "notes": "WARN:fallback_chicagofed_nfci(nonfinancial leverage)",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
   },
   {
     "series_id": "SP500",
@@ -658,7 +658,7 @@
     "value": 60.3,
     "source_url": "https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv",
     "notes": "WARN:nonofficial_datahub_oil_prices(wti-daily)",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
   },
   {
     "series_id": "DGS10",
@@ -824,7 +824,7 @@
     "value": 2.64,
     "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2",
     "notes": "WARN:fredgraph_no_key(BAMLH0A0HYM2)",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
   },
   {
     "series_id": "DGS10",
@@ -907,7 +907,7 @@
     "value": 4.24,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:fallback_treasury_csv",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
   },
   {
     "series_id": "DGS2",
@@ -915,7 +915,7 @@
     "value": 3.6,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:fallback_treasury_csv",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
   },
   {
     "series_id": "DJIA",
@@ -923,17 +923,17 @@
     "value": 49098.71,
     "source_url": "https://stooq.com/q/d/l/?s=^dji&i=d",
     "notes": "WARN:nonofficial_stooq(^dji);derived_1d_pct",
-    "as_of_ts": "2026-01-23T21:45:59Z",
+    "as_of_ts": "2026-01-24T03:53:11Z",
     "change_pct_1d": -0.577717
   },
   {
     "series_id": "NASDAQCOM",
     "data_date": "2026-01-23",
-    "value": 23501.244,
+    "value": 23501.24,
     "source_url": "https://stooq.com/q/d/l/?s=^ndq&i=d",
     "notes": "WARN:nonofficial_stooq(^ndq);derived_1d_pct",
-    "as_of_ts": "2026-01-23T21:45:59Z",
-    "change_pct_1d": 0.278307
+    "as_of_ts": "2026-01-24T03:53:11Z",
+    "change_pct_1d": 0.27829
   },
   {
     "series_id": "SP500",
@@ -941,7 +941,7 @@
     "value": 6915.61,
     "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
     "notes": "WARN:nonofficial_stooq(^spx);derived_1d_pct",
-    "as_of_ts": "2026-01-23T21:45:59Z",
+    "as_of_ts": "2026-01-24T03:53:11Z",
     "change_pct_1d": 0.03269
   },
   {
@@ -950,7 +950,7 @@
     "value": 0.64,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:derived_from_treasury(10Y-2Y)",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
   },
   {
     "series_id": "T10Y3M",
@@ -958,7 +958,7 @@
     "value": 0.54,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:derived_from_treasury(10Y-3M)",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
   },
   {
     "series_id": "UST3M",
@@ -966,6 +966,14 @@
     "value": 3.7,
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202601?_format=csv&field_tdr_date_value_month=202601&page=&type=daily_treasury_yield_curve",
     "notes": "WARN:fallback_treasury_csv",
-    "as_of_ts": "2026-01-23T21:45:59Z"
+    "as_of_ts": "2026-01-24T03:53:11Z"
+  },
+  {
+    "series_id": "VIXCLS",
+    "data_date": "2026-01-23",
+    "value": 16.09,
+    "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "notes": "WARN:fallback_cboe_vix",
+    "as_of_ts": "2026-01-24T03:53:11Z"
   }
 ]
