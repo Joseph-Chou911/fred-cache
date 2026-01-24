@@ -3,6 +3,8 @@
 ## 1) 結論
 - 狀態：擴張｜信號：WATCH｜資料品質：OK
   - rationale: 20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)
+- 一致性判定（Margin × Roll25）：DIVERGENCE
+  - rationale: Margin(WATCH/ALERT) but roll25 not heated
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 1) WATCH（升溫）
@@ -28,12 +30,20 @@
 - roll25_path: roll25_cache/latest_report.json
 - UsedDate: 2026-01-23｜risk_level: 低｜tag: NON_TRADING_DAY
 - summary: 今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低
-- numbers: Close=31961.51, PctChange=0.679%, TradeValue=818,428,930,073, VolumeMultiplier=1.068, AmplitudePct=1.100%, VolMultiplier=0.770
+- numbers: Close=31961.51, PctChange=0.679%, TradeValue=818428930073, VolumeMultiplier=1.068, AmplitudePct=1.100%, VolMultiplier=0.770
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=False, OhlcMissing=False
 - action: 維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。
 - caveats: Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | LookbackNActual=16 | LookbackOldest=2026-01-02 | OHLC=OK
 - generated_at: 2026-01-24T11:53:00.541598+08:00 (Asia/Taipei)
+
+## 2.2) 一致性判定（Margin × Roll25 共振）
+- 規則（deterministic，不猜）：
+  1. 若 Margin∈{WATCH,ALERT} 且 roll25 heated（risk_level∈{中,高} 或 VolumeAmplified/VolAmplified/NewLow_N/ConsecutiveBreak 任一為 True）→ RESONANCE
+  2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）
+  3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
+  4. 其餘 → QUIET
+- 判定：DIVERGENCE（Margin(WATCH/ALERT) but roll25 not heated）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -70,6 +80,7 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - Check-4 TWSE history rows>=21：✅（OK）（rows=31）
 - Check-4 TPEX history rows>=21：✅（OK）（rows=31）
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
+- Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）
 
-_generated_at_utc: 2026-01-24T08:23:43Z_
+_generated_at_utc: 2026-01-24T08:37:49Z_
