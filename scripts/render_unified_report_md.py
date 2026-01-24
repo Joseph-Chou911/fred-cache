@@ -19,7 +19,7 @@ def fmt(x: Any) -> str:
         return NA
     if isinstance(x, bool):
         return "true" if x else "false"
-    if isinstance(x, (int,)):
+    if isinstance(x, int):
         return str(x)
     if isinstance(x, float):
         return f"{x:.6f}".rstrip("0").rstrip(".")
@@ -37,6 +37,15 @@ def safe_path(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
             return default
     return cur
 
+def get_any(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
+    """Try multiple possible keys (for schema drift)."""
+    if not isinstance(d, dict):
+        return default
+    for k in keys:
+        if k in d:
+            return d.get(k)
+    return default
+
 def md_kv(lines: List[str], k: str, v: Any) -> None:
     lines.append(f"- {k}: {fmt(v)}")
 
@@ -45,6 +54,15 @@ def md_table(lines: List[str], headers: List[str], rows: List[List[Any]]) -> Non
     lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
     for r in rows:
         lines.append("| " + " | ".join(fmt(x) for x in r) + " |")
+
+def rank_signal(level: str) -> int:
+    order = {"ALERT": 4, "WATCH": 3, "INFO": 2, "NONE": 1}
+    return order.get(level or "", 0)
+
+def pick_rows(rows: List[Dict[str, Any]], allowed_levels: Tuple[str, ...]) -> List[Dict[str, Any]]:
+    out = [r for r in rows if g(r, "signal_level") in allowed_levels]
+    out.sort(key=lambda r: (-rank_signal(g(r, "signal_level", "")), str(g(r, "series", ""))))
+    return out
 
 # -----------------------
 # margin stats
@@ -84,7 +102,7 @@ def margin_stats(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
     }
 
 # -----------------------
-# signal extraction
+# extract rows
 # -----------------------
 def extract_market_rows(market_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = g(market_latest, "rows", [])
@@ -94,14 +112,70 @@ def extract_fred_rows(fred_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = g(fred_latest, "rows", [])
     return rows if isinstance(rows, list) else []
 
-def rank_signal(level: str) -> int:
-    # higher = more important
-    order = {"ALERT": 4, "WATCH": 3, "INFO": 2, "NONE": 1}
-    return order.get(level or "", 0)
+# -----------------------
+# meta sniffing (for audit)
+# -----------------------
+def meta_summary(dash_latest: Dict[str, Any]) -> Dict[str, Any]:
+    meta = g(dash_latest, "meta", {})
+    summ = g(meta, "summary", {})
+    return {
+        "stats_as_of_ts": g(meta, "stats_as_of_ts", NA),
+        "run_ts_utc": g(meta, "run_ts_utc", NA),
+        "ruleset_id": g(meta, "ruleset_id", NA),
+        "script_fingerprint": g(meta, "script_fingerprint", NA),
+        "script_version": g(meta, "script_version", NA),
+        "series_count": g(meta, "series_count", NA),
+        "summary": summ if isinstance(summ, dict) else {},
+    }
 
-def pick_rows(rows: List[Dict[str, Any]], allowed_levels: Tuple[str, ...]) -> List[Dict[str, Any]]:
-    out = [r for r in rows if g(r, "signal_level") in allowed_levels]
-    out.sort(key=lambda r: (-rank_signal(g(r, "signal_level", "")), str(g(r, "series", ""))))
+def warn_if_schema_drift(lines: List[str], m_meta: Dict[str, Any], f_meta: Dict[str, Any]) -> None:
+    # Simple audit warnings
+    if m_meta.get("ruleset_id") not in (NA, None) and f_meta.get("ruleset_id") not in (NA, None):
+        if fmt(m_meta.get("ruleset_id")) != fmt(f_meta.get("ruleset_id")):
+            lines.append(f"- WARNING: ruleset_id mismatch (market={fmt(m_meta.get('ruleset_id'))}, fred={fmt(f_meta.get('ruleset_id'))})")
+    if m_meta.get("script_fingerprint") not in (NA, None) and f_meta.get("script_fingerprint") not in (NA, None):
+        if fmt(m_meta.get("script_fingerprint")) != fmt(f_meta.get("script_fingerprint")):
+            lines.append(f"- WARNING: script_fingerprint mismatch (market={fmt(m_meta.get('script_fingerprint'))}, fred={fmt(f_meta.get('script_fingerprint'))})")
+
+# -----------------------
+# normalize per-row fields (key variants)
+# -----------------------
+def norm_row_value(r: Dict[str, Any], key_variants: List[str]) -> Any:
+    return get_any(r, key_variants, None)
+
+def norm_zdelta(r: Dict[str, Any]) -> Any:
+    return norm_row_value(r, ["z_delta60", "z_delta_60", "zΔ60", "zDelta60"])
+
+def norm_pdelta(r: Dict[str, Any]) -> Any:
+    return norm_row_value(r, ["p_delta60", "p_delta_60", "pΔ60", "pDelta60"])
+
+def norm_ret1(r: Dict[str, Any]) -> Any:
+    return norm_row_value(r, ["ret1_pct60", "ret1_pct", "ret1%", "ret1_pct_60", "ret1Pct60"])
+
+# -----------------------
+# resonance matrix (strict intersection only)
+# -----------------------
+def build_resonance(mrows: List[Dict[str, Any]], frows: List[Dict[str, Any]]) -> List[List[Any]]:
+    # strict: same series name
+    fmap = {str(g(r, "series", "")): r for r in frows if isinstance(r, dict)}
+    out: List[List[Any]] = []
+    for mr in mrows:
+        s = str(g(mr, "series", ""))
+        if not s or s not in fmap:
+            continue
+        fr = fmap[s]
+        out.append([
+            s,
+            g(mr, "signal_level"),
+            g(fr, "signal_level"),
+            g(mr, "reason"),
+            g(fr, "reason"),
+            g(mr, "data_date"),
+            g(fr, "data_date"),
+            g(mr, "source_url"),
+            g(fr, "source_url"),
+        ])
+    out.sort(key=lambda x: str(x[0]))
     return out
 
 # -----------------------
@@ -123,6 +197,9 @@ def main() -> None:
     lines.append("# Unified Risk Dashboard Report")
     lines.append("")
 
+    # -----------------------
+    # status
+    # -----------------------
     lines.append("## Module Status")
     md_kv(lines, "market_cache", status("market_cache"))
     md_kv(lines, "fred_cache", status("fred_cache"))
@@ -131,19 +208,23 @@ def main() -> None:
     lines.append("")
 
     # -----------------------
-    # market_cache (detailed)
+    # market_cache
     # -----------------------
     m = safe_path(modules, ["market_cache", "dashboard_latest"], None)
     lines.append("## market_cache (detailed)")
+    mrows: List[Dict[str, Any]] = []
+    m_meta = {"ruleset_id": NA, "script_fingerprint": NA}
     if isinstance(m, dict):
-        meta = g(m, "meta", {})
-        md_kv(lines, "as_of_ts", g(meta, "stats_as_of_ts", NA))
-        md_kv(lines, "run_ts_utc", g(meta, "run_ts_utc", NA))
-        md_kv(lines, "series_count", g(meta, "series_count", NA))
+        m_meta = meta_summary(m)
+        md_kv(lines, "as_of_ts", m_meta.get("stats_as_of_ts"))
+        md_kv(lines, "run_ts_utc", m_meta.get("run_ts_utc"))
+        md_kv(lines, "ruleset_id", m_meta.get("ruleset_id"))
+        md_kv(lines, "script_fingerprint", m_meta.get("script_fingerprint"))
+        md_kv(lines, "script_version", m_meta.get("script_version"))
+        md_kv(lines, "series_count", m_meta.get("series_count"))
         lines.append("")
 
         mrows = extract_market_rows(m)
-        # market 只有 4 個，全部列
         headers = [
             "series","signal","dir","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%60",
@@ -161,9 +242,9 @@ def main() -> None:
                 g(r,"z60"),
                 g(r,"p60"),
                 g(r,"p252"),
-                g(r,"z_delta60"),
-                g(r,"p_delta60"),
-                g(r,"ret1_pct60"),
+                norm_zdelta(r),
+                norm_pdelta(r),
+                norm_ret1(r),
                 g(r,"reason"),
                 g(r,"tag"),
                 g(r,"prev_signal"),
@@ -179,15 +260,20 @@ def main() -> None:
         lines.append("")
 
     # -----------------------
-    # fred_cache (WATCH+INFO)
+    # fred_cache
     # -----------------------
     f = safe_path(modules, ["fred_cache", "dashboard_latest"], None)
-    lines.append("## fred_cache (WATCH+INFO)")
+    lines.append("## fred_cache (ALERT+WATCH+INFO)")  # <- 修正標題
+    frows: List[Dict[str, Any]] = []
+    f_meta = {"ruleset_id": NA, "script_fingerprint": NA}
     if isinstance(f, dict):
-        meta = g(f, "meta", {})
-        summ = g(meta, "summary", {})
-        md_kv(lines, "as_of_ts", g(meta, "stats_as_of_ts", NA))
-        md_kv(lines, "run_ts_utc", g(meta, "run_ts_utc", NA))
+        f_meta = meta_summary(f)
+        summ = f_meta.get("summary", {})
+        md_kv(lines, "as_of_ts", f_meta.get("stats_as_of_ts"))
+        md_kv(lines, "run_ts_utc", f_meta.get("run_ts_utc"))
+        md_kv(lines, "ruleset_id", f_meta.get("ruleset_id"))
+        md_kv(lines, "script_fingerprint", f_meta.get("script_fingerprint"))
+        md_kv(lines, "script_version", f_meta.get("script_version"))
         if isinstance(summ, dict):
             md_kv(lines, "ALERT", summ.get("ALERT"))
             md_kv(lines, "WATCH", summ.get("WATCH"))
@@ -197,7 +283,7 @@ def main() -> None:
         lines.append("")
 
         frows = extract_fred_rows(f)
-        focus = pick_rows(frows, ("WATCH", "INFO", "ALERT"))
+        focus = pick_rows(frows, ("ALERT","WATCH","INFO"))
         headers = [
             "series","signal","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%",
@@ -214,9 +300,9 @@ def main() -> None:
                 g(r,"z60"),
                 g(r,"p60"),
                 g(r,"p252"),
-                g(r,"z_delta_60"),
-                g(r,"p_delta_60"),
-                g(r,"ret1_pct"),
+                norm_zdelta(r),
+                norm_pdelta(r),
+                norm_ret1(r),
                 g(r,"reason"),
                 g(r,"tag"),
                 g(r,"prev_signal"),
@@ -230,7 +316,26 @@ def main() -> None:
         lines.append("")
 
     # -----------------------
-    # taiwan margin (richer)
+    # audit warnings (ruleset/script mismatch)
+    # -----------------------
+    lines.append("## Audit Notes")
+    warn_if_schema_drift(lines, m_meta, f_meta)
+    lines.append("")
+
+    # -----------------------
+    # resonance matrix (strict intersection)
+    # -----------------------
+    lines.append("## Resonance Matrix (strict: same series)")
+    rrows = build_resonance(mrows, frows)
+    if rrows:
+        headers = ["series","market_signal","fred_signal","market_reason","fred_reason","market_date","fred_date","market_source","fred_source"]
+        md_table(lines, headers, rrows)
+    else:
+        lines.append("- NA (no strict overlaps)")
+    lines.append("")
+
+    # -----------------------
+    # taiwan margin
     # -----------------------
     t = safe_path(modules, ["taiwan_margin_financing", "latest"], None)
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
