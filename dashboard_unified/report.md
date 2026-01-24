@@ -5,7 +5,7 @@
 - fred_cache: OK
 - roll25_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T11:20:27Z
+- unified_generated_at_utc: 2026-01-24T11:28:37Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -48,6 +48,7 @@
 - fred_dir is DERIVED (heuristic) from a fixed mapping table in this script (FRED_DIR_MAP). Unmapped series => NA.
 - market_class/fred_class are DERIVED from tag only (deterministic): LONG if tag contains LONG_EXTREME; LEVEL if tag contains EXTREME_Z; JUMP if tag contains JUMP* (incl. JUMP_DELTA/JUMP_RET); otherwise NONE.
 - roll25_heated/roll25_confidence are COMPUTED in build_unified_dashboard_latest.py from roll25 JSON only; renderer does not recompute.
+- margin rationale evidence is either READ from unified.cross_module.margin_rationale or DERIVED deterministically from latest TWSE rows (report-only).
 
 ## Resonance Matrix (strict + alias)
 | resonance_level | pair_type | series | market_series | fred_series | market_signal | fred_signal | market_class | fred_class | market_tag | fred_tag | market_dir | fred_dir | market_reason | fred_reason | market_date | fred_date | market_source | fred_source |
@@ -83,6 +84,22 @@
 - margin_signal: WATCH
 - margin_signal_source: DERIVED.rule_v1(TWSE_chg_yi_last5)
 
+#### margin_rationale (from build)
+- rule_hit: WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)
+- pos_days_last5: 4
+- basis: TWSE chg_yi last5
+- chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2]
+- latest_chg: 43.4
+- method: derived_rule
+- rule_version: rule_v1
+- sum_last5: 126.8
+
+#### date_alignment (confirm-only; does not change signal)
+- twmargin_date: 2026-01-23
+- roll25_used_date: 2026-01-23
+- used_date_match: true
+- note: confirm-only; does not change signal
+
 ## Unified Risk Judgment (Market + FRED + Roll25)
 - market_WATCH: 4
 - market_ALERT: 0
@@ -93,6 +110,7 @@
 - UnifiedState: RESONANCE_MF
 
 - Rule: UnifiedState is derived deterministically from (market has WATCH/ALERT?, fred has WATCH/ALERT?, roll25_heated). No forecast inference.
+- Note: Margin×Roll25 consistency=DIVERGENCE, margin_signal=WATCH (audit context; does not alter UnifiedState here).
 
 ## taiwan_margin_financing (TWSE/TPEX)
 ### TWSE (data_date=2026-01-23)
