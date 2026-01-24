@@ -14,6 +14,14 @@ If a field is missing => prints NA.
 Small audit-focused enhancements:
 - Footer prints input_path/output_path for self-audit.
 - Detects repo-root report.md residue and warns in footer (does NOT delete).
+
+2026-01-25 update:
+- Fix roll25 tag semantics: separate run-day tag vs used-date status.
+  Prints:
+    - run_day_tag (e.g., NON_TRADING_DAY when workflow runs on weekend)
+    - used_date_status (e.g., OK_TODAY / OK_LATEST / DATA_NOT_UPDATED / ...)
+    - tag (legacy) kept for backward compatibility
+- Display OhlcMissing even if signals lacks it, by inferring from ohlc_status when possible.
 """
 
 from __future__ import annotations
@@ -105,6 +113,25 @@ def _detect_root_report_residue(in_path: str, out_path: str) -> Dict[str, Any]:
         info["warn_root_report_residue"] = True
 
     return info
+
+
+def _infer_ohlc_missing(sigs: Any, r_latest: Any) -> Any:
+    """
+    Display-only helper:
+    - If signals has OhlcMissing, use it.
+    - Else try infer from r_latest.ohlc_status ("OK" vs "MISSING").
+    - Else return None.
+    """
+    if isinstance(sigs, dict) and "OhlcMissing" in sigs:
+        return sigs.get("OhlcMissing")
+    if isinstance(r_latest, dict):
+        st = r_latest.get("ohlc_status")
+        if isinstance(st, str):
+            if st.upper() == "MISSING":
+                return True
+            if st.upper() == "OK":
+                return False
+    return None
 
 
 def main() -> int:
@@ -226,7 +253,7 @@ def main() -> int:
             "series","signal","fred_dir","fred_class","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%","reason","tag","prev","delta","source"
         ]
-        rws: List[List[str]] = []
+        rws_f: List[List[str]] = []
         for it in f_rows:
             if not isinstance(it, dict):
                 continue
@@ -239,7 +266,7 @@ def main() -> int:
                     fclass = "LEVEL"
                 elif "JUMP" in tag:
                     fclass = "JUMP"
-            rws.append([
+            rws_f.append([
                 str(it.get("series","NA")),
                 str(it.get("signal_level","NA")),
                 str(it.get("fred_dir","NA")),
@@ -259,7 +286,7 @@ def main() -> int:
                 str(it.get("delta_signal","NA")),
                 str(it.get("source_url","NA")),
             ])
-        lines.append(_md_table(hdr, rws))
+        lines.append(_md_table(hdr, rws_f))
         lines.append("")
 
     # roll25_cache (core fields from latest report)
@@ -270,6 +297,7 @@ def main() -> int:
         sigs = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
         r_core = {
             "UsedDate": nums.get("UsedDate") or r_latest.get("used_date"),
+            # legacy tag may have been overloaded; keep it but do NOT treat it as used-date trading tag
             "tag": r_latest.get("tag"),
             "risk_level": r_latest.get("risk_level"),
             "turnover_twd": nums.get("TradeValue"),
@@ -284,10 +312,24 @@ def main() -> int:
             "LookbackNActual": r_latest.get("lookback_n_actual"),
         }
 
+    # New: separate tag semantics (prefer structured fields; fallback to legacy)
+    run_day_tag = (
+        _safe_get(r_latest, "run_day_tag")
+        or _safe_get(r_latest, "tag")  # legacy fallback (may represent run-day tag)
+        or _safe_get(r_core, "tag")
+    )
+    used_date_status = (
+        _safe_get(r_latest, "used_date_status")
+        or _safe_get(r_latest, "tag_used_date_status")  # optional future alias
+    )
+    legacy_tag = _safe_get(r_core, "tag") or "NA"
+
     lines.append("## roll25_cache (TW turnover)")
     lines.append(f"- status: {_safe_get(roll25,'status') or 'NA'}")
     lines.append(f"- UsedDate: {_fmt(r_core.get('UsedDate'),0)}")
-    lines.append(f"- tag: {r_core.get('tag','NA')}")
+    lines.append(f"- run_day_tag: {run_day_tag if run_day_tag is not None else 'NA'}")
+    lines.append(f"- used_date_status: {used_date_status if used_date_status is not None else 'NA'}")
+    lines.append(f"- tag (legacy): {legacy_tag}")
     lines.append(f"- risk_level: {r_core.get('risk_level','NA')}")
     lines.append(f"- turnover_twd: {_fmt(r_core.get('turnover_twd'),0)}")
     lines.append(f"- turnover_unit: {r_core.get('turnover_unit','NA')}")
@@ -300,9 +342,15 @@ def main() -> int:
     lines.append(f"- LookbackNActual: {_fmt_int(r_core.get('LookbackNActual'))}")
 
     sigs = r_core.get("signals", {})
+    # Ensure OhlcMissing is displayed even if not present in signal dict
+    ohlc_missing = _infer_ohlc_missing(sigs, r_latest)
+
     if isinstance(sigs, dict):
-        for k in ["DownDay","VolumeAmplified","VolAmplified","NewLow_N","ConsecutiveBreak","OhlcMissing"]:
+        for k in ["DownDay","VolumeAmplified","VolAmplified","NewLow_N","ConsecutiveBreak"]:
             lines.append(f"- signals.{k}: {_fmt(sigs.get(k),0)}")
+        lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing,0)}")
+    else:
+        lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing,0)}")
     lines.append("")
 
     # roll25 derived
