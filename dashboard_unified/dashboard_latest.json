@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T09:28:20Z",
+  "generated_at_utc": "2026-01-24T09:57:32Z",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",
@@ -526,7 +526,7 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-24T11:53:00.541598+08:00",
+        "generated_at": "2026-01-24T17:40:12.322010+08:00",
         "timezone": "Asia/Taipei",
         "summary": "今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低",
         "numbers": {
@@ -692,16 +692,23 @@
         "UsedDate": "2026-01-23",
         "risk_level": "低",
         "tag": "NON_TRADING_DAY",
+        "turnover_twd": 818428930073,
+        "turnover_unit": "TWD",
+        "volume_multiplier": 1.068,
+        "vol_multiplier": 0.77,
+        "amplitude_pct": 1.1,
+        "pct_change": 0.679,
+        "close": 31961.51,
         "signals": {
-          "DownDay": "NA",
-          "VolumeAmplified": "NA",
-          "VolAmplified": "NA",
-          "NewLow_N": "NA",
-          "ConsecutiveBreak": "NA",
-          "OhlcMissing": "NA"
+          "DownDay": false,
+          "VolumeAmplified": false,
+          "VolAmplified": false,
+          "NewLow_N": false,
+          "ConsecutiveBreak": false,
+          "OhlcMissing": false
         },
-        "LookbackNTarget": "NA",
-        "LookbackNActual": "NA"
+        "LookbackNTarget": "20",
+        "LookbackNActual": 16
       }
     },
     "taiwan_margin_financing": {
@@ -1050,7 +1057,7 @@
         "margin_signal": "NA",
         "margin_signal_source": "NA",
         "roll25_heated": false,
-        "roll25_confidence": "OK",
+        "roll25_confidence": "DOWNGRADED",
         "consistency": "NA",
         "rationale": {
           "consistency_rule": "See script header; deterministic Margin×Roll25",
@@ -1058,14 +1065,14 @@
             "rule": "NON_TRADING_DAY => heated=False",
             "tag": "NON_TRADING_DAY",
             "risk_level": "低",
-            "window_note": "window_info_unavailable",
+            "window_note": "LookbackNActual=16/20 (window_not_full)",
             "signals_used": {
-              "DownDay": "NA",
-              "VolumeAmplified": "NA",
-              "VolAmplified": "NA",
-              "NewLow_N": "NA",
-              "ConsecutiveBreak": "NA",
-              "OhlcMissing": "NA"
+              "DownDay": false,
+              "VolumeAmplified": false,
+              "VolAmplified": false,
+              "NewLow_N": false,
+              "ConsecutiveBreak": false,
+              "OhlcMissing": false
             }
           },
           "date_alignment": {

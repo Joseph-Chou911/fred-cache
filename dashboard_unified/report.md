@@ -3,8 +3,9 @@
 ## Module Status
 - market_cache: OK
 - fred_cache: OK
+- roll25_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T09:28:20Z
+- unified_generated_at_utc: 2026-01-24T09:57:32Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -46,12 +47,52 @@
 ## Audit Notes
 - fred_dir is DERIVED (heuristic) from a fixed mapping table in this script (FRED_DIR_MAP). Unmapped series => NA.
 - market_class/fred_class are DERIVED from tag only (deterministic): LONG if tag contains LONG_EXTREME; LEVEL if tag contains EXTREME_Z; JUMP if tag contains JUMP* (incl. JUMP_DELTA/JUMP_RET); otherwise NONE.
+- roll25_heated/roll25_confidence are COMPUTED in build_unified_dashboard_latest.py from roll25 JSON only; renderer does not recompute.
 
 ## Resonance Matrix (strict + alias)
 | resonance_level | pair_type | series | market_series | fred_series | market_signal | fred_signal | market_class | fred_class | market_tag | fred_tag | market_dir | fred_dir | market_reason | fred_reason | market_date | fred_date | market_source | fred_source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CONCORD_STRONG | ALIAS | VIX↔VIXCLS | VIX | VIXCLS | WATCH | WATCH | JUMP | JUMP | JUMP_P,JUMP_RET | JUMP_DELTA | HIGH | HIGH | abs(PΔ60)>=15;abs(ret1%60)>=2 | abs(pΔ60)>=15;abs(ret1%)>=2 | 2026-01-22 | 2026-01-22 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
 | STRUCTURAL_VS_SHOCK | STRICT | SP500 | SP500 | SP500 | WATCH | INFO | LONG+JUMP | LONG | LONG_EXTREME,JUMP_P | LONG_EXTREME | HIGH | HIGH | P252>=95;abs(PΔ60)>=15 | P252>=95 | 2026-01-22 | 2026-01-22 | https://stooq.com/q/d/l/?s=^spx&i=d | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
+
+## roll25_cache (TW turnover)
+- status: OK
+- UsedDate: 2026-01-23
+- tag: NON_TRADING_DAY
+- risk_level: 低
+- turnover_twd: 818428930073
+- turnover_unit: TWD
+- volume_multiplier: 1.068
+- vol_multiplier: 0.77
+- amplitude_pct: 1.1
+- pct_change: 0.679
+- close: 31961.51
+- LookbackNTarget: 20
+- LookbackNActual: 16
+- signals.DownDay: false
+- signals.VolumeAmplified: false
+- signals.VolAmplified: false
+- signals.NewLow_N: false
+- signals.ConsecutiveBreak: false
+- signals.OhlcMissing: false
+
+### roll25_heated / confidence (from build)
+- roll25_heated: false
+- roll25_confidence: DOWNGRADED
+- consistency(Margin×Roll25): NA
+- margin_signal: NA
+- margin_signal_source: NA
+
+## Unified Risk Judgment (Market + FRED + Roll25)
+- market_WATCH: 4
+- market_ALERT: 0
+- fred_WATCH: 2
+- fred_ALERT: 1
+- roll25_heated: false
+- roll25_confidence: DOWNGRADED
+- UnifiedState: RESONANCE_MF
+
+- Rule: UnifiedState is derived deterministically from (market has WATCH/ALERT?, fred has WATCH/ALERT?, roll25_heated). No forecast inference.
 
 ## taiwan_margin_financing (TWSE/TPEX)
 ### TWSE (data_date=2026-01-23)
