@@ -1,6 +1,7 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T16:05:15Z",
+  "generated_at_utc": "2026-01-24T16:21:25Z",
+  "run_day_tag": "NON_TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",
@@ -690,6 +691,31 @@
         "lookback_n_actual": 16,
         "lookback_oldest": "2026-01-02"
       },
+      "core": {
+        "UsedDate": "2026-01-23",
+        "run_day_tag": "NON_TRADING_DAY",
+        "used_date_status": "NON_TRADING_DAY",
+        "tag_legacy": "NON_TRADING_DAY",
+        "risk_level": "低",
+        "turnover_twd": 818428930073,
+        "turnover_unit": "TWD",
+        "close": 31961.51,
+        "pct_change": 0.679,
+        "amplitude_pct": 1.1,
+        "volume_multiplier": 1.068,
+        "vol_multiplier": 0.77,
+        "LookbackNTarget": 20,
+        "LookbackNActual": 16,
+        "signals": {
+          "DownDay": false,
+          "VolumeAmplified": false,
+          "VolAmplified": false,
+          "NewLow_N": false,
+          "ConsecutiveBreak": false,
+          "OhlcMissing": false
+        },
+        "ohlc_status": "OK"
+      },
       "derived": {
         "status": "OK",
         "params": {
@@ -1080,8 +1106,8 @@
         "rationale": {
           "consistency_rule": "Deterministic Margin×Roll25 (rule_v1).",
           "roll25_rationale": {
-            "rule": "NON_TRADING_DAY => heated=False",
-            "tag": "NON_TRADING_DAY",
+            "rule": "heated=True if any key signals true else False (no special-case for NON_TRADING_DAY)",
+            "used_date_status(tag_legacy)": "NON_TRADING_DAY",
             "risk_level": "低",
             "window_note": "LookbackNActual=16/20 (window_not_full)",
             "signals_used": {
@@ -1107,7 +1133,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-24T16:05:13Z",
+        "generated_at_utc": "2026-01-24T16:21:24Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
         "data_date": "2026-01-23",
@@ -1243,6 +1269,7 @@
     "Roll25 derived metrics are computed from roll25_cache/latest_report.json only (no external fetch).",
     "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
     "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
-    "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing)."
+    "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
+    "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status is roll25 latest_report.tag (selection status)."
   ]
 }
