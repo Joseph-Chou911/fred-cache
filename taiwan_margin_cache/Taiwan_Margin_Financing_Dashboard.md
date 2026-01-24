@@ -60,4 +60,4 @@
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 
-_generated_at_utc: 2026-01-24T00:01:15Z_
+_generated_at_utc: 2026-01-24T07:56:08Z_
