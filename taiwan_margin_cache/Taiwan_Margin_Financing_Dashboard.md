@@ -24,6 +24,17 @@
   - rows=30｜head_dates=['2026-01-23', '2026-01-22', '2026-01-21']｜tail_dates=['2025-12-15', '2025-12-12', '2025-12-11']
 - 合計：融資餘額 5073.30 億元｜資料日期 2026-01-23｜來源：TWSE=HiStock / TPEX=HiStock
 
+## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
+- roll25_path: roll25_cache/latest_report.json
+- UsedDate: 2026-01-23｜risk_level: 低｜tag: NON_TRADING_DAY
+- summary: 今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低
+- numbers: Close=31961.51, PctChange=0.679%, TradeValue=818,428,930,073, VolumeMultiplier=1.068, AmplitudePct=1.100%, VolMultiplier=0.770
+- signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=False, OhlcMissing=False
+- action: 維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。
+- caveats: Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
+Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | LookbackNActual=16 | LookbackOldest=2026-01-02 | OHLC=OK
+- generated_at: 2026-01-24T11:53:00.541598+08:00 (Asia/Taipei)
+
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
 - 1D：Δ=43.50 億元；Δ%=1.1702 %｜latest=3760.80｜base=3717.30（基期日=2026-01-22）
@@ -48,6 +59,7 @@
 - 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
+- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
 
 ## 6) 反方審核檢查（任一失敗 → PARTIAL）
 - Check-1 TWSE meta_date==series[0].date：✅（OK）
@@ -58,6 +70,6 @@
 - Check-4 TWSE history rows>=21：✅（OK）（rows=31）
 - Check-4 TPEX history rows>=21：✅（OK）（rows=31）
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
-- Check-5 TPEX 20D base_date 存在於 series：✅（OK）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）
 
-_generated_at_utc: 2026-01-24T07:56:08Z_
+_generated_at_utc: 2026-01-24T08:23:43Z_
