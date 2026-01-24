@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+scripts/render_unified_report_md.py
+
+- Renders unified report.md from unified_latest.json (or similar unified input)
+- Adds:
+  (2) fred_dir (derived heuristic, audit-noted)
+  (3) market_class / fred_class in Resonance Matrix for auditability
+
+Design choices (audit-first):
+- fred_dir is NOT guessed from data; it is derived from a fixed, explicit mapping table
+  (series -> risk direction HIGH/LOW). Anything not in the map => NA.
+- market_class/fred_class is derived from tag/reason only, with explicit rules.
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 NA = "NA"
 
@@ -48,27 +62,10 @@ def md_table(lines: List[str], headers: List[str], rows: List[List[Any]]) -> Non
     for r in rows:
         lines.append("| " + " | ".join(fmt(x) for x in r) + " |")
 
-def rank_signal(level: str) -> int:
-    order = {"ALERT": 4, "WATCH": 3, "INFO": 2, "NONE": 1}
-    return order.get((level or "").upper(), 0)
-
-def is_long_extreme(tag: str) -> bool:
-    t = (tag or "").upper()
-    return ("LONG_EXTREME" in t) or ("EXTREME_Z" in t)
-
-def is_jumpish(tag: str, reason: str) -> bool:
-    t = (tag or "").upper()
-    r = (reason or "").upper()
-    if "JUMP" in t:
-        return True
-    if ("ZΔ" in r) or ("PΔ" in r) or ("RET" in r) or ("DELTA" in r):
-        return True
-    return False
-
-def pick_rows(rows: List[Dict[str, Any]], allowed_levels: Tuple[str, ...]) -> List[Dict[str, Any]]:
-    out = [r for r in rows if g(r, "signal_level") in allowed_levels]
-    out.sort(key=lambda r: (-rank_signal(g(r, "signal_level", "")), str(g(r, "series", ""))))
-    return out
+def split_csvish(s: Any) -> List[str]:
+    if not isinstance(s, str) or not s.strip() or s.strip() == NA:
+        return []
+    return [x.strip() for x in s.split(",") if x.strip()]
 
 # -----------------------
 # margin stats
@@ -108,7 +105,7 @@ def margin_stats(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
     }
 
 # -----------------------
-# row extraction
+# signal extraction
 # -----------------------
 def extract_market_rows(market_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = g(market_latest, "rows", [])
@@ -118,171 +115,240 @@ def extract_fred_rows(fred_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = g(fred_latest, "rows", [])
     return rows if isinstance(rows, list) else []
 
-def index_by_series(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    out: Dict[str, Dict[str, Any]] = {}
-    for r in rows:
-        s = g(r, "series")
-        if isinstance(s, str) and s:
-            out[s] = r
+def rank_signal(level: str) -> int:
+    order = {"ALERT": 4, "WATCH": 3, "INFO": 2, "NONE": 1}
+    return order.get(level or "", 0)
+
+def pick_rows(rows: List[Dict[str, Any]], allowed_levels: Tuple[str, ...]) -> List[Dict[str, Any]]:
+    out = [r for r in rows if g(r, "signal_level") in allowed_levels]
+    out.sort(key=lambda r: (-rank_signal(g(r, "signal_level", "")), str(g(r, "series", ""))))
     return out
 
 # -----------------------
-# ALIAS + Resonance
+# Derived dir for FRED (explicit mapping)
 # -----------------------
-# NOTE:
-# - Only put truly different-name mappings here.
-# - Same-name pairs are automatically ignored.
-ALIAS_PAIRS: List[Tuple[str, str]] = [
-    ("VIX", "VIXCLS"),
+# NOTE: This is heuristic, not inferred from data.
+# Anything not listed here returns NA.
+FRED_DIR_MAP: Dict[str, str] = {
+    # Risk increases when HIGH:
+    "VIXCLS": "HIGH",
+    "DGS10": "HIGH",
+    "DGS2": "HIGH",
+    "T10Y2Y": "HIGH",     # term spread level interpretation can be debated; keep explicit and auditable
+    "T10Y3M": "HIGH",     # likewise, keep explicit
+    "STLFSI4": "HIGH",
+    "OFR_FSI": "HIGH",
+    "BAMLH0A0HYM2": "HIGH",  # HY OAS higher => risk higher
+    "DTWEXBGS": "HIGH",      # broad dollar index higher often = tighter USD conditions; treat as HIGH-risk direction for consistency
+    # Risk increases when LOW:
+    "NFCINONFINLEVERAGE": "LOW",  # more negative can indicate tighter conditions / riskier (your previous convention may differ)
+    # Equities: "higher" isn't directly "risk", but you often use "extension" as risk. Keep explicit:
+    "SP500": "HIGH",
+    "DJIA": "HIGH",
+    "NASDAQCOM": "HIGH",
+    "DCOILWTICO": "HIGH",  # oil higher can be inflation/pressure; explicit heuristic
+}
+
+def derive_fred_dir(series: str) -> str:
+    if not isinstance(series, str):
+        return NA
+    return FRED_DIR_MAP.get(series, NA)
+
+# -----------------------
+# Alias mapping between modules
+# -----------------------
+# pair_type=ALIAS uses this mapping (market_series -> fred_series)
+ALIASES: List[Tuple[str, str, str]] = [
+    ("VIX", "VIXCLS", "VIX↔VIXCLS"),
+    # Add more if needed, but keep explicit and auditable.
 ]
 
-def normalize_series_key(s: str) -> str:
-    return (s or "").strip()
+# -----------------------
+# Classification (LONG / JUMP) from tag/reason
+# -----------------------
+def classify_row(tag: Any, reason: Any) -> str:
+    """
+    Returns one of: LONG, JUMP, LONG+JUMP, NONE
+    Rule (explicit):
+      - LONG if tag contains LONG_EXTREME
+      - JUMP if tag contains 'JUMP' OR reason contains 'abs(' thresholds (delta/ret1 style)
+    """
+    tags = set(split_csvish(tag))
+    rsn = str(reason) if isinstance(reason, str) else ""
 
+    is_long = "LONG_EXTREME" in tags
+    is_jump = any(t.startswith("JUMP") for t in tags) or ("abs(" in rsn)
+
+    if is_long and is_jump:
+        return "LONG+JUMP"
+    if is_long:
+        return "LONG"
+    if is_jump:
+        return "JUMP"
+    return "NONE"
+
+# -----------------------
+# Resonance logic
+# -----------------------
 def resonance_level(
-    market_sig: str,
-    fred_sig: str,
-    market_tag: str,
-    fred_tag: str,
-    market_reason: str,
-    fred_reason: str,
+    market_signal: str,
+    fred_signal: str,
+    market_class: str,
+    fred_class: str,
 ) -> str:
-    ms = (market_sig or "").upper()
-    fs = (fred_sig or "").upper()
-    if ms in ("", NA) or fs in ("", NA):
-        return "NA"
+    """
+    Output resonance_level (audit-friendly, deterministic):
+    - CONCORD_STRONG: same signal level AND same class (e.g., WATCH+WATCH and JUMP+JUMP)
+    - CONCORD_WEAK:   same signal level but different class
+    - STRUCTURAL_VS_SHOCK: one side LONG-only, other side JUMP-only, regardless of signal mismatch
+    - DISCORD_LEVEL: different signal level but same class
+    - DISCORD_MIXED: everything else
+    """
+    ms = market_signal or NA
+    fs = fred_signal or NA
+    mc = market_class or "NONE"
+    fc = fred_class or "NONE"
 
-    m_rank = rank_signal(ms)
-    f_rank = rank_signal(fs)
+    # structural vs shock: explicit mismatch in class type
+    if (mc == "LONG" and fc == "JUMP") or (mc == "JUMP" and fc == "LONG"):
+        return "STRUCTURAL_VS_SHOCK"
 
-    if m_rank <= 1 and f_rank <= 1:
-        return "WEAK"
+    if ms == fs and ms != NA:
+        return "CONCORD_STRONG" if mc == fc else "CONCORD_WEAK"
 
-    if m_rank >= 2 and f_rank >= 2:
-        if ms == fs:
-            return "CONCORD_STRONG" if m_rank >= 3 else "CONCORD"
+    if ms != fs and ms != NA and fs != NA:
+        return "DISCORD_LEVEL" if mc == fc else "DISCORD_MIXED"
 
-        m_long = is_long_extreme(market_tag)
-        f_long = is_long_extreme(fred_tag)
-        m_jump = is_jumpish(market_tag, market_reason)
-        f_jump = is_jumpish(fred_tag, fred_reason)
+    return "DISCORD_MIXED"
 
-        if (m_long and f_jump) or (f_long and m_jump):
-            return "STRUCTURAL_VS_SHOCK"
+def series_key(series: str) -> str:
+    return str(series or "").strip()
 
-        return "DIVERGE"
-
-    if (m_rank >= 2 and f_rank <= 1) or (f_rank >= 2 and m_rank <= 1):
-        return "DIVERGE"
-
-    return "NA"
-
-def _dedup_pairs(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen: set = set()
-    out: List[Dict[str, Any]] = []
-    for r in rows:
-        key = (r.get("pair_type"), r.get("market_series"), r.get("fred_series"))
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(r)
-    return out
-
-def build_resonance_rows(
+def build_resonance_pairs(
     market_rows: List[Dict[str, Any]],
     fred_rows: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    m_idx = index_by_series(market_rows)
-    f_idx = index_by_series(fred_rows)
+    """
+    Build resonance matrix rows:
+    - STRICT pairs: same series name exists in both
+    - ALIAS pairs: based on ALIASES mapping, if both exist
+    Dedup: do not include ALIAS if it maps identical names already in STRICT (e.g., SP500->SP500).
+    """
+    m_by_series = {series_key(g(r, "series")): r for r in market_rows if series_key(g(r, "series"))}
+    f_by_series = {series_key(g(r, "series")): r for r in fred_rows if series_key(g(r, "series"))}
 
     out: List[Dict[str, Any]] = []
-    strict_pairs: set = set()  # (market_series, fred_series) for STRICT
+    seen_pairs: set[Tuple[str, str, str]] = set()  # (pair_type, m_series, f_series)
 
-    # 1) STRICT intersection (same series name)
-    strict_keys = sorted(set(m_idx.keys()).intersection(set(f_idx.keys())))
-    for s in strict_keys:
-        mr = m_idx.get(s, {})
-        fr = f_idx.get(s, {})
-        strict_pairs.add((s, s))
-        out.append({
+    # STRICT intersections
+    for s in sorted(set(m_by_series.keys()) & set(f_by_series.keys())):
+        mr = m_by_series[s]
+        fr = f_by_series[s]
+        m_sig = g(mr, "signal_level", NA)
+        f_sig = g(fr, "signal_level", NA)
+        m_tag = g(mr, "tag", NA)
+        f_tag = g(fr, "tag", NA)
+        m_reason = g(mr, "reason", NA)
+        f_reason = g(fr, "reason", NA)
+
+        m_dir = g(mr, "dir", NA)
+        f_dir = derive_fred_dir(s)
+
+        m_class = classify_row(m_tag, m_reason)
+        f_class = classify_row(f_tag, f_reason)
+
+        row = {
             "pair_type": "STRICT",
             "series": s,
             "market_series": s,
             "fred_series": s,
-            "market_signal": g(mr, "signal_level", NA),
-            "fred_signal": g(fr, "signal_level", NA),
-            "market_reason": g(mr, "reason", NA),
-            "fred_reason": g(fr, "reason", NA),
+            "market_signal": m_sig,
+            "fred_signal": f_sig,
+            "market_tag": m_tag,
+            "fred_tag": f_tag,
+            "market_dir": m_dir,
+            "fred_dir": f_dir,
+            "market_class": m_class,
+            "fred_class": f_class,
+            "market_reason": m_reason,
+            "fred_reason": f_reason,
             "market_date": g(mr, "data_date", NA),
             "fred_date": g(fr, "data_date", NA),
             "market_source": g(mr, "source_url", NA),
             "fred_source": g(fr, "source_url", NA),
-            "market_tag": g(mr, "tag", NA),
-            "fred_tag": g(fr, "tag", NA),
-            "market_dir": g(mr, "dir", NA),
-            "fred_dir": g(fr, "dir", NA),
-        })
+        }
+        row["resonance_level"] = resonance_level(m_sig, f_sig, m_class, f_class)
 
-    # 2) ALIAS pairs
-    for m_s, f_s in ALIAS_PAIRS:
-        m_s = normalize_series_key(m_s)
-        f_s = normalize_series_key(f_s)
-        if not m_s or not f_s:
+        key = ("STRICT", s, s)
+        if key not in seen_pairs:
+            out.append(row)
+            seen_pairs.add(key)
+
+    # ALIAS mappings
+    for m_name, f_name, label in ALIASES:
+        ms = series_key(m_name)
+        fs = series_key(f_name)
+        if not ms or not fs:
+            continue
+        if ms not in m_by_series or fs not in f_by_series:
             continue
 
-        # HARD GUARD #1: same-name alias is never allowed
-        if m_s == f_s:
+        # Do not add alias duplicates of STRICT identical naming
+        if ms == fs and ("STRICT", ms, fs) in seen_pairs:
             continue
 
-        # HARD GUARD #2: if this pair is already STRICT-equivalent, skip
-        if (m_s, f_s) in strict_pairs:
-            continue
+        mr = m_by_series[ms]
+        fr = f_by_series[fs]
 
-        if m_s in m_idx and f_s in f_idx:
-            mr = m_idx[m_s]
-            fr = f_idx[f_s]
-            out.append({
-                "pair_type": "ALIAS",
-                "series": f"{m_s}↔{f_s}",
-                "market_series": m_s,
-                "fred_series": f_s,
-                "market_signal": g(mr, "signal_level", NA),
-                "fred_signal": g(fr, "signal_level", NA),
-                "market_reason": g(mr, "reason", NA),
-                "fred_reason": g(fr, "reason", NA),
-                "market_date": g(mr, "data_date", NA),
-                "fred_date": g(fr, "data_date", NA),
-                "market_source": g(mr, "source_url", NA),
-                "fred_source": g(fr, "source_url", NA),
-                "market_tag": g(mr, "tag", NA),
-                "fred_tag": g(fr, "tag", NA),
-                "market_dir": g(mr, "dir", NA),
-                "fred_dir": g(fr, "dir", NA),
-            })
+        m_sig = g(mr, "signal_level", NA)
+        f_sig = g(fr, "signal_level", NA)
+        m_tag = g(mr, "tag", NA)
+        f_tag = g(fr, "tag", NA)
+        m_reason = g(mr, "reason", NA)
+        f_reason = g(fr, "reason", NA)
 
-    # final de-dup (protect against accidental alias duplicates)
-    out = _dedup_pairs(out)
+        m_dir = g(mr, "dir", NA)
+        f_dir = derive_fred_dir(fs)
 
-    # compute resonance
-    for r in out:
-        r["resonance_level"] = resonance_level(
-            r.get("market_signal", NA),
-            r.get("fred_signal", NA),
-            r.get("market_tag", NA),
-            r.get("fred_tag", NA),
-            r.get("market_reason", NA),
-            r.get("fred_reason", NA),
-        )
+        m_class = classify_row(m_tag, m_reason)
+        f_class = classify_row(f_tag, f_reason)
 
-    lvl_rank = {
-        "CONCORD_STRONG": 0,
-        "CONCORD": 1,
-        "STRUCTURAL_VS_SHOCK": 2,
-        "DIVERGE": 3,
-        "WEAK": 4,
-        "NA": 9,
+        row = {
+            "pair_type": "ALIAS",
+            "series": label,
+            "market_series": ms,
+            "fred_series": fs,
+            "market_signal": m_sig,
+            "fred_signal": f_sig,
+            "market_tag": m_tag,
+            "fred_tag": f_tag,
+            "market_dir": m_dir,
+            "fred_dir": f_dir,
+            "market_class": m_class,
+            "fred_class": f_class,
+            "market_reason": m_reason,
+            "fred_reason": f_reason,
+            "market_date": g(mr, "data_date", NA),
+            "fred_date": g(fr, "data_date", NA),
+            "market_source": g(mr, "source_url", NA),
+            "fred_source": g(fr, "source_url", NA),
+        }
+        row["resonance_level"] = resonance_level(m_sig, f_sig, m_class, f_class)
+
+        key = ("ALIAS", ms, fs)
+        if key not in seen_pairs:
+            out.append(row)
+            seen_pairs.add(key)
+
+    # Sort: most important resonance first, then pair_type, then series label
+    order = {
+        "CONCORD_STRONG": 1,
+        "CONCORD_WEAK": 2,
+        "STRUCTURAL_VS_SHOCK": 3,
+        "DISCORD_LEVEL": 4,
+        "DISCORD_MIXED": 5,
     }
-    out.sort(key=lambda x: (lvl_rank.get(x.get("resonance_level", "NA"), 9), str(x.get("series", ""))))
+    out.sort(key=lambda r: (order.get(str(r.get("resonance_level")), 99), str(r.get("pair_type")), str(r.get("series"))))
     return out
 
 # -----------------------
@@ -304,9 +370,6 @@ def main() -> None:
     lines.append("# Unified Risk Dashboard Report")
     lines.append("")
 
-    # -----------------------
-    # module status
-    # -----------------------
     lines.append("## Module Status")
     md_kv(lines, "market_cache", status("market_cache"))
     md_kv(lines, "fred_cache", status("fred_cache"))
@@ -318,8 +381,8 @@ def main() -> None:
     # market_cache (detailed)
     # -----------------------
     m = safe_path(modules, ["market_cache", "dashboard_latest"], None)
-    market_rows: List[Dict[str, Any]] = []
     lines.append("## market_cache (detailed)")
+    market_rows: List[Dict[str, Any]] = []
     if isinstance(m, dict):
         meta = g(m, "meta", {})
         md_kv(lines, "as_of_ts", g(meta, "stats_as_of_ts", NA))
@@ -331,6 +394,7 @@ def main() -> None:
         lines.append("")
 
         market_rows = extract_market_rows(m)
+
         headers = [
             "series","signal","dir","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%60",
@@ -369,8 +433,8 @@ def main() -> None:
     # fred_cache (ALERT+WATCH+INFO)
     # -----------------------
     f = safe_path(modules, ["fred_cache", "dashboard_latest"], None)
-    fred_rows: List[Dict[str, Any]] = []
     lines.append("## fred_cache (ALERT+WATCH+INFO)")
+    fred_rows: List[Dict[str, Any]] = []
     if isinstance(f, dict):
         meta = g(f, "meta", {})
         summ = g(meta, "summary", {})
@@ -389,12 +453,13 @@ def main() -> None:
 
         fred_rows = extract_fred_rows(f)
         focus = pick_rows(fred_rows, ("WATCH", "INFO", "ALERT"))
+
         headers = [
             "series","signal","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%",
             "reason","tag","prev","delta","source"
         ]
-        table_rows: List[List[Any]] = []
+        table_rows = []
         for r in focus:
             table_rows.append([
                 g(r,"series"),
@@ -421,25 +486,33 @@ def main() -> None:
         lines.append("")
 
     # -----------------------
-    # Resonance Matrix (strict + alias)
+    # Audit Notes (for derived fields)
     # -----------------------
-    lines.append("## Resonance Matrix (strict + alias)")
-    res_rows = build_resonance_rows(market_rows, fred_rows)
+    lines.append("## Audit Notes")
+    lines.append(f"- fred_dir is DERIVED (heuristic) from a fixed mapping table in this script (FRED_DIR_MAP). Unmapped series => {NA}.")
+    lines.append(f"- market_class/fred_class are DERIVED from tag/reason only: LONG if tag contains LONG_EXTREME; JUMP if tag contains JUMP* or reason contains 'abs(' thresholds; otherwise NONE.")
+    lines.append("")
 
-    if res_rows:
+    # -----------------------
+    # Resonance Matrix
+    # -----------------------
+    resonance = build_resonance_pairs(market_rows, fred_rows)
+    lines.append("## Resonance Matrix (strict + alias)")
+    if resonance:
         headers = [
             "resonance_level","pair_type","series",
             "market_series","fred_series",
             "market_signal","fred_signal",
+            "market_class","fred_class",
             "market_tag","fred_tag",
             "market_dir","fred_dir",
             "market_reason","fred_reason",
             "market_date","fred_date",
-            "market_source","fred_source",
+            "market_source","fred_source"
         ]
-        table_rows: List[List[Any]] = []
-        for r in res_rows:
-            table_rows.append([
+        rows: List[List[Any]] = []
+        for r in resonance:
+            rows.append([
                 r.get("resonance_level", NA),
                 r.get("pair_type", NA),
                 r.get("series", NA),
@@ -447,6 +520,8 @@ def main() -> None:
                 r.get("fred_series", NA),
                 r.get("market_signal", NA),
                 r.get("fred_signal", NA),
+                r.get("market_class", NA),
+                r.get("fred_class", NA),
                 r.get("market_tag", NA),
                 r.get("fred_tag", NA),
                 r.get("market_dir", NA),
@@ -458,10 +533,10 @@ def main() -> None:
                 r.get("market_source", NA),
                 r.get("fred_source", NA),
             ])
-        md_table(lines, headers, table_rows)
+        md_table(lines, headers, rows)
         lines.append("")
     else:
-        lines.append("- NA (no overlap / no alias matches)")
+        lines.append(f"- {NA} (no overlapping/alias pairs)")
         lines.append("")
 
     # -----------------------
@@ -488,7 +563,7 @@ def main() -> None:
             md_kv(lines, f"min_chg_last{blk['n_used']}", blk["min_chg_last5"])
             lines.append("")
     else:
-        lines.append("- NA (missing/failed)")
+        lines.append(f"- {NA} (missing/failed)")
         lines.append("")
 
     outp = Path(args.outp)
