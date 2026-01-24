@@ -29,20 +29,42 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Python deps (requests)
+      - name: Install runtime deps (minimal)
         shell: bash
         run: |
           set -euo pipefail
-          python -V
           python -m pip install --upgrade pip
-          python -m pip install --upgrade requests
-          python -c "import requests; print('requests_version=', requests.__version__)"
+          python -m pip install requests
 
-      - name: Ensure output dirs
+      - name: Update FX cache (BOT USD/TWD) [STRICT]
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p unified_dashboard fx_cache
+          mkdir -p fx_cache
+
+          # Run strict fetcher. It will exit 1 if parse/values invalid.
+          python scripts/fetch_fx_usdtwd_bot.py \
+            --tz "Asia/Taipei" \
+            --latest-out "fx_cache/latest.json" \
+            --history "fx_cache/history.json" \
+            --max-back 10 \
+            --timeout 20
+
+          # Post-guard: both files must exist and be non-empty
+          test -s fx_cache/latest.json
+          test -s fx_cache/history.json
+
+          echo "OK: fx_cache/latest.json size=$(wc -c < fx_cache/latest.json)"
+          echo "OK: fx_cache/history.json size=$(wc -c < fx_cache/history.json)"
+
+          echo "---- fx_cache/latest.json (head 120) ----"
+          sed -n '1,120p' fx_cache/latest.json || true
+
+      - name: Ensure output dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p unified_dashboard
 
       - name: Verify required inputs exist
         shell: bash
@@ -53,9 +75,10 @@ jobs:
             "dashboard_fred_cache/dashboard_latest.json"
             "taiwan_margin_cache/latest.json"
             "roll25_cache/latest_report.json"
+            "fx_cache/latest.json"
+            "fx_cache/history.json"
             "scripts/build_unified_dashboard_latest.py"
             "scripts/render_unified_report_md.py"
-            "scripts/fetch_fx_usdtwd_bot.py"
           )
           missing=0
           for f in "${req[@]}"; do
@@ -71,29 +94,6 @@ jobs:
             exit 1
           fi
 
-      - name: Update FX cache (BOT USD/TWD) [STRICT]
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Run fetcher. It should exit non-zero if strict sanity fails.
-          python scripts/fetch_fx_usdtwd_bot.py \
-            --tz "Asia/Taipei" \
-            --latest-out "fx_cache/latest.json" \
-            --history "fx_cache/history.json" \
-            --max-back 10 \
-            --timeout 20
-
-          # Hard guards: outputs must exist and be non-empty
-          test -s fx_cache/latest.json
-          test -s fx_cache/history.json
-
-          echo "OK: fx_cache/latest.json size=$(wc -c < fx_cache/latest.json)"
-          echo "OK: fx_cache/history.json size=$(wc -c < fx_cache/history.json)"
-
-          echo "---- fx_cache/latest.json (head 120) ----"
-          sed -n '1,120p' fx_cache/latest.json || true
-
       - name: Build unified_dashboard/latest.json
         shell: bash
         env:
@@ -101,11 +101,6 @@ jobs:
           ROLL25_DD_N: "10"
         run: |
           set -euo pipefail
-
-          # Require FX inputs produced by previous step
-          test -s fx_cache/latest.json
-          test -s fx_cache/history.json
-
           python scripts/build_unified_dashboard_latest.py \
             --market-in "dashboard/dashboard_latest.json" \
             --fred-in "dashboard_fred_cache/dashboard_latest.json" \
@@ -142,7 +137,7 @@ jobs:
 
           # Post-guard: renderer must NOT create root report.md.
           if [[ -f "report.md" ]]; then
-            echo "ERROR: root report.md was created AFTER render. Renderer/output path may be broken."
+            echo "ERROR: root report.md was created AFTER render."
             ls -la report.md || true
             exit 1
           fi
@@ -154,6 +149,9 @@ jobs:
           echo "---- git status ----"
           git status --porcelain || true
 
+          echo "---- fx_cache/latest.json (head 80) ----"
+          sed -n '1,80p' fx_cache/latest.json || true
+
           echo "---- unified_dashboard/latest.json (head 30) ----"
           sed -n '1,30p' unified_dashboard/latest.json || true
 
@@ -163,31 +161,23 @@ jobs:
           echo "---- unified_dashboard/report.md (tail 15) ----"
           tail -n 15 unified_dashboard/report.md || true
 
-          echo "---- fx_cache/latest.json (head 80) ----"
-          sed -n '1,80p' fx_cache/latest.json || true
-
       - name: Commit & push if changed
         shell: bash
         run: |
           set -euo pipefail
 
           # Fail fast if outputs are ignored
-          if git check-ignore -q unified_dashboard/latest.json; then
-            echo "ERROR: unified_dashboard/latest.json is ignored by .gitignore"
-            exit 1
-          fi
-          if git check-ignore -q unified_dashboard/report.md; then
-            echo "ERROR: unified_dashboard/report.md is ignored by .gitignore"
-            exit 1
-          fi
-          if git check-ignore -q fx_cache/latest.json; then
-            echo "ERROR: fx_cache/latest.json is ignored by .gitignore"
-            exit 1
-          fi
-          if git check-ignore -q fx_cache/history.json; then
-            echo "ERROR: fx_cache/history.json is ignored by .gitignore"
-            exit 1
-          fi
+          for f in \
+            unified_dashboard/latest.json \
+            unified_dashboard/report.md \
+            fx_cache/latest.json \
+            fx_cache/history.json
+          do
+            if git check-ignore -q "$f"; then
+              echo "ERROR: $f is ignored by .gitignore"
+              exit 1
+            fi
+          done
 
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes. Skip commit."
@@ -198,19 +188,21 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Only stage intended outputs
-          git add unified_dashboard/latest.json unified_dashboard/report.md
-          git add fx_cache/latest.json fx_cache/history.json
+          git add \
+            unified_dashboard/latest.json \
+            unified_dashboard/report.md \
+            fx_cache/latest.json \
+            fx_cache/history.json
           git add -u
 
-          # Hard-guard: refuse to commit staged changes outside unified_dashboard/ or fx_cache/
+          # Hard-guard: refuse to commit if staged changes include paths outside allowed dirs
           staged_paths="$(git diff --cached --name-only || true)"
           bad_paths="$(echo "$staged_paths" | awk 'NF && $0 !~ /^(unified_dashboard|fx_cache)\// {print $0}')"
           if [[ -n "$bad_paths" ]]; then
             echo "ERROR: Refusing to commit staged changes outside unified_dashboard/ or fx_cache/:"
             echo "$bad_paths"
-            echo "Hint: remove unintended changes or adjust staging rules."
             exit 1
           fi
 
-          git commit -m "Update unified dashboard + report + FX cache"
+          git commit -m "Update unified dashboard + FX cache"
           git push
