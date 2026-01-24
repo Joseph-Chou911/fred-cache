@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T16:21:25Z",
+  "generated_at_utc": "2026-01-24T16:40:23Z",
   "run_day_tag": "NON_TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -1133,7 +1133,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-24T16:21:24Z",
+        "generated_at_utc": "2026-01-24T16:40:22Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
         "data_date": "2026-01-23",
