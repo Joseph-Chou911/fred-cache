@@ -28,11 +28,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"                 # ✅ 建議：pip cache
-          cache-dependency-path: |
-            requirements.txt
-            pyproject.toml
-            setup.cfg
 
       - name: Install deps
         shell: bash
@@ -58,7 +53,7 @@ jobs:
             --out taiwan_margin_cache/latest.json \
             --min_rows 21
 
-      - name: Append history (seed missing market + robust append + dedup)
+      - name: Append history (seed from latest.rows if empty)
         shell: bash
         run: |
           set -euo pipefail
@@ -66,6 +61,22 @@ jobs:
             --latest taiwan_margin_cache/latest.json \
             --history taiwan_margin_cache/history.json \
             --max_items 800
+
+      - name: Audit: list roll25_cache (confirm-only input)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== roll25_cache (if exists) ==="
+          ls -la roll25_cache || true
+          echo "=== roll25_cache candidate files ==="
+          for f in roll25_cache/dashboard_latest.json roll25_cache/stats_latest.json roll25_cache/latest.json; do
+            if [ -f "$f" ]; then
+              echo "FOUND: $f"
+              wc -c "$f" || true
+            else
+              echo "MISS:  $f"
+            fi
+          done
 
       - name: Render dashboard (Taiwan margin-financing) -> taiwan_margin_cache/
         shell: bash
@@ -95,6 +106,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # 你要的輸出都在 taiwan_margin_cache
           git add -A taiwan_margin_cache dashboard
 
           if git diff --cached --quiet; then
