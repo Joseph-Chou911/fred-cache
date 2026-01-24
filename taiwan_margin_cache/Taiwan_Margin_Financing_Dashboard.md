@@ -5,6 +5,7 @@
   - rationale: 20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)
 - 一致性判定（Margin × Roll25）：DIVERGENCE
   - rationale: Margin(WATCH/ALERT) but roll25 not heated
+  - roll25_window_note: LookbackNActual=16/20（window 未滿 → 信心降級）
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 1) WATCH（升溫）
@@ -30,12 +31,13 @@
 - roll25_path: roll25_cache/latest_report.json
 - UsedDate: 2026-01-23｜risk_level: 低｜tag: NON_TRADING_DAY
 - summary: 今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低
-- numbers: Close=31961.51, PctChange=0.679%, TradeValue=818428930073, VolumeMultiplier=1.068, AmplitudePct=1.100%, VolMultiplier=0.770
+- numbers: Close=31961.51, PctChange=0.679%, TradeValue=818428930073, VolumeMultiplier=1.068, AmplitudePct=1.1%, VolMultiplier=0.77
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=False, OhlcMissing=False
 - action: 維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。
 - caveats: Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | LookbackNActual=16 | LookbackOldest=2026-01-02 | OHLC=OK
 - generated_at: 2026-01-24T11:53:00.541598+08:00 (Asia/Taipei)
+- lookback_note: LookbackNActual=16/20（window 未滿 → 信心降級）
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -44,6 +46,7 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
 - 判定：DIVERGENCE（Margin(WATCH/ALERT) but roll25 not heated）
+- 信心降級：LookbackNActual=16/20（window 未滿 → 信心降級）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -70,8 +73,9 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
+- roll25 LookbackNActual 未滿 target 時：只做『信心降級註記』，不改 margin 資料品質。
 
-## 6) 反方審核檢查（任一失敗 → PARTIAL）
+## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL）
 - Check-1 TWSE meta_date==series[0].date：✅（OK）
 - Check-1 TPEX meta_date==series[0].date：✅（OK）
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
@@ -82,5 +86,6 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）
+- Check-7 roll25 Lookback window：⚠️（NOTE）（LookbackNActual=16/20（window 未滿 → 信心降級））
 
-_generated_at_utc: 2026-01-24T08:37:49Z_
+_generated_at_utc: 2026-01-24T08:46:02Z_
