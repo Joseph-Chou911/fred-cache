@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T16:40:23Z",
+  "generated_at_utc": "2026-01-24T16:54:03Z",
   "run_day_tag": "NON_TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -694,7 +694,14 @@
       "core": {
         "UsedDate": "2026-01-23",
         "run_day_tag": "NON_TRADING_DAY",
-        "used_date_status": "NON_TRADING_DAY",
+        "used_date_status": "OK_LATEST",
+        "used_date_status_dbg": {
+          "used_date": "2026-01-23",
+          "latest_row_date": "2026-01-23",
+          "ohlc_status": "OK",
+          "freshness_ok": true
+        },
+        "used_date_selection_tag": "NON_TRADING_DAY",
         "tag_legacy": "NON_TRADING_DAY",
         "risk_level": "低",
         "turnover_twd": 818428930073,
@@ -1107,7 +1114,7 @@
           "consistency_rule": "Deterministic Margin×Roll25 (rule_v1).",
           "roll25_rationale": {
             "rule": "heated=True if any key signals true else False (no special-case for NON_TRADING_DAY)",
-            "used_date_status(tag_legacy)": "NON_TRADING_DAY",
+            "used_date_selection_tag(tag_legacy)": "NON_TRADING_DAY",
             "risk_level": "低",
             "window_note": "LookbackNActual=16/20 (window_not_full)",
             "signals_used": {
@@ -1133,7 +1140,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-24T16:40:22Z",
+        "generated_at_utc": "2026-01-24T16:54:01Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
         "data_date": "2026-01-23",
@@ -1270,6 +1277,6 @@
     "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
     "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
     "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
-    "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status is roll25 latest_report.tag (selection status)."
+    "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status computed deterministically from roll25 latest_report; used_date_selection_tag (tag_legacy) preserves roll25 latest_report.tag."
   ]
 }

@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-24T16:40:23Z
+- unified_generated_at_utc: 2026-01-24T16:54:03Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-24T13:27:02Z
@@ -55,7 +55,7 @@
 - status: OK
 - UsedDate: 2026-01-23
 - run_day_tag: NON_TRADING_DAY
-- used_date_status: NON_TRADING_DAY
+- used_date_status: OK_LATEST
 - tag (legacy): NON_TRADING_DAY
 - risk_level: 低
 - turnover_twd: 818428930073
@@ -117,7 +117,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-24T16:40:23Z -->
+<!-- rendered_at_utc: 2026-01-24T16:54:03Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
