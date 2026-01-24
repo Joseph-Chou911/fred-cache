@@ -1,0 +1,24 @@
+{
+  "schema_version": "fx_usdtwd_latest_v1",
+  "generated_at_utc": "2026-01-24T12:03:39Z",
+  "source": "BOT",
+  "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
+  "data_date": "2026-01-23",
+  "usd_twd": {
+    "spot_buy": 31.5,
+    "spot_sell": 31.483,
+    "mid": 31.491500000000002
+  },
+  "raw": {
+    "currency_label": "USD",
+    "row": {
+      "currency": "USD",
+      "spot_buy": 31.5,
+      "spot_sell": 31.483
+    }
+  },
+  "http": {
+    "status_code": 200,
+    "error": null
+  }
+}

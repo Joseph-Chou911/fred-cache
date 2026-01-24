@@ -1,0 +1,12 @@
+{
+  "schema_version": "fx_usdtwd_history_v1",
+  "items": [
+    {
+      "date": "2026-01-23",
+      "mid": 31.491500000000002,
+      "spot_buy": 31.5,
+      "spot_sell": 31.483,
+      "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23"
+    }
+  ]
+}
