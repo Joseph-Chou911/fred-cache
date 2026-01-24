@@ -1,10 +1,10 @@
-name: Update Unified Risk Report
+name: Update Unified Dashboard (merge+render)
 
 on:
   workflow_dispatch: {}
   schedule:
-    # 22:40 Asia/Taipei = 14:40 UTC (example; adjust to your preferred)
-    - cron: "40 14 * * *"
+    # 23:30 Asia/Taipei = 15:30 UTC
+    - cron: "30 15 * * *"
 
 permissions:
   contents: write
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   unified:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -29,68 +29,81 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Verify required inputs exist
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          pip install requests pandas
+          req=(
+            "dashboard/dashboard_latest.json"
+            "dashboard_fred_cache/dashboard_latest.json"
+            "taiwan_margin_cache/latest.json"
+            "roll25_cache/latest_report.json"
+            "fx_cache/latest.json"
+            "fx_cache/history.json"
+            "scripts/build_unified_dashboard_latest.py"
+            "scripts/render_unified_report_md.py"
+          )
+          missing=0
+          for f in "${req[@]}"; do
+            if [[ ! -f "$f" ]]; then
+              echo "MISSING: $f"
+              missing=1
+            else
+              echo "OK: $f"
+            fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            echo "One or more required files are missing. Stop."
+            exit 1
+          fi
 
-      - name: Ensure dirs
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dashboard dashboard_fred_cache roll25_cache taiwan_margin_cache unified_dashboard fx_cache
-
-      # (A) Your existing steps that generate:
-      # - dashboard/dashboard_latest.json
-      # - dashboard_fred_cache/dashboard_latest.json
-      # - roll25_cache/latest_report.json
-      # - taiwan_margin_cache/latest.json
-      # Keep them as-is, just ensure they run before build_unified.
-
-      # (B) FX fetch (new)
-      - name: Fetch FX USD/TWD (BOT)
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/fetch_fx_usdtwd_bot.py \
-            --latest-out fx_cache/latest.json \
-            --history fx_cache/history.json \
-            --max-back 10
-
-      # (C) Build unified dashboard (updated)
-      - name: Build unified dashboard
+      - name: Build unified_dashboard/latest.json
         shell: bash
         env:
+          # optional tuning (defaults in script are 10/10)
           ROLL25_VOL_N: "10"
           ROLL25_DD_N: "10"
         run: |
           set -euo pipefail
           python scripts/build_unified_dashboard_latest.py \
-            --market-in dashboard/dashboard_latest.json \
-            --fred-in dashboard_fred_cache/dashboard_latest.json \
-            --twmargin-in taiwan_margin_cache/latest.json \
-            --roll25-in roll25_cache/latest_report.json \
-            --fx-in fx_cache/latest.json \
-            --fx-history fx_cache/history.json \
-            --out unified_dashboard/latest.json
+            --market-in "dashboard/dashboard_latest.json" \
+            --fred-in "dashboard_fred_cache/dashboard_latest.json" \
+            --twmargin-in "taiwan_margin_cache/latest.json" \
+            --roll25-in "roll25_cache/latest_report.json" \
+            --fx-in "fx_cache/latest.json" \
+            --fx-history "fx_cache/history.json" \
+            --out "unified_dashboard/latest.json"
 
-      # (D) Render report.md (updated)
       - name: Render report.md
         shell: bash
         run: |
           set -euo pipefail
           python scripts/render_unified_report_md.py \
-            --in unified_dashboard/latest.json \
-            --out report.md
+            --in "unified_dashboard/latest.json" \
+            --out "report.md"
 
-      - name: Commit & push
+      - name: Show brief diff (for logs)
         shell: bash
         run: |
           set -euo pipefail
+          git status --porcelain
+          echo "---- unified_dashboard/latest.json (head 60) ----"
+          sed -n '1,60p' unified_dashboard/latest.json || true
+          echo "---- report.md (head 80) ----"
+          sed -n '1,80p' report.md || true
+
+      - name: Commit & push if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "No changes. Skip commit."
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Update unified risk report" || echo "No changes to commit"
+
+          git add unified_dashboard/latest.json report.md
+          git commit -m "Update unified dashboard + report"
           git push
