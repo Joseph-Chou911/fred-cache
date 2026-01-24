@@ -23,6 +23,14 @@ Inputs:
 
 Output:
 - unified_dashboard/latest.json (or any path you pass)
+
+2026-01-25 update:
+- roll25 tag semantics split:
+  - run_day_tag: derived from unified builder run day (Asia/Taipei) weekend or not
+  - used_date_status: preserve roll25 latest_report.tag as "UsedDate selection status"
+  - tag_legacy: same as roll25 latest_report.tag for backward compatibility
+- roll25_heated_rule_v1: remove "NON_TRADING_DAY => heated=False" special case
+  (weekend run can still reflect the last trading day's signals).
 """
 
 from __future__ import annotations
@@ -32,7 +40,7 @@ import json
 import math
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -182,14 +190,37 @@ def _extract_useddate_from_roll25_report(roll_obj: Dict[str, Any]) -> Optional[s
     return None
 
 
+def _infer_run_day_tag_from_utc_z(generated_at_utc_z: str) -> str:
+    """
+    Determine run_day_tag based on local (Asia/Taipei) day-of-week.
+    - NON_TRADING_DAY if local weekday is Sat/Sun
+    - TRADING_DAY otherwise
+    If parsing fails => NA.
+    """
+    try:
+        # generated_at_utc_z: "YYYY-MM-DDTHH:MM:SSZ"
+        dt_utc = datetime.strptime(generated_at_utc_z, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        dt_tpe = dt_utc.astimezone(timezone(timedelta(hours=8)))
+        wd = dt_tpe.weekday()  # Mon=0 ... Sun=6
+        return "NON_TRADING_DAY" if wd >= 5 else "TRADING_DAY"
+    except Exception:
+        return "NA"
+
+
 def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     """
     Deterministic "heated" flag from roll25 JSON only.
+
+    IMPORTANT semantic fix:
+    - DO NOT force heated=False just because roll_obj.tag == "NON_TRADING_DAY".
+      That tag is used_date selection status (e.g., weekend run chooses latest trading day),
+      not a statement that the UsedDate is non-trading.
+
     Rules:
-    - If tag == "NON_TRADING_DAY" => heated=False
-    - Else heated=True if ANY of these signals are true:
+    - heated=True if ANY of these signals are true:
       DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak, OhlcMissing
     - Else heated=False
+
     Confidence:
     - DOWNGRADED if LookbackNActual < LookbackNTarget OR target unknown.
     """
@@ -203,18 +234,13 @@ def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     def _b(x: Any) -> bool:
         return bool(x) is True
 
-    if isinstance(tag, str) and tag == "NON_TRADING_DAY":
-        heated = False
-        rule_note = "NON_TRADING_DAY => heated=False"
-    else:
-        keys = ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak", "OhlcMissing"]
-        hits = {k: _b(sigs.get(k)) for k in keys}
-        heated = any(hits.values())
-        rule_note = "heated=True if any key signals true else False"
+    keys = ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak", "OhlcMissing"]
+    hits = {k: _b(sigs.get(k)) for k in keys}
+    heated = any(hits.values())
+    rule_note = "heated=True if any key signals true else False (no special-case for NON_TRADING_DAY)"
 
     lookback_actual = roll_obj.get("lookback_n_actual")
     if not isinstance(lookback_actual, int):
-        # If absent, try fall back from numbers
         la2 = nums.get("LookbackNActual")
         if isinstance(la2, int):
             lookback_actual = la2
@@ -234,7 +260,7 @@ def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
         "roll25_confidence": confidence,
         "roll25_rationale": {
             "rule": rule_note,
-            "tag": tag if isinstance(tag, str) else "NA",
+            "used_date_status(tag_legacy)": tag if isinstance(tag, str) else "NA",
             "risk_level": risk_level if isinstance(risk_level, str) else "NA",
             "window_note": (
                 f"LookbackNActual={lookback_actual}/{lookback_target} (window_not_full)"
@@ -297,7 +323,6 @@ def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str,
     pos_days = sum(1 for x in last5 if x > 0)
     latest_chg = last5[0] if points >= 1 else None
 
-    # thresholds (explicit, deterministic)
     signal = "NA"
     rule_hit = "NA"
     if points >= 1:
@@ -315,7 +340,6 @@ def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str,
 
     confidence = "OK" if points >= 5 else "DOWNGRADED"
 
-    # best-effort date
     data_date = twse.get("data_date") if isinstance(twse.get("data_date"), str) else None
 
     return {
@@ -343,7 +367,6 @@ def _get_margin_signal_prefer_structured(twm_obj: Dict[str, Any]) -> Dict[str, A
     """
     cm = twm_obj.get("cross_module")
     if isinstance(cm, dict) and isinstance(cm.get("margin_signal"), str):
-        # still ensure rationale exists
         out = {
             "margin_signal": cm.get("margin_signal", "NA"),
             "margin_signal_source": cm.get("margin_signal_source", "STRUCTURED"),
@@ -491,6 +514,7 @@ def main() -> int:
     args = ap.parse_args()
 
     generated_at_utc = _now_utc_z()
+    run_day_tag = _infer_run_day_tag_from_utc_z(generated_at_utc)
 
     def _load_or_fail(path: str) -> Tuple[str, Any]:
         try:
@@ -506,6 +530,7 @@ def main() -> int:
 
     # roll25 derived
     roll25_derived: Dict[str, Any] = {"status": "NA"}
+    roll25_core: Dict[str, Any] = {}
     if roll_status == "OK" and isinstance(roll_obj, dict):
         closes_newest = _extract_roll25_closes(roll_obj)
         vol_pct, vol_pts = _realized_vol_annualized_pct(closes_newest, args.roll25_vol_n)
@@ -538,6 +563,44 @@ def main() -> int:
                 "LookbackNActual": lookback_actual if isinstance(lookback_actual, int) else "NA",
                 "LookbackNTarget": lookback_target if isinstance(lookback_target, int) else "NA",
             },
+        }
+
+        # roll25 core (explicitly normalized for downstream rendering)
+        used_date = _extract_useddate_from_roll25_report(roll_obj)
+        used_date_status = roll_obj.get("tag") if isinstance(roll_obj.get("tag"), str) else "NA"  # selection status
+        tag_legacy = used_date_status
+
+        nums = roll_obj.get("numbers") if isinstance(roll_obj.get("numbers"), dict) else {}
+        sigs = roll_obj.get("signal") if isinstance(roll_obj.get("signal"), dict) else {}
+
+        roll25_core = {
+            "UsedDate": used_date or "NA",
+            "run_day_tag": run_day_tag,
+            "used_date_status": used_date_status,
+            "tag_legacy": tag_legacy,
+
+            "risk_level": roll_obj.get("risk_level") if isinstance(roll_obj.get("risk_level"), str) else "NA",
+            "turnover_twd": nums.get("TradeValue"),
+            "turnover_unit": "TWD",
+
+            "close": nums.get("Close"),
+            "pct_change": nums.get("PctChange"),
+            "amplitude_pct": nums.get("AmplitudePct"),
+            "volume_multiplier": nums.get("VolumeMultiplier"),
+            "vol_multiplier": nums.get("VolMultiplier"),
+
+            "LookbackNTarget": _extract_lookback_target_from_roll25_report(roll_obj),
+            "LookbackNActual": roll_obj.get("lookback_n_actual") if isinstance(roll_obj.get("lookback_n_actual"), int) else None,
+
+            "signals": {
+                "DownDay": sigs.get("DownDay"),
+                "VolumeAmplified": sigs.get("VolumeAmplified"),
+                "VolAmplified": sigs.get("VolAmplified"),
+                "NewLow_N": sigs.get("NewLow_N"),
+                "ConsecutiveBreak": sigs.get("ConsecutiveBreak"),
+                "OhlcMissing": sigs.get("OhlcMissing"),
+            },
+            "ohlc_status": roll_obj.get("ohlc_status") if isinstance(roll_obj.get("ohlc_status"), str) else "NA",
         }
 
     # fx derived
@@ -593,6 +656,7 @@ def main() -> int:
     unified = {
         "schema_version": "unified_dashboard_latest_v1",
         "generated_at_utc": generated_at_utc,
+        "run_day_tag": run_day_tag,
         "inputs": {
             "market_in": args.market_in,
             "fred_in": args.fred_in,
@@ -613,6 +677,7 @@ def main() -> int:
             "roll25_cache": {
                 "status": "OK" if roll_status == "OK" else roll_status,
                 "latest_report": roll_obj,
+                "core": roll25_core if roll25_core else None,
                 "derived": roll25_derived,
             },
             "taiwan_margin_financing": {
@@ -631,12 +696,15 @@ def main() -> int:
             "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
             "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
             "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
+            "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status is roll25 latest_report.tag (selection status).",
         ],
     }
 
-    # avoid emitting null cross_module for cleanliness
+    # avoid emitting null nodes for cleanliness
     if unified["modules"]["taiwan_margin_financing"].get("cross_module") is None:
         unified["modules"]["taiwan_margin_financing"].pop("cross_module", None)
+    if unified["modules"]["roll25_cache"].get("core") is None:
+        unified["modules"]["roll25_cache"].pop("core", None)
 
     _dump_json(args.out, unified)
     return 0
