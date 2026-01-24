@@ -31,6 +31,17 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install dependencies (if requirements.txt exists)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f requirements.txt ]; then
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+          else
+            echo "No requirements.txt, skip pip install."
+          fi
+
       - name: Run dashboard renderer (fred_cache)
         shell: bash
         run: |
@@ -40,6 +51,7 @@ jobs:
       - name: Configure git author
         shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -47,11 +59,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add dashboard_fred_cache/dashboard.md dashboard_fred_cache/history.json || true
+          git add \
+            dashboard_fred_cache/dashboard.md \
+            dashboard_fred_cache/history.json \
+            dashboard_fred_cache/dashboard_latest.json || true
+
           if git diff --cached --quiet; then
             echo "No changes."
             exit 0
           fi
+
           git commit -m "dashboard(fred_cache): update"
 
       - name: Push (with rebase retry)
