@@ -1,78 +1,78 @@
 [
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "NOMINAL_10Y",
-    "data_date": "2026-01-22",
-    "value": "4.26",
+    "data_date": "2026-01-23",
+    "value": "4.24",
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "REAL_10Y",
-    "data_date": "2026-01-22",
-    "value": "1.95",
+    "data_date": "2026-01-23",
+    "value": "1.92",
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "BE10Y_PROXY",
-    "data_date": "2026-01-22",
-    "value": "2.3099999999999996",
+    "data_date": "2026-01-23",
+    "value": "2.3200000000000003",
     "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601 + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "VIX_PROXY",
-    "data_date": "2026-01-22",
-    "value": "15.64",
+    "data_date": "2026-01-23",
+    "value": "16.09",
     "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "HYG_CLOSE",
-    "data_date": "2026-01-22",
-    "value": "81.18",
+    "data_date": "2026-01-23",
+    "value": "81.14",
     "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20250926&d2=20260124&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "IEF_CLOSE",
-    "data_date": "2026-01-22",
-    "value": "95.79",
+    "data_date": "2026-01-23",
+    "value": "95.95",
     "source_url": "https://stooq.com/q/d/l/?s=ief.us&d1=20250926&d2=20260124&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "TIP_CLOSE",
-    "data_date": "2026-01-22",
-    "value": "110.01",
+    "data_date": "2026-01-23",
+    "value": "110.23",
     "source_url": "https://stooq.com/q/d/l/?s=tip.us&d1=20250926&d2=20260124&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "HYG_IEF_RATIO",
-    "data_date": "2026-01-22",
-    "value": "0.8474788600062637",
+    "data_date": "2026-01-23",
+    "value": "0.8456487754038562",
     "source_url": "https://stooq.com/",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "TIP_IEF_RATIO",
-    "data_date": "2026-01-22",
-    "value": "1.1484497337926713",
+    "data_date": "2026-01-23",
+    "value": "1.1488275143303803",
     "source_url": "https://stooq.com/",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "OFR_FSI",
     "data_date": "2026-01-21",
     "value": "-2.445",
@@ -80,7 +80,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "REGIME_STATE",
     "data_date": "2026-01-24",
     "value": "NEUTRAL_MIXED",
@@ -88,7 +88,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "REGIME_CONFIDENCE",
     "data_date": "2026-01-24",
     "value": "LOW",
@@ -96,10 +96,10 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-01-24T03:32:21.907404+08:00",
+    "as_of_ts": "2026-01-24T11:58:14.428517+08:00",
     "series_id": "REGIME_REASONS",
     "data_date": "2026-01-24",
-    "value": "[\"panic=LOW(VIX=15.64)\", \"inflation_expect=MID(BE10Y=2.3099999999999996)\", \"credit_dev_unavailable(history_lt_60(12))\", \"OFR_FSI=OK(-2.445)\", \"confidence_cap=LOW(credit_unavailable)\"]",
+    "value": "[\"panic=LOW(VIX=16.09)\", \"inflation_expect=MID(BE10Y=2.3200000000000003)\", \"credit_dev_unavailable(history_lt_60(13))\", \"OFR_FSI=OK(-2.445)\", \"confidence_cap=LOW(credit_unavailable)\"]",
     "source_url": "NA",
     "notes": "NA"
   }
