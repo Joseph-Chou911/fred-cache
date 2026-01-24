@@ -70,10 +70,23 @@ jobs:
             --in dashboard_unified/dashboard_latest.json \
             --out dashboard_unified/report.md
 
+      - name: Configure git identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Commit unified dashboard
         shell: bash
         run: |
           set -euo pipefail
           git add dashboard_unified/dashboard_latest.json dashboard_unified/report.md
-          git diff --cached --quiet || git commit -m "Update unified dashboard (merge-only)"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update unified dashboard (merge-only)"
           git push
