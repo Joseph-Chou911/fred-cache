@@ -4,25 +4,23 @@
 scripts/render_taiwan_margin_dashboard.py
 
 Render Taiwan margin financing dashboard from latest.json + history.json
-+ (NEW) Read roll25_cache (existing stats) for "volume/volatility confirm-only" section.
++ (optional) embed TWSE roll25_cache/latest_report.json summary (volume/volatility)
 
 Principles
 - Use balance series from history for Δ and Δ% (not site-provided chg_yi).
 - 合計 only if TWSE/TPEX latest date matches AND baseline dates for horizon match.
 - Output audit-friendly markdown with NA handling.
-- Confirm-only: roll25_cache is used only for confirmation display; it MUST NOT change margin signal.
+- roll25 is confirm-only input: read local json only, no web calls.
 
 品質降級（中等規則）
-- 融資資料 checks 任一 FAIL → margin_quality=PARTIAL
-- roll25_cache 若缺檔/解析失敗/無法抽出 rows → confirm_quality=PARTIAL（但不影響融資 signal）
+- 任一 Check 失敗 → PARTIAL
+- 若提供 --roll25 但檔案缺失/JSON壞掉/UsedDate 與融資最新日期不一致 → PARTIAL
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -40,15 +38,14 @@ def read_json(path: str) -> Any:
         return json.load(f)
 
 
-def read_json_if_exists(path: str) -> Tuple[Optional[Any], Optional[str]]:
+def try_read_json(path: Optional[str]) -> Tuple[Optional[Any], Optional[str]]:
     if not path:
-        return None, "path=NA"
-    if not os.path.exists(path):
-        return None, f"file_not_found: {path}"
+        return None, None
     try:
-        return read_json(path), None
+        obj = read_json(path)
+        return obj, None
     except Exception as e:
-        return None, f"json_read_failed: {type(e).__name__}: {e}"
+        return None, f"read_json failed: {type(e).__name__}: {e}"
 
 
 def fmt_num(x: Optional[float], nd: int = 2) -> str:
@@ -63,17 +60,24 @@ def fmt_pct(x: Optional[float], nd: int = 4) -> str:
     return f"{x:.{nd}f}"
 
 
-def fmt_any(x: Any) -> str:
+def fmt_int_commas(x: Any) -> str:
     if x is None:
         return "NA"
     if isinstance(x, bool):
         return "true" if x else "false"
     if isinstance(x, int):
-        return str(x)
+        return f"{x:,}"
     if isinstance(x, float):
-        s = f"{x:.6f}".rstrip("0").rstrip(".")
-        return s if s else "0"
-    return str(x)
+        # if it is actually an integer-like float
+        if abs(x - int(x)) < 1e-12:
+            return f"{int(x):,}"
+        return str(x)
+    try:
+        # attempt parse
+        xi = int(x)
+        return f"{xi:,}"
+    except Exception:
+        return str(x)
 
 
 def yesno(ok: bool) -> str:
@@ -92,32 +96,8 @@ def line_check(name: str, ok: bool, msg: str) -> str:
     return f"- {name}：{yesno(False)}（{msg}）"
 
 
-def parse_iso_to_dt(s: Any) -> Optional[datetime]:
-    if not isinstance(s, str) or not s.strip():
-        return None
-    ss = s.strip()
-    try:
-        if ss.endswith("Z"):
-            ss = ss[:-1] + "+00:00"
-        return datetime.fromisoformat(ss)
-    except Exception:
-        return None
-
-
-def age_hours_from_iso(as_of_ts: Any) -> Optional[float]:
-    dt = parse_iso_to_dt(as_of_ts)
-    if dt is None:
-        return None
-    now = datetime.now(timezone.utc)
-    if dt.tzinfo is None:
-        # treat naive as UTC to avoid guessing timezone
-        dt = dt.replace(tzinfo=timezone.utc)
-    delta = now - dt.astimezone(timezone.utc)
-    return delta.total_seconds() / 3600.0
-
-
 # ---------------------------
-# Data build / calc (margin)
+# Data build / calc
 # ---------------------------
 
 def build_series_from_history(history_items: List[Dict[str, Any]], market: str) -> List[Tuple[str, float]]:
@@ -219,7 +199,7 @@ def total_calc(
 
 
 # ---------------------------
-# Extract / Checks (margin)
+# Extract / Checks
 # ---------------------------
 
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
@@ -283,7 +263,7 @@ def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]
 
 
 # ---------------------------
-# Signal rules (margin)
+# Signal rules
 # ---------------------------
 
 def calc_accel(one_d_pct: Optional[float], five_d_pct: Optional[float]) -> Optional[float]:
@@ -337,116 +317,46 @@ def determine_signal(
 
 
 # ---------------------------
-# roll25_cache (confirm-only)
+# roll25 embed (confirm-only)
 # ---------------------------
 
-ROLL25_CANDIDATES = [
-    "roll25_cache/dashboard_latest.json",
-    "roll25_cache/stats_latest.json",
-    "roll25_cache/latest.json",
-]
+def extract_roll25_fields(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Expect structure like:
+      numbers.UsedDate, numbers.TradeValue, numbers.VolumeMultiplier, numbers.AmplitudePct, numbers.VolMultiplier
+      risk_level, summary, signal{}, caveats, generated_at, timezone
+    """
+    numbers = obj.get("numbers") if isinstance(obj.get("numbers"), dict) else {}
+    signal = obj.get("signal") if isinstance(obj.get("signal"), dict) else {}
 
-# Keyword-based grouping (deterministic, but explicit that it's a heuristic classifier)
-VOL_KEYS = [
-    r"VOLAT", r"\bVOL\b", r"SIGMA", r"ATR", r"RANGE", r"波動", r"振幅", r"ABSRET", r"RET_ABS", r"ABS_RET"
-]
-VOLUME_KEYS = [
-    r"TURNOVER", r"VOLUME", r"AMOUNT", r"成交", r"量", r"金額"
-]
-
-VOL_RE = re.compile("|".join(VOL_KEYS), re.IGNORECASE)
-VOLUME_RE = re.compile("|".join(VOLUME_KEYS), re.IGNORECASE)
-
-
-def _as_dict(x: Any) -> Dict[str, Any]:
-    return x if isinstance(x, dict) else {}
-
-
-def _as_list(x: Any) -> List[Any]:
-    return x if isinstance(x, list) else []
-
-
-def extract_roll25_meta(obj: Any) -> Dict[str, Any]:
-    d = _as_dict(obj)
-    # try common meta positions
-    if "meta" in d and isinstance(d["meta"], dict):
-        return d["meta"]
-    if "dashboard_latest" in d and isinstance(d["dashboard_latest"], dict):
-        md = d["dashboard_latest"].get("meta")
-        if isinstance(md, dict):
-            return md
-    # fallback: root is meta-like
-    return {k: d.get(k) for k in ("as_of_ts", "stats_as_of_ts", "generated_at_utc", "run_ts_utc") if k in d}
-
-
-def extract_roll25_rows(obj: Any) -> List[Dict[str, Any]]:
-    d = _as_dict(obj)
-
-    # candidate 1: root.rows
-    rows = d.get("rows")
-    if isinstance(rows, list):
-        return [r for r in rows if isinstance(r, dict)]
-
-    # candidate 2: dashboard_latest.rows
-    dl = d.get("dashboard_latest")
-    if isinstance(dl, dict) and isinstance(dl.get("rows"), list):
-        return [r for r in dl["rows"] if isinstance(r, dict)]
-
-    # candidate 3: stats_latest style: maybe series list
-    # try: d["series"] is list of dict rows
-    series = d.get("series")
-    if isinstance(series, list):
-        return [r for r in series if isinstance(r, dict)]
-
-    return []
-
-
-def norm_signal_level(r: Dict[str, Any]) -> str:
-    # accept both signal_level / signal
-    s = r.get("signal_level")
-    if isinstance(s, str) and s.strip():
-        return s.strip()
-    s2 = r.get("signal")
-    if isinstance(s2, str) and s2.strip():
-        return s2.strip()
-    return "NA"
-
-
-def norm_series_name(r: Dict[str, Any]) -> str:
-    s = r.get("series")
-    if isinstance(s, str) and s.strip():
-        return s.strip()
-    n = r.get("name")
-    if isinstance(n, str) and n.strip():
-        return n.strip()
-    return "NA"
-
-
-def group_roll25_rows(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    vol_rows: List[Dict[str, Any]] = []
-    volume_rows: List[Dict[str, Any]] = []
-    for r in rows:
-        s = norm_series_name(r)
-        if s == "NA":
-            continue
-        if VOLUME_RE.search(s):
-            volume_rows.append(r)
-        if VOL_RE.search(s):
-            vol_rows.append(r)
-    return volume_rows, vol_rows
-
-
-def confirm_on(rows: List[Dict[str, Any]]) -> Optional[bool]:
-    if rows is None:
-        return None
-    if len(rows) == 0:
-        return False
-    # ON if any row is WATCH/ALERT (or any non-NONE you can tighten later)
-    for r in rows:
-        lv = norm_signal_level(r)
-        if lv in ("WATCH", "ALERT"):
-            return True
-    return False
+    return {
+        "generated_at": obj.get("generated_at"),
+        "timezone": obj.get("timezone"),
+        "summary": obj.get("summary"),
+        "risk_level": obj.get("risk_level"),
+        "tag": obj.get("tag"),
+        "freshness_ok": obj.get("freshness_ok"),
+        "used_date": obj.get("used_date") or numbers.get("UsedDate"),
+        "used_dminus1": obj.get("used_dminus1"),
+        "lookback_n_actual": obj.get("lookback_n_actual"),
+        "lookback_oldest": obj.get("lookback_oldest"),
+        "close": numbers.get("Close"),
+        "pct_change": numbers.get("PctChange"),
+        "trade_value": numbers.get("TradeValue"),
+        "volume_multiplier": numbers.get("VolumeMultiplier"),
+        "amplitude_pct": numbers.get("AmplitudePct"),
+        "vol_multiplier": numbers.get("VolMultiplier"),
+        "signal_flags": {
+            "DownDay": signal.get("DownDay"),
+            "VolumeAmplified": signal.get("VolumeAmplified"),
+            "VolAmplified": signal.get("VolAmplified"),
+            "NewLow_N": signal.get("NewLow_N"),
+            "ConsecutiveBreak": signal.get("ConsecutiveBreak"),
+            "OhlcMissing": signal.get("OhlcMissing"),
+        },
+        "action": obj.get("action"),
+        "caveats": obj.get("caveats"),
+    }
 
 
 def main() -> None:
@@ -454,7 +364,7 @@ def main() -> None:
     ap.add_argument("--latest", required=True)
     ap.add_argument("--history", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--roll25", default="", help="Optional path to roll25_cache json. If empty, try common candidates.")
+    ap.add_argument("--roll25", default=None, help="optional path to roll25_cache/latest_report.json")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -463,7 +373,6 @@ def main() -> None:
     if not isinstance(items, list):
         items = []
 
-    # ---- margin series ----
     twse_s = build_series_from_history(items, "TWSE")
     tpex_s = build_series_from_history(items, "TPEX")
 
@@ -496,7 +405,7 @@ def main() -> None:
     accel = calc_accel(tot1.get("pct"), tot5.get("pct"))
     spread20 = calc_spread20(tp20.get("pct"), tw20.get("pct"))
 
-    state_label, margin_signal, rationale = determine_signal(
+    state_label, signal, rationale = determine_signal(
         tot20_pct=tot20.get("pct"),
         tot1_pct=tot1.get("pct"),
         tot5_pct=tot5.get("pct"),
@@ -504,7 +413,7 @@ def main() -> None:
         spread20=spread20,
     )
 
-    # ---- margin checks ----
+    # Checks (original)
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
     c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
@@ -526,60 +435,48 @@ def main() -> None:
     c5_tw_ok, c5_tw_msg = check_base_date_in_series(twse_s, tw20.get("base_date"), "TWSE_20D")
     c5_tp_ok, c5_tp_msg = check_base_date_in_series(tpex_s, tp20.get("base_date"), "TPEX_20D")
 
-    margin_any_fail = (
+    # roll25 checks (optional)
+    roll25_obj, roll25_err = try_read_json(args.roll25)
+    roll25_fields: Optional[Dict[str, Any]] = None
+    c6_roll25_ok = True
+    c6_roll25_msg = "OK"
+
+    if args.roll25:
+        if roll25_err or not isinstance(roll25_obj, dict):
+            c6_roll25_ok = False
+            c6_roll25_msg = roll25_err or "roll25 json not a dict"
+        else:
+            roll25_fields = extract_roll25_fields(roll25_obj)
+            used_date = roll25_fields.get("used_date")
+            # align with TWSE meta_date (primary) if present; else align with latest_date_from_series
+            base_date = twse_meta_date or latest_date_from_series(twse_s)
+            if not used_date or not base_date:
+                c6_roll25_ok = False
+                c6_roll25_msg = f"UsedDate/base_date NA (UsedDate={used_date}, base_date={base_date})"
+            elif str(used_date) != str(base_date):
+                c6_roll25_ok = False
+                c6_roll25_msg = f"date mismatch: roll25.UsedDate={used_date} != margin.TWSE_date={base_date}"
+            else:
+                c6_roll25_ok = True
+                c6_roll25_msg = "OK"
+
+    any_fail = (
         (not c1_tw_ok) or (not c1_tp_ok) or
         (not c2_tw_ok) or (not c2_tp_ok) or
         (not c3_ok) or
         (not c4_tw_ok) or (not c4_tp_ok) or
-        (not c5_tw_ok) or (not c5_tp_ok)
+        (not c5_tw_ok) or (not c5_tp_ok) or
+        (not c6_roll25_ok)
     )
-    margin_quality = "PARTIAL" if margin_any_fail else "OK"
+    quality = "PARTIAL" if any_fail else "OK"
 
-    # ---- roll25_cache load (confirm-only) ----
-    roll25_path_used = "NA"
-    roll25_err = None
-    roll25_obj: Optional[Any] = None
-
-    cand_paths = []
-    if isinstance(args.roll25, str) and args.roll25.strip():
-        cand_paths = [args.roll25.strip()]
-    else:
-        cand_paths = ROLL25_CANDIDATES
-
-    for p in cand_paths:
-        obj, err = read_json_if_exists(p)
-        if err is None and obj is not None:
-            roll25_obj = obj
-            roll25_path_used = p
-            roll25_err = None
-            break
-        roll25_err = err  # keep last error for audit
-
-    roll25_meta = extract_roll25_meta(roll25_obj) if roll25_obj is not None else {}
-    roll25_rows = extract_roll25_rows(roll25_obj) if roll25_obj is not None else []
-    volume_rows, vol_rows = group_roll25_rows(roll25_rows)
-
-    volume_confirm = confirm_on(volume_rows) if roll25_obj is not None else None
-    vol_confirm = confirm_on(vol_rows) if roll25_obj is not None else None
-
-    # confirm quality: presence + ability to extract rows (not whether confirm triggers)
-    confirm_quality = "OK" if (roll25_obj is not None and isinstance(roll25_rows, list)) else "PARTIAL"
-
-    # confirm summary (DO NOT change margin signal)
-    if volume_confirm is None or vol_confirm is None:
-        confirm_summary = "NA"
-    else:
-        confirm_summary = "ON" if (volume_confirm or vol_confirm) else "OFF"
-
-    # ---- Render markdown ----
+    # Render markdown
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
     md.append("## 1) 結論")
-    md.append(f"- 狀態：{state_label}｜信號：{margin_signal}｜資料品質（融資）：{margin_quality}")
+    md.append(f"- 狀態：{state_label}｜信號：{signal}｜資料品質：{quality}")
     md.append(f"  - rationale: {rationale}")
-    md.append(f"- 量/波動確認（roll25_cache, confirm-only）：{confirm_summary}｜資料品質（確認）：{confirm_quality}")
-    md.append("  - 說明：confirm-only 不改動融資信號，只用於你後續決策時的同步檢查。")
     md.append("")
 
     md.append("## 1.1) 判定標準（本 dashboard 內建規則）")
@@ -614,6 +511,43 @@ def main() -> None:
     else:
         md.append("- 合計：NA（日期不一致或缺值，依規則不得合計）")
     md.append("")
+
+    # roll25 section (optional)
+    md.append("## 2.1) 台股成交量/波動（roll25_cache；confirm-only）")
+    if args.roll25 and roll25_fields:
+        md.append(f"- roll25_path: {args.roll25}")
+        md.append(f"- UsedDate: {roll25_fields.get('used_date','NA')}｜risk_level: {roll25_fields.get('risk_level','NA')}｜tag: {roll25_fields.get('tag','NA')}")
+        md.append(f"- summary: {roll25_fields.get('summary','NA')}")
+        md.append(
+            "- numbers: "
+            f"Close={fmt_num(roll25_fields.get('close'),2)}, "
+            f"PctChange={fmt_num(roll25_fields.get('pct_change'),3)}%, "
+            f"TradeValue={fmt_int_commas(roll25_fields.get('trade_value'))}, "
+            f"VolumeMultiplier={fmt_num(roll25_fields.get('volume_multiplier'),3)}, "
+            f"AmplitudePct={fmt_num(roll25_fields.get('amplitude_pct'),3)}%, "
+            f"VolMultiplier={fmt_num(roll25_fields.get('vol_multiplier'),3)}"
+        )
+        sf = roll25_fields.get("signal_flags") or {}
+        md.append(
+            "- signals: "
+            f"DownDay={sf.get('DownDay','NA')}, "
+            f"VolumeAmplified={sf.get('VolumeAmplified','NA')}, "
+            f"VolAmplified={sf.get('VolAmplified','NA')}, "
+            f"NewLow_N={sf.get('NewLow_N','NA')}, "
+            f"ConsecutiveBreak={sf.get('ConsecutiveBreak','NA')}, "
+            f"OhlcMissing={sf.get('OhlcMissing','NA')}"
+        )
+        md.append(f"- action: {roll25_fields.get('action','NA')}")
+        md.append(f"- caveats: {roll25_fields.get('caveats','NA')}")
+        md.append(f"- generated_at: {roll25_fields.get('generated_at','NA')} ({roll25_fields.get('timezone','NA')})")
+        md.append("")
+    elif args.roll25 and not roll25_fields:
+        md.append(f"- roll25_path: {args.roll25}")
+        md.append(f"- status: NA（{c6_roll25_msg}）")
+        md.append("")
+    else:
+        md.append("- NA（未提供 --roll25）")
+        md.append("")
 
     md.append("## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）")
     md.append("### 上市(TWSE)")
@@ -657,70 +591,11 @@ def main() -> None:
     md.append(f"- Spread20 = TPEX_20D% - TWSE_20D%：{fmt_pct(spread20,4)}")
     md.append("")
 
-    # ---- NEW: confirm-only section ----
-    md.append("## 4.1) 台股成交量/波動確認（roll25_cache, confirm-only）")
-    md.append(f"- roll25_source_path: {roll25_path_used}")
-    if roll25_obj is None:
-        md.append(f"- roll25_load: FAIL（{roll25_err or 'unknown'}）")
-        md.append("- volume_confirm: NA")
-        md.append("- vol_confirm: NA")
-        md.append("- 注意：confirm-only 缺失不影響融資信號，但你就少一個『同步檢查』維度。")
-        md.append("")
-    else:
-        as_of_ts = roll25_meta.get("as_of_ts") or roll25_meta.get("stats_as_of_ts") or roll25_meta.get("generated_at_utc")
-        ah = age_hours_from_iso(as_of_ts)
-        md.append(f"- roll25_as_of_ts: {fmt_any(as_of_ts)}｜age_h≈{fmt_any(round(ah, 3) if ah is not None else None)}")
-        md.append(f"- volume_confirm: {fmt_any(volume_confirm)}（ON 判定：任一 volume row 為 WATCH/ALERT）")
-        md.append(f"- vol_confirm: {fmt_any(vol_confirm)}（ON 判定：任一 vol row 為 WATCH/ALERT）")
-        md.append("")
-        md.append("### 4.1.1) volume-related rows（關鍵字：TURNOVER/VOLUME/AMOUNT/成交/量/金額）")
-        if len(volume_rows) == 0:
-            md.append("- NA（roll25_rows 中找不到 volume 類 series 名稱；可能 schema/命名不同）")
-        else:
-            md.append("| series | signal | value | data_date | age_h | tag | reason | source |")
-            md.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
-            for r in volume_rows[:20]:
-                md.append("| "
-                          + " | ".join([
-                              fmt_any(norm_series_name(r)),
-                              fmt_any(norm_signal_level(r)),
-                              fmt_any(r.get("value")),
-                              fmt_any(r.get("data_date")),
-                              fmt_any(r.get("age_hours")),
-                              fmt_any(r.get("tag")),
-                              fmt_any(r.get("reason")),
-                              fmt_any(r.get("source_url") or r.get("source")),
-                          ])
-                          + " |")
-        md.append("")
-        md.append("### 4.1.2) volatility-related rows（關鍵字：VOL/VOLAT/SIGMA/ATR/RANGE/波動/振幅/ABSRET）")
-        if len(vol_rows) == 0:
-            md.append("- NA（roll25_rows 中找不到 vol 類 series 名稱；可能 schema/命名不同）")
-        else:
-            md.append("| series | signal | value | data_date | age_h | tag | reason | source |")
-            md.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
-            for r in vol_rows[:20]:
-                md.append("| "
-                          + " | ".join([
-                              fmt_any(norm_series_name(r)),
-                              fmt_any(norm_signal_level(r)),
-                              fmt_any(r.get("value")),
-                              fmt_any(r.get("data_date")),
-                              fmt_any(r.get("age_hours")),
-                              fmt_any(r.get("tag")),
-                              fmt_any(r.get("reason")),
-                              fmt_any(r.get("source_url") or r.get("source")),
-                          ])
-                          + " |")
-        md.append("")
-        md.append("### 4.1.3) 稽核聲明")
-        md.append("- 以上分類為『名稱關鍵字』分群，屬 deterministic 但仍是 heuristic；不會改動融資主信號。")
-        md.append("")
-
     md.append("## 5) 稽核備註")
     md.append("- 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。")
     md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。")
     md.append("- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
+    md.append("- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。")
     md.append("")
 
     md.append("## 6) 反方審核檢查（任一失敗 → PARTIAL）")
@@ -732,7 +607,10 @@ def main() -> None:
     md.append(line_check("Check-4 TWSE history rows>=21", c4_tw_ok, c4_tw_msg))
     md.append(line_check("Check-4 TPEX history rows>=21", c4_tp_ok, c4_tp_msg))
     md.append(line_check("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
-    md.append(line_check("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
+    if args.roll25:
+        md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_roll25_ok, c6_roll25_msg))
+    else:
+        md.append("- Check-6 roll25：NA（未提供 --roll25）")
     md.append("")
 
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
