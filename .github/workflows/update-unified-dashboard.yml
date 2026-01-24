@@ -87,18 +87,33 @@ jobs:
         run: |
           set -euo pipefail
 
+          in_path="unified_dashboard/latest.json"
+          out_path="unified_dashboard/report.md"
+
+          # Pre-guard: root report.md should NOT exist before render.
+          # If it exists, fail fast (audit-first). Do not silently delete.
+          if [[ -f "report.md" ]]; then
+            echo "ERROR: root report.md exists BEFORE render. This indicates stale/duplicate output."
+            echo "       Please remove it in repo or fix upstream steps. Refusing to proceed."
+            ls -la report.md || true
+            exit 1
+          fi
+
           # Render into the unified_dashboard folder (NOT repo root)
           python scripts/render_unified_report_md.py \
-            --in "unified_dashboard/latest.json" \
-            --out "unified_dashboard/report.md"
+            --in "$in_path" \
+            --out "$out_path"
 
-          test -s unified_dashboard/report.md
-          echo "OK: unified_dashboard/report.md size=$(wc -c < unified_dashboard/report.md)"
+          # Post-guard: output must exist and be non-empty.
+          test -s "$out_path"
+          echo "OK: $out_path size=$(wc -c < "$out_path")"
 
-          # Guardrail: if old root report.md exists, remove it to avoid confusion
+          # Post-guard: renderer must NOT create root report.md.
           if [[ -f "report.md" ]]; then
-            echo "WARN: root report.md exists; removing to prevent stale duplicates."
-            rm -f report.md
+            echo "ERROR: root report.md was created AFTER render. Renderer/output path may be broken."
+            echo "       Refusing to continue to avoid committing ambiguous outputs."
+            ls -la report.md || true
+            exit 1
           fi
 
       - name: Show brief outputs (for logs)
@@ -140,9 +155,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Only stage intended outputs + any necessary deletions tracked by git.
           git add unified_dashboard/latest.json unified_dashboard/report.md
-          # (optional) also add removal of root report.md if it existed
           git add -u
+
+          # Optional hard-guard: refuse to commit if staged changes include paths outside unified_dashboard/
+          staged_paths="$(git diff --cached --name-only || true)"
+          bad_paths="$(echo "$staged_paths" | awk 'NF && $0 !~ /^unified_dashboard\// {print $0}')"
+          if [[ -n "$bad_paths" ]]; then
+            echo "ERROR: Refusing to commit staged changes outside unified_dashboard/:"
+            echo "$bad_paths"
+            echo "Hint: remove unintended changes or adjust staging rules."
+            exit 1
+          fi
 
           git commit -m "Update unified dashboard + report"
           git push
