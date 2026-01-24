@@ -1,25 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-scripts/render_unified_report_md.py
-
-修正重點（audit-first）：
-1) 修正 class 判讀：
-   - 新增 LEVEL（由 EXTREME_Z tag 決定）
-   - JUMP 只由 tag 決定（JUMP* / JUMP_DELTA / JUMP_RET），不再用 reason 內的 "abs(" 亂判
-   - LONG 由 LONG_EXTREME tag 決定
-   - 複合型：若同時命中 LONG + JUMP（或 LONG + LEVEL / JUMP + LEVEL 等）則用 "+" 串接（例如 LONG+JUMP）
-2) 修正 resonance_level：
-   - STRUCTURAL_VS_SHOCK：structural={LONG,LEVEL} vs shock={JUMP} 的交叉
-   - 其他維持一致性規則
-3) Audit Notes 文字同步更新（與實作一致）
-
-新增（本次）：
-4) roll25_cache 區塊：顯示 UsedDate / 成交金額 (turnover_twd) / 倍數 / signals / lookback
-5) Unified Risk Judgment：用 market/fred 是否存在 WATCH/ALERT + roll25_heated 做 deterministic 三方矩陣
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -29,9 +10,6 @@ from typing import Any, Dict, List, Tuple
 
 NA = "NA"
 
-# -----------------------
-# helpers
-# -----------------------
 def read_json(path: str) -> Dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -73,95 +51,10 @@ def split_csvish(s: Any) -> List[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 # -----------------------
-# signal counts + unified tri-state
-# -----------------------
-def count_signal_levels(rows: List[Dict[str, Any]]) -> Dict[str, int]:
-    cnt = {"ALERT": 0, "WATCH": 0, "INFO": 0, "NONE": 0, NA: 0}
-    for r in rows or []:
-        s = g(r, "signal_level", NA)
-        if s in cnt:
-            cnt[s] += 1
-        else:
-            cnt[NA] += 1
-    return cnt
-
-def tri_bool(x: Any) -> Any:
-    if isinstance(x, bool):
-        return x
-    if isinstance(x, str):
-        t = x.strip().lower()
-        if t == "true":
-            return True
-        if t == "false":
-            return False
-        if t == NA.lower() or t == NA:
-            return NA
-    return NA
-
-def unified_state(m_wa: Any, f_wa: Any, r_heated: Any) -> str:
-    m = tri_bool(m_wa); f = tri_bool(f_wa); r = tri_bool(r_heated)
-    if m == NA or f == NA or r == NA:
-        return NA
-    if m and f and r:
-        return "RESONANCE_MFV"
-    if m and f and (not r):
-        return "RESONANCE_MF"
-    if m and (not f) and r:
-        return "MARKET_MOVE_WITH_VOLUME"
-    if m and (not f) and (not r):
-        return "MARKET_MOVE"
-    if (not m) and f and r:
-        return "MIDTERM_PRESSURE_WITH_VOLUME"
-    if (not m) and f and (not r):
-        return "MIDTERM_PRESSURE"
-    return "QUIET"
-
-# -----------------------
-# margin stats
-# -----------------------
-def margin_stats(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
-    series = g(twm_latest, "series", {})
-    blk = g(series, which, {})
-    rows = g(blk, "rows", [])
-    chgs: List[float] = []
-    if isinstance(rows, list):
-        for r in rows[:5]:
-            try:
-                chgs.append(float(r.get("chg_yi")))
-            except Exception:
-                pass
-
-    s = sum(chgs) if chgs else 0.0
-    n = len(chgs)
-    pos = sum(1 for x in chgs if x > 0) if chgs else 0
-    neg = sum(1 for x in chgs if x < 0) if chgs else 0
-    mx = max(chgs) if chgs else None
-    mn = min(chgs) if chgs else None
-
-    latest = rows[0] if isinstance(rows, list) and rows else None
-
-    return {
-        "data_date": g(blk, "data_date", NA),
-        "source_url": g(blk, "source_url", NA),
-        "latest": latest,
-        "sum_last5": s,
-        "avg_last5": (s / n) if n else None,
-        "pos_days_last5": pos,
-        "neg_days_last5": neg,
-        "max_chg_last5": mx,
-        "min_chg_last5": mn,
-        "n_used": n,
-    }
-
-# -----------------------
 # extraction
 # -----------------------
-def extract_market_rows(market_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows = g(market_latest, "rows", [])
-    return rows if isinstance(rows, list) else []
-
-def extract_fred_rows(fred_latest: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows = g(fred_latest, "rows", [])
+def extract_rows(latest: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = g(latest, "rows", [])
     return rows if isinstance(rows, list) else []
 
 def rank_signal(level: str) -> int:
@@ -174,7 +67,7 @@ def pick_rows(rows: List[Dict[str, Any]], allowed_levels: Tuple[str, ...]) -> Li
     return out
 
 # -----------------------
-# (2) fred_dir mapping (audit-table)
+# fred_dir mapping (audit-table)
 # -----------------------
 FRED_DIR_MAP: Dict[str, str] = {
     "VIXCLS": "HIGH",
@@ -200,22 +93,10 @@ def derive_fred_dir(series: Any) -> str:
     return FRED_DIR_MAP.get(s, NA)
 
 # -----------------------
-# (3) class from tag (deterministic; audit-safe)
+# class from tag (deterministic)
 # -----------------------
 def classify_row(tag: Any, reason: Any) -> str:
-    """
-    class definitions (deterministic):
-      - LONG  : tag contains LONG_EXTREME
-      - JUMP  : tag contains any JUMP* OR tag in {JUMP_DELTA, JUMP_RET}
-      - LEVEL : tag contains EXTREME_Z
-      - Composite: join by '+' in stable order (LONG, LEVEL, JUMP)
-      - NONE  : otherwise
-
-    NOTE: do NOT use `reason` substring "abs(" as a jump detector; abs(Z60)>=2 is LEVEL.
-    `reason` is kept only for compatibility in signature.
-    """
     tags = set(split_csvish(tag))
-
     is_long = "LONG_EXTREME" in tags
     is_level = "EXTREME_Z" in tags
     is_jump = any(t.startswith("JUMP") for t in tags) or ("JUMP_DELTA" in tags) or ("JUMP_RET" in tags)
@@ -227,19 +108,12 @@ def classify_row(tag: Any, reason: Any) -> str:
         parts.append("LEVEL")
     if is_jump:
         parts.append("JUMP")
-
     return "+".join(parts) if parts else "NONE"
 
-# -----------------------
-# alias mapping
-# -----------------------
 ALIASES: List[Tuple[str, str, str]] = [
     ("VIX", "VIXCLS", "VIX↔VIXCLS"),
 ]
 
-# -----------------------
-# resonance
-# -----------------------
 def resonance_level(market_signal: str, fred_signal: str, market_class: str, fred_class: str) -> str:
     ms = market_signal or NA
     fs = fred_signal or NA
@@ -331,8 +205,6 @@ def build_resonance_pairs(market_rows: List[Dict[str, Any]], fred_rows: List[Dic
             continue
         if ms not in m_by or fs not in f_by:
             continue
-        if ms == fs and ("STRICT", ms, fs) in seen:
-            continue
 
         mr, fr = m_by[ms], f_by[fs]
 
@@ -389,8 +261,58 @@ def build_resonance_pairs(market_rows: List[Dict[str, Any]], fred_rows: List[Dic
     return out
 
 # -----------------------
-# render
+# margin stats (renderer side, for TWSE/TPEX block)
 # -----------------------
+def margin_stats(twm_latest: Dict[str, Any], which: str) -> Dict[str, Any]:
+    blk = safe_path(twm_latest, ["series", which], {}) if isinstance(twm_latest, dict) else {}
+    rows = g(blk, "rows", [])
+    chgs: List[float] = []
+    if isinstance(rows, list):
+        for r in rows[:5]:
+            try:
+                chgs.append(float(r.get("chg_yi")))
+            except Exception:
+                pass
+
+    s = sum(chgs) if chgs else 0.0
+    n = len(chgs)
+    pos = sum(1 for x in chgs if x > 0) if chgs else 0
+    neg = sum(1 for x in chgs if x < 0) if chgs else 0
+    mx = max(chgs) if chgs else None
+    mn = min(chgs) if chgs else None
+    latest = rows[0] if isinstance(rows, list) and rows else None
+
+    return {
+        "data_date": g(blk, "data_date", NA),
+        "source_url": g(blk, "source_url", NA),
+        "latest": latest,
+        "sum_last5": s,
+        "avg_last5": (s / n) if n else None,
+        "pos_days_last5": pos,
+        "neg_days_last5": neg,
+        "max_chg_last5": mx,
+        "min_chg_last5": mn,
+        "n_used": n,
+    }
+
+# -----------------------
+# Unified Risk Judgment (deterministic)
+# -----------------------
+def count_levels(rows: List[Dict[str, Any]]) -> Tuple[int, int]:
+    w = sum(1 for r in rows if g(r, "signal_level") == "WATCH")
+    a = sum(1 for r in rows if g(r, "signal_level") == "ALERT")
+    return w, a
+
+def derive_unified_state(m_has: bool, f_has: bool, r_heated: Any) -> str:
+    r = True if str(r_heated).lower() == "true" else False if str(r_heated).lower() == "false" else None
+    if m_has and f_has:
+        return "RESONANCE_MFR" if r is True else "RESONANCE_MF"
+    if m_has and (not f_has):
+        return "MARKET_ONLY_HOT" if r is True else "MARKET_ONLY"
+    if (not m_has) and f_has:
+        return "FRED_ONLY_HOT" if r is True else "FRED_ONLY"
+    return "ROLL25_ONLY" if r is True else "QUIET"
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="inp", required=True)
@@ -431,8 +353,7 @@ def main() -> None:
         md_kv(lines, "series_count", g(meta, "series_count", NA))
         lines.append("")
 
-        market_rows = extract_market_rows(m)
-
+        market_rows = extract_rows(m)
         headers = [
             "series","signal","dir","market_class","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%60",
@@ -491,7 +412,7 @@ def main() -> None:
             md_kv(lines, "CHANGED", summ.get("CHANGED"))
         lines.append("")
 
-        fred_rows = extract_fred_rows(f)
+        fred_rows = extract_rows(f)
         focus = pick_rows(fred_rows, ("WATCH", "INFO", "ALERT"))
 
         headers = [
@@ -562,9 +483,9 @@ def main() -> None:
             "market_date","fred_date",
             "market_source","fred_source"
         ]
-        rows: List[List[Any]] = []
+        rows2: List[List[Any]] = []
         for r in resonance:
-            rows.append([
+            rows2.append([
                 r.get("resonance_level", NA),
                 r.get("pair_type", NA),
                 r.get("series", NA),
@@ -585,55 +506,45 @@ def main() -> None:
                 r.get("market_source", NA),
                 r.get("fred_source", NA),
             ])
-        md_table(lines, headers, rows)
+        md_table(lines, headers, rows2)
         lines.append("")
     else:
         lines.append(f"- {NA} (no overlapping/alias pairs)")
         lines.append("")
 
     # -----------------------
-    # roll25_cache (TW turnover)
+    # roll25_cache block
     # -----------------------
+    rcore = safe_path(modules, ["roll25_cache", "core"], None)
     lines.append("## roll25_cache (TW turnover)")
-    r_mod = safe_path(modules, ["roll25_cache"], None)
-    r_core = safe_path(modules, ["roll25_cache", "core"], None)
-    cross = safe_path(modules, ["taiwan_margin_financing", "cross_module"], None)
+    if isinstance(rcore, dict):
+        md_kv(lines, "status", status("roll25_cache"))
+        for k in [
+            "UsedDate","tag","risk_level",
+            "turnover_twd","turnover_unit",
+            "volume_multiplier","vol_multiplier","amplitude_pct","pct_change","close",
+            "LookbackNTarget","LookbackNActual",
+        ]:
+            md_kv(lines, k, g(rcore, k, NA))
 
-    if isinstance(r_mod, dict):
-        md_kv(lines, "status", safe_path(r_mod, ["status"], NA))
-        if isinstance(r_core, dict):
-            md_kv(lines, "UsedDate", r_core.get("UsedDate", NA))
-            md_kv(lines, "tag", r_core.get("tag", NA))
-            md_kv(lines, "risk_level", r_core.get("risk_level", NA))
-            md_kv(lines, "turnover_twd", r_core.get("turnover_twd", NA))
-            md_kv(lines, "turnover_unit", r_core.get("turnover_unit", NA))
-            md_kv(lines, "volume_multiplier", r_core.get("volume_multiplier", NA))
-            md_kv(lines, "vol_multiplier", r_core.get("vol_multiplier", NA))
-            md_kv(lines, "amplitude_pct", r_core.get("amplitude_pct", NA))
-            md_kv(lines, "pct_change", r_core.get("pct_change", NA))
-            md_kv(lines, "close", r_core.get("close", NA))
-            md_kv(lines, "LookbackNTarget", r_core.get("LookbackNTarget", NA))
-            md_kv(lines, "LookbackNActual", r_core.get("LookbackNActual", NA))
+        sigs = g(rcore, "signals", {})
+        if isinstance(sigs, dict):
+            md_kv(lines, "signals.DownDay", sigs.get("DownDay"))
+            md_kv(lines, "signals.VolumeAmplified", sigs.get("VolumeAmplified"))
+            md_kv(lines, "signals.VolAmplified", sigs.get("VolAmplified"))
+            md_kv(lines, "signals.NewLow_N", sigs.get("NewLow_N"))
+            md_kv(lines, "signals.ConsecutiveBreak", sigs.get("ConsecutiveBreak"))
+            md_kv(lines, "signals.OhlcMissing", sigs.get("OhlcMissing"))
+        lines.append("")
 
-            sigs = r_core.get("signals", {})
-            if isinstance(sigs, dict):
-                md_kv(lines, "signals.DownDay", sigs.get("DownDay", NA))
-                md_kv(lines, "signals.VolumeAmplified", sigs.get("VolumeAmplified", NA))
-                md_kv(lines, "signals.VolAmplified", sigs.get("VolAmplified", NA))
-                md_kv(lines, "signals.NewLow_N", sigs.get("NewLow_N", NA))
-                md_kv(lines, "signals.ConsecutiveBreak", sigs.get("ConsecutiveBreak", NA))
-                md_kv(lines, "signals.OhlcMissing", sigs.get("OhlcMissing", NA))
-        else:
-            lines.append(f"- core: {NA}")
-
-        if isinstance(cross, dict):
-            lines.append("")
-            lines.append("### roll25_heated / confidence (from build)")
-            md_kv(lines, "roll25_heated", cross.get("roll25_heated", NA))
-            md_kv(lines, "roll25_confidence", cross.get("roll25_confidence", NA))
-            md_kv(lines, "consistency(Margin×Roll25)", cross.get("consistency", NA))
-            md_kv(lines, "margin_signal", cross.get("margin_signal", NA))
-            md_kv(lines, "margin_signal_source", cross.get("margin_signal_source", NA))
+        # roll25_heated/confidence/consistency/margin_signal (from build)
+        cross = safe_path(modules, ["taiwan_margin_financing", "cross_module"], {})
+        lines.append("### roll25_heated / confidence (from build)")
+        md_kv(lines, "roll25_heated", g(cross, "roll25_heated", NA))
+        md_kv(lines, "roll25_confidence", g(cross, "roll25_confidence", NA))
+        md_kv(lines, "consistency(Margin×Roll25)", g(cross, "consistency", NA))
+        md_kv(lines, "margin_signal", g(cross, "margin_signal", NA))
+        md_kv(lines, "margin_signal_source", g(cross, "margin_signal_source", NA))
         lines.append("")
     else:
         lines.append(f"- {NA} (missing/failed)")
@@ -643,31 +554,29 @@ def main() -> None:
     # Unified Risk Judgment (Market + FRED + Roll25)
     # -----------------------
     lines.append("## Unified Risk Judgment (Market + FRED + Roll25)")
-    m_cnt = count_signal_levels(market_rows)
-    f_cnt = count_signal_levels(fred_rows)
+    m_w, m_a = count_levels(market_rows)
+    f_w, f_a = count_levels(fred_rows)
+    cross = safe_path(modules, ["taiwan_margin_financing", "cross_module"], {})
+    roll25_heated = g(cross, "roll25_heated", NA)
+    roll25_conf = g(cross, "roll25_confidence", NA)
 
-    m_wa = (m_cnt["WATCH"] + m_cnt["ALERT"]) > 0
-    f_wa = (f_cnt["WATCH"] + f_cnt["ALERT"]) > 0
+    m_has = (m_w + m_a) > 0
+    f_has = (f_w + f_a) > 0
+    ustate = derive_unified_state(m_has, f_has, roll25_heated)
 
-    r_heated = NA
-    r_conf = NA
-    if isinstance(cross, dict):
-        r_heated = cross.get("roll25_heated", NA)
-        r_conf = cross.get("roll25_confidence", NA)
-
-    md_kv(lines, "market_WATCH", m_cnt["WATCH"])
-    md_kv(lines, "market_ALERT", m_cnt["ALERT"])
-    md_kv(lines, "fred_WATCH", f_cnt["WATCH"])
-    md_kv(lines, "fred_ALERT", f_cnt["ALERT"])
-    md_kv(lines, "roll25_heated", r_heated)
-    md_kv(lines, "roll25_confidence", r_conf)
-    md_kv(lines, "UnifiedState", unified_state(m_wa, f_wa, r_heated))
+    md_kv(lines, "market_WATCH", m_w)
+    md_kv(lines, "market_ALERT", m_a)
+    md_kv(lines, "fred_WATCH", f_w)
+    md_kv(lines, "fred_ALERT", f_a)
+    md_kv(lines, "roll25_heated", roll25_heated)
+    md_kv(lines, "roll25_confidence", roll25_conf)
+    md_kv(lines, "UnifiedState", ustate)
     lines.append("")
     lines.append("- Rule: UnifiedState is derived deterministically from (market has WATCH/ALERT?, fred has WATCH/ALERT?, roll25_heated). No forecast inference.")
     lines.append("")
 
     # -----------------------
-    # taiwan margin
+    # taiwan margin block
     # -----------------------
     t = safe_path(modules, ["taiwan_margin_financing", "latest"], None)
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
