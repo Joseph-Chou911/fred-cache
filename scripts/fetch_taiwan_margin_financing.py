@@ -3,11 +3,11 @@
 """
 Scheme2 (HiStock-only) fetcher for TWSE/TPEX margin financing.
 
-Key points:
-- Parse dates incl. MM/DD without year.
-- Parse numeric cells that may include units.
-- Map change column to HiStock's "融資增加(億)" (or similar), not "增減".
-- Still safe if change column missing: keep chg_yi=None.
+Improvements (audit-first, backward compatible):
+- More robust MM/DD year inference (choose best candidate vs "month+1" heuristic).
+- Table selection: prefer tables where required cols exist and parsed rows are maximal.
+- HTTP retry + backoff.
+- Add optional audit fields: fetched_at_utc, http_error, rows_count.
 """
 
 from __future__ import annotations
@@ -15,7 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timezone, date
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -58,6 +59,45 @@ def _safe_float(x: Any) -> Optional[float]:
         return None
 
 
+def _best_mmdd_year(mo: int, dd: int, tz: str = "Asia/Taipei") -> Optional[int]:
+    """
+    Robust year inference for MM/DD (no year):
+    - Consider current year and previous year candidates.
+    - Choose the candidate that is not too far in the future (<= today + 1 day),
+      and is closest to today by absolute day distance.
+    """
+    today = datetime.now(ZoneInfo(tz)).date()
+    candidates: List[Tuple[int, Optional[date]]] = []
+    for y in (today.year, today.year - 1):
+        try:
+            candidates.append((y, date(y, mo, dd)))
+        except Exception:
+            candidates.append((y, None))
+
+    valid: List[Tuple[int, date]] = [(y, d) for y, d in candidates if d is not None]
+    if not valid:
+        return None
+
+    # prefer not future > today+1
+    best: Optional[Tuple[int, date]] = None
+    best_score: Optional[int] = None
+    for y, d in valid:
+        # allow small forward drift (timezone / site update)
+        if d > (today.replace(day=today.day) + (date.fromordinal(today.toordinal() + 1) - today)):
+            # d > today+1
+            continue
+        score = abs((today - d).days)
+        if best is None or best_score is None or score < best_score:
+            best = (y, d)
+            best_score = score
+
+    if best is None:
+        # fallback: choose the closest even if slightly future
+        y, d = min(valid, key=lambda x: abs((today - x[1]).days))
+        return y
+    return best[0]
+
+
 def _norm_date(s: Any, tz: str = "Asia/Taipei") -> Optional[str]:
     if s is None:
         return None
@@ -73,33 +113,41 @@ def _norm_date(s: Any, tz: str = "Asia/Taipei") -> Optional[str]:
     m2 = re.search(r"^(\d{1,2})[\/\-.](\d{1,2})$", ss)
     if m2:
         mo, d = int(m2.group(1)), int(m2.group(2))
-        now_local = datetime.now(ZoneInfo(tz))
-        y = now_local.year
-        if mo > now_local.month + 1:
-            y -= 1
+        y = _best_mmdd_year(mo, d, tz=tz)
+        if y is None:
+            return None
         return f"{y:04d}-{mo:02d}-{d:02d}"
 
     return None
 
 
-def http_get(url: str, timeout: int = 25) -> Tuple[Optional[str], Optional[str]]:
-    try:
-        r = requests.get(
-            url,
-            headers={
-                "User-Agent": UA,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
-                "Cache-Control": "no-cache",
-                "Pragma": "no-cache",
-            },
-            timeout=timeout,
-        )
-        r.raise_for_status()
-        r.encoding = r.encoding or "utf-8"
-        return r.text, None
-    except Exception as e:
-        return None, f"HTTP 取得失敗：{type(e).__name__}: {e}"
+def http_get(url: str, timeout: int = 25, tries: int = 3) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Simple retry + backoff to reduce flaky failures.
+    """
+    last_err: Optional[str] = None
+    for i in range(tries):
+        try:
+            r = requests.get(
+                url,
+                headers={
+                    "User-Agent": UA,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+                timeout=timeout,
+            )
+            r.raise_for_status()
+            r.encoding = r.encoding or "utf-8"
+            return r.text, None
+        except Exception as e:
+            last_err = f"HTTP 取得失敗：{type(e).__name__}: {e}"
+            # backoff: 0.8s, 1.6s, 3.2s ...
+            if i < tries - 1:
+                time.sleep(0.8 * (2 ** i))
+    return None, last_err
 
 
 def _find_cols(cols: List[str]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
@@ -135,46 +183,8 @@ def _find_cols(cols: List[str]) -> Tuple[Optional[str], Optional[str], Optional[
     return date_col, bal_col, chg_col
 
 
-def parse_histock(html: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[str]]:
-    notes: List[str] = []
+def _parse_rows(df: pd.DataFrame, date_col: str, bal_col: str, chg_col: Optional[str]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
-
-    try:
-        tables = pd.read_html(StringIO(html), flavor="lxml")
-    except Exception as e:
-        return None, [], [f"HiStock 解析失敗：{type(e).__name__}: {e}"]
-
-    if not tables:
-        return None, [], ["HiStock 找不到任何表格（read_html=0 tables）"]
-
-    # pick first table containing 日期 + 融資
-    target = None
-    for df in tables:
-        cols = [_col_to_str(c) for c in df.columns]
-        joined = " ".join(cols)
-        if ("日期" in joined) and ("融資" in joined):
-            target = df
-            break
-
-    if target is None:
-        return None, [], ["HiStock：無法定位含『日期』+『融資』的資料表"]
-
-    df = target.copy()
-    df.columns = [_col_to_str(c) for c in df.columns]
-    cols = list(df.columns)
-
-    notes.append("HiStock 欄位：" + " | ".join(cols[:40]))
-
-    date_col, bal_col, chg_col = _find_cols(cols)
-    if date_col is None or bal_col is None:
-        return None, [], ["HiStock：找不到必要欄位（日期/融資餘額）"] + notes
-
-    if chg_col is None:
-        notes.append("HiStock：找不到『融資增加/減少/變動』欄，chg_yi 將輸出 NA")
-
-    raw_dates = [str(x) for x in df[date_col].head(5).tolist()]
-    notes.append("HiStock 原始日期樣本：" + ", ".join(raw_dates))
-
     for _, r in df.iterrows():
         d = _norm_date(r.get(date_col, None))
         if not d:
@@ -190,10 +200,68 @@ def parse_histock(html: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[
                 "chg_yi": float(chg) if chg is not None else None,
             }
         )
-
     rows.sort(key=lambda x: x["date"], reverse=True)
-    data_date = rows[0]["date"] if rows else None
-    return data_date, rows, notes
+    return rows
+
+
+def parse_histock(html: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[str]]:
+    notes: List[str] = []
+    try:
+        tables = pd.read_html(StringIO(html), flavor="lxml")
+    except Exception as e:
+        return None, [], [f"HiStock 解析失敗：{type(e).__name__}: {e}"]
+
+    if not tables:
+        return None, [], ["HiStock 找不到任何表格（read_html=0 tables）"]
+
+    # Evaluate all candidate tables; choose best by:
+    # 1) has required columns (date+balance)
+    # 2) parsed rows count maximal
+    best_rows: List[Dict[str, Any]] = []
+    best_notes: List[str] = []
+    best_dd: Optional[str] = None
+    best_cols: Optional[List[str]] = None
+
+    for idx, df in enumerate(tables):
+        cols = [_col_to_str(c) for c in df.columns]
+        joined = " ".join(cols)
+        if ("日期" not in joined) or ("融資" not in joined):
+            continue
+
+        date_col, bal_col, chg_col = _find_cols(cols)
+        if date_col is None or bal_col is None:
+            continue
+
+        df2 = df.copy()
+        df2.columns = cols
+
+        local_notes: List[str] = []
+        local_notes.append(f"候選表[{idx}]欄位：" + " | ".join(cols[:40]))
+        if chg_col is None:
+            local_notes.append(f"候選表[{idx}]：找不到『融資增加/減少/變動』欄，chg_yi 將輸出 NA")
+
+        raw_dates = [str(x) for x in df2[date_col].head(5).tolist()]
+        local_notes.append(f"候選表[{idx}]原始日期樣本：" + ", ".join(raw_dates))
+
+        rows = _parse_rows(df2, date_col, bal_col, chg_col)
+        local_notes.append(f"候選表[{idx}]解析rows={len(rows)}")
+
+        if len(rows) > len(best_rows):
+            best_rows = rows
+            best_notes = local_notes
+            best_dd = rows[0]["date"] if rows else None
+            best_cols = cols
+
+    if not best_rows:
+        # fallback: keep earlier behavior but provide audit hint
+        return None, [], ["HiStock：無法定位可解析的『日期+融資餘額』資料表（可能改版）"]
+
+    # final notes: record chosen table cols
+    notes.extend(best_notes)
+    if best_cols:
+        notes.append("HiStock 最終採用欄位：" + " | ".join(best_cols[:40]))
+
+    return best_dd, best_rows, notes
 
 
 def main() -> None:
@@ -213,6 +281,8 @@ def main() -> None:
     }
 
     def set_series(mkt: str, url: str, html: Optional[str], err: Optional[str]) -> None:
+        fetched_at = now_utc_iso()
+
         if err or not html:
             out["series"][mkt] = {
                 "source": "HiStock",
@@ -220,6 +290,10 @@ def main() -> None:
                 "data_date": None,
                 "rows": [],
                 "notes": [err or "HiStock 空回應"],
+                # optional audit fields
+                "fetched_at_utc": fetched_at,
+                "http_error": err or "HiStock empty response",
+                "rows_count": 0,
             }
             return
 
@@ -234,6 +308,10 @@ def main() -> None:
             "data_date": dd,
             "rows": rows,
             "notes": notes,
+            # optional audit fields
+            "fetched_at_utc": fetched_at,
+            "http_error": None,
+            "rows_count": len(rows),
         }
 
     html, err = http_get(HISTOCK_TWSE_URL)
