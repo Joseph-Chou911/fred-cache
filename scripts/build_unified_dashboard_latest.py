@@ -19,10 +19,11 @@ def try_read(path: str) -> Dict[str, Any]:
         return {}
 
 def outcome_to_status(outcome: str) -> str:
-    # steps.<id>.outcome: success | failure | cancelled | skipped
-    if outcome == "success":
+    # From file checks: present|missing
+    # Also accepts: success|failure|cancelled|skipped (if you later想改回step outcome)
+    if outcome in ("present", "success", "ok", "OK"):
         return "OK"
-    if outcome in ("failure", "cancelled"):
+    if outcome in ("failure", "cancelled", "FAILED"):
         return "FAILED"
     return "MISSING"
 
@@ -37,9 +38,10 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
-    market = try_read(args.market_in)
-    fred = try_read(args.fred_in)
-    twm = try_read(args.twmargin_in)
+    # 只有當檔案 present 才嘗試讀；missing 則保持 None
+    market = try_read(args.market_in) if outcome_to_status(args.market_outcome) == "OK" else {}
+    fred = try_read(args.fred_in) if outcome_to_status(args.fred_outcome) == "OK" else {}
+    twm = try_read(args.twmargin_in) if outcome_to_status(args.twmargin_outcome) == "OK" else {}
 
     unified = {
         "schema_version": "unified_dashboard_latest_v1",
@@ -60,7 +62,7 @@ def main() -> None:
             },
             "taiwan_margin_financing": {
                 "status": outcome_to_status(args.twmargin_outcome),
-                "latest": twm if twm else None,   # 你這份檔名就是 latest.json
+                "latest": twm if twm else None,   # 你的檔案是 latest.json
             },
         }
     }
