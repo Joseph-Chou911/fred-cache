@@ -24,10 +24,12 @@ Inputs:
 Output:
 - unified_dashboard/latest.json (or any path you pass)
 
-2026-01-25 update:
-- roll25 tag semantics split:
+2026-01-25 update (revised):
+- roll25 semantics split (unambiguous):
   - run_day_tag: derived from unified builder run day (Asia/Taipei) weekend or not
-  - used_date_status: preserve roll25 latest_report.tag as "UsedDate selection status"
+  - used_date_status: computed deterministically from roll25 latest_report
+    (UsedDate vs latest row date, freshness_ok, ohlc_status). NOT the tag.
+  - used_date_selection_tag: preserve roll25 latest_report.tag (selection status)
   - tag_legacy: same as roll25 latest_report.tag for backward compatibility
 - roll25_heated_rule_v1: remove "NON_TRADING_DAY => heated=False" special case
   (weekend run can still reflect the last trading day's signals).
@@ -207,13 +209,68 @@ def _infer_run_day_tag_from_utc_z(generated_at_utc_z: str) -> str:
         return "NA"
 
 
+def _max_roll25_date(latest_report: Dict[str, Any]) -> Optional[str]:
+    arr = latest_report.get("cache_roll25")
+    if not isinstance(arr, list) or not arr:
+        return None
+    dates: List[str] = []
+    for r in arr:
+        if isinstance(r, dict) and isinstance(r.get("date"), str):
+            dates.append(r["date"])
+    return max(dates) if dates else None
+
+
+def _compute_used_date_status_v1(latest_report: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    """
+    Deterministic, audit-friendly UsedDate status from roll25 latest_report only.
+
+    Does NOT depend on external trading calendar.
+
+    Logic:
+    - if UsedDate missing -> MISSING_USED_DATE
+    - if ohlc_status == "MISSING" -> DATA_NOT_UPDATED
+    - if freshness_ok == False -> DATA_NOT_UPDATED
+    - if latest_row_date exists:
+        - UsedDate == latest_row_date -> OK_LATEST
+        - else -> DATA_NOT_UPDATED
+    - else -> UNKNOWN_LATEST_ROW_DATE
+    """
+    used_date = _extract_useddate_from_roll25_report(latest_report)
+    ohlc_status = latest_report.get("ohlc_status") if isinstance(latest_report.get("ohlc_status"), str) else None
+    freshness_ok = latest_report.get("freshness_ok")
+    latest_row_date = _max_roll25_date(latest_report)
+
+    dbg = {
+        "used_date": used_date or "NA",
+        "latest_row_date": latest_row_date or "NA",
+        "ohlc_status": ohlc_status or "NA",
+        "freshness_ok": freshness_ok if isinstance(freshness_ok, bool) else "NA",
+    }
+
+    if not isinstance(used_date, str) or not used_date:
+        return "MISSING_USED_DATE", dbg
+
+    if isinstance(ohlc_status, str) and ohlc_status.upper() == "MISSING":
+        return "DATA_NOT_UPDATED", dbg
+
+    if freshness_ok is False:
+        return "DATA_NOT_UPDATED", dbg
+
+    if isinstance(latest_row_date, str) and latest_row_date:
+        if used_date == latest_row_date:
+            return "OK_LATEST", dbg
+        return "DATA_NOT_UPDATED", dbg
+
+    return "UNKNOWN_LATEST_ROW_DATE", dbg
+
+
 def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     """
     Deterministic "heated" flag from roll25 JSON only.
 
     IMPORTANT semantic fix:
     - DO NOT force heated=False just because roll_obj.tag == "NON_TRADING_DAY".
-      That tag is used_date selection status (e.g., weekend run chooses latest trading day),
+      That tag is UsedDate selection status (e.g., weekend run chooses latest trading day),
       not a statement that the UsedDate is non-trading.
 
     Rules:
@@ -260,7 +317,7 @@ def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
         "roll25_confidence": confidence,
         "roll25_rationale": {
             "rule": rule_note,
-            "used_date_status(tag_legacy)": tag if isinstance(tag, str) else "NA",
+            "used_date_selection_tag(tag_legacy)": tag if isinstance(tag, str) else "NA",
             "risk_level": risk_level if isinstance(risk_level, str) else "NA",
             "window_note": (
                 f"LookbackNActual={lookback_actual}/{lookback_target} (window_not_full)"
@@ -567,8 +624,13 @@ def main() -> int:
 
         # roll25 core (explicitly normalized for downstream rendering)
         used_date = _extract_useddate_from_roll25_report(roll_obj)
-        used_date_status = roll_obj.get("tag") if isinstance(roll_obj.get("tag"), str) else "NA"  # selection status
-        tag_legacy = used_date_status
+
+        # Preserve roll25 selection tag (legacy semantics)
+        used_date_selection_tag = roll_obj.get("tag") if isinstance(roll_obj.get("tag"), str) else "NA"
+        tag_legacy = used_date_selection_tag
+
+        # Compute a real UsedDate status (unambiguous)
+        used_date_status, used_date_status_dbg = _compute_used_date_status_v1(roll_obj)
 
         nums = roll_obj.get("numbers") if isinstance(roll_obj.get("numbers"), dict) else {}
         sigs = roll_obj.get("signal") if isinstance(roll_obj.get("signal"), dict) else {}
@@ -576,7 +638,13 @@ def main() -> int:
         roll25_core = {
             "UsedDate": used_date or "NA",
             "run_day_tag": run_day_tag,
+
+            # ✅ new: unambiguous status for UsedDate
             "used_date_status": used_date_status,
+            "used_date_status_dbg": used_date_status_dbg,
+
+            # ✅ preserved: roll25 latest_report.tag (selection status)
+            "used_date_selection_tag": used_date_selection_tag,
             "tag_legacy": tag_legacy,
 
             "risk_level": roll_obj.get("risk_level") if isinstance(roll_obj.get("risk_level"), str) else "NA",
@@ -696,7 +764,7 @@ def main() -> int:
             "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
             "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
             "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
-            "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status is roll25 latest_report.tag (selection status).",
+            "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status computed deterministically from roll25 latest_report; used_date_selection_tag (tag_legacy) preserves roll25 latest_report.tag.",
         ],
     }
 
