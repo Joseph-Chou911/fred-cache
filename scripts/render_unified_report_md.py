@@ -4,16 +4,20 @@
 """
 scripts/render_unified_report_md.py
 
-需求：你說「2、3都要」
-我這版把「2=fed_dir」與「3=market_class/fred_class」做到三個地方都一致出現：
+修正重點（audit-first）：
+1) 修正 class 判讀：
+   - 新增 LEVEL（由 EXTREME_Z tag 決定）
+   - JUMP 只由 tag 決定（JUMP* / JUMP_DELTA / JUMP_RET），不再用 reason 內的 "abs(" 亂判
+   - LONG 由 LONG_EXTREME tag 決定
+   - 複合型：若同時命中 LONG + JUMP（或 LONG + LEVEL / JUMP + LEVEL 等）則用 "+" 串接（例如 LONG+JUMP）
+2) 修正 resonance_level：
+   - STRUCTURAL_VS_SHOCK：structural={LONG,LEVEL} vs shock={JUMP} 的交叉
+   - 其他維持一致性規則
+3) Audit Notes 文字同步更新（與實作一致）
 
-(1) market_cache 表：新增 market_class 欄位
-(2) fred_cache 表：新增 fred_dir + fred_class 欄位
-(3) Resonance Matrix：保留 market_dir + fred_dir + market_class + fred_class
-
-原則：audit-first
-- fred_dir = 只從固定 mapping table (FRED_DIR_MAP) 產生，不從數值推論；未列入 => NA
-- class = 只從 tag / reason 做 deterministic 分類：LONG / JUMP / LONG+JUMP / NONE
+你原先要求「2、3都要」：
+- (2) fred_dir：維持固定 mapping table（不從數值推論）
+- (3) market_class / fred_class：在 market 表、fred 表、共振矩陣都一致出現
 """
 
 from __future__ import annotations
@@ -152,22 +156,35 @@ def derive_fred_dir(series: Any) -> str:
     return FRED_DIR_MAP.get(s, NA)
 
 # -----------------------
-# (3) class from tag/reason
+# (3) class from tag (deterministic; audit-safe)
 # -----------------------
 def classify_row(tag: Any, reason: Any) -> str:
+    """
+    class definitions (deterministic):
+      - LONG  : tag contains LONG_EXTREME
+      - JUMP  : tag contains any JUMP* OR tag in {JUMP_DELTA, JUMP_RET}
+      - LEVEL : tag contains EXTREME_Z
+      - Composite: join by '+' in stable order (LONG, LEVEL, JUMP)
+      - NONE  : otherwise
+
+    NOTE: do NOT use `reason` substring "abs(" as a jump detector; abs(Z60)>=2 is LEVEL.
+    `reason` is kept only for compatibility in signature.
+    """
     tags = set(split_csvish(tag))
-    rsn = str(reason) if isinstance(reason, str) else ""
 
     is_long = "LONG_EXTREME" in tags
-    is_jump = any(t.startswith("JUMP") for t in tags) or ("abs(" in rsn)
+    is_level = "EXTREME_Z" in tags
+    is_jump = any(t.startswith("JUMP") for t in tags) or ("JUMP_DELTA" in tags) or ("JUMP_RET" in tags)
 
-    if is_long and is_jump:
-        return "LONG+JUMP"
+    parts: List[str] = []
     if is_long:
-        return "LONG"
+        parts.append("LONG")
+    if is_level:
+        parts.append("LEVEL")
     if is_jump:
-        return "JUMP"
-    return "NONE"
+        parts.append("JUMP")
+
+    return "+".join(parts) if parts else "NONE"
 
 # -----------------------
 # alias mapping
@@ -185,8 +202,19 @@ def resonance_level(market_signal: str, fred_signal: str, market_class: str, fre
     mc = market_class or "NONE"
     fc = fred_class or "NONE"
 
-    # structural vs shock (explicit)
-    if (mc == "LONG" and fc == "JUMP") or (mc == "JUMP" and fc == "LONG"):
+    structural = {"LONG", "LEVEL"}
+    shock = {"JUMP"}
+
+    # composite support: treat "LONG+JUMP" etc. as set membership
+    mc_set = set(mc.split("+")) if mc and mc != "NONE" else set()
+    fc_set = set(fc.split("+")) if fc and fc != "NONE" else set()
+
+    mc_is_struct = bool(mc_set & structural)
+    fc_is_struct = bool(fc_set & structural)
+    mc_is_shock = bool(mc_set & shock)
+    fc_is_shock = bool(fc_set & shock)
+
+    if (mc_is_struct and fc_is_shock) or (mc_is_shock and fc_is_struct):
         return "STRUCTURAL_VS_SHOCK"
 
     if ms == fs and ms != NA:
@@ -464,7 +492,13 @@ def main() -> None:
     # -----------------------
     lines.append("## Audit Notes")
     lines.append(f"- fred_dir is DERIVED (heuristic) from a fixed mapping table in this script (FRED_DIR_MAP). Unmapped series => {NA}.")
-    lines.append(f"- market_class/fred_class are DERIVED from tag/reason only: LONG if tag contains LONG_EXTREME; JUMP if tag contains JUMP* or reason contains 'abs(' thresholds; otherwise NONE.")
+    lines.append(
+        "- market_class/fred_class are DERIVED from tag only (deterministic): "
+        "LONG if tag contains LONG_EXTREME; "
+        "LEVEL if tag contains EXTREME_Z; "
+        "JUMP if tag contains JUMP* (incl. JUMP_DELTA/JUMP_RET); "
+        "otherwise NONE."
+    )
     lines.append("")
 
     # -----------------------
