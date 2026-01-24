@@ -5,17 +5,17 @@ scripts/render_taiwan_margin_dashboard.py
 
 Render Taiwan margin financing dashboard from latest.json + history.json
 
-Principles
-- Use balance series from history for Δ and Δ% (not site-provided chg_yi).
-- 合計 only if TWSE/TPEX latest date matches AND baseline dates for horizon match.
-- Output audit-friendly markdown with NA handling.
-- roll25_cache is confirm-only (read repo JSON only; do NOT fetch external data here).
-- Add deterministic "Margin × Roll25" resonance classification.
-- Add roll25 lookback adequacy note (confidence downgrade) WITHOUT changing margin quality.
+Key guarantees
+- Δ/Δ% strictly computed from history balance series (not site chg column).
+- 合計 only if (TWSE latest date == TPEX latest date) AND horizon base_date matches.
+- roll25_cache is confirm-only: read repo JSON only; never fetch external data here.
+- Deterministic Margin × Roll25 resonance classification (no guessing).
+- roll25 lookback inadequacy -> confidence NOTE (does NOT affect margin_quality).
 
-品質降級（中等規則）
-- 任一 Margin Check 失敗 → PARTIAL（margin_quality）
-- roll25 lookback < target → 只做「信心降級註記」（不改 margin_quality）
+Output noise control (this version)
+- roll25 window NOTE printed ONCE only (in section 2.2).
+- 2.1 roll25 raw block does NOT repeat lookback note.
+- Summary does NOT repeat lookback note.
 """
 
 from __future__ import annotations
@@ -43,12 +43,6 @@ def fmt_num(x: Optional[float], nd: int = 2) -> str:
     if x is None:
         return "NA"
     return f"{x:.{nd}f}"
-
-
-def fmt_int(x: Optional[int]) -> str:
-    if x is None:
-        return "NA"
-    return str(int(x))
 
 
 def fmt_pct(x: Optional[float], nd: int = 4) -> str:
@@ -90,8 +84,7 @@ def build_series_from_history(history_items: List[Dict[str, Any]], market: str) 
         b = it.get("balance_yi")
         if d and isinstance(b, (int, float)):
             tmp[str(d)] = float(b)
-    out = sorted(tmp.items(), key=lambda x: x[0], reverse=True)  # YYYY-MM-DD sorts fine as string
-    return out
+    return sorted(tmp.items(), key=lambda x: x[0], reverse=True)
 
 
 def latest_balance_from_series(series: List[Tuple[str, float]]) -> Optional[float]:
@@ -138,7 +131,7 @@ def total_calc(
     合計 only if:
     - latest meta dates exist and match
     - both series have n+1 points
-    - base_date for horizon matches (i.e., same base date)
+    - base_date for horizon matches
     """
     tw = calc_horizon(twse_s, n)
     tp = calc_horizon(tpex_s, n)
@@ -154,10 +147,6 @@ def total_calc(
     if tw["base_date"] != tp["base_date"]:
         return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
                 "reason": "base_date mismatch"}
-
-    if len(twse_s) < n + 1 or len(tpex_s) < n + 1:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "insufficient history"}
 
     latest_tot = twse_s[0][1] + tpex_s[0][1]
     base_tot = twse_s[n][1] + tpex_s[n][1]
@@ -266,43 +255,41 @@ def roll25_used_date(roll: Dict[str, Any]) -> Optional[str]:
 
 def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
     """
-    Deterministic (no guessing):
+    Deterministic:
     heated if:
       - risk_level in {"中","高"} OR
       - any of (VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak) is True
-    Return None if required fields missing.
+    Return None if not enough information.
     """
     risk = _get(roll, "risk_level", None)
     sig = _get(roll, "signal", {})
     if risk is None and not isinstance(sig, dict):
         return None
-    flags = []
+
+    flags: List[bool] = []
     if isinstance(sig, dict):
         for k in ("VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"):
             v = sig.get(k, None)
             if v is None:
-                # missing flag => still OK, just ignore
                 continue
             flags.append(bool(v))
+
     risk_heated = (str(risk) in ("中", "高")) if risk is not None else False
     return bool(risk_heated or any(flags))
 
 
-def roll25_lookback_note(roll: Dict[str, Any]) -> Tuple[Optional[bool], str]:
+def roll25_lookback_note(roll: Dict[str, Any], default_target: int = 20) -> Tuple[Optional[bool], str]:
     """
-    confidence downgrade note for lookback window.
-    OK if lookback_n_actual >= 20 (target), else downgrade.
+    Confidence note only. OK if lookback_n_actual >= target else downgrade.
     Return (ok_or_none, msg).
     """
     n_actual = _get(roll, "lookback_n_actual", None)
-    # target is typically 20; prefer explicit field if present
     n_target = _get(roll, "lookback_n_target", None)
     if n_target is None:
-        # infer from caveats if exists, but do NOT parse aggressively; keep deterministic
-        n_target = 20
+        n_target = default_target
 
     if n_actual is None:
-        return None, "LookbackNActual=NA (cannot assess window adequacy)"
+        return None, "LookbackNActual=NA（cannot assess window adequacy）"
     try:
         na = int(n_actual)
         nt = int(n_target)
@@ -358,6 +345,7 @@ def determine_signal(
             watch_cond = True
         if (accel is not None and accel >= 0.25):
             watch_cond = True
+
     if watch_cond:
         return (state, "WATCH", "20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)")
 
@@ -372,21 +360,21 @@ def determine_signal(
 # Resonance (Margin × Roll25)
 # ---------------------------
 
-def determine_resonance(margin_signal: str, roll: Optional[Dict[str, Any]], roll_ok: bool) -> Tuple[str, str]:
+def determine_resonance(margin_signal: str, roll: Optional[Dict[str, Any]], strict_ok: bool) -> Tuple[str, str]:
     """
-    Deterministic (no guessing):
-      1. 若 Margin∈{WATCH,ALERT} 且 roll25 heated → RESONANCE
-      2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE
-      3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY
-      4. 其餘 → QUIET
-    If roll missing or roll_ok==False => NA
+    Deterministic:
+      1) Margin∈{WATCH,ALERT} and roll25 heated -> RESONANCE
+      2) Margin∈{WATCH,ALERT} and roll25 not heated -> DIVERGENCE
+      3) Margin not heated and roll25 heated -> MARKET_SHOCK_ONLY
+      4) else -> QUIET
+    strict_ok requires roll25 exists AND UsedDate == TWSE latest date.
     """
-    if roll is None or not roll_ok:
+    if roll is None or not strict_ok:
         return ("NA", "roll25 missing/mismatch => resonance NA (strict)")
 
     heated = roll25_is_heated(roll)
     if heated is None:
-        return ("NA", "roll25 heated 판단所需欄位缺失 => resonance NA (strict)")
+        return ("NA", "roll25 heated 判定欄位不足 => resonance NA (strict)")
 
     hot = bool(heated)
     ms_hot = (margin_signal in ("WATCH", "ALERT"))
@@ -455,7 +443,7 @@ def main() -> None:
     )
 
     # ---------------------------
-    # Margin checks => margin_quality
+    # Margin checks -> margin_quality
     # ---------------------------
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
     c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
@@ -488,27 +476,31 @@ def main() -> None:
     margin_quality = "PARTIAL" if margin_any_fail else "OK"
 
     # ---------------------------
-    # roll25 (confirm-only) + checks (DO NOT affect margin_quality)
+    # roll25 confirm-only + strict matching + confidence note
     # ---------------------------
     roll, roll_err = load_roll25(args.roll25)
     roll_ok = (roll is not None and roll_err is None)
 
-    # Check-6: UsedDate matches TWSE latest date (strict confirm-only)
     roll_used = roll25_used_date(roll) if roll else None
-    c6_roll_ok = bool(roll_ok and twse_meta_date is not None and roll_used is not None and roll_used == twse_meta_date)
+    strict_roll_match = bool(roll_ok and twse_meta_date and roll_used and (roll_used == twse_meta_date))
+    c6_roll_ok = strict_roll_match
     c6_roll_msg = "OK" if c6_roll_ok else f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'}) or roll25 missing"
 
-    # roll lookback adequacy note (confidence downgrade only)
-    c7_lb_ok, c7_lb_msg = (None, "roll25 missing")
+    c7_lb_ok: Optional[bool] = None
+    c7_lb_msg: str = "roll25 missing"
     if roll_ok and roll is not None:
-        c7_lb_ok, c7_lb_msg = roll25_lookback_note(roll)
+        c7_lb_ok, c7_lb_msg = roll25_lookback_note(roll, default_target=20)
 
-    # For resonance, require strict date match; otherwise NA
     resonance_label, resonance_rationale = determine_resonance(
         margin_signal=margin_signal,
         roll=roll,
-        roll_ok=c6_roll_ok
+        strict_ok=strict_roll_match,
     )
+
+    # Decide whether to print roll25_window_note (only once)
+    roll25_window_note: Optional[str] = None
+    if strict_roll_match and (c7_lb_ok is False or c7_lb_ok is None):
+        roll25_window_note = c7_lb_msg
 
     # ---------------------------
     # Render markdown
@@ -523,11 +515,8 @@ def main() -> None:
     if resonance_label != "NA":
         md.append(f"- 一致性判定（Margin × Roll25）：{resonance_label}")
         md.append(f"  - rationale: {resonance_rationale}")
-        # lookback note shown as confidence-only (does NOT change margin_quality)
-        if c7_lb_ok is False:
-            md.append(f"  - roll25_window_note: {c7_lb_msg}")
-        elif c7_lb_ok is None:
-            md.append(f"  - roll25_window_note: {c7_lb_msg}")
+        if roll25_window_note:
+            md.append(f"  - roll25_window_note: {roll25_window_note}")
     else:
         md.append(f"- 一致性判定（Margin × Roll25）：NA")
         md.append(f"  - rationale: {resonance_rationale}")
@@ -568,7 +557,7 @@ def main() -> None:
         md.append("- 合計：NA（日期不一致或缺值，依規則不得合計）")
     md.append("")
 
-    # roll25 block (confirm-only)
+    # roll25 raw (confirm-only) - NO lookback note here to reduce duplication
     md.append("## 2.1) 台股成交量/波動（roll25_cache；confirm-only）")
     md.append(f"- roll25_path: {args.roll25}")
     if roll_ok and roll is not None:
@@ -597,9 +586,6 @@ def main() -> None:
         md.append(f"- action: {_get(roll,'action','NA')}")
         md.append(f"- caveats: {_get(roll,'caveats','NA')}")
         md.append(f"- generated_at: {_get(roll,'generated_at','NA')} ({_get(roll,'timezone','NA')})")
-        # lookback confidence note
-        if c7_lb_ok is False or c7_lb_ok is None:
-            md.append(f"- lookback_note: {c7_lb_msg}")
     else:
         md.append(f"- roll25_error: {roll_err or 'roll25 missing'}")
     md.append("")
@@ -611,10 +597,8 @@ def main() -> None:
     md.append("  3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）")
     md.append("  4. 其餘 → QUIET")
     md.append(f"- 判定：{resonance_label}（{resonance_rationale}）")
-    if c7_lb_ok is False:
-        md.append(f"- 信心降級：{c7_lb_msg}")
-    elif c7_lb_ok is None:
-        md.append(f"- 信心資訊：{c7_lb_msg}")
+    if roll25_window_note:
+        md.append(f"- 信心降級：{roll25_window_note}")
     md.append("")
 
     md.append("## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）")
@@ -667,7 +651,7 @@ def main() -> None:
     md.append("- roll25 LookbackNActual 未滿 target 時：只做『信心降級註記』，不改 margin 資料品質。")
     md.append("")
 
-    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL）")
+    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25 僅供一致性判定）")
     md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
     md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
     md.append(line_check("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
@@ -678,12 +662,13 @@ def main() -> None:
     md.append(line_check("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
     md.append(line_check("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
     md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_roll_ok, c6_roll_msg))
-    if c7_lb_ok is True:
-        md.append(f"- Check-7 roll25 Lookback window：✅（OK）（{c7_lb_msg}）")
-    elif c7_lb_ok is False:
-        md.append(f"- Check-7 roll25 Lookback window：⚠️（NOTE）（{c7_lb_msg}）")
+    # Check-7 is informational only (never flips margin_quality)
+    if strict_roll_match and c7_lb_ok is True:
+        md.append(f"- Check-7 roll25 Lookback window（info）：✅（OK）（{c7_lb_msg}）")
+    elif strict_roll_match:
+        md.append(f"- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（{c7_lb_msg}）")
     else:
-        md.append(f"- Check-7 roll25 Lookback window：⚠️（NOTE）（{c7_lb_msg}）")
+        md.append("- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）")
     md.append("")
 
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
