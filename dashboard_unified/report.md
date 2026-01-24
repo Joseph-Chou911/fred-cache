@@ -5,7 +5,7 @@
 - fred_cache: OK
 - roll25_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T09:57:32Z
+- unified_generated_at_utc: 2026-01-24T11:20:27Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -79,9 +79,9 @@
 ### roll25_heated / confidence (from build)
 - roll25_heated: false
 - roll25_confidence: DOWNGRADED
-- consistency(Margin×Roll25): NA
-- margin_signal: NA
-- margin_signal_source: NA
+- consistency(Margin×Roll25): DIVERGENCE
+- margin_signal: WATCH
+- margin_signal_source: DERIVED.rule_v1(TWSE_chg_yi_last5)
 
 ## Unified Risk Judgment (Market + FRED + Roll25)
 - market_WATCH: 4

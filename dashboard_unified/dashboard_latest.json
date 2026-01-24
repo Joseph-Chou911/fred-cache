@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T09:57:32Z",
+  "generated_at_utc": "2026-01-24T11:20:27Z",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",
@@ -690,8 +690,8 @@
       },
       "core": {
         "UsedDate": "2026-01-23",
-        "risk_level": "低",
         "tag": "NON_TRADING_DAY",
+        "risk_level": "低",
         "turnover_twd": 818428930073,
         "turnover_unit": "TWD",
         "volume_multiplier": 1.068,
@@ -707,7 +707,7 @@
           "ConsecutiveBreak": false,
           "OhlcMissing": false
         },
-        "LookbackNTarget": "20",
+        "LookbackNTarget": 20,
         "LookbackNActual": 16
       }
     },
@@ -1054,13 +1054,29 @@
         }
       },
       "cross_module": {
-        "margin_signal": "NA",
-        "margin_signal_source": "NA",
+        "margin_signal": "WATCH",
+        "margin_signal_source": "DERIVED.rule_v1(TWSE_chg_yi_last5)",
+        "margin_rationale": {
+          "method": "derived_rule",
+          "basis": "TWSE chg_yi last5",
+          "chg_last5": [
+            43.4,
+            39.9,
+            -34.8,
+            18.1,
+            60.2
+          ],
+          "sum_last5": 126.8,
+          "pos_days_last5": 4,
+          "latest_chg": 43.4,
+          "rule_version": "rule_v1",
+          "rule_hit": "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)"
+        },
         "roll25_heated": false,
         "roll25_confidence": "DOWNGRADED",
-        "consistency": "NA",
+        "consistency": "DIVERGENCE",
         "rationale": {
-          "consistency_rule": "See script header; deterministic Margin×Roll25",
+          "consistency_rule": "Deterministic Margin×Roll25 (see script header).",
           "roll25_rationale": {
             "rule": "NON_TRADING_DAY => heated=False",
             "tag": "NON_TRADING_DAY",
@@ -1088,7 +1104,7 @@
   "audit_notes": [
     "roll25_heated is computed deterministically from roll25 JSON only (risk_level + explicit signal booleans); NON_TRADING_DAY forces heated=False.",
     "roll25_confidence is DOWNGRADED only when LookbackNActual < LookbackNTarget (info-note only).",
-    "margin_signal is read from taiwan_margin_cache/latest.json structured fields; if missing => NA and consistency => NA.",
-    "No markdown parsing; no external data fetch in this step."
+    "margin_signal: prefer structured field; if missing, derive by rule_v1 from TWSE chg_yi last5 (explicit thresholds, deterministic).",
+    "No external data fetch in this step."
   ]
 }
