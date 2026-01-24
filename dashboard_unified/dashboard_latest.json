@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T11:28:37Z",
+  "generated_at_utc": "2026-01-24T11:38:06Z",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",

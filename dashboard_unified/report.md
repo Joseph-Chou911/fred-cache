@@ -5,7 +5,7 @@
 - fred_cache: OK
 - roll25_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T11:28:37Z
+- unified_generated_at_utc: 2026-01-24T11:38:06Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
@@ -18,8 +18,8 @@
 | series | signal | dir | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | SP500 | WATCH | HIGH | LONG+JUMP | 6913.35 | 2026-01-22 | 11.693831 | 0.854939 | 81.666667 | 95.634921 | 0.380407 | 15 | 0.548751 | P252>=95;abs(PΔ60)>=15 | LONG_EXTREME,JUMP_P | ALERT | ALERT→WATCH | 2 | 3 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| VIX | WATCH | HIGH | JUMP | 15.64 | 2026-01-22 | 11.693831 | -0.560243 | 30 | 20.238095 | -0.461344 | -25 | -7.455621 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | ALERT | ALERT→WATCH | 2 | 3 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| HYG_IEF_RATIO | WATCH | LOW | LEVEL | 0.847479 | 2026-01-22 | 11.693831 | 2.450272 | 100 | 83.730159 | -0.026976 | 0 | 0.084412 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | 4 | 5 | DERIVED |
+| VIX | WATCH | HIGH | JUMP | 15.64 | 2026-01-22 | 11.693831 | -0.560243 | 30.000000 | 20.238095 | -0.461344 | -25 | -7.455621 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | ALERT | ALERT→WATCH | 2 | 3 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
+| HYG_IEF_RATIO | WATCH | LOW | LEVEL | 0.847479 | 2026-01-22 | 11.693831 | 2.450272 | 100.000000 | 83.730159 | -0.026976 | 0 | 0.084412 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | 4 | 5 | DERIVED |
 | OFR_FSI | WATCH | HIGH | JUMP | -2.195 | 2026-01-20 | 11.693831 | 0.535354 | 76.666667 | 36.904762 | 0.669266 | 25 | 9.930242 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 1 | 2 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
 
 ## fred_cache (ALERT+WATCH+INFO)
@@ -38,19 +38,25 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | BAMLH0A0HYM2 | ALERT | HIGH | LONG | 2.64 | 2026-01-22 | 10.463624 | -1.947339 | 1.666667 | 1.587302 | -0.278774 | -1.666667 | -1.858736 | P252<=2 | LONG_EXTREME | NONE | NONE→ALERT | https://api.stlouisfed.org/fred/series/observations?series_id=BAMLH0A0HYM2&file_type=json&sort_order=desc&limit=1 |
 | DGS10 | WATCH | HIGH | LEVEL | 4.26 | 2026-01-21 | 10.463624 | 2.093672 | 98.333333 | 50.793651 | -0.676696 | -1.666667 | -0.930233 | abs(Z60)>=2 | EXTREME_Z | WATCH | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1 |
-| VIXCLS | WATCH | HIGH | JUMP | 15.64 | 2026-01-22 | 10.463624 | -0.564433 | 30 | 20.238095 | -0.465988 | -25 | -7.455621 | abs(pΔ60)>=15;abs(ret1%)>=2 | JUMP_DELTA | WATCH | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
+| VIXCLS | WATCH | HIGH | JUMP | 15.64 | 2026-01-22 | 10.463624 | -0.564433 | 30.000000 | 20.238095 | -0.465988 | -25 | -7.455621 | abs(pΔ60)>=15;abs(ret1%)>=2 | JUMP_DELTA | WATCH | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
 | DJIA | INFO | HIGH | LONG | 49384.01 | 2026-01-22 | 10.463624 | 1.528194 | 93.333333 | 98.412698 | 0.273801 | 6.666667 | 0.625096 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DJIA&file_type=json&sort_order=desc&limit=1 |
-| NFCINONFINLEVERAGE | INFO | LOW | LONG | -0.50568 | 2026-01-16 | 10.463624 | 1.237692 | 90 | 97.619048 | 0.02007 | 1.666667 | 0.850947 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1 |
+| NFCINONFINLEVERAGE | INFO | LOW | LONG | -0.50568 | 2026-01-16 | 10.463624 | 1.237692 | 90.000000 | 97.619048 | 0.020070 | 1.666667 | 0.850947 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1 |
 | SP500 | INFO | HIGH | LONG | 6913.35 | 2026-01-22 | 10.463624 | 0.854939 | 81.666667 | 95.634921 | 0.380407 | 15 | 0.548751 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
-| T10Y3M | INFO | HIGH | LONG | 0.55 | 2026-01-22 | 10.463624 | 1.089838 | 90 | 97.619048 | -0.088016 | -5 | -1.785714 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1 |
+| T10Y3M | INFO | HIGH | LONG | 0.55 | 2026-01-22 | 10.463624 | 1.089838 | 90.000000 | 97.619048 | -0.088016 | -5 | -1.785714 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1 |
+| DCOILWTICO | NONE | NA | JUMP | 60.3 | 2026-01-20 | 10.463624 | 0.609351 | 73.333333 | 19.444444 | 0.580173 | 16.666667 | 1.532244 | NA | JUMP_DELTA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DCOILWTICO&file_type=json&sort_order=desc&limit=1 |
+| DGS2 | NONE | HIGH | NONE | 3.6 | 2026-01-21 | 10.463624 | 1.366107 | 93.333333 | 35.317460 | -0.047345 | 0 | 0.000000 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DGS2&file_type=json&sort_order=desc&limit=1 |
+| DTWEXBGS | NONE | NA | NONE | 120.4478 | 2026-01-16 | 10.463624 | -1.045572 | 21.666667 | 14.682540 | -0.189991 | -5 | -0.114276 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXBGS&file_type=json&sort_order=desc&limit=1 |
+| NASDAQCOM | NONE | HIGH | JUMP | 23436.02 | 2026-01-22 | 10.463624 | 0.313334 | 51.666667 | 88.492063 | 0.542100 | 18.333333 | 0.909372 | NA | JUMP_DELTA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NASDAQCOM&file_type=json&sort_order=desc&limit=1 |
+| STLFSI4 | NONE | HIGH | JUMP | -0.651 | 2026-01-16 | 10.463624 | -0.397953 | 35.000000 | 38.888889 | 0.056151 | 3.333333 | 2.016857 | NA | JUMP_RET | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=STLFSI4&file_type=json&sort_order=desc&limit=1 |
+| T10Y2Y | NONE | HIGH | NONE | 0.65 | 2026-01-22 | 10.463624 | 0.631599 | 66.666667 | 91.666667 | -0.168452 | -3.333333 | -1.515152 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&file_type=json&sort_order=desc&limit=1 |
 
 ## Audit Notes
 - fred_dir is DERIVED (heuristic) from a fixed mapping table in this script (FRED_DIR_MAP). Unmapped series => NA.
 - market_class/fred_class are DERIVED from tag only (deterministic): LONG if tag contains LONG_EXTREME; LEVEL if tag contains EXTREME_Z; JUMP if tag contains JUMP* (incl. JUMP_DELTA/JUMP_RET); otherwise NONE.
-- roll25_heated/roll25_confidence are COMPUTED in build_unified_dashboard_latest.py from roll25 JSON only; renderer does not recompute.
-- margin rationale evidence is either READ from unified.cross_module.margin_rationale or DERIVED deterministically from latest TWSE rows (report-only).
+- roll25_heated/roll25_confidence are COMPUTED in build step from roll25 JSON only; renderer does not recompute.
 
 ## Resonance Matrix (strict + alias)
+
 | resonance_level | pair_type | series | market_series | fred_series | market_signal | fred_signal | market_class | fred_class | market_tag | fred_tag | market_dir | fred_dir | market_reason | fred_reason | market_date | fred_date | market_source | fred_source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CONCORD_STRONG | ALIAS | VIX↔VIXCLS | VIX | VIXCLS | WATCH | WATCH | JUMP | JUMP | JUMP_P,JUMP_RET | JUMP_DELTA | HIGH | HIGH | abs(PΔ60)>=15;abs(ret1%60)>=2 | abs(pΔ60)>=15;abs(ret1%)>=2 | 2026-01-22 | 2026-01-22 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
@@ -84,21 +90,20 @@
 - margin_signal: WATCH
 - margin_signal_source: DERIVED.rule_v1(TWSE_chg_yi_last5)
 
-#### margin_rationale (from build)
-- rule_hit: WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)
-- pos_days_last5: 4
-- basis: TWSE chg_yi last5
-- chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2]
-- latest_chg: 43.4
+### margin_rationale (from build; canonical order)
 - method: derived_rule
+- basis: TWSE chg_yi last5
 - rule_version: rule_v1
+- rule_hit: WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)
+- chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2]
 - sum_last5: 126.8
+- pos_days_last5: 4
+- latest_chg: 43.4
 
-#### date_alignment (confirm-only; does not change signal)
-- twmargin_date: 2026-01-23
-- roll25_used_date: 2026-01-23
-- used_date_match: true
-- note: confirm-only; does not change signal
+##### margin_rationale (aliases for report continuity)
+- sum_chg_yi_last5: 126.8
+- latest.chg_yi: 43.4
+- pos_days_last5: 4
 
 ## Unified Risk Judgment (Market + FRED + Roll25)
 - market_WATCH: 4
@@ -110,9 +115,9 @@
 - UnifiedState: RESONANCE_MF
 
 - Rule: UnifiedState is derived deterministically from (market has WATCH/ALERT?, fred has WATCH/ALERT?, roll25_heated). No forecast inference.
-- Note: Margin×Roll25 consistency=DIVERGENCE, margin_signal=WATCH (audit context; does not alter UnifiedState here).
 
 ## taiwan_margin_financing (TWSE/TPEX)
+
 ### TWSE (data_date=2026-01-23)
 - source_url: https://histock.tw/stock/three.aspx?m=mg
 - latest.date: 2026-01-23
@@ -136,3 +141,5 @@
 - neg_days_last5: 2
 - max_chg_last5: 12.5
 - min_chg_last5: -10.3
+
+<!-- rendered_at_utc: 2026-01-24T11:38:06Z -->
