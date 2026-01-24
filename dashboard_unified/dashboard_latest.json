@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T06:31:45Z",
+  "generated_at_utc": "2026-01-24T09:07:55Z",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",
@@ -526,7 +526,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-01-24T00:01:15Z",
+        "generated_at_utc": "2026-01-24T08:56:53Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
@@ -685,10 +685,15 @@
               }
             ],
             "notes": [
-              "HiStock 欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "HiStock 原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
+              "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "候選表[0]原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
+              "候選表[0]解析rows=30",
+              "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
               "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
-            ]
+            ],
+            "fetched_at_utc": "2026-01-24T08:56:53Z",
+            "http_error": null,
+            "rows_count": 30
           },
           "TPEX": {
             "source": "HiStock",
@@ -847,10 +852,15 @@
               }
             ],
             "notes": [
-              "HiStock 欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "HiStock 原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
+              "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "候選表[0]原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
+              "候選表[0]解析rows=30",
+              "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
               "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
-            ]
+            ],
+            "fetched_at_utc": "2026-01-24T08:56:54Z",
+            "http_error": null,
+            "rows_count": 30
           }
         }
       }

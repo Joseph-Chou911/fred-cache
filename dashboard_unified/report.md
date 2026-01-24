@@ -4,7 +4,7 @@
 - market_cache: OK
 - fred_cache: OK
 - taiwan_margin_financing: OK
-- unified_generated_at_utc: 2026-01-24T06:31:45Z
+- unified_generated_at_utc: 2026-01-24T09:07:55Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-23T04:12:23Z
