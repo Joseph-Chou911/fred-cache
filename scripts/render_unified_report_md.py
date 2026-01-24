@@ -15,9 +15,9 @@ scripts/render_unified_report_md.py
    - 其他維持一致性規則
 3) Audit Notes 文字同步更新（與實作一致）
 
-你原先要求「2、3都要」：
-- (2) fred_dir：維持固定 mapping table（不從數值推論）
-- (3) market_class / fred_class：在 market 表、fred 表、共振矩陣都一致出現
+新增（本次）：
+4) roll25_cache 區塊：顯示 UsedDate / 成交金額 (turnover_twd) / 倍數 / signals / lookback
+5) Unified Risk Judgment：用 market/fred 是否存在 WATCH/ALERT + roll25_heated 做 deterministic 三方矩陣
 """
 
 from __future__ import annotations
@@ -71,6 +71,50 @@ def split_csvish(s: Any) -> List[str]:
     if not isinstance(s, str) or not s.strip() or s.strip() == NA:
         return []
     return [x.strip() for x in s.split(",") if x.strip()]
+
+# -----------------------
+# signal counts + unified tri-state
+# -----------------------
+def count_signal_levels(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    cnt = {"ALERT": 0, "WATCH": 0, "INFO": 0, "NONE": 0, NA: 0}
+    for r in rows or []:
+        s = g(r, "signal_level", NA)
+        if s in cnt:
+            cnt[s] += 1
+        else:
+            cnt[NA] += 1
+    return cnt
+
+def tri_bool(x: Any) -> Any:
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, str):
+        t = x.strip().lower()
+        if t == "true":
+            return True
+        if t == "false":
+            return False
+        if t == NA.lower() or t == NA:
+            return NA
+    return NA
+
+def unified_state(m_wa: Any, f_wa: Any, r_heated: Any) -> str:
+    m = tri_bool(m_wa); f = tri_bool(f_wa); r = tri_bool(r_heated)
+    if m == NA or f == NA or r == NA:
+        return NA
+    if m and f and r:
+        return "RESONANCE_MFV"
+    if m and f and (not r):
+        return "RESONANCE_MF"
+    if m and (not f) and r:
+        return "MARKET_MOVE_WITH_VOLUME"
+    if m and (not f) and (not r):
+        return "MARKET_MOVE"
+    if (not m) and f and r:
+        return "MIDTERM_PRESSURE_WITH_VOLUME"
+    if (not m) and f and (not r):
+        return "MIDTERM_PRESSURE"
+    return "QUIET"
 
 # -----------------------
 # margin stats
@@ -205,7 +249,6 @@ def resonance_level(market_signal: str, fred_signal: str, market_class: str, fre
     structural = {"LONG", "LEVEL"}
     shock = {"JUMP"}
 
-    # composite support: treat "LONG+JUMP" etc. as set membership
     mc_set = set(mc.split("+")) if mc and mc != "NONE" else set()
     fc_set = set(fc.split("+")) if fc and fc != "NONE" else set()
 
@@ -335,7 +378,6 @@ def build_resonance_pairs(market_rows: List[Dict[str, Any]], fred_rows: List[Dic
             out.append(row)
             seen.add(key)
 
-    # sort by resonance importance
     order = {
         "CONCORD_STRONG": 1,
         "CONCORD_WEAK": 2,
@@ -368,12 +410,13 @@ def main() -> None:
     lines.append("## Module Status")
     md_kv(lines, "market_cache", status("market_cache"))
     md_kv(lines, "fred_cache", status("fred_cache"))
+    md_kv(lines, "roll25_cache", status("roll25_cache"))
     md_kv(lines, "taiwan_margin_financing", status("taiwan_margin_financing"))
     md_kv(lines, "unified_generated_at_utc", g(u, "generated_at_utc", NA))
     lines.append("")
 
     # -----------------------
-    # market_cache (detailed)  -> add market_class
+    # market_cache (detailed)
     # -----------------------
     m = safe_path(modules, ["market_cache", "dashboard_latest"], None)
     lines.append("## market_cache (detailed)")
@@ -427,7 +470,7 @@ def main() -> None:
         lines.append("")
 
     # -----------------------
-    # fred_cache (ALERT+WATCH+INFO) -> add fred_dir + fred_class
+    # fred_cache (ALERT+WATCH+INFO)
     # -----------------------
     f = safe_path(modules, ["fred_cache", "dashboard_latest"], None)
     lines.append("## fred_cache (ALERT+WATCH+INFO)")
@@ -499,6 +542,7 @@ def main() -> None:
         "JUMP if tag contains JUMP* (incl. JUMP_DELTA/JUMP_RET); "
         "otherwise NONE."
     )
+    lines.append("- roll25_heated/roll25_confidence are COMPUTED in build_unified_dashboard_latest.py from roll25 JSON only; renderer does not recompute.")
     lines.append("")
 
     # -----------------------
@@ -546,6 +590,81 @@ def main() -> None:
     else:
         lines.append(f"- {NA} (no overlapping/alias pairs)")
         lines.append("")
+
+    # -----------------------
+    # roll25_cache (TW turnover)
+    # -----------------------
+    lines.append("## roll25_cache (TW turnover)")
+    r_mod = safe_path(modules, ["roll25_cache"], None)
+    r_core = safe_path(modules, ["roll25_cache", "core"], None)
+    cross = safe_path(modules, ["taiwan_margin_financing", "cross_module"], None)
+
+    if isinstance(r_mod, dict):
+        md_kv(lines, "status", safe_path(r_mod, ["status"], NA))
+        if isinstance(r_core, dict):
+            md_kv(lines, "UsedDate", r_core.get("UsedDate", NA))
+            md_kv(lines, "tag", r_core.get("tag", NA))
+            md_kv(lines, "risk_level", r_core.get("risk_level", NA))
+            md_kv(lines, "turnover_twd", r_core.get("turnover_twd", NA))
+            md_kv(lines, "turnover_unit", r_core.get("turnover_unit", NA))
+            md_kv(lines, "volume_multiplier", r_core.get("volume_multiplier", NA))
+            md_kv(lines, "vol_multiplier", r_core.get("vol_multiplier", NA))
+            md_kv(lines, "amplitude_pct", r_core.get("amplitude_pct", NA))
+            md_kv(lines, "pct_change", r_core.get("pct_change", NA))
+            md_kv(lines, "close", r_core.get("close", NA))
+            md_kv(lines, "LookbackNTarget", r_core.get("LookbackNTarget", NA))
+            md_kv(lines, "LookbackNActual", r_core.get("LookbackNActual", NA))
+
+            sigs = r_core.get("signals", {})
+            if isinstance(sigs, dict):
+                md_kv(lines, "signals.DownDay", sigs.get("DownDay", NA))
+                md_kv(lines, "signals.VolumeAmplified", sigs.get("VolumeAmplified", NA))
+                md_kv(lines, "signals.VolAmplified", sigs.get("VolAmplified", NA))
+                md_kv(lines, "signals.NewLow_N", sigs.get("NewLow_N", NA))
+                md_kv(lines, "signals.ConsecutiveBreak", sigs.get("ConsecutiveBreak", NA))
+                md_kv(lines, "signals.OhlcMissing", sigs.get("OhlcMissing", NA))
+        else:
+            lines.append(f"- core: {NA}")
+
+        if isinstance(cross, dict):
+            lines.append("")
+            lines.append("### roll25_heated / confidence (from build)")
+            md_kv(lines, "roll25_heated", cross.get("roll25_heated", NA))
+            md_kv(lines, "roll25_confidence", cross.get("roll25_confidence", NA))
+            md_kv(lines, "consistency(Margin×Roll25)", cross.get("consistency", NA))
+            md_kv(lines, "margin_signal", cross.get("margin_signal", NA))
+            md_kv(lines, "margin_signal_source", cross.get("margin_signal_source", NA))
+        lines.append("")
+    else:
+        lines.append(f"- {NA} (missing/failed)")
+        lines.append("")
+
+    # -----------------------
+    # Unified Risk Judgment (Market + FRED + Roll25)
+    # -----------------------
+    lines.append("## Unified Risk Judgment (Market + FRED + Roll25)")
+    m_cnt = count_signal_levels(market_rows)
+    f_cnt = count_signal_levels(fred_rows)
+
+    m_wa = (m_cnt["WATCH"] + m_cnt["ALERT"]) > 0
+    f_wa = (f_cnt["WATCH"] + f_cnt["ALERT"]) > 0
+
+    r_heated = NA
+    r_conf = NA
+    if isinstance(cross, dict):
+        r_heated = cross.get("roll25_heated", NA)
+        r_conf = cross.get("roll25_confidence", NA)
+
+    md_kv(lines, "market_WATCH", m_cnt["WATCH"])
+    md_kv(lines, "market_ALERT", m_cnt["ALERT"])
+    md_kv(lines, "fred_WATCH", f_cnt["WATCH"])
+    md_kv(lines, "fred_ALERT", f_cnt["ALERT"])
+    md_kv(lines, "roll25_heated", r_heated)
+    md_kv(lines, "roll25_confidence", r_conf)
+    md_kv(lines, "UnifiedState", unified_state(m_wa, f_wa, r_heated))
+    lines.append("")
+    lines.append("- Rule: UnifiedState is derived deterministically from (market has WATCH/ALERT?, fred has WATCH/ALERT?, roll25_heated). No forecast inference.")
+    lines.append("")
 
     # -----------------------
     # taiwan margin
