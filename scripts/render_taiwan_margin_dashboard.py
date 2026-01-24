@@ -12,6 +12,9 @@ Principles
 
 品質降級（中等規則）
 - 任一 Check 失敗 → PARTIAL
+
+新增（向下相容）
+- 可選輸出 --out_json：輸出機器可讀摘要，供 unified report 直接引用，避免重算造成口徑不一致。
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+
+NA = "NA"
 
 # ---------------------------
 # IO / formatting helpers
@@ -35,15 +40,20 @@ def read_json(path: str) -> Any:
         return json.load(f)
 
 
+def write_json(path: str, obj: Any) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=True)
+
+
 def fmt_num(x: Optional[float], nd: int = 2) -> str:
     if x is None:
-        return "NA"
+        return NA
     return f"{x:.{nd}f}"
 
 
 def fmt_pct(x: Optional[float], nd: int = 4) -> str:
     if x is None:
-        return "NA"
+        return NA
     return f"{x:.{nd}f}"
 
 
@@ -188,8 +198,8 @@ def extract_meta_date(latest_obj: Dict[str, Any], market: str) -> Optional[str]:
 def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
     series = latest_obj.get("series") or {}
     meta = series.get(market) or {}
-    src = meta.get("source") or "NA"
-    url = meta.get("source_url") or "NA"
+    src = meta.get("source") or NA
+    url = meta.get("source_url") or NA
     return str(src), str(url)
 
 
@@ -225,7 +235,7 @@ def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]
     for r in rows[:5]:
         d = r.get("date")
         b = r.get("balance_yi")
-        out.append((str(d) if d else "NA", float(b) if isinstance(b, (int, float)) else None))
+        out.append((str(d) if d else NA, float(b) if isinstance(b, (int, float)) else None))
     return out
 
 
@@ -253,7 +263,7 @@ def determine_signal(
     spread20: Optional[float],
 ) -> Tuple[str, str, str]:
     if tot20_pct is None:
-        return ("NA", "NA", "insufficient total_20D% (NA)")
+        return (NA, NA, "insufficient total_20D% (NA)")
 
     if tot20_pct >= 8.0:
         state = "擴張"
@@ -288,6 +298,7 @@ def main() -> None:
     ap.add_argument("--latest", required=True)
     ap.add_argument("--history", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--out_json", required=False, default=None, help="Optional: machine-readable dashboard summary JSON")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -367,7 +378,52 @@ def main() -> None:
     )
     quality = "PARTIAL" if any_fail else "OK"
 
+    # ---------------------------
+    # Optional machine-readable summary
+    # ---------------------------
+    if args.out_json:
+        summary = {
+            "schema_version": "tw_margin_dash_v1",
+            "generated_at_utc": latest.get("generated_at_utc", now_utc_iso()),
+            "quality": quality,
+            "state_label": state_label,
+            "signal": signal,
+            "rationale": rationale,
+            "meta_date": {
+                "TWSE": twse_meta_date,
+                "TPEX": tpex_meta_date,
+                "TOTAL": twse_meta_date if (twse_meta_date and twse_meta_date == tpex_meta_date) else None,
+            },
+            "source": {
+                "TWSE": {"source": twse_src, "source_url": twse_url},
+                "TPEX": {"source": tpex_src, "source_url": tpex_url},
+            },
+            "horizons": {
+                "TWSE": {"1D": tw1, "5D": tw5, "20D": tw20},
+                "TPEX": {"1D": tp1, "5D": tp5, "20D": tp20},
+                "TOTAL": {"1D": tot1, "5D": tot5, "20D": tot20},
+            },
+            "helpers": {
+                "accel": accel,
+                "spread20": spread20,
+            },
+            "checks": {
+                "check1_twse_meta_eq_series0": c1_tw_ok,
+                "check1_tpex_meta_eq_series0": c1_tp_ok,
+                "check2_twse_head5_desc_unique": {"ok": c2_tw_ok, "msg": c2_tw_msg},
+                "check2_tpex_head5_desc_unique": {"ok": c2_tp_ok, "msg": c2_tp_msg},
+                "check3_head5_not_identical": {"ok": c3_ok, "msg": c3_msg},
+                "check4_twse_min_rows_21": {"ok": c4_tw_ok, "msg": c4_tw_msg},
+                "check4_tpex_min_rows_21": {"ok": c4_tp_ok, "msg": c4_tp_msg},
+                "check5_twse_20d_base_date_in_series": {"ok": c5_tw_ok, "msg": c5_tw_msg},
+                "check5_tpex_20d_base_date_in_series": {"ok": c5_tp_ok, "msg": c5_tp_msg},
+            },
+        }
+        write_json(args.out_json, summary)
+
+    # ---------------------------
     # Render markdown (ONLY layout tweaks here)
+    # ---------------------------
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
@@ -392,11 +448,11 @@ def main() -> None:
 
     md.append("## 2) 資料")
     md.append(
-        f"- 上市(TWSE)：融資餘額 {fmt_num(latest_balance_from_series(twse_s),2)} 億元｜資料日期 {twse_meta_date or 'NA'}｜來源：{twse_src}（{twse_url}）"
+        f"- 上市(TWSE)：融資餘額 {fmt_num(latest_balance_from_series(twse_s),2)} 億元｜資料日期 {twse_meta_date or NA}｜來源：{twse_src}（{twse_url}）"
     )
     md.append(f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}")
     md.append(
-        f"- 上櫃(TPEX)：融資餘額 {fmt_num(latest_balance_from_series(tpex_s),2)} 億元｜資料日期 {tpex_meta_date or 'NA'}｜來源：{tpex_src}（{tpex_url}）"
+        f"- 上櫃(TPEX)：融資餘額 {fmt_num(latest_balance_from_series(tpex_s),2)} 億元｜資料日期 {tpex_meta_date or NA}｜來源：{tpex_src}（{tpex_url}）"
     )
     md.append(f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}")
 
@@ -412,37 +468,37 @@ def main() -> None:
     md.append("## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）")
     md.append("### 上市(TWSE)")
     md.append(
-        f"- 1D：Δ={fmt_num(tw1['delta'],2)} 億元；Δ%={fmt_pct(tw1['pct'],4)} %｜latest={fmt_num(tw1['latest'],2)}｜base={fmt_num(tw1['base'],2)}（基期日={tw1['base_date'] or 'NA'}）"
+        f"- 1D：Δ={fmt_num(tw1['delta'],2)} 億元；Δ%={fmt_pct(tw1['pct'],4)} %｜latest={fmt_num(tw1['latest'],2)}｜base={fmt_num(tw1['base'],2)}（基期日={tw1['base_date'] or NA}）"
     )
     md.append(
-        f"- 5D：Δ={fmt_num(tw5['delta'],2)} 億元；Δ%={fmt_pct(tw5['pct'],4)} %｜latest={fmt_num(tw5['latest'],2)}｜base={fmt_num(tw5['base'],2)}（基期日={tw5['base_date'] or 'NA'}）"
+        f"- 5D：Δ={fmt_num(tw5['delta'],2)} 億元；Δ%={fmt_pct(tw5['pct'],4)} %｜latest={fmt_num(tw5['latest'],2)}｜base={fmt_num(tw5['base'],2)}（基期日={tw5['base_date'] or NA}）"
     )
     md.append(
-        f"- 20D：Δ={fmt_num(tw20['delta'],2)} 億元；Δ%={fmt_pct(tw20['pct'],4)} %｜latest={fmt_num(tw20['latest'],2)}｜base={fmt_num(tw20['base'],2)}（基期日={tw20['base_date'] or 'NA'}）"
+        f"- 20D：Δ={fmt_num(tw20['delta'],2)} 億元；Δ%={fmt_pct(tw20['pct'],4)} %｜latest={fmt_num(tw20['latest'],2)}｜base={fmt_num(tw20['base'],2)}（基期日={tw20['base_date'] or NA}）"
     )
     md.append("")
 
     md.append("### 上櫃(TPEX)")
     md.append(
-        f"- 1D：Δ={fmt_num(tp1['delta'],2)} 億元；Δ%={fmt_pct(tp1['pct'],4)} %｜latest={fmt_num(tp1['latest'],2)}｜base={fmt_num(tp1['base'],2)}（基期日={tp1['base_date'] or 'NA'}）"
+        f"- 1D：Δ={fmt_num(tp1['delta'],2)} 億元；Δ%={fmt_pct(tp1['pct'],4)} %｜latest={fmt_num(tp1['latest'],2)}｜base={fmt_num(tp1['base'],2)}（基期日={tp1['base_date'] or NA}）"
     )
     md.append(
-        f"- 5D：Δ={fmt_num(tp5['delta'],2)} 億元；Δ%={fmt_pct(tp5['pct'],4)} %｜latest={fmt_num(tp5['latest'],2)}｜base={fmt_num(tp5['base'],2)}（基期日={tp5['base_date'] or 'NA'}）"
+        f"- 5D：Δ={fmt_num(tp5['delta'],2)} 億元；Δ%={fmt_pct(tp5['pct'],4)} %｜latest={fmt_num(tp5['latest'],2)}｜base={fmt_num(tp5['base'],2)}（基期日={tp5['base_date'] or NA}）"
     )
     md.append(
-        f"- 20D：Δ={fmt_num(tp20['delta'],2)} 億元；Δ%={fmt_pct(tp20['pct'],4)} %｜latest={fmt_num(tp20['latest'],2)}｜base={fmt_num(tp20['base'],2)}（基期日={tp20['base_date'] or 'NA'}）"
+        f"- 20D：Δ={fmt_num(tp20['delta'],2)} 億元；Δ%={fmt_pct(tp20['pct'],4)} %｜latest={fmt_num(tp20['latest'],2)}｜base={fmt_num(tp20['base'],2)}（基期日={tp20['base_date'] or NA}）"
     )
     md.append("")
 
     md.append("### 合計(上市+上櫃)")
     md.append(
-        f"- 1D：Δ={fmt_num(tot1.get('delta'),2)} 億元；Δ%={fmt_pct(tot1.get('pct'),4)} %｜latest={fmt_num(tot1.get('latest'),2)}｜base={fmt_num(tot1.get('base'),2)}（基期日={tot1.get('base_date') or 'NA'}）"
+        f"- 1D：Δ={fmt_num(tot1.get('delta'),2)} 億元；Δ%={fmt_pct(tot1.get('pct'),4)} %｜latest={fmt_num(tot1.get('latest'),2)}｜base={fmt_num(tot1.get('base'),2)}（基期日={tot1.get('base_date') or NA}）"
     )
     md.append(
-        f"- 5D：Δ={fmt_num(tot5.get('delta'),2)} 億元；Δ%={fmt_pct(tot5.get('pct'),4)} %｜latest={fmt_num(tot5.get('latest'),2)}｜base={fmt_num(tot5.get('base'),2)}（基期日={tot5.get('base_date') or 'NA'}）"
+        f"- 5D：Δ={fmt_num(tot5.get('delta'),2)} 億元；Δ%={fmt_pct(tot5.get('pct'),4)} %｜latest={fmt_num(tot5.get('latest'),2)}｜base={fmt_num(tot5.get('base'),2)}（基期日={tot5.get('base_date') or NA}）"
     )
     md.append(
-        f"- 20D：Δ={fmt_num(tot20.get('delta'),2)} 億元；Δ%={fmt_pct(tot20.get('pct'),4)} %｜latest={fmt_num(tot20.get('latest'),2)}｜base={fmt_num(tot20.get('base'),2)}（基期日={tot20.get('base_date') or 'NA'}）"
+        f"- 20D：Δ={fmt_num(tot20.get('delta'),2)} 億元；Δ%={fmt_pct(tot20.get('pct'),4)} %｜latest={fmt_num(tot20.get('latest'),2)}｜base={fmt_num(tot20.get('base'),2)}（基期日={tot20.get('base_date') or NA}）"
     )
     md.append("")
 
