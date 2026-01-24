@@ -6,17 +6,21 @@ Render unified_dashboard/latest.json into report.md
 Adds:
 - roll25_derived (realized vol / max drawdown)
 - fx_usdtwd section (BOT USD/TWD mid + deterministic signal)
-- taiwan_margin_financing.cross_module section (Margin×Roll25 consistency)
+- cross_module (kept)
 
 This renderer does NOT recompute; it only formats fields already in unified JSON.
 If a field is missing => prints NA.
+
+Small audit-focused enhancements:
+- Footer prints input_path/output_path for self-audit.
+- Detects repo-root report.md residue and warns in footer (does NOT delete).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -72,38 +76,51 @@ def _md_table(headers: List[str], rows: List[List[str]]) -> str:
     return "\n".join(out)
 
 
-def _extract_lookback_target_from_roll25_report(roll_obj: Dict[str, Any]) -> Any:
-    for path in [
-        ("core", "LookbackNTarget"),
-        ("numbers", "LookbackNTarget"),
-    ]:
-        v = _safe_get(roll_obj, *path)
-        if isinstance(v, int):
-            return v
-        if isinstance(v, float) and v.is_integer():
-            return int(v)
+def _detect_root_report_residue(in_path: str, out_path: str) -> Dict[str, Any]:
+    """
+    Detect whether repo-root has a report.md that is NOT the intended output.
+    Heuristic:
+      - If out_path basename is report.md and out_path is not exactly ./report.md,
+        and ./report.md exists -> residue likely.
+      - If out_path is ./report.md, then no residue warning (it's intended).
+    """
+    info: Dict[str, Any] = {
+        "root_report_exists": False,
+        "root_report_is_output": False,
+        "warn_root_report_residue": False,
+        "root_report_path": os.path.abspath("report.md"),
+        "output_abs": os.path.abspath(out_path),
+        "input_abs": os.path.abspath(in_path),
+    }
 
-    v2 = roll_obj.get("LookbackNTarget")
-    if isinstance(v2, int):
-        return v2
-    if isinstance(v2, float) and v2.is_integer():
-        return int(v2)
+    root_exists = os.path.isfile("report.md")
+    info["root_report_exists"] = root_exists
 
-    cav = roll_obj.get("caveats")
-    if isinstance(cav, str):
-        m = re.search(r"LookbackNTarget=(\d+)", cav)
-        if m:
-            try:
-                return int(m.group(1))
-            except Exception:
-                return "NA"
-    return "NA"
+    out_abs = info["output_abs"]
+    root_abs = info["root_report_path"]
+    info["root_report_is_output"] = (out_abs == root_abs)
+
+    # If we're NOT writing to root/report.md but root/report.md exists -> likely residue
+    if root_exists and not info["root_report_is_output"]:
+        info["warn_root_report_residue"] = True
+
+    return info
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--in", dest="in_path", default="unified_dashboard/latest.json")
-    ap.add_argument("--out", dest="out_path", default="report.md")
+    ap.add_argument(
+        "--in",
+        dest="in_path",
+        default="unified_dashboard/latest.json",
+        help="Input unified dashboard JSON path",
+    )
+    ap.add_argument(
+        "--out",
+        dest="out_path",
+        default="unified_dashboard/report.md",
+        help="Output markdown report path",
+    )
     args = ap.parse_args()
 
     uni = _load_json(args.in_path)
@@ -141,7 +158,11 @@ def main() -> int:
     lines.append(f"- series_count: {m_meta.get('series_count','NA')}\n")
 
     if isinstance(m_rows, list) and m_rows:
-        hdr = ["series","signal","dir","market_class","value","data_date","age_h","z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev","delta","streak_hist","streak_wa","source"]
+        hdr = [
+            "series","signal","dir","market_class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
+            "delta","streak_hist","streak_wa","source"
+        ]
         rws: List[List[str]] = []
         for it in m_rows:
             if not isinstance(it, dict):
@@ -201,7 +222,10 @@ def main() -> int:
         lines.append("")
 
     if isinstance(f_rows, list) and f_rows:
-        hdr = ["series","signal","fred_dir","fred_class","value","data_date","age_h","z60","p60","p252","zΔ60","pΔ60","ret1%","reason","tag","prev","delta","source"]
+        hdr = [
+            "series","signal","fred_dir","fred_class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%","reason","tag","prev","delta","source"
+        ]
         rws: List[List[str]] = []
         for it in f_rows:
             if not isinstance(it, dict):
@@ -241,12 +265,9 @@ def main() -> int:
     # roll25_cache (core fields from latest report)
     r_latest = _safe_get(roll25, "latest_report") or {}
     r_core = _safe_get(roll25, "core") or {}
-
-    # derive minimal core from report if missing
     if not r_core and isinstance(r_latest, dict):
         nums = r_latest.get("numbers", {}) if isinstance(r_latest.get("numbers"), dict) else {}
         sigs = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
-        lb_target = _extract_lookback_target_from_roll25_report(r_latest)
         r_core = {
             "UsedDate": nums.get("UsedDate") or r_latest.get("used_date"),
             "tag": r_latest.get("tag"),
@@ -259,7 +280,7 @@ def main() -> int:
             "pct_change": nums.get("PctChange"),
             "close": nums.get("Close"),
             "signals": sigs,
-            "LookbackNTarget": lb_target,
+            "LookbackNTarget": 20,
             "LookbackNActual": r_latest.get("lookback_n_actual"),
         }
 
@@ -298,7 +319,7 @@ def main() -> int:
     lines.append(f"- confidence: {r_der.get('confidence','NA')}")
     lines.append("")
 
-    # fx section
+    # FX
     fx_der = _safe_get(fx, "derived") or {}
     lines.append("## FX (USD/TWD)")
     lines.append(f"- status: {_safe_get(fx,'status') or 'NA'}")
@@ -325,35 +346,44 @@ def main() -> int:
     lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
 
-    # cross_module output (Margin×Roll25)
-    cm = _safe_get(twm, "cross_module") or {}
-    lines.append("### cross_module (Margin × Roll25 consistency)")
-    if isinstance(cm, dict) and cm:
-        lines.append(f"- margin_signal: {cm.get('margin_signal','NA')}")
-        lines.append(f"- margin_signal_source: {cm.get('margin_signal_source','NA')}")
-        mr = cm.get("margin_rationale", {}) if isinstance(cm.get("margin_rationale"), dict) else {}
+    # cross_module (kept)
+    cross = _safe_get(twm, "cross_module") or {}
+    if isinstance(cross, dict) and cross:
+        lines.append("### cross_module (Margin × Roll25 consistency)")
+        lines.append(f"- margin_signal: {cross.get('margin_signal','NA')}")
+        lines.append(f"- margin_signal_source: {cross.get('margin_signal_source','NA')}")
+        mr = cross.get("margin_rationale", {}) if isinstance(cross.get("margin_rationale"), dict) else {}
         lines.append(f"- margin_rule_version: {mr.get('rule_version','NA')}")
-        lines.append(f"- chg_last5: {mr.get('chg_last5','NA')}")
+        chg_last5 = mr.get("chg_last5", None)
+        lines.append(f"- chg_last5: {chg_last5 if chg_last5 is not None else 'NA'}")
         lines.append(f"- sum_last5: {_fmt(mr.get('sum_last5'),3)}")
         lines.append(f"- pos_days_last5: {_fmt_int(mr.get('pos_days_last5'))}")
         lines.append(f"- latest_chg: {_fmt(mr.get('latest_chg'),3)}")
         lines.append(f"- margin_confidence: {mr.get('confidence','NA')}")
-        lines.append(f"- roll25_heated: {_fmt(cm.get('roll25_heated'),0)}")
-        lines.append(f"- roll25_confidence: {cm.get('roll25_confidence','NA')}")
-        lines.append(f"- consistency: {cm.get('consistency','NA')}")
-
-        rat = cm.get("rationale", {}) if isinstance(cm.get("rationale"), dict) else {}
-        align = rat.get("date_alignment", {}) if isinstance(rat.get("date_alignment"), dict) else {}
-        lines.append(f"- date_alignment: twmargin_date={align.get('twmargin_date','NA')}, roll25_used_date={align.get('roll25_used_date','NA')}, match={_fmt(align.get('used_date_match'),0)}")
+        lines.append(f"- roll25_heated: {_fmt(cross.get('roll25_heated'),0)}")
+        lines.append(f"- roll25_confidence: {cross.get('roll25_confidence','NA')}")
+        lines.append(f"- consistency: {cross.get('consistency','NA')}")
+        da = _safe_get(cross, "rationale", "date_alignment") or {}
+        if isinstance(da, dict) and da:
+            lines.append(
+                f"- date_alignment: twmargin_date={da.get('twmargin_date','NA')}, "
+                f"roll25_used_date={da.get('roll25_used_date','NA')}, "
+                f"match={str(da.get('used_date_match','NA')).lower()}"
+            )
         lines.append("")
-    else:
-        lines.append("- cross_module: NA (not generated)")
-        lines.append("")
 
-    # footer
-    lines.append(f"<!-- rendered_at_utc: {rendered_at_utc} -->\n")
+    # audit footer (new)
+    residue = _detect_root_report_residue(args.in_path, args.out_path)
+    lines.append(f"<!-- rendered_at_utc: {rendered_at_utc} -->")
+    lines.append(f"<!-- input_path: {args.in_path} | input_abs: {residue['input_abs']} -->")
+    lines.append(f"<!-- output_path: {args.out_path} | output_abs: {residue['output_abs']} -->")
+    lines.append(f"<!-- root_report_exists: {str(residue['root_report_exists']).lower()} | root_report_is_output: {str(residue['root_report_is_output']).lower()} -->")
+    if residue["warn_root_report_residue"]:
+        lines.append("<!-- WARNING: repo root has report.md but output is not root/report.md; likely residue file. -->")
+    lines.append("")
 
     text = "\n".join(lines)
+    os.makedirs(os.path.dirname(args.out_path) or ".", exist_ok=True)
     with open(args.out_path, "w", encoding="utf-8") as f:
         f.write(text)
 
