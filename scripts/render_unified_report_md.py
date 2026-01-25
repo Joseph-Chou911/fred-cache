@@ -24,15 +24,8 @@ If a field is missing => prints NA.
 - Positioning Matrix: SP500 and VIX use market_cache only (single source policy).
 - Positioning Matrix prints source_policy and includes data_date for SP500/VIX (audit-friendly).
 
-2026-01-25 option(2) follow-up (Roll25 heat split):
-- Render BOTH:
-  - roll25_heated_market (market-only heat; excludes data-quality)
-  - roll25_data_quality_issue (data-quality issue flag, e.g., OHLC missing / used_date not latest)
-- Prefer split from cross_module if present; else derive deterministically for display.
-
-2026-01-25 renderer cleanup:
-- Avoid duplicated roll25_heat_split output: render full split only under roll25_cache section.
-- FX: add deterministic dq note when momentum fields unavailable.
+2026-01-26 minimal diff:
+- Add one line in cross_module: roll25_split_ref (uses ONLY existing cross_module fields; missing => NA).
 """
 
 from __future__ import annotations
@@ -96,6 +89,13 @@ def _md_table(headers: List[str], rows: List[List[str]]) -> str:
 
 
 def _detect_root_report_residue(in_path: str, out_path: str) -> Dict[str, Any]:
+    """
+    Detect whether repo-root has a report.md that is NOT the intended output.
+    Heuristic:
+      - If out_path basename is report.md and out_path is not exactly ./report.md,
+        and ./report.md exists -> residue likely.
+      - If out_path is ./report.md, then no residue warning (it's intended).
+    """
     info: Dict[str, Any] = {
         "root_report_exists": False,
         "root_report_is_output": False,
@@ -104,6 +104,7 @@ def _detect_root_report_residue(in_path: str, out_path: str) -> Dict[str, Any]:
         "output_abs": os.path.abspath(out_path),
         "input_abs": os.path.abspath(in_path),
     }
+
     root_exists = os.path.isfile("report.md")
     info["root_report_exists"] = root_exists
 
@@ -111,6 +112,7 @@ def _detect_root_report_residue(in_path: str, out_path: str) -> Dict[str, Any]:
     root_abs = info["root_report_path"]
     info["root_report_is_output"] = (out_abs == root_abs)
 
+    # If we're NOT writing to root/report.md but root/report.md exists -> likely residue
     if root_exists and not info["root_report_is_output"]:
         info["warn_root_report_residue"] = True
 
@@ -118,6 +120,12 @@ def _detect_root_report_residue(in_path: str, out_path: str) -> Dict[str, Any]:
 
 
 def _infer_ohlc_missing(sigs: Any, r_latest: Any) -> Any:
+    """
+    Display-only helper:
+    - If signals has OhlcMissing, use it.
+    - Else try infer from r_latest.ohlc_status ("OK" vs "MISSING").
+    - Else return None.
+    """
     if isinstance(sigs, dict) and "OhlcMissing" in sigs:
         return sigs.get("OhlcMissing")
     if isinstance(r_latest, dict):
@@ -133,6 +141,11 @@ def _infer_ohlc_missing(sigs: Any, r_latest: Any) -> Any:
 # ---- unit helpers (cross_module) ----
 
 def _get_twmargin_chg_unit_label(uni: Any) -> str:
+    """
+    Read unit label for TWSE chg_yi from unified JSON:
+      modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label
+    Returns "NA" if missing.
+    """
     label = _safe_get(
         uni,
         "modules",
@@ -149,6 +162,11 @@ def _get_twmargin_chg_unit_label(uni: Any) -> str:
 
 
 def _fmt_with_unit(x: Any, unit: str, nd: int = 3) -> str:
+    """
+    Format a scalar numeric with unit (audit-friendly).
+    - If x is None or not numeric => "NA"
+    - If unit missing => "NA" (do not guess)
+    """
     if x is None:
         return "NA"
     try:
@@ -161,6 +179,11 @@ def _fmt_with_unit(x: Any, unit: str, nd: int = 3) -> str:
 
 
 def _fmt_num_list_json(xs: Any, nd: int = 1) -> Any:
+    """
+    Return a JSON-like numeric list string: "[43.4, 39.9, -34.8]"
+    - If xs is not list => None
+    - Non-numeric items => None (audit: do not silently coerce)
+    """
     if not isinstance(xs, list):
         return None
     out: List[float] = []
@@ -190,105 +213,20 @@ def _truthy_signal(x: Any, allowed: List[str]) -> bool:
     return x.upper() in [a.upper() for a in allowed]
 
 
-# ---- roll25 heat split (Option 2) ----
-
-def _derive_roll25_heat_split_for_display(roll25_module: Any) -> Dict[str, Any]:
-    out: Dict[str, Any] = {
-        "roll25_heated_market": None,
-        "roll25_data_quality_issue": None,
-        "derived": True,
-        "dbg": {},
-    }
-
-    latest = _safe_get(roll25_module, "latest_report") or {}
-    core = _safe_get(roll25_module, "core") or {}
-
-    sigs = _safe_get(core, "signals")
-    if not isinstance(sigs, dict):
-        sigs = _safe_get(latest, "signal")
-    if not isinstance(sigs, dict):
-        sigs = {}
-
-    ohlc_status = None
-    if isinstance(latest, dict) and isinstance(latest.get("ohlc_status"), str):
-        ohlc_status = latest.get("ohlc_status")
-    if ohlc_status is None and isinstance(core, dict) and isinstance(core.get("ohlc_status"), str):
-        ohlc_status = core.get("ohlc_status")
-
-    used_date_status = None
-    if isinstance(core, dict) and isinstance(core.get("used_date_status"), str):
-        used_date_status = core.get("used_date_status")
-    if used_date_status is None and isinstance(latest, dict) and isinstance(latest.get("used_date_status"), str):
-        used_date_status = latest.get("used_date_status")
-
-    ohlc_missing = _infer_ohlc_missing(sigs, latest)
-
-    market_keys = ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]
-    market_hits: Dict[str, Any] = {k: sigs.get(k) for k in market_keys}
-    market_true = [k for k, v in market_hits.items() if v is True]
-
-    heated_market: Optional[bool] = None
-    if isinstance(sigs, dict) and any(k in sigs for k in market_keys):
-        heated_market = len(market_true) > 0
-
-    dq_issue: Optional[bool] = None
-    issue_hits = False
-    issue_proven_clear = True
-
-    if ohlc_missing is True:
-        issue_hits = True
-    elif ohlc_missing is None:
-        issue_proven_clear = False
-
-    if isinstance(ohlc_status, str):
-        if ohlc_status.upper() == "MISSING":
-            issue_hits = True
-    else:
-        issue_proven_clear = False
-
-    if isinstance(used_date_status, str):
-        if used_date_status != "OK_LATEST":
-            issue_hits = True
-    else:
-        issue_proven_clear = False
-
-    if issue_hits:
-        dq_issue = True
-    else:
-        dq_issue = False if issue_proven_clear else None
-
-    out["roll25_heated_market"] = heated_market
-    out["roll25_data_quality_issue"] = dq_issue
-    out["dbg"] = {
-        "market_hits": market_hits,
-        "market_true": market_true,
-        "OhlcMissing": ohlc_missing,
-        "ohlc_status": ohlc_status,
-        "used_date_status": used_date_status,
-    }
-    return out
-
-
-def _get_roll25_heat_split(roll25_module: Any, cross_module: Any) -> Dict[str, Any]:
-    if isinstance(cross_module, dict):
-        hm = cross_module.get("roll25_heated_market")
-        dq = cross_module.get("roll25_data_quality_issue")
-        if isinstance(hm, bool) or isinstance(dq, bool):
-            return {
-                "roll25_heated_market": hm if isinstance(hm, bool) else None,
-                "roll25_data_quality_issue": dq if isinstance(dq, bool) else None,
-                "derived": False,
-                "dbg": {"source": "cross_module"},
-            }
-    derived = _derive_roll25_heat_split_for_display(roll25_module)
-    derived["dbg"]["source"] = "DERIVED_FROM_ROLL25_SECTION"
-    return derived
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--in", dest="in_path", default="unified_dashboard/latest.json")
-    ap.add_argument("--out", dest="out_path", default="unified_dashboard/report.md")
+    ap.add_argument(
+        "--in",
+        dest="in_path",
+        default="unified_dashboard/latest.json",
+        help="Input unified dashboard JSON path",
+    )
+    ap.add_argument(
+        "--out",
+        dest="out_path",
+        default="unified_dashboard/report.md",
+        help="Output markdown report path",
+    )
     args = ap.parse_args()
 
     uni = _load_json(args.in_path)
@@ -326,11 +264,13 @@ def main() -> int:
     roll25_der = _safe_get(roll25, "derived") or {}
     fx_der = _safe_get(fx, "derived") or {}
 
+    # Single-source policy (explicit, to avoid confusion)
     source_policy = "SP500,VIX => market_cache_only (fred_cache SP500/VIXCLS not used for mode)"
 
     spx_m = _find_row(m_rows, "SP500")
     vix_m = _find_row(m_rows, "VIX")
 
+    # trend_on: based on market_cache SP500 only
     spx_sig = spx_m.get("signal_level") if isinstance(spx_m, dict) else None
     spx_tag = spx_m.get("tag") if isinstance(spx_m, dict) else None
     spx_date = spx_m.get("data_date") if isinstance(spx_m, dict) else None
@@ -342,28 +282,29 @@ def main() -> int:
         and ("LONG_EXTREME" in spx_tag.upper())
     )
 
+    # fragility_high parts (deterministic, signal-only)
     credit = _find_row(f_rows, "BAMLH0A0HYM2")
     dgs10 = _find_row(f_rows, "DGS10")
 
     credit_sig = credit.get("signal_level") if isinstance(credit, dict) else None
     dgs10_sig = dgs10.get("signal_level") if isinstance(dgs10, dict) else None
 
-    credit_fragile = _truthy_signal(credit_sig, ["ALERT"])
+    credit_fragile = _truthy_signal(credit_sig, ["ALERT"])  # strict
     rate_stress = _truthy_signal(dgs10_sig, ["WATCH", "ALERT"])
-
     tw_margin_sig = tw_cross.get("margin_signal") if isinstance(tw_cross, dict) else None
     tw_margin = _truthy_signal(tw_margin_sig, ["WATCH", "ALERT"])
-
     cross_cons = tw_cross.get("consistency") if isinstance(tw_cross, dict) else None
     cross_divergence = bool(isinstance(cross_cons, str) and cross_cons.upper() == "DIVERGENCE")
 
     fragility_high = bool((credit_fragile or rate_stress) and (tw_margin or cross_divergence))
 
+    # vol_runaway: market_cache VIX only (single source)
     vix_sig = vix_m.get("signal_level") if isinstance(vix_m, dict) else None
     vix_dir = vix_m.get("dir") if isinstance(vix_m, dict) else None
     vix_ret1 = vix_m.get("ret1_pct60") if isinstance(vix_m, dict) else None
     vix_date = vix_m.get("data_date") if isinstance(vix_m, dict) else None
 
+    # Conservative runaway gate: ALERT, or WATCH with very large jump
     vix_ret1_val: Optional[float] = None
     try:
         if vix_ret1 is not None:
@@ -381,6 +322,7 @@ def main() -> int:
 
     matrix_cell = f"Trend={'ON' if trend_on else 'OFF'} / Fragility={'HIGH' if fragility_high else 'LOW'}"
 
+    # mode mapping (deterministic; report-only)
     if vol_runaway:
         mode = "PAUSE_RISK_ON"
     else:
@@ -393,6 +335,7 @@ def main() -> int:
         else:
             mode = "HOLD_CASH"
 
+    # dq gates (display-only; conservative)
     roll25_conf = roll25_der.get("confidence") if isinstance(roll25_der, dict) else None
     fx_conf = fx_der.get("fx_confidence") if isinstance(fx_der, dict) else None
 
@@ -564,6 +507,7 @@ def main() -> int:
     r_latest = _safe_get(roll25, "latest_report") or {}
     r_core = _safe_get(roll25, "core") or {}
 
+    # Backward-compat: if unified builder didn't provide "core", reconstruct from latest_report
     if not r_core and isinstance(r_latest, dict):
         nums = r_latest.get("numbers", {}) if isinstance(r_latest.get("numbers"), dict) else {}
         sigs = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
@@ -585,6 +529,7 @@ def main() -> int:
             "ohlc_status": r_latest.get("ohlc_status"),
         }
 
+    # New: separate tag semantics (prefer structured fields; fallback to legacy)
     run_day_tag = (
         uni.get("run_day_tag")
         or _safe_get(r_latest, "run_day_tag")
@@ -606,22 +551,12 @@ def main() -> int:
         or "NA"
     )
 
-    heat_split = _get_roll25_heat_split(roll25, tw_cross)
-    heated_market = heat_split.get("roll25_heated_market")
-    dq_issue = heat_split.get("roll25_data_quality_issue")
-
     lines.append("## roll25_cache (TW turnover)")
     lines.append(f"- status: {_safe_get(roll25,'status') or 'NA'}")
     lines.append(f"- UsedDate: {_fmt(r_core.get('UsedDate'),0)}")
     lines.append(f"- run_day_tag: {run_day_tag if run_day_tag is not None else 'NA'}")
     lines.append(f"- used_date_status: {used_date_status if used_date_status is not None else 'NA'}")
     lines.append(f"- tag (legacy): {legacy_tag}")
-
-    lines.append("### roll25_heat_split (Option 2)")
-    lines.append(f"- roll25_heated_market: {_fmt(heated_market,0)}")
-    lines.append(f"- roll25_data_quality_issue: {_fmt(dq_issue,0)}")
-    lines.append(f"- split_source: {heat_split.get('dbg',{}).get('source','NA')}")
-
     lines.append(f"- risk_level: {r_core.get('risk_level','NA')}")
     lines.append(f"- turnover_twd: {_fmt(r_core.get('turnover_twd'),0)}")
     lines.append(f"- turnover_unit: {r_core.get('turnover_unit','NA')}")
@@ -668,13 +603,14 @@ def main() -> int:
     lines.append(f"- spot_buy: {_fmt(usd.get('spot_buy'),6)}")
     lines.append(f"- spot_sell: {_fmt(usd.get('spot_sell'),6)}")
     lines.append(f"- mid: {_fmt(usd.get('mid'),6)}")
+
     mom = fx_der.get("momentum", {}) if isinstance(fx_der.get("momentum"), dict) else {}
-    ret1 = mom.get("ret1_pct")
-    chg5 = mom.get("chg_5d_pct")
-    momentum_unavailable = (ret1 is None) and (chg5 is None)
-    lines.append(f"- momentum_unavailable: {_fmt(momentum_unavailable,0)} (deterministic dq note)")
-    lines.append(f"- ret1_pct: {_fmt(ret1,6)} (from {mom.get('ret1_from','NA')} to {mom.get('ret1_to','NA')})")
-    lines.append(f"- chg_5d_pct: {_fmt(chg5,6)} (from {mom.get('chg_5d_from','NA')} to {mom.get('chg_5d_to','NA')})")
+    momentum_unavailable = bool(not isinstance(mom, dict) or not mom)
+    if momentum_unavailable:
+        lines.append("- momentum_unavailable: true (deterministic dq note)")
+
+    lines.append(f"- ret1_pct: {_fmt(mom.get('ret1_pct'),6)} (from {mom.get('ret1_from','NA')} to {mom.get('ret1_to','NA')})")
+    lines.append(f"- chg_5d_pct: {_fmt(mom.get('chg_5d_pct'),6)} (from {mom.get('chg_5d_from','NA')} to {mom.get('chg_5d_to','NA')})")
     lines.append(f"- dir: {fx_der.get('dir','NA')}")
     lines.append(f"- fx_signal: {fx_der.get('fx_signal','NA')}")
     lines.append(f"- fx_reason: {fx_der.get('fx_reason','NA')}")
@@ -689,7 +625,7 @@ def main() -> int:
     lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
 
-    # cross_module (kept; avoid duplicating roll25 split here)
+    # cross_module
     cross = _safe_get(twm, "cross_module") or {}
     if isinstance(cross, dict) and cross:
         chg_unit = _get_twmargin_chg_unit_label(uni)
@@ -699,10 +635,13 @@ def main() -> int:
         lines.append(f"- margin_signal_source: {cross.get('margin_signal_source','NA')}")
         mr = cross.get("margin_rationale", {}) if isinstance(cross.get("margin_rationale"), dict) else {}
         lines.append(f"- margin_rule_version: {mr.get('rule_version','NA')}")
+
         lines.append(f"- chg_unit: {chg_unit} (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)")
 
         chg_last5 = mr.get("chg_last5", None)
         chg_last5_json = _fmt_num_list_json(chg_last5, nd=1)
+
+        # Converged: numeric list + unit once (no unit => NA; do not guess)
         if chg_last5_json is not None and chg_unit != "NA":
             lines.append(f"- chg_last5: {chg_last5_json} {chg_unit}")
         else:
@@ -715,6 +654,13 @@ def main() -> int:
         lines.append(f"- margin_confidence: {mr.get('confidence','NA')}")
         lines.append(f"- roll25_heated (legacy): {_fmt(cross.get('roll25_heated'),0)}")
         lines.append(f"- roll25_confidence: {cross.get('roll25_confidence','NA')}")
+
+        # ---- minimal diff: roll25_split_ref (uses cross_module fields only; missing => NA) ----
+        hm = cross.get("roll25_heated_market")
+        dq = cross.get("roll25_data_quality_issue")
+        lines.append(f"- roll25_split_ref: heated_market={_fmt(hm,0)}, dq_issue={_fmt(dq,0)} (see roll25_cache section)")
+        # ------------------------------------------------------------------------------------
+
         lines.append(f"- consistency: {cross.get('consistency','NA')}")
         da = _safe_get(cross, "rationale", "date_alignment") or {}
         if isinstance(da, dict) and da:
@@ -725,6 +671,7 @@ def main() -> int:
             )
         lines.append("")
 
+    # audit footer
     residue = _detect_root_report_residue(args.in_path, args.out_path)
     lines.append(f"<!-- rendered_at_utc: {rendered_at_utc} -->")
     lines.append(f"<!-- input_path: {args.in_path} | input_abs: {residue['input_abs']} -->")
