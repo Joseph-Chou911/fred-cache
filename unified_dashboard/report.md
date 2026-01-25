@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-25T00:45:00Z
+- unified_generated_at_utc: 2026-01-25T00:51:40Z
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-24T13:27:02Z
@@ -108,8 +108,7 @@
 - margin_signal_source: DERIVED.rule_v1(TWSE_chg_yi_last5)
 - margin_rule_version: rule_v1
 - chg_unit: 億 (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)
-- chg_last5: ['43.4 億', '39.9 億', '-34.8 億', '18.1 億', '60.2 億']
-- chg_last5_raw: [43.4, 39.9, -34.8, 18.1, 60.2]
+- chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2] 億
 - sum_last5: 126.800 億
 - pos_days_last5: 4
 - latest_chg: 43.400 億
@@ -119,7 +118,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-25T00:45:00Z -->
+<!-- rendered_at_utc: 2026-01-25T00:51:40Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
