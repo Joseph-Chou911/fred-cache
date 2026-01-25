@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-25T23:13:02Z
+- unified_generated_at_utc: 2026-01-25T23:23:04Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -136,10 +136,11 @@
 - margin_confidence: OK
 - roll25_heated (legacy): false
 - roll25_confidence: DOWNGRADED
+- roll25_split_ref: heated_market=NA, dq_issue=NA (see roll25_cache section)
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-25T23:13:02Z -->
+<!-- rendered_at_utc: 2026-01-25T23:23:04Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
