@@ -2,30 +2,35 @@
   "schema_version": "bottom_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-01-25T11:12:12.640098Z",
-      "as_of_ts": "2026-01-25T19:12:12.640114+08:00",
-      "data_commit_sha": "7e6a53c3f5dd21cd799b7ea1fd16ce03747008d0",
-      "bottom_state": "NONE",
-      "triggers": {
-        "TRIG_PANIC": 0,
-        "TRIG_SYSTEMIC_VETO": 0,
-        "TRIG_REVERSAL": 0
+      "run_ts_utc": "2026-01-25T11:26:12.551541Z",
+      "as_of_ts": "2026-01-25T19:26:12.551554+08:00",
+      "data_commit_sha": "ef8bc69835192d09f96aad9b0ae67ee069b28c9c",
+      "global": {
+        "bottom_state": "NONE",
+        "triggers": {
+          "TRIG_PANIC": 0,
+          "TRIG_SYSTEMIC_VETO": 0,
+          "TRIG_REVERSAL": 0
+        },
+        "context": {
+          "context_equity_extreme_sp500_p252_ge_95": 1,
+          "sp500_p252": 95.63492063492063
+        },
+        "distances": {
+          "vix_panic_gap": 3.91,
+          "sp500_ret1_panic_gap": 1.5326903744204952,
+          "hyg_veto_gap_z": 3.97231697590731,
+          "ofr_veto_gap_z": 2.1685363191964626
+        }
       },
-      "context": {
-        "context_equity_extreme_sp500_p252_ge_95": 1,
-        "sp500_p252": 95.63492063492063
-      },
-      "distances": {
-        "vix_panic_gap": 3.91,
-        "sp500_ret1_panic_gap": 1.5326903744204952,
-        "hyg_veto_gap_z": 3.97231697590731,
-        "ofr_veto_gap_z": 2.1685363191964626
-      },
-      "series_signals": {
-        "VIX": "NONE",
-        "SP500": "INFO",
-        "HYG_IEF_RATIO": "NONE",
-        "OFR_FSI": "NONE"
+      "tw": {
+        "tw_state": "NONE",
+        "triggers": {
+          "TRIG_TW_PANIC": 0,
+          "TRIG_TW_LEVERAGE_HEAT": null,
+          "TRIG_TW_REVERSAL": 0,
+          "TRIG_TW_DRAWDOWN": null
+        }
       }
     }
   ]
