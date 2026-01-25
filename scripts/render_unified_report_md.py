@@ -27,6 +27,10 @@ Small audit-focused enhancements:
 - Align field names with unified JSON:
     roll25.core.used_date_status, roll25.core.tag_legacy
 - Prefer unified top-level run_day_tag for run-day context.
+
+2026-01-25 (cross_module unit fix):
+- Display margin change unit (e.g., 億) in cross_module section.
+- Format sum_last5 / latest_chg with unit (no guessing; missing => NA).
 """
 
 from __future__ import annotations
@@ -137,6 +141,46 @@ def _infer_ohlc_missing(sigs: Any, r_latest: Any) -> Any:
             if st.upper() == "OK":
                 return False
     return None
+
+
+# ---- unit helpers (cross_module) ----
+
+def _get_twmargin_chg_unit_label(uni: Any) -> str:
+    """
+    Read unit label for TWSE chg_yi from unified JSON:
+      modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label
+    Returns "NA" if missing.
+    """
+    label = _safe_get(
+        uni,
+        "modules",
+        "taiwan_margin_financing",
+        "latest",
+        "series",
+        "TWSE",
+        "chg_yi_unit",
+        "label",
+    )
+    if isinstance(label, str) and label.strip():
+        return label.strip()
+    return "NA"
+
+
+def _fmt_with_unit(x: Any, unit: str, nd: int = 3) -> str:
+    """
+    Format a scalar numeric with unit (audit-friendly).
+    - If x is None or not numeric => "NA"
+    - If unit missing => "NA" (do not guess)
+    """
+    if x is None:
+        return "NA"
+    try:
+        v = float(x)
+    except Exception:
+        return "NA"
+    if not unit or unit == "NA":
+        return "NA"
+    return f"{v:.{nd}f} {unit}"
 
 
 def main() -> int:
@@ -415,19 +459,29 @@ def main() -> int:
     lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
 
-    # cross_module (kept)
+    # cross_module (kept) + unit display
     cross = _safe_get(twm, "cross_module") or {}
     if isinstance(cross, dict) and cross:
+        # unit from unified.latest.series.TWSE.chg_yi_unit.label
+        chg_unit = _get_twmargin_chg_unit_label(uni)
+
         lines.append("### cross_module (Margin × Roll25 consistency)")
         lines.append(f"- margin_signal: {cross.get('margin_signal','NA')}")
         lines.append(f"- margin_signal_source: {cross.get('margin_signal_source','NA')}")
         mr = cross.get("margin_rationale", {}) if isinstance(cross.get("margin_rationale"), dict) else {}
         lines.append(f"- margin_rule_version: {mr.get('rule_version','NA')}")
+
+        # NEW: unit disclosure (no guessing)
+        lines.append(f"- chg_unit: {chg_unit} (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)")
+
         chg_last5 = mr.get("chg_last5", None)
         lines.append(f"- chg_last5: {chg_last5 if chg_last5 is not None else 'NA'}")
-        lines.append(f"- sum_last5: {_fmt(mr.get('sum_last5'),3)}")
+
+        # NEW: show scalars with unit (if unit missing => NA)
+        lines.append(f"- sum_last5: {_fmt_with_unit(mr.get('sum_last5'), chg_unit, nd=3)}")
         lines.append(f"- pos_days_last5: {_fmt_int(mr.get('pos_days_last5'))}")
-        lines.append(f"- latest_chg: {_fmt(mr.get('latest_chg'),3)}")
+        lines.append(f"- latest_chg: {_fmt_with_unit(mr.get('latest_chg'), chg_unit, nd=3)}")
+
         lines.append(f"- margin_confidence: {mr.get('confidence','NA')}")
         lines.append(f"- roll25_heated: {_fmt(cross.get('roll25_heated'),0)}")
         lines.append(f"- roll25_confidence: {cross.get('roll25_confidence','NA')}")
