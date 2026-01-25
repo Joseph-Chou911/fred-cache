@@ -8,9 +8,11 @@ Adds:
 - fx_usdtwd: USD/TWD spot mid (BOT) + ret1/chg_5d + deterministic signal rule
 - taiwan_margin_financing.cross_module:
   - margin_signal (derived from TWSE chg_yi last5 if not present)
-  - roll25_heated (derived from roll25 report only)
+  - roll25_heated_market (derived from roll25 report MARKET signals only)
+  - roll25_data_quality_issue (derived from roll25 report DATA QUALITY only)
   - roll25_confidence (DOWNGRADED when lookback not full or unknown)
-  - consistency (CONVERGENCE/DIVERGENCE) + deterministic rationale
+  - consistency (CONVERGENCE/DIVERGENCE) based on margin_signal × roll25_heated_market
+  - deterministic rationale
 
 NO external fetch here. Pure merge + deterministic calculations.
 
@@ -33,6 +35,16 @@ Output:
   - tag_legacy: same as roll25 latest_report.tag for backward compatibility
 - roll25_heated_rule_v1: remove "NON_TRADING_DAY => heated=False" special case
   (weekend run can still reflect the last trading day's signals).
+
+2026-01-25 update (this change):
+- Split Roll25 "heated" into TWO orthogonal concepts:
+  1) roll25_heated_market: ONLY market-behavior signals
+     - DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak
+  2) roll25_data_quality_issue: ONLY data quality / missingness
+     - OhlcMissing OR freshness_ok==False OR used_date_status indicates not updated
+- Backward compatibility:
+  - keep roll25_heated (legacy) == roll25_heated_market (NOT including data quality)
+  - rationale includes both market_hits and data_quality_hits
 """
 
 from __future__ import annotations
@@ -182,7 +194,7 @@ def _extract_lookback_target_from_roll25_report(roll_obj: Dict[str, Any]) -> Opt
 
 
 def _extract_useddate_from_roll25_report(roll_obj: Dict[str, Any]) -> Optional[str]:
-    # Prefer numbers.UsedDate (as in your sample), else used_date
+    # Prefer numbers.UsedDate, else used_date
     v = _safe_get(roll_obj, "numbers", "UsedDate")
     if isinstance(v, str):
         return v
@@ -200,7 +212,6 @@ def _infer_run_day_tag_from_utc_z(generated_at_utc_z: str) -> str:
     If parsing fails => NA.
     """
     try:
-        # generated_at_utc_z: "YYYY-MM-DDTHH:MM:SSZ"
         dt_utc = datetime.strptime(generated_at_utc_z, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         dt_tpe = dt_utc.astimezone(timezone(timedelta(hours=8)))
         wd = dt_tpe.weekday()  # Mon=0 ... Sun=6
@@ -264,24 +275,29 @@ def _compute_used_date_status_v1(latest_report: Dict[str, Any]) -> Tuple[str, Di
     return "UNKNOWN_LATEST_ROW_DATE", dbg
 
 
-def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
+def _roll25_heated_rule_v2_split(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Deterministic "heated" flag from roll25 JSON only.
+    Deterministic Roll25 heat + data quality split from roll25 JSON only.
 
-    IMPORTANT semantic fix:
-    - DO NOT force heated=False just because roll_obj.tag == "NON_TRADING_DAY".
-      That tag is UsedDate selection status (e.g., weekend run chooses latest trading day),
-      not a statement that the UsedDate is non-trading.
+    Output:
+    - roll25_heated_market: market behavior only (no data-quality flags)
+      Uses signals:
+        DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak
 
-    Rules:
-    - heated=True if ANY of these signals are true:
-      DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak, OhlcMissing
-    - Else heated=False
+    - roll25_data_quality_issue: data quality / missingness only
+      Uses:
+        OhlcMissing (signal)
+        OR roll_obj.ohlc_status == "MISSING"
+        OR roll_obj.freshness_ok == False
+        OR used_date_status in {"DATA_NOT_UPDATED", "MISSING_USED_DATE", "UNKNOWN_LATEST_ROW_DATE"}
+
+    Backward compatibility:
+    - roll25_heated (legacy) == roll25_heated_market
 
     Confidence:
     - DOWNGRADED if LookbackNActual < LookbackNTarget OR target unknown.
     """
-    tag = roll_obj.get("tag")
+    tag_legacy = roll_obj.get("tag")
     risk_level = roll_obj.get("risk_level")
     nums = roll_obj.get("numbers") if isinstance(roll_obj.get("numbers"), dict) else {}
     sigs = roll_obj.get("signal") if isinstance(roll_obj.get("signal"), dict) else {}
@@ -291,11 +307,28 @@ def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     def _b(x: Any) -> bool:
         return bool(x) is True
 
-    keys = ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak", "OhlcMissing"]
-    hits = {k: _b(sigs.get(k)) for k in keys}
-    heated = any(hits.values())
-    rule_note = "heated=True if any key signals true else False (no special-case for NON_TRADING_DAY)"
+    # --- Market hits (ONLY market behavior) ---
+    market_keys = ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]
+    market_hits = {k: _b(sigs.get(k)) for k in market_keys}
+    heated_market = any(market_hits.values())
 
+    # --- Data quality hits (ONLY data quality / missingness) ---
+    ohlc_missing_signal = _b(sigs.get("OhlcMissing"))
+    ohlc_status = roll_obj.get("ohlc_status") if isinstance(roll_obj.get("ohlc_status"), str) else None
+    freshness_ok = roll_obj.get("freshness_ok") if isinstance(roll_obj.get("freshness_ok"), bool) else None
+
+    used_date_status, used_date_status_dbg = _compute_used_date_status_v1(roll_obj)
+    used_date_status_bad = used_date_status in {"DATA_NOT_UPDATED", "MISSING_USED_DATE", "UNKNOWN_LATEST_ROW_DATE"}
+
+    data_quality_hits = {
+        "OhlcMissing(signal)": ohlc_missing_signal,
+        "OHLCStatusMissing(field)": (isinstance(ohlc_status, str) and ohlc_status.upper() == "MISSING"),
+        "FreshnessNotOK(field)": (freshness_ok is False),
+        "UsedDateStatusBad(derived)": bool(used_date_status_bad),
+    }
+    data_quality_issue = any(data_quality_hits.values())
+
+    # --- Confidence (window) ---
     lookback_actual = roll_obj.get("lookback_n_actual")
     if not isinstance(lookback_actual, int):
         la2 = nums.get("LookbackNActual")
@@ -312,30 +345,47 @@ def _roll25_heated_rule_v1(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     elif lookback_actual < lookback_target:
         confidence = "DOWNGRADED"
 
+    window_note = (
+        f"LookbackNActual={lookback_actual}/{lookback_target} (window_not_full)"
+        if isinstance(lookback_actual, int) and isinstance(lookback_target, int) and lookback_actual < lookback_target
+        else (
+            f"LookbackNActual={lookback_actual}/{lookback_target}"
+            if isinstance(lookback_actual, int)
+            else "LookbackNActual=NA"
+        )
+    )
+
     return {
-        "roll25_heated": bool(heated),
+        # NEW (split)
+        "roll25_heated_market": bool(heated_market),
+        "roll25_data_quality_issue": bool(data_quality_issue),
+
+        # LEGACY (backward compatibility) — IMPORTANT: equals market only
+        "roll25_heated": bool(heated_market),
+
         "roll25_confidence": confidence,
         "roll25_rationale": {
-            "rule": rule_note,
-            "used_date_selection_tag(tag_legacy)": tag if isinstance(tag, str) else "NA",
+            "rule_market": "heated_market=True if any market-behavior signals true else False",
+            "rule_data_quality": "data_quality_issue=True if any data-quality flags true else False",
+            "used_date_selection_tag(tag_legacy)": tag_legacy if isinstance(tag_legacy, str) else "NA",
             "risk_level": risk_level if isinstance(risk_level, str) else "NA",
-            "window_note": (
-                f"LookbackNActual={lookback_actual}/{lookback_target} (window_not_full)"
-                if isinstance(lookback_actual, int) and isinstance(lookback_target, int) and lookback_actual < lookback_target
-                else (
-                    f"LookbackNActual={lookback_actual}/{lookback_target}"
-                    if isinstance(lookback_actual, int)
-                    else "LookbackNActual=NA"
-                )
-            ),
-            "signals_used": {
+            "window_note": window_note,
+            "signals_market_used": {
                 "DownDay": sigs.get("DownDay", False),
                 "VolumeAmplified": sigs.get("VolumeAmplified", False),
                 "VolAmplified": sigs.get("VolAmplified", False),
                 "NewLow_N": sigs.get("NewLow_N", False),
                 "ConsecutiveBreak": sigs.get("ConsecutiveBreak", False),
-                "OhlcMissing": sigs.get("OhlcMissing", False),
             },
+            "signals_data_quality_used": {
+                "OhlcMissing": sigs.get("OhlcMissing", False),
+                "ohlc_status": ohlc_status if isinstance(ohlc_status, str) else "NA",
+                "freshness_ok": freshness_ok if isinstance(freshness_ok, bool) else "NA",
+                "used_date_status": used_date_status,
+                "used_date_status_dbg": used_date_status_dbg,
+            },
+            "market_hits": market_hits,
+            "data_quality_hits": data_quality_hits,
             "used_date": used_date or "NA",
         },
     }
@@ -446,19 +496,19 @@ def _date_alignment(twm_obj: Dict[str, Any], roll_obj: Dict[str, Any]) -> Dict[s
     }
 
 
-def _consistency_rule_v1(margin_signal: str, roll25_heated: bool) -> Dict[str, Any]:
+def _consistency_rule_v1(margin_signal: str, roll25_heated_market: bool) -> Dict[str, Any]:
     """
-    Deterministic consistency label between margin and roll25 heat.
-    - DIVERGENCE if (margin in WATCH/ALERT and heated=False) OR (margin==NONE and heated=True)
+    Deterministic consistency label between margin and roll25 market heat.
+    - DIVERGENCE if (margin in WATCH/ALERT and heated_market=False) OR (margin==NONE and heated_market=True)
     - CONVERGENCE otherwise
     """
     ms = margin_signal or "NA"
-    heated = bool(roll25_heated)
+    heated = bool(roll25_heated_market)
 
     diverge = ((ms in ("WATCH", "ALERT")) and (not heated)) or ((ms == "NONE") and heated)
     return {
         "consistency": "DIVERGENCE" if diverge else "CONVERGENCE",
-        "consistency_rule": "Deterministic Margin×Roll25 (rule_v1).",
+        "consistency_rule": "Deterministic Margin×Roll25MarketHeat (rule_v1).",
     }
 
 
@@ -639,7 +689,7 @@ def main() -> int:
             "UsedDate": used_date or "NA",
             "run_day_tag": run_day_tag,
 
-            # ✅ new: unambiguous status for UsedDate
+            # ✅ unambiguous status for UsedDate
             "used_date_status": used_date_status,
             "used_date_status_dbg": used_date_status_dbg,
 
@@ -669,6 +719,7 @@ def main() -> int:
                 "OhlcMissing": sigs.get("OhlcMissing"),
             },
             "ohlc_status": roll_obj.get("ohlc_status") if isinstance(roll_obj.get("ohlc_status"), str) else "NA",
+            "freshness_ok": roll_obj.get("freshness_ok") if isinstance(roll_obj.get("freshness_ok"), bool) else "NA",
         }
 
     # fx derived
@@ -699,25 +750,40 @@ def main() -> int:
             **sig,
         }
 
-    # cross_module (Margin×Roll25)
+    # cross_module (Margin×Roll25MarketHeat)
     cross_module: Dict[str, Any] = {}
     if twm_status == "OK" and isinstance(twm_obj, dict) and roll_status == "OK" and isinstance(roll_obj, dict):
         ms = _get_margin_signal_prefer_structured(twm_obj)
-        r25 = _roll25_heated_rule_v1(roll_obj)
+        r25 = _roll25_heated_rule_v2_split(roll_obj)
         align = _date_alignment(twm_obj, roll_obj)
-        cons = _consistency_rule_v1(str(ms.get("margin_signal", "NA")), bool(r25.get("roll25_heated", False)))
+
+        heated_market = bool(r25.get("roll25_heated_market", False))
+        data_quality_issue = bool(r25.get("roll25_data_quality_issue", False))
+
+        cons = _consistency_rule_v1(str(ms.get("margin_signal", "NA")), heated_market)
 
         cross_module = {
             "margin_signal": ms.get("margin_signal", "NA"),
             "margin_signal_source": ms.get("margin_signal_source", "NA"),
             "margin_rationale": ms.get("margin_rationale", {"method": "NA"}),
-            "roll25_heated": r25.get("roll25_heated", False),
+
+            # NEW (split)
+            "roll25_heated_market": heated_market,
+            "roll25_data_quality_issue": data_quality_issue,
+
+            # LEGACY (backward compatibility)
+            "roll25_heated": bool(r25.get("roll25_heated", False)),
+
             "roll25_confidence": r25.get("roll25_confidence", "NA"),
             "consistency": cons.get("consistency", "NA"),
             "rationale": {
                 "consistency_rule": cons.get("consistency_rule", "NA"),
-                "roll25_rationale": r25.get("roll25_rationale", {"rule": "NA"}),
+                "roll25_rationale": r25.get("roll25_rationale", {"rule_market": "NA", "rule_data_quality": "NA"}),
                 "date_alignment": align,
+                "note": (
+                    "consistency uses roll25_heated_market only; "
+                    "roll25_data_quality_issue does NOT flip consistency, but should downgrade trust in interpretation."
+                ),
             },
         }
 
@@ -765,6 +831,9 @@ def main() -> int:
             "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
             "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
             "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status computed deterministically from roll25 latest_report; used_date_selection_tag (tag_legacy) preserves roll25 latest_report.tag.",
+            "Roll25 split: roll25_heated_market (market behavior only) and roll25_data_quality_issue (data quality only).",
+            "Consistency uses roll25_heated_market only; data quality issue does not force DIVERGENCE/CONVERGENCE flip, but should downgrade interpretation confidence.",
+            "Backward compatibility: roll25_heated (legacy) == roll25_heated_market.",
         ],
     }
 
