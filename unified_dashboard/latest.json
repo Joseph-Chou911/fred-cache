@@ -1,7 +1,7 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-25T14:32:45Z",
-  "run_day_tag": "NON_TRADING_DAY",
+  "generated_at_utc": "2026-01-25T23:00:42Z",
+  "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
     "fred_in": "dashboard_fred_cache/dashboard_latest.json",
@@ -15,33 +15,33 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-24T15:40:05.488487+00:00",
+          "run_ts_utc": "2026-01-25T15:41:14.459181+00:00",
           "module": "market_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@e5caa24",
+          "script_fingerprint": "render_dashboard_py_signals_v8@8332161",
           "stale_hours": 36.0,
           "stats_path": "market_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-01-24T13:27:02Z",
-          "stats_as_of_ts": "2026-01-24T13:27:02Z",
+          "stats_generated_at_utc": "2026-01-25T04:38:46Z",
+          "stats_as_of_ts": "2026-01-25T04:38:46Z",
           "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
           "series_count": 4,
           "dash_history_path": "dashboard/history.json",
           "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
           "history_items_loaded": 6,
-          "history_excluded_same_day": 1
+          "history_excluded_same_day": 0
         },
         "rows": [
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@e5caa24",
+            "script_fingerprint": "render_dashboard_py_signals_v8@8332161",
             "series": "OFR_FSI",
             "value": -2.445,
             "data_date": "2026-01-21",
-            "as_of_ts": "2026-01-24T13:27:02Z",
+            "as_of_ts": "2026-01-25T04:38:46Z",
             "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
             "dq": "OK",
-            "age_hours": 2.2176356908333332,
+            "age_hours": 11.041238661388888,
             "z60": -0.16853631919646242,
             "ret1_pct60": -11.389521640091118,
             "z_delta60": -0.7038906118856403,
@@ -57,20 +57,20 @@
             "dir_note": "DIR_UNCERTAIN_ABS",
             "prev_signal": "WATCH",
             "delta_signal": "SAME",
-            "streak_hist": 2,
-            "streak_wa": 3
+            "streak_hist": 3,
+            "streak_wa": 4
           },
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@e5caa24",
+            "script_fingerprint": "render_dashboard_py_signals_v8@8332161",
             "series": "VIX",
             "value": 16.09,
             "data_date": "2026-01-23",
-            "as_of_ts": "2026-01-24T13:27:02Z",
+            "as_of_ts": "2026-01-25T04:38:46Z",
             "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
             "dq": "OK",
-            "age_hours": 2.2176356908333332,
+            "age_hours": 11.041238661388888,
             "z60": -0.38809606605851577,
             "ret1_pct60": 2.8772378516623993,
             "z_delta60": 0.172147211058723,
@@ -86,20 +86,20 @@
             "dir_note": "DIR_UNCERTAIN_ABS",
             "prev_signal": "WATCH",
             "delta_signal": "SAME",
-            "streak_hist": 3,
-            "streak_wa": 4
+            "streak_hist": 4,
+            "streak_wa": 5
           },
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@e5caa24",
+            "script_fingerprint": "render_dashboard_py_signals_v8@8332161",
             "series": "SP500",
             "value": 6915.61,
             "data_date": "2026-01-23",
-            "as_of_ts": "2026-01-24T13:27:02Z",
+            "as_of_ts": "2026-01-25T04:38:46Z",
             "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
             "dq": "OK",
-            "age_hours": 2.2176356908333332,
+            "age_hours": 11.041238661388888,
             "z60": 0.867813687185047,
             "ret1_pct60": 0.03269037442049526,
             "z_delta60": 0.012874360472983959,
@@ -113,22 +113,22 @@
             "near": "NA",
             "dir": "HIGH",
             "dir_note": "RISK_BIAS_UP",
-            "prev_signal": "WATCH",
-            "delta_signal": "WATCH→INFO",
-            "streak_hist": 3,
+            "prev_signal": "INFO",
+            "delta_signal": "SAME",
+            "streak_hist": 0,
             "streak_wa": 0
           },
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@e5caa24",
+            "script_fingerprint": "render_dashboard_py_signals_v8@8332161",
             "series": "HYG_IEF_RATIO",
             "value": 0.8456487754038562,
             "data_date": "2026-01-23",
-            "as_of_ts": "2026-01-24T13:27:02Z",
+            "as_of_ts": "2026-01-25T04:38:46Z",
             "source_url": "DERIVED",
             "dq": "OK",
-            "age_hours": 2.2176356908333332,
+            "age_hours": 11.041238661388888,
             "z60": 1.9723169759073098,
             "ret1_pct60": -0.2159445726344131,
             "z_delta60": -0.477955336205953,
@@ -142,9 +142,9 @@
             "near": "NA",
             "dir": "LOW",
             "dir_note": "NA",
-            "prev_signal": "WATCH",
-            "delta_signal": "WATCH→NONE",
-            "streak_hist": 5,
+            "prev_signal": "NONE",
+            "delta_signal": "SAME",
+            "streak_hist": 0,
             "streak_wa": 0
           }
         ],
@@ -529,9 +529,9 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-25T17:43:19.036994+08:00",
+        "generated_at": "2026-01-26T02:56:06.801780+08:00",
         "timezone": "Asia/Taipei",
-        "summary": "今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低",
+        "summary": "今日資料未更新；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低",
         "numbers": {
           "UsedDate": "2026-01-23",
           "Close": 31961.51,
@@ -681,7 +681,7 @@
             "low": 29007.75
           }
         ],
-        "tag": "NON_TRADING_DAY",
+        "tag": "DATA_NOT_UPDATED",
         "freshness_ok": true,
         "risk_level": "低",
         "mode": "FULL",
@@ -693,7 +693,7 @@
       },
       "core": {
         "UsedDate": "2026-01-23",
-        "run_day_tag": "NON_TRADING_DAY",
+        "run_day_tag": "TRADING_DAY",
         "used_date_status": "OK_LATEST",
         "used_date_status_dbg": {
           "used_date": "2026-01-23",
@@ -701,8 +701,8 @@
           "ohlc_status": "OK",
           "freshness_ok": true
         },
-        "used_date_selection_tag": "NON_TRADING_DAY",
-        "tag_legacy": "NON_TRADING_DAY",
+        "used_date_selection_tag": "DATA_NOT_UPDATED",
+        "tag_legacy": "DATA_NOT_UPDATED",
         "risk_level": "低",
         "turnover_twd": 818428930073,
         "turnover_unit": "TWD",
@@ -1132,7 +1132,7 @@
           "roll25_rationale": {
             "rule_market": "heated_market=True if any market-behavior signals true else False",
             "rule_data_quality": "data_quality_issue=True if any data-quality flags true else False",
-            "used_date_selection_tag(tag_legacy)": "NON_TRADING_DAY",
+            "used_date_selection_tag(tag_legacy)": "DATA_NOT_UPDATED",
             "risk_level": "低",
             "window_note": "LookbackNActual=16/20 (window_not_full)",
             "signals_market_used": {
@@ -1183,7 +1183,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-25T14:32:44Z",
+        "generated_at_utc": "2026-01-25T23:00:40Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
         "data_date": "2026-01-23",
