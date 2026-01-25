@@ -3,7 +3,7 @@ name: Update Bottom Cache (market_cache-based)
 on:
   workflow_dispatch: {}
   schedule:
-    # Example: 23:30 Asia/Taipei = 15:30 UTC
+    # 23:30 Asia/Taipei = 15:30 UTC
     - cron: "30 15 * * *"
 
 permissions:
@@ -17,6 +17,7 @@ jobs:
   bottom_cache:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,12 +35,22 @@ jobs:
           set -euo pipefail
           python scripts/render_bottom_cache.py
 
+      # Optional but recommended: remove legacy split outputs so repo stays clean
+      - name: Cleanup legacy bottom_cache outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f bottom_cache/latest.json bottom_cache/history.json || true
+
       - name: Commit changes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add bottom_cache/latest.json bottom_cache/history.json dashboard_bottom_cache/report.md
+
+          # ONLY unified output folder (dashboard_bottom_cache)
+          git add -A dashboard_bottom_cache
+
           git commit -m "bottom_cache: update" || echo "No changes to commit"
           git push
