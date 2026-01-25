@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-bottom_cache renderer (global market_cache + TW local gate) -> dashboard_bottom_cache/*
-
-Outputs (all in ONE folder):
+bottom_cache renderer:
+- Global bottom/reversal workflow from market_cache (single-source)
+- TW local gate from existing repo outputs (no fetch):
+    * roll25_cache/latest_report.json
+    * taiwan_margin_cache/latest.json   ✅ (your actual path)
+Outputs (ONE folder):
 - dashboard_bottom_cache/latest.json
 - dashboard_bottom_cache/history.json
 - dashboard_bottom_cache/report.md
 
-Design intent:
-- Global: Event-driven "bottom / reversal workflow" signal (NOT a daily market-state dashboard).
-- TW: Use existing workflow outputs (no external fetch here) as a *local gate* for Taiwan bottoming.
-- Deterministic rules only; no guessing; missing fields => NA + excluded reasons.
-
-Upstream inputs:
-- Global (single-source): market_cache/stats_latest.json
-- TW local gate (existing outputs):
-  - roll25_cache/latest_report.json (preferred)
-  - taiwan_margin_financing/latest.json (preferred)
-  - (optional) fx_usdtwd/latest.json (not required in v0)
+Principles:
+- Deterministic rules only; no guessing.
+- Missing fields => NA + excluded reasons.
 """
 
 from __future__ import annotations
@@ -31,10 +26,12 @@ from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
 
-# =========================
-# Config
-# =========================
+# ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
+
+# TW inputs (existing workflow outputs, no fetch)
+TW_ROLL25_REPORT_PATH = "roll25_cache/latest_report.json"
+TW_MARGIN_PATH = "taiwan_margin_cache/latest.json"  # ✅ corrected path
 
 # ✅ single unified output folder
 OUT_DIR = "dashboard_bottom_cache"
@@ -42,7 +39,7 @@ OUT_LATEST = f"{OUT_DIR}/latest.json"
 OUT_HISTORY = f"{OUT_DIR}/history.json"
 OUT_MD = f"{OUT_DIR}/report.md"
 
-# Global series we need from market_cache
+# what we need from market_cache
 NEEDED = ["VIX", "SP500", "HYG_IEF_RATIO", "OFR_FSI"]
 
 # risk direction is a RULE (not guessed)
@@ -53,39 +50,26 @@ RISK_DIR = {
     "SP500": "LOW",
 }
 
-# Global v0 thresholds (deterministic)
+# v0 thresholds (keep deterministic)
 TH_VIX_PANIC = 20.0
 TH_SPX_RET1_PANIC = -1.5     # unit = percent (%)
 TH_HYG_VETO_Z = -2.0         # systemic credit stress veto (LOW direction)
 TH_OFR_VETO_Z = 2.0          # systemic stress veto (HIGH direction)
 HISTORY_SHOW_N = 10          # for report only
 
-# TW inputs (existing workflow outputs)
-ROLL25_REPORT_PATH = "roll25_cache/latest_report.json"
-TW_MARGIN_PATH = "taiwan_margin_financing/latest.json"
+# TW local gate rules (v0)
+# panic when DownDay AND any stress flags
+TW_PANIC_REQUIRES = ["DownDay"]
+TW_PANIC_ANY_OF = ["VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]
 
-# TW v0 gate thresholds (deterministic)
-# Panic trigger via roll25 signals
-# - TRIG_TW_PANIC = DownDay AND (VolumeAmplified OR VolAmplified OR NewLow_N OR ConsecutiveBreak)
-# Leverage heat derived from margin rows (since no cross_module file exists)
-# - Derive margin_signal from TWSE last5 chg_yi (unit: 億)
-# - Heat if margin_signal in {WATCH, ALERT}
-# Reversal trigger:
-# - PANIC & NOT heat & pct_change>=0 & DownDay=false
-# Drawdown gate:
-# - disabled in this repo (no roll25_derived file); kept as NA with reason
-
-# Margin signal derivation thresholds (unit: 億)
-TH_MARGIN_INFO_SUM5 = 80.0
-TH_MARGIN_WATCH_SUM5 = 120.0
-TH_MARGIN_ALERT_SUM5 = 200.0
-TH_MARGIN_WATCH_POS5_SUM5 = 100.0   # pos_days>=4 and sum>=100 -> WATCH
-TH_MARGIN_ALERT_POS5_SUM5 = 150.0   # pos_days>=5 and sum>=150 -> ALERT
+# leverage heat: derived from margin flow; conservative rule similar to your margin dashboard feel
+# WATCH if 5-day sum chg_yi >= 100 (億) AND pos_days_last5 >= 4
+# ALERT if 5-day sum chg_yi >= 150 (億) AND pos_days_last5 >= 4
+TW_MARGIN_WATCH_SUM5_YI = 100.0
+TW_MARGIN_ALERT_SUM5_YI = 150.0
+TW_MARGIN_POSDAYS5_MIN = 4
 
 
-# =========================
-# Utils
-# =========================
 def _read_json(path: str) -> Any:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -130,18 +114,14 @@ def _as_int(x: Any) -> Optional[int]:
         if x is None:
             return None
         if isinstance(x, bool):
-            return 1 if x else 0
-        if isinstance(x, int):
             return int(x)
+        if isinstance(x, int):
+            return x
         if isinstance(x, float):
-            if x != x:
-                return None
             return int(x)
         s = str(x).strip()
         if s == "" or s.upper() == "NA":
             return None
-        if s.lower() in ("true", "false"):
-            return 1 if s.lower() == "true" else 0
         return int(float(s))
     except Exception:
         return None
@@ -152,6 +132,8 @@ def _as_bool(x: Any) -> Optional[bool]:
         return None
     if isinstance(x, bool):
         return x
+    if isinstance(x, (int, float)):
+        return bool(x)
     s = str(x).strip().lower()
     if s in ("true", "1", "yes", "y"):
         return True
@@ -213,356 +195,81 @@ def _safe_float_str(x: Optional[float], nd: int = 4) -> str:
     return fmt.format(x)
 
 
-def _exists_read_json(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _iso_sort_key(iso: str) -> Tuple[int, str]:
     try:
-        if not os.path.exists(path):
-            return None, "file_not_found"
-        obj = _read_json(path)
-        if not isinstance(obj, dict):
-            return None, "not_a_dict"
-        return obj, None
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        return (int(dt.timestamp()), iso)
+    except Exception:
+        return (0, iso)
+
+
+# ---------------- TW helpers ----------------
+
+def _load_tw_roll25(excluded: List[Dict[str, str]]) -> Tuple[Dict[str, Any], bool]:
+    if not os.path.exists(TW_ROLL25_REPORT_PATH):
+        excluded.append({"trigger": "TW:INPUT_ROLL25", "reason": "not_available:file_not_found"})
+        return ({}, False)
+    try:
+        obj = _read_json(TW_ROLL25_REPORT_PATH)
+        return (obj if isinstance(obj, dict) else {}, True)
     except Exception as e:
-        return None, f"read_or_parse_failed:{type(e).__name__}"
+        excluded.append({"trigger": "TW:INPUT_ROLL25", "reason": f"read_or_parse_failed:{type(e).__name__}"})
+        return ({}, False)
 
 
-# =========================
-# TW: roll25 parsing
-# =========================
-def _extract_roll25_fields(roll: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+def _load_tw_margin(excluded: List[Dict[str, str]]) -> Tuple[Dict[str, Any], bool]:
+    if not os.path.exists(TW_MARGIN_PATH):
+        excluded.append({"trigger": "TW:INPUT_MARGIN", "reason": "not_available:file_not_found"})
+        return ({}, False)
+    try:
+        obj = _read_json(TW_MARGIN_PATH)
+        return (obj if isinstance(obj, dict) else {}, True)
+    except Exception as e:
+        excluded.append({"trigger": "TW:INPUT_MARGIN", "reason": f"read_or_parse_failed:{type(e).__name__}"})
+        return ({}, False)
+
+
+def _derive_margin_signal_from_rows(rows: List[Dict[str, Any]]) -> Tuple[Optional[str], Dict[str, Any]]:
     """
-    Parse roll25_cache/latest_report.json
-
-    Expected:
-      - numbers: UsedDate, Close, PctChange, TradeValue, VolumeMultiplier, AmplitudePct, VolMultiplier
-      - signal: DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak, OhlcMissing
-      - lookback_n_actual, LookbackNTarget (may be in caveats text, but latest_report.json provides lookback_n_actual)
+    Derive margin heat signal from TWSE rows (chg_yi):
+    - WATCH if sum_last5 >= 100 and pos_days_last5 >= 4
+    - ALERT if sum_last5 >= 150 and pos_days_last5 >= 4
+    Returns (signal, dbg)
     """
-    notes: List[str] = []
-    out: Dict[str, Any] = {}
+    if not isinstance(rows, list) or len(rows) == 0:
+        return (None, {"reason": "rows_empty_or_invalid"})
 
-    numbers = roll.get("numbers") if isinstance(roll.get("numbers"), dict) else {}
-    signal = roll.get("signal") if isinstance(roll.get("signal"), dict) else {}
+    # assume rows are newest-first as in your sample
+    last5 = rows[:5]
+    chgs: List[float] = []
+    for r in last5:
+        v = _as_float(r.get("chg_yi"))
+        if v is None:
+            continue
+        chgs.append(v)
 
-    out["UsedDate"] = _as_str(numbers.get("UsedDate"))
-    out["run_day_tag"] = _as_str(roll.get("tag"))
-    out["risk_level"] = _as_str(roll.get("risk_level"))
-    out["turnover_twd"] = _as_float(numbers.get("TradeValue"))
-    out["close"] = _as_float(numbers.get("Close"))
-    out["pct_change"] = _as_float(numbers.get("PctChange"))
-    out["amplitude_pct"] = _as_float(numbers.get("AmplitudePct"))
-    out["volume_multiplier"] = _as_float(numbers.get("VolumeMultiplier"))
-    out["vol_multiplier"] = _as_float(numbers.get("VolMultiplier"))
+    if len(chgs) < 3:
+        return (None, {"reason": "insufficient_chg_yi_points", "points": len(chgs)})
 
-    # lookback
-    out["lookback_n_actual"] = _as_int(roll.get("lookback_n_actual"))
-    # Some historical versions used LookbackNTarget; keep best-effort
-    out["lookback_n_target"] = _as_int(roll.get("LookbackNTarget")) or None
+    sum5 = float(sum(chgs))
+    pos_days = sum(1 for x in chgs if x > 0)
 
-    # signals
-    out["signals"] = {
-        "DownDay": _as_bool(signal.get("DownDay")),
-        "VolumeAmplified": _as_bool(signal.get("VolumeAmplified")),
-        "VolAmplified": _as_bool(signal.get("VolAmplified")),
-        "NewLow_N": _as_bool(signal.get("NewLow_N")),
-        "ConsecutiveBreak": _as_bool(signal.get("ConsecutiveBreak")),
-        "OhlcMissing": _as_bool(signal.get("OhlcMissing")),
+    sig = "NONE"
+    if pos_days >= TW_MARGIN_POSDAYS5_MIN and sum5 >= TW_MARGIN_ALERT_SUM5_YI:
+        sig = "ALERT"
+    elif pos_days >= TW_MARGIN_POSDAYS5_MIN and sum5 >= TW_MARGIN_WATCH_SUM5_YI:
+        sig = "WATCH"
+
+    dbg = {
+        "chg_last5_yi": chgs,
+        "sum_last5_yi": sum5,
+        "pos_days_last5": pos_days,
+        "rule": f"WATCH(sum5>={TW_MARGIN_WATCH_SUM5_YI} & pos_days>={TW_MARGIN_POSDAYS5_MIN}); "
+                f"ALERT(sum5>={TW_MARGIN_ALERT_SUM5_YI} & pos_days>={TW_MARGIN_POSDAYS5_MIN})"
     }
-
-    # validation notes
-    if out["UsedDate"] is None:
-        notes.append("missing numbers.UsedDate")
-    if out["pct_change"] is None:
-        notes.append("missing numbers.PctChange")
-    if out["signals"]["DownDay"] is None:
-        notes.append("missing signal.DownDay")
-
-    return out, notes
+    return (sig, dbg)
 
 
-# =========================
-# TW: margin signal derivation (unit: 億)
-# =========================
-def _derive_margin_signal_from_rows(rows: Any) -> Tuple[Optional[str], Dict[str, Any]]:
-    """
-    Derive a simple margin_signal from rows (list of {date, chg_yi, balance_yi}).
-    Unit of chg_yi and balance_yi is 億 (based on your schema).
-
-    Need last5 valid chg_yi numbers, else NA.
-
-    Compute:
-      last5 = first 5 rows chg_yi (assuming rows are latest->older)
-      sum_last5
-      pos_days_last5
-      latest_chg = last5[0]
-
-    Signal:
-      ALERT if (sum_last5 >= 200) OR (pos_days_last5 >= 5 and sum_last5 >= 150)
-      WATCH if (sum_last5 >= 120) OR (pos_days_last5 >= 4 and sum_last5 >= 100)
-      INFO  if (sum_last5 >= 80)
-      NONE otherwise
-    """
-    dbg: Dict[str, Any] = {
-        "unit": "億",
-        "chg_last5_yi": None,
-        "sum_last5_yi": None,
-        "pos_days_last5": None,
-        "latest_chg_yi": None,
-        "rule": "v0(sum_last5/pos_days)",
-        "thresholds_yi": {
-            "INFO_sum_last5": TH_MARGIN_INFO_SUM5,
-            "WATCH_sum_last5": TH_MARGIN_WATCH_SUM5,
-            "ALERT_sum_last5": TH_MARGIN_ALERT_SUM5,
-            "WATCH_pos>=4_sum>=100": TH_MARGIN_WATCH_POS5_SUM5,
-            "ALERT_pos>=5_sum>=150": TH_MARGIN_ALERT_POS5_SUM5,
-        },
-    }
-
-    if not isinstance(rows, list) or len(rows) < 5:
-        return None, dbg
-
-    last5: List[float] = []
-    for i in range(5):
-        r = rows[i]
-        if not isinstance(r, dict):
-            return None, dbg
-        chg = _as_float(r.get("chg_yi"))
-        if chg is None:
-            return None, dbg
-        last5.append(float(chg))
-
-    s5 = sum(last5)
-    pos = sum(1 for x in last5 if x > 0)
-    latest = last5[0]
-
-    dbg["chg_last5_yi"] = last5
-    dbg["sum_last5_yi"] = s5
-    dbg["pos_days_last5"] = pos
-    dbg["latest_chg_yi"] = latest
-
-    if (s5 >= TH_MARGIN_ALERT_SUM5) or (pos >= 5 and s5 >= TH_MARGIN_ALERT_POS5_SUM5):
-        return "ALERT", dbg
-    if (s5 >= TH_MARGIN_WATCH_SUM5) or (pos >= 4 and s5 >= TH_MARGIN_WATCH_POS5_SUM5):
-        return "WATCH", dbg
-    if s5 >= TH_MARGIN_INFO_SUM5:
-        return "INFO", dbg
-    return "NONE", dbg
-
-
-def _extract_margin_signal(margin: Dict[str, Any]) -> Tuple[Optional[str], Dict[str, Any]]:
-    """
-    Extract or derive margin signal from taiwan_margin_financing/latest.json.
-
-    Your schema:
-      margin["series"]["TWSE"]["rows"] (latest->older)
-      margin["series"]["TPEX"]["rows"]
-
-    There is no precomputed 'margin_signal', so we derive it deterministically from TWSE last5 chg_yi.
-    """
-    if not isinstance(margin, dict):
-        return None, {"reason": "margin_not_dict"}
-
-    series = margin.get("series")
-    if not isinstance(series, dict):
-        return None, {"reason": "missing_series"}
-
-    twse = series.get("TWSE", {})
-    rows = twse.get("rows") if isinstance(twse, dict) else None
-
-    sig, dbg = _derive_margin_signal_from_rows(rows)
-    if sig is None:
-        dbg["reason"] = "missing_or_invalid_rows_or_chg_yi"
-    dbg["data_date"] = _as_str(twse.get("data_date")) if isinstance(twse, dict) else None
-    dbg["source_url"] = _as_str(twse.get("source_url")) if isinstance(twse, dict) else None
-    return sig, dbg
-
-
-# =========================
-# TW Local Gate (roll25 + margin)
-# =========================
-def _tw_local_gate(excluded: List[Dict[str, str]]) -> Dict[str, Any]:
-    """
-    Return TW gate section:
-      - inputs summary
-      - triggers: TRIG_TW_PANIC / TRIG_TW_LEVERAGE_HEAT / TRIG_TW_REVERSAL / TRIG_TW_DRAWDOWN (NA)
-      - state: NA/NONE/TW_BOTTOM_WATCH/TW_BOTTOM_CANDIDATE/PANIC_BUT_LEVERAGE_HEAT
-      - snapshot values for reporting
-    """
-    out: Dict[str, Any] = {
-        "tw_state": "NA",
-        "triggers": {
-            "TRIG_TW_PANIC": None,
-            "TRIG_TW_LEVERAGE_HEAT": None,
-            "TRIG_TW_REVERSAL": None,
-            "TRIG_TW_DRAWDOWN": None,
-        },
-        "distances": {
-            "pct_change_to_nonnegative_gap": None,
-            "lookback_missing_points": None,
-            "drawdown_gap_pct": None,
-        },
-        "inputs": {
-            "roll25_path": ROLL25_REPORT_PATH,
-            "roll25_ok": False,
-            "margin_path": TW_MARGIN_PATH,
-            "margin_ok": False,
-        },
-        "snapshot": {
-            "UsedDate": None,
-            "run_day_tag": None,
-            "risk_level": None,
-            "lookback_n_actual": None,
-            "lookback_n_target": None,
-            "roll25_confidence": "NA",  # not present in latest_report.json; keep as NA
-            "pct_change": None,
-            "amplitude_pct": None,
-            "turnover_twd": None,
-            "close": None,
-            "signals": {},
-            "margin": {},
-        },
-        "notes": [],
-    }
-
-    # --- load roll25 latest_report.json ---
-    roll, rerr = _exists_read_json(ROLL25_REPORT_PATH)
-    if roll is None:
-        excluded.append({"trigger": "TW:INPUT_ROLL25", "reason": f"not_available:{rerr or 'unknown'}"})
-    else:
-        out["inputs"]["roll25_ok"] = True
-        roll_fields, roll_notes = _extract_roll25_fields(roll)
-        out["snapshot"]["UsedDate"] = roll_fields.get("UsedDate")
-        out["snapshot"]["run_day_tag"] = roll_fields.get("run_day_tag")
-        out["snapshot"]["risk_level"] = roll_fields.get("risk_level")
-        out["snapshot"]["lookback_n_actual"] = roll_fields.get("lookback_n_actual")
-        out["snapshot"]["lookback_n_target"] = roll_fields.get("lookback_n_target")
-        out["snapshot"]["pct_change"] = roll_fields.get("pct_change")
-        out["snapshot"]["amplitude_pct"] = roll_fields.get("amplitude_pct")
-        out["snapshot"]["turnover_twd"] = roll_fields.get("turnover_twd")
-        out["snapshot"]["close"] = roll_fields.get("close")
-        out["snapshot"]["signals"] = roll_fields.get("signals", {})
-        if roll_notes:
-            out["notes"].append("roll25_notes:" + ",".join(roll_notes))
-
-    # --- load margin latest.json ---
-    margin, merr = _exists_read_json(TW_MARGIN_PATH)
-    margin_signal: Optional[str] = None
-    margin_dbg: Dict[str, Any] = {}
-
-    if margin is None:
-        excluded.append({"trigger": "TW:INPUT_MARGIN", "reason": f"not_available:{merr or 'unknown'}"})
-    else:
-        out["inputs"]["margin_ok"] = True
-        margin_signal, margin_dbg = _extract_margin_signal(margin)
-        if margin_signal is None:
-            out["notes"].append("margin file exists but cannot derive margin_signal -> heat=NA")
-
-    out["snapshot"]["margin"] = {
-        "margin_signal": margin_signal or "NA",
-        "unit": "億",
-        "debug": margin_dbg,
-    }
-
-    # --- derive TW triggers ---
-    sigs = out["snapshot"]["signals"] if isinstance(out["snapshot"]["signals"], dict) else {}
-
-    down = _as_bool(sigs.get("DownDay"))
-    volA = _as_bool(sigs.get("VolumeAmplified"))
-    volB = _as_bool(sigs.get("VolAmplified"))
-    newlow = _as_bool(sigs.get("NewLow_N"))
-    conbreak = _as_bool(sigs.get("ConsecutiveBreak"))
-
-    # TRIG_TW_PANIC
-    if down is None or (volA is None and volB is None and newlow is None and conbreak is None):
-        excluded.append({"trigger": "TRIG_TW_PANIC", "reason": "missing_fields:roll25.signal.DownDay and/or other signal fields"})
-        out["triggers"]["TRIG_TW_PANIC"] = None
-    else:
-        cond_any = False
-        for b in (volA, volB, newlow, conbreak):
-            if b is True:
-                cond_any = True
-                break
-        out["triggers"]["TRIG_TW_PANIC"] = 1 if (down is True and cond_any) else 0
-
-    # TRIG_TW_LEVERAGE_HEAT (no cross_module -> derived from margin_signal)
-    if margin_signal is None:
-        excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:margin_signal (derived from taiwan_margin_financing.series.TWSE.rows)"})
-        out["triggers"]["TRIG_TW_LEVERAGE_HEAT"] = None
-    else:
-        out["triggers"]["TRIG_TW_LEVERAGE_HEAT"] = 1 if margin_signal in ("WATCH", "ALERT") else 0
-
-    # TRIG_TW_REVERSAL
-    pct_change = out["snapshot"].get("pct_change")
-    pct_change = float(pct_change) if isinstance(pct_change, (int, float)) else None
-
-    tw_panic = out["triggers"]["TRIG_TW_PANIC"]
-    tw_heat = out["triggers"]["TRIG_TW_LEVERAGE_HEAT"]
-
-    if tw_panic != 1:
-        out["triggers"]["TRIG_TW_REVERSAL"] = 0 if tw_panic in (0, None) else 0
-    else:
-        if tw_heat is None:
-            excluded.append({"trigger": "TRIG_TW_REVERSAL", "reason": "gating_missing:TRIG_TW_LEVERAGE_HEAT"})
-            out["triggers"]["TRIG_TW_REVERSAL"] = None
-        elif tw_heat == 1:
-            out["triggers"]["TRIG_TW_REVERSAL"] = 0
-        else:
-            # heat==0, need pct_change>=0 and DownDay==False
-            if pct_change is None or down is None:
-                excluded.append({"trigger": "TRIG_TW_REVERSAL", "reason": "missing_fields:roll25.numbers.PctChange and/or roll25.signal.DownDay"})
-                out["triggers"]["TRIG_TW_REVERSAL"] = None
-            else:
-                out["triggers"]["TRIG_TW_REVERSAL"] = 1 if (pct_change >= 0 and down is False) else 0
-
-    # TRIG_TW_DRAWDOWN (no roll25_derived file in this repo)
-    excluded.append({"trigger": "TRIG_TW_DRAWDOWN", "reason": "not_supported:no roll25_derived input in repo"})
-    out["triggers"]["TRIG_TW_DRAWDOWN"] = None
-
-    # Distances / gating notes
-    if pct_change is not None:
-        out["distances"]["pct_change_to_nonnegative_gap"] = pct_change - 0.0  # <=0 means still negative
-    else:
-        out["distances"]["pct_change_to_nonnegative_gap"] = None
-
-    # lookback missing points vs target=20 (fixed), but your report already has actual
-    act = out["snapshot"].get("lookback_n_actual")
-    if isinstance(act, int):
-        out["distances"]["lookback_missing_points"] = max(0, 20 - act)
-    else:
-        out["distances"]["lookback_missing_points"] = None
-
-    out["distances"]["drawdown_gap_pct"] = None
-
-    # TW state machine (simple v0)
-    # - If no roll25 -> NA
-    if out["inputs"]["roll25_ok"] is not True:
-        out["tw_state"] = "NA"
-        return out
-
-    # - If TW_PANIC==0 => NONE
-    if out["triggers"]["TRIG_TW_PANIC"] == 0:
-        out["tw_state"] = "NONE"
-        return out
-
-    # - If TW_PANIC==1 and heat==1 => PANIC_BUT_LEVERAGE_HEAT
-    if out["triggers"]["TRIG_TW_PANIC"] == 1 and out["triggers"]["TRIG_TW_LEVERAGE_HEAT"] == 1:
-        out["tw_state"] = "PANIC_BUT_LEVERAGE_HEAT"
-        return out
-
-    # - If TW_PANIC==1 and heat==0:
-    if out["triggers"]["TRIG_TW_PANIC"] == 1 and out["triggers"]["TRIG_TW_LEVERAGE_HEAT"] == 0:
-        if out["triggers"]["TRIG_TW_REVERSAL"] == 1:
-            out["tw_state"] = "TW_BOTTOM_CANDIDATE"
-        else:
-            out["tw_state"] = "TW_BOTTOM_WATCH"
-        return out
-
-    out["tw_state"] = "NA"
-    return out
-
-
-# =========================
-# Main
-# =========================
 def main() -> None:
     run_ts_utc = _utc_now()
     as_of_ts_tpe = _tpe_now()
@@ -589,7 +296,7 @@ def main() -> None:
 
     series_root = root.get("series") if isinstance(root.get("series"), dict) else {}
 
-    # ---- extract global series snapshots ----
+    # ---- extract series snapshots ----
     series_out: Dict[str, Any] = {}
     for sid in NEEDED:
         s = series_root.get(sid, {}) if isinstance(series_root, dict) else {}
@@ -599,6 +306,7 @@ def main() -> None:
 
         z60 = _as_float(w60.get("z"))
         p252 = _as_float(w252.get("p"))
+
         sig = _series_signal(z60, p252)
 
         series_out[sid] = {
@@ -624,11 +332,10 @@ def main() -> None:
             "series_signal": sig or "NA",
         }
 
-    # ---- global triggers ----
+    # ---- Global triggers ----
     vix_val = series_out["VIX"]["latest"]["value"]
     spx_ret1 = series_out["SP500"]["w60"]["ret1_pct"]  # unit %
 
-    # TRIG_PANIC: VIX >= 20 OR SP500.ret1% <= -1.5
     trig_panic: Optional[int] = None
     if vix_val is None and spx_ret1 is None:
         excluded.append({"trigger": "TRIG_PANIC", "reason": "missing_fields:VIX.latest.value & SP500.w60.ret1_pct"})
@@ -637,24 +344,21 @@ def main() -> None:
         cond_spx = (spx_ret1 is not None and spx_ret1 <= TH_SPX_RET1_PANIC)
         trig_panic = 1 if (cond_vix or cond_spx) else 0
 
-    # TRIG_SYSTEMIC_VETO: systemic stress veto via HYG_IEF_RATIO / OFR_FSI
     hyg_z = series_out["HYG_IEF_RATIO"]["w60"]["z"]
     hyg_sig = series_out["HYG_IEF_RATIO"]["series_signal"]
     ofr_z = series_out["OFR_FSI"]["w60"]["z"]
     ofr_sig = series_out["OFR_FSI"]["series_signal"]
 
     trig_veto: Optional[int] = None
-    hyg_can = (hyg_z is not None and hyg_sig in ("WATCH", "ALERT"))
-    ofr_can = (ofr_z is not None and ofr_sig in ("WATCH", "ALERT"))
-
     if hyg_z is None and ofr_z is None:
         excluded.append({"trigger": "TRIG_SYSTEMIC_VETO", "reason": "missing_fields:HYG_IEF_RATIO.w60.z & OFR_FSI.w60.z"})
     else:
-        hyg_veto = 1 if (hyg_can and hyg_z <= TH_HYG_VETO_Z) else 0
-        ofr_veto = 1 if (ofr_can and ofr_z >= TH_OFR_VETO_Z) else 0
+        hyg_can = (hyg_z is not None and hyg_sig in ("WATCH", "ALERT"))
+        ofr_can = (ofr_z is not None and ofr_sig in ("WATCH", "ALERT"))
+        hyg_veto = 1 if (hyg_can and hyg_z is not None and hyg_z <= TH_HYG_VETO_Z) else 0
+        ofr_veto = 1 if (ofr_can and ofr_z is not None and ofr_z >= TH_OFR_VETO_Z) else 0
         trig_veto = 1 if (hyg_veto == 1 or ofr_veto == 1) else 0
 
-    # TRIG_REVERSAL: panic & NOT systemic & VIX cooling & SP500 stable
     trig_rev: Optional[int] = None
     if trig_panic != 1 or trig_veto != 0:
         trig_rev = 0
@@ -663,7 +367,6 @@ def main() -> None:
         vix_zd = series_out["VIX"]["w60"]["z_delta"]
         vix_pd = series_out["VIX"]["w60"]["p_delta"]
 
-        # VIX cooling: any first available metric < 0
         vix_cooling: Optional[int] = None
         for x in (vix_ret1, vix_zd, vix_pd):
             if x is not None:
@@ -681,11 +384,9 @@ def main() -> None:
             if spx_stab is None:
                 miss.append("SP500(w60.ret1_pct)")
             excluded.append({"trigger": "TRIG_REVERSAL", "reason": "missing_fields:" + "&".join(miss)})
-            trig_rev = None
         else:
             trig_rev = 1 if (vix_cooling == 1 and spx_stab == 1) else 0
 
-    # ---- global bottom_state ----
     bottom_state = "NA"
     if trig_panic == 0:
         bottom_state = "NONE"
@@ -699,7 +400,7 @@ def main() -> None:
     else:
         bottom_state = "NA"
 
-    # ---- global context flags ----
+    # ---- context flags (non-trigger) ----
     spx_p252 = series_out["SP500"]["w252"]["p"]
     context_equity_extreme: Optional[int] = None
     if spx_p252 is None:
@@ -707,29 +408,143 @@ def main() -> None:
     else:
         context_equity_extreme = 1 if float(spx_p252) >= 95.0 else 0
 
-    # ---- global distances (<=0 means triggered) ----
-    dist_vix_panic: Optional[float] = None
-    if vix_val is not None:
-        dist_vix_panic = TH_VIX_PANIC - float(vix_val)
+    # ---- distances (<=0 means triggered) ----
+    dist_vix_panic: Optional[float] = TH_VIX_PANIC - float(vix_val) if vix_val is not None else None
+    dist_spx_panic: Optional[float] = float(spx_ret1) - TH_SPX_RET1_PANIC if spx_ret1 is not None else None
+    dist_hyg_veto: Optional[float] = float(hyg_z) - TH_HYG_VETO_Z if hyg_z is not None else None
+    dist_ofr_veto: Optional[float] = TH_OFR_VETO_Z - float(ofr_z) if ofr_z is not None else None
 
-    dist_spx_panic: Optional[float] = None
-    if spx_ret1 is not None:
-        dist_spx_panic = float(spx_ret1) - TH_SPX_RET1_PANIC
+    # ---------------- TW Local Gate ----------------
+    tw_roll25, ok_roll25 = _load_tw_roll25(excluded)
+    tw_margin, ok_margin = _load_tw_margin(excluded)
 
-    dist_hyg_veto: Optional[float] = None
-    if hyg_z is not None:
-        dist_hyg_veto = float(hyg_z) - TH_HYG_VETO_Z
+    # roll25 fields from latest_report.json
+    tw_used_date = _as_str(tw_roll25.get("used_date") or _get(tw_roll25, ["numbers", "UsedDate"]))
+    tw_tag = _as_str(tw_roll25.get("tag"))
+    tw_risk_level = _as_str(tw_roll25.get("risk_level"))
+    tw_lookback_actual = _as_int(tw_roll25.get("lookback_n_actual"))
+    # if target missing in this report schema, show as NA (do not guess)
+    tw_lookback_target = _as_int(tw_roll25.get("lookback_n_target"))
 
-    dist_ofr_veto: Optional[float] = None
-    if ofr_z is not None:
-        dist_ofr_veto = TH_OFR_VETO_Z - float(ofr_z)
+    tw_pct_change = _as_float(_get(tw_roll25, ["numbers", "PctChange"]))
+    tw_amplitude_pct = _as_float(_get(tw_roll25, ["numbers", "AmplitudePct"]))
+    tw_turnover_twd = _as_float(_get(tw_roll25, ["numbers", "TradeValue"]))
+    tw_close = _as_float(_get(tw_roll25, ["numbers", "Close"]))
 
-    # ---- TW local gate ----
-    tw = _tw_local_gate(excluded)
+    sig_obj = _get(tw_roll25, ["signal"])
+    if not isinstance(sig_obj, dict):
+        sig_obj = {}
+
+    sig_downday = _as_bool(sig_obj.get("DownDay"))
+    sig_volamp = _as_bool(sig_obj.get("VolumeAmplified"))
+    sig_volamp2 = _as_bool(sig_obj.get("VolAmplified"))
+    sig_newlow = _as_bool(sig_obj.get("NewLow_N"))
+    sig_consec = _as_bool(sig_obj.get("ConsecutiveBreak"))
+
+    # TW margin derive (TWSE)
+    tw_margin_signal: Optional[str] = None
+    tw_margin_dbg: Dict[str, Any] = {}
+    tw_margin_unit = "億"  # ✅ display unit for margin numbers
+
+    twse_rows: List[Dict[str, Any]] = []
+    if ok_margin:
+        # accept both taiwan_margin_cache schema variants:
+        # - { "series": { "TWSE": { "rows": [...] , "chg_yi_unit": {...}}}}
+        series = tw_margin.get("series")
+        if isinstance(series, dict) and isinstance(series.get("TWSE"), dict):
+            twse = series["TWSE"]
+            rows = twse.get("rows")
+            if isinstance(rows, list):
+                twse_rows = [r for r in rows if isinstance(r, dict)]
+            # unit label if exists
+            unit_label = _get(twse, ["chg_yi_unit", "label"])
+            if isinstance(unit_label, str) and unit_label.strip():
+                tw_margin_unit = unit_label.strip()
+
+    if ok_margin and twse_rows:
+        tw_margin_signal, tw_margin_dbg = _derive_margin_signal_from_rows(twse_rows)
+    else:
+        if ok_margin:
+            excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:series.TWSE.rows[].chg_yi"})
+        else:
+            # already excluded by TW:INPUT_MARGIN
+            pass
+
+    # TRIG_TW_PANIC
+    trig_tw_panic: Optional[int] = None
+    if not ok_roll25:
+        trig_tw_panic = None
+        excluded.append({"trigger": "TRIG_TW_PANIC", "reason": "missing_input:roll25_cache/latest_report.json"})
+    else:
+        # require DownDay + any_of stress flags
+        if sig_downday is None or any(x is None for x in [sig_volamp, sig_volamp2, sig_newlow, sig_consec]):
+            excluded.append({"trigger": "TRIG_TW_PANIC", "reason": "missing_fields:roll25.signal.*"})
+            trig_tw_panic = None
+        else:
+            any_stress = bool(sig_volamp or sig_volamp2 or sig_newlow or sig_consec)
+            trig_tw_panic = 1 if (sig_downday and any_stress) else 0
+
+    # TRIG_TW_LEVERAGE_HEAT
+    trig_tw_heat: Optional[int] = None
+    if tw_margin_signal is None:
+        trig_tw_heat = None
+        # excluded reason already appended above if margin present but invalid
+        if ok_margin is False:
+            # already excluded by input missing
+            pass
+        else:
+            excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:margin_signal (derived from taiwan_margin_cache.series.TWSE.rows)"})
+    else:
+        trig_tw_heat = 1 if (tw_margin_signal in ("WATCH", "ALERT")) else 0
+
+    # TRIG_TW_REVERSAL: PANIC & NOT heat & pct_change>=0 & DownDay=false
+    trig_tw_rev: Optional[int] = None
+    if trig_tw_panic != 1:
+        trig_tw_rev = 0 if trig_tw_panic in (0, None) else None
+    else:
+        # need pct_change + DownDay
+        if tw_pct_change is None or sig_downday is None:
+            excluded.append({"trigger": "TRIG_TW_REVERSAL", "reason": "missing_fields:pct_change or DownDay"})
+            trig_tw_rev = None
+        else:
+            # if heat is NA, conservative: do not confirm reversal
+            if trig_tw_heat is None:
+                trig_tw_rev = 0
+            else:
+                trig_tw_rev = 1 if (trig_tw_heat == 0 and tw_pct_change >= 0 and sig_downday is False) else 0
+
+    # TW state machine (simple v0)
+    tw_state = "NA"
+    if trig_tw_panic is None:
+        tw_state = "NA"
+    elif trig_tw_panic == 0:
+        tw_state = "NONE"
+    else:
+        # panic == 1
+        if trig_tw_heat == 1:
+            tw_state = "PANIC_BUT_LEVERAGE_HEAT"
+        elif trig_tw_heat == 0:
+            tw_state = "TW_BOTTOM_CANDIDATE" if trig_tw_rev == 1 else "TW_BOTTOM_WATCH"
+        else:
+            tw_state = "TW_BOTTOM_WATCH"  # heat NA -> conservative
+
+    # TW distances
+    pct_change_gap_nonneg: Optional[float] = None
+    if tw_pct_change is not None:
+        # gap to non-negative (>=0 is "good"); if already >=0, show current value for reference
+        pct_change_gap_nonneg = float(tw_pct_change)
+
+    lookback_missing_points: Optional[int] = None
+    if tw_lookback_actual is not None:
+        # if target not available, do not compute missing strictly
+        if tw_lookback_target is None:
+            lookback_missing_points = None
+        else:
+            lookback_missing_points = max(0, int(tw_lookback_target) - int(tw_lookback_actual))
 
     # ---- build latest.json ----
     latest_out = {
-        "schema_version": "bottom_cache_v2",
+        "schema_version": "bottom_cache_v1",
         "generated_at_utc": run_ts_utc,
         "as_of_ts": as_of_ts_tpe,
         "data_commit_sha": git_sha,
@@ -741,63 +556,90 @@ def main() -> None:
             "market_cache_script_version": meta["script_version"] or "NA",
             "market_cache_ret1_mode": meta["ret1_mode"] or "NA",
             "market_cache_percentile_method": meta["percentile_method"] or "NA",
+            "tw_roll25_report_path": TW_ROLL25_REPORT_PATH,
+            "tw_margin_path": TW_MARGIN_PATH,
         },
-        "global": {
-            "bottom_state": bottom_state,
-            "triggers": {
-                "TRIG_PANIC": trig_panic,
-                "TRIG_SYSTEMIC_VETO": trig_veto,
-                "TRIG_REVERSAL": trig_rev,
+        "bottom_state_global": bottom_state,
+        "triggers_global": {
+            "TRIG_PANIC": trig_panic,
+            "TRIG_SYSTEMIC_VETO": trig_veto,
+            "TRIG_REVERSAL": trig_rev,
+        },
+        "context_global": {
+            "context_equity_extreme_sp500_p252_ge_95": context_equity_extreme,
+            "sp500_p252": spx_p252 if spx_p252 is not None else None,
+        },
+        "distances_global": {
+            "vix_panic_gap": dist_vix_panic,
+            "sp500_ret1_panic_gap": dist_spx_panic,
+            "hyg_veto_gap_z": dist_hyg_veto,
+            "ofr_veto_gap_z": dist_ofr_veto,
+        },
+        "tw_local_gate": {
+            "tw_state": tw_state,
+            "UsedDate": tw_used_date or "NA",
+            "run_day_tag": tw_tag or "NA",
+            "risk_level": tw_risk_level or "NA",
+            "lookback_n_actual": tw_lookback_actual,
+            "lookback_n_target": tw_lookback_target,
+            "pct_change": tw_pct_change,
+            "amplitude_pct": tw_amplitude_pct,
+            "turnover_twd": tw_turnover_twd,
+            "close": tw_close,
+            "signals": {
+                "DownDay": sig_downday,
+                "VolumeAmplified": sig_volamp,
+                "VolAmplified": sig_volamp2,
+                "NewLow_N": sig_newlow,
+                "ConsecutiveBreak": sig_consec,
             },
-            "context": {
-                "context_equity_extreme_sp500_p252_ge_95": context_equity_extreme,
-                "sp500_p252": spx_p252 if spx_p252 is not None else None,
+            "margin": {
+                "margin_signal_TWSE": tw_margin_signal,
+                "unit": tw_margin_unit,
+                "dbg": tw_margin_dbg,
+            },
+            "triggers": {
+                "TRIG_TW_PANIC": trig_tw_panic,
+                "TRIG_TW_LEVERAGE_HEAT": trig_tw_heat,
+                "TRIG_TW_REVERSAL": trig_tw_rev,
             },
             "distances": {
-                "vix_panic_gap": dist_vix_panic,
-                "sp500_ret1_panic_gap": dist_spx_panic,
-                "hyg_veto_gap_z": dist_hyg_veto,
-                "ofr_veto_gap_z": dist_ofr_veto,
+                "pct_change_to_nonnegative_gap": pct_change_gap_nonneg,
+                "lookback_missing_points": lookback_missing_points,
             },
-            "series": series_out,
         },
-        "tw": tw,
         "excluded_triggers": excluded,
+        "series_global": series_out,
         "notes": [
-            "Global: single-source = market_cache/stats_latest.json",
-            "TW: uses existing workflow outputs (roll25_cache/latest_report.json, taiwan_margin_financing/latest.json)",
-            "No external fetching in this renderer.",
-            "ret1_pct unit is percent (%) in market_cache",
-            "TW margin unit is 億 (chg_yi, balance_yi)"
+            "Global: single source = market_cache/stats_latest.json",
+            "TW: uses existing repo outputs only (no external fetch here)",
+            "Signals are deterministic; missing fields => NA + excluded reasons",
+            "ret1_pct unit is percent (%)",
         ],
     }
 
     _write_json(OUT_LATEST, latest_out)
 
     # ---- history.json append (overwrite same TPE day bucket) ----
-    hist: Dict[str, Any] = {"schema_version": "bottom_history_v2", "items": []}
+    hist: Dict[str, Any] = {"schema_version": "bottom_history_v1", "items": []}
     if os.path.exists(OUT_HISTORY):
         try:
             tmp = _read_json(OUT_HISTORY)
             if isinstance(tmp, dict) and isinstance(tmp.get("items"), list):
                 hist = tmp
         except Exception:
-            hist = {"schema_version": "bottom_history_v2", "items": []}
+            hist = {"schema_version": "bottom_history_v1", "items": []}
 
     item = {
         "run_ts_utc": run_ts_utc,
         "as_of_ts": as_of_ts_tpe,
         "data_commit_sha": git_sha,
-        "global": {
-            "bottom_state": bottom_state,
-            "triggers": latest_out["global"]["triggers"],
-            "context": latest_out["global"]["context"],
-            "distances": latest_out["global"]["distances"],
-        },
-        "tw": {
-            "tw_state": tw.get("tw_state", "NA"),
-            "triggers": tw.get("triggers", {}),
-        },
+        "bottom_state_global": bottom_state,
+        "triggers_global": latest_out["triggers_global"],
+        "context_global": latest_out["context_global"],
+        "distances_global": latest_out["distances_global"],
+        "tw_state": tw_state,
+        "tw_triggers": latest_out["tw_local_gate"]["triggers"],
     }
 
     dk = _day_key_tpe_from_iso(as_of_ts_tpe)
@@ -812,41 +654,25 @@ def main() -> None:
 
     # ---- analytics on history for report.md ----
     items_sorted: List[Dict[str, Any]] = [it for it in hist.get("items", []) if isinstance(it, dict)]
-
-    def _parse_iso(iso: str) -> Tuple[int, str]:
-        try:
-            dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-            return (int(dt.timestamp()), iso)
-        except Exception:
-            return (0, iso)
-
-    items_sorted.sort(key=lambda x: _parse_iso(_as_str(x.get("as_of_ts")) or "NA"))
-
+    items_sorted.sort(key=lambda x: _iso_sort_key(_as_str(x.get("as_of_ts")) or "NA"))
     recent = items_sorted[-HISTORY_SHOW_N:] if items_sorted else []
 
-    # global streak
-    streak_g = 0
-    cur_state_g = bottom_state
+    # streaks
+    streak_global = 0
     for it in reversed(items_sorted):
-        g = it.get("global", {}) if isinstance(it.get("global"), dict) else {}
-        st = g.get("bottom_state") or "NA"
-        if st == cur_state_g:
-            streak_g += 1
+        if (it.get("bottom_state_global") or "NA") == bottom_state:
+            streak_global += 1
         else:
             break
 
-    # TW streak
     streak_tw = 0
-    cur_state_tw = tw.get("tw_state", "NA")
     for it in reversed(items_sorted):
-        t = it.get("tw", {}) if isinstance(it.get("tw"), dict) else {}
-        st = t.get("tw_state") or "NA"
-        if st == cur_state_tw:
+        if (it.get("tw_state") or "NA") == tw_state:
             streak_tw += 1
         else:
             break
 
-    # top-2 nearest global distances
+    # nearest global distances
     dist_map = {
         "VIX panic gap (<=0 triggered)": dist_vix_panic,
         "SP500 ret1% gap (<=0 triggered)": dist_spx_panic,
@@ -862,12 +688,19 @@ def main() -> None:
     dist_sorted = sorted(dist_map.items(), key=lambda kv: _dist_rank_val(kv[1]))
     top2 = dist_sorted[:2]
 
+    # margin balance display (latest TWSE balance) with unit "億"
+    twse_latest_balance_yi: Optional[float] = None
+    twse_latest_chg_yi: Optional[float] = None
+    if twse_rows:
+        twse_latest_balance_yi = _as_float(twse_rows[0].get("balance_yi"))
+        twse_latest_chg_yi = _as_float(twse_rows[0].get("chg_yi"))
+
     # ---- report.md ----
     md: List[str] = []
     md.append("# Bottom Cache Dashboard (v0)\n\n")
     md.append(f"- as_of_ts (TPE): `{as_of_ts_tpe}`\n")
     md.append(f"- run_ts_utc: `{run_ts_utc}`\n")
-    md.append(f"- bottom_state (Global): **{bottom_state}**  (streak={streak_g})\n")
+    md.append(f"- bottom_state (Global): **{bottom_state}**  (streak={streak_global})\n")
     md.append(f"- market_cache_as_of_ts: `{meta['as_of_ts'] or 'NA'}`\n")
     md.append(f"- market_cache_generated_at_utc: `{meta['generated_at_utc'] or 'NA'}`\n\n")
 
@@ -927,45 +760,38 @@ def main() -> None:
 
     # ---- TW section ----
     md.append("## TW Local Gate (roll25 + margin)\n")
-    md.append(f"- tw_state: **{tw.get('tw_state','NA')}**  (streak={streak_tw})\n")
-    md.append(f"- UsedDate: `{tw.get('snapshot',{}).get('UsedDate')}`; run_day_tag: `{tw.get('snapshot',{}).get('run_day_tag')}`; risk_level: `{tw.get('snapshot',{}).get('risk_level')}`\n")
-    md.append(f"- Lookback: `{tw.get('snapshot',{}).get('lookback_n_actual')}/{tw.get('snapshot',{}).get('lookback_n_target')}`; roll25_confidence: `{tw.get('snapshot',{}).get('roll25_confidence','NA')}`\n")
-    md.append(f"- margin_signal(TWSE): `{tw.get('snapshot',{}).get('margin',{}).get('margin_signal','NA')}`; unit: `億`\n\n")
+    md.append(f"- tw_state: **{tw_state}**  (streak={streak_tw})\n")
+    md.append(f"- UsedDate: `{tw_used_date or 'NA'}`; run_day_tag: `{tw_tag or 'NA'}`; risk_level: `{tw_risk_level or 'NA'}`\n")
+    md.append(f"- Lookback: `{tw_lookback_actual}/{tw_lookback_target}`\n")
+    md.append(f"- margin_signal(TWSE): `{tw_margin_signal}`; unit: `{tw_margin_unit}`\n")
+    if twse_latest_balance_yi is not None:
+        md.append(f"- margin_balance(TWSE latest): `{_safe_float_str(twse_latest_balance_yi, 1)}` {tw_margin_unit}\n")
+    else:
+        md.append(f"- margin_balance(TWSE latest): `NA` {tw_margin_unit}\n")
+    if twse_latest_chg_yi is not None:
+        md.append(f"- margin_chg(TWSE latest): `{_safe_float_str(twse_latest_chg_yi, 1)}` {tw_margin_unit}\n")
+    else:
+        md.append(f"- margin_chg(TWSE latest): `NA` {tw_margin_unit}\n")
+    md.append("\n")
 
     md.append("### TW Triggers (0/1/NA)\n")
-    tr_tw = tw.get("triggers", {}) if isinstance(tw.get("triggers"), dict) else {}
-    md.append(f"- TRIG_TW_PANIC: `{tr_tw.get('TRIG_TW_PANIC')}`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))\n")
-    md.append(f"- TRIG_TW_LEVERAGE_HEAT: `{tr_tw.get('TRIG_TW_LEVERAGE_HEAT')}`  (margin_signal∈{{WATCH,ALERT}})\n")
-    md.append(f"- TRIG_TW_REVERSAL: `{tr_tw.get('TRIG_TW_REVERSAL')}`  (PANIC & NOT heat & pct_change>=0 & DownDay=false)\n")
-    md.append(f"- TRIG_TW_DRAWDOWN: `{tr_tw.get('TRIG_TW_DRAWDOWN')}`  (not supported in repo)\n\n")
+    md.append(f"- TRIG_TW_PANIC: `{trig_tw_panic}`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))\n")
+    md.append(f"- TRIG_TW_LEVERAGE_HEAT: `{trig_tw_heat}`  (margin_signal∈{{WATCH,ALERT}})\n")
+    md.append(f"- TRIG_TW_REVERSAL: `{trig_tw_rev}`  (PANIC & NOT heat & pct_change>=0 & DownDay=false)\n\n")
 
     md.append("### TW Distances / Gating\n")
-    dist_tw = tw.get("distances", {}) if isinstance(tw.get("distances"), dict) else {}
-    md.append(f"- pct_change_to_nonnegative_gap: `{dist_tw.get('pct_change_to_nonnegative_gap')}`\n")
-    md.append(f"- lookback_missing_points: `{dist_tw.get('lookback_missing_points')}`\n")
-    md.append(f"- drawdown_gap_pct (<=0 means reached): `{dist_tw.get('drawdown_gap_pct')}`\n\n")
+    md.append(f"- pct_change_to_nonnegative_gap: `{_safe_float_str(pct_change_gap_nonneg, 3) if pct_change_gap_nonneg is not None else 'NA'}`\n")
+    md.append(f"- lookback_missing_points: `{lookback_missing_points if lookback_missing_points is not None else 'NA'}`\n\n")
 
     md.append("### TW Snapshot (key fields)\n")
-    snap = tw.get("snapshot", {}) if isinstance(tw.get("snapshot"), dict) else {}
-    sigs = snap.get("signals", {}) if isinstance(snap.get("signals"), dict) else {}
-    md.append(f"- pct_change: `{snap.get('pct_change')}`; amplitude_pct: `{snap.get('amplitude_pct')}`; turnover_twd: `{snap.get('turnover_twd')}`; close: `{snap.get('close')}`\n")
     md.append(
-        "- signals: "
-        f"DownDay={sigs.get('DownDay')}, "
-        f"VolumeAmplified={sigs.get('VolumeAmplified')}, "
-        f"VolAmplified={sigs.get('VolAmplified')}, "
-        f"NewLow_N={sigs.get('NewLow_N')}, "
-        f"ConsecutiveBreak={sigs.get('ConsecutiveBreak')}\n"
+        f"- pct_change: `{tw_pct_change}`; amplitude_pct: `{tw_amplitude_pct}`; "
+        f"turnover_twd: `{tw_turnover_twd}`; close: `{tw_close}`\n"
     )
-    mdbg = snap.get("margin", {}).get("debug", {}) if isinstance(snap.get("margin", {}), dict) else {}
-    if isinstance(mdbg, dict) and mdbg.get("sum_last5_yi") is not None:
-        md.append(
-            f"- margin_debug(TWSE, unit=億): "
-            f"sum_last5={_safe_float_str(_as_float(mdbg.get('sum_last5_yi')), 1)}, "
-            f"pos_days_last5={mdbg.get('pos_days_last5')}, "
-            f"latest_chg={_safe_float_str(_as_float(mdbg.get('latest_chg_yi')), 1)}\n"
-        )
-    md.append("\n")
+    md.append(
+        f"- signals: DownDay={sig_downday}, VolumeAmplified={sig_volamp}, VolAmplified={sig_volamp2}, "
+        f"NewLow_N={sig_newlow}, ConsecutiveBreak={sig_consec}\n\n"
+    )
 
     if excluded:
         md.append("## Excluded / NA Reasons\n")
@@ -989,24 +815,21 @@ def main() -> None:
         for it in recent:
             asof = _as_str(it.get("as_of_ts")) or "NA"
             dk2 = _day_key_tpe_from_iso(asof)
-            g = it.get("global", {}) if isinstance(it.get("global"), dict) else {}
-            t = it.get("tw", {}) if isinstance(it.get("tw"), dict) else {}
-            st = g.get("bottom_state") or "NA"
-            trg = g.get("triggers", {}) if isinstance(g.get("triggers"), dict) else {}
-            p = trg.get("TRIG_PANIC", "NA")
-            v = trg.get("TRIG_SYSTEMIC_VETO", "NA")
-            r = trg.get("TRIG_REVERSAL", "NA")
-            tw_state = t.get("tw_state", "NA")
-            tw_tr = t.get("triggers", {}) if isinstance(t.get("triggers"), dict) else {}
-            tp = tw_tr.get("TRIG_TW_PANIC", None)
-            th = tw_tr.get("TRIG_TW_LEVERAGE_HEAT", None)
-            trv = tw_tr.get("TRIG_TW_REVERSAL", None)
-
+            st = it.get("bottom_state_global") or "NA"
+            tr = it.get("triggers_global") if isinstance(it.get("triggers_global"), dict) else {}
+            p = tr.get("TRIG_PANIC", "NA")
+            v = tr.get("TRIG_SYSTEMIC_VETO", "NA")
+            r = tr.get("TRIG_REVERSAL", "NA")
+            tws = it.get("tw_state") or "NA"
+            twtr = it.get("tw_triggers") if isinstance(it.get("tw_triggers"), dict) else {}
+            twp = twtr.get("TRIG_TW_PANIC", "NA")
+            twh = twtr.get("TRIG_TW_LEVERAGE_HEAT", "NA")
+            twr = twtr.get("TRIG_TW_REVERSAL", "NA")
             note = ""
-            ctx = g.get("context", {}) if isinstance(g.get("context"), dict) else {}
-            if ctx.get("context_equity_extreme_sp500_p252_ge_95", None) == 1:
+            ce = (it.get("context_global") or {}).get("context_equity_extreme_sp500_p252_ge_95", None)
+            if ce == 1:
                 note = "equity_extreme"
-            md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {tw_state} | {tp} | {th} | {trv} | {note} |\n")
+            md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {tws} | {twp} | {twh} | {twr} | {note} |\n")
         md.append("\n")
 
     md.append("## Series Snapshot (Global)\n")
@@ -1027,7 +850,7 @@ def main() -> None:
     md.append("\n## Data Sources\n")
     md.append(f"- Global (single-source): `{MARKET_STATS_PATH}`\n")
     md.append("- TW Local Gate (existing workflow outputs, no fetch):\n")
-    md.append(f"  - `{ROLL25_REPORT_PATH}`\n")
+    md.append(f"  - `{TW_ROLL25_REPORT_PATH}`\n")
     md.append(f"  - `{TW_MARGIN_PATH}`  (unit: 億)\n")
     md.append("- This dashboard does not fetch external URLs directly.\n")
 
