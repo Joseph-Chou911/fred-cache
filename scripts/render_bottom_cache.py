@@ -11,9 +11,12 @@ TZ_TPE = ZoneInfo("Asia/Taipei")
 
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
-OUT_LATEST = "bottom_cache/latest.json"
-OUT_HISTORY = "bottom_cache/history.json"
-OUT_MD = "dashboard_bottom_cache/report.md"
+
+# Unified output folder (latest/history/report all here)
+OUT_DIR = "dashboard_bottom_cache"
+OUT_LATEST = f"{OUT_DIR}/latest.json"
+OUT_HISTORY = f"{OUT_DIR}/history.json"
+OUT_MD = f"{OUT_DIR}/report.md"
 
 NEEDED = ["VIX", "SP500", "HYG_IEF_RATIO", "OFR_FSI"]
 
