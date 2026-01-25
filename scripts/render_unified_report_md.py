@@ -4,39 +4,25 @@
 Render unified_dashboard/latest.json into report.md
 
 Adds:
-- (2) Positioning Matrix (report-only; deterministic; uses signals already in unified JSON)
+- (2) Positioning Matrix (report-only; deterministic; uses signals already present in unified JSON)
 - roll25_derived (realized vol / max drawdown)
 - fx_usdtwd section (BOT USD/TWD mid + deterministic signal)
 - cross_module (kept)
 
-This renderer does NOT recompute upstream indicators; it only formats fields already in unified JSON.
+This renderer does NOT recompute market/fred/margin/roll25/fx stats; it only formats fields already in unified JSON.
 If a field is missing => prints NA.
 
-2026-01-25 update:
+2026-01-25 updates:
 - Fix roll25 tag semantics: separate run-day tag vs used-date status.
-  Prints:
-    - run_day_tag (e.g., NON_TRADING_DAY when workflow runs on weekend)
-    - used_date_status (e.g., OK_TODAY / OK_LATEST / DATA_NOT_UPDATED / ...)
-    - tag (legacy) kept for backward compatibility
 - Display OhlcMissing even if signals lacks it, by inferring from ohlc_status when possible.
-
-2026-01-25 (follow-up fix):
-- Align field names with unified JSON:
-    roll25.core.used_date_status, roll25.core.tag_legacy
+- Align field names with unified JSON: roll25.core.used_date_status, roll25.core.tag_legacy
 - Prefer unified top-level run_day_tag for run-day context.
+- Cross_module unit fix: display margin change unit (e.g., 億) deterministically.
+- Render chg_last5 as JSON-like numeric list + unit once.
 
-2026-01-25 (cross_module unit fix):
-- Display margin change unit (e.g., 億) in cross_module section.
-- Format sum_last5 / latest_chg with unit (no guessing; missing => NA).
-
-2026-01-25 (chg_last5 converge):
-- Render chg_last5 as a JSON-like numeric list + unit once:
-    chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2] 億
-  (If unit missing => NA; do not guess)
-
-2026-01-25 (Positioning Matrix source unification):
-- For Positioning Matrix, SP500 and VIX are sourced ONLY from market_cache (single source of truth).
-- fred_cache SP500 and VIXCLS are NOT used for mode decisions (still rendered in fred table).
+2026-01-25 follow-up:
+- Positioning Matrix: SP500 and VIX use market_cache only (single source policy).
+- Positioning Matrix prints source_policy and includes data_date for SP500/VIX (audit-friendly).
 """
 
 from __future__ import annotations
@@ -207,142 +193,21 @@ def _fmt_num_list_json(xs: Any, nd: int = 1) -> Any:
     return json.dumps(out, ensure_ascii=False)
 
 
-# ---- Positioning Matrix helpers (report-only; deterministic) ----
+# ---- positioning matrix helpers (report-only) ----
 
 def _find_row(rows: Any, series_name: str) -> Optional[Dict[str, Any]]:
     if not isinstance(rows, list):
         return None
     for it in rows:
-        if isinstance(it, dict) and str(it.get("series", "")) == series_name:
+        if isinstance(it, dict) and str(it.get("series", "")).upper() == series_name.upper():
             return it
     return None
 
 
-def _truthy_signal_level(x: Any) -> str:
+def _truthy_signal(x: Any, allowed: List[str]) -> bool:
     if not isinstance(x, str):
-        return "NA"
-    return x.strip().upper() if x.strip() else "NA"
-
-
-def _has_tag(it: Optional[Dict[str, Any]], needle: str) -> bool:
-    if not isinstance(it, dict):
         return False
-    tag = it.get("tag")
-    if not isinstance(tag, str):
-        return False
-    return needle in tag
-
-
-def _compute_positioning_mode(
-    uni: Any,
-    market_rows: Any,
-    fred_rows: Any,
-    cross: Any,
-    roll25: Any,
-    fx: Any,
-) -> Dict[str, Any]:
-    """
-    Deterministic, report-only strategy mode computation using existing JSON signals.
-
-    Source unification rule:
-      - SP500 and VIX are sourced ONLY from market_cache for this matrix.
-
-    Notes:
-      - This does not change any upstream computation; it only maps existing flags.
-      - Missing inputs => conservative defaults (no guessing).
-    """
-    strategy_version = "strategy_mode_v1"
-
-    # --- Trend basis: market_cache SP500 only ---
-    m_sp500 = _find_row(market_rows, "SP500")
-    sp500_sig = _truthy_signal_level(m_sp500.get("signal_level") if isinstance(m_sp500, dict) else None)
-    sp500_tag = m_sp500.get("tag") if isinstance(m_sp500, dict) else "NA"
-
-    # Conservative: trend_on only when market SP500 is explicitly LONG_EXTREME (your existing signal schema)
-    trend_on = bool(isinstance(m_sp500, dict) and sp500_sig == "INFO" and _has_tag(m_sp500, "LONG_EXTREME"))
-
-    # --- Fragility components (multi-source; all must already exist in unified JSON) ---
-    f_baml = _find_row(fred_rows, "BAMLH0A0HYM2")
-    f_dgs10 = _find_row(fred_rows, "DGS10")
-
-    baml_sig = _truthy_signal_level(f_baml.get("signal_level") if isinstance(f_baml, dict) else None)
-    dgs10_sig = _truthy_signal_level(f_dgs10.get("signal_level") if isinstance(f_dgs10, dict) else None)
-
-    credit_fragile = bool(baml_sig == "ALERT")
-    rate_stress = bool(dgs10_sig in ("WATCH", "ALERT"))
-
-    margin_signal = _truthy_signal_level(cross.get("margin_signal") if isinstance(cross, dict) else None)
-    tw_margin = bool(margin_signal in ("WATCH", "ALERT"))
-
-    consistency = cross.get("consistency") if isinstance(cross, dict) else "NA"
-    cross_divergence = bool(isinstance(consistency, str) and consistency.upper() == "DIVERGENCE")
-
-    # Fragility aggregation: conservative "HIGH" if at least 2 components true OR credit is ALERT (strong condition)
-    fragility_hits = sum([1 if credit_fragile else 0, 1 if rate_stress else 0, 1 if tw_margin else 0, 1 if cross_divergence else 0])
-    fragility_high = bool(credit_fragile or fragility_hits >= 2)
-
-    # --- Vol gate: market_cache VIX only (single source of truth) ---
-    m_vix = _find_row(market_rows, "VIX")
-    vix_sig = _truthy_signal_level(m_vix.get("signal_level") if isinstance(m_vix, dict) else None)
-    vix_dir = m_vix.get("dir") if isinstance(m_vix, dict) else "NA"
-    vix_ret1 = m_vix.get("ret1_pct60") if isinstance(m_vix, dict) else None
-
-    # Conservative runaway definition:
-    # - ALERT always runaway
-    # - WATCH only runaway if ret1%60 >= 5 (large jump) AND dir HIGH
-    vix_up = bool(isinstance(vix_dir, str) and vix_dir.upper() == "HIGH")
-    vol_runaway = False
-    if vix_sig == "ALERT":
-        vol_runaway = True
-    elif vix_sig == "WATCH":
-        try:
-            r = float(vix_ret1) if vix_ret1 is not None else None
-        except Exception:
-            r = None
-        vol_runaway = bool(vix_up and (r is not None and r >= 5.0))
-
-    # --- Matrix cell + mode mapping ---
-    matrix_cell = f"Trend={'ON' if trend_on else 'OFF'} / Fragility={'HIGH' if fragility_high else 'LOW'}"
-
-    if trend_on and fragility_high:
-        mode = "DEFENSIVE_DCA"
-    elif trend_on and not fragility_high:
-        mode = "NORMAL_DCA"
-    elif (not trend_on) and fragility_high:
-        mode = "CAPITAL_PRESERVATION"
-    else:
-        mode = "RISK_ON_DCA"
-
-    # Vol runaway overrides: most conservative
-    if vol_runaway:
-        mode = "PAUSE_DCA"
-
-    # --- dq gates (report-only disclosures) ---
-    roll25_derived_conf = _safe_get(roll25, "derived", "confidence") or "NA"
-    fx_conf = _safe_get(fx, "derived", "fx_confidence") or "NA"
-
-    return {
-        "strategy_version": strategy_version,
-        "trend_on": trend_on,
-        "fragility_high": fragility_high,
-        "vol_runaway": vol_runaway,
-        "matrix_cell": matrix_cell,
-        "mode": mode,
-        "reasons": {
-            "trend_basis": f"market_cache.SP500.signal={sp500_sig}, tag={sp500_tag}",
-            "fragility_parts": {
-                "credit_fragile(BAMLH0A0HYM2=ALERT)": credit_fragile,
-                "rate_stress(DGS10=WATCH/ALERT)": rate_stress,
-                "tw_margin(WATCH/ALERT)": tw_margin,
-                "cross_divergence(DIVERGENCE)": cross_divergence,
-            },
-            "vol_gate": f"market_cache.VIX only (signal={vix_sig}, dir={vix_dir}, ret1%60={_fmt(vix_ret1,6)})",
-        },
-        "dq_gates": {
-            "roll25_derived_confidence": roll25_derived_conf,
-            "fx_confidence": fx_conf,
-        },
-    }
+    return x.upper() in [a.upper() for a in allowed]
 
 
 def main() -> int:
@@ -383,57 +248,142 @@ def main() -> int:
     lines.append(f"- fx_usdtwd: {_safe_get(fx,'status') or 'NA'}")
     lines.append(f"- unified_generated_at_utc: {uni.get('generated_at_utc','NA')}\n")
 
-    # Pull rows for Positioning Matrix
+    # ----------------------------
+    # (2) Positioning Matrix
+    # ----------------------------
     m_dash = _safe_get(market, "dashboard_latest") or {}
     m_rows = _safe_get(m_dash, "rows") or []
+
     f_dash = _safe_get(fred, "dashboard_latest") or {}
     f_rows = _safe_get(f_dash, "rows") or []
-    cross = _safe_get(twm, "cross_module") or {}
 
-    # (2) Positioning Matrix
-    pm = _compute_positioning_mode(
-        uni=uni,
-        market_rows=m_rows,
-        fred_rows=f_rows,
-        cross=cross,
-        roll25=roll25,
-        fx=fx,
+    tw_cross = _safe_get(twm, "cross_module") or {}
+    roll25_der = _safe_get(roll25, "derived") or {}
+    fx_der = _safe_get(fx, "derived") or {}
+
+    # Single-source policy (explicit, to avoid confusion)
+    source_policy = "SP500,VIX => market_cache_only (fred_cache SP500/VIXCLS not used for mode)"
+
+    spx_m = _find_row(m_rows, "SP500")
+    vix_m = _find_row(m_rows, "VIX")
+
+    # trend_on: based on market_cache SP500 only
+    spx_sig = spx_m.get("signal_level") if isinstance(spx_m, dict) else None
+    spx_tag = spx_m.get("tag") if isinstance(spx_m, dict) else None
+    spx_date = spx_m.get("data_date") if isinstance(spx_m, dict) else None
+
+    trend_on = bool(
+        isinstance(spx_sig, str)
+        and spx_sig.upper() == "INFO"
+        and isinstance(spx_tag, str)
+        and ("LONG_EXTREME" in spx_tag.upper())
     )
+
+    # fragility_high parts (deterministic, signal-only)
+    credit = _find_row(f_rows, "BAMLH0A0HYM2")
+    dgs10 = _find_row(f_rows, "DGS10")
+
+    credit_sig = credit.get("signal_level") if isinstance(credit, dict) else None
+    dgs10_sig = dgs10.get("signal_level") if isinstance(dgs10, dict) else None
+
+    credit_fragile = _truthy_signal(credit_sig, ["ALERT"])  # strict
+    rate_stress = _truthy_signal(dgs10_sig, ["WATCH", "ALERT"])
+    tw_margin_sig = tw_cross.get("margin_signal") if isinstance(tw_cross, dict) else None
+    tw_margin = _truthy_signal(tw_margin_sig, ["WATCH", "ALERT"])
+    cross_cons = tw_cross.get("consistency") if isinstance(tw_cross, dict) else None
+    cross_divergence = bool(isinstance(cross_cons, str) and cross_cons.upper() == "DIVERGENCE")
+
+    fragility_high = bool((credit_fragile or rate_stress) and (tw_margin or cross_divergence))
+
+    # vol_runaway: market_cache VIX only (single source)
+    vix_sig = vix_m.get("signal_level") if isinstance(vix_m, dict) else None
+    vix_dir = vix_m.get("dir") if isinstance(vix_m, dict) else None
+    vix_ret1 = vix_m.get("ret1_pct60") if isinstance(vix_m, dict) else None
+    vix_date = vix_m.get("data_date") if isinstance(vix_m, dict) else None
+
+    # Conservative runaway gate: ALERT, or WATCH with very large jump
+    vix_ret1_val: Optional[float] = None
+    try:
+        if vix_ret1 is not None:
+            vix_ret1_val = float(vix_ret1)
+    except Exception:
+        vix_ret1_val = None
+
+    vol_runaway = bool(
+        isinstance(vix_sig, str)
+        and (
+            vix_sig.upper() == "ALERT"
+            or (vix_sig.upper() == "WATCH" and (vix_ret1_val is not None and vix_ret1_val >= 5.0))
+        )
+    )
+
+    matrix_cell = f"Trend={'ON' if trend_on else 'OFF'} / Fragility={'HIGH' if fragility_high else 'LOW'}"
+
+    # mode mapping (deterministic; report-only)
+    if vol_runaway:
+        mode = "PAUSE_RISK_ON"
+    else:
+        if trend_on and fragility_high:
+            mode = "DEFENSIVE_DCA"
+        elif trend_on and not fragility_high:
+            mode = "NORMAL_DCA"
+        elif (not trend_on) and fragility_high:
+            mode = "RISK_OFF"
+        else:
+            mode = "HOLD_CASH"
+
+    # dq gates (display-only; conservative)
+    roll25_conf = roll25_der.get("confidence") if isinstance(roll25_der, dict) else None
+    fx_conf = fx_der.get("fx_confidence") if isinstance(fx_der, dict) else None
 
     lines.append("## (2) Positioning Matrix")
     lines.append("### Current Strategy Mode (deterministic; report-only)")
-    lines.append(f"- strategy_version: {pm.get('strategy_version','NA')}")
-    lines.append(f"- trend_on: {_fmt(pm.get('trend_on'),0)}")
-    lines.append(f"- fragility_high: {_fmt(pm.get('fragility_high'),0)}")
-    lines.append(f"- vol_runaway: {_fmt(pm.get('vol_runaway'),0)}")
-    lines.append(f"- matrix_cell: {pm.get('matrix_cell','NA')}")
-    lines.append(f"- mode: {pm.get('mode','NA')}\n")
-
-    reasons = pm.get("reasons", {}) if isinstance(pm.get("reasons"), dict) else {}
-    frag_parts = reasons.get("fragility_parts", {}) if isinstance(reasons.get("fragility_parts"), dict) else {}
+    lines.append("- strategy_version: strategy_mode_v1")
+    lines.append(f"- source_policy: {source_policy}")
+    lines.append(f"- trend_on: {_fmt(trend_on,0)}")
+    lines.append(f"- fragility_high: {_fmt(fragility_high,0)}")
+    lines.append(f"- vol_runaway: {_fmt(vol_runaway,0)}")
+    lines.append(f"- matrix_cell: {matrix_cell}")
+    lines.append(f"- mode: {mode}\n")
 
     lines.append("**reasons**")
-    lines.append(f"- trend_basis: {reasons.get('trend_basis','NA')}")
-    # Render fragility_parts in a stable, explicit order
-    fp_credit = _fmt(frag_parts.get("credit_fragile(BAMLH0A0HYM2=ALERT)"), 0)
-    fp_rate = _fmt(frag_parts.get("rate_stress(DGS10=WATCH/ALERT)"), 0)
-    fp_margin = _fmt(frag_parts.get("tw_margin(WATCH/ALERT)"), 0)
-    fp_div = _fmt(frag_parts.get("cross_divergence(DIVERGENCE)"), 0)
+    if isinstance(spx_m, dict):
+        lines.append(
+            f"- trend_basis: market_cache.SP500.signal={spx_sig if spx_sig is not None else 'NA'}, "
+            f"tag={spx_tag if spx_tag is not None else 'NA'}, data_date={spx_date if spx_date is not None else 'NA'}"
+        )
+    else:
+        lines.append("- trend_basis: market_cache.SP500: NA (missing row)")
+
     lines.append(
         "- fragility_parts: "
-        f"credit_fragile(BAMLH0A0HYM2=ALERT)={fp_credit}, "
-        f"rate_stress(DGS10=WATCH/ALERT)={fp_rate}, "
-        f"tw_margin(WATCH/ALERT)={fp_margin}, "
-        f"cross_divergence(DIVERGENCE)={fp_div}"
+        f"credit_fragile(BAMLH0A0HYM2={credit_sig if credit_sig is not None else 'NA'})="
+        f"{str(credit_fragile).lower()}, "
+        f"rate_stress(DGS10={dgs10_sig if dgs10_sig is not None else 'NA'})="
+        f"{str(rate_stress).lower()}, "
+        f"tw_margin({tw_margin_sig if tw_margin_sig is not None else 'NA'})="
+        f"{str(tw_margin).lower()}, "
+        f"cross_divergence({cross_cons if cross_cons is not None else 'NA'})="
+        f"{str(cross_divergence).lower()}"
     )
-    lines.append(f"- vol_gate: {reasons.get('vol_gate','NA')}\n")
 
-    dq = pm.get("dq_gates", {}) if isinstance(pm.get("dq_gates"), dict) else {}
-    lines.append("**dq_gates (no guessing; conservative defaults)**")
-    lines.append(f"- roll25_derived_confidence={dq.get('roll25_derived_confidence','NA')} (derived metrics not used for upgrade triggers)")
-    lines.append(f"- fx_confidence={dq.get('fx_confidence','NA')} (fx not used as primary trigger)\n")
+    if isinstance(vix_m, dict):
+        lines.append(
+            f"- vol_gate: market_cache.VIX only (signal={vix_sig if vix_sig is not None else 'NA'}, "
+            f"dir={vix_dir if vix_dir is not None else 'NA'}, "
+            f"ret1%60={_fmt(vix_ret1_val,6) if vix_ret1_val is not None else 'NA'}, "
+            f"data_date={vix_date if vix_date is not None else 'NA'})"
+        )
+    else:
+        lines.append("- vol_gate: market_cache.VIX only: NA (missing row)")
 
+    lines.append("\n**dq_gates (no guessing; conservative defaults)**")
+    lines.append(f"- roll25_derived_confidence={roll25_conf if roll25_conf is not None else 'NA'} (derived metrics not used for upgrade triggers)")
+    lines.append(f"- fx_confidence={fx_conf if fx_conf is not None else 'NA'} (fx not used as primary trigger)\n")
+
+    # ----------------------------
     # market_cache detailed
+    # ----------------------------
     m_meta = _safe_get(m_dash, "meta") or {}
     lines.append("## market_cache (detailed)")
     lines.append(f"- as_of_ts: {m_meta.get('stats_as_of_ts','NA')}")
@@ -487,7 +437,9 @@ def main() -> int:
         lines.append(_md_table(hdr, rws))
         lines.append("")
 
+    # ----------------------------
     # fred_cache
+    # ----------------------------
     f_meta = _safe_get(f_dash, "meta") or {}
     lines.append("## fred_cache (ALERT+WATCH+INFO)")
     lines.append(f"- as_of_ts: {f_meta.get('stats_as_of_ts','NA')}")
@@ -546,7 +498,9 @@ def main() -> int:
         lines.append(_md_table(hdr, rws_f))
         lines.append("")
 
+    # ----------------------------
     # roll25_cache (core fields from latest report)
+    # ----------------------------
     r_latest = _safe_get(roll25, "latest_report") or {}
     r_core = _safe_get(roll25, "core") or {}
 
@@ -664,6 +618,7 @@ def main() -> int:
     lines.append("")
 
     # cross_module
+    cross = _safe_get(twm, "cross_module") or {}
     if isinstance(cross, dict) and cross:
         chg_unit = _get_twmargin_chg_unit_label(uni)
 
