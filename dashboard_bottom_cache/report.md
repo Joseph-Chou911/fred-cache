@@ -1,7 +1,7 @@
 # Bottom Cache Dashboard (v0)
 
-- as_of_ts (TPE): `2026-01-25T19:26:12.551554+08:00`
-- run_ts_utc: `2026-01-25T11:26:12.551541Z`
+- as_of_ts (TPE): `2026-01-25T19:40:31.851190+08:00`
+- run_ts_utc: `2026-01-25T11:40:31.851174Z`
 - bottom_state (Global): **NONE**  (streak=1)
 - market_cache_as_of_ts: `2026-01-25T04:38:46Z`
 - market_cache_generated_at_utc: `2026-01-25T04:38:46Z`
@@ -34,28 +34,23 @@
 ## TW Local Gate (roll25 + margin)
 - tw_state: **NONE**  (streak=1)
 - UsedDate: `2026-01-23`; run_day_tag: `NON_TRADING_DAY`; risk_level: `低`
-- Lookback: `16/None`; roll25_confidence: `NA`
-- margin_signal(TWSE): `NA`; unit: `億`
+- Lookback: `16/None`
+- margin_signal(TWSE): `WATCH`; unit: `億`
+- margin_balance(TWSE latest): `3760.8` 億
+- margin_chg(TWSE latest): `43.4` 億
 
 ### TW Triggers (0/1/NA)
 - TRIG_TW_PANIC: `0`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))
-- TRIG_TW_LEVERAGE_HEAT: `None`  (margin_signal∈{WATCH,ALERT})
+- TRIG_TW_LEVERAGE_HEAT: `1`  (margin_signal∈{WATCH,ALERT})
 - TRIG_TW_REVERSAL: `0`  (PANIC & NOT heat & pct_change>=0 & DownDay=false)
-- TRIG_TW_DRAWDOWN: `None`  (not supported in repo)
 
 ### TW Distances / Gating
 - pct_change_to_nonnegative_gap: `0.679`
-- lookback_missing_points: `4`
-- drawdown_gap_pct (<=0 means reached): `None`
+- lookback_missing_points: `NA`
 
 ### TW Snapshot (key fields)
 - pct_change: `0.679`; amplitude_pct: `1.1`; turnover_twd: `818428930073.0`; close: `31961.51`
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=False
-
-## Excluded / NA Reasons
-- TW:INPUT_MARGIN: not_available:file_not_found
-- TRIG_TW_LEVERAGE_HEAT: missing_fields:margin_signal (derived from taiwan_margin_financing.series.TWSE.rows)
-- TRIG_TW_DRAWDOWN: not_supported:no roll25_derived input in repo
 
 ## Action Map (v0)
 - Global NONE: 維持既定 DCA/資產配置紀律；不把它當成抄底時點訊號
@@ -67,7 +62,7 @@
 ## Recent History (last 10 buckets)
 | tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | note |
 |---|---|---|---:|---:|---:|---|---:|---:|---:|---|
-| 2026-01-25 | 2026-01-25T19:26:12.551554+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | None | 0 | equity_extreme |
+| 2026-01-25 | 2026-01-25T19:40:31.851190+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) | w60.z_delta | w60.p_delta |
@@ -81,5 +76,5 @@
 - Global (single-source): `market_cache/stats_latest.json`
 - TW Local Gate (existing workflow outputs, no fetch):
   - `roll25_cache/latest_report.json`
-  - `taiwan_margin_financing/latest.json`  (unit: 億)
+  - `taiwan_margin_cache/latest.json`  (unit: 億)
 - This dashboard does not fetch external URLs directly.
