@@ -27,6 +27,9 @@ If a field is missing => prints NA.
 2026-01-26 updates (A+B):
 A) roll25_cache: add a deterministic note clarifying run_day_tag vs UsedDate semantics (report-only).
 B) FX: treat "momentum dict exists but all key fields are None" as momentum_unavailable (deterministic dq note).
+
+2026-01-26 follow-up:
+- cross_module: always render roll25_split_ref (deterministic; no guessing) using roll25_cache split fields if available.
 """
 
 from __future__ import annotations
@@ -220,7 +223,8 @@ def _fx_momentum_unavailable(mom: Any) -> bool:
     """
     Deterministic DQ:
     - momentum is missing/not a dict => unavailable
-    - OR momentum exists but all key fields are None => unavailable
+    - OR momentum exists but ALL key fields are None => unavailable
+    - OR momentum exists but none of the keys exist => unavailable
     """
     if not isinstance(mom, dict):
         return True
@@ -230,13 +234,72 @@ def _fx_momentum_unavailable(mom: Any) -> bool:
         "chg_5d_from", "chg_5d_to",
     ]
     any_present = False
+    any_nonnull = False
     for k in keys:
         if k in mom:
             any_present = True
             if mom.get(k) is not None:
-                return False
-    # If none of the keys exist, treat as unavailable; if keys exist but all None, unavailable
-    return True if (not any_present or True) else True
+                any_nonnull = True
+    return (not any_present) or (not any_nonnull)
+
+
+# ---- roll25 split ref helpers (cross_module) ----
+
+def _roll25_split_values(roll25: Any) -> Dict[str, Any]:
+    """
+    Extract roll25 split booleans deterministically from unified JSON (no guessing).
+    We try multiple known layouts for backward compatibility.
+
+    Returns:
+      {"heated_market": <bool|None>, "dq_issue": <bool|None>}
+    """
+    # Preferred (if builder provides it):
+    # modules.roll25_cache.heat_split.{heated_market, dq_issue}
+    heated = _safe_get(roll25, "heat_split", "heated_market")
+    dq = _safe_get(roll25, "heat_split", "dq_issue")
+
+    # Alternative keys (some versions used roll25_data_quality_issue)
+    if dq is None:
+        dq = _safe_get(roll25, "heat_split", "roll25_data_quality_issue")
+    if heated is None:
+        heated = _safe_get(roll25, "heat_split", "roll25_heated_market")
+
+    # Older renderer output block might have been stored under derived/cross_module (defensive reads)
+    if heated is None:
+        heated = _safe_get(roll25, "derived", "roll25_heated_market")
+    if dq is None:
+        dq = _safe_get(roll25, "derived", "roll25_data_quality_issue")
+
+    # Last resort: some builders embed split under latest_report.roll25_heat_split
+    if heated is None:
+        heated = _safe_get(roll25, "latest_report", "roll25_heat_split", "roll25_heated_market")
+    if dq is None:
+        dq = _safe_get(roll25, "latest_report", "roll25_heat_split", "roll25_data_quality_issue")
+
+    # Normalize: only accept bool; otherwise None (audit: do not coerce)
+    if not isinstance(heated, bool):
+        heated = None
+    if not isinstance(dq, bool):
+        dq = None
+
+    return {"heated_market": heated, "dq_issue": dq}
+
+
+def _build_roll25_split_ref(roll25: Any) -> str:
+    """
+    Deterministic display string; always returns a string.
+    If fields missing => NA (no guessing).
+
+    Example:
+      "heated_market=false, dq_issue=false (see roll25_cache section)"
+    """
+    vals = _roll25_split_values(roll25)
+    heated = vals["heated_market"]
+    dq = vals["dq_issue"]
+
+    heated_s = "NA" if heated is None else ("true" if heated else "false")
+    dq_s = "NA" if dq is None else ("true" if dq else "false")
+    return f"heated_market={heated_s}, dq_issue={dq_s} (see roll25_cache section)"
 
 
 def main() -> int:
@@ -687,10 +750,8 @@ def main() -> int:
         lines.append(f"- roll25_heated (legacy): {_fmt(cross.get('roll25_heated'),0)}")
         lines.append(f"- roll25_confidence: {cross.get('roll25_confidence','NA')}")
 
-        # Optional: split reference if present (kept minimal; no guessing)
-        split_ref = cross.get("roll25_split_ref")
-        if split_ref is not None:
-            lines.append(f"- roll25_split_ref: {split_ref}")
+        # Always render roll25_split_ref (deterministic; no guessing)
+        lines.append(f"- roll25_split_ref: {_build_roll25_split_ref(roll25)}")
 
         lines.append(f"- consistency: {cross.get('consistency','NA')}")
         da = _safe_get(cross, "rationale", "date_alignment") or {}
