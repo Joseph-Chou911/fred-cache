@@ -2,14 +2,24 @@
   "schema_version": "bottom_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-01-25T10:07:12.953796Z",
-      "as_of_ts": "2026-01-25T18:07:12.953810+08:00",
-      "data_commit_sha": "c7d27cb81006d00a5c6a6a98f650e5a8543d3894",
+      "run_ts_utc": "2026-01-25T10:46:41.662302Z",
+      "as_of_ts": "2026-01-25T18:46:41.662313+08:00",
+      "data_commit_sha": "f75f32bd404fbe6931bcc1479a7600ab899d4187",
       "bottom_state": "NONE",
       "triggers": {
         "TRIG_PANIC": 0,
         "TRIG_SYSTEMIC_VETO": 0,
         "TRIG_REVERSAL": 0
+      },
+      "context": {
+        "context_equity_extreme_sp500_p252_ge_95": 1,
+        "sp500_p252": 95.63492063492063
+      },
+      "distances": {
+        "vix_panic_gap": 3.91,
+        "sp500_ret1_panic_gap": 1.5326903744204952,
+        "hyg_veto_gap_z": 3.97231697590731,
+        "ofr_veto_gap_z": 2.1685363191964626
       },
       "series_signals": {
         "VIX": "NONE",
