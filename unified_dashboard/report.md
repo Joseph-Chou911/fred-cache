@@ -6,7 +6,25 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-25T00:51:40Z
+- unified_generated_at_utc: 2026-01-25T04:06:37Z
+
+## (2) Positioning Matrix
+### Current Strategy Mode (deterministic; report-only)
+- strategy_version: strategy_mode_v1
+- trend_on: true
+- fragility_high: true
+- vol_runaway: false
+- matrix_cell: Trend=ON / Fragility=HIGH
+- mode: DEFENSIVE_DCA
+
+**reasons**
+- trend_basis: SP500.signal=INFO, tag=LONG_EXTREME
+- fragility_parts: credit_fragile(BAMLH0A0HYM2=ALERT)=true, rate_stress(DGS10=WATCH)=true, tw_margin(WATCH)=true, cross_divergence(DIVERGENCE)=true
+- vol_gate: mixed/unknown WATCH direction (VIX_up=true, VIXCLS_up=false)
+
+**dq_gates (no guessing; conservative defaults)**
+- roll25_derived_confidence=DOWNGRADED (derived metrics not used for upgrade triggers)
+- fx_confidence=DOWNGRADED (fx not used as primary trigger)
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-24T13:27:02Z
@@ -118,7 +136,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-25T00:51:40Z -->
+<!-- rendered_at_utc: 2026-01-25T04:06:37Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
