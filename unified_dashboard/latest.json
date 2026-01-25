@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-25T04:06:37Z",
+  "generated_at_utc": "2026-01-25T04:42:54Z",
   "run_day_tag": "NON_TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -529,7 +529,7 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-25T02:55:54.460580+08:00",
+        "generated_at": "2026-01-25T12:32:30.712808+08:00",
         "timezone": "Asia/Taipei",
         "summary": "今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低",
         "numbers": {
@@ -1154,7 +1154,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-25T04:06:36Z",
+        "generated_at_utc": "2026-01-25T04:42:53Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
         "data_date": "2026-01-23",
