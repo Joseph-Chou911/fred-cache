@@ -23,6 +23,13 @@ If a field is missing => prints NA.
 2026-01-25 follow-up:
 - Positioning Matrix: SP500 and VIX use market_cache only (single source policy).
 - Positioning Matrix prints source_policy and includes data_date for SP500/VIX (audit-friendly).
+
+2026-01-25 option(2) follow-up (Roll25 heat split):
+- Render BOTH:
+  - roll25_heated_market (market-only heat; excludes data-quality)
+  - roll25_data_quality_issue (data-quality issue flag, e.g., OHLC missing / used_date not latest)
+- Backward compatible:
+  - If unified JSON lacks these two fields, derive them deterministically from roll25 section for display.
 """
 
 from __future__ import annotations
@@ -31,7 +38,7 @@ import argparse
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def _read_text(path: str) -> str:
@@ -210,6 +217,145 @@ def _truthy_signal(x: Any, allowed: List[str]) -> bool:
     return x.upper() in [a.upper() for a in allowed]
 
 
+# ---- roll25 heat split (Option 2) ----
+
+def _derive_roll25_heat_split_for_display(
+    roll25_module: Any,
+) -> Dict[str, Any]:
+    """
+    Display-only deterministic derivation of option(2) heat split, used as fallback if
+    unified JSON does NOT contain split fields.
+
+    Market heat:
+      heated_market = any of (DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak) == True
+
+    Data-quality issue:
+      dq_issue = True if (OhlcMissing==True) OR (ohlc_status=="MISSING") OR (used_date_status != "OK_LATEST")
+      dq_issue = False if we can deterministically prove none of the above
+      dq_issue = NA if roll25 section is missing too much to decide
+
+    Returns:
+      {
+        "roll25_heated_market": bool|None,
+        "roll25_data_quality_issue": bool|None,
+        "derived": bool,
+        "dbg": {...}
+      }
+    """
+    out: Dict[str, Any] = {
+        "roll25_heated_market": None,
+        "roll25_data_quality_issue": None,
+        "derived": True,
+        "dbg": {},
+    }
+
+    latest = _safe_get(roll25_module, "latest_report") or {}
+    core = _safe_get(roll25_module, "core") or {}
+
+    # signals (prefer core.signals, fallback latest_report.signal)
+    sigs = _safe_get(core, "signals")
+    if not isinstance(sigs, dict):
+        sigs = _safe_get(latest, "signal")
+    if not isinstance(sigs, dict):
+        sigs = {}
+
+    # ohlc status
+    ohlc_status = None
+    if isinstance(latest, dict) and isinstance(latest.get("ohlc_status"), str):
+        ohlc_status = latest.get("ohlc_status")
+    if ohlc_status is None and isinstance(core, dict) and isinstance(core.get("ohlc_status"), str):
+        ohlc_status = core.get("ohlc_status")
+
+    # used_date_status
+    used_date_status = None
+    if isinstance(core, dict) and isinstance(core.get("used_date_status"), str):
+        used_date_status = core.get("used_date_status")
+    if used_date_status is None and isinstance(latest, dict) and isinstance(latest.get("used_date_status"), str):
+        used_date_status = latest.get("used_date_status")
+
+    # infer OhlcMissing (dq signal)
+    ohlc_missing = _infer_ohlc_missing(sigs, latest)
+
+    # market heat keys (exclude OhlcMissing)
+    market_keys = ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]
+    market_hits: Dict[str, Any] = {k: sigs.get(k) for k in market_keys}
+    market_true = [k for k, v in market_hits.items() if v is True]
+
+    heated_market: Optional[bool] = None
+    if isinstance(sigs, dict) and any(k in sigs for k in market_keys):
+        heated_market = len(market_true) > 0
+
+    # dq_issue deterministic evaluation
+    dq_issue: Optional[bool] = None
+    dq_flags = {
+        "OhlcMissing": ohlc_missing,
+        "ohlc_status": ohlc_status,
+        "used_date_status": used_date_status,
+    }
+
+    # If any dq evidence indicates issue => True
+    issue_hits = False
+    issue_proven_clear = True  # becomes False if we lack evidence
+
+    if ohlc_missing is True:
+        issue_hits = True
+    elif ohlc_missing is None:
+        issue_proven_clear = False
+
+    if isinstance(ohlc_status, str):
+        if ohlc_status.upper() == "MISSING":
+            issue_hits = True
+        # OK counts as clear evidence for this sub-check
+    else:
+        issue_proven_clear = False
+
+    if isinstance(used_date_status, str):
+        if used_date_status != "OK_LATEST":
+            issue_hits = True
+        # OK_LATEST counts as clear evidence for this sub-check
+    else:
+        issue_proven_clear = False
+
+    if issue_hits:
+        dq_issue = True
+    else:
+        dq_issue = False if issue_proven_clear else None
+
+    out["roll25_heated_market"] = heated_market
+    out["roll25_data_quality_issue"] = dq_issue
+    out["dbg"] = {
+        "market_hits": market_hits,
+        "market_true": market_true,
+        **dq_flags,
+    }
+    return out
+
+
+def _get_roll25_heat_split(
+    uni: Any,
+    roll25_module: Any,
+    cross_module: Any,
+) -> Dict[str, Any]:
+    """
+    Prefer split fields from cross_module if present.
+    Else derive for display from roll25 section.
+    """
+    # 1) cross_module provides split
+    if isinstance(cross_module, dict):
+        hm = cross_module.get("roll25_heated_market")
+        dq = cross_module.get("roll25_data_quality_issue")
+        if isinstance(hm, bool) or isinstance(dq, bool):
+            return {
+                "roll25_heated_market": hm if isinstance(hm, bool) else None,
+                "roll25_data_quality_issue": dq if isinstance(dq, bool) else None,
+                "derived": False,
+                "dbg": {"source": "cross_module"},
+            }
+
+    # 2) fallback derive from roll25 module (display-only)
+    return _derive_roll25_heat_split_for_display(roll25_module)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -288,8 +434,10 @@ def main() -> int:
 
     credit_fragile = _truthy_signal(credit_sig, ["ALERT"])  # strict
     rate_stress = _truthy_signal(dgs10_sig, ["WATCH", "ALERT"])
+
     tw_margin_sig = tw_cross.get("margin_signal") if isinstance(tw_cross, dict) else None
     tw_margin = _truthy_signal(tw_margin_sig, ["WATCH", "ALERT"])
+
     cross_cons = tw_cross.get("consistency") if isinstance(tw_cross, dict) else None
     cross_divergence = bool(isinstance(cross_cons, str) and cross_cons.upper() == "DIVERGENCE")
 
@@ -548,12 +696,24 @@ def main() -> int:
         or "NA"
     )
 
+    # Split heat (Option 2): prefer cross_module, else derive from roll25 section
+    heat_split = _get_roll25_heat_split(uni, roll25, tw_cross)
+    heated_market = heat_split.get("roll25_heated_market")
+    dq_issue = heat_split.get("roll25_data_quality_issue")
+
     lines.append("## roll25_cache (TW turnover)")
     lines.append(f"- status: {_safe_get(roll25,'status') or 'NA'}")
     lines.append(f"- UsedDate: {_fmt(r_core.get('UsedDate'),0)}")
     lines.append(f"- run_day_tag: {run_day_tag if run_day_tag is not None else 'NA'}")
     lines.append(f"- used_date_status: {used_date_status if used_date_status is not None else 'NA'}")
     lines.append(f"- tag (legacy): {legacy_tag}")
+
+    # ✅ option(2) explicit split (display-only; deterministic)
+    lines.append("### roll25_heat_split (Option 2)")
+    lines.append(f"- roll25_heated_market: {_fmt(heated_market,0)}")
+    lines.append(f"- roll25_data_quality_issue: {_fmt(dq_issue,0)}")
+    lines.append(f"- split_source: {heat_split.get('dbg',{}).get('source','DERIVED_FROM_ROLL25_SECTION')}")
+
     lines.append(f"- risk_level: {r_core.get('risk_level','NA')}")
     lines.append(f"- turnover_twd: {_fmt(r_core.get('turnover_twd'),0)}")
     lines.append(f"- turnover_unit: {r_core.get('turnover_unit','NA')}")
@@ -644,7 +804,14 @@ def main() -> int:
         lines.append(f"- latest_chg: {_fmt_with_unit(mr.get('latest_chg'), chg_unit, nd=3)}")
 
         lines.append(f"- margin_confidence: {mr.get('confidence','NA')}")
-        lines.append(f"- roll25_heated: {_fmt(cross.get('roll25_heated'),0)}")
+
+        # ✅ option(2) split fields (preferred), plus legacy for backward compatibility
+        split = _get_roll25_heat_split(uni, roll25, cross)
+        lines.append("#### roll25_heat_split (Option 2; cross_module)")
+        lines.append(f"- roll25_heated_market: {_fmt(split.get('roll25_heated_market'),0)}")
+        lines.append(f"- roll25_data_quality_issue: {_fmt(split.get('roll25_data_quality_issue'),0)}")
+        lines.append(f"- roll25_heated (legacy): {_fmt(cross.get('roll25_heated'),0)}")
+
         lines.append(f"- roll25_confidence: {cross.get('roll25_confidence','NA')}")
         lines.append(f"- consistency: {cross.get('consistency','NA')}")
         da = _safe_get(cross, "rationale", "date_alignment") or {}
