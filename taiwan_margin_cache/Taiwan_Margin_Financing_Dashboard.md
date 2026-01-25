@@ -36,7 +36,7 @@
 - action: 維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。
 - caveats: Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | LookbackNActual=16 | LookbackOldest=2026-01-02 | OHLC=OK
-- generated_at: 2026-01-24T21:24:16.004739+08:00 (Asia/Taipei)
+- generated_at: 2026-01-25T02:55:54.460580+08:00 (Asia/Taipei)
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -86,4 +86,4 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（LookbackNActual=16/20（window 未滿 → 信心降級））
 
-_generated_at_utc: 2026-01-24T13:24:51Z_
+_generated_at_utc: 2026-01-25T00:17:33Z_
