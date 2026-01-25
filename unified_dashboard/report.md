@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-25T23:23:04Z
+- unified_generated_at_utc: 2026-01-25T23:36:07Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -77,6 +77,8 @@
 - used_date_status: OK_LATEST
 - tag (legacy): DATA_NOT_UPDATED
 - note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
+- heat_split.heated_market: NA
+- heat_split.dq_issue: NA
 - risk_level: 低
 - turnover_twd: 818428930073
 - turnover_unit: TWD
@@ -140,7 +142,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-25T23:23:04Z -->
+<!-- rendered_at_utc: 2026-01-25T23:36:07Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
