@@ -1,0 +1,45 @@
+name: Update Bottom Cache (market_cache-based)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Example: 23:30 Asia/Taipei = 15:30 UTC
+    - cron: "30 15 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-writer-main
+  cancel-in-progress: false
+
+jobs:
+  bottom_cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Render bottom_cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/render_bottom_cache.py
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bottom_cache/latest.json bottom_cache/history.json dashboard_bottom_cache/report.md
+          git commit -m "bottom_cache: update" || echo "No changes to commit"
+          git push
