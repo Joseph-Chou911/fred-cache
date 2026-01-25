@@ -31,6 +31,12 @@ Small audit-focused enhancements:
 2026-01-25 (cross_module unit fix):
 - Display margin change unit (e.g., 億) in cross_module section.
 - Format sum_last5 / latest_chg with unit (no guessing; missing => NA).
+
+2026-01-25 (cross_module chg_last5 unit converge):
+- Render chg_last5 with explicit unit while keeping a numeric list available.
+  Output:
+    - chg_last5: ["43.4 億", ...]   (human-readable, unit explicit)
+    - chg_last5_raw: [43.4, ...]   (machine-friendly numeric list, optional)
 """
 
 from __future__ import annotations
@@ -181,6 +187,27 @@ def _fmt_with_unit(x: Any, unit: str, nd: int = 3) -> str:
     if not unit or unit == "NA":
         return "NA"
     return f"{v:.{nd}f} {unit}"
+
+
+def _fmt_list_with_unit(xs: Any, unit: str, nd: int = 1) -> Any:
+    """
+    Format a list of numerics with unit as a list[str], e.g. ["43.4 億", ...].
+    - If xs is not a list => None
+    - If unit missing => None (do not guess)
+    - Non-numeric items become "NA"
+    """
+    if not isinstance(xs, list):
+        return None
+    if not unit or unit == "NA":
+        return None
+    out: List[str] = []
+    for it in xs:
+        try:
+            v = float(it)
+            out.append(f"{v:.{nd}f} {unit}")
+        except Exception:
+            out.append("NA")
+    return out
 
 
 def main() -> int:
@@ -459,7 +486,7 @@ def main() -> int:
     lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
 
-    # cross_module (kept) + unit display
+    # cross_module (kept) + unit display + chg_last5 unit converge
     cross = _safe_get(twm, "cross_module") or {}
     if isinstance(cross, dict) and cross:
         # unit from unified.latest.series.TWSE.chg_yi_unit.label
@@ -471,13 +498,23 @@ def main() -> int:
         mr = cross.get("margin_rationale", {}) if isinstance(cross.get("margin_rationale"), dict) else {}
         lines.append(f"- margin_rule_version: {mr.get('rule_version','NA')}")
 
-        # NEW: unit disclosure (no guessing)
+        # unit disclosure (no guessing)
         lines.append(f"- chg_unit: {chg_unit} (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)")
 
         chg_last5 = mr.get("chg_last5", None)
-        lines.append(f"- chg_last5: {chg_last5 if chg_last5 is not None else 'NA'}")
+        chg_last5_fmt = _fmt_list_with_unit(chg_last5, chg_unit, nd=1)
 
-        # NEW: show scalars with unit (if unit missing => NA)
+        # Converged display:
+        # - Prefer explicit-unit list when possible
+        # - Also emit raw numeric list for audit/machine parsing
+        if chg_last5_fmt is not None:
+            lines.append(f"- chg_last5: {chg_last5_fmt}")
+            lines.append(f"- chg_last5_raw: {chg_last5}")
+        else:
+            # No unit => do not guess; keep original and make the limitation explicit via NA-form behavior
+            lines.append(f"- chg_last5: {chg_last5 if chg_last5 is not None else 'NA'}")
+
+        # show scalars with unit (if unit missing => NA)
         lines.append(f"- sum_last5: {_fmt_with_unit(mr.get('sum_last5'), chg_unit, nd=3)}")
         lines.append(f"- pos_days_last5: {_fmt_int(mr.get('pos_days_last5'))}")
         lines.append(f"- latest_chg: {_fmt_with_unit(mr.get('latest_chg'), chg_unit, nd=3)}")
@@ -495,7 +532,7 @@ def main() -> int:
             )
         lines.append("")
 
-    # audit footer (new)
+    # audit footer
     residue = _detect_root_report_residue(args.in_path, args.out_path)
     lines.append(f"<!-- rendered_at_utc: {rendered_at_utc} -->")
     lines.append(f"<!-- input_path: {args.in_path} | input_abs: {residue['input_abs']} -->")
