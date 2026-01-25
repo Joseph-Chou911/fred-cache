@@ -2,9 +2,9 @@
   "schema_version": "bottom_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-01-25T09:57:01.510461Z",
-      "as_of_ts": "2026-01-25T17:57:01.510476+08:00",
-      "data_commit_sha": "0f6e2e117aa9b50cace23734b84c5085e3977b4a",
+      "run_ts_utc": "2026-01-25T10:07:12.953796Z",
+      "as_of_ts": "2026-01-25T18:07:12.953810+08:00",
+      "data_commit_sha": "c7d27cb81006d00a5c6a6a98f650e5a8543d3894",
       "bottom_state": "NONE",
       "triggers": {
         "TRIG_PANIC": 0,

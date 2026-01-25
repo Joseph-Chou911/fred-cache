@@ -1,8 +1,8 @@
 {
   "schema_version": "bottom_cache_v1",
-  "generated_at_utc": "2026-01-25T09:57:01.510461Z",
-  "as_of_ts": "2026-01-25T17:57:01.510476+08:00",
-  "data_commit_sha": "0f6e2e117aa9b50cace23734b84c5085e3977b4a",
+  "generated_at_utc": "2026-01-25T10:07:12.953796Z",
+  "as_of_ts": "2026-01-25T18:07:12.953810+08:00",
+  "data_commit_sha": "c7d27cb81006d00a5c6a6a98f650e5a8543d3894",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -109,9 +109,16 @@
       "series_signal": "NONE"
     }
   },
+  "thresholds_v0": {
+    "VIX_panic_ge": 20.0,
+    "SP500_ret1_panic_le_pct": -1.5,
+    "HYG_IEF_RATIO_veto_z_le": -2.0,
+    "OFR_FSI_veto_z_ge": 2.0
+  },
   "notes": [
     "v0: single source = market_cache/stats_latest.json",
-    "signal derived from w60.z and w252.p using deterministic thresholds",
-    "ret1_pct unit is percent (%)"
+    "series_signal derived from w60.z and w252.p using deterministic thresholds",
+    "ret1_pct unit is percent (%)",
+    "outputs unified into dashboard_bottom_cache/{latest.json,history.json,report.md}"
   ]
 }
