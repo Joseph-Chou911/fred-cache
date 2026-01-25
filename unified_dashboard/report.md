@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-25T14:26:58Z
+- unified_generated_at_utc: 2026-01-25T14:32:45Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -114,6 +114,7 @@
 - spot_buy: 31.500000
 - spot_sell: 31.600000
 - mid: 31.550000
+- momentum_unavailable: true (deterministic dq note)
 - ret1_pct: NA (from None to None)
 - chg_5d_pct: NA (from None to None)
 - dir: NA
@@ -136,15 +137,12 @@
 - pos_days_last5: 4
 - latest_chg: 43.400 億
 - margin_confidence: OK
-#### roll25_heat_split (Option 2; cross_module)
-- roll25_heated_market: false
-- roll25_data_quality_issue: false
 - roll25_heated (legacy): false
 - roll25_confidence: DOWNGRADED
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-25T14:26:58Z -->
+<!-- rendered_at_utc: 2026-01-25T14:32:45Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
