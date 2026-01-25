@@ -12,11 +12,10 @@ TZ_TPE = ZoneInfo("Asia/Taipei")
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
 
-# Unified output folder (latest/history/report all here)
-OUT_DIR = "dashboard_bottom_cache"
-OUT_LATEST = f"{OUT_DIR}/latest.json"
-OUT_HISTORY = f"{OUT_DIR}/history.json"
-OUT_MD = f"{OUT_DIR}/report.md"
+# ✅ unified outputs (ONLY dashboard_bottom_cache)
+OUT_LATEST = "dashboard_bottom_cache/latest.json"
+OUT_HISTORY = "dashboard_bottom_cache/history.json"
+OUT_MD = "dashboard_bottom_cache/report.md"
 
 NEEDED = ["VIX", "SP500", "HYG_IEF_RATIO", "OFR_FSI"]
 
@@ -172,7 +171,6 @@ def main() -> None:
     else:
         hyg_veto = 1 if (hyg_can and hyg_z <= -2.0) else 0
         ofr_veto = 1 if (ofr_can and ofr_z >= 2.0) else 0
-        # if one is available and the other missing, we still OR on the available one
         trig_veto = 1 if (hyg_veto == 1 or ofr_veto == 1) else 0
 
     # TRIG_REVERSAL
