@@ -8,6 +8,8 @@ Improvements (audit-first, backward compatible):
 - Table selection: prefer tables where required cols exist and parsed rows are maximal.
 - HTTP retry + backoff.
 - Add optional audit fields: fetched_at_utc, http_error, rows_count.
+- NEW (audit-first): emit chg_yi_unit extracted from HiStock column name (e.g., "融資增加(億)").
+  * If unit cannot be extracted => NA (no guessing).
 """
 
 from __future__ import annotations
@@ -83,8 +85,7 @@ def _best_mmdd_year(mo: int, dd: int, tz: str = "Asia/Taipei") -> Optional[int]:
     best_score: Optional[int] = None
     for y, d in valid:
         # allow small forward drift (timezone / site update)
-        if d > (today.replace(day=today.day) + (date.fromordinal(today.toordinal() + 1) - today)):
-            # d > today+1
+        if d > date.fromordinal(today.toordinal() + 1):  # today + 1 day
             continue
         score = abs((today - d).days)
         if best is None or best_score is None or score < best_score:
@@ -93,7 +94,7 @@ def _best_mmdd_year(mo: int, dd: int, tz: str = "Asia/Taipei") -> Optional[int]:
 
     if best is None:
         # fallback: choose the closest even if slightly future
-        y, d = min(valid, key=lambda x: abs((today - x[1]).days))
+        y, _d = min(valid, key=lambda x: abs((today - x[1]).days))
         return y
     return best[0]
 
@@ -150,6 +151,44 @@ def http_get(url: str, timeout: int = 25, tries: int = 3) -> Tuple[Optional[str]
     return None, last_err
 
 
+# ---------- NEW: unit extraction (audit-first; no guessing) ----------
+
+def _extract_unit_from_colname(col: Optional[str]) -> Dict[str, Any]:
+    """
+    Extract unit from column name like:
+      - '融資餘額(億)'
+      - '融資增加(億)'
+      - full-width parentheses: '融資增加（億）'
+
+    Audit-first:
+    - If cannot extract => NA (no guessing).
+    - We record what we saw (raw unit string) and where it came from (source).
+
+    Returns:
+      {"code": "...", "label": "...", "raw": "...", "source": "..."}
+    """
+    if not isinstance(col, str) or not col.strip():
+        return {"code": "NA", "label": "NA", "raw": "NA", "source": "NA"}
+
+    s = col.strip()
+
+    # Support half-width and full-width parentheses.
+    m = re.search(r"[(（]([^）)]+)[)）]", s)
+    raw_unit = m.group(1).strip() if m else ""
+
+    if not raw_unit:
+        return {"code": "NA", "label": "NA", "raw": "NA", "source": f"colname:{s}"}
+
+    # Conservative mapping: reflect what HiStock shows, do not assert currency/scale.
+    if raw_unit == "億":
+        return {"code": "UNIT_YI", "label": "億", "raw": raw_unit, "source": f"colname:{s}"}
+    if raw_unit == "萬":
+        return {"code": "UNIT_WAN", "label": "萬", "raw": raw_unit, "source": f"colname:{s}"}
+
+    # Unknown unit: keep raw
+    return {"code": "UNIT_RAW", "label": raw_unit, "raw": raw_unit, "source": f"colname:{s}"}
+
+
 def _find_cols(cols: List[str]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Return (date_col, balance_col, change_col) based on HiStock column naming.
@@ -204,15 +243,19 @@ def _parse_rows(df: pd.DataFrame, date_col: str, bal_col: str, chg_col: Optional
     return rows
 
 
-def parse_histock(html: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[str]]:
+def parse_histock(html: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[str], Dict[str, Any]]:
+    """
+    Returns:
+      (data_date, rows, notes, chg_yi_unit)
+    """
     notes: List[str] = []
     try:
         tables = pd.read_html(StringIO(html), flavor="lxml")
     except Exception as e:
-        return None, [], [f"HiStock 解析失敗：{type(e).__name__}: {e}"]
+        return None, [], [f"HiStock 解析失敗：{type(e).__name__}: {e}"], {"code": "NA", "label": "NA", "raw": "NA", "source": "NA"}
 
     if not tables:
-        return None, [], ["HiStock 找不到任何表格（read_html=0 tables）"]
+        return None, [], ["HiStock 找不到任何表格（read_html=0 tables）"], {"code": "NA", "label": "NA", "raw": "NA", "source": "NA"}
 
     # Evaluate all candidate tables; choose best by:
     # 1) has required columns (date+balance)
@@ -221,6 +264,8 @@ def parse_histock(html: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[
     best_notes: List[str] = []
     best_dd: Optional[str] = None
     best_cols: Optional[List[str]] = None
+    best_bal_col: Optional[str] = None
+    best_chg_col: Optional[str] = None
 
     for idx, df in enumerate(tables):
         cols = [_col_to_str(c) for c in df.columns]
@@ -251,17 +296,23 @@ def parse_histock(html: str) -> Tuple[Optional[str], List[Dict[str, Any]], List[
             best_notes = local_notes
             best_dd = rows[0]["date"] if rows else None
             best_cols = cols
+            best_bal_col = bal_col
+            best_chg_col = chg_col
 
     if not best_rows:
         # fallback: keep earlier behavior but provide audit hint
-        return None, [], ["HiStock：無法定位可解析的『日期+融資餘額』資料表（可能改版）"]
+        return None, [], ["HiStock：無法定位可解析的『日期+融資餘額』資料表（可能改版）"], {"code": "NA", "label": "NA", "raw": "NA", "source": "NA"}
 
     # final notes: record chosen table cols
     notes.extend(best_notes)
     if best_cols:
         notes.append("HiStock 最終採用欄位：" + " | ".join(best_cols[:40]))
 
-    return best_dd, best_rows, notes
+    # NEW: extract unit metadata from chosen change column name
+    chg_unit = _extract_unit_from_colname(best_chg_col)
+    notes.append(f"unit.chg_yi from col='{best_chg_col}': {chg_unit}")
+
+    return best_dd, best_rows, notes, chg_unit
 
 
 def main() -> None:
@@ -290,6 +341,8 @@ def main() -> None:
                 "data_date": None,
                 "rows": [],
                 "notes": [err or "HiStock 空回應"],
+                # NEW: unit metadata (audit-first)
+                "chg_yi_unit": {"code": "NA", "label": "NA", "raw": "NA", "source": "NA"},
                 # optional audit fields
                 "fetched_at_utc": fetched_at,
                 "http_error": err or "HiStock empty response",
@@ -297,7 +350,7 @@ def main() -> None:
             }
             return
 
-        dd, rows, notes = parse_histock(html)
+        dd, rows, notes, chg_unit = parse_histock(html)
         if len(rows) < args.min_rows:
             notes.append(f"HiStock {mkt} rows 不足以提供 min_rows={args.min_rows}（實得 {len(rows)}）")
         notes.append("Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。")
@@ -308,6 +361,8 @@ def main() -> None:
             "data_date": dd,
             "rows": rows,
             "notes": notes,
+            # NEW: unit metadata (audit-first)
+            "chg_yi_unit": chg_unit,
             # optional audit fields
             "fetched_at_utc": fetched_at,
             "http_error": None,
