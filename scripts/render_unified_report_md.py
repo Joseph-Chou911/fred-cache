@@ -24,8 +24,9 @@ If a field is missing => prints NA.
 - Positioning Matrix: SP500 and VIX use market_cache only (single source policy).
 - Positioning Matrix prints source_policy and includes data_date for SP500/VIX (audit-friendly).
 
-2026-01-26 minimal diff:
-- Add one line in cross_module: roll25_split_ref (uses ONLY existing cross_module fields; missing => NA).
+2026-01-26 updates (A+B):
+A) roll25_cache: add a deterministic note clarifying run_day_tag vs UsedDate semantics (report-only).
+B) FX: treat "momentum dict exists but all key fields are None" as momentum_unavailable (deterministic dq note).
 """
 
 from __future__ import annotations
@@ -211,6 +212,31 @@ def _truthy_signal(x: Any, allowed: List[str]) -> bool:
     if not isinstance(x, str):
         return False
     return x.upper() in [a.upper() for a in allowed]
+
+
+# ---- FX helpers (dq) ----
+
+def _fx_momentum_unavailable(mom: Any) -> bool:
+    """
+    Deterministic DQ:
+    - momentum is missing/not a dict => unavailable
+    - OR momentum exists but all key fields are None => unavailable
+    """
+    if not isinstance(mom, dict):
+        return True
+    keys = [
+        "ret1_pct", "chg_5d_pct",
+        "ret1_from", "ret1_to",
+        "chg_5d_from", "chg_5d_to",
+    ]
+    any_present = False
+    for k in keys:
+        if k in mom:
+            any_present = True
+            if mom.get(k) is not None:
+                return False
+    # If none of the keys exist, treat as unavailable; if keys exist but all None, unavailable
+    return True if (not any_present or True) else True
 
 
 def main() -> int:
@@ -557,6 +583,10 @@ def main() -> int:
     lines.append(f"- run_day_tag: {run_day_tag if run_day_tag is not None else 'NA'}")
     lines.append(f"- used_date_status: {used_date_status if used_date_status is not None else 'NA'}")
     lines.append(f"- tag (legacy): {legacy_tag}")
+
+    # (A) deterministic note to avoid semantic confusion
+    lines.append("- note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)")
+
     lines.append(f"- risk_level: {r_core.get('risk_level','NA')}")
     lines.append(f"- turnover_twd: {_fmt(r_core.get('turnover_twd'),0)}")
     lines.append(f"- turnover_unit: {r_core.get('turnover_unit','NA')}")
@@ -603,14 +633,16 @@ def main() -> int:
     lines.append(f"- spot_buy: {_fmt(usd.get('spot_buy'),6)}")
     lines.append(f"- spot_sell: {_fmt(usd.get('spot_sell'),6)}")
     lines.append(f"- mid: {_fmt(usd.get('mid'),6)}")
+    mom = fx_der.get("momentum", None)
 
-    mom = fx_der.get("momentum", {}) if isinstance(fx_der.get("momentum"), dict) else {}
-    momentum_unavailable = bool(not isinstance(mom, dict) or not mom)
+    # (B) deterministic dq note (unavailable if missing or all key fields None)
+    momentum_unavailable = _fx_momentum_unavailable(mom)
     if momentum_unavailable:
         lines.append("- momentum_unavailable: true (deterministic dq note)")
 
-    lines.append(f"- ret1_pct: {_fmt(mom.get('ret1_pct'),6)} (from {mom.get('ret1_from','NA')} to {mom.get('ret1_to','NA')})")
-    lines.append(f"- chg_5d_pct: {_fmt(mom.get('chg_5d_pct'),6)} (from {mom.get('chg_5d_from','NA')} to {mom.get('chg_5d_to','NA')})")
+    mom_dict = mom if isinstance(mom, dict) else {}
+    lines.append(f"- ret1_pct: {_fmt(mom_dict.get('ret1_pct'),6)} (from {mom_dict.get('ret1_from','NA')} to {mom_dict.get('ret1_to','NA')})")
+    lines.append(f"- chg_5d_pct: {_fmt(mom_dict.get('chg_5d_pct'),6)} (from {mom_dict.get('chg_5d_from','NA')} to {mom_dict.get('chg_5d_to','NA')})")
     lines.append(f"- dir: {fx_der.get('dir','NA')}")
     lines.append(f"- fx_signal: {fx_der.get('fx_signal','NA')}")
     lines.append(f"- fx_reason: {fx_der.get('fx_reason','NA')}")
@@ -655,11 +687,10 @@ def main() -> int:
         lines.append(f"- roll25_heated (legacy): {_fmt(cross.get('roll25_heated'),0)}")
         lines.append(f"- roll25_confidence: {cross.get('roll25_confidence','NA')}")
 
-        # ---- minimal diff: roll25_split_ref (uses cross_module fields only; missing => NA) ----
-        hm = cross.get("roll25_heated_market")
-        dq = cross.get("roll25_data_quality_issue")
-        lines.append(f"- roll25_split_ref: heated_market={_fmt(hm,0)}, dq_issue={_fmt(dq,0)} (see roll25_cache section)")
-        # ------------------------------------------------------------------------------------
+        # Optional: split reference if present (kept minimal; no guessing)
+        split_ref = cross.get("roll25_split_ref")
+        if split_ref is not None:
+            lines.append(f"- roll25_split_ref: {split_ref}")
 
         lines.append(f"- consistency: {cross.get('consistency','NA')}")
         da = _safe_get(cross, "rationale", "date_alignment") or {}
