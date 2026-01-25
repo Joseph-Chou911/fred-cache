@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-25T05:13:10Z",
+  "generated_at_utc": "2026-01-25T14:15:00Z",
   "run_day_tag": "NON_TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -160,11 +160,11 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-24T23:11:41.208799+00:00",
+          "run_ts_utc": "2026-01-25T13:52:02.409839+00:00",
           "module": "fred_cache",
           "stale_hours": 72.0,
-          "stats_generated_at_utc": "2026-01-24T18:56:24+00:00",
-          "stats_as_of_ts": "2026-01-25T02:56:21+08:00",
+          "stats_generated_at_utc": "2026-01-25T13:45:35+00:00",
+          "stats_as_of_ts": "2026-01-25T21:45:24+08:00",
           "script_version": "stats_v1_ddof0_w60_w252_pct_le_ret1_delta",
           "series_count": 13,
           "history_path": "dashboard_fred_cache/history.json",
@@ -181,14 +181,14 @@
           },
           "history_lite_series": 13,
           "day_key_local": "2026-01-25",
-          "snapshot_id": "commit:50a7cca2268b0aebe4b5b47a568464a6a4aba1a1",
-          "data_commit_sha": "50a7cca2268b0aebe4b5b47a568464a6a4aba1a1"
+          "snapshot_id": "commit:42f0a48961bc8cc6c0bfee57164fb247791e8ecc",
+          "data_commit_sha": "42f0a48961bc8cc6c0bfee57164fb247791e8ecc"
         },
         "rows": [
           {
             "series": "BAMLH0A0HYM2",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-22",
             "value": 2.64,
             "z60": -1.9473392731543289,
@@ -209,12 +209,12 @@
             "hitbits": "NA",
             "dbg": "p60=1.666666666667;prev_p60=3.333333333333;z60=-1.947339273154;prev_z60=-1.668564956258;prev_v=2.69;last_v=2.64;zΔ60=-0.278774316896;pΔ60=-1.666666666667;ret1%=-1.85873605948",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=BAMLH0A0HYM2&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "DGS10",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-22",
             "value": 4.26,
             "z60": 2.018186616514373,
@@ -235,12 +235,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "VIXCLS",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-22",
             "value": 15.64,
             "z60": -0.5644331466069641,
@@ -261,12 +261,12 @@
             "hitbits": "P+R",
             "dbg": "p60=30;prev_p60=55;z60=-0.564433146607;prev_z60=-0.098444930935;prev_v=16.9;last_v=15.64;zΔ60=-0.465988215672;pΔ60=-25;ret1%=-7.455621301775",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "DJIA",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-23",
             "value": 49098.71,
             "z60": 1.179958329367025,
@@ -287,12 +287,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DJIA&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "NFCINONFINLEVERAGE",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-16",
             "value": -0.50568,
             "z60": 1.2376921248704504,
@@ -313,12 +313,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "SP500",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-23",
             "value": 6915.61,
             "z60": 0.867813687185047,
@@ -339,12 +339,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "T10Y3M",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-23",
             "value": 0.54,
             "z60": 1.0019649601394853,
@@ -365,12 +365,12 @@
             "hitbits": "NA",
             "dbg": "p60=86.666666666667;prev_p60=90;z60=1.001964960139;prev_z60=1.089838477283;prev_v=0.55;last_v=0.54;zΔ60=-0.087873517144;pΔ60=-3.333333333333;ret1%=-1.818181818182",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "DCOILWTICO",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-20",
             "value": 60.3,
             "z60": 0.6093511436214766,
@@ -391,12 +391,12 @@
             "hitbits": "P",
             "dbg": "p60=73.333333333333;prev_p60=56.666666666667;z60=0.609351143621;prev_z60=0.029178106248;prev_v=59.39;last_v=60.3;zΔ60=0.580173037373;pΔ60=16.666666666667;ret1%=1.532244485604",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DCOILWTICO&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "DGS2",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-22",
             "value": 3.61,
             "z60": 1.4871052550136983,
@@ -417,12 +417,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DGS2&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "DTWEXBGS",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-16",
             "value": 120.4478,
             "z60": -1.0455724394978938,
@@ -443,12 +443,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXBGS&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "NASDAQCOM",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-23",
             "value": 23501.24,
             "z60": 0.49171619505704245,
@@ -469,12 +469,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=NASDAQCOM&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "STLFSI4",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-16",
             "value": -0.651,
             "z60": -0.39795300587574917,
@@ -495,12 +495,12 @@
             "hitbits": "R",
             "dbg": "p60=35;prev_p60=31.666666666667;z60=-0.397953005876;prev_z60=-0.454103944422;prev_v=-0.6644;last_v=-0.651;zΔ60=0.056150938546;pΔ60=3.333333333333;ret1%=2.016857314871",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=STLFSI4&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           },
           {
             "series": "T10Y2Y",
             "dq": "OK",
-            "age_hours": 4.254780221944444,
+            "age_hours": 0.10761384416666667,
             "data_date": "2026-01-23",
             "value": 0.64,
             "z60": 0.46564648780943013,
@@ -521,7 +521,7 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-25T02:56:21+08:00"
+            "effective_as_of_ts": "2026-01-25T21:45:24+08:00"
           }
         ]
       }
@@ -529,7 +529,7 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-25T12:32:30.712808+08:00",
+        "generated_at": "2026-01-25T17:43:19.036994+08:00",
         "timezone": "Asia/Taipei",
         "summary": "今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低",
         "numbers": {
@@ -721,7 +721,8 @@
           "ConsecutiveBreak": false,
           "OhlcMissing": false
         },
-        "ohlc_status": "OK"
+        "ohlc_status": "OK",
+        "freshness_ok": true
       },
       "derived": {
         "status": "OK",
@@ -1121,23 +1122,50 @@
           "confidence": "OK",
           "twse_data_date": "2026-01-23"
         },
+        "roll25_heated_market": false,
+        "roll25_data_quality_issue": false,
         "roll25_heated": false,
         "roll25_confidence": "DOWNGRADED",
         "consistency": "DIVERGENCE",
         "rationale": {
-          "consistency_rule": "Deterministic Margin×Roll25 (rule_v1).",
+          "consistency_rule": "Deterministic Margin×Roll25MarketHeat (rule_v1).",
           "roll25_rationale": {
-            "rule": "heated=True if any key signals true else False (no special-case for NON_TRADING_DAY)",
+            "rule_market": "heated_market=True if any market-behavior signals true else False",
+            "rule_data_quality": "data_quality_issue=True if any data-quality flags true else False",
             "used_date_selection_tag(tag_legacy)": "NON_TRADING_DAY",
             "risk_level": "低",
             "window_note": "LookbackNActual=16/20 (window_not_full)",
-            "signals_used": {
+            "signals_market_used": {
               "DownDay": false,
               "VolumeAmplified": false,
               "VolAmplified": false,
               "NewLow_N": false,
-              "ConsecutiveBreak": false,
-              "OhlcMissing": false
+              "ConsecutiveBreak": false
+            },
+            "signals_data_quality_used": {
+              "OhlcMissing": false,
+              "ohlc_status": "OK",
+              "freshness_ok": true,
+              "used_date_status": "OK_LATEST",
+              "used_date_status_dbg": {
+                "used_date": "2026-01-23",
+                "latest_row_date": "2026-01-23",
+                "ohlc_status": "OK",
+                "freshness_ok": true
+              }
+            },
+            "market_hits": {
+              "DownDay": false,
+              "VolumeAmplified": false,
+              "VolAmplified": false,
+              "NewLow_N": false,
+              "ConsecutiveBreak": false
+            },
+            "data_quality_hits": {
+              "OhlcMissing(signal)": false,
+              "OHLCStatusMissing(field)": false,
+              "FreshnessNotOK(field)": false,
+              "UsedDateStatusBad(derived)": false
             },
             "used_date": "2026-01-23"
           },
@@ -1146,7 +1174,8 @@
             "roll25_used_date": "2026-01-23",
             "used_date_match": true,
             "note": "confirm-only; does not change signal"
-          }
+          },
+          "note": "consistency uses roll25_heated_market only; roll25_data_quality_issue does NOT flip consistency, but should downgrade trust in interpretation."
         }
       }
     },
@@ -1154,7 +1183,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-25T05:13:09Z",
+        "generated_at_utc": "2026-01-25T14:14:55Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
         "data_date": "2026-01-23",
@@ -1291,6 +1320,9 @@
     "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
     "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
     "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
-    "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status computed deterministically from roll25 latest_report; used_date_selection_tag (tag_legacy) preserves roll25 latest_report.tag."
+    "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei); used_date_status computed deterministically from roll25 latest_report; used_date_selection_tag (tag_legacy) preserves roll25 latest_report.tag.",
+    "Roll25 split: roll25_heated_market (market behavior only) and roll25_data_quality_issue (data quality only).",
+    "Consistency uses roll25_heated_market only; data quality issue does not force DIVERGENCE/CONVERGENCE flip, but should downgrade interpretation confidence.",
+    "Backward compatibility: roll25_heated (legacy) == roll25_heated_market."
   ]
 }
