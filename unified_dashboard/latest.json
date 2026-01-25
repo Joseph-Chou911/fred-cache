@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-24T23:12:07Z",
+  "generated_at_utc": "2026-01-25T00:19:27Z",
   "run_day_tag": "NON_TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -748,7 +748,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-01-24T13:24:51Z",
+        "generated_at_utc": "2026-01-25T00:17:33Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
@@ -911,9 +911,16 @@
               "候選表[0]原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
               "候選表[0]解析rows=30",
               "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
               "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
             ],
-            "fetched_at_utc": "2026-01-24T13:24:52Z",
+            "chg_yi_unit": {
+              "code": "UNIT_YI",
+              "label": "億",
+              "raw": "億",
+              "source": "colname:融資增加(億)"
+            },
+            "fetched_at_utc": "2026-01-25T00:17:33Z",
             "http_error": null,
             "rows_count": 30
           },
@@ -1078,9 +1085,16 @@
               "候選表[0]原始日期樣本：01/23, 01/22, 01/21, 01/20, 01/19",
               "候選表[0]解析rows=30",
               "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
               "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
             ],
-            "fetched_at_utc": "2026-01-24T13:24:53Z",
+            "chg_yi_unit": {
+              "code": "UNIT_YI",
+              "label": "億",
+              "raw": "億",
+              "source": "colname:融資增加(億)"
+            },
+            "fetched_at_utc": "2026-01-25T00:17:34Z",
             "http_error": null,
             "rows_count": 30
           }
@@ -1140,7 +1154,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-24T23:12:06Z",
+        "generated_at_utc": "2026-01-25T00:19:26Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
         "data_date": "2026-01-23",
