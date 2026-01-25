@@ -32,11 +32,10 @@ Small audit-focused enhancements:
 - Display margin change unit (e.g., 億) in cross_module section.
 - Format sum_last5 / latest_chg with unit (no guessing; missing => NA).
 
-2026-01-25 (cross_module chg_last5 unit converge):
-- Render chg_last5 with explicit unit while keeping a numeric list available.
-  Output:
-    - chg_last5: ["43.4 億", ...]   (human-readable, unit explicit)
-    - chg_last5_raw: [43.4, ...]   (machine-friendly numeric list, optional)
+2026-01-25 (chg_last5 converge):
+- Render chg_last5 as a JSON-like numeric list + unit once:
+    chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2] 億
+  (If unit missing => NA; do not guess)
 """
 
 from __future__ import annotations
@@ -189,25 +188,23 @@ def _fmt_with_unit(x: Any, unit: str, nd: int = 3) -> str:
     return f"{v:.{nd}f} {unit}"
 
 
-def _fmt_list_with_unit(xs: Any, unit: str, nd: int = 1) -> Any:
+def _fmt_num_list_json(xs: Any, nd: int = 1) -> Any:
     """
-    Format a list of numerics with unit as a list[str], e.g. ["43.4 億", ...].
-    - If xs is not a list => None
-    - If unit missing => None (do not guess)
-    - Non-numeric items become "NA"
+    Return a JSON-like numeric list string: "[43.4, 39.9, -34.8]"
+    - If xs is not list => None
+    - Non-numeric items => None (audit: do not silently coerce)
     """
     if not isinstance(xs, list):
         return None
-    if not unit or unit == "NA":
-        return None
-    out: List[str] = []
+    out: List[float] = []
     for it in xs:
         try:
             v = float(it)
-            out.append(f"{v:.{nd}f} {unit}")
         except Exception:
-            out.append("NA")
-    return out
+            return None
+        out.append(round(v, nd))
+    # json.dumps => no Python repr, stable brackets/commas, no single quotes
+    return json.dumps(out, ensure_ascii=False)
 
 
 def main() -> int:
@@ -392,24 +389,21 @@ def main() -> int:
         }
 
     # New: separate tag semantics (prefer structured fields; fallback to legacy)
-    # 1) run_day_tag: prefer unified top-level run_day_tag (workflow run-day context)
     run_day_tag = (
         uni.get("run_day_tag")
         or _safe_get(r_latest, "run_day_tag")
-        or _safe_get(r_latest, "tag")         # legacy fallback (often run-day tag on weekend)
+        or _safe_get(r_latest, "tag")
         or _safe_get(r_core, "run_day_tag")
         or _safe_get(r_core, "tag_legacy")
         or _safe_get(r_core, "tag")
     )
 
-    # 2) used_date_status: prefer roll25.core.used_date_status (your unified JSON has it)
     used_date_status = (
         _safe_get(r_core, "used_date_status")
         or _safe_get(r_latest, "used_date_status")
         or _safe_get(r_latest, "tag_used_date_status")
     )
 
-    # 3) legacy tag: unified JSON uses core.tag_legacy (not core.tag)
     legacy_tag = (
         _safe_get(r_core, "tag_legacy")
         or _safe_get(r_core, "tag")
@@ -434,7 +428,6 @@ def main() -> int:
     lines.append(f"- LookbackNActual: {_fmt_int(r_core.get('LookbackNActual'))}")
 
     sigs = r_core.get("signals", {})
-    # Ensure OhlcMissing is displayed even if not present in signal dict
     ohlc_missing = _infer_ohlc_missing(sigs, r_latest)
 
     if isinstance(sigs, dict):
@@ -486,10 +479,9 @@ def main() -> int:
     lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
 
-    # cross_module (kept) + unit display + chg_last5 unit converge
+    # cross_module
     cross = _safe_get(twm, "cross_module") or {}
     if isinstance(cross, dict) and cross:
-        # unit from unified.latest.series.TWSE.chg_yi_unit.label
         chg_unit = _get_twmargin_chg_unit_label(uni)
 
         lines.append("### cross_module (Margin × Roll25 consistency)")
@@ -498,23 +490,17 @@ def main() -> int:
         mr = cross.get("margin_rationale", {}) if isinstance(cross.get("margin_rationale"), dict) else {}
         lines.append(f"- margin_rule_version: {mr.get('rule_version','NA')}")
 
-        # unit disclosure (no guessing)
         lines.append(f"- chg_unit: {chg_unit} (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)")
 
         chg_last5 = mr.get("chg_last5", None)
-        chg_last5_fmt = _fmt_list_with_unit(chg_last5, chg_unit, nd=1)
+        chg_last5_json = _fmt_num_list_json(chg_last5, nd=1)
 
-        # Converged display:
-        # - Prefer explicit-unit list when possible
-        # - Also emit raw numeric list for audit/machine parsing
-        if chg_last5_fmt is not None:
-            lines.append(f"- chg_last5: {chg_last5_fmt}")
-            lines.append(f"- chg_last5_raw: {chg_last5}")
+        # Converged: numeric list + unit once (no unit => NA; do not guess)
+        if chg_last5_json is not None and chg_unit != "NA":
+            lines.append(f"- chg_last5: {chg_last5_json} {chg_unit}")
         else:
-            # No unit => do not guess; keep original and make the limitation explicit via NA-form behavior
-            lines.append(f"- chg_last5: {chg_last5 if chg_last5 is not None else 'NA'}")
+            lines.append("- chg_last5: NA")
 
-        # show scalars with unit (if unit missing => NA)
         lines.append(f"- sum_last5: {_fmt_with_unit(mr.get('sum_last5'), chg_unit, nd=3)}")
         lines.append(f"- pos_days_last5: {_fmt_int(mr.get('pos_days_last5'))}")
         lines.append(f"- latest_chg: {_fmt_with_unit(mr.get('latest_chg'), chg_unit, nd=3)}")
