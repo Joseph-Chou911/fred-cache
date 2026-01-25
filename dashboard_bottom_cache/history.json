@@ -1,0 +1,22 @@
+{
+  "schema_version": "bottom_history_v1",
+  "items": [
+    {
+      "run_ts_utc": "2026-01-25T09:51:40.144416Z",
+      "as_of_ts": "2026-01-25T17:51:40.144426+08:00",
+      "data_commit_sha": "1396ea4130630ca480aefc2e942d199dd0ca78ad",
+      "bottom_state": "NONE",
+      "triggers": {
+        "TRIG_PANIC": 0,
+        "TRIG_SYSTEMIC_VETO": 0,
+        "TRIG_REVERSAL": 0
+      },
+      "series_signals": {
+        "VIX": "NONE",
+        "SP500": "INFO",
+        "HYG_IEF_RATIO": "NONE",
+        "OFR_FSI": "NONE"
+      }
+    }
+  ]
+}
