@@ -1,7 +1,7 @@
 # Bottom Cache Dashboard (v0)
 
-- as_of_ts (TPE): `2026-01-25T17:51:40.144426+08:00`
-- run_ts_utc: `2026-01-25T09:51:40.144416Z`
+- as_of_ts (TPE): `2026-01-25T17:54:10.735585+08:00`
+- run_ts_utc: `2026-01-25T09:54:10.735569Z`
 - bottom_state: **NONE**
 
 ## Triggers (0/1/NA)
