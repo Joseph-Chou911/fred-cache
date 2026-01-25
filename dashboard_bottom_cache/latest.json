@@ -1,8 +1,8 @@
 {
   "schema_version": "bottom_cache_v1",
-  "generated_at_utc": "2026-01-25T10:46:41.662302Z",
-  "as_of_ts": "2026-01-25T18:46:41.662313+08:00",
-  "data_commit_sha": "f75f32bd404fbe6931bcc1479a7600ab899d4187",
+  "generated_at_utc": "2026-01-25T11:02:34.327464Z",
+  "as_of_ts": "2026-01-25T19:02:34.327486+08:00",
+  "data_commit_sha": "af6cba292ee41ce1c252777bfdaa0be13a3b553f",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -10,7 +10,22 @@
     "market_cache_as_of_ts": "2026-01-25T04:38:46Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
-    "market_cache_percentile_method": "P = count(x<=latest)/n * 100"
+    "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
+    "tw_local_gate": {
+      "roll25_cache_latest_path": "roll25_cache/latest.json",
+      "roll25_cache_ok": false,
+      "roll25_derived_latest_path": "roll25_derived/latest.json",
+      "roll25_derived_ok": false,
+      "roll25_derived_err": "file_not_found",
+      "taiwan_margin_financing_latest_path": "taiwan_margin_financing/latest.json",
+      "taiwan_margin_financing_ok": false,
+      "taiwan_margin_financing_err": "file_not_found",
+      "fx_usdtwd_latest_path": "fx_usdtwd/latest.json",
+      "fx_usdtwd_ok": false,
+      "fx_usdtwd_err": "file_not_found",
+      "cross_module_path_used": "NA",
+      "cross_module_ok": false
+    }
   },
   "bottom_state": "NONE",
   "triggers": {
@@ -20,15 +35,79 @@
   },
   "context": {
     "context_equity_extreme_sp500_p252_ge_95": 1,
-    "sp500_p252": 95.63492063492063
+    "sp500_p252": 95.63492063492063,
+    "tw_local_gate": {
+      "UsedDate": "NA",
+      "run_day_tag": "NA",
+      "risk_level": "NA",
+      "LookbackNTarget": null,
+      "LookbackNActual": null,
+      "roll25_confidence": "NA",
+      "pct_change": null,
+      "close": null,
+      "turnover_twd": null,
+      "amplitude_pct": null,
+      "signals": {
+        "DownDay": null,
+        "VolumeAmplified": null,
+        "VolAmplified": null,
+        "NewLow_N": null,
+        "ConsecutiveBreak": null,
+        "OhlcMissing": null
+      },
+      "cross_module": {
+        "margin_signal": "NA",
+        "consistency": "NA",
+        "roll25_heated": null,
+        "margin_confidence": "NA",
+        "roll25_confidence": "NA"
+      },
+      "roll25_derived": {
+        "confidence": "NA",
+        "dd_n": null,
+        "max_drawdown_N_pct": null,
+        "max_drawdown_points_used": null
+      }
+    }
   },
   "distances": {
     "vix_panic_gap": 3.91,
     "sp500_ret1_panic_gap": 1.5326903744204952,
     "hyg_veto_gap_z": 3.97231697590731,
-    "ofr_veto_gap_z": 2.1685363191964626
+    "ofr_veto_gap_z": 2.1685363191964626,
+    "tw_local_gate": {
+      "pct_change_to_nonnegative_gap": null,
+      "drawdown_gap_pct": null,
+      "lookback_missing_points": null
+    }
   },
-  "excluded_triggers": [],
+  "tw_local_gate": {
+    "tw_state": "NA",
+    "tw_triggers": {
+      "TRIG_TW_PANIC": null,
+      "TRIG_TW_LEVERAGE_HEAT": null,
+      "TRIG_TW_REVERSAL": null,
+      "TRIG_TW_DRAWDOWN": null
+    }
+  },
+  "excluded_triggers": [
+    {
+      "trigger": "TW:INPUT_ROLL25",
+      "reason": "not_available:file_not_found"
+    },
+    {
+      "trigger": "TW:INPUT_CROSS_MODULE",
+      "reason": "not_available:file_not_found"
+    },
+    {
+      "trigger": "TRIG_TW_PANIC",
+      "reason": "missing_fields:roll25.signals.*"
+    },
+    {
+      "trigger": "TRIG_TW_LEVERAGE_HEAT",
+      "reason": "missing_fields:cross_module.margin_signal&consistency"
+    }
+  ],
   "series": {
     "VIX": {
       "series_id": "VIX",
@@ -120,9 +199,13 @@
     }
   },
   "notes": [
-    "v0: single source = market_cache/stats_latest.json",
+    "Global v0: single source = market_cache/stats_latest.json",
+    "TW Local Gate v0: uses existing TW workflow outputs; parallel only",
     "signal derived from w60.z and w252.p using deterministic thresholds",
     "ret1_pct unit is percent (%)",
-    "context fields do NOT change triggers; they are informational only"
+    "context fields do NOT change triggers; they are informational only",
+    "TW Local Gate v0: uses existing workflow outputs only (no new fetch).",
+    "TW triggers are parallel and do NOT change Global bottom_state.",
+    "If any required TW inputs missing => trigger becomes NA and logged in excluded_triggers."
   ]
 }

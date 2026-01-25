@@ -2,9 +2,9 @@
   "schema_version": "bottom_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-01-25T10:46:41.662302Z",
-      "as_of_ts": "2026-01-25T18:46:41.662313+08:00",
-      "data_commit_sha": "f75f32bd404fbe6931bcc1479a7600ab899d4187",
+      "run_ts_utc": "2026-01-25T11:02:34.327464Z",
+      "as_of_ts": "2026-01-25T19:02:34.327486+08:00",
+      "data_commit_sha": "af6cba292ee41ce1c252777bfdaa0be13a3b553f",
       "bottom_state": "NONE",
       "triggers": {
         "TRIG_PANIC": 0,
@@ -13,13 +13,60 @@
       },
       "context": {
         "context_equity_extreme_sp500_p252_ge_95": 1,
-        "sp500_p252": 95.63492063492063
+        "sp500_p252": 95.63492063492063,
+        "tw_local_gate": {
+          "UsedDate": "NA",
+          "run_day_tag": "NA",
+          "risk_level": "NA",
+          "LookbackNTarget": null,
+          "LookbackNActual": null,
+          "roll25_confidence": "NA",
+          "pct_change": null,
+          "close": null,
+          "turnover_twd": null,
+          "amplitude_pct": null,
+          "signals": {
+            "DownDay": null,
+            "VolumeAmplified": null,
+            "VolAmplified": null,
+            "NewLow_N": null,
+            "ConsecutiveBreak": null,
+            "OhlcMissing": null
+          },
+          "cross_module": {
+            "margin_signal": "NA",
+            "consistency": "NA",
+            "roll25_heated": null,
+            "margin_confidence": "NA",
+            "roll25_confidence": "NA"
+          },
+          "roll25_derived": {
+            "confidence": "NA",
+            "dd_n": null,
+            "max_drawdown_N_pct": null,
+            "max_drawdown_points_used": null
+          }
+        }
       },
       "distances": {
         "vix_panic_gap": 3.91,
         "sp500_ret1_panic_gap": 1.5326903744204952,
         "hyg_veto_gap_z": 3.97231697590731,
-        "ofr_veto_gap_z": 2.1685363191964626
+        "ofr_veto_gap_z": 2.1685363191964626,
+        "tw_local_gate": {
+          "pct_change_to_nonnegative_gap": null,
+          "drawdown_gap_pct": null,
+          "lookback_missing_points": null
+        }
+      },
+      "tw_local_gate": {
+        "tw_state": "NA",
+        "tw_triggers": {
+          "TRIG_TW_PANIC": null,
+          "TRIG_TW_LEVERAGE_HEAT": null,
+          "TRIG_TW_REVERSAL": null,
+          "TRIG_TW_DRAWDOWN": null
+        }
       },
       "series_signals": {
         "VIX": "NONE",
