@@ -4,16 +4,13 @@
 Render unified_dashboard/latest.json into report.md
 
 Adds:
+- (2) Positioning Matrix (report-only; deterministic; uses signals already in unified JSON)
 - roll25_derived (realized vol / max drawdown)
 - fx_usdtwd section (BOT USD/TWD mid + deterministic signal)
 - cross_module (kept)
 
-This renderer does NOT recompute; it only formats fields already in unified JSON.
+This renderer does NOT recompute upstream indicators; it only formats fields already in unified JSON.
 If a field is missing => prints NA.
-
-Small audit-focused enhancements:
-- Footer prints input_path/output_path for self-audit.
-- Detects repo-root report.md residue and warns in footer (does NOT delete).
 
 2026-01-25 update:
 - Fix roll25 tag semantics: separate run-day tag vs used-date status.
@@ -37,10 +34,9 @@ Small audit-focused enhancements:
     chg_last5: [43.4, 39.9, -34.8, 18.1, 60.2] 億
   (If unit missing => NA; do not guess)
 
-2026-01-25 (Positioning Matrix):
-- Add "(2) Positioning Matrix" section in report.md only.
-- Uses existing signals in unified JSON; no recomputation / no JSON mutation.
-- Missing fields => NA + dq_gates (conservative).
+2026-01-25 (Positioning Matrix source unification):
+- For Positioning Matrix, SP500 and VIX are sourced ONLY from market_cache (single source of truth).
+- fred_cache SP500 and VIXCLS are NOT used for mode decisions (still rendered in fred table).
 """
 
 from __future__ import annotations
@@ -49,7 +45,7 @@ import argparse
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def _read_text(path: str) -> str:
@@ -208,194 +204,145 @@ def _fmt_num_list_json(xs: Any, nd: int = 1) -> Any:
         except Exception:
             return None
         out.append(round(v, nd))
-    # json.dumps => no Python repr, stable brackets/commas, no single quotes
     return json.dumps(out, ensure_ascii=False)
 
 
-# ---- positioning / strategy helpers (report-only; deterministic; no recompute of inputs) ----
+# ---- Positioning Matrix helpers (report-only; deterministic) ----
 
-def _index_rows_by_series(rows: Any) -> Dict[str, Dict[str, Any]]:
-    """
-    Build lookup: series -> row(dict)
-    If duplicates exist, last one wins (stable enough for dashboard_latest rows).
-    """
-    out: Dict[str, Dict[str, Any]] = {}
+def _find_row(rows: Any, series_name: str) -> Optional[Dict[str, Any]]:
     if not isinstance(rows, list):
-        return out
+        return None
     for it in rows:
-        if not isinstance(it, dict):
-            continue
-        s = it.get("series")
-        if isinstance(s, str) and s.strip():
-            out[s.strip()] = it
-    return out
+        if isinstance(it, dict) and str(it.get("series", "")) == series_name:
+            return it
+    return None
 
 
-def _sig(it: Any) -> str:
-    if not isinstance(it, dict):
+def _truthy_signal_level(x: Any) -> str:
+    if not isinstance(x, str):
         return "NA"
-    v = it.get("signal_level")
-    return v if isinstance(v, str) and v else "NA"
+    return x.strip().upper() if x.strip() else "NA"
 
 
-def _tag(it: Any) -> str:
+def _has_tag(it: Optional[Dict[str, Any]], needle: str) -> bool:
     if not isinstance(it, dict):
-        return "NA"
-    v = it.get("tag")
-    return v if isinstance(v, str) and v else "NA"
+        return False
+    tag = it.get("tag")
+    if not isinstance(tag, str):
+        return False
+    return needle in tag
 
 
-def _bool(x: Any) -> Any:
-    return x if isinstance(x, bool) else None
-
-
-def _compute_strategy_mode(
+def _compute_positioning_mode(
     uni: Any,
-    m_rows: Any,
-    f_rows: Any,
+    market_rows: Any,
+    fred_rows: Any,
     cross: Any,
-    roll25_derived: Any,
-    fx_derived: Any,
+    roll25: Any,
+    fx: Any,
 ) -> Dict[str, Any]:
     """
-    Deterministic, report-only strategy mode:
-      - Trend axis: SP500 INFO + LONG_EXTREME => Trend=ON
-      - Fragility axis: credit ALERT or rate WATCH or margin WATCH/ALERT or DIVERGENCE
-      - Hedge overlay: only when vol_runaway is strongly supported
+    Deterministic, report-only strategy mode computation using existing JSON signals.
 
-    Missing fields => do NOT guess; add dq_gates instead.
+    Source unification rule:
+      - SP500 and VIX are sourced ONLY from market_cache for this matrix.
+
+    Notes:
+      - This does not change any upstream computation; it only maps existing flags.
+      - Missing inputs => conservative defaults (no guessing).
     """
-    out: Dict[str, Any] = {
-        "trend_on": None,
-        "fragility_high": None,
-        "vol_runaway": None,
-        "mode": "NA",
-        "matrix_cell": "NA",
-        "reasons": [],
-        "dq_gates": [],
-        "version": "strategy_mode_v1",
-    }
+    strategy_version = "strategy_mode_v1"
 
-    m = _index_rows_by_series(m_rows)
-    f = _index_rows_by_series(f_rows)
+    # --- Trend basis: market_cache SP500 only ---
+    m_sp500 = _find_row(market_rows, "SP500")
+    sp500_sig = _truthy_signal_level(m_sp500.get("signal_level") if isinstance(m_sp500, dict) else None)
+    sp500_tag = m_sp500.get("tag") if isinstance(m_sp500, dict) else "NA"
 
-    # ---- Trend axis (SP500) ----
-    spx = m.get("SP500") or f.get("SP500")
-    spx_sig = _sig(spx)
-    spx_tag = _tag(spx)
+    # Conservative: trend_on only when market SP500 is explicitly LONG_EXTREME (your existing signal schema)
+    trend_on = bool(isinstance(m_sp500, dict) and sp500_sig == "INFO" and _has_tag(m_sp500, "LONG_EXTREME"))
 
-    trend_on = None
-    if spx_sig != "NA" or spx_tag != "NA":
-        # Require explicit LONG_EXTREME tag to avoid over-triggering trend-on.
-        trend_on = (spx_sig == "INFO") and ("LONG_EXTREME" in spx_tag)
-        out["reasons"].append(f"trend_basis: SP500.signal={spx_sig}, tag={spx_tag}")
-    else:
-        out["dq_gates"].append("trend_basis_missing: cannot read SP500 signal/tag")
+    # --- Fragility components (multi-source; all must already exist in unified JSON) ---
+    f_baml = _find_row(fred_rows, "BAMLH0A0HYM2")
+    f_dgs10 = _find_row(fred_rows, "DGS10")
 
-    # ---- Fragility axis ----
-    hy = f.get("BAMLH0A0HYM2")
-    dgs10 = f.get("DGS10")
+    baml_sig = _truthy_signal_level(f_baml.get("signal_level") if isinstance(f_baml, dict) else None)
+    dgs10_sig = _truthy_signal_level(f_dgs10.get("signal_level") if isinstance(f_dgs10, dict) else None)
 
-    hy_alert = (_sig(hy) == "ALERT")
-    rate_watch = (_sig(dgs10) == "WATCH")
+    credit_fragile = bool(baml_sig == "ALERT")
+    rate_stress = bool(dgs10_sig in ("WATCH", "ALERT"))
 
-    margin_sig = "NA"
-    divergence = False
-    if isinstance(cross, dict):
-        margin_sig = cross.get("margin_signal", "NA")
-        divergence = (cross.get("consistency") == "DIVERGENCE")
+    margin_signal = _truthy_signal_level(cross.get("margin_signal") if isinstance(cross, dict) else None)
+    tw_margin = bool(margin_signal in ("WATCH", "ALERT"))
 
-    margin_hot = (margin_sig in ("WATCH", "ALERT"))
+    consistency = cross.get("consistency") if isinstance(cross, dict) else "NA"
+    cross_divergence = bool(isinstance(consistency, str) and consistency.upper() == "DIVERGENCE")
 
-    frag_parts = [
-        ("credit_fragile(BAMLH0A0HYM2=ALERT)", hy_alert),
-        ("rate_stress(DGS10=WATCH)", rate_watch),
-        (f"tw_margin({margin_sig})", margin_hot),
-        ("cross_divergence(DIVERGENCE)", divergence),
-    ]
+    # Fragility aggregation: conservative "HIGH" if at least 2 components true OR credit is ALERT (strong condition)
+    fragility_hits = sum([1 if credit_fragile else 0, 1 if rate_stress else 0, 1 if tw_margin else 0, 1 if cross_divergence else 0])
+    fragility_high = bool(credit_fragile or fragility_hits >= 2)
 
-    frag_known = [b for _, b in frag_parts if isinstance(b, bool)]
-    if frag_known:
-        fragility_high = any(frag_known)
-        out["reasons"].append(
-            "fragility_parts: " + ", ".join([f"{name}={str(val).lower()}" for name, val in frag_parts])
-        )
-    else:
-        fragility_high = None
-        out["dq_gates"].append("fragility_basis_missing: cannot read fragility signals")
+    # --- Vol gate: market_cache VIX only (single source of truth) ---
+    m_vix = _find_row(market_rows, "VIX")
+    vix_sig = _truthy_signal_level(m_vix.get("signal_level") if isinstance(m_vix, dict) else None)
+    vix_dir = m_vix.get("dir") if isinstance(m_vix, dict) else "NA"
+    vix_ret1 = m_vix.get("ret1_pct60") if isinstance(m_vix, dict) else None
 
-    # ---- Vol runaway gate (strict) ----
-    vix = m.get("VIX")
-    vixcls = f.get("VIXCLS")
-
-    vix_sig = _sig(vix)
-    vixcls_sig = _sig(vixcls)
-
-    vix_up = None
-    vixcls_up = None
-    if isinstance(vix, dict) and isinstance(vix.get("ret1_pct60"), (int, float)):
-        vix_up = (float(vix.get("ret1_pct60")) > 0)
-    if isinstance(vixcls, dict) and isinstance(vixcls.get("ret1_pct"), (int, float)):
-        vixcls_up = (float(vixcls.get("ret1_pct")) > 0)
-
-    any_vol_alert = (vix_sig == "ALERT") or (vixcls_sig == "ALERT")
-    both_watch = (vix_sig in ("WATCH", "ALERT")) and (vixcls_sig in ("WATCH", "ALERT"))
-
-    if any_vol_alert:
+    # Conservative runaway definition:
+    # - ALERT always runaway
+    # - WATCH only runaway if ret1%60 >= 5 (large jump) AND dir HIGH
+    vix_up = bool(isinstance(vix_dir, str) and vix_dir.upper() == "HIGH")
+    vol_runaway = False
+    if vix_sig == "ALERT":
         vol_runaway = True
-        out["reasons"].append(f"vol_gate: VIX={vix_sig}, VIXCLS={vixcls_sig} => vol_runaway=true (ALERT)")
-    elif both_watch and (vix_up is True) and (vixcls_up is True):
-        vol_runaway = True
-        out["reasons"].append(
-            f"vol_gate: both WATCH and up (VIX_up={str(vix_up).lower()}, VIXCLS_up={str(vixcls_up).lower()})"
-        )
-    elif both_watch:
-        vol_runaway = False
-        out["reasons"].append(
-            f"vol_gate: mixed/unknown WATCH direction (VIX_up={str(vix_up).lower()}, VIXCLS_up={str(vixcls_up).lower()})"
-        )
-    else:
-        vol_runaway = False
-        out["reasons"].append(f"vol_gate: VIX={vix_sig}, VIXCLS={vixcls_sig} => not runaway")
+    elif vix_sig == "WATCH":
+        try:
+            r = float(vix_ret1) if vix_ret1 is not None else None
+        except Exception:
+            r = None
+        vol_runaway = bool(vix_up and (r is not None and r >= 5.0))
 
-    # ---- DQ gates (do not upgrade based on downgraded derived modules) ----
-    if isinstance(roll25_derived, dict) and roll25_derived.get("confidence") == "DOWNGRADED":
-        out["dq_gates"].append("roll25_derived_confidence=DOWNGRADED (derived metrics not used for upgrade triggers)")
-    if isinstance(fx_derived, dict) and fx_derived.get("fx_confidence") == "DOWNGRADED":
-        out["dq_gates"].append("fx_confidence=DOWNGRADED (fx not used as primary trigger)")
+    # --- Matrix cell + mode mapping ---
+    matrix_cell = f"Trend={'ON' if trend_on else 'OFF'} / Fragility={'HIGH' if fragility_high else 'LOW'}"
 
-    out["trend_on"] = trend_on
-    out["fragility_high"] = fragility_high
-    out["vol_runaway"] = vol_runaway
-
-    if trend_on is None or fragility_high is None:
-        out["matrix_cell"] = "NA"
-        out["mode"] = "NA"
-        out["dq_gates"].append("mode_unresolved: missing trend/fragility axis")
-        return out
-
-    # Base cell -> mode
-    if trend_on and (not fragility_high):
-        cell = "Trend=ON / Fragility=LOW"
-        mode = "NORMAL"
-    elif trend_on and fragility_high:
-        cell = "Trend=ON / Fragility=HIGH"
+    if trend_on and fragility_high:
         mode = "DEFENSIVE_DCA"
+    elif trend_on and not fragility_high:
+        mode = "NORMAL_DCA"
     elif (not trend_on) and fragility_high:
-        cell = "Trend=OFF / Fragility=HIGH"
-        mode = "RISK_OFF"
+        mode = "CAPITAL_PRESERVATION"
     else:
-        cell = "Trend=OFF / Fragility=LOW"
-        mode = "NORMAL"
+        mode = "RISK_ON_DCA"
 
-    # Hedge overlay only if vol runaway AND fragility high
-    if vol_runaway and fragility_high:
-        mode = "HEDGE_READY"
-        out["reasons"].append("hedge_overlay: vol_runaway=true AND fragility_high=true")
+    # Vol runaway overrides: most conservative
+    if vol_runaway:
+        mode = "PAUSE_DCA"
 
-    out["matrix_cell"] = cell
-    out["mode"] = mode
-    return out
+    # --- dq gates (report-only disclosures) ---
+    roll25_derived_conf = _safe_get(roll25, "derived", "confidence") or "NA"
+    fx_conf = _safe_get(fx, "derived", "fx_confidence") or "NA"
+
+    return {
+        "strategy_version": strategy_version,
+        "trend_on": trend_on,
+        "fragility_high": fragility_high,
+        "vol_runaway": vol_runaway,
+        "matrix_cell": matrix_cell,
+        "mode": mode,
+        "reasons": {
+            "trend_basis": f"market_cache.SP500.signal={sp500_sig}, tag={sp500_tag}",
+            "fragility_parts": {
+                "credit_fragile(BAMLH0A0HYM2=ALERT)": credit_fragile,
+                "rate_stress(DGS10=WATCH/ALERT)": rate_stress,
+                "tw_margin(WATCH/ALERT)": tw_margin,
+                "cross_divergence(DIVERGENCE)": cross_divergence,
+            },
+            "vol_gate": f"market_cache.VIX only (signal={vix_sig}, dir={vix_dir}, ret1%60={_fmt(vix_ret1,6)})",
+        },
+        "dq_gates": {
+            "roll25_derived_confidence": roll25_derived_conf,
+            "fx_confidence": fx_conf,
+        },
+    }
 
 
 def main() -> int:
@@ -436,42 +383,58 @@ def main() -> int:
     lines.append(f"- fx_usdtwd: {_safe_get(fx,'status') or 'NA'}")
     lines.append(f"- unified_generated_at_utc: {uni.get('generated_at_utc','NA')}\n")
 
-    # Prepare commonly reused objects (for strategy + later rendering)
+    # Pull rows for Positioning Matrix
     m_dash = _safe_get(market, "dashboard_latest") or {}
-    m_meta = _safe_get(m_dash, "meta") or {}
     m_rows = _safe_get(m_dash, "rows") or []
-
     f_dash = _safe_get(fred, "dashboard_latest") or {}
-    f_meta = _safe_get(f_dash, "meta") or {}
     f_rows = _safe_get(f_dash, "rows") or []
-
     cross = _safe_get(twm, "cross_module") or {}
-    r_der = _safe_get(roll25, "derived") or {}
-    fx_der = _safe_get(fx, "derived") or {}
 
-    # (2) Positioning Matrix / Strategy Mode (report-only; deterministic)
-    sm = _compute_strategy_mode(uni, m_rows, f_rows, cross, r_der, fx_der)
+    # (2) Positioning Matrix
+    pm = _compute_positioning_mode(
+        uni=uni,
+        market_rows=m_rows,
+        fred_rows=f_rows,
+        cross=cross,
+        roll25=roll25,
+        fx=fx,
+    )
+
     lines.append("## (2) Positioning Matrix")
     lines.append("### Current Strategy Mode (deterministic; report-only)")
-    lines.append(f"- strategy_version: {sm.get('version','NA')}")
-    lines.append(f"- trend_on: {_fmt(_bool(sm.get('trend_on')),0)}")
-    lines.append(f"- fragility_high: {_fmt(_bool(sm.get('fragility_high')),0)}")
-    lines.append(f"- vol_runaway: {_fmt(_bool(sm.get('vol_runaway')),0)}")
-    lines.append(f"- matrix_cell: {sm.get('matrix_cell','NA')}")
-    lines.append(f"- mode: {sm.get('mode','NA')}")
-    lines.append("")
-    if isinstance(sm.get("reasons"), list) and sm["reasons"]:
-        lines.append("**reasons**")
-        for r in sm["reasons"]:
-            lines.append(f"- {r}")
-        lines.append("")
-    if isinstance(sm.get("dq_gates"), list) and sm["dq_gates"]:
-        lines.append("**dq_gates (no guessing; conservative defaults)**")
-        for g in sm["dq_gates"]:
-            lines.append(f"- {g}")
-        lines.append("")
+    lines.append(f"- strategy_version: {pm.get('strategy_version','NA')}")
+    lines.append(f"- trend_on: {_fmt(pm.get('trend_on'),0)}")
+    lines.append(f"- fragility_high: {_fmt(pm.get('fragility_high'),0)}")
+    lines.append(f"- vol_runaway: {_fmt(pm.get('vol_runaway'),0)}")
+    lines.append(f"- matrix_cell: {pm.get('matrix_cell','NA')}")
+    lines.append(f"- mode: {pm.get('mode','NA')}\n")
+
+    reasons = pm.get("reasons", {}) if isinstance(pm.get("reasons"), dict) else {}
+    frag_parts = reasons.get("fragility_parts", {}) if isinstance(reasons.get("fragility_parts"), dict) else {}
+
+    lines.append("**reasons**")
+    lines.append(f"- trend_basis: {reasons.get('trend_basis','NA')}")
+    # Render fragility_parts in a stable, explicit order
+    fp_credit = _fmt(frag_parts.get("credit_fragile(BAMLH0A0HYM2=ALERT)"), 0)
+    fp_rate = _fmt(frag_parts.get("rate_stress(DGS10=WATCH/ALERT)"), 0)
+    fp_margin = _fmt(frag_parts.get("tw_margin(WATCH/ALERT)"), 0)
+    fp_div = _fmt(frag_parts.get("cross_divergence(DIVERGENCE)"), 0)
+    lines.append(
+        "- fragility_parts: "
+        f"credit_fragile(BAMLH0A0HYM2=ALERT)={fp_credit}, "
+        f"rate_stress(DGS10=WATCH/ALERT)={fp_rate}, "
+        f"tw_margin(WATCH/ALERT)={fp_margin}, "
+        f"cross_divergence(DIVERGENCE)={fp_div}"
+    )
+    lines.append(f"- vol_gate: {reasons.get('vol_gate','NA')}\n")
+
+    dq = pm.get("dq_gates", {}) if isinstance(pm.get("dq_gates"), dict) else {}
+    lines.append("**dq_gates (no guessing; conservative defaults)**")
+    lines.append(f"- roll25_derived_confidence={dq.get('roll25_derived_confidence','NA')} (derived metrics not used for upgrade triggers)")
+    lines.append(f"- fx_confidence={dq.get('fx_confidence','NA')} (fx not used as primary trigger)\n")
 
     # market_cache detailed
+    m_meta = _safe_get(m_dash, "meta") or {}
     lines.append("## market_cache (detailed)")
     lines.append(f"- as_of_ts: {m_meta.get('stats_as_of_ts','NA')}")
     lines.append(f"- run_ts_utc: {m_meta.get('run_ts_utc','NA')}")
@@ -482,15 +445,15 @@ def main() -> int:
 
     if isinstance(m_rows, list) and m_rows:
         hdr = [
-            "series", "signal", "dir", "market_class", "value", "data_date", "age_h",
-            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%60", "reason", "tag", "prev",
-            "delta", "streak_hist", "streak_wa", "source"
+            "series","signal","dir","market_class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
+            "delta","streak_hist","streak_wa","source"
         ]
         rws: List[List[str]] = []
         for it in m_rows:
             if not isinstance(it, dict):
                 continue
-            tag = it.get("tag", "NA")
+            tag = it.get("tag","NA")
             mclass = "NONE"
             if isinstance(tag, str):
                 if "LONG_EXTREME" in tag:
@@ -500,31 +463,32 @@ def main() -> int:
                 if "JUMP" in tag:
                     mclass = "JUMP" if mclass == "NONE" else f"{mclass}+JUMP"
             rws.append([
-                str(it.get("series", "NA")),
-                str(it.get("signal_level", "NA")),
-                str(it.get("dir", "NA")),
+                str(it.get("series","NA")),
+                str(it.get("signal_level","NA")),
+                str(it.get("dir","NA")),
                 mclass,
-                _fmt(it.get("value"), 6),
-                str(it.get("data_date", "NA")),
-                _fmt(it.get("age_hours"), 6),
-                _fmt(it.get("z60"), 6),
-                _fmt(it.get("p60"), 6),
-                _fmt(it.get("p252"), 6),
-                _fmt(it.get("z_delta60"), 6),
-                _fmt(it.get("p_delta60"), 6),
-                _fmt(it.get("ret1_pct60"), 6),
-                str(it.get("reason", "NA")),
+                _fmt(it.get("value"),6),
+                str(it.get("data_date","NA")),
+                _fmt(it.get("age_hours"),6),
+                _fmt(it.get("z60"),6),
+                _fmt(it.get("p60"),6),
+                _fmt(it.get("p252"),6),
+                _fmt(it.get("z_delta60"),6),
+                _fmt(it.get("p_delta60"),6),
+                _fmt(it.get("ret1_pct60"),6),
+                str(it.get("reason","NA")),
                 str(tag),
-                str(it.get("prev_signal", "NA")),
-                str(it.get("delta_signal", "NA")),
+                str(it.get("prev_signal","NA")),
+                str(it.get("delta_signal","NA")),
                 _fmt_int(it.get("streak_hist")),
                 _fmt_int(it.get("streak_wa")),
-                str(it.get("source_url", "NA")),
+                str(it.get("source_url","NA")),
             ])
         lines.append(_md_table(hdr, rws))
         lines.append("")
 
     # fred_cache
+    f_meta = _safe_get(f_dash, "meta") or {}
     lines.append("## fred_cache (ALERT+WATCH+INFO)")
     lines.append(f"- as_of_ts: {f_meta.get('stats_as_of_ts','NA')}")
     lines.append(f"- run_ts_utc: {f_meta.get('run_ts_utc','NA')}")
@@ -543,14 +507,14 @@ def main() -> int:
 
     if isinstance(f_rows, list) and f_rows:
         hdr = [
-            "series", "signal", "fred_dir", "fred_class", "value", "data_date", "age_h",
-            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%", "reason", "tag", "prev", "delta", "source"
+            "series","signal","fred_dir","fred_class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%","reason","tag","prev","delta","source"
         ]
         rws_f: List[List[str]] = []
         for it in f_rows:
             if not isinstance(it, dict):
                 continue
-            tag = it.get("tag", "NA")
+            tag = it.get("tag","NA")
             fclass = "NONE"
             if isinstance(tag, str):
                 if "LONG_EXTREME" in tag:
@@ -560,24 +524,24 @@ def main() -> int:
                 elif "JUMP" in tag:
                     fclass = "JUMP"
             rws_f.append([
-                str(it.get("series", "NA")),
-                str(it.get("signal_level", "NA")),
-                str(it.get("fred_dir", "NA")),
+                str(it.get("series","NA")),
+                str(it.get("signal_level","NA")),
+                str(it.get("fred_dir","NA")),
                 fclass,
-                _fmt(it.get("value"), 6),
-                str(it.get("data_date", "NA")),
-                _fmt(it.get("age_hours"), 6),
-                _fmt(it.get("z60"), 6),
-                _fmt(it.get("p60"), 6),
-                _fmt(it.get("p252"), 6),
-                _fmt(it.get("z_delta_60"), 6),
-                _fmt(it.get("p_delta_60"), 6),
-                _fmt(it.get("ret1_pct"), 6),
-                str(it.get("reason", "NA")),
+                _fmt(it.get("value"),6),
+                str(it.get("data_date","NA")),
+                _fmt(it.get("age_hours"),6),
+                _fmt(it.get("z60"),6),
+                _fmt(it.get("p60"),6),
+                _fmt(it.get("p252"),6),
+                _fmt(it.get("z_delta_60"),6),
+                _fmt(it.get("p_delta_60"),6),
+                _fmt(it.get("ret1_pct"),6),
+                str(it.get("reason","NA")),
                 str(tag),
-                str(it.get("prev_signal", "NA")),
-                str(it.get("delta_signal", "NA")),
-                str(it.get("source_url", "NA")),
+                str(it.get("prev_signal","NA")),
+                str(it.get("delta_signal","NA")),
+                str(it.get("source_url","NA")),
             ])
         lines.append(_md_table(hdr, rws_f))
         lines.append("")
@@ -651,7 +615,7 @@ def main() -> int:
     ohlc_missing = _infer_ohlc_missing(sigs, r_latest)
 
     if isinstance(sigs, dict):
-        for k in ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]:
+        for k in ["DownDay","VolumeAmplified","VolAmplified","NewLow_N","ConsecutiveBreak"]:
             lines.append(f"- signals.{k}: {_fmt(sigs.get(k),0)}")
         lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing,0)}")
     else:
@@ -659,6 +623,7 @@ def main() -> int:
     lines.append("")
 
     # roll25 derived
+    r_der = _safe_get(roll25, "derived") or {}
     lines.append("### roll25_derived (realized vol / drawdown)")
     lines.append(f"- status: {r_der.get('status','NA')}")
     params = r_der.get("params", {}) if isinstance(r_der.get("params"), dict) else {}
@@ -672,6 +637,7 @@ def main() -> int:
     lines.append("")
 
     # FX
+    fx_der = _safe_get(fx, "derived") or {}
     lines.append("## FX (USD/TWD)")
     lines.append(f"- status: {_safe_get(fx,'status') or 'NA'}")
     lines.append(f"- data_date: {fx_der.get('data_date','NA')}")
