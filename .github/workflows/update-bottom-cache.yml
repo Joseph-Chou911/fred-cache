@@ -29,14 +29,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Render bottom_cache
+      - name: Render bottom_cache (dashboard_bottom_cache only)
         shell: bash
         run: |
           set -euo pipefail
           python scripts/render_bottom_cache.py
 
-      # Optional but recommended: remove legacy split outputs so repo stays clean
-      - name: Cleanup legacy bottom_cache outputs
+      # ✅ 防呆：如果你 repo 以前已經有 bottom_cache/，就把它移除避免再被誤 commit
+      - name: Cleanup legacy bottom_cache folder (optional)
         shell: bash
         run: |
           set -euo pipefail
@@ -49,7 +49,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # ONLY unified output folder (dashboard_bottom_cache)
+          # ✅ only unified output folder
           git add -A dashboard_bottom_cache
 
           git commit -m "bottom_cache: update" || echo "No changes to commit"
