@@ -1,12 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+bottom_cache renderer (market_cache single-source) -> dashboard_bottom_cache/*
+
+Outputs (all in ONE folder):
+- dashboard_bottom_cache/latest.json
+- dashboard_bottom_cache/history.json
+- dashboard_bottom_cache/report.md
+
+Design intent (v0+):
+- Event-driven "bottom / reversal workflow" signal, not a daily "market state" dashboard.
+- Deterministic rules only; no guessing; missing fields => NA + excluded reasons.
+- Uses ONLY market_cache/stats_latest.json as the upstream source.
+"""
 
 from __future__ import annotations
 
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Tuple
 from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
@@ -14,12 +27,13 @@ TZ_TPE = ZoneInfo("Asia/Taipei")
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
 
-# ✅ unified output folder (all artifacts here)
+# ✅ single unified output folder
 OUT_DIR = "dashboard_bottom_cache"
 OUT_LATEST = f"{OUT_DIR}/latest.json"
 OUT_HISTORY = f"{OUT_DIR}/history.json"
 OUT_MD = f"{OUT_DIR}/report.md"
 
+# what we need from market_cache
 NEEDED = ["VIX", "SP500", "HYG_IEF_RATIO", "OFR_FSI"]
 
 # risk direction is a RULE (not guessed)
@@ -30,11 +44,12 @@ RISK_DIR = {
     "SP500": "LOW",
 }
 
-# v0 thresholds (audit-friendly, deterministic)
-TH_VIX = 20.0
-TH_SPX_RET1 = -1.5          # unit: percent (%)
-TH_HYG_VETO_Z = -2.0
-TH_OFR_VETO_Z = 2.0
+# v0 thresholds (keep deterministic)
+TH_VIX_PANIC = 20.0
+TH_SPX_RET1_PANIC = -1.5     # unit = percent (%)
+TH_HYG_VETO_Z = -2.0         # systemic credit stress veto (LOW direction)
+TH_OFR_VETO_Z = 2.0          # systemic stress veto (HIGH direction)
+HISTORY_SHOW_N = 10          # for report only
 
 
 def _read_json(path: str) -> Any:
@@ -95,7 +110,11 @@ def _get(d: Dict[str, Any], path: List[str]) -> Any:
 
 
 def _series_signal(z60: Optional[float], p252: Optional[float]) -> Optional[str]:
-    # Align with your system style (Extreme z, Percentile extremes)
+    """
+    Align with your system style:
+    - Extreme z: WATCH/ALERT
+    - Percentile extremes: INFO
+    """
     if z60 is None and p252 is None:
         return None
     if z60 is not None and abs(z60) >= 2.5:
@@ -107,23 +126,34 @@ def _series_signal(z60: Optional[float], p252: Optional[float]) -> Optional[str]
     return "NONE"
 
 
-def _fmt(x: Any, nd: int = 4) -> str:
-    if x is None:
-        return "NA"
-    try:
-        if isinstance(x, float):
-            return f"{x:.{nd}f}"
-        return str(x)
-    except Exception:
-        return "NA"
-
-
-def _day_key_tpe(iso_ts: str) -> str:
+def _day_key_tpe_from_iso(iso_ts: str) -> str:
+    """
+    Convert iso to TPE date key (YYYY-MM-DD). If parse fails -> "NA"
+    """
     try:
         dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00")).astimezone(TZ_TPE)
         return dt.date().isoformat()
     except Exception:
         return "NA"
+
+
+def _safe_float_str(x: Optional[float], nd: int = 4) -> str:
+    if x is None:
+        return "NA"
+    fmt = f"{{:.{nd}f}}"
+    return fmt.format(x)
+
+
+def _pick_first_available_change_pct_1d(series_out: Dict[str, Any], order: List[str]) -> Optional[float]:
+    """
+    Use existing w60.ret1_pct as the change metric (unit is percent % in your market_cache).
+    This helper is for extensibility; currently bottom_cache v0 only uses SP500.
+    """
+    for sid in order:
+        v = series_out.get(sid, {}).get("w60", {}).get("ret1_pct")
+        if isinstance(v, (int, float)):
+            return float(v)
+    return None
 
 
 def main() -> None:
@@ -171,13 +201,13 @@ def main() -> None:
             "latest": {
                 "data_date": _as_str(latest.get("data_date")),
                 "value": _as_float(latest.get("value")),
-                "as_of_ts": _as_str(latest.get("as_of_ts")) or meta["as_of_ts"] or "NA",
+                "as_of_ts": _as_str(latest.get("as_of_ts")) or meta["as_of_ts"],
                 "source_url": _as_str(latest.get("source_url")) or "NA",
             },
             "w60": {
                 "z": z60,
                 "p": _as_float(w60.get("p")),
-                "ret1_pct": _as_float(w60.get("ret1_pct")),  # unit = percent (%)
+                "ret1_pct": _as_float(w60.get("ret1_pct")),   # unit = %
                 "z_delta": _as_float(w60.get("z_delta")),
                 "p_delta": _as_float(w60.get("p_delta")),
             },
@@ -189,19 +219,19 @@ def main() -> None:
         }
 
     # ---- triggers ----
-    # TRIG_PANIC: VIX>=20 OR SP500 ret1%<=-1.5
+    # TRIG_PANIC: VIX >= 20 OR SP500.ret1% <= -1.5
     vix_val = series_out["VIX"]["latest"]["value"]
     spx_ret1 = series_out["SP500"]["w60"]["ret1_pct"]  # unit %
-    trig_panic: Optional[int] = None
 
+    trig_panic: Optional[int] = None
     if vix_val is None and spx_ret1 is None:
         excluded.append({"trigger": "TRIG_PANIC", "reason": "missing_fields:VIX.latest.value & SP500.w60.ret1_pct"})
     else:
-        cond_vix = (vix_val is not None and vix_val >= TH_VIX)
-        cond_spx = (spx_ret1 is not None and spx_ret1 <= TH_SPX_RET1)
+        cond_vix = (vix_val is not None and vix_val >= TH_VIX_PANIC)
+        cond_spx = (spx_ret1 is not None and spx_ret1 <= TH_SPX_RET1_PANIC)
         trig_panic = 1 if (cond_vix or cond_spx) else 0
 
-    # TRIG_SYSTEMIC_VETO: veto if credit/systemic stress present
+    # TRIG_SYSTEMIC_VETO: systemic stress veto via HYG_IEF_RATIO / OFR_FSI
     hyg_z = series_out["HYG_IEF_RATIO"]["w60"]["z"]
     hyg_sig = series_out["HYG_IEF_RATIO"]["series_signal"]
     ofr_z = series_out["OFR_FSI"]["w60"]["z"]
@@ -211,15 +241,14 @@ def main() -> None:
     hyg_can = (hyg_z is not None and hyg_sig in ("WATCH", "ALERT"))
     ofr_can = (ofr_z is not None and ofr_sig in ("WATCH", "ALERT"))
 
-    if (hyg_z is None and ofr_z is None):
+    if hyg_z is None and ofr_z is None:
         excluded.append({"trigger": "TRIG_SYSTEMIC_VETO", "reason": "missing_fields:HYG_IEF_RATIO.w60.z & OFR_FSI.w60.z"})
     else:
-        # conservative OR on available parts
-        hyg_veto = 1 if (hyg_can and hyg_z is not None and hyg_z <= TH_HYG_VETO_Z) else 0
-        ofr_veto = 1 if (ofr_can and ofr_z is not None and ofr_z >= TH_OFR_VETO_Z) else 0
+        hyg_veto = 1 if (hyg_can and hyg_z <= TH_HYG_VETO_Z) else 0
+        ofr_veto = 1 if (ofr_can and ofr_z >= TH_OFR_VETO_Z) else 0
         trig_veto = 1 if (hyg_veto == 1 or ofr_veto == 1) else 0
 
-    # TRIG_REVERSAL: only evaluated when panic==1 and veto==0
+    # TRIG_REVERSAL: panic & NOT systemic & VIX cooling & SP500 stable
     trig_rev: Optional[int] = None
     if trig_panic != 1 or trig_veto != 0:
         trig_rev = 0
@@ -228,14 +257,13 @@ def main() -> None:
         vix_zd = series_out["VIX"]["w60"]["z_delta"]
         vix_pd = series_out["VIX"]["w60"]["p_delta"]
 
-        # VIX cooling: first available metric must be negative
+        # VIX cooling: any first available metric < 0
         vix_cooling: Optional[int] = None
         for x in (vix_ret1, vix_zd, vix_pd):
             if x is not None:
                 vix_cooling = 1 if x < 0 else 0
                 break
 
-        # SP500 stable: ret1% >= 0
         spx_stab: Optional[int] = None
         if spx_ret1 is not None:
             spx_stab = 1 if spx_ret1 >= 0 else 0
@@ -260,12 +288,36 @@ def main() -> None:
         elif trig_veto == 0:
             bottom_state = "BOTTOM_CANDIDATE" if trig_rev == 1 else "BOTTOM_WATCH"
         else:
-            # veto NA -> conservative
-            bottom_state = "BOTTOM_WATCH"
+            bottom_state = "BOTTOM_WATCH"  # veto NA -> conservative
     else:
         bottom_state = "NA"
 
-    # ---- latest.json (unified output) ----
+    # ---- context flags (non-trigger, but useful) ----
+    spx_p252 = series_out["SP500"]["w252"]["p"]
+    context_equity_extreme: Optional[int] = None
+    if spx_p252 is None:
+        context_equity_extreme = None
+    else:
+        context_equity_extreme = 1 if float(spx_p252) >= 95.0 else 0
+
+    # ---- distances to trigger thresholds (<=0 means triggered) ----
+    dist_vix_panic: Optional[float] = None
+    if vix_val is not None:
+        dist_vix_panic = TH_VIX_PANIC - float(vix_val)
+
+    dist_spx_panic: Optional[float] = None
+    if spx_ret1 is not None:
+        dist_spx_panic = float(spx_ret1) - TH_SPX_RET1_PANIC  # <=0 triggers
+
+    dist_hyg_veto: Optional[float] = None
+    if hyg_z is not None:
+        dist_hyg_veto = float(hyg_z) - TH_HYG_VETO_Z          # <=0 veto active (more negative)
+
+    dist_ofr_veto: Optional[float] = None
+    if ofr_z is not None:
+        dist_ofr_veto = TH_OFR_VETO_Z - float(ofr_z)          # <=0 veto active (>=2)
+
+    # ---- build latest.json ----
     latest_out = {
         "schema_version": "bottom_cache_v1",
         "generated_at_utc": run_ts_utc,
@@ -286,30 +338,35 @@ def main() -> None:
             "TRIG_SYSTEMIC_VETO": trig_veto,
             "TRIG_REVERSAL": trig_rev,
         },
+        "context": {
+            "context_equity_extreme_sp500_p252_ge_95": context_equity_extreme,
+            "sp500_p252": spx_p252 if spx_p252 is not None else None,
+        },
+        "distances": {
+            "vix_panic_gap": dist_vix_panic,
+            "sp500_ret1_panic_gap": dist_spx_panic,
+            "hyg_veto_gap_z": dist_hyg_veto,
+            "ofr_veto_gap_z": dist_ofr_veto,
+        },
         "excluded_triggers": excluded,
         "series": series_out,
-        "thresholds_v0": {
-            "VIX_panic_ge": TH_VIX,
-            "SP500_ret1_panic_le_pct": TH_SPX_RET1,
-            "HYG_IEF_RATIO_veto_z_le": TH_HYG_VETO_Z,
-            "OFR_FSI_veto_z_ge": TH_OFR_VETO_Z,
-        },
         "notes": [
             "v0: single source = market_cache/stats_latest.json",
-            "series_signal derived from w60.z and w252.p using deterministic thresholds",
+            "signal derived from w60.z and w252.p using deterministic thresholds",
             "ret1_pct unit is percent (%)",
-            "outputs unified into dashboard_bottom_cache/{latest.json,history.json,report.md}",
+            "context fields do NOT change triggers; they are informational only"
         ],
     }
+
     _write_json(OUT_LATEST, latest_out)
 
-    # ---- history append (overwrite same TPE day bucket) ----
-    hist = {"schema_version": "bottom_history_v1", "items": []}
+    # ---- history.json append (overwrite same TPE day bucket) ----
+    hist: Dict[str, Any] = {"schema_version": "bottom_history_v1", "items": []}
     if os.path.exists(OUT_HISTORY):
         try:
-            hist = _read_json(OUT_HISTORY)
-            if not isinstance(hist, dict) or "items" not in hist or not isinstance(hist.get("items"), list):
-                hist = {"schema_version": "bottom_history_v1", "items": []}
+            tmp = _read_json(OUT_HISTORY)
+            if isinstance(tmp, dict) and isinstance(tmp.get("items"), list):
+                hist = tmp
         except Exception:
             hist = {"schema_version": "bottom_history_v1", "items": []}
 
@@ -319,84 +376,189 @@ def main() -> None:
         "data_commit_sha": git_sha,
         "bottom_state": bottom_state,
         "triggers": latest_out["triggers"],
+        "context": latest_out["context"],
+        "distances": latest_out["distances"],
         "series_signals": {sid: series_out[sid]["series_signal"] for sid in NEEDED},
     }
 
-    dk = _day_key_tpe(as_of_ts_tpe)
-    new_items = [it for it in hist.get("items", []) if _day_key_tpe(it.get("as_of_ts", "NA")) != dk]
+    dk = _day_key_tpe_from_iso(as_of_ts_tpe)
+    old_items = hist.get("items", [])
+    if not isinstance(old_items, list):
+        old_items = []
+
+    new_items = [it for it in old_items if _day_key_tpe_from_iso(_as_str(it.get("as_of_ts")) or "NA") != dk]
     new_items.append(item)
     hist["items"] = new_items
     _write_json(OUT_HISTORY, hist)
 
-    # ---- report.md (enhanced, distinct) ----
+    # ---- analytics on history for report.md ----
+    # Sort by as_of_ts (stable) for reporting
+    items_sorted: List[Dict[str, Any]] = []
+    for it in hist.get("items", []):
+        if isinstance(it, dict):
+            items_sorted.append(it)
+
+    def _parse_iso(iso: str) -> Tuple[int, str]:
+        # return a sortable key
+        try:
+            dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            return (int(dt.timestamp()), iso)
+        except Exception:
+            return (0, iso)
+
+    items_sorted.sort(key=lambda x: _parse_iso(_as_str(x.get("as_of_ts")) or "NA"))
+
+    # last N
+    recent = items_sorted[-HISTORY_SHOW_N:] if len(items_sorted) > 0 else []
+
+    # last non-NONE
+    last_non_none: Optional[Dict[str, Any]] = None
+    for it in reversed(items_sorted):
+        if (it.get("bottom_state") or "NA") not in ("NONE", "NA"):
+            last_non_none = it
+            break
+
+    # streak of current bottom_state (by distinct TPE day buckets already ensured)
+    streak = 0
+    cur_state = bottom_state
+    for it in reversed(items_sorted):
+        if (it.get("bottom_state") or "NA") == cur_state:
+            streak += 1
+        else:
+            break
+
+    # transitions in recent window
+    transitions: List[str] = []
+    prev_state: Optional[str] = None
+    for it in recent:
+        st = it.get("bottom_state") or "NA"
+        if prev_state is None:
+            prev_state = st
+            continue
+        if st != prev_state:
+            transitions.append(f"{prev_state} → {st} @ {_as_str(it.get('as_of_ts')) or 'NA'}")
+        prev_state = st
+
+    # top-2 nearest activation distances (smaller positive means closer; <=0 already triggered)
+    dist_map = {
+        "VIX panic gap (<=0 triggered)": dist_vix_panic,
+        "SP500 ret1% gap (<=0 triggered)": dist_spx_panic,
+        "HYG veto gap z (<=0 veto)": dist_hyg_veto,
+        "OFR veto gap z (<=0 veto)": dist_ofr_veto,
+    }
+
+    def _dist_rank_val(x: Optional[float]) -> float:
+        if x is None:
+            return float("inf")
+        # If already triggered (<=0), make it the "closest"
+        return -1e9 if x <= 0 else x
+
+    dist_sorted = sorted(dist_map.items(), key=lambda kv: _dist_rank_val(kv[1]))
+    top2 = dist_sorted[:2]
+
+    # ---- dashboard markdown ----
     md: List[str] = []
     md.append("# Bottom Cache Dashboard (v0)\n\n")
     md.append(f"- as_of_ts (TPE): `{as_of_ts_tpe}`\n")
     md.append(f"- run_ts_utc: `{run_ts_utc}`\n")
-    md.append(f"- bottom_state: **{bottom_state}**\n\n")
+    md.append(f"- bottom_state: **{bottom_state}**  (streak={streak})\n")
+    md.append(f"- market_cache_as_of_ts: `{meta['as_of_ts'] or 'NA'}`\n")
+    md.append(f"- market_cache_generated_at_utc: `{meta['generated_at_utc'] or 'NA'}`\n\n")
 
-    # rationale chain
     md.append("## Rationale (Decision Chain)\n")
-    md.append(f"- TRIG_PANIC = `{trig_panic}`  (VIX >= {TH_VIX} OR SP500.ret1% <= {TH_SPX_RET1})\n")
+    md.append(f"- TRIG_PANIC = `{trig_panic}`  (VIX >= {TH_VIX_PANIC} OR SP500.ret1% <= {TH_SPX_RET1_PANIC})\n")
     md.append(f"- TRIG_SYSTEMIC_VETO = `{trig_veto}`  (systemic veto via HYG_IEF_RATIO / OFR_FSI)\n")
     md.append(f"- TRIG_REVERSAL = `{trig_rev}`  (panic & NOT systemic & VIX cooling & SP500 stable)\n")
     if trig_panic == 0:
         md.append("- 因 TRIG_PANIC=0 → 不進入抄底流程（v0 設計）\n")
     elif trig_panic == 1 and trig_veto == 1:
-        md.append("- 因 TRIG_SYSTEMIC_VETO=1 → 不抄底（系統性壓力）\n")
-    elif trig_panic == 1 and trig_veto == 0 and trig_rev == 1:
-        md.append("- panic 且非系統性，並出現冷卻/穩定 → BOTTOM_CANDIDATE\n")
+        md.append("- 已觸發恐慌，但出現系統性 veto → 不抄底（先等信用/壓力解除）\n")
     elif trig_panic == 1 and trig_veto == 0 and trig_rev == 0:
-        md.append("- panic 且非系統性，但尚未冷卻/穩定 → BOTTOM_WATCH\n")
-    else:
-        md.append("- 條件缺失/NA → 保守處理\n")
+        md.append("- 恐慌成立且無系統性 veto，但尚未看到反轉確認 → BOTTOM_WATCH\n")
+    elif trig_panic == 1 and trig_veto == 0 and trig_rev == 1:
+        md.append("- 恐慌成立且無系統性 veto，且反轉確認成立 → BOTTOM_CANDIDATE\n")
     md.append("\n")
 
-    # distance-to-trigger (why NONE / how far)
     md.append("## Distance to Triggers (How far from activation)\n")
-    if vix_val is not None:
-        md.append(f"- VIX panic gap = {TH_VIX} - {vix_val} = **{_fmt(TH_VIX - vix_val, 4)}**  (<=0 means triggered)\n")
+    if dist_vix_panic is not None and vix_val is not None:
+        md.append(f"- VIX panic gap = {TH_VIX_PANIC} - {vix_val} = **{_safe_float_str(dist_vix_panic, 4)}**  (<=0 means triggered)\n")
     else:
         md.append("- VIX panic gap = NA (missing VIX.latest.value)\n")
 
-    if spx_ret1 is not None:
-        md.append(f"- SP500 ret1% gap = {spx_ret1} - ({TH_SPX_RET1}) = **{_fmt(spx_ret1 - TH_SPX_RET1, 4)}**  (<=0 means triggered)\n")
+    if dist_spx_panic is not None and spx_ret1 is not None:
+        md.append(f"- SP500 ret1% gap = {spx_ret1} - ({TH_SPX_RET1_PANIC}) = **{_safe_float_str(dist_spx_panic, 4)}**  (<=0 means triggered)\n")
     else:
         md.append("- SP500 ret1% gap = NA (missing SP500.w60.ret1_pct)\n")
 
-    if hyg_z is not None:
-        md.append(f"- HYG veto gap (z) = {hyg_z} - ({TH_HYG_VETO_Z}) = **{_fmt(hyg_z - TH_HYG_VETO_Z, 4)}**  (<=0 means systemic veto)\n")
+    if dist_hyg_veto is not None and hyg_z is not None:
+        md.append(f"- HYG veto gap (z) = {hyg_z} - ({TH_HYG_VETO_Z}) = **{_safe_float_str(dist_hyg_veto, 4)}**  (<=0 means systemic veto)\n")
     else:
         md.append("- HYG veto gap (z) = NA (missing HYG_IEF_RATIO.w60.z)\n")
 
-    if ofr_z is not None:
-        md.append(f"- OFR veto gap (z) = ({TH_OFR_VETO_Z}) - {ofr_z} = **{_fmt(TH_OFR_VETO_Z - ofr_z, 4)}**  (<=0 means systemic veto)\n")
+    if dist_ofr_veto is not None and ofr_z is not None:
+        md.append(f"- OFR veto gap (z) = ({TH_OFR_VETO_Z}) - {ofr_z} = **{_safe_float_str(dist_ofr_veto, 4)}**  (<=0 means systemic veto)\n")
     else:
         md.append("- OFR veto gap (z) = NA (missing OFR_FSI.w60.z)\n")
+
+    md.append("\n### Nearest Conditions (Top-2)\n")
+    for name, val in top2:
+        md.append(f"- {name}: `{_safe_float_str(val, 4)}`\n")
     md.append("\n")
 
-    # triggers block
+    md.append("## Context (Non-trigger)\n")
+    if context_equity_extreme is None:
+        md.append("- SP500.p252: NA → cannot evaluate equity extreme context\n")
+    else:
+        md.append(f"- SP500.p252 = `{_safe_float_str(float(spx_p252), 4) if spx_p252 is not None else 'NA'}`; equity_extreme(p252>=95) = `{context_equity_extreme}`\n")
+        if context_equity_extreme == 1:
+            md.append("- 註：處於高檔極端時，即使未來出現抄底流程訊號，也應要求更嚴格的反轉確認（僅旁註，不改 triggers）\n")
+    md.append("\n")
+
     md.append("## Triggers (0/1/NA)\n")
-    for k, v in latest_out["triggers"].items():
-        md.append(f"- {k}: `{v}`\n")
-    md.append("\n")
+    md.append(f"- TRIG_PANIC: `{trig_panic}`\n")
+    md.append(f"- TRIG_SYSTEMIC_VETO: `{trig_veto}`\n")
+    md.append(f"- TRIG_REVERSAL: `{trig_rev}`\n\n")
 
-    # excluded / NA reasons
     if excluded:
         md.append("## Excluded / NA Reasons\n")
         for e in excluded:
-            md.append(f"- {e['trigger']}: {e['reason']}\n")
+            md.append(f"- {e.get('trigger','NA')}: {e.get('reason','NA')}\n")
         md.append("\n")
 
-    # action map
     md.append("## Action Map (v0)\n")
     md.append("- NONE: 維持既定 DCA/資產配置紀律；不把它當成抄底時點訊號\n")
     md.append("- BOTTOM_WATCH: 只做準備（現金/分批計畫/撤退條件），不進場\n")
     md.append("- BOTTOM_CANDIDATE: 允許分批（例如 2–3 段），但需設定撤退條件\n")
-    md.append("- PANIC_BUT_SYSTEMIC: 不抄底，先等信用/壓力解除\n")
-    md.append("\n")
+    md.append("- PANIC_BUT_SYSTEMIC: 不抄底，先等信用/壓力解除\n\n")
 
-    # series snapshot
+    md.append("## Recent History (last 10 buckets)\n")
+    if not recent:
+        md.append("- NA (history empty)\n\n")
+    else:
+        md.append("| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | note |\n")
+        md.append("|---|---|---|---:|---:|---:|---|\n")
+        for it in recent:
+            asof = _as_str(it.get("as_of_ts")) or "NA"
+            dk2 = _day_key_tpe_from_iso(asof)
+            st = it.get("bottom_state") or "NA"
+            tr = it.get("triggers") if isinstance(it.get("triggers"), dict) else {}
+            p = tr.get("TRIG_PANIC", "NA")
+            v = tr.get("TRIG_SYSTEMIC_VETO", "NA")
+            r = tr.get("TRIG_REVERSAL", "NA")
+            note = ""
+            if isinstance(it.get("context"), dict):
+                ce = it["context"].get("context_equity_extreme_sp500_p252_ge_95", None)
+                if ce == 1:
+                    note = "equity_extreme"
+            md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {note} |\n")
+        md.append("\n")
+
+    if transitions:
+        md.append("## State Transitions (within recent window)\n")
+        for t in transitions:
+            md.append(f"- {t}\n")
+        md.append("\n")
+
     md.append("## Series Snapshot\n")
     md.append("| series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) | w60.z_delta | w60.p_delta |\n")
     md.append("|---|---|---|---|---:|---:|---:|---:|---:|---:|\n")
@@ -411,6 +573,10 @@ def main() -> None:
             f"{s['w60']['z_delta'] if s['w60']['z_delta'] is not None else 'NA'} | "
             f"{s['w60']['p_delta'] if s['w60']['p_delta'] is not None else 'NA'} |\n"
         )
+
+    md.append("\n## Data Sources (single-source policy)\n")
+    md.append(f"- market_cache input: `{MARKET_STATS_PATH}`\n")
+    md.append("- This dashboard does not fetch external URLs directly; it trusts market_cache to provide `source_url` per series.\n")
 
     _write_text(OUT_MD, "".join(md))
 
