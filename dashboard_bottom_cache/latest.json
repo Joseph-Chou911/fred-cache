@@ -1,13 +1,13 @@
 {
   "schema_version": "bottom_cache_v1",
-  "generated_at_utc": "2026-01-25T11:40:31.851174Z",
-  "as_of_ts": "2026-01-25T19:40:31.851190+08:00",
-  "data_commit_sha": "4b049777bf10799665445d743656cf6e12c6baa2",
+  "generated_at_utc": "2026-01-26T08:06:45.700697Z",
+  "as_of_ts": "2026-01-26T16:06:45.700719+08:00",
+  "data_commit_sha": "cfb1f378b706b7af15e7c3f33f753648bf7a53ab",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-01-25T04:38:46Z",
-    "market_cache_as_of_ts": "2026-01-25T04:38:46Z",
+    "market_cache_generated_at_utc": "2026-01-26T04:42:43Z",
+    "market_cache_as_of_ts": "2026-01-26T04:42:43Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -33,7 +33,7 @@
   "tw_local_gate": {
     "tw_state": "NONE",
     "UsedDate": "2026-01-23",
-    "run_day_tag": "NON_TRADING_DAY",
+    "run_day_tag": "DATA_NOT_UPDATED",
     "risk_level": "低",
     "lookback_n_actual": 16,
     "lookback_n_target": null,
@@ -82,7 +82,7 @@
       "latest": {
         "data_date": "2026-01-23",
         "value": 16.09,
-        "as_of_ts": "2026-01-25T04:38:46Z",
+        "as_of_ts": "2026-01-26T04:42:43Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
@@ -104,7 +104,7 @@
       "latest": {
         "data_date": "2026-01-23",
         "value": 6915.61,
-        "as_of_ts": "2026-01-25T04:38:46Z",
+        "as_of_ts": "2026-01-26T04:42:43Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
@@ -126,7 +126,7 @@
       "latest": {
         "data_date": "2026-01-23",
         "value": 0.8456487754038562,
-        "as_of_ts": "2026-01-25T04:38:46Z",
+        "as_of_ts": "2026-01-26T04:42:43Z",
         "source_url": "DERIVED"
       },
       "w60": {
@@ -148,7 +148,7 @@
       "latest": {
         "data_date": "2026-01-21",
         "value": -2.445,
-        "as_of_ts": "2026-01-25T04:38:46Z",
+        "as_of_ts": "2026-01-26T04:42:43Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {

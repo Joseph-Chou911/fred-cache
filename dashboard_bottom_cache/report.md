@@ -1,10 +1,10 @@
 # Bottom Cache Dashboard (v0)
 
-- as_of_ts (TPE): `2026-01-25T19:40:31.851190+08:00`
-- run_ts_utc: `2026-01-25T11:40:31.851174Z`
-- bottom_state (Global): **NONE**  (streak=1)
-- market_cache_as_of_ts: `2026-01-25T04:38:46Z`
-- market_cache_generated_at_utc: `2026-01-25T04:38:46Z`
+- as_of_ts (TPE): `2026-01-26T16:06:45.700719+08:00`
+- run_ts_utc: `2026-01-26T08:06:45.700697Z`
+- bottom_state (Global): **NONE**  (streak=2)
+- market_cache_as_of_ts: `2026-01-26T04:42:43Z`
+- market_cache_generated_at_utc: `2026-01-26T04:42:43Z`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -32,8 +32,8 @@
 - TRIG_REVERSAL: `0`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **NONE**  (streak=1)
-- UsedDate: `2026-01-23`; run_day_tag: `NON_TRADING_DAY`; risk_level: `低`
+- tw_state: **NONE**  (streak=2)
+- UsedDate: `2026-01-23`; run_day_tag: `DATA_NOT_UPDATED`; risk_level: `低`
 - Lookback: `16/None`
 - margin_signal(TWSE): `WATCH`; unit: `億`
 - margin_balance(TWSE latest): `3760.8` 億
@@ -63,6 +63,7 @@
 | tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | note |
 |---|---|---|---:|---:|---:|---|---:|---:|---:|---|
 | 2026-01-25 | 2026-01-25T19:40:31.851190+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
+| 2026-01-26 | 2026-01-26T16:06:45.700719+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) | w60.z_delta | w60.p_delta |
