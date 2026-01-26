@@ -1,50 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-FX cache: USD/TWD spot rate from Bank of Taiwan (BOT) CSV (single request per run).
+FX cache: USD/TWD spot rate from Bank of Taiwan (BOT) xrt page (HTML).
 
 Why this version:
-- The per-day endpoint /xrt/flcsv/0/YYYY-MM-DD may not exist on weekends/holidays,
-  and "today" file may not be published yet at your run time.
-- Use the USD 3-month CSV endpoint instead:
-  https://rate.bot.com.tw/xrt/flcsv/0/L3M/USD/1
-  which includes explicit dates (YYYYMMDD). We take the latest available row.
+- L3M/USD/1 (history-series CSV) may lag behind the real-time board rate.
+- The xrt page shows the *current* board rate with:
+  - page date (YYYY/MM/DD)
+  - quote time (YYYY/MM/DD HH:MM)
+  - USD cash + spot buy/sell (spot shown with 2 decimals on the page)
 
-Output:
-- fx_cache/latest.json
-- fx_cache/history.json (append/dedupe by date)
+Goal:
+- 1 request per run (deterministic)
+- Extract:
+  * data_date (YYYY-MM-DD)
+  * quote_time_local (YYYY-MM-DDTHH:MM:SS+08:00)
+  * spot_buy, spot_sell (2-decimal as displayed)
+- Write:
+  * fx_cache/latest.json
+  * fx_cache/history.json (upsert by date)
 
-Strict mode:
-- If --strict is set, exit non-zero unless:
-  * data_date exists
-  * spot_buy and spot_sell exist
-  * spot_sell >= spot_buy (sanity check)
-
-Backward compatibility (Scheme B):
-- Accept legacy args used by older workflows:
-  * --tz (ignored)
-  * --max-back (ignored)
+Backward compatibility:
+- Accept legacy args: --tz, --max-back (ignored)
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import os
 import re
 from datetime import datetime, timezone
-from io import StringIO
 from typing import Any, Dict, Optional, Tuple
 
 import requests
+from zoneinfo import ZoneInfo
 
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-BOT_USD_L3M_CSV = "https://rate.bot.com.tw/xrt/flcsv/0/L3M/USD/1"
+BOT_XRT_PAGE = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
 
 
 def _read_text(path: str) -> str:
@@ -66,15 +63,6 @@ def _dump_json(path: str, obj: Any) -> None:
     _write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
 
 
-def _try_decode(b: bytes) -> str:
-    for enc in ("utf-8-sig", "utf-8", "cp950"):
-        try:
-            return b.decode(enc)
-        except Exception:
-            continue
-    return b.decode("utf-8", errors="replace")
-
-
 def _to_float(x: str) -> Optional[float]:
     x = (x or "").strip()
     if not x:
@@ -83,13 +71,6 @@ def _to_float(x: str) -> Optional[float]:
         return float(x.replace(",", ""))
     except Exception:
         return None
-
-
-def _yyyymmdd_to_yyyy_mm_dd(s: str) -> Optional[str]:
-    s = (s or "").strip()
-    if not re.fullmatch(r"\d{8}", s):
-        return None
-    return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
 
 
 def _load_history(path: str) -> Dict[str, Any]:
@@ -120,117 +101,108 @@ def _upsert_history(history: Dict[str, Any], item: Dict[str, Any]) -> None:
     history["items"] = [by_date[k] for k in sorted(by_date.keys())]
 
 
-def _fetch(session: requests.Session, url: str, timeout: int) -> Tuple[int, bytes, Optional[str]]:
+def _fetch(session: requests.Session, url: str, timeout: int) -> Tuple[int, str, Optional[str]]:
     try:
         resp = session.get(url, headers={"User-Agent": UA}, timeout=timeout)
-        return resp.status_code, resp.content, None
+        # BOT page is UTF-8 HTML
+        resp.encoding = "utf-8"
+        return resp.status_code, resp.text, None
     except Exception as e:
-        return 0, b"", str(e)
+        return 0, "", str(e)
 
 
-def _parse_usd_l3m_csv(text: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+def _parse_xrt_html(html: str, tz_name: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     """
-    Parse BOT L3M/USD/1 CSV.
+    Extract:
+    - page_date: 'YYYY/MM/DD' from header
+    - quote_time: 'YYYY/MM/DD HH:MM' from "牌價最新掛牌時間"
+    - USD spot_buy/spot_sell (2-decimal as displayed)
 
-    Expected common row (often no header):
-      YYYYMMDD,USD,本行買入,<cash_buy>,<spot_buy>,本行賣出,<cash_sell>,<spot_sell>
-
-    Return:
-      (parsed, dbg)
-    parsed schema:
-      {
-        "data_date": "YYYY-MM-DD",
-        "spot_buy": float|None,
-        "spot_sell": float|None,
-        "cash_buy": float|None,
-        "cash_sell": float|None,
-        "raw_row": [...],
-      }
+    Returns (parsed, dbg)
     """
-    dbg: Dict[str, Any] = {"format": "unknown", "reason": "NA"}
+    dbg: Dict[str, Any] = {"format": "xrt_html", "reason": "NA"}
 
-    rows = list(csv.reader(StringIO(text)))
-    if not rows:
-        dbg["reason"] = "csv_empty"
+    # 1) page date (header line contains: "#  2026/01/26 本行 ...")
+    m_date = re.search(r"#\s*(\d{4}/\d{2}/\d{2})\s+本行", html)
+    page_date = m_date.group(1) if m_date else None
+
+    # 2) quote time (line contains: "牌價最新掛牌時間：2026/01/26 14:38")
+    m_qt = re.search(r"牌價最新掛牌時間：\s*(\d{4}/\d{2}/\d{2})\s+(\d{2}:\d{2})", html)
+    qt_date = m_qt.group(1) if m_qt else None
+    qt_hm = m_qt.group(2) if m_qt else None
+
+    # 3) USD row: we anchor near "美金 (USD)" then capture 4 numbers (cash buy/sell, spot buy/sell)
+    # The HTML content usually contains a segment like:
+    # 美金 (USD) ... 31.06 31.73 31.41  31.51 ...
+    m_usd = re.search(
+        r"美金\s*\(USD\)[\s\S]{0,400}?\s(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)",
+        html
+    )
+    cash_buy = cash_sell = spot_buy = spot_sell = None
+    if m_usd:
+        cash_buy = _to_float(m_usd.group(1))
+        cash_sell = _to_float(m_usd.group(2))
+        spot_buy = _to_float(m_usd.group(3))
+        spot_sell = _to_float(m_usd.group(4))
+
+    if not page_date:
+        dbg["reason"] = "cannot_find_page_date"
+        return None, dbg
+    if not (spot_buy is not None and spot_sell is not None):
+        dbg["reason"] = "cannot_find_usd_spot"
         return None, dbg
 
-    # Scan rows and pick the FIRST valid data row.
-    # BOT typically returns latest first for this endpoint, but we avoid assuming headers exist.
-    for r in rows:
-        if not r or len(r) < 5:
-            continue
+    # data_date ISO
+    data_date = page_date.replace("/", "-")
 
-        first = (r[0] or "").strip()
-        date_iso = _yyyymmdd_to_yyyy_mm_dd(first)
-        if not date_iso:
-            continue
+    # quote_time_local ISO (best-effort). If quote time missing, use page date 00:00.
+    tz = ZoneInfo(tz_name)
+    if qt_date and qt_hm:
+        # qt_date should match page_date, but we won't assume
+        dt = datetime.strptime(f"{qt_date} {qt_hm}", "%Y/%m/%d %H:%M").replace(tzinfo=tz)
+    else:
+        dt = datetime.strptime(page_date, "%Y/%m/%d").replace(tzinfo=tz)
+        dbg["quote_time_note"] = "missing_quote_time_fallback_to_midnight"
 
-        # Currency should be USD for this endpoint; be defensive.
-        ccy = (r[1] if len(r) > 1 else "").strip()
-        if ccy and "USD" not in ccy:
-            continue
-
-        # Common pattern length >= 8:
-        # [0]=date, [1]=USD, [2]=buy_label, [3]=cash_buy, [4]=spot_buy,
-        # [5]=sell_label, [6]=cash_sell, [7]=spot_sell
-        cash_buy = _to_float(r[3]) if len(r) > 3 else None
-        spot_buy = _to_float(r[4]) if len(r) > 4 else None
-        cash_sell = _to_float(r[6]) if len(r) > 6 else None
-        spot_sell = _to_float(r[7]) if len(r) > 7 else None
-
-        dbg["format"] = "l3m_usd_row"
-        dbg["reason"] = "matched_yyyymmdd_row"
-        dbg["row_len"] = len(r)
-
-        return (
-            {
-                "data_date": date_iso,
-                "cash_buy": cash_buy,
-                "cash_sell": cash_sell,
-                "spot_buy": spot_buy,
-                "spot_sell": spot_sell,
-                "raw_row": r,
-            },
-            dbg,
-        )
-
-    dbg["reason"] = "no_valid_data_row_found"
-    dbg["rows_preview"] = rows[:3]
-    return None, dbg
+    parsed = {
+        "data_date": data_date,
+        "quote_time_local": dt.isoformat(),
+        "usd_twd": {
+            "cash_buy": cash_buy,
+            "cash_sell": cash_sell,
+            "spot_buy": spot_buy,
+            "spot_sell": spot_sell,
+        },
+    }
+    dbg["reason"] = "ok"
+    return parsed, dbg
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--tz", default="Asia/Taipei", help="(legacy) accepted; used only for quote_time_local tz")
     ap.add_argument("--latest-out", default="fx_cache/latest.json")
     ap.add_argument("--history", default="fx_cache/history.json")
+    ap.add_argument("--max-back", type=int, default=10, help="(legacy) ignored")
     ap.add_argument("--timeout", type=int, default=20)
     ap.add_argument("--strict", action="store_true", help="Fail (exit 1) if spot rates are missing/invalid.")
-    ap.add_argument("--source-url", default=BOT_USD_L3M_CSV)
-
-    # Backward compatibility: keep old args used by existing workflows (ignored in this version)
-    ap.add_argument("--tz", default="Asia/Taipei", help="(deprecated) ignored; kept for backward compatibility")
-    ap.add_argument("--max-back", type=int, default=10, help="(deprecated) ignored; kept for backward compatibility")
-
+    ap.add_argument("--source-url", default=BOT_XRT_PAGE)
     args = ap.parse_args()
 
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     session = requests.Session()
-    status_code, content, http_err = _fetch(session, args.source_url, args.timeout)
+    status_code, html, http_err = _fetch(session, args.source_url, args.timeout)
 
-    chosen_url = args.source_url
     parsed: Optional[Dict[str, Any]] = None
-    parse_dbg: Dict[str, Any] = {}
+    parse_dbg: Dict[str, Any] = {"format": "xrt_html", "reason": "http_not_200_or_empty"}
 
-    if status_code == 200 and content:
-        text = _try_decode(content)
-        parsed, parse_dbg = _parse_usd_l3m_csv(text)
-    else:
-        parse_dbg = {"format": "unknown", "reason": "http_not_200_or_empty"}
+    if status_code == 200 and html:
+        parsed, parse_dbg = _parse_xrt_html(html, args.tz)
 
     data_date = parsed.get("data_date") if parsed else None
-    spot_buy = parsed.get("spot_buy") if parsed else None
-    spot_sell = parsed.get("spot_sell") if parsed else None
+    spot_buy = parsed["usd_twd"].get("spot_buy") if parsed else None
+    spot_sell = parsed["usd_twd"].get("spot_sell") if parsed else None
 
     mid: Optional[float] = None
     if spot_buy is not None and spot_sell is not None:
@@ -248,8 +220,9 @@ def main() -> int:
         "schema_version": "fx_usdtwd_latest_v1",
         "generated_at_utc": now_utc,
         "source": "BOT",
-        "source_url": chosen_url,
+        "source_url": args.source_url,
         "data_date": data_date,
+        "quote_time_local": (parsed.get("quote_time_local") if parsed else None),
         "usd_twd": {
             "spot_buy": spot_buy,
             "spot_sell": spot_sell,
@@ -272,13 +245,14 @@ def main() -> int:
                 "mid": mid,
                 "spot_buy": spot_buy,
                 "spot_sell": spot_sell,
-                "source_url": chosen_url,
+                "source_url": args.source_url,
+                "quote_time_local": latest.get("quote_time_local"),
             },
         )
         _dump_json(args.history, history)
 
     print(
-        "FX(BOT:L3M/USD/1) strict_ok={ok} date={date} spot_buy={b} spot_sell={s} mid={m} http={http} err={err} url={url}".format(
+        "FX(BOT:XRT_HTML) strict_ok={ok} date={date} spot_buy={b} spot_sell={s} mid={m} http={http} err={err} url={url}".format(
             ok=str(strict_ok).lower(),
             date=data_date or "NA",
             b="None" if spot_buy is None else f"{spot_buy:.6f}",
@@ -286,7 +260,7 @@ def main() -> int:
             m="None" if mid is None else f"{mid:.6f}",
             http=status_code,
             err=(http_err or "NA"),
-            url=(chosen_url or "NA"),
+            url=(args.source_url or "NA"),
         )
     )
 
