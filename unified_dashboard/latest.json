@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-26T06:46:24Z",
+  "generated_at_utc": "2026-01-26T06:49:17Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -1185,104 +1185,38 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-26T06:46:22Z",
+        "generated_at_utc": "2026-01-26T06:49:17Z",
         "source": "BOT",
-        "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
+        "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/L3M/USD/1",
         "data_date": "2026-01-23",
         "usd_twd": {
-          "spot_buy": 31.5,
-          "spot_sell": 31.6,
+          "spot_buy": 31.475,
+          "spot_sell": 31.625,
           "mid": 31.55
         },
         "raw": {
-          "currency_label": "USD",
-          "row": {
-            "currency": "USD",
-            "spot_buy": 31.5,
-            "spot_sell": 31.6,
-            "layout": "dual_block",
-            "idx": {
-              "ccy": 0,
-              "spot_buy": 3,
-              "spot_sell": 13
-            },
+          "parsed": {
+            "data_date": "2026-01-23",
+            "cash_buy": 31.15,
+            "cash_sell": 31.82,
+            "spot_buy": 31.475,
+            "spot_sell": 31.625,
             "raw_row": [
+              "20260123",
               "USD",
               "本行買入",
               "31.15000",
-              "31.50000",
-              "31.48300",
-              "31.43200",
-              "31.37300",
-              "31.31000",
-              "31.25100",
-              "31.18700",
-              "31.13700",
+              "31.47500",
               "本行賣出",
               "31.82000",
-              "31.60000",
-              "31.58700",
-              "31.54100",
-              "31.48900",
-              "31.43400",
-              "31.38100",
-              "31.32500",
-              "31.27900",
+              "31.62500",
               ""
-            ],
-            "raw_header": [
-              "幣別",
-              "匯率",
-              "現金",
-              "即期",
-              "遠期10天",
-              "遠期30天",
-              "遠期60天",
-              "遠期90天",
-              "遠期120天",
-              "遠期150天",
-              "遠期180天",
-              "匯率",
-              "現金",
-              "即期",
-              "遠期10天",
-              "遠期30天",
-              "遠期60天",
-              "遠期90天",
-              "遠期120天",
-              "遠期150天",
-              "遠期180天"
-            ],
-            "raw_cells": {
-              "spot_buy_raw": "31.50000",
-              "spot_sell_raw": "31.60000"
-            }
+            ]
           },
           "parse_dbg": {
-            "layout": "dual_block",
-            "reason": "matched_dual_block_即期",
-            "raw_header_preview": [
-              "幣別",
-              "匯率",
-              "現金",
-              "即期",
-              "遠期10天",
-              "遠期30天",
-              "遠期60天",
-              "遠期90天",
-              "遠期120天",
-              "遠期150天",
-              "遠期180天",
-              "匯率",
-              "現金",
-              "即期",
-              "遠期10天",
-              "遠期30天",
-              "遠期60天",
-              "遠期90天",
-              "遠期120天",
-              "遠期150天"
-            ]
+            "format": "l3m_usd_row",
+            "reason": "matched_yyyymmdd_row",
+            "row_len": 9
           }
         },
         "http": {
@@ -1293,11 +1227,11 @@
       "derived": {
         "status": "OK",
         "source": "BOT",
-        "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/2026-01-23",
+        "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/L3M/USD/1",
         "data_date": "2026-01-23",
         "usd_twd": {
-          "spot_buy": 31.5,
-          "spot_sell": 31.6,
+          "spot_buy": 31.475,
+          "spot_sell": 31.625,
           "mid": 31.55
         },
         "momentum": {
