@@ -8,6 +8,8 @@ Adds:
 - roll25_derived (realized vol / max drawdown)
 - fx_usdtwd section (BOT USD/TWD mid + deterministic signal)
 - cross_module (kept)
+- AUTO Module Status (core modules first, then any extra modules sorted)
+- Optional module sections: inflation_realrate_cache / asset_proxy_cache (display-only; no guessing)
 
 This renderer does NOT recompute market/fred/margin/roll25/fx stats; it only formats fields already in unified JSON.
 If a field is missing => prints NA.
@@ -35,6 +37,12 @@ B) FX: treat "momentum dict exists but all key fields are None" as momentum_unav
     2) modules.roll25_cache.latest_report.roll25_heated_market / roll25_data_quality_issue (if present)
 - DO NOT guess; if not found => NA.
 - run_day_tag fallback no longer uses roll25 tag_legacy (to avoid semantic contamination).
+
+2026-01-26 (this version):
+- Module Status is auto-rendered: core modules fixed order + any extra modules sorted.
+- Render optional sections for inflation_realrate_cache / asset_proxy_cache (display-only):
+  - If dashboard_latest.rows exists => render a table (best-effort; missing fields => NA)
+  - Else print status + deterministic note
 """
 
 from __future__ import annotations
@@ -269,6 +277,111 @@ def _fmt_bool_or_na(x: Any) -> str:
     return "NA"
 
 
+# ---- generic module rendering (display-only) ----
+
+def _render_generic_dashboard_section(lines: List[str], module_name: str, mod: Any) -> None:
+    """
+    Display-only, deterministic:
+    - If mod.dashboard_latest.meta/rows exist, render using market-like headers.
+    - Otherwise, print only status and a note. No guessing.
+    """
+    lines.append(f"## {module_name} (detailed)")
+    lines.append(f"- status: {_safe_get(mod,'status') or 'NA'}")
+
+    dash = _safe_get(mod, "dashboard_latest") or {}
+    meta = _safe_get(dash, "meta") or {}
+    rows = _safe_get(dash, "rows") or []
+
+    if isinstance(meta, dict) and meta:
+        lines.append(f"- as_of_ts: {meta.get('stats_as_of_ts','NA')}")
+        lines.append(f"- run_ts_utc: {meta.get('run_ts_utc','NA')}")
+        lines.append(f"- ruleset_id: {meta.get('ruleset_id','NA')}")
+        lines.append(f"- script_fingerprint: {meta.get('script_fingerprint','NA')}")
+        lines.append(f"- script_version: {meta.get('script_version','NA')}")
+        lines.append(f"- series_count: {meta.get('series_count','NA')}")
+
+    if isinstance(rows, list) and rows:
+        hdr = [
+            "series","signal","dir","class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
+            "delta","streak_hist","streak_wa","source"
+        ]
+        rws: List[List[str]] = []
+        for it in rows:
+            if not isinstance(it, dict):
+                continue
+            tag = it.get("tag", "NA")
+            cls = "NONE"
+            if isinstance(tag, str):
+                up = tag.upper()
+                if "LONG_EXTREME" in up:
+                    cls = "LONG"
+                elif "EXTREME_Z" in up:
+                    cls = "LEVEL"
+                elif "JUMP" in up:
+                    cls = "JUMP"
+            rws.append([
+                str(it.get("series","NA")),
+                str(it.get("signal_level","NA")),
+                str(it.get("dir","NA")),
+                cls,
+                _fmt(it.get("value"),6),
+                str(it.get("data_date","NA")),
+                _fmt(it.get("age_hours"),6),
+                _fmt(it.get("z60"),6),
+                _fmt(it.get("p60"),6),
+                _fmt(it.get("p252"),6),
+                _fmt(it.get("z_delta60"),6),
+                _fmt(it.get("p_delta60"),6),
+                _fmt(it.get("ret1_pct60"),6),
+                str(it.get("reason","NA")),
+                str(tag),
+                str(it.get("prev_signal","NA")),
+                str(it.get("delta_signal","NA")),
+                _fmt_int(it.get("streak_hist")),
+                _fmt_int(it.get("streak_wa")),
+                str(it.get("source_url","NA")),
+            ])
+        lines.append("")
+        lines.append(_md_table(hdr, rws))
+        lines.append("")
+    else:
+        lines.append("- note: dashboard_latest.rows missing/empty; nothing to render (deterministic).")
+        lines.append("")
+
+
+def _render_module_status(lines: List[str], modules: Dict[str, Any], unified_generated_at_utc: str) -> None:
+    """
+    Deterministic:
+    - Core modules are listed first in fixed order.
+    - Any remaining modules are listed in sorted order.
+    - Prints only the status field if present; else NA.
+    """
+    core_order = [
+        "market_cache",
+        "fred_cache",
+        "roll25_cache",
+        "taiwan_margin_financing",
+        "fx_usdtwd",
+    ]
+
+    lines.append("## Module Status")
+    seen = set()
+
+    for name in core_order:
+        if name in modules:
+            lines.append(f"- {name}: {_safe_get(modules.get(name), 'status') or 'NA'}")
+            seen.add(name)
+        else:
+            lines.append(f"- {name}: NA")
+
+    extras = sorted([k for k in modules.keys() if k not in seen])
+    for name in extras:
+        lines.append(f"- {name}: {_safe_get(modules.get(name), 'status') or 'NA'}")
+
+    lines.append(f"- unified_generated_at_utc: {unified_generated_at_utc}\n")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -289,23 +402,24 @@ def main() -> int:
     rendered_at_utc = _now_utc_z()
 
     modules = uni.get("modules", {}) if isinstance(uni, dict) else {}
+    if not isinstance(modules, dict):
+        modules = {}
+
     market = modules.get("market_cache", {})
     fred = modules.get("fred_cache", {})
     roll25 = modules.get("roll25_cache", {})
     twm = modules.get("taiwan_margin_financing", {})
     fx = modules.get("fx_usdtwd", {})
 
+    # optional modules (display-only)
+    infl = modules.get("inflation_realrate_cache", {})
+    apx = modules.get("asset_proxy_cache", {})
+
     lines: List[str] = []
     lines.append("# Unified Risk Dashboard Report\n")
 
-    # Module status
-    lines.append("## Module Status")
-    lines.append(f"- market_cache: {_safe_get(market,'status') or 'NA'}")
-    lines.append(f"- fred_cache: {_safe_get(fred,'status') or 'NA'}")
-    lines.append(f"- roll25_cache: {_safe_get(roll25,'status') or 'NA'}")
-    lines.append(f"- taiwan_margin_financing: {_safe_get(twm,'status') or 'NA'}")
-    lines.append(f"- fx_usdtwd: {_safe_get(fx,'status') or 'NA'}")
-    lines.append(f"- unified_generated_at_utc: {uni.get('generated_at_utc','NA')}\n")
+    # Module status (AUTO)
+    _render_module_status(lines, modules, str(uni.get("generated_at_utc", "NA")))
 
     # ----------------------------
     # (2) Positioning Matrix
@@ -557,6 +671,14 @@ def main() -> int:
         lines.append("")
 
     # ----------------------------
+    # optional modules (display-only; no effect on strategy mode)
+    # ----------------------------
+    if "inflation_realrate_cache" in modules:
+        _render_generic_dashboard_section(lines, "inflation_realrate_cache", infl)
+    if "asset_proxy_cache" in modules:
+        _render_generic_dashboard_section(lines, "asset_proxy_cache", apx)
+
+    # ----------------------------
     # roll25_cache (core fields from latest report)
     # ----------------------------
     r_latest = _safe_get(roll25, "latest_report") or {}
@@ -669,16 +791,16 @@ def main() -> int:
     lines.append("")
 
     # FX
-    fx_der = _safe_get(fx, "derived") or {}
+    fx_der2 = _safe_get(fx, "derived") or {}
     lines.append("## FX (USD/TWD)")
     lines.append(f"- status: {_safe_get(fx,'status') or 'NA'}")
-    lines.append(f"- data_date: {fx_der.get('data_date','NA')}")
-    lines.append(f"- source_url: {fx_der.get('source_url','NA')}")
-    usd = fx_der.get("usd_twd", {}) if isinstance(fx_der.get("usd_twd"), dict) else {}
+    lines.append(f"- data_date: {fx_der2.get('data_date','NA')}")
+    lines.append(f"- source_url: {fx_der2.get('source_url','NA')}")
+    usd = fx_der2.get("usd_twd", {}) if isinstance(fx_der2.get("usd_twd"), dict) else {}
     lines.append(f"- spot_buy: {_fmt(usd.get('spot_buy'),6)}")
     lines.append(f"- spot_sell: {_fmt(usd.get('spot_sell'),6)}")
     lines.append(f"- mid: {_fmt(usd.get('mid'),6)}")
-    mom = fx_der.get("momentum", None)
+    mom = fx_der2.get("momentum", None)
 
     momentum_unavailable = _fx_momentum_unavailable(mom)
     if momentum_unavailable:
@@ -687,10 +809,10 @@ def main() -> int:
     mom_dict = mom if isinstance(mom, dict) else {}
     lines.append(f"- ret1_pct: {_fmt(mom_dict.get('ret1_pct'),6)} (from {mom_dict.get('ret1_from','NA')} to {mom_dict.get('ret1_to','NA')})")
     lines.append(f"- chg_5d_pct: {_fmt(mom_dict.get('chg_5d_pct'),6)} (from {mom_dict.get('chg_5d_from','NA')} to {mom_dict.get('chg_5d_to','NA')})")
-    lines.append(f"- dir: {fx_der.get('dir','NA')}")
-    lines.append(f"- fx_signal: {fx_der.get('fx_signal','NA')}")
-    lines.append(f"- fx_reason: {fx_der.get('fx_reason','NA')}")
-    lines.append(f"- fx_confidence: {fx_der.get('fx_confidence','NA')}")
+    lines.append(f"- dir: {fx_der2.get('dir','NA')}")
+    lines.append(f"- fx_signal: {fx_der2.get('fx_signal','NA')}")
+    lines.append(f"- fx_reason: {fx_der2.get('fx_reason','NA')}")
+    lines.append(f"- fx_confidence: {fx_der2.get('fx_confidence','NA')}")
     lines.append("")
 
     # taiwan margin financing
