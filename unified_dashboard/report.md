@@ -6,7 +6,9 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-26T03:07:23Z
+- asset_proxy_cache: OK
+- inflation_realrate_cache: OK
+- unified_generated_at_utc: 2026-01-26T03:26:48Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -69,6 +71,36 @@
 | NASDAQCOM | NONE | NA | NONE | 23501.240000 | 2026-01-23 | 0.107614 | 0.491716 | 63.333333 | 90.873016 | 0.178382 | 11.666667 | 0.278290 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NASDAQCOM&file_type=json&sort_order=desc&limit=1 |
 | STLFSI4 | NONE | NA | JUMP | -0.651000 | 2026-01-16 | 0.107614 | -0.397953 | 35.000000 | 38.888889 | 0.056151 | 3.333333 | 2.016857 | NA | JUMP_RET | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=STLFSI4&file_type=json&sort_order=desc&limit=1 |
 | T10Y2Y | NONE | NA | NONE | 0.640000 | 2026-01-23 | 0.107614 | 0.465646 | 60.000000 | 88.888889 | -0.165952 | -6.666667 | -1.538462 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&file_type=json&sort_order=desc&limit=1 |
+
+## inflation_realrate_cache (detailed)
+- status: OK
+- as_of_ts: 2026-01-26T10:35:51+08:00
+- run_ts_utc: 2026-01-26T02:35:55.335229+00:00
+- ruleset_id: signals_v8
+- script_fingerprint: render_dashboard_py_signals_v8@25e5777
+- script_version: cycle_sidecars_stats_v1
+- series_count: 2
+
+| series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DFII10 | NONE | MOVE | NONE | 1.950000 | 2026-01-22 | 0.001204 | 1.451479 | 98.333333 | 54.365079 | 0.487509 | 10.197740 | 1.562500 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| T10YIE | NONE | MOVE | NONE | 2.320000 | 2026-01-23 | 0.001204 | 1.821846 | 95.000000 | 50.396825 | 0.280440 | 0.084746 | 0.432900 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+
+## asset_proxy_cache (detailed)
+- status: OK
+- as_of_ts: 2026-01-26T10:35:51+08:00
+- run_ts_utc: 2026-01-26T02:35:55.383920+00:00
+- ruleset_id: signals_v8
+- script_fingerprint: render_dashboard_py_signals_v8@25e5777
+- script_version: cycle_sidecars_stats_v1
+- series_count: 4
+
+| series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GLD.US_CLOSE | ALERT | MOVE | LONG | 458.000000 | 2026-01-23 | 0.001218 | 2.838172 | 100.000000 | 100.000000 | 0.055325 | 0.000000 | 1.374532 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 1 | 2 | https://stooq.com/q/d/l/?s=gld.us&d1=20251227&d2=20260126&i=d |
+| IAU.US_CLOSE | ALERT | MOVE | LONG | 93.790000 | 2026-01-23 | 0.001218 | 2.834577 | 100.000000 | 100.000000 | 0.046141 | 0.000000 | 1.328868 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 1 | 2 | https://stooq.com/q/d/l/?s=iau.us&d1=20251227&d2=20260126&i=d |
+| IYR.US_CLOSE | NONE | MOVE | NONE | 96.040000 | 2026-01-23 | 0.001218 | 1.007798 | 83.333333 | 68.650794 | 0.248250 | 5.367232 | 0.292398 | NA | NA | NONE | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=iyr.us&d1=20251227&d2=20260126&i=d |
+| VNQ.US_CLOSE | NONE | MOVE | NONE | 90.540000 | 2026-01-23 | 0.001218 | 0.982156 | 83.333333 | 63.095238 | 0.174193 | 1.977401 | 0.199203 | NA | NA | NONE | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=vnq.us&d1=20251227&d2=20260126&i=d |
 
 ## roll25_cache (TW turnover)
 - status: OK
@@ -145,7 +177,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-26T03:07:23Z -->
+<!-- rendered_at_utc: 2026-01-26T03:26:48Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
