@@ -7,6 +7,14 @@
       "spot_buy": 31.475,
       "spot_sell": 31.625,
       "source_url": "https://rate.bot.com.tw/xrt/flcsv/0/L3M/USD/1"
+    },
+    {
+      "date": "2026-01-26",
+      "mid": 31.46,
+      "spot_buy": 31.41,
+      "spot_sell": 31.51,
+      "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
+      "quote_time_local": "2026-01-26T15:07:00+08:00"
     }
   ]
 }
