@@ -1,27 +1,32 @@
 {
   "schema_version": "stats_latest_v1",
-  "generated_at_utc": "2026-01-26T01:48:47Z",
-  "as_of_ts": "2026-01-24T11:57:58+08:00",
+  "generated_at_utc": "2026-01-26T02:10:24Z",
+  "as_of_ts": "2026-01-26T10:10:20+08:00",
   "script_version": "cycle_sidecars_stats_v1",
   "series_count": 2,
   "series": {
     "DFII10": {
       "latest": {
-        "as_of_ts": "2026-01-24T11:57:58+08:00",
+        "as_of_ts": "2026-01-26T10:10:20+08:00",
         "data_date": "2026-01-22",
         "value": 1.95,
         "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
-        "notes": "NA"
+        "notes": "NA",
+        "data_lag_days": 4
       },
       "windows": {
         "w60": {
+          "n": 60,
+          "ok": true,
           "z": 1.4514789791981528,
           "p": 98.33333333333333,
-          "z_delta": 0.49119865986901645,
-          "p_delta": 10.0,
+          "z_delta": 0.4875091400658109,
+          "p_delta": 10.197740112994339,
           "ret1_pct": 1.5625
         },
         "w252": {
+          "n": 252,
+          "ok": true,
           "z": 0.026631879804148995,
           "p": 54.36507936507937
         }
@@ -29,21 +34,26 @@
     },
     "T10YIE": {
       "latest": {
-        "as_of_ts": "2026-01-24T11:57:58+08:00",
+        "as_of_ts": "2026-01-26T10:10:20+08:00",
         "data_date": "2026-01-23",
         "value": 2.32,
         "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
-        "notes": "NA"
+        "notes": "NA",
+        "data_lag_days": 3
       },
       "windows": {
         "w60": {
+          "n": 60,
+          "ok": true,
           "z": 1.8218461128963708,
           "p": 95.0,
-          "z_delta": 0.29059850916351304,
-          "p_delta": 0.0,
+          "z_delta": 0.2804404579101065,
+          "p_delta": 0.08474576271186152,
           "ret1_pct": 0.43290043290042934
         },
         "w252": {
+          "n": 252,
+          "ok": true,
           "z": -0.07344706030583333,
           "p": 50.3968253968254
         }
