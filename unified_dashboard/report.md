@@ -6,7 +6,7 @@
 - roll25_cache: OK
 - taiwan_margin_financing: OK
 - fx_usdtwd: OK
-- unified_generated_at_utc: 2026-01-26T03:01:31Z
+- unified_generated_at_utc: 2026-01-26T03:07:23Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -75,10 +75,11 @@
 - UsedDate: 2026-01-23
 - run_day_tag: TRADING_DAY
 - used_date_status: OK_LATEST
+- used_date_selection_tag: DATA_NOT_UPDATED
 - tag (legacy): DATA_NOT_UPDATED
 - note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
-- heat_split.heated_market: NA
-- heat_split.dq_issue: NA
+- heat_split.heated_market: false
+- heat_split.dq_issue: false
 - risk_level: 低
 - turnover_twd: 818428930073
 - turnover_unit: TWD
@@ -136,13 +137,15 @@
 - pos_days_last5: 4
 - latest_chg: 43.400 億
 - margin_confidence: OK
+- roll25_heated_market: false
+- roll25_data_quality_issue: false
 - roll25_heated (legacy): false
 - roll25_confidence: DOWNGRADED
-- roll25_split_ref: heated_market=NA, dq_issue=NA (see roll25_cache section)
+- roll25_split_ref: heated_market=false, dq_issue=false (see roll25_cache section)
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-23, roll25_used_date=2026-01-23, match=true
 
-<!-- rendered_at_utc: 2026-01-26T03:01:31Z -->
+<!-- rendered_at_utc: 2026-01-26T03:07:23Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
