@@ -1,0 +1,18 @@
+{
+  "schema_version": "dash_history_v2",
+  "items": [
+    {
+      "run_ts_utc": "2026-01-26T01:48:48.050971+00:00",
+      "stats_as_of_ts": "2026-01-24T11:57:59+08:00",
+      "module": "asset_proxy_cache",
+      "ruleset_id": "signals_v8",
+      "script_fingerprint": "render_dashboard_py_signals_v8@86b8c78",
+      "series_signals": {
+        "GLD.US_CLOSE": "ALERT",
+        "IAU.US_CLOSE": "ALERT",
+        "IYR.US_CLOSE": "NONE",
+        "VNQ.US_CLOSE": "NONE"
+      }
+    }
+  ]
+}
