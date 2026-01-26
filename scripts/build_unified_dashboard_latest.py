@@ -14,6 +14,11 @@ Adds:
   - consistency (CONVERGENCE/DIVERGENCE) based on margin_signal × roll25_heated_market
   - deterministic rationale
 
+NEW (2026-01-26):
+- Optional merge-in (display-only; NO impact to unified logic):
+  - inflation_realrate_cache/dashboard_latest.json
+  - asset_proxy_cache/dashboard_latest.json
+
 NO external fetch here. Pure merge + deterministic calculations.
 
 Inputs:
@@ -22,29 +27,11 @@ Inputs:
 - taiwan_margin_cache/latest.json
 - roll25_cache/latest_report.json
 - fx_cache/latest.json (+ fx_cache/history.json)
+- [optional] inflation_realrate_cache/dashboard_latest.json
+- [optional] asset_proxy_cache/dashboard_latest.json
 
 Output:
 - unified_dashboard/latest.json (or any path you pass)
-
-2026-01-25 update (revised):
-- roll25 semantics split (unambiguous):
-  - run_day_tag: derived from unified builder run day (Asia/Taipei) weekend or not
-  - used_date_status: computed deterministically from roll25 latest_report
-    (UsedDate vs latest row date, freshness_ok, ohlc_status). NOT the tag.
-  - used_date_selection_tag: preserve roll25 latest_report.tag (selection status)
-  - tag_legacy: same as roll25 latest_report.tag for backward compatibility
-- roll25_heated_rule_v1: remove "NON_TRADING_DAY => heated=False" special case
-  (weekend run can still reflect the last trading day's signals).
-
-2026-01-25 update (this change):
-- Split Roll25 "heated" into TWO orthogonal concepts:
-  1) roll25_heated_market: ONLY market-behavior signals
-     - DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak
-  2) roll25_data_quality_issue: ONLY data quality / missingness
-     - OhlcMissing OR freshness_ok==False OR used_date_status indicates not updated
-- Backward compatibility:
-  - keep roll25_heated (legacy) == roll25_heated_market (NOT including data quality)
-  - rationale includes both market_hits and data_quality_hits
 """
 
 from __future__ import annotations
@@ -93,7 +80,6 @@ def _safe_get(d: Any, *keys: str) -> Any:
 # ---------- Roll25 derived metrics ----------
 
 def _extract_roll25_closes(roll25_latest_report: Dict[str, Any]) -> List[float]:
-    # Prefer cache_roll25 (already ordered newest->oldest in your sample)
     arr = roll25_latest_report.get("cache_roll25")
     out: List[float] = []
     if isinstance(arr, list):
@@ -102,17 +88,10 @@ def _extract_roll25_closes(roll25_latest_report: Dict[str, Any]) -> List[float]:
                 v = it.get("close")
                 if isinstance(v, (int, float)):
                     out.append(float(v))
-    # cache_roll25 is expected newest first; keep that order
-    return out
+    return out  # newest->oldest
 
 
 def _realized_vol_annualized_pct(closes_newest_first: List[float], n: int) -> Tuple[Optional[float], int]:
-    """
-    Compute annualized realized volatility (pct) from last n returns.
-    Uses log returns; annualization sqrt(252).
-    Need at least n+1 closes.
-    Returns (vol_pct, points_used).
-    """
     if n <= 0:
         return None, 0
     if len(closes_newest_first) < n + 1:
@@ -131,24 +110,19 @@ def _realized_vol_annualized_pct(closes_newest_first: List[float], n: int) -> Tu
         return None, len(rets)
 
     mean = sum(rets) / len(rets)
-    var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)  # sample var
+    var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)
     vol_daily = math.sqrt(max(var, 0.0))
     vol_ann = vol_daily * math.sqrt(252.0)
     return vol_ann * 100.0, len(rets)
 
 
 def _max_drawdown_pct(closes_newest_first: List[float], n: int) -> Tuple[Optional[float], int]:
-    """
-    Max drawdown over last n closes (not returns).
-    Input order newest->oldest; evaluate chronologically oldest->newest.
-    Returns (max_drawdown_pct as negative number, points_used).
-    """
     if n <= 1:
         return None, 0
     if len(closes_newest_first) < n:
         return None, 0
 
-    series = list(reversed(closes_newest_first[:n]))
+    series = list(reversed(closes_newest_first[:n]))  # oldest->newest
     peak = -1e100
     max_dd = 0.0
     for c in series:
@@ -162,15 +136,6 @@ def _max_drawdown_pct(closes_newest_first: List[float], n: int) -> Tuple[Optiona
 
 
 def _extract_lookback_target_from_roll25_report(roll_obj: Dict[str, Any]) -> Optional[int]:
-    """
-    Deterministically extract LookbackNTarget.
-    Priority:
-    1) roll_obj.core.LookbackNTarget
-    2) roll_obj.numbers.LookbackNTarget
-    3) roll_obj.LookbackNTarget
-    4) parse from caveats string: "LookbackNTarget=20"
-    If not found => None
-    """
     for path in [
         ("core", "LookbackNTarget"),
         ("numbers", "LookbackNTarget"),
@@ -194,7 +159,6 @@ def _extract_lookback_target_from_roll25_report(roll_obj: Dict[str, Any]) -> Opt
 
 
 def _extract_useddate_from_roll25_report(roll_obj: Dict[str, Any]) -> Optional[str]:
-    # Prefer numbers.UsedDate, else used_date
     v = _safe_get(roll_obj, "numbers", "UsedDate")
     if isinstance(v, str):
         return v
@@ -205,16 +169,10 @@ def _extract_useddate_from_roll25_report(roll_obj: Dict[str, Any]) -> Optional[s
 
 
 def _infer_run_day_tag_from_utc_z(generated_at_utc_z: str) -> str:
-    """
-    Determine run_day_tag based on local (Asia/Taipei) day-of-week.
-    - NON_TRADING_DAY if local weekday is Sat/Sun
-    - TRADING_DAY otherwise
-    If parsing fails => NA.
-    """
     try:
         dt_utc = datetime.strptime(generated_at_utc_z, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         dt_tpe = dt_utc.astimezone(timezone(timedelta(hours=8)))
-        wd = dt_tpe.weekday()  # Mon=0 ... Sun=6
+        wd = dt_tpe.weekday()
         return "NON_TRADING_DAY" if wd >= 5 else "TRADING_DAY"
     except Exception:
         return "NA"
@@ -232,20 +190,6 @@ def _max_roll25_date(latest_report: Dict[str, Any]) -> Optional[str]:
 
 
 def _compute_used_date_status_v1(latest_report: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-    """
-    Deterministic, audit-friendly UsedDate status from roll25 latest_report only.
-
-    Does NOT depend on external trading calendar.
-
-    Logic:
-    - if UsedDate missing -> MISSING_USED_DATE
-    - if ohlc_status == "MISSING" -> DATA_NOT_UPDATED
-    - if freshness_ok == False -> DATA_NOT_UPDATED
-    - if latest_row_date exists:
-        - UsedDate == latest_row_date -> OK_LATEST
-        - else -> DATA_NOT_UPDATED
-    - else -> UNKNOWN_LATEST_ROW_DATE
-    """
     used_date = _extract_useddate_from_roll25_report(latest_report)
     ohlc_status = latest_report.get("ohlc_status") if isinstance(latest_report.get("ohlc_status"), str) else None
     freshness_ok = latest_report.get("freshness_ok")
@@ -276,27 +220,6 @@ def _compute_used_date_status_v1(latest_report: Dict[str, Any]) -> Tuple[str, Di
 
 
 def _roll25_heated_rule_v2_split(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Deterministic Roll25 heat + data quality split from roll25 JSON only.
-
-    Output:
-    - roll25_heated_market: market behavior only (no data-quality flags)
-      Uses signals:
-        DownDay, VolumeAmplified, VolAmplified, NewLow_N, ConsecutiveBreak
-
-    - roll25_data_quality_issue: data quality / missingness only
-      Uses:
-        OhlcMissing (signal)
-        OR roll_obj.ohlc_status == "MISSING"
-        OR roll_obj.freshness_ok == False
-        OR used_date_status in {"DATA_NOT_UPDATED", "MISSING_USED_DATE", "UNKNOWN_LATEST_ROW_DATE"}
-
-    Backward compatibility:
-    - roll25_heated (legacy) == roll25_heated_market
-
-    Confidence:
-    - DOWNGRADED if LookbackNActual < LookbackNTarget OR target unknown.
-    """
     tag_legacy = roll_obj.get("tag")
     risk_level = roll_obj.get("risk_level")
     nums = roll_obj.get("numbers") if isinstance(roll_obj.get("numbers"), dict) else {}
@@ -307,12 +230,10 @@ def _roll25_heated_rule_v2_split(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     def _b(x: Any) -> bool:
         return bool(x) is True
 
-    # --- Market hits (ONLY market behavior) ---
     market_keys = ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]
     market_hits = {k: _b(sigs.get(k)) for k in market_keys}
     heated_market = any(market_hits.values())
 
-    # --- Data quality hits (ONLY data quality / missingness) ---
     ohlc_missing_signal = _b(sigs.get("OhlcMissing"))
     ohlc_status = roll_obj.get("ohlc_status") if isinstance(roll_obj.get("ohlc_status"), str) else None
     freshness_ok = roll_obj.get("freshness_ok") if isinstance(roll_obj.get("freshness_ok"), bool) else None
@@ -328,7 +249,6 @@ def _roll25_heated_rule_v2_split(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     }
     data_quality_issue = any(data_quality_hits.values())
 
-    # --- Confidence (window) ---
     lookback_actual = roll_obj.get("lookback_n_actual")
     if not isinstance(lookback_actual, int):
         la2 = nums.get("LookbackNActual")
@@ -356,13 +276,9 @@ def _roll25_heated_rule_v2_split(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     return {
-        # NEW (split)
         "roll25_heated_market": bool(heated_market),
         "roll25_data_quality_issue": bool(data_quality_issue),
-
-        # LEGACY (backward compatibility) — IMPORTANT: equals market only
-        "roll25_heated": bool(heated_market),
-
+        "roll25_heated": bool(heated_market),  # legacy == market only
         "roll25_confidence": confidence,
         "roll25_rationale": {
             "rule_market": "heated_market=True if any market-behavior signals true else False",
@@ -394,10 +310,6 @@ def _roll25_heated_rule_v2_split(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
 # ---------- Margin signal (TWSE) ----------
 
 def _extract_twm_series(twm_obj: Dict[str, Any], market: str) -> Optional[Dict[str, Any]]:
-    """
-    Your taiwan_margin_cache/latest.json sample:
-    latest.series.TWSE / latest.series.TPEX
-    """
     series = _safe_get(twm_obj, "series")
     if not isinstance(series, dict):
         return None
@@ -406,19 +318,11 @@ def _extract_twm_series(twm_obj: Dict[str, Any], market: str) -> Optional[Dict[s
 
 
 def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Deterministic margin_signal rule (v1) based on TWSE chg_yi last5:
-    - WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)
-    - INFO  if sum_last5>=60  OR (pos_days>=3 AND latest_chg>=30)
-    - NONE  otherwise
-    Confidence:
-    - DOWNGRADED if <5 chg values available
-    """
     twse = _extract_twm_series(twm_obj, "TWSE") or {}
     rows = twse.get("rows")
     chgs: List[float] = []
     if isinstance(rows, list):
-        for it in rows[:10]:  # only need a few newest
+        for it in rows[:10]:
             if isinstance(it, dict):
                 v = it.get("chg_yi")
                 if isinstance(v, (int, float)):
@@ -446,7 +350,6 @@ def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str,
             rule_hit = "below thresholds"
 
     confidence = "OK" if points >= 5 else "DOWNGRADED"
-
     data_date = twse.get("data_date") if isinstance(twse.get("data_date"), str) else None
 
     return {
@@ -468,18 +371,13 @@ def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str,
 
 
 def _get_margin_signal_prefer_structured(twm_obj: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    If margin cache already has cross_module.margin_signal, prefer it (structured),
-    else derive using rule_v1 from TWSE.
-    """
     cm = twm_obj.get("cross_module")
     if isinstance(cm, dict) and isinstance(cm.get("margin_signal"), str):
-        out = {
+        return {
             "margin_signal": cm.get("margin_signal", "NA"),
             "margin_signal_source": cm.get("margin_signal_source", "STRUCTURED"),
             "margin_rationale": cm.get("margin_rationale", {"method": "structured_or_unknown"}),
         }
-        return out
     return _derive_margin_signal_rule_v1_from_twm(twm_obj)
 
 
@@ -497,14 +395,8 @@ def _date_alignment(twm_obj: Dict[str, Any], roll_obj: Dict[str, Any]) -> Dict[s
 
 
 def _consistency_rule_v1(margin_signal: str, roll25_heated_market: bool) -> Dict[str, Any]:
-    """
-    Deterministic consistency label between margin and roll25 market heat.
-    - DIVERGENCE if (margin in WATCH/ALERT and heated_market=False) OR (margin==NONE and heated_market=True)
-    - CONVERGENCE otherwise
-    """
     ms = margin_signal or "NA"
     heated = bool(roll25_heated_market)
-
     diverge = ((ms in ("WATCH", "ALERT")) and (not heated)) or ((ms == "NONE") and heated)
     return {
         "consistency": "DIVERGENCE" if diverge else "CONVERGENCE",
@@ -563,14 +455,6 @@ def _fx_ret1_and_chg5(history_items: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _fx_signal_rule_v1(ret1_pct: Optional[float], chg_5d_pct: Optional[float], points: int) -> Dict[str, Any]:
-    """
-    Deterministic FX pressure signal (v1).
-    - WATCH if abs(chg_5d_pct) >= 1.5 OR abs(ret1_pct) >= 1.0
-    - INFO  if abs(chg_5d_pct) >= 1.0 OR abs(ret1_pct) >= 0.7
-    - NONE  otherwise
-    Confidence:
-    - DOWNGRADED if points < 6 (cannot compute chg_5d) OR ret1 unavailable
-    """
     def _abs(x: Optional[float]) -> Optional[float]:
         return None if x is None else abs(float(x))
 
@@ -606,6 +490,23 @@ def _fx_signal_rule_v1(ret1_pct: Optional[float], chg_5d_pct: Optional[float], p
     }
 
 
+# ---------- Optional module loader (display-only) ----------
+
+def _load_optional(path: str) -> Tuple[str, Any]:
+    """
+    Optional input:
+    - If file missing => status=MISSING
+    - If JSON invalid => status=ERROR: <...>
+    - If OK => status=OK and obj
+    """
+    try:
+        if not os.path.exists(path):
+            return "MISSING", None
+        return "OK", _load_json(path)
+    except Exception as e:
+        return f"ERROR: {type(e).__name__}", None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--market-in", default="dashboard/dashboard_latest.json")
@@ -614,8 +515,12 @@ def main() -> int:
     ap.add_argument("--roll25-in", default="roll25_cache/latest_report.json")
     ap.add_argument("--fx-in", default="fx_cache/latest.json")
     ap.add_argument("--fx-history", default="fx_cache/history.json")
-    ap.add_argument("--out", default="unified_dashboard/latest.json")
 
+    # ✅ NEW: optional dashboards (display-only; do not affect calculations)
+    ap.add_argument("--inflation-in", default="inflation_realrate_cache/dashboard_latest.json")
+    ap.add_argument("--assetproxy-in", default="asset_proxy_cache/dashboard_latest.json")
+
+    ap.add_argument("--out", default="unified_dashboard/latest.json")
     ap.add_argument("--roll25-vol-n", type=int, default=int(os.getenv("ROLL25_VOL_N", "10")))
     ap.add_argument("--roll25-dd-n", type=int, default=int(os.getenv("ROLL25_DD_N", "10")))
     args = ap.parse_args()
@@ -634,6 +539,10 @@ def main() -> int:
     twm_status, twm_obj = _load_or_fail(args.twmargin_in)
     roll_status, roll_obj = _load_or_fail(args.roll25_in)
     fx_status, fx_obj = _load_or_fail(args.fx_in)
+
+    # ✅ NEW optional loads (never break unified)
+    infl_status, infl_obj = _load_optional(args.inflation_in)
+    ap_status, ap_obj = _load_optional(args.assetproxy_in)
 
     # roll25 derived
     roll25_derived: Dict[str, Any] = {"status": "NA"}
@@ -672,14 +581,9 @@ def main() -> int:
             },
         }
 
-        # roll25 core (explicitly normalized for downstream rendering)
         used_date = _extract_useddate_from_roll25_report(roll_obj)
-
-        # Preserve roll25 selection tag (legacy semantics)
         used_date_selection_tag = roll_obj.get("tag") if isinstance(roll_obj.get("tag"), str) else "NA"
         tag_legacy = used_date_selection_tag
-
-        # Compute a real UsedDate status (unambiguous)
         used_date_status, used_date_status_dbg = _compute_used_date_status_v1(roll_obj)
 
         nums = roll_obj.get("numbers") if isinstance(roll_obj.get("numbers"), dict) else {}
@@ -688,28 +592,20 @@ def main() -> int:
         roll25_core = {
             "UsedDate": used_date or "NA",
             "run_day_tag": run_day_tag,
-
-            # ✅ unambiguous status for UsedDate
             "used_date_status": used_date_status,
             "used_date_status_dbg": used_date_status_dbg,
-
-            # ✅ preserved: roll25 latest_report.tag (selection status)
             "used_date_selection_tag": used_date_selection_tag,
             "tag_legacy": tag_legacy,
-
             "risk_level": roll_obj.get("risk_level") if isinstance(roll_obj.get("risk_level"), str) else "NA",
             "turnover_twd": nums.get("TradeValue"),
             "turnover_unit": "TWD",
-
             "close": nums.get("Close"),
             "pct_change": nums.get("PctChange"),
             "amplitude_pct": nums.get("AmplitudePct"),
             "volume_multiplier": nums.get("VolumeMultiplier"),
             "vol_multiplier": nums.get("VolMultiplier"),
-
             "LookbackNTarget": _extract_lookback_target_from_roll25_report(roll_obj),
             "LookbackNActual": roll_obj.get("lookback_n_actual") if isinstance(roll_obj.get("lookback_n_actual"), int) else None,
-
             "signals": {
                 "DownDay": sigs.get("DownDay"),
                 "VolumeAmplified": sigs.get("VolumeAmplified"),
@@ -759,21 +655,15 @@ def main() -> int:
 
         heated_market = bool(r25.get("roll25_heated_market", False))
         data_quality_issue = bool(r25.get("roll25_data_quality_issue", False))
-
         cons = _consistency_rule_v1(str(ms.get("margin_signal", "NA")), heated_market)
 
         cross_module = {
             "margin_signal": ms.get("margin_signal", "NA"),
             "margin_signal_source": ms.get("margin_signal_source", "NA"),
             "margin_rationale": ms.get("margin_rationale", {"method": "NA"}),
-
-            # NEW (split)
             "roll25_heated_market": heated_market,
             "roll25_data_quality_issue": data_quality_issue,
-
-            # LEGACY (backward compatibility)
             "roll25_heated": bool(r25.get("roll25_heated", False)),
-
             "roll25_confidence": r25.get("roll25_confidence", "NA"),
             "consistency": cons.get("consistency", "NA"),
             "rationale": {
@@ -798,6 +688,9 @@ def main() -> int:
             "roll25_in": args.roll25_in,
             "fx_in": args.fx_in,
             "fx_history": args.fx_history,
+            # ✅ NEW
+            "inflation_in": args.inflation_in,
+            "assetproxy_in": args.assetproxy_in,
         },
         "modules": {
             "market_cache": {
@@ -824,6 +717,16 @@ def main() -> int:
                 "latest": fx_obj,
                 "derived": fx_derived,
             },
+
+            # ✅ NEW optional modules (display-only)
+            "inflation_realrate_cache": {
+                "status": "OK" if infl_status == "OK" else infl_status,
+                "dashboard_latest": infl_obj if infl_status == "OK" else None,
+            },
+            "asset_proxy_cache": {
+                "status": "OK" if ap_status == "OK" else ap_status,
+                "dashboard_latest": ap_obj if ap_status == "OK" else None,
+            },
         },
         "audit_notes": [
             "Roll25 derived metrics are computed from roll25_cache/latest_report.json only (no external fetch).",
@@ -834,6 +737,8 @@ def main() -> int:
             "Roll25 split: roll25_heated_market (market behavior only) and roll25_data_quality_issue (data quality only).",
             "Consistency uses roll25_heated_market only; data quality issue does not force DIVERGENCE/CONVERGENCE flip, but should downgrade interpretation confidence.",
             "Backward compatibility: roll25_heated (legacy) == roll25_heated_market.",
+            # ✅ NEW
+            "Optional modules inflation_realrate_cache / asset_proxy_cache are merged for display only; they do not affect positioning matrix or cross_module.",
         ],
     }
 
