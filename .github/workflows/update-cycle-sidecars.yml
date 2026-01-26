@@ -1,4 +1,4 @@
-name: Update cycle sidecars (inflation_realrate + asset_proxy + dashboards)
+name: "Update cycle sidecars (inflation_realrate + asset_proxy + dashboards)"
 
 on:
   workflow_dispatch: {}
@@ -21,24 +21,24 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: Checkout
+      - name: "Checkout"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Sync to latest main (ff-only)
+      - name: "Sync to latest main (ff-only)"
         run: |
           set -euo pipefail
           git fetch origin main
           git checkout main
           git merge --ff-only origin/main
 
-      - name: Set up Python
+      - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: "Install deps"
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
@@ -47,7 +47,7 @@ jobs:
       # ------------------------------------------------------------
       # 1) Generate latest.json + history.json (authoritative raw)
       # ------------------------------------------------------------
-      - name: Generate sidecar raw data (latest/history)
+      - name: "Generate sidecar raw data (latest/history)"
         env:
           TZ: Asia/Taipei
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -55,7 +55,7 @@ jobs:
           set -euo pipefail
           python scripts/update_cycle_sidecars.py --tz Asia/Taipei
 
-      - name: Debug dump raw as_of_ts
+      - name: "Debug dump raw as_of_ts"
         run: |
           set -euo pipefail
           echo "== inflation_realrate_cache/latest.json as_of_ts =="
@@ -76,7 +76,7 @@ jobs:
       # ------------------------------------------------------------
       # 2) Compute stats_latest.json from history.json (must follow raw)
       # ------------------------------------------------------------
-      - name: Compute stats (inflation_realrate_cache)
+      - name: "Compute stats (inflation_realrate_cache)"
         env:
           TZ: Asia/Taipei
         run: |
@@ -85,7 +85,7 @@ jobs:
             --cache-dir inflation_realrate_cache \
             --tz Asia/Taipei
 
-      - name: Compute stats (asset_proxy_cache)
+      - name: "Compute stats (asset_proxy_cache)"
         env:
           TZ: Asia/Taipei
         run: |
@@ -97,7 +97,7 @@ jobs:
       # ------------------------------------------------------------
       # 3) Render dashboard report.md + dashboard_latest.json
       # ------------------------------------------------------------
-      - name: Render dashboard (inflation_realrate_cache)
+      - name: "Render dashboard (inflation_realrate_cache)"
         env:
           TZ: Asia/Taipei
         run: |
@@ -112,7 +112,7 @@ jobs:
             --ruleset-id signals_v8 \
             --script-fingerprint render_dashboard_py_signals_v8
 
-      - name: Render dashboard (asset_proxy_cache)
+      - name: "Render dashboard (asset_proxy_cache)"
         env:
           TZ: Asia/Taipei
         run: |
@@ -128,11 +128,9 @@ jobs:
             --script-fingerprint render_dashboard_py_signals_v8
 
       # ------------------------------------------------------------
-      # 3.5) GUARDS (hard fail if any mismatch)  ✅新增
+      # 3.5) Guards (hard fail if any mismatch)
       # ------------------------------------------------------------
-
-      # Guard A: inflation_realrate_cache latest == stats == dashboard meta
-      - name: Guard A (inflation_realrate_cache): latest == stats == dashboard meta
+      - name: "Guard A (inflation_realrate_cache) - latest == stats == dashboard meta"
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -149,8 +147,7 @@ jobs:
           print("OK: Guard A passed")
           PY
 
-      # Guard B: inflation_realrate_cache rows[*].as_of_ts == meta.stats_as_of_ts
-      - name: Guard B (inflation_realrate_cache): rows as_of_ts == meta.stats_as_of_ts
+      - name: "Guard B (inflation_realrate_cache) - rows as_of_ts == meta.stats_as_of_ts"
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -169,8 +166,7 @@ jobs:
           print("OK: Guard B passed")
           PY
 
-      # Guard A: asset_proxy_cache latest == stats == dashboard meta
-      - name: Guard A (asset_proxy_cache): latest == stats == dashboard meta
+      - name: "Guard A (asset_proxy_cache) - latest == stats == dashboard meta"
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -187,8 +183,7 @@ jobs:
           print("OK: Guard A passed")
           PY
 
-      # Guard B: asset_proxy_cache rows[*].as_of_ts == meta.stats_as_of_ts
-      - name: Guard B (asset_proxy_cache): rows as_of_ts == meta.stats_as_of_ts
+      - name: "Guard B (asset_proxy_cache) - rows as_of_ts == meta.stats_as_of_ts"
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -210,7 +205,7 @@ jobs:
       # ------------------------------------------------------------
       # 4) Append dashboard history (ORDER-SAFE streak baseline)
       # ------------------------------------------------------------
-      - name: Append dashboard history (inflation_realrate_cache)
+      - name: "Append dashboard history (inflation_realrate_cache)"
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
@@ -218,7 +213,7 @@ jobs:
             --history inflation_realrate_cache/history_dashboard.json \
             --max-items 180
 
-      - name: Append dashboard history (asset_proxy_cache)
+      - name: "Append dashboard history (asset_proxy_cache)"
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
@@ -226,7 +221,7 @@ jobs:
             --history asset_proxy_cache/history_dashboard.json \
             --max-items 180
 
-      - name: Commit DATA (if changed)
+      - name: "Commit DATA (if changed)"
         id: commit_data
         run: |
           set -euo pipefail
@@ -244,7 +239,7 @@ jobs:
           echo "changed=1" >> "$GITHUB_OUTPUT"
           echo "data_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Write manifests (pinned.data -> DATA_SHA)
+      - name: "Write manifests (pinned.data -> DATA_SHA)"
         if: steps.commit_data.outputs.changed == '1'
         env:
           TZ: Asia/Taipei
@@ -255,7 +250,7 @@ jobs:
             --data-sha "${{ steps.commit_data.outputs.data_sha }}" \
             --tz Asia/Taipei
 
-      - name: Commit MANIFEST (if changed)
+      - name: "Commit MANIFEST (if changed)"
         if: steps.commit_data.outputs.changed == '1'
         run: |
           set -euo pipefail
@@ -267,7 +262,7 @@ jobs:
 
           git commit -m "Update cycle sidecars manifest"
 
-      - name: Push (no rebase; merge on conflict)
+      - name: "Push (no rebase; merge on conflict)"
         if: steps.commit_data.outputs.changed == '1'
         run: |
           set -euo pipefail
