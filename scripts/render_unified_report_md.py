@@ -28,9 +28,13 @@ If a field is missing => prints NA.
 A) roll25_cache: add a deterministic note clarifying run_day_tag vs UsedDate semantics (report-only).
 B) FX: treat "momentum dict exists but all key fields are None" as momentum_unavailable (deterministic dq note).
 
-2026-01-26 follow-up:
-- roll25_split_ref is rendered deterministically (even if cross_module did not provide it),
-  by referencing roll25 heat-split flags when present; otherwise NA.
+2026-01-26 follow-up (IMPORTANT):
+- roll25 heat split flags are now sourced deterministically from unified JSON fields created by builder:
+  priority:
+    1) modules.taiwan_margin_financing.cross_module.roll25_heated_market / roll25_data_quality_issue
+    2) modules.roll25_cache.latest_report.roll25_heated_market / roll25_data_quality_issue (if present)
+- DO NOT guess; if not found => NA.
+- run_day_tag fallback no longer uses roll25 tag_legacy (to avoid semantic contamination).
 """
 
 from __future__ import annotations
@@ -223,54 +227,40 @@ def _fx_momentum_unavailable(mom: Any) -> bool:
         "ret1_from", "ret1_to",
         "chg_5d_from", "chg_5d_to",
     ]
-    saw_any_key = False
     for k in keys:
-        if k in mom:
-            saw_any_key = True
-            if mom.get(k) is not None:
-                return False
-    # if keys absent or all None => unavailable
+        if k in mom and mom.get(k) is not None:
+            return False
     return True
 
 
-# ---- roll25 split-ref helpers (deterministic; renderer-side) ----
+# ---- roll25 split helpers (deterministic; renderer-side) ----
 
-def _pick_roll25_heat_flags(roll25: Any) -> Dict[str, Any]:
+def _coerce_bool_or_none(x: Any) -> Optional[bool]:
+    if isinstance(x, bool):
+        return x
+    return None
+
+
+def _pick_roll25_heat_flags_from_unified(uni: Any) -> Dict[str, Optional[bool]]:
     """
-    Try several likely paths (do not guess; only return if found).
-    Returns: {"heated_market": <bool|None>, "dq_issue": <bool|None>}
+    Deterministic:
+    Priority:
+      1) modules.taiwan_margin_financing.cross_module.roll25_heated_market / roll25_data_quality_issue
+      2) modules.roll25_cache.latest_report.roll25_heated_market / roll25_data_quality_issue (if present)
+    No guessing. If not found => None.
     """
-    candidates = [
-        ("roll25_heat_split", "roll25_heated_market", "roll25_data_quality_issue"),
-        ("heat_split", "heated_market", "dq_issue"),
-        ("heat_split", "roll25_heated_market", "roll25_data_quality_issue"),
-    ]
+    heated = _safe_get(uni, "modules", "taiwan_margin_financing", "cross_module", "roll25_heated_market")
+    dq = _safe_get(uni, "modules", "taiwan_margin_financing", "cross_module", "roll25_data_quality_issue")
+    h1 = _coerce_bool_or_none(heated)
+    d1 = _coerce_bool_or_none(dq)
+    if h1 is not None or d1 is not None:
+        return {"heated_market": h1, "dq_issue": d1}
 
-    # direct under modules.roll25_cache.*
-    for base, k1, k2 in candidates:
-        heated = _safe_get(roll25, base, k1)
-        dq = _safe_get(roll25, base, k2)
-        if heated is not None or dq is not None:
-            return {"heated_market": heated, "dq_issue": dq}
-
-    # under latest_report.*
-    lr = _safe_get(roll25, "latest_report")
-    if isinstance(lr, dict):
-        for base, k1, k2 in candidates:
-            heated = _safe_get(lr, base, k1)
-            dq = _safe_get(lr, base, k2)
-            if heated is not None or dq is not None:
-                return {"heated_market": heated, "dq_issue": dq}
-
-    # under derived/cross_module (if builder stored there)
-    der = _safe_get(roll25, "derived")
-    if isinstance(der, dict):
-        heated = der.get("roll25_heated_market")
-        dq = der.get("roll25_data_quality_issue")
-        if heated is not None or dq is not None:
-            return {"heated_market": heated, "dq_issue": dq}
-
-    return {"heated_market": None, "dq_issue": None}
+    heated2 = _safe_get(uni, "modules", "roll25_cache", "latest_report", "roll25_heated_market")
+    dq2 = _safe_get(uni, "modules", "roll25_cache", "latest_report", "roll25_data_quality_issue")
+    h2 = _coerce_bool_or_none(heated2)
+    d2 = _coerce_bool_or_none(dq2)
+    return {"heated_market": h2, "dq_issue": d2}
 
 
 def _fmt_bool_or_na(x: Any) -> str:
@@ -415,7 +405,6 @@ def main() -> int:
     lines.append(f"- mode: {mode}\n")
 
     lines.append("**reasons**")
-    # ✅ 這一段就是你截斷會造成 SyntaxError 的位置：務必保持整行完整
     if isinstance(spx_m, dict):
         lines.append(
             f"- trend_basis: market_cache.SP500.signal={spx_sig if spx_sig is not None else 'NA'}, "
@@ -573,13 +562,16 @@ def main() -> int:
     r_latest = _safe_get(roll25, "latest_report") or {}
     r_core = _safe_get(roll25, "core") or {}
 
+    # fallback for legacy unified JSON (older schema)
     if not r_core and isinstance(r_latest, dict):
         nums = r_latest.get("numbers", {}) if isinstance(r_latest.get("numbers"), dict) else {}
         sigs = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
         r_core = {
             "UsedDate": nums.get("UsedDate") or r_latest.get("used_date"),
-            "tag_legacy": r_latest.get("tag"),
+            "run_day_tag": r_latest.get("run_day_tag"),
             "used_date_status": r_latest.get("used_date_status") or r_latest.get("tag_used_date_status"),
+            "used_date_selection_tag": r_latest.get("tag"),
+            "tag_legacy": r_latest.get("tag"),
             "risk_level": r_latest.get("risk_level"),
             "turnover_twd": nums.get("TradeValue"),
             "turnover_unit": "TWD",
@@ -589,42 +581,52 @@ def main() -> int:
             "pct_change": nums.get("PctChange"),
             "close": nums.get("Close"),
             "signals": sigs,
-            "LookbackNTarget": 20,
-            "LookbackNActual": r_latest.get("lookback_n_actual"),
+            "LookbackNTarget": nums.get("LookbackNTarget") or 20,
+            "LookbackNActual": r_latest.get("lookback_n_actual") or nums.get("LookbackNActual"),
             "ohlc_status": r_latest.get("ohlc_status"),
+            "freshness_ok": r_latest.get("freshness_ok"),
         }
 
+    # IMPORTANT: run_day_tag should NOT fall back to tag_legacy (semantic contamination)
     run_day_tag = (
         uni.get("run_day_tag")
-        or _safe_get(r_latest, "run_day_tag")
-        or _safe_get(r_latest, "tag")
         or _safe_get(r_core, "run_day_tag")
-        or _safe_get(r_core, "tag_legacy")
-        or _safe_get(r_core, "tag")
+        or _safe_get(r_latest, "run_day_tag")
+        or "NA"
     )
 
     used_date_status = (
         _safe_get(r_core, "used_date_status")
         or _safe_get(r_latest, "used_date_status")
         or _safe_get(r_latest, "tag_used_date_status")
+        or "NA"
+    )
+
+    used_date_selection_tag = (
+        _safe_get(r_core, "used_date_selection_tag")
+        or _safe_get(r_latest, "used_date_selection_tag")
+        or _safe_get(r_core, "tag_legacy")
+        or _safe_get(r_latest, "tag")
+        or "NA"
     )
 
     legacy_tag = (
         _safe_get(r_core, "tag_legacy")
-        or _safe_get(r_core, "tag")
+        or _safe_get(r_latest, "tag")
         or "NA"
     )
 
-    # roll25 heat-split flags (for split_ref)
-    heat_flags = _pick_roll25_heat_flags(roll25)
+    # roll25 heat split flags (deterministic from unified JSON)
+    heat_flags = _pick_roll25_heat_flags_from_unified(uni)
     heated_market = heat_flags.get("heated_market")
     dq_issue = heat_flags.get("dq_issue")
 
     lines.append("## roll25_cache (TW turnover)")
     lines.append(f"- status: {_safe_get(roll25,'status') or 'NA'}")
     lines.append(f"- UsedDate: {_fmt(r_core.get('UsedDate'),0)}")
-    lines.append(f"- run_day_tag: {run_day_tag if run_day_tag is not None else 'NA'}")
-    lines.append(f"- used_date_status: {used_date_status if used_date_status is not None else 'NA'}")
+    lines.append(f"- run_day_tag: {run_day_tag}")
+    lines.append(f"- used_date_status: {used_date_status}")
+    lines.append(f"- used_date_selection_tag: {used_date_selection_tag}")
     lines.append(f"- tag (legacy): {legacy_tag}")
     lines.append("- note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)")
     lines.append(f"- heat_split.heated_market: {_fmt_bool_or_na(heated_market)}")
@@ -725,10 +727,16 @@ def main() -> int:
         lines.append(f"- latest_chg: {_fmt_with_unit(mr.get('latest_chg'), chg_unit, nd=3)}")
 
         lines.append(f"- margin_confidence: {mr.get('confidence','NA')}")
+
+        # explicit split fields (A/B builder)
+        lines.append(f"- roll25_heated_market: {_fmt(cross.get('roll25_heated_market'),0)}")
+        lines.append(f"- roll25_data_quality_issue: {_fmt(cross.get('roll25_data_quality_issue'),0)}")
+
+        # legacy
         lines.append(f"- roll25_heated (legacy): {_fmt(cross.get('roll25_heated'),0)}")
         lines.append(f"- roll25_confidence: {cross.get('roll25_confidence','NA')}")
 
-        # renderer-side deterministic split ref (even if cross_module didn't provide it)
+        # renderer-side deterministic split ref (even if cross_module did not provide it)
         lines.append(
             f"- roll25_split_ref: heated_market={_fmt_bool_or_na(heated_market)}, "
             f"dq_issue={_fmt_bool_or_na(dq_issue)} (see roll25_cache section)"
