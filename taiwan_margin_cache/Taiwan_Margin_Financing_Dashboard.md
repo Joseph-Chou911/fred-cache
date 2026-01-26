@@ -29,14 +29,14 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-01-23｜risk_level: 低｜tag: NON_TRADING_DAY
-- summary: 今日非交易日；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低
+- UsedDate: 2026-01-23｜risk_level: 低｜tag: DATA_NOT_UPDATED
+- summary: 今日資料未更新；UsedDate=2026-01-23：未觸發 A) 規則；風險等級=低
 - numbers: Close=31961.51, PctChange=0.679%, TradeValue=818428930073, VolumeMultiplier=1.068, AmplitudePct=1.1%, VolMultiplier=0.77
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=False, OhlcMissing=False
 - action: 維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。
 - caveats: Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | LookbackNActual=16 | LookbackOldest=2026-01-02 | OHLC=OK
-- generated_at: 2026-01-25T02:55:54.460580+08:00 (Asia/Taipei)
+- generated_at: 2026-01-26T12:36:43.184287+08:00 (Asia/Taipei)
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -86,4 +86,4 @@ Mode=FULL | UsedDate=2026-01-23 | UsedDminus1=2026-01-22 | LookbackNTarget=20 | 
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（LookbackNActual=16/20（window 未滿 → 信心降級））
 
-_generated_at_utc: 2026-01-25T00:17:33Z_
+_generated_at_utc: 2026-01-26T07:25:00Z_
