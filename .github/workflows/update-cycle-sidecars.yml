@@ -1,21 +1,7 @@
-name: Update cycle sidecars (inflation_realrate + asset_proxy)
+name: Update cycle sidecars (inflation_realrate + asset_proxy + dashboards)
 
 on:
-  workflow_dispatch:
-    inputs:
-      backfill_start:
-        description: "Optional. YYYY-MM-DD. If set, backfill history from this date (inclusive)."
-        required: false
-        default: ""
-      backfill_end:
-        description: "Optional. YYYY-MM-DD. If set, backfill history until this date (inclusive). Default=today UTC."
-        required: false
-        default: ""
-      force_backfill:
-        description: "Optional. true/false. If true, ignore backfill_done.flag and force backfill."
-        required: false
-        default: "false"
-
+  workflow_dispatch: {}
   schedule:
     # Every 8 hours at minute 21 (UTC): 00:21, 08:21, 16:21
     # Asia/Taipei (UTC+8): 08:21, 16:21, 00:21(next day)
@@ -25,6 +11,7 @@ permissions:
   contents: write
 
 concurrency:
+  # IMPORTANT: serialize pushes with your other writer workflows
   group: repo-writer-main
   cancel-in-progress: false
 
@@ -57,41 +44,59 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
-      # 1) Fetch / backfill raw history + latest.json/csv
-      - name: Update sidecar raw data (history + latest)
+      # ------------------------------------------------------------
+      # 1) Generate latest.json + history.json (authoritative raw)
+      # ------------------------------------------------------------
+      - name: Generate sidecar raw data (latest/history)
         env:
           TZ: Asia/Taipei
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          BACKFILL_START: ${{ github.event.inputs.backfill_start }}
-          BACKFILL_END: ${{ github.event.inputs.backfill_end }}
-          FORCE_BACKFILL: ${{ github.event.inputs.force_backfill }}
         run: |
           set -euo pipefail
+          python scripts/update_cycle_sidecars.py --tz Asia/Taipei
 
-          EXTRA_ARGS=""
+      - name: Debug dump raw as_of_ts
+        run: |
+          set -euo pipefail
+          echo "== inflation_realrate_cache/latest.json as_of_ts =="
+          python - <<'PY'
+          import json
+          p="inflation_realrate_cache/latest.json"
+          a=json.load(open(p,"r",encoding="utf-8"))
+          print(a[0]["as_of_ts"] if a else "NA")
+          PY
+          echo "== asset_proxy_cache/latest.json as_of_ts =="
+          python - <<'PY'
+          import json
+          p="asset_proxy_cache/latest.json"
+          a=json.load(open(p,"r",encoding="utf-8"))
+          print(a[0]["as_of_ts"] if a else "NA")
+          PY
 
-          if [ -n "${BACKFILL_START:-}" ]; then
-            EXTRA_ARGS="$EXTRA_ARGS --backfill_start ${BACKFILL_START}"
-          fi
-          if [ -n "${BACKFILL_END:-}" ]; then
-            EXTRA_ARGS="$EXTRA_ARGS --backfill_end ${BACKFILL_END}"
-          fi
-          if [ "${FORCE_BACKFILL:-false}" = "true" ]; then
-            EXTRA_ARGS="$EXTRA_ARGS --force_backfill"
-          fi
-
-          echo "Running: python scripts/update_cycle_sidecars.py --tz Asia/Taipei $EXTRA_ARGS"
-          python scripts/update_cycle_sidecars.py --tz Asia/Taipei $EXTRA_ARGS
-
-      # 2) Compute stats_latest.json (market_cache compatible schema)
-      - name: Compute stats_latest.json (sidecars)
+      # ------------------------------------------------------------
+      # 2) Compute stats_latest.json from history.json (must follow raw)
+      # ------------------------------------------------------------
+      - name: Compute stats (inflation_realrate_cache)
         env:
           TZ: Asia/Taipei
         run: |
           set -euo pipefail
-          python scripts/compute_cycle_sidecars_stats.py --tz Asia/Taipei --script-version "cycle_sidecars_stats_v1"
+          python scripts/compute_cycle_sidecars_stats.py \
+            --cache-dir inflation_realrate_cache \
+            --tz Asia/Taipei
 
-      # 3) Render report.md + dashboard_latest.json using existing renderer
+      - name: Compute stats (asset_proxy_cache)
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/compute_cycle_sidecars_stats.py \
+            --cache-dir asset_proxy_cache \
+            --tz Asia/Taipei
+
+      # ------------------------------------------------------------
+      # 3) Render dashboard report.md + dashboard_latest.json
+      # ------------------------------------------------------------
       - name: Render dashboard (inflation_realrate_cache)
         env:
           TZ: Asia/Taipei
@@ -103,18 +108,9 @@ jobs:
             --out-md inflation_realrate_cache/report.md \
             --out-json inflation_realrate_cache/dashboard_latest.json \
             --module inflation_realrate_cache \
+            --stale-hours 36.0 \
             --ruleset-id signals_v8 \
             --script-fingerprint render_dashboard_py_signals_v8
-
-      - name: Append dashboard history (inflation_realrate_cache)
-        env:
-          TZ: Asia/Taipei
-        run: |
-          set -euo pipefail
-          python scripts/append_dashboard_history.py \
-            --latest inflation_realrate_cache/dashboard_latest.json \
-            --history inflation_realrate_cache/history_dashboard.json \
-            --max-items 180
 
       - name: Render dashboard (asset_proxy_cache)
         env:
@@ -127,12 +123,22 @@ jobs:
             --out-md asset_proxy_cache/report.md \
             --out-json asset_proxy_cache/dashboard_latest.json \
             --module asset_proxy_cache \
+            --stale-hours 36.0 \
             --ruleset-id signals_v8 \
             --script-fingerprint render_dashboard_py_signals_v8
 
+      # ------------------------------------------------------------
+      # 4) Append dashboard history (ORDER-SAFE streak baseline)
+      # ------------------------------------------------------------
+      - name: Append dashboard history (inflation_realrate_cache)
+        run: |
+          set -euo pipefail
+          python scripts/append_dashboard_history.py \
+            --latest inflation_realrate_cache/dashboard_latest.json \
+            --history inflation_realrate_cache/history_dashboard.json \
+            --max-items 180
+
       - name: Append dashboard history (asset_proxy_cache)
-        env:
-          TZ: Asia/Taipei
         run: |
           set -euo pipefail
           python scripts/append_dashboard_history.py \
@@ -140,7 +146,6 @@ jobs:
             --history asset_proxy_cache/history_dashboard.json \
             --max-items 180
 
-      # 4) Commit raw+derived outputs (history/latest/stats/report/dashboard_latest/history_dashboard)
       - name: Commit DATA (if changed)
         id: commit_data
         run: |
@@ -155,11 +160,10 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Update cycle sidecars data"
+          git commit -m "Update cycle sidecars data+dashboards"
           echo "changed=1" >> "$GITHUB_OUTPUT"
           echo "data_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      # 5) Pin manifests to DATA SHA (your existing script)
       - name: Write manifests (pinned.data -> DATA_SHA)
         if: steps.commit_data.outputs.changed == '1'
         env:
