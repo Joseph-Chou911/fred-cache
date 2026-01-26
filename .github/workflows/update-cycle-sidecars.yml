@@ -15,6 +15,7 @@ on:
         description: "Optional. true/false. If true, ignore backfill_done.flag and force backfill."
         required: false
         default: "false"
+
   schedule:
     # Every 8 hours at minute 21 (UTC): 00:21, 08:21, 16:21
     # Asia/Taipei (UTC+8): 08:21, 16:21, 00:21(next day)
@@ -56,7 +57,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
-      - name: Generate sidecar data
+      # 1) Fetch / backfill raw history + latest.json/csv
+      - name: Update sidecar raw data (history + latest)
         env:
           TZ: Asia/Taipei
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -81,6 +83,64 @@ jobs:
           echo "Running: python scripts/update_cycle_sidecars.py --tz Asia/Taipei $EXTRA_ARGS"
           python scripts/update_cycle_sidecars.py --tz Asia/Taipei $EXTRA_ARGS
 
+      # 2) Compute stats_latest.json (market_cache compatible schema)
+      - name: Compute stats_latest.json (sidecars)
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/compute_cycle_sidecars_stats.py --tz Asia/Taipei --script-version "cycle_sidecars_stats_v1"
+
+      # 3) Render report.md + dashboard_latest.json using existing renderer
+      - name: Render dashboard (inflation_realrate_cache)
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/render_dashboard.py \
+            --stats inflation_realrate_cache/stats_latest.json \
+            --dash-history inflation_realrate_cache/history_dashboard.json \
+            --out-md inflation_realrate_cache/report.md \
+            --out-json inflation_realrate_cache/dashboard_latest.json \
+            --module inflation_realrate_cache \
+            --ruleset-id signals_v8 \
+            --script-fingerprint render_dashboard_py_signals_v8
+
+      - name: Append dashboard history (inflation_realrate_cache)
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/append_dashboard_history.py \
+            --latest inflation_realrate_cache/dashboard_latest.json \
+            --history inflation_realrate_cache/history_dashboard.json \
+            --max-items 180
+
+      - name: Render dashboard (asset_proxy_cache)
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/render_dashboard.py \
+            --stats asset_proxy_cache/stats_latest.json \
+            --dash-history asset_proxy_cache/history_dashboard.json \
+            --out-md asset_proxy_cache/report.md \
+            --out-json asset_proxy_cache/dashboard_latest.json \
+            --module asset_proxy_cache \
+            --ruleset-id signals_v8 \
+            --script-fingerprint render_dashboard_py_signals_v8
+
+      - name: Append dashboard history (asset_proxy_cache)
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+          python scripts/append_dashboard_history.py \
+            --latest asset_proxy_cache/dashboard_latest.json \
+            --history asset_proxy_cache/history_dashboard.json \
+            --max-items 180
+
+      # 4) Commit raw+derived outputs (history/latest/stats/report/dashboard_latest/history_dashboard)
       - name: Commit DATA (if changed)
         id: commit_data
         run: |
@@ -99,6 +159,7 @@ jobs:
           echo "changed=1" >> "$GITHUB_OUTPUT"
           echo "data_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      # 5) Pin manifests to DATA SHA (your existing script)
       - name: Write manifests (pinned.data -> DATA_SHA)
         if: steps.commit_data.outputs.changed == '1'
         env:
