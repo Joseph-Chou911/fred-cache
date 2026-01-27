@@ -44,6 +44,8 @@ jobs:
       - name: Generate + sanity + report + commit + manifest + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
+          # Optional: keep as env for easy tuning without code changes
+          AMP_MISMATCH_ABS_THRESHOLD: "0.01"
         run: |
           set -euo pipefail
 
@@ -134,9 +136,10 @@ jobs:
             echo "MANIFEST_SHA=${MANIFEST_SHA}"
 
             echo "Snapshot URLs:"
-            echo "  DATA (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
-            echo "  MANIFEST (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
-            echo "  MANIFEST (main):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
+            echo "  DATA latest_report (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
+            echo "  REPORT (immutable):             https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/report.md"
+            echo "  MANIFEST (immutable):           https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
+            echo "  MANIFEST (main):                https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
             if git push origin HEAD:main; then
               echo "Push succeeded."
@@ -182,6 +185,7 @@ jobs:
         env:
           TZ: Asia/Taipei
           BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
+          AMP_MISMATCH_ABS_THRESHOLD: "0.01"
         run: |
           set -euo pipefail
 
@@ -273,9 +277,10 @@ jobs:
             echo "MANIFEST_SHA=${MANIFEST_SHA}"
 
             echo "Snapshot URLs:"
-            echo "  DATA (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
-            echo "  MANIFEST (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
-            echo "  MANIFEST (main):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
+            echo "  DATA latest_report (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
+            echo "  REPORT (immutable):             https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/report.md"
+            echo "  MANIFEST (immutable):           https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
+            echo "  MANIFEST (main):                https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
             if git push origin HEAD:main; then
               echo "Push succeeded."
