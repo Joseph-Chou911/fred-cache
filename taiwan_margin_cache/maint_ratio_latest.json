@@ -1,11 +1,11 @@
 {
   "schema_version": "tw_market_maint_ratio_latest_v1",
-  "script_fingerprint": "fetch_twse_market_maint_ratio_py@v2",
-  "generated_at_utc": "2026-01-27T23:28:53Z",
-  "generated_at_local": "2026-01-28T07:28:53.773184+08:00",
+  "script_fingerprint": "fetch_twse_market_maint_ratio_py@v3_exchangeReport_fields9",
+  "generated_at_utc": "2026-01-27T23:53:09Z",
+  "generated_at_local": "2026-01-28T07:53:09.566473+08:00",
   "timezone": "Asia/Taipei",
   "source_urls": {
-    "MI_MARGN": "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN",
+    "MI_MARGN": "https://www.twse.com.tw/exchangeReport/MI_MARGN",
     "MI_INDEX": "https://www.twse.com.tw/exchangeReport/MI_INDEX"
   },
   "params": {
