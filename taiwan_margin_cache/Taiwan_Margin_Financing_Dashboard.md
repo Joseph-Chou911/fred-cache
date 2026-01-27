@@ -94,4 +94,4 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（UsedDate(2026-01-26) != TWSE meta_date(2026-01-27) or roll25 missing）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）
 
-_generated_at_utc: 2026-01-27T23:12:45Z_
+_generated_at_utc: 2026-01-27T23:28:52Z_
