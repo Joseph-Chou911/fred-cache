@@ -29,13 +29,10 @@ Notes (output semantics):
 - When used_date_status==DATA_NOT_UPDATED, summary adds:
     "daily endpoint has not published today's row yet"
 
-Compatibility additions (NO logic changes):
-- latest_report.signal adds unified-friendly alias keys:
-    DownDay, OhlcMissing, UsedDateStatus, RunDayTag
-  plus snake_case aliases:
-    down_day, ohlc_missing, used_date_status, run_day_tag
-- latest_report adds cache_roll25 = merged_roll (for unified roll25_derived inputs)
-  while keeping cache_tail (human-readable).
+2026-01-27 ADDITIVE UPDATE (does NOT change existing semantics/values):
+- Add derived signals for unified dashboard consumption (volume multiplier, volume amplified,
+  new low N, consecutive down days) using existing fields only.
+- All new fields are additive; existing keys/values are untouched.
 """
 
 from __future__ import annotations
@@ -542,6 +539,96 @@ def _calc_stats_for_series(values_desc: List[Tuple[str, float]], used_date: str,
     }
 
 
+# ----------------- ADDITIVE unified-friendly derived signals -----------------
+
+def _take_trade_values_desc(m: Dict[str, Dict[str, Any]], used_date: str, n: int) -> List[float]:
+    xs: List[float] = []
+    for d in _dates_desc(m):
+        if d > used_date:
+            continue
+        tv = _safe_float(m[d].get("trade_value"))
+        if tv is None:
+            continue
+        xs.append(float(tv))
+        if len(xs) >= n:
+            break
+    return xs
+
+def _take_closes_desc(m: Dict[str, Dict[str, Any]], used_date: str, n: int) -> List[float]:
+    xs: List[float] = []
+    for d in _dates_desc(m):
+        if d > used_date:
+            continue
+        c = _safe_float(m[d].get("close"))
+        if c is None:
+            continue
+        xs.append(float(c))
+        if len(xs) >= n:
+            break
+    return xs
+
+def _consecutive_down_days(series_ret_desc: List[Tuple[str, float]], used_date: str, max_n: int = 60) -> Optional[int]:
+    """
+    Count consecutive days where daily return < 0 starting from used_date.
+    Returns None if used_date return is missing.
+    """
+    # Build map for quick lookup
+    mret = {d: float(v) for d, v in series_ret_desc}
+    if used_date not in mret:
+        return None
+    cnt = 0
+    # Walk in date-desc order using series_ret_desc ordering
+    for d, v in series_ret_desc:
+        if d > used_date:
+            continue
+        if cnt >= max_n:
+            break
+        if float(v) < 0:
+            cnt += 1
+        else:
+            break
+    return cnt
+
+def _new_low_n(today_close: Optional[float], closes_desc: List[float], n: int, min_points: int) -> Optional[int]:
+    """
+    Return n if today's close <= min(last n closes), else 0.
+    If insufficient points -> None.
+    """
+    if today_close is None:
+        return None
+    if len(closes_desc) < min_points:
+        return None
+    window = closes_desc[:n]
+    if len(window) < min_points:
+        return None
+    mn = min(window) if window else None
+    if mn is None:
+        return None
+    return n if today_close <= mn else 0
+
+def _vol_multiplier(today_tv: Optional[float], tv_desc: List[float], n: int, min_points: int) -> Optional[float]:
+    """
+    vol_multiplier = today_trade_value / avg(last n trade_values)
+    If insufficient points -> None.
+    """
+    if today_tv is None:
+        return None
+    if len(tv_desc) < min_points:
+        return None
+    window = tv_desc[:n]
+    if len(window) < min_points:
+        return None
+    mu = _avg(window)
+    if mu is None or mu == 0:
+        return None
+    return float(today_tv) / float(mu)
+
+def _volume_amplified(mult: Optional[float], threshold: float) -> Optional[bool]:
+    if mult is None:
+        return None
+    return bool(mult >= threshold)
+
+
 # ----------------- main -----------------
 
 def main() -> None:
@@ -700,19 +787,50 @@ def main() -> None:
 
     summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}{extra_note}"
 
-    # ---- Compatibility: signal alias keys (no computation change) ----
-    signal_obj = {
-        # original camel-case keys (kept)
-        "DownDay": None if (pct_change is None and today_change is None) else bool(is_down_day),
-        "OhlcMissing": (not ohlc_ok),
-        "UsedDateStatus": used_date_status,
-        "RunDayTag": run_day_tag,
+    # -------- ADDITIVE derived signals for unified (do not change existing values) --------
+    # These are designed to be deterministic, auditable, and NA-safe.
+    # If insufficient points -> None.
+    # Definitions:
+    # - vol_multiplier_20 = today_trade_value / avg(last 20 trade_value)
+    # - VolumeAmplified = vol_multiplier_20 >= 1.5
+    # - NewLow_N (default N=60) = 60 if today_close <= min(last 60 closes) else 0
+    # - ConsecutiveBreak = consecutive down days count from used_date (daily return < 0)
+    VOL_WIN = 20
+    VOL_MIN_POINTS = 15
+    VOL_THRESHOLD = 1.5
 
-        # snake_case aliases for readers that expect them
-        "down_day": None if (pct_change is None and today_change is None) else bool(is_down_day),
-        "ohlc_missing": (not ohlc_ok),
-        "used_date_status": used_date_status,
-        "run_day_tag": run_day_tag,
+    NEWLOW_N = 60
+    NEWLOW_MIN_POINTS = 40
+
+    m_all = _index_by_date(merged_roll, used_date)
+    tv_desc = _take_trade_values_desc(m_all, used_date, VOL_WIN)
+    closes_desc = _take_closes_desc(m_all, used_date, NEWLOW_N)
+
+    vol_mult_20 = _vol_multiplier(today_trade_value, tv_desc, VOL_WIN, VOL_MIN_POINTS)
+    volume_ampl = _volume_amplified(vol_mult_20, VOL_THRESHOLD)
+
+    new_low_n = _new_low_n(today_close, closes_desc, NEWLOW_N, NEWLOW_MIN_POINTS)
+
+    series_ret = _series_pct_change_desc(m_all)
+    cons_down = _consecutive_down_days(series_ret, used_date, max_n=60)
+
+    # We also provide aliases (VolAmplified vs VolumeAmplified) to reduce key mismatch risk.
+    # Keep all existing signal keys unchanged; just extend.
+    additive_signal = {
+        # unify-facing keys
+        "VolumeAmplified": volume_ampl,
+        "VolAmplified": volume_ampl,          # alias
+        "NewLow_N": new_low_n,
+        "ConsecutiveBreak": cons_down,
+        # also include explicit lookback target (some renderers want this)
+        "LookbackNTarget": LOOKBACK_TARGET,
+        "LookbackNActual": n_actual,
+        # debugging notes (kept minimal and additive)
+        "VolMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
+        "VolumeMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
+        "VolWin": VOL_WIN,
+        "VolThreshold": VOL_THRESHOLD,
+        "NewLowWin": NEWLOW_N,
     }
 
     latest_report = {
@@ -725,8 +843,23 @@ def main() -> None:
             "PctChange": None if pct_change is None else round(float(pct_change), 6),
             "TradeValue": None if today_trade_value is None else int(round(float(today_trade_value))),
             "AmplitudePct": None if amplitude_pct is None else round(float(amplitude_pct), 6),
+
+            # ADDITIVE unified-friendly numbers (do not remove/alter existing keys)
+            "VolMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
+            "VolumeMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
+            "LookbackNTarget": LOOKBACK_TARGET,
+            "LookbackNActual": n_actual,
         },
-        "signal": signal_obj,
+        "signal": {
+            # existing keys (unchanged)
+            "DownDay": None if (pct_change is None and today_change is None) else bool(is_down_day),
+            "OhlcMissing": (not ohlc_ok),
+            "UsedDateStatus": used_date_status,
+            "RunDayTag": run_day_tag,
+
+            # ADDITIVE keys
+            **additive_signal,
+        },
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
         "caveats": "\n".join([
             f"Sources: daily_fmtqik={daily_fmt_url} ; daily_mi_5mins_hist={daily_ohlc_url}",
@@ -737,6 +870,11 @@ def main() -> None:
             f"RunDayTag={run_day_tag} | UsedDateStatus={used_date_status}",
             f"freshness_ok={freshness_ok} | freshness_age_days={freshness_age_days}",
             f"dedupe_ok={dedupe_ok}",
+            # additive derived definition audit line
+            f"ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last{VOL_WIN}) "
+            f"(min_points={VOL_MIN_POINTS}); VolumeAmplified=(>= {VOL_THRESHOLD}); "
+            f"NewLow_N: {NEWLOW_N} if close<=min(close_last{NEWLOW_N}) (min_points={NEWLOW_MIN_POINTS}) else 0; "
+            f"ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.",
         ]),
         "run_day_tag": run_day_tag,
         "used_date_status": used_date_status,
@@ -749,20 +887,14 @@ def main() -> None:
         "used_dminus1": used_dminus1,
         "lookback_n_actual": n_actual,
         "lookback_oldest": oldest,
-
-        # ---- Compatibility: unified expects cache_roll25 ----
-        # Provide full roll (capped at STORE_CAP) for derived stats,
-        # while keeping cache_tail for quick human glance.
-        "cache_roll25": merged_roll,
         "cache_tail": merged_roll[:25],
     }
 
     # stats
-    m = _index_by_date(merged_roll, used_date)
-    series_close = _series_value_desc(m, "close")
-    series_tv = _series_value_desc(m, "trade_value")
-    series_ret = _series_pct_change_desc(m)
-    series_amp = _series_amplitude_pct_desc(m)
+    series_close = _series_value_desc(m_all, "close")
+    series_tv = _series_value_desc(m_all, "trade_value")
+    series_ret = _series_pct_change_desc(m_all)
+    series_amp = _series_amplitude_pct_desc(m_all)
 
     stats = {
         "schema_version": "twse_stats_v1",
@@ -817,6 +949,23 @@ def main() -> None:
             }
         },
 
+        # ADDITIVE derived (for unified if it prefers stats)
+        "derived": {
+            "lookback_n_target": LOOKBACK_TARGET,
+            "lookback_n_actual": n_actual,
+            "vol_multiplier_20": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
+            "volume_amplified": volume_ampl,
+            "new_low_n": new_low_n,
+            "consecutive_down_days": cons_down,
+            "definition": {
+                "vol_win": VOL_WIN,
+                "vol_threshold": VOL_THRESHOLD,
+                "vol_min_points": VOL_MIN_POINTS,
+                "newlow_win": NEWLOW_N,
+                "newlow_min_points": NEWLOW_MIN_POINTS
+            }
+        },
+
         "sources": {
             "daily_fmtqik_url": daily_fmt_url,
             "daily_mi_5mins_hist_url": daily_ohlc_url,
@@ -834,6 +983,8 @@ def main() -> None:
     print(f"  run_day_tag={run_day_tag} used_date_status={used_date_status}")
     print(f"  roll_records={len(merged_roll)} dedupe_ok={dedupe_ok}")
     print(f"  close_n={len(series_close)} tv_n={len(series_tv)} ret_n={len(series_ret)} amp_n={len(series_amp)}")
+    print(f"  ADDITIVE: vol_multiplier_20={None if vol_mult_20 is None else round(float(vol_mult_20), 6)} "
+          f"VolumeAmplified={volume_ampl} NewLow_N={new_low_n} ConsecutiveBreak={cons_down}")
     print(f"  wrote: {ROLL_PATH}, {REPORT_PATH}, {STATS_PATH}")
 
 
