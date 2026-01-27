@@ -1,27 +1,34 @@
 {
-  "generated_at": "2026-01-27T07:38:12.456448+08:00",
+  "generated_at": "2026-01-27T10:06:28.020682+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日資料未更新；UsedDate=2026-01-26：未觸發 A) 規則；風險等級=低",
+  "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True",
   "numbers": {
     "UsedDate": "2026-01-26",
     "Close": 32064.52,
-    "PctChange": 0.322,
+    "PctChange": 0.322294,
     "TradeValue": 747339306040,
-    "VolumeMultiplier": 0.971,
-    "AmplitudePct": 0.647,
-    "VolMultiplier": 0.46
+    "AmplitudePct": 0.64731
   },
   "signal": {
     "DownDay": false,
-    "VolumeAmplified": false,
-    "VolAmplified": false,
-    "NewLow_N": false,
-    "ConsecutiveBreak": false,
-    "OhlcMissing": false
+    "OhlcMissing": false,
+    "UsedDateStatus": "DATA_NOT_UPDATED",
+    "RunDayTag": "TRADING_DAY"
   },
-  "action": "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。",
-  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nMode=FULL | UsedDate=2026-01-26 | UsedDminus1=2026-01-23 | LookbackNTarget=20 | LookbackNActual=17 | LookbackOldest=2026-01-02 | OHLC=OK",
-  "cache_roll25": [
+  "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
+  "caveats": "Sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nBackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=TRADING_DAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True",
+  "run_day_tag": "TRADING_DAY",
+  "used_date_status": "DATA_NOT_UPDATED",
+  "tag": "TRADING_DAY",
+  "freshness_ok": true,
+  "freshness_age_days": 1,
+  "mode": "FULL",
+  "ohlc_status": "OK",
+  "used_date": "2026-01-26",
+  "used_dminus1": "2026-01-23",
+  "lookback_n_actual": 17,
+  "lookback_oldest": "2026-01-02",
+  "cache_tail": [
     {
       "date": "2026-01-26",
       "close": 32064.52,
@@ -158,14 +165,5 @@
       "high": 29363.43,
       "low": 29007.75
     }
-  ],
-  "tag": "DATA_NOT_UPDATED",
-  "freshness_ok": true,
-  "risk_level": "低",
-  "mode": "FULL",
-  "ohlc_status": "OK",
-  "used_date": "2026-01-26",
-  "used_dminus1": "2026-01-23",
-  "lookback_n_actual": 17,
-  "lookback_oldest": "2026-01-02"
+  ]
 }
