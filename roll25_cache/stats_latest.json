@@ -1,7 +1,7 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-01-27T02:34:26Z",
-  "generated_at_local": "2026-01-27T10:34:26.813960+08:00",
+  "generated_at_utc": "2026-01-27T02:50:17Z",
+  "generated_at_local": "2026-01-27T10:50:17.148478+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-01-26",
   "run_day_tag": "TRADING_DAY",
@@ -97,7 +97,9 @@
     }
   },
   "sources": {
-    "fmtqik_url": "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK",
-    "mi_5mins_hist_url": "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST"
+    "daily_fmtqik_url": "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK",
+    "daily_mi_5mins_hist_url": "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST",
+    "backfill_fmtqik_url": "https://www.twse.com.tw/exchangeReport/FMTQIK",
+    "backfill_mi_5mins_hist_url": "https://www.twse.com.tw/indicesReport/MI_5MINS_HIST"
   }
 }
