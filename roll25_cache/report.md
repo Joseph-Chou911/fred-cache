@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-27T11:25:22Z`
-- generated_at_local: `2026-01-27T19:25:21.981998+08:00`
+- generated_at_utc: `2026-01-27T11:30:36Z`
+- generated_at_local: `2026-01-27T19:30:36.796986+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-01-26`
 - UsedDateStatus: `DATA_NOT_UPDATED`
@@ -34,12 +34,13 @@
 | TURNOVER_TWD | 747339306040 | 1.160229 | 79.167 | 2.221586 | 95.040 | 0.087570 | 60.833 | -8.686108 | OK |
 | CLOSE | 32064.52 | 2.182688 | 99.167 | 2.453498 | 99.802 | 0.877612 | 87.500 | 0.322294 | OK |
 | PCT_CHANGE_CLOSE | 0.322294 | 0.091742 | 47.500 | 0.111997 | 53.373 | NA | NA | NA | OK |
-| AMPLITUDE_PCT | 0.647310 | NA | NA | NA | NA | NA | NA | NA | DOWNGRADED |
+| AMPLITUDE_PCT | 0.645230 | -1.187070 | 2.500 | -0.769002 | 6.548 | NA | NA | NA | OK |
 | VOL_MULTIPLIER_20 | 1.027252 | -0.172992 | 49.167 | -0.016194 | 54.167 | NA | NA | NA | OK |
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
+- amplitude_pct is computed from roll25.json if present; otherwise derived from (high-low)/close*100 when possible; else NA.
 - ret1% and zΔ60/pΔ60 are only computed for TURNOVER_TWD and CLOSE; other series show NA to avoid misleading ratios.
 - If insufficient points for any required full window, corresponding stats remain NA and confidence is DOWNGRADED (no guessing).
 
