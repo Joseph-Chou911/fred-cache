@@ -1,10 +1,10 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-01-27T06:27:10Z",
-  "generated_at_local": "2026-01-27T14:27:10.941656+08:00",
+  "generated_at_utc": "2026-01-27T06:39:33Z",
+  "generated_at_local": "2026-01-27T14:39:33.517491+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-01-26",
-  "run_day_tag": "TRADING_DAY",
+  "run_day_tag": "WEEKDAY",
   "used_date_status": "DATA_NOT_UPDATED",
   "freshness_ok": true,
   "freshness_age_days": 1,
