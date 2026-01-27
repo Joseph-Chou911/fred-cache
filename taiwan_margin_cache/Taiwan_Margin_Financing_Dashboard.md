@@ -44,7 +44,7 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-01-27T20:32:21.579821+08:00 (Asia/Taipei)
+- generated_at: 2026-01-27T23:09:16.421816+08:00 (Asia/Taipei)
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -94,4 +94,4 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（UsedDate(2026-01-26) != TWSE meta_date(2026-01-27) or roll25 missing）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）
 
-_generated_at_utc: 2026-01-27T15:03:16Z_
+_generated_at_utc: 2026-01-27T15:10:23Z_
