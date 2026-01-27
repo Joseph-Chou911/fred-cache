@@ -1,10 +1,10 @@
 # Bottom Cache Dashboard (v0)
 
-- as_of_ts (TPE): `2026-01-26T16:06:45.700719+08:00`
-- run_ts_utc: `2026-01-26T08:06:45.700697Z`
-- bottom_state (Global): **NONE**  (streak=2)
-- market_cache_as_of_ts: `2026-01-26T04:42:43Z`
-- market_cache_generated_at_utc: `2026-01-26T04:42:43Z`
+- as_of_ts (TPE): `2026-01-27T14:59:00.580562+08:00`
+- run_ts_utc: `2026-01-27T06:59:00.580550Z`
+- bottom_state (Global): **NONE**  (streak=3)
+- market_cache_as_of_ts: `2026-01-27T04:17:10Z`
+- market_cache_generated_at_utc: `2026-01-27T04:17:10Z`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -13,17 +13,17 @@
 - 因 TRIG_PANIC=0 → 不進入抄底流程（v0 設計）
 
 ## Distance to Triggers (How far from activation) - Global
-- VIX panic gap = 20.0 - 16.09 = **3.9100**  (<=0 means triggered)
-- SP500 ret1% gap = 0.03269037442049526 - (-1.5) = **1.5327**  (<=0 means triggered)
-- HYG veto gap (z) = 1.9723169759073098 - (-2.0) = **3.9723**  (<=0 means systemic veto)
-- OFR veto gap (z) = (2.0) - -0.16853631919646242 = **2.1685**  (<=0 means systemic veto)
+- VIX panic gap = 20.0 - 16.15 = **3.8500**  (<=0 means triggered)
+- SP500 ret1% gap = 0.5006065986948351 - (-1.5) = **2.0006**  (<=0 means triggered)
+- HYG veto gap (z) = 1.7318916416182217 - (-2.0) = **3.7319**  (<=0 means systemic veto)
+- OFR veto gap (z) = (2.0) - -0.8136912270406668 = **2.8137**  (<=0 means systemic veto)
 
 ### Nearest Conditions (Top-2) - Global
-- SP500 ret1% gap (<=0 triggered): `1.5327`
-- OFR veto gap z (<=0 veto): `2.1685`
+- SP500 ret1% gap (<=0 triggered): `2.0006`
+- OFR veto gap z (<=0 veto): `2.8137`
 
 ## Context (Non-trigger) - Global
-- SP500.p252 = `95.6349`; equity_extreme(p252>=95) = `1`
+- SP500.p252 = `98.8095`; equity_extreme(p252>=95) = `1`
 - 註：處於高檔極端時，即使未來出現抄底流程訊號，也應要求更嚴格的反轉確認（僅旁註，不改 triggers）
 
 ## Triggers (0/1/NA) - Global
@@ -32,25 +32,28 @@
 - TRIG_REVERSAL: `0`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **NONE**  (streak=2)
-- UsedDate: `2026-01-23`; run_day_tag: `DATA_NOT_UPDATED`; risk_level: `低`
-- Lookback: `16/None`
+- tw_state: **NA**  (streak=1)
+- UsedDate: `2026-01-26`; run_day_tag: `WEEKDAY`; risk_level: `NA`
+- Lookback: `20/None`
 - margin_signal(TWSE): `WATCH`; unit: `億`
-- margin_balance(TWSE latest): `3760.8` 億
-- margin_chg(TWSE latest): `43.4` 億
+- margin_balance(TWSE latest): `3815.8` 億
+- margin_chg(TWSE latest): `55.0` 億
 
 ### TW Triggers (0/1/NA)
-- TRIG_TW_PANIC: `0`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))
+- TRIG_TW_PANIC: `None`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))
 - TRIG_TW_LEVERAGE_HEAT: `1`  (margin_signal∈{WATCH,ALERT})
 - TRIG_TW_REVERSAL: `0`  (PANIC & NOT heat & pct_change>=0 & DownDay=false)
 
 ### TW Distances / Gating
-- pct_change_to_nonnegative_gap: `0.679`
+- pct_change_to_nonnegative_gap: `0.322`
 - lookback_missing_points: `NA`
 
 ### TW Snapshot (key fields)
-- pct_change: `0.679`; amplitude_pct: `1.1`; turnover_twd: `818428930073.0`; close: `31961.51`
-- signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=False
+- pct_change: `0.322294`; amplitude_pct: `0.64731`; turnover_twd: `747339306040.0`; close: `32064.52`
+- signals: DownDay=False, VolumeAmplified=None, VolAmplified=None, NewLow_N=None, ConsecutiveBreak=None
+
+## Excluded / NA Reasons
+- TRIG_TW_PANIC: missing_fields:roll25.signal.*
 
 ## Action Map (v0)
 - Global NONE: 維持既定 DCA/資產配置紀律；不把它當成抄底時點訊號
@@ -64,14 +67,15 @@
 |---|---|---|---:|---:|---:|---|---:|---:|---:|---|
 | 2026-01-25 | 2026-01-25T19:40:31.851190+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
 | 2026-01-26 | 2026-01-26T16:06:45.700719+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
+| 2026-01-27 | 2026-01-27T14:59:00.580562+08:00 | NONE | 0 | 0 | 0 | NA | None | 1 | 0 | equity_extreme |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) | w60.z_delta | w60.p_delta |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
-| VIX | HIGH | NONE | 2026-01-23 | 16.09 | -0.38809606605851577 | 28.57142857142857 | 2.8772378516623993 | 0.172147211058723 | 13.333333333333336 |
-| SP500 | LOW | INFO | 2026-01-23 | 6915.61 | 0.867813687185047 | 95.63492063492063 | 0.03269037442049526 | 0.012874360472983959 | 0.0 |
-| HYG_IEF_RATIO | LOW | NONE | 2026-01-23 | 0.8456487754038562 | 1.9723169759073098 | 78.96825396825396 | -0.2159445726344131 | -0.477955336205953 | -5.0 |
-| OFR_FSI | HIGH | NONE | 2026-01-21 | -2.445 | -0.16853631919646242 | 15.079365079365079 | -11.389521640091118 | -0.7038906118856403 | -28.333333333333336 |
+| VIX | HIGH | NONE | 2026-01-26 | 16.15 | -0.36085631266913765 | 30.158730158730158 | 0.3729024238657472 | 0.02723975338937812 | 1.6666666666666643 |
+| SP500 | LOW | INFO | 2026-01-26 | 6950.23 | 1.2148554889307452 | 98.80952380952381 | 0.5006065986948351 | 0.3470418017456982 | 13.333333333333329 |
+| HYG_IEF_RATIO | LOW | NONE | 2026-01-26 | 0.8448329690914768 | 1.7318916416182217 | 75.79365079365078 | -0.09647105702835386 | -0.24042533428908808 | -3.333333333333343 |
+| OFR_FSI | HIGH | NONE | 2026-01-22 | -2.68 | -0.8136912270406668 | 7.142857142857142 | -9.611451942740299 | -0.6451549078442044 | -18.333333333333336 |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`

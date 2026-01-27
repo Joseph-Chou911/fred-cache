@@ -54,6 +54,33 @@
         "TRIG_TW_LEVERAGE_HEAT": 1,
         "TRIG_TW_REVERSAL": 0
       }
+    },
+    {
+      "run_ts_utc": "2026-01-27T06:59:00.580550Z",
+      "as_of_ts": "2026-01-27T14:59:00.580562+08:00",
+      "data_commit_sha": "6482652e1a42df6f1e13f55f3b57bdaf7511d7e3",
+      "bottom_state_global": "NONE",
+      "triggers_global": {
+        "TRIG_PANIC": 0,
+        "TRIG_SYSTEMIC_VETO": 0,
+        "TRIG_REVERSAL": 0
+      },
+      "context_global": {
+        "context_equity_extreme_sp500_p252_ge_95": 1,
+        "sp500_p252": 98.80952380952381
+      },
+      "distances_global": {
+        "vix_panic_gap": 3.8500000000000014,
+        "sp500_ret1_panic_gap": 2.0006065986948354,
+        "hyg_veto_gap_z": 3.7318916416182217,
+        "ofr_veto_gap_z": 2.8136912270406667
+      },
+      "tw_state": "NA",
+      "tw_triggers": {
+        "TRIG_TW_PANIC": null,
+        "TRIG_TW_LEVERAGE_HEAT": 1,
+        "TRIG_TW_REVERSAL": 0
+      }
     }
   ]
 }
