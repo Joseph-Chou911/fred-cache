@@ -1,53 +1,58 @@
-# TWSE Roll25 (Turnover) Report
-
-## 1) Audit Header
-- source_latest_report: `roll25_cache/latest_report.json`
-- source_stats_latest: `roll25_cache/stats_latest.json`
-- latest_report.generated_at: `2026-01-27T18:26:04.016678+08:00`
+# Roll25 Cache Report (TWSE Turnover)
+## 1) Summary
+- generated_at_utc: `2026-01-27T11:03:02Z`
+- generated_at_local: `2026-01-27T19:03:02.130820+08:00`
 - timezone: `Asia/Taipei`
-- UsedDate (data date): `2026-01-26`
-- run_day_tag (from latest_report): `WEEKDAY`
-- used_date_status: `DATA_NOT_UPDATED`
+- UsedDate: `2026-01-26`
+- UsedDateStatus: `DATA_NOT_UPDATED`
+- RunDayTag: `WEEKDAY`
+- summary: 今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 
-## 2) Summary (from latest_report)
-- `今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet`
+## 2) Key Numbers (from latest_report.json)
+- turnover_twd: `747339306040`
+- close: `32064.52`
+- pct_change: `0.322294`
+- amplitude_pct: `0.647310`
+- volume_multiplier_20: `1.027252`
 
-## 3) 成交量狀況（可讀版）
-- Turnover (TradeValue, TWD): `747,339,306,040`
-- vol_multiplier (20D avg): `1.027`
-- vol_threshold: `1.500`
-- signals.VolumeAmplified: `false`
+## 3) Market Behavior Signals (from latest_report.json)
+- DownDay: `false`
+- VolumeAmplified: `false`
+- NewLow_N: `0`
+- ConsecutiveBreak: `0`
 
-### 3.1 判斷邏輯（固定規則、無猜測）
-- 依倍數判讀：vol_multiplier=1.027 < 1.500 → **未達放量門檻**
-- 位階參考（TradeValue）：60D z=1.160, p=79.2; 252D z=2.222, p=95.0
-
-## 4) 價格/波動概況
-- Close: `32064.52`
-- PctChange (D vs D-1): `0.322%`
-- AmplitudePct (High-Low vs prev close): `0.647%`
-- signals.DownDay: `false`
-
-## 5) 市場行為 Signals（供 cross_module / heated_market 用）
-- signals.NewLow_N: `0`
-- signals.ConsecutiveBreak: `0`
-
-> 解讀提醒：NewLow_N=0 表示未創近 N 日新低；ConsecutiveBreak=0 表示未出現連續下跌（日報酬<0）延伸。
-
-## 6) Data Quality / Confidence 線索
-- ohlc_status: `OK`
-- signals.OhlcMissing: `false`
+## 4) Data Quality Flags (from latest_report.json)
+- OhlcMissing: `false`
 - freshness_ok: `true`
 - freshness_age_days: `1`
+- ohlc_status: `OK`
 - mode: `FULL`
-- LookbackNActual/Target: `20/20`
 
-## 7) TradeValue 位階（stats_latest.json）
-- asof: `2026-01-26`
-- 60D: value=747339306040.000, z=1.160, p=79.2, n=60/60
-- 252D: value=747339306040.000, z=2.222, p=95.0, n=252/252
-- points_total_available(trade_value): `275`
+## 5) Z/P Table (market_cache-like; computed from roll25.json)
+| series | value | z60 | p60 | z252 | p252 | zD60 | pD60 | ret1_pct | confidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TURNOVER_TWD | 747339306040.000000 | 1.160229 | 79.167 | 2.221586 | 95.040 | 0.087570 | 60.833 | -8.686108 | OK |
+| CLOSE | 32064.520000 | 2.182688 | 99.167 | 2.453498 | 99.802 | 0.877612 | 87.500 | 0.322294 | OK |
+| PCT_CHANGE_CLOSE | 0.322294 | 0.091742 | 47.500 | 0.111997 | 53.373 | 0.279323 | 54.167 | -52.506298 | OK |
+| AMPLITUDE_PCT | 0.647310 | -1.192265 | 2.500 | -0.780508 | 6.548 | -1.345826 | 10.833 | -41.167654 | OK |
+| VOL_MULTIPLIER_20 | 1.027252 | -0.172992 | 49.167 | -0.016194 | 54.167 | -0.648484 | 30.833 | -10.589826 | OK |
 
-## 8) Notes (deterministic)
-- 本報告不含任何 runtime timestamp，僅以 latest_report.generated_at 代表資料版本。
-- 本報告僅做可讀化彙整，不改變 roll25_cache 的任何運算結果。
+## 6) Audit Notes
+- This report is computed from local files only (no external fetch).
+- z-score uses population std (ddof=0). Percentile is tie-aware.
+- If insufficient points, corresponding stats remain NA (no guessing).
+
+## 7) Caveats / Sources (from latest_report.json)
+```
+Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
+Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
+run_day_tag is weekday-only heuristic (not exchange calendar)
+BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
+Mode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23
+RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
+freshness_ok=True | freshness_age_days=1
+dedupe_ok=True
+REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
+ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
+ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
+```

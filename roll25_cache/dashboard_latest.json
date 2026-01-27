@@ -1,0 +1,120 @@
+{
+  "schema_version": "roll25_dashboard_latest_v1",
+  "generated_at_utc": "2026-01-27T11:03:02Z",
+  "inputs": {
+    "roll25_json": "roll25_cache/roll25.json",
+    "latest_report": "roll25_cache/latest_report.json"
+  },
+  "as_of": {
+    "UsedDate": "2026-01-26",
+    "used_date_status": "DATA_NOT_UPDATED",
+    "run_day_tag": "WEEKDAY"
+  },
+  "calc_policy": {
+    "zscore_ddof": 0,
+    "percentile": "tie_aware",
+    "delta60": "value(t) - value(t+60) in date-desc indexing",
+    "ret1_pct": "(v0 - v1)/abs(v1)*100",
+    "vol_multiplier": {
+      "win": 20,
+      "min_points": 15,
+      "definition": "tv_t / avg(tv_t..tv_{t+win-1})"
+    }
+  },
+  "table": [
+    {
+      "series": "TURNOVER_TWD",
+      "data_date": "2026-01-26",
+      "value": 747339306040.0,
+      "z60": 1.160229,
+      "p60": 79.167,
+      "z252": 2.221586,
+      "p252": 95.04,
+      "zD60": 0.08757,
+      "pD60": 60.833,
+      "ret1_pct": -8.686108,
+      "window_note": {
+        "n_level_available": 275,
+        "n_delta60_available": 215,
+        "has_252_full": true
+      },
+      "confidence": "OK"
+    },
+    {
+      "series": "CLOSE",
+      "data_date": "2026-01-26",
+      "value": 32064.52,
+      "z60": 2.182688,
+      "p60": 99.167,
+      "z252": 2.453498,
+      "p252": 99.802,
+      "zD60": 0.877612,
+      "pD60": 87.5,
+      "ret1_pct": 0.322294,
+      "window_note": {
+        "n_level_available": 260,
+        "n_delta60_available": 200,
+        "has_252_full": true
+      },
+      "confidence": "OK"
+    },
+    {
+      "series": "PCT_CHANGE_CLOSE",
+      "data_date": "2026-01-26",
+      "value": 0.3222939091425969,
+      "z60": 0.091742,
+      "p60": 47.5,
+      "z252": 0.111997,
+      "p252": 53.373,
+      "zD60": 0.279323,
+      "pD60": 54.167,
+      "ret1_pct": -52.506298,
+      "window_note": {
+        "n_level_available": 259,
+        "n_delta60_available": 199,
+        "has_252_full": true
+      },
+      "confidence": "OK"
+    },
+    {
+      "series": "AMPLITUDE_PCT",
+      "data_date": "2026-01-26",
+      "value": 0.6473098423697736,
+      "z60": -1.192265,
+      "p60": 2.5,
+      "z252": -0.780508,
+      "p252": 6.548,
+      "zD60": -1.345826,
+      "pD60": 10.833,
+      "ret1_pct": -41.167654,
+      "window_note": {
+        "n_level_available": 259,
+        "n_delta60_available": 199,
+        "has_252_full": true
+      },
+      "confidence": "OK"
+    },
+    {
+      "series": "VOL_MULTIPLIER_20",
+      "data_date": "2026-01-26",
+      "value": 1.0272516084884573,
+      "z60": -0.172992,
+      "p60": 49.167,
+      "z252": -0.016194,
+      "p252": 54.167,
+      "zD60": -0.648484,
+      "pD60": 30.833,
+      "ret1_pct": -10.589826,
+      "window_note": {
+        "n_level_available": 261,
+        "n_delta60_available": 201,
+        "has_252_full": true
+      },
+      "confidence": "OK"
+    }
+  ],
+  "notes": [
+    "NO external fetch; computed from local roll25.json only.",
+    "If insufficient points, z/p/delta stats are NA (no guessing)."
+  ]
+}
