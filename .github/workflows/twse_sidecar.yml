@@ -1,7 +1,12 @@
-name: Update TWSE sidecar (roll25 + latest_report + manifest)
+name: Update TWSE sidecar (roll25 + latest_report + stats + manifest)
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Run one-shot backfill job (0=normal run, 1=backfill)"
+        required: false
+        default: "0"
   schedule:
     # Every 9 hours at minute 8 (UTC): 00:08, 09:08, 18:08
     # Asia/Taipei (UTC+8): 08:08, 17:08, 02:08 (next day)
@@ -11,12 +16,16 @@ permissions:
   contents: write
 
 concurrency:
+  # daily + dispatch(normal) share the same writer lock
   group: repo-writer-main
   cancel-in-progress: false
 
 jobs:
-  update:
+  update_daily:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill == '' || github.event.inputs.backfill == '0'))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,11 +55,12 @@ jobs:
           data_files=(
             "roll25_cache/roll25.json"
             "roll25_cache/latest_report.json"
+            "roll25_cache/stats_latest.json"
           )
           manifest_file="roll25_cache/manifest.json"
 
           for attempt in 1 2 3; do
-            echo "===== Attempt ${attempt} ====="
+            echo "===== Attempt ${attempt} (daily) ====="
 
             # Always start from latest remote main
             git fetch origin main
@@ -65,10 +75,10 @@ jobs:
             # 1) Generate (MUST fail with non-zero on fatal errors)
             python scripts/update_twse_sidecar.py
 
-            # 2) Sanity (must fail if script fails)
+            # 2) Sanity (must fail if sanity fails)
             python scripts/sanity_twse_roll25.py
 
-            # 3) Required outputs & freshness check (avoid committing stale files)
+            # 3) Required outputs & stale-mtime check (avoid committing stale files)
             missing=0
             for f in "${data_files[@]}"; do
               if [ ! -f "$f" ]; then
@@ -102,7 +112,7 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Update TWSE data (roll25 + latest_report)"
+            git commit -m "Update TWSE sidecar data (roll25 + latest_report + stats)"
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
@@ -125,6 +135,138 @@ jobs:
             echo "  MANIFEST (main):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
             # 7) Push. If rejected, retry from latest origin/main.
+            if git push origin HEAD:main; then
+              echo "Push succeeded."
+              exit 0
+            fi
+
+            echo "Push failed (likely non-fast-forward). Backoff then retry."
+            if [ "$attempt" -eq 1 ]; then sleep 2; fi
+            if [ "$attempt" -eq 2 ]; then sleep 4; fi
+            if [ "$attempt" -eq 3 ]; then sleep 8; fi
+          done
+
+          echo "Push failed after 3 attempts."
+          exit 1
+
+  backfill:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill != '' && github.event.inputs.backfill != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    concurrency:
+      # backfill uses its own writer lock to avoid fighting with daily schedule
+      group: repo-writer-backfill
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir requests
+
+      - name: Backfill + sanity + commit + push (retry-safe, no-rebase)
+        env:
+          TZ: Asia/Taipei
+        run: |
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          data_files=(
+            "roll25_cache/roll25.json"
+            "roll25_cache/latest_report.json"
+            "roll25_cache/stats_latest.json"
+          )
+          manifest_file="roll25_cache/manifest.json"
+
+          for attempt in 1 2 3; do
+            echo "===== Attempt ${attempt} (backfill) ====="
+
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+
+            echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
+            echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
+
+            start_epoch="$(date +%s)"
+
+            # 1) Backfill generate
+            # NOTE: This calls the same script (no CLI args assumed).
+            python scripts/update_twse_sidecar.py
+
+            # 2) Sanity
+            python scripts/sanity_twse_roll25.py
+
+            # 3) Required outputs & stale-mtime check
+            missing=0
+            for f in "${data_files[@]}"; do
+              if [ ! -f "$f" ]; then
+                echo "[ERROR] missing required file: $f"
+                missing=1
+                continue
+              fi
+              mtime="$(stat -c %Y "$f" || echo 0)"
+              if [ "$mtime" -lt "$start_epoch" ]; then
+                echo "[ERROR] $f was not updated by this run (stale mtime)"
+                missing=1
+              fi
+            done
+            if [ "$missing" -eq 1 ]; then
+              echo "[ERROR] required outputs missing or stale; abort."
+              exit 1
+            fi
+
+            # 4) Fingerprint (audit only)
+            for f in "${data_files[@]}"; do
+              h="$(sha256sum "$f" | awk '{print $1}')"
+              echo "$f  sha256=$h"
+            done
+
+            # 5) Commit DATA
+            git add -A "${data_files[@]}"
+            if git diff --cached --quiet; then
+              echo "No staged data changes to commit."
+              echo "Manifest main URL:"
+              echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/${manifest_file}"
+              exit 0
+            fi
+
+            git commit -m "Backfill TWSE sidecar data (roll25 + latest_report + stats)"
+            DATA_SHA="$(git rev-parse HEAD)"
+            echo "DATA_SHA=${DATA_SHA}"
+
+            # 6) Generate manifest pinned to DATA_SHA
+            python scripts/write_twse_manifest.py --data-sha "${DATA_SHA}" --out "${manifest_file}"
+
+            git add -A "${manifest_file}"
+            if git diff --cached --quiet; then
+              echo "[ERROR] manifest.json did not change after generation (unexpected)."
+              exit 1
+            fi
+
+            git commit -m "Update TWSE manifest (pinned to ${DATA_SHA})"
+            MANIFEST_SHA="$(git rev-parse HEAD)"
+            echo "MANIFEST_SHA=${MANIFEST_SHA}"
+
+            echo "Snapshot URLs:"
+            echo "  DATA (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
+            echo "  MANIFEST (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
+            echo "  MANIFEST (main):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
+
             if git push origin HEAD:main; then
               echo "Push succeeded."
               exit 0
