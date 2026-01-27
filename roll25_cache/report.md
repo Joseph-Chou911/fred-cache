@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-27T11:03:02Z`
-- generated_at_local: `2026-01-27T19:03:02.130820+08:00`
+- generated_at_utc: `2026-01-27T11:16:25Z`
+- generated_at_local: `2026-01-27T19:16:25.108338+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-01-26`
 - UsedDateStatus: `DATA_NOT_UPDATED`
@@ -18,29 +18,30 @@
 ## 3) Market Behavior Signals (from latest_report.json)
 - DownDay: `false`
 - VolumeAmplified: `false`
-- NewLow_N: `0`
-- ConsecutiveBreak: `0`
+- VolAmplified: `false`
+- NewLow_N: `0.000000`
+- ConsecutiveBreak: `0.000000`
 
 ## 4) Data Quality Flags (from latest_report.json)
 - OhlcMissing: `false`
 - freshness_ok: `true`
-- freshness_age_days: `1`
 - ohlc_status: `OK`
 - mode: `FULL`
 
 ## 5) Z/P Table (market_cache-like; computed from roll25.json)
-| series | value | z60 | p60 | z252 | p252 | zD60 | pD60 | ret1_pct | confidence |
+| series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | TURNOVER_TWD | 747339306040.000000 | 1.160229 | 79.167 | 2.221586 | 95.040 | 0.087570 | 60.833 | -8.686108 | OK |
 | CLOSE | 32064.520000 | 2.182688 | 99.167 | 2.453498 | 99.802 | 0.877612 | 87.500 | 0.322294 | OK |
-| PCT_CHANGE_CLOSE | 0.322294 | 0.091742 | 47.500 | 0.111997 | 53.373 | 0.279323 | 54.167 | -52.506298 | OK |
-| AMPLITUDE_PCT | 0.647310 | -1.192265 | 2.500 | -0.780508 | 6.548 | -1.345826 | 10.833 | -41.167654 | OK |
-| VOL_MULTIPLIER_20 | 1.027252 | -0.172992 | 49.167 | -0.016194 | 54.167 | -0.648484 | 30.833 | -10.589826 | OK |
+| PCT_CHANGE_CLOSE | 0.322294 | 0.091742 | 47.500 | 0.111997 | 53.373 | NA | NA | NA | OK |
+| AMPLITUDE_PCT | 0.647310 | NA | NA | NA | NA | NA | NA | NA | DOWNGRADED |
+| VOL_MULTIPLIER_20 | 1.027252 | -0.172992 | 49.167 | -0.016194 | 54.167 | NA | NA | NA | OK |
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
-- z-score uses population std (ddof=0). Percentile is tie-aware.
-- If insufficient points, corresponding stats remain NA (no guessing).
+- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
+- ret1% and zΔ60/pΔ60 are only computed for TURNOVER_TWD and CLOSE; other series show NA to avoid misleading ratios.
+- If insufficient points for any required window, corresponding stats remain NA and confidence is DOWNGRADED (no guessing).
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
