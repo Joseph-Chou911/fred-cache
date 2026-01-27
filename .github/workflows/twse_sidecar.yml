@@ -3,18 +3,10 @@ name: Update TWSE sidecar (roll25 + latest_report + stats + manifest)
 on:
   workflow_dispatch:
     inputs:
-      backfill:
-        description: "Run one-shot backfill job (0=normal run, 1=backfill)"
+      backfill_months:
+        description: "One-shot backfill months (0=disabled). Suggested: 18~24"
         required: false
         default: "0"
-      backfill_limit:
-        description: "Backfill limit (trading days). Suggested: 252"
-        required: false
-        default: "252"
-      backfill_end_date:
-        description: "Optional end date (YYYY-MM-DD). Leave empty to auto-use latest available."
-        required: false
-        default: ""
   schedule:
     # Every 9 hours at minute 8 (UTC): 00:08, 09:08, 18:08
     # Asia/Taipei (UTC+8): 08:08, 17:08, 02:08 (next day)
@@ -30,7 +22,7 @@ concurrency:
 
 jobs:
   update_daily:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill == '' || github.event.inputs.backfill == '0'))
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill_months == '' || github.event.inputs.backfill_months == '0'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -80,13 +72,13 @@ jobs:
 
             start_epoch="$(date +%s)"
 
-            # 1) Generate (MUST fail with non-zero on fatal errors)
+            # 1) Generate (daily mode)
             python scripts/update_twse_sidecar.py
 
-            # 2) Sanity (must fail if sanity fails)
+            # 2) Sanity
             python scripts/sanity_twse_roll25.py
 
-            # 3) Required outputs & stale-mtime check (avoid committing stale files)
+            # 3) Required outputs & stale-mtime check
             missing=0
             for f in "${data_files[@]}"; do
               if [ ! -f "$f" ]; then
@@ -158,7 +150,7 @@ jobs:
           exit 1
 
   backfill:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill != '' && github.event.inputs.backfill != '0'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -187,10 +179,7 @@ jobs:
       - name: Backfill + sanity + commit + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
-          # These env vars assume your update_twse_sidecar.py reads them.
-          # If not, they are harmless.
-          BACKFILL_LIMIT: ${{ github.event.inputs.backfill_limit }}
-          BACKFILL_END_DATE: ${{ github.event.inputs.backfill_end_date }}
+          BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
         run: |
           set -euo pipefail
 
@@ -213,12 +202,12 @@ jobs:
 
             echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
             echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
-            echo "Backfill settings: BACKFILL_LIMIT=${BACKFILL_LIMIT} BACKFILL_END_DATE=${BACKFILL_END_DATE}"
+            echo "BACKFILL_MONTHS=${BACKFILL_MONTHS}"
 
             start_epoch="$(date +%s)"
 
-            # 1) Generate (backfill mode depends on script implementation)
-            python scripts/update_twse_sidecar.py
+            # 1) Backfill generate (THIS is the key change)
+            python scripts/update_twse_sidecar.py --backfill-months "${BACKFILL_MONTHS}"
 
             # 2) Sanity
             python scripts/sanity_twse_roll25.py
