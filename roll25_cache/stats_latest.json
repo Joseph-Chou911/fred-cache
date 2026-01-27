@@ -1,7 +1,7 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-01-27T08:06:57Z",
-  "generated_at_local": "2026-01-27T16:06:57.715486+08:00",
+  "generated_at_utc": "2026-01-27T08:31:20Z",
+  "generated_at_local": "2026-01-27T16:31:20.382772+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-01-26",
   "run_day_tag": "WEEKDAY",
@@ -112,9 +112,6 @@
       "newlow_min_points": 40
     }
   },
-  "latest_row_date": "2026-01-26",
-  "latest_row_date_parse_ok": true,
-  "latest_row_date_age_days": 1,
   "sources": {
     "daily_fmtqik_url": "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK",
     "daily_mi_5mins_hist_url": "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST",
