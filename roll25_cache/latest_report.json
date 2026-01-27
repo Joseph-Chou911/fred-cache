@@ -1,7 +1,13 @@
 {
-  "generated_at": "2026-01-27T15:55:13.871689+08:00",
+  "generated_at": "2026-01-27T16:06:57.714944+08:00",
   "timezone": "Asia/Taipei",
   "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
+  "latest_row_date": "2026-01-26",
+  "latest_available_date": "2026-01-26",
+  "latest_date": "2026-01-26",
+  "LatestRowDate": "2026-01-26",
+  "latest_row_date_parse_ok": true,
+  "latest_row_date_age_days": 1,
   "numbers": {
     "UsedDate": "2026-01-26",
     "Close": 32064.52,
@@ -11,7 +17,9 @@
     "VolMultiplier": 1.027252,
     "VolumeMultiplier": 1.027252,
     "LookbackNTarget": 20,
-    "LookbackNActual": 20
+    "LookbackNActual": 20,
+    "LatestRowDate": "2026-01-26",
+    "LatestRowDateAgeDays": 1
   },
   "signal": {
     "DownDay": false,
@@ -28,10 +36,15 @@
     "VolumeMultiplier": 1.027252,
     "VolWin": 20,
     "VolThreshold": 1.5,
-    "NewLowWin": 60
+    "NewLowWin": 60,
+    "latest_row_date": "2026-01-26",
+    "latest_row_date_parse_ok": true,
+    "latest_row_date_age_days": 1,
+    "LatestRowDate": "2026-01-26",
+    "LatestRowDateParseOK": true
   },
   "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.",
+  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_LATEST_ROW_DATE: latest_row_date=2026-01-26 parse_ok=True age_days=1 (derived from merged_roll[0].date; does not affect UsedDate).",
   "run_day_tag": "WEEKDAY",
   "used_date_status": "DATA_NOT_UPDATED",
   "tag": "WEEKDAY",
