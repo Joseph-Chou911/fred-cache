@@ -3,10 +3,18 @@ name: Update TWSE sidecar (roll25 + latest_report + stats + manifest)
 on:
   workflow_dispatch:
     inputs:
-      backfill_months:
-        description: "One-shot backfill months (0=disabled). Suggested: 18~24"
+      backfill:
+        description: "0=normal run, 1=backfill job"
         required: false
         default: "0"
+      backfill_months:
+        description: "Only used when backfill=1. Suggested: 18~36"
+        required: false
+        default: "24"
+      backfill_limit:
+        description: "How many newest trading dates to merge (default 252)"
+        required: false
+        default: "252"
   schedule:
     # Every 9 hours at minute 8 (UTC): 00:08, 09:08, 18:08
     # Asia/Taipei (UTC+8): 08:08, 17:08, 02:08 (next day)
@@ -21,7 +29,7 @@ concurrency:
 
 jobs:
   update_daily:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill_months == '' || github.event.inputs.backfill_months == '0'))
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill == '' || github.event.inputs.backfill == '0'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -70,10 +78,10 @@ jobs:
 
             start_epoch="$(date +%s)"
 
-            # 1) Generate (daily mode; no args)
-            python scripts/update_twse_sidecar.py
+            # 1) Generate (daily: no backfill months)
+            python scripts/update_twse_sidecar.py --backfill-months 0 --backfill-limit 252
 
-            # 2) Sanity
+            # 2) Sanity (strict on used_date + recent window; old gaps only WARN)
             python scripts/sanity_twse_roll25.py
 
             # 3) Required outputs & stale-mtime check
@@ -117,6 +125,9 @@ jobs:
             # 6) Generate manifest pinned to DATA_SHA
             python scripts/write_twse_manifest.py --data-sha "${DATA_SHA}" --out "${manifest_file}"
 
+            # Replace {REPO} placeholders (so manifest is directly usable)
+            sed -i "s/{REPO}/${GITHUB_REPOSITORY}/g" "${manifest_file}"
+
             git add -A "${manifest_file}"
             if git diff --cached --quiet; then
               echo "[ERROR] manifest.json did not change after generation (unexpected)."
@@ -147,7 +158,7 @@ jobs:
           exit 1
 
   backfill:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill != '' && github.event.inputs.backfill != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -175,9 +186,14 @@ jobs:
       - name: Backfill + sanity + commit + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
-          BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
         run: |
           set -euo pipefail
+
+          BF_MONTHS="${{ github.event.inputs.backfill_months }}"
+          BF_LIMIT="${{ github.event.inputs.backfill_limit }}"
+
+          if [ -z "${BF_MONTHS}" ]; then BF_MONTHS="24"; fi
+          if [ -z "${BF_LIMIT}" ]; then BF_LIMIT="252"; fi
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -198,11 +214,12 @@ jobs:
 
             echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
             echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
+            echo "BackfillMonths=${BF_MONTHS} BackfillLimit=${BF_LIMIT}"
 
             start_epoch="$(date +%s)"
 
             # 1) Backfill generate
-            python scripts/update_twse_sidecar.py --backfill-months "${BACKFILL_MONTHS}"
+            python scripts/update_twse_sidecar.py --backfill-months "${BF_MONTHS}" --backfill-limit "${BF_LIMIT}"
 
             # 2) Sanity
             python scripts/sanity_twse_roll25.py
@@ -247,6 +264,7 @@ jobs:
 
             # 6) Generate manifest pinned to DATA_SHA
             python scripts/write_twse_manifest.py --data-sha "${DATA_SHA}" --out "${manifest_file}"
+            sed -i "s/{REPO}/${GITHUB_REPOSITORY}/g" "${manifest_file}"
 
             git add -A "${manifest_file}"
             if git diff --cached --quiet; then
