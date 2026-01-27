@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-27T06:00:47Z",
+  "generated_at_utc": "2026-01-27T07:02:09Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -531,9 +531,9 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-27T13:58:37.058193+08:00",
+        "generated_at": "2026-01-27T14:55:43.707848+08:00",
         "timezone": "Asia/Taipei",
-        "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True",
+        "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
         "numbers": {
           "UsedDate": "2026-01-26",
           "Close": 32064.52,
@@ -545,13 +545,13 @@
           "DownDay": false,
           "OhlcMissing": false,
           "UsedDateStatus": "DATA_NOT_UPDATED",
-          "RunDayTag": "TRADING_DAY"
+          "RunDayTag": "WEEKDAY"
         },
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-        "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nBackfillMonths=24 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=TRADING_DAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True",
-        "run_day_tag": "TRADING_DAY",
+        "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True",
+        "run_day_tag": "WEEKDAY",
         "used_date_status": "DATA_NOT_UPDATED",
-        "tag": "TRADING_DAY",
+        "tag": "WEEKDAY",
         "freshness_ok": true,
         "freshness_age_days": 1,
         "mode": "FULL",
@@ -773,8 +773,8 @@
           "ohlc_status": "OK",
           "freshness_ok": true
         },
-        "used_date_selection_tag": "TRADING_DAY",
-        "tag_legacy": "TRADING_DAY",
+        "used_date_selection_tag": "WEEKDAY",
+        "tag_legacy": "WEEKDAY",
         "risk_level": "NA",
         "turnover_twd": 747339306040,
         "turnover_unit": "TWD",
@@ -1204,7 +1204,7 @@
           "roll25_rationale": {
             "rule_market": "heated_market=True if any market-behavior signals true else False",
             "rule_data_quality": "data_quality_issue=True if any data-quality flags true else False",
-            "used_date_selection_tag(tag_legacy)": "TRADING_DAY",
+            "used_date_selection_tag(tag_legacy)": "WEEKDAY",
             "risk_level": "NA",
             "window_note": "LookbackNActual=20/None",
             "signals_market_used": {
@@ -1255,21 +1255,21 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-27T06:00:46Z",
+        "generated_at_utc": "2026-01-27T07:02:08Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-01-27",
-        "quote_time_local": "2026-01-27T13:45:00+08:00",
+        "quote_time_local": "2026-01-27T14:56:00+08:00",
         "usd_twd": {
-          "spot_buy": 31.41,
-          "spot_sell": 31.51,
-          "mid": 31.46
+          "spot_buy": 3.996,
+          "spot_sell": 4.056,
+          "mid": 4.026
         },
         "raw": {
           "parse_dbg": {
             "format": "xrt_text_v2",
             "reason": "ok",
-            "text_len": 2594,
+            "text_len": 2570,
             "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/27 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
             "text_has_usd": true,
             "text_has_zh_usd": true
@@ -1287,12 +1287,12 @@
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-01-27",
         "usd_twd": {
-          "spot_buy": 31.41,
-          "spot_sell": 31.51,
-          "mid": 31.46
+          "spot_buy": 3.996,
+          "spot_sell": 4.056,
+          "mid": 4.026
         },
         "momentum": {
-          "ret1_pct": -0.095268339155291,
+          "ret1_pct": -87.21498888536044,
           "ret1_from": "2026-01-26",
           "ret1_to": "2026-01-27",
           "chg_5d_pct": null,
@@ -1301,8 +1301,8 @@
           "points": 3
         },
         "dir": "TWD_STRONG",
-        "fx_signal": "NONE",
-        "fx_reason": "below thresholds",
+        "fx_signal": "WATCH",
+        "fx_reason": "abs(chg_5d%)>=1.5 OR abs(ret1%)>=1.0",
         "fx_rule_version": "rule_v1",
         "fx_confidence": "DOWNGRADED"
       }
