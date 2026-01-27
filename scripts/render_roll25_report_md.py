@@ -3,22 +3,17 @@
 """
 Render roll25_cache/latest_report.json + roll25_cache/roll25.json into roll25_cache/report.md
 
-Goals:
 - Market-cache-like Z/P table: z60/p60/z252/p252 + zΔ60/pΔ60 + ret1%
 - Column names aligned to market_cache style: zΔ60, pΔ60, ret1%
 - NO external fetch. Local files only.
 - Conservative NA handling:
   - ret1% + zΔ60/pΔ60 are meaningful only for TURNOVER_TWD and CLOSE.
-  - For PCT_CHANGE_CLOSE / AMPLITUDE_PCT / VOL_MULTIPLIER_20, ret1% and zΔ60/pΔ60 => NA to avoid misleading ratios.
+  - For PCT_CHANGE_CLOSE / AMPLITUDE_PCT / VOL_MULTIPLIER_20, ret1% and zΔ60/pΔ60 => NA (avoid misleading).
 - z-score uses population std (ddof=0).
-- Percentile is tie-aware: (count_less + 0.5*count_equal)/n * 100.
-
-Inputs (defaults):
-- roll25_cache/latest_report.json
-- roll25_cache/roll25.json
-
-Output (default):
-- roll25_cache/report.md
+- Percentile is tie-aware: (less + 0.5*equal)/n * 100.
+- Formatting improvements:
+  - NewLow_N / ConsecutiveBreak as integers when possible
+  - Per-series value decimals (TURNOVER 0, CLOSE 2, pct/amp/ratio 6)
 """
 
 from __future__ import annotations
@@ -28,7 +23,7 @@ import json
 import math
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 
 # ---------------- I/O ----------------
@@ -50,17 +45,6 @@ def _load_json(path: str) -> Any:
 
 def _now_utc_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _iso_local_tpe() -> str:
-    # Avoid zoneinfo dependency; assume Asia/Taipei = UTC+8 (DST-free)
-    dt = datetime.now(timezone.utc).astimezone(timezone.utc)
-    dt_tpe = dt.astimezone(timezone.utc).replace(tzinfo=timezone.utc).astimezone(
-        timezone.utc
-    )
-    # Instead of risking wrong conversion, just stamp local from latest_report if available;
-    # This function kept for fallback only.
-    return datetime.now().astimezone().isoformat()
 
 
 # ---------------- Helpers: parsing roll25.json ----------------
@@ -110,13 +94,12 @@ def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     - date: str (YYYY-MM-DD)
     - turnover_twd: float (trade value)
     - close: float
-    - pct_change_close: float (percent, not fraction)
+    - pct_change_close: float (percent)
     - amplitude_pct: float (percent)
     - vol_multiplier_20: float (ratio)
     """
     out: List[Dict[str, Any]] = []
 
-    # We allow multiple possible key names to maximize compatibility.
     date_keys = ["date", "Date", "ymd", "YMD"]
     tv_keys = ["turnover_twd", "trade_value", "TradeValue", "tv", "成交金額", "turnover"]
     close_keys = ["close", "Close", "收盤價"]
@@ -146,9 +129,10 @@ def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             }
         )
 
-    # Sort by date ascending (chronological)
+    # Sort by date ascending
     out.sort(key=lambda x: x["date"])
-    # Dedup by date (keep last occurrence)
+
+    # Dedup by date (keep last)
     dedup: Dict[str, Dict[str, Any]] = {}
     for r in out:
         dedup[r["date"]] = r
@@ -158,16 +142,13 @@ def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def _compute_pct_change_from_close(rows: List[Dict[str, Any]]) -> None:
     """
-    If pct_change_close missing, compute from close.
+    If pct_change_close missing, compute from close:
     pct_change_close = (close_t - close_{t-1}) / abs(close_{t-1}) * 100
     """
     prev_close: Optional[float] = None
     for r in rows:
         c = r.get("close")
-        if isinstance(c, (int, float)):
-            c = float(c)
-        else:
-            c = None
+        c = float(c) if isinstance(c, (int, float)) else None
 
         if r.get("pct_change_close") is None and c is not None and prev_close not in (None, 0.0):
             r["pct_change_close"] = (c - float(prev_close)) / abs(float(prev_close)) * 100.0
@@ -178,12 +159,13 @@ def _compute_pct_change_from_close(rows: List[Dict[str, Any]]) -> None:
 
 def _compute_vol_multiplier_20(rows: List[Dict[str, Any]], min_points: int = 15, win: int = 20) -> None:
     """
-    vol_multiplier_20 = today_turnover / avg(turnover_last20)
-    Conservative definition:
-    - Use trailing window of up to 20 points INCLUDING today.
-    - Require at least min_points non-null turnovers in window; else keep None.
+    vol_multiplier_20 = today_turnover / avg(turnover_last20)  (including today)
+    Require >= min_points non-null in window.
     """
-    tvs: List[Optional[float]] = [r.get("turnover_twd") if isinstance(r.get("turnover_twd"), (int, float)) else None for r in rows]
+    tvs: List[Optional[float]] = [
+        float(r["turnover_twd"]) if isinstance(r.get("turnover_twd"), (int, float)) else None
+        for r in rows
+    ]
     for i in range(len(rows)):
         if rows[i].get("vol_multiplier_20") is not None:
             continue
@@ -202,20 +184,17 @@ def _compute_vol_multiplier_20(rows: List[Dict[str, Any]], min_points: int = 15,
 # ---------------- Stats: z / percentile ----------------
 
 def _mean(xs: List[float]) -> Optional[float]:
-    if not xs:
-        return None
-    return sum(xs) / float(len(xs))
+    return (sum(xs) / float(len(xs))) if xs else None
 
 
 def _std_pop(xs: List[float]) -> Optional[float]:
-    # ddof=0
     n = len(xs)
     if n <= 0:
         return None
     mu = _mean(xs)
     if mu is None:
         return None
-    var = sum((x - mu) ** 2 for x in xs) / float(n)
+    var = sum((x - mu) ** 2 for x in xs) / float(n)  # ddof=0
     if var < 0:
         var = 0.0
     return math.sqrt(var)
@@ -238,15 +217,43 @@ def _percentile_tie_aware(x: float, xs: List[float]) -> Optional[float]:
     return (less + 0.5 * equal) / float(n) * 100.0
 
 
-def _fmt(x: Any, nd: int = 6) -> str:
+# ---------------- Formatting ----------------
+
+def _fmt_num(x: Any, nd: int) -> str:
     if x is None:
         return "NA"
-    if isinstance(x, str):
-        return x
     if isinstance(x, bool):
         return "true" if x else "false"
     if isinstance(x, (int, float)):
         return f"{float(x):.{nd}f}"
+    return "NA"
+
+
+def _fmt_intish(x: Any) -> str:
+    """
+    If numeric and close to integer -> print integer; else fallback to raw/NA.
+    """
+    if x is None:
+        return "NA"
+    if isinstance(x, bool):
+        return "true" if x else "false"
+    if isinstance(x, int):
+        return str(x)
+    if isinstance(x, float):
+        if math.isfinite(x) and abs(x - round(x)) < 1e-9:
+            return str(int(round(x)))
+        return _fmt_num(x, 6)
+    if isinstance(x, str):
+        s = x.strip()
+        if s == "":
+            return "NA"
+        try:
+            f = float(s.replace(",", ""))
+            if math.isfinite(f) and abs(f - round(f)) < 1e-9:
+                return str(int(round(f)))
+            return _fmt_num(f, 6)
+        except Exception:
+            return s
     return "NA"
 
 
@@ -266,7 +273,7 @@ def _window_end_at(rows: List[Dict[str, Any]], idx: int, key: str, win: int) -> 
         v = r.get(key)
         if isinstance(v, (int, float)):
             vals.append(float(v))
-    # Important: require full window length (no partial) for comparability
+    # Require full window to avoid "120 days pretending to be 252"
     if len(vals) != win:
         return []
     return vals
@@ -283,11 +290,6 @@ def _delta60_value(rows: List[Dict[str, Any]], idx: int, key: str, lag: int = 60
 
 
 def _delta60_series_window(rows: List[Dict[str, Any]], idx: int, key: str, win: int = 60, lag: int = 60) -> List[float]:
-    """
-    Build a delta series of length=win, ending at idx:
-    deltas at t = (x_t - x_{t-lag}) for t in [idx-(win-1) .. idx]
-    Requires all points exist.
-    """
     out: List[float] = []
     start = idx - (win - 1)
     if start < 0:
@@ -335,28 +337,24 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
     amp = nums.get("AmplitudePct")
     vol_mult = nums.get("VolMultiplier")
 
-    # Locate index for UsedDate to compute windows ending at that date
     idx = _find_index_by_date(rows, used_date) if isinstance(used_date, str) else None
 
-    # Series definitions
     series_defs = [
-        ("TURNOVER_TWD", "turnover_twd", turnover),
-        ("CLOSE", "close", close),
-        ("PCT_CHANGE_CLOSE", "pct_change_close", pct_change),
-        ("AMPLITUDE_PCT", "amplitude_pct", amp),
-        ("VOL_MULTIPLIER_20", "vol_multiplier_20", vol_mult),
+        ("TURNOVER_TWD", "turnover_twd", turnover, 0),
+        ("CLOSE", "close", close, 2),
+        ("PCT_CHANGE_CLOSE", "pct_change_close", pct_change, 6),
+        ("AMPLITUDE_PCT", "amplitude_pct", amp, 6),
+        ("VOL_MULTIPLIER_20", "vol_multiplier_20", vol_mult, 6),
     ]
 
-    # Gating: only these series are allowed to show ret1% and zΔ60/pΔ60
+    # Only these series get ret1% and zΔ60/pΔ60
     allow_ret_and_delta = {"TURNOVER_TWD", "CLOSE"}
 
-    # Compute table rows
     table_rows: List[Dict[str, Any]] = []
-    for name, key, fallback_value in series_defs:
-        row_out: Dict[str, Any] = {"series": name}
+    for name, key, fallback_value, value_nd in series_defs:
+        row_out: Dict[str, Any] = {"series": name, "value_nd": value_nd}
 
         if idx is None:
-            # Cannot align to UsedDate; we still show current value from latest_report
             cur = _as_float(fallback_value)
             row_out.update(
                 {
@@ -374,12 +372,10 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
             table_rows.append(row_out)
             continue
 
-        # Current value from aligned roll25.json if possible, else fallback to latest_report
         cur_val = rows[idx].get(key)
         cur = float(cur_val) if isinstance(cur_val, (int, float)) else _as_float(fallback_value)
         row_out["value"] = cur
 
-        # windows
         w60 = _window_end_at(rows, idx, key, 60)
         w252 = _window_end_at(rows, idx, key, 252)
 
@@ -388,7 +384,6 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
         z252 = _zscore(cur, w252) if cur is not None and w252 else None
         p252 = _percentile_tie_aware(cur, w252) if cur is not None and w252 else None
 
-        # deltas & ret1 (gated)
         if name in allow_ret_and_delta:
             dcur = _delta60_value(rows, idx, key, lag=60) if cur is not None else None
             dwin = _delta60_series_window(rows, idx, key, win=60, lag=60) if cur is not None else []
@@ -400,12 +395,13 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
             pD = None
             r1 = None
 
-        # confidence: OK only when the stats that should exist (given gating) are all computable
+        # Confidence rule:
+        # - Require w60 and w252 for z/p
+        # - For gated series, also require zΔ60/pΔ60/ret1%
         need_ok = True
-        if w60 == [] or w252 == []:
+        if not w60 or not w252:
             need_ok = False
         if name in allow_ret_and_delta:
-            # require delta window and ret1
             if zD is None or pD is None or r1 is None:
                 need_ok = False
 
@@ -423,7 +419,6 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
         )
         table_rows.append(row_out)
 
-    # Render markdown
     lines: List[str] = []
     lines.append("# Roll25 Cache Report (TWSE Turnover)")
     lines.append("## 1) Summary")
@@ -436,40 +431,41 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
     lines.append(f"- summary: {summary}")
     lines.append("")
     lines.append("## 2) Key Numbers (from latest_report.json)")
-    lines.append(f"- turnover_twd: `{_fmt(turnover, 0)}`")
-    lines.append(f"- close: `{_fmt(close, 2)}`")
-    lines.append(f"- pct_change: `{_fmt(pct_change, 6)}`")
-    lines.append(f"- amplitude_pct: `{_fmt(amp, 6)}`")
-    lines.append(f"- volume_multiplier_20: `{_fmt(vol_mult, 6)}`")
+    lines.append(f"- turnover_twd: `{_fmt_num(turnover, 0)}`")
+    lines.append(f"- close: `{_fmt_num(close, 2)}`")
+    lines.append(f"- pct_change: `{_fmt_num(pct_change, 6)}`")
+    lines.append(f"- amplitude_pct: `{_fmt_num(amp, 6)}`")
+    lines.append(f"- volume_multiplier_20: `{_fmt_num(vol_mult, 6)}`")
     lines.append("")
     lines.append("## 3) Market Behavior Signals (from latest_report.json)")
-    lines.append(f"- DownDay: `{_fmt(sig.get('DownDay'))}`")
-    lines.append(f"- VolumeAmplified: `{_fmt(sig.get('VolumeAmplified'))}`")
-    lines.append(f"- VolAmplified: `{_fmt(sig.get('VolAmplified'))}`")
-    lines.append(f"- NewLow_N: `{_fmt(sig.get('NewLow_N'))}`")
-    lines.append(f"- ConsecutiveBreak: `{_fmt(sig.get('ConsecutiveBreak'))}`")
+    lines.append(f"- DownDay: `{_fmt_intish(sig.get('DownDay'))}`")
+    lines.append(f"- VolumeAmplified: `{_fmt_intish(sig.get('VolumeAmplified'))}`")
+    lines.append(f"- VolAmplified: `{_fmt_intish(sig.get('VolAmplified'))}`")
+    lines.append(f"- NewLow_N: `{_fmt_intish(sig.get('NewLow_N'))}`")
+    lines.append(f"- ConsecutiveBreak: `{_fmt_intish(sig.get('ConsecutiveBreak'))}`")
     lines.append("")
     lines.append("## 4) Data Quality Flags (from latest_report.json)")
-    lines.append(f"- OhlcMissing: `{_fmt(sig.get('OhlcMissing'))}`")
-    lines.append(f"- freshness_ok: `{_fmt(latest.get('freshness_ok'))}`")
-    lines.append(f"- ohlc_status: `{_fmt(latest.get('ohlc_status'))}`")
-    lines.append(f"- mode: `{_fmt(latest.get('mode'))}`")
+    lines.append(f"- OhlcMissing: `{_fmt_intish(sig.get('OhlcMissing'))}`")
+    lines.append(f"- freshness_ok: `{_fmt_intish(latest.get('freshness_ok'))}`")
+    lines.append(f"- ohlc_status: `{latest.get('ohlc_status') if isinstance(latest.get('ohlc_status'), str) else 'NA'}`")
+    lines.append(f"- mode: `{latest.get('mode') if isinstance(latest.get('mode'), str) else 'NA'}`")
     lines.append("")
     lines.append("## 5) Z/P Table (market_cache-like; computed from roll25.json)")
     lines.append("| series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence |")
     lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for r in table_rows:
+        vnd = int(r.get("value_nd", 6))
         lines.append(
             "| {series} | {value} | {z60} | {p60} | {z252} | {p252} | {zD} | {pD} | {ret1} | {conf} |".format(
                 series=r["series"],
-                value=_fmt(r.get("value"), 6),
-                z60=_fmt(r.get("z60"), 6),
-                p60=_fmt(r.get("p60"), 3),
-                z252=_fmt(r.get("z252"), 6),
-                p252=_fmt(r.get("p252"), 3),
-                zD=_fmt(r.get("zΔ60"), 6),
-                pD=_fmt(r.get("pΔ60"), 3),
-                ret1=_fmt(r.get("ret1%"), 6),
+                value=_fmt_num(r.get("value"), vnd) if r.get("value") is not None else "NA",
+                z60=_fmt_num(r.get("z60"), 6),
+                p60=_fmt_num(r.get("p60"), 3),
+                z252=_fmt_num(r.get("z252"), 6),
+                p252=_fmt_num(r.get("p252"), 3),
+                zD=_fmt_num(r.get("zΔ60"), 6),
+                pD=_fmt_num(r.get("pΔ60"), 3),
+                ret1=_fmt_num(r.get("ret1%"), 6),
                 conf=r.get("confidence", "NA"),
             )
         )
@@ -478,18 +474,16 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
     lines.append("- This report is computed from local files only (no external fetch).")
     lines.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
     lines.append("- ret1% and zΔ60/pΔ60 are only computed for TURNOVER_TWD and CLOSE; other series show NA to avoid misleading ratios.")
-    lines.append("- If insufficient points for any required window, corresponding stats remain NA and confidence is DOWNGRADED (no guessing).")
+    lines.append("- If insufficient points for any required full window, corresponding stats remain NA and confidence is DOWNGRADED (no guessing).")
     lines.append("")
     lines.append("## 7) Caveats / Sources (from latest_report.json)")
     cav = latest.get("caveats")
+    lines.append("```")
     if isinstance(cav, str) and cav.strip():
-        lines.append("```")
         lines.append(cav.rstrip())
-        lines.append("```")
     else:
-        lines.append("```")
         lines.append("NA")
-        lines.append("```")
+    lines.append("```")
 
     _write_text(out_path, "\n".join(lines) + "\n")
 
@@ -507,7 +501,6 @@ def main() -> int:
     rows_raw = _extract_rows_roll25_json(roll25_obj)
     rows = _normalize_rows(rows_raw)
 
-    # Fill missing derived fields conservatively (only if not present)
     _compute_pct_change_from_close(rows)
     _compute_vol_multiplier_20(rows, min_points=15, win=20)
 
