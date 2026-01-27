@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-27T11:54:50Z`
-- generated_at_local: `2026-01-27T19:54:50.283461+08:00`
+- generated_at_utc: `2026-01-27T12:24:22Z`
+- generated_at_local: `2026-01-27T20:24:22.682656+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-01-26`
 - UsedDateStatus: `DATA_NOT_UPDATED`
@@ -35,11 +35,12 @@
 | CLOSE | 32064.52 | 2.206849 | 99.166667 | 2.492607 | 99.801587 | 0.564419 | 77.5 | 0.790282 | OK |
 | PCT_CHANGE_CLOSE | 0.322294 | 0.480532 | 72.5 | 0.42251 | 70.833333 | NA | NA | NA | OK |
 | AMPLITUDE_PCT | 0.64731 | -0.289286 | 47.5 | -0.234214 | 50.198413 | NA | NA | NA | OK |
-| VOL_MULTIPLIER_20 | 1.027252 | 0.271798 | 69.166667 | NA | NA | NA | NA | NA | DOWNGRADED |
+| VOL_MULTIPLIER_20 | 1.027252 | 0.271798 | 69.166667 | 0.425788 | 73.611111 | NA | NA | NA | OK |
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
+- ret1% uses STRICT adjacency (series[0] vs series[1]); if day-1 missing => NA (no jumping).
 - zΔ60/pΔ60 are computed on the delta series (today - prev) over the last 60 deltas, not (z_today - z_prev).
 - AMPLITUDE_PCT value uses latest_report.json:numbers.AmplitudePct; stats use roll25.json series (amplitude_pct or derived from H/L/C).
 - AMPLITUDE_PCT mismatch check: abs(latest - roll25_derived@UsedDate) > 0.01 => DQ note + AMPLITUDE row confidence=DOWNGRADED.
