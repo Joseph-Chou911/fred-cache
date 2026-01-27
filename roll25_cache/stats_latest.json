@@ -1,7 +1,7 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-01-27T03:33:29Z",
-  "generated_at_local": "2026-01-27T11:33:29.731363+08:00",
+  "generated_at_utc": "2026-01-27T05:58:37Z",
+  "generated_at_local": "2026-01-27T13:58:37.059743+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-01-26",
   "run_day_tag": "TRADING_DAY",
@@ -10,6 +10,7 @@
   "freshness_age_days": 1,
   "mode": "FULL",
   "ohlc_status": "OK",
+  "backfill_months": 24,
   "backfill_limit": 252,
   "store_cap": 400,
   "series": {
@@ -71,7 +72,7 @@
       },
       "window_note": {
         "n_total_available": 259,
-        "note": "pct_change needs D-1 close; with backfill=252, max pct_change points are typically <=251."
+        "note": "pct_change needs D-1 close; with backfill_limit=252, max pct_change points are typically <=251."
       }
     },
     "amplitude_pct": {
