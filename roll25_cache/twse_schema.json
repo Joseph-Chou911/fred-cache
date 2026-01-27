@@ -1,23 +1,28 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "timezone": "Asia/Taipei",
 
+  "daily": {
+    "fmtqik_url": "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK",
+    "mi_5mins_hist_url": "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST"
+  },
+
+  "backfill": {
+    "fmtqik_url_tpl": "https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01}",
+    "mi_5mins_hist_url_tpl": "https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}"
+  },
+
   "fmtqik": {
-    "url": "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK",
     "date_keys": ["Date", "date", "日期", "DATE"],
     "trade_value_keys": ["TradeValue", "tradeValue", "成交金額"],
-    "close_keys": ["TAIEX", "Close", "close", "收盤指數", "收盤"],
+    "close_keys": ["TAIEX", "Close", "close", "收盤指數", "收盤", "Index", "index"],
     "change_keys": ["Change", "change", "漲跌點數", "漲跌"]
   },
 
   "mi_5mins_hist": {
-    "url": "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST",
     "date_keys": ["Date", "date", "日期", "DATE"],
     "high_keys": ["HighestIndex", "High", "high", "最高", "最高價"],
     "low_keys": ["LowestIndex", "Low", "low", "最低", "最低價"],
     "close_keys": ["ClosingIndex", "Close", "close", "收盤", "收盤價"]
-  },
-
-  "backfill_fmtqik_url_tpl": "https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01}",
-  "backfill_mi_5mins_hist_url_tpl": "https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}"
+  }
 }
