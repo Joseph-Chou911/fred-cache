@@ -3,16 +3,19 @@
 """
 Render roll25_cache/latest_report.json + roll25_cache/roll25.json into roll25_cache/report.md
 
-Key fixes (important):
-- ret1% and zΔ60/pΔ60 are computed using STRICT adjacency (index 0 vs index 1).
-  If day-1 is missing, we output NA (NO "skip missing" / NO jumping).
-- z/p windows are computed by taking the newest N finite points in-order.
-  If insufficient points for a required window => NA and confidence DOWNGRADED.
+Audit-grade alignment rules:
+- All displayed VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.
+- ret1% is STRICT adjacency: prev = next older row after UsedDate (no jumping).
+- zΔ60/pΔ60 are computed on DELTA series (today - prev) over last 60 deltas (anchored).
+- Date ordering uses parsed date (not string sort).
 
-Definitions:
-- z-score: population std (ddof=0)
-- percentile: tie-aware (less + 0.5*equal) / n * 100
-- zΔ60/pΔ60: statistics on delta series (today - prev) over last 60 deltas
+Stats:
+- z-score uses population std (ddof=0)
+- percentile is tie-aware: (less + 0.5*equal) / n * 100
+
+DQ checks:
+- AMPLITUDE mismatch: abs(latest - derived@UsedDate) > threshold => AMPLITUDE row DOWNGRADED + note
+- CLOSE pct mismatch: abs(ret1_close - latest_pct_change) > threshold => CLOSE row DOWNGRADED + note
 """
 
 from __future__ import annotations
@@ -21,8 +24,9 @@ import argparse
 import json
 import math
 import os
+import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -61,7 +65,6 @@ def _fmt(x: Any) -> str:
     if isinstance(x, float):
         if not math.isfinite(x):
             return "NA"
-        # stable formatting
         if abs(x) >= 1e12:
             return f"{x:.0f}"
         return f"{x:.6f}".rstrip("0").rstrip(".")
@@ -75,6 +78,49 @@ def _safe_get(d: Any, *keys: str) -> Any:
             return None
         cur = cur.get(k)
     return cur
+
+
+# ---------------- Date parsing ----------------
+
+_MMDD_RE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*$")
+_YYYYMMDD_RE = re.compile(r"^\s*(\d{4})(\d{2})(\d{2})\s*$")
+
+def _parse_date(s: Any, *, default_year: Optional[int] = None) -> Optional[date]:
+    if not isinstance(s, str):
+        return None
+    t = s.strip()
+    if not t:
+        return None
+
+    # normalize separators
+    t2 = t.replace(".", "-").replace("/", "-")
+
+    # YYYY-MM-DD
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S%z"):
+        try:
+            return datetime.strptime(t2, fmt).date()
+        except Exception:
+            pass
+
+    # YYYYMMDD
+    m = _YYYYMMDD_RE.match(t)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            return date(y, mo, d)
+        except Exception:
+            return None
+
+    # MM/DD (needs year)
+    m = _MMDD_RE.match(t)
+    if m and default_year is not None:
+        mo, d = int(m.group(1)), int(m.group(2))
+        try:
+            return date(default_year, mo, d)
+        except Exception:
+            return None
+
+    return None
 
 
 # ---------------- Stats helpers ----------------
@@ -100,10 +146,6 @@ def _percentile_tie_aware(x: float, arr: List[float]) -> Optional[float]:
 
 
 def _take_newest_finite(series_nf: List[float], n: int) -> Optional[List[float]]:
-    """
-    Take newest N finite points in-order from series (newest-first).
-    Does NOT reorder; does NOT jump for ret1 computation; only for window stats.
-    """
     out: List[float] = []
     for v in series_nf:
         if isinstance(v, (int, float)) and math.isfinite(float(v)):
@@ -115,60 +157,28 @@ def _take_newest_finite(series_nf: List[float], n: int) -> Optional[List[float]]
     return out
 
 
-def _strict_ret1_pct(series_nf: List[float]) -> Optional[float]:
-    """
-    Strict adjacency: uses series_nf[0] and series_nf[1] only.
-    If either is missing/non-finite => NA (no jumping).
-    """
-    if len(series_nf) < 2:
-        return None
-    a = series_nf[0]
-    b = series_nf[1]
-    if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
-        return None
-    a = float(a)
-    b = float(b)
-    if not (math.isfinite(a) and math.isfinite(b)):
-        return None
-    if b == 0:
-        return None
-    return (a - b) / abs(b) * 100.0
-
-
-def _strict_delta_today(series_nf: List[float]) -> Optional[float]:
-    """
-    Strict adjacency: delta_today = series_nf[0] - series_nf[1]
-    """
-    if len(series_nf) < 2:
-        return None
-    a = series_nf[0]
-    b = series_nf[1]
-    if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
-        return None
-    a = float(a)
-    b = float(b)
-    if not (math.isfinite(a) and math.isfinite(b)):
-        return None
-    return a - b
-
-
 def _delta_series_nf(series_nf: List[float]) -> List[float]:
-    """
-    Delta series aligned to adjacency: delta[i] = series[i] - series[i+1]
-    Only keep finite deltas where both points are finite.
-    """
     out: List[float] = []
     for i in range(len(series_nf) - 1):
         a = series_nf[i]
         b = series_nf[i + 1]
         if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
             continue
-        a = float(a)
-        b = float(b)
+        a = float(a); b = float(b)
         if not (math.isfinite(a) and math.isfinite(b)):
             continue
         out.append(a - b)
     return out
+
+
+def _ret1_pct_strict(a: Optional[float], b: Optional[float]) -> Optional[float]:
+    if a is None or b is None:
+        return None
+    if not (math.isfinite(a) and math.isfinite(b)):
+        return None
+    if b == 0:
+        return None
+    return (a - b) / abs(b) * 100.0
 
 
 @dataclass
@@ -178,73 +188,13 @@ class RowStats:
     p60: Optional[float]
     z252: Optional[float]
     p252: Optional[float]
-    zD60: Optional[float]   # printed as zΔ60
-    pD60: Optional[float]   # printed as pΔ60
-    ret1: Optional[float]   # printed as ret1%
+    zD60: Optional[float]   # print zΔ60
+    pD60: Optional[float]   # print pΔ60
+    ret1: Optional[float]   # print ret1%
     confidence: str         # OK / DOWNGRADED
 
 
-def _compute_level_stats(
-    series_nf: List[float],
-    *,
-    want_delta_and_ret1: bool,
-    require_full_252: bool = True,
-) -> RowStats:
-    """
-    series_nf is newest-first, may contain nan/None.
-    """
-    # value (today) must be finite for meaningful output
-    if not series_nf:
-        return RowStats(None, None, None, None, None, None, None, None, "DOWNGRADED")
-
-    v0 = series_nf[0]
-    if not isinstance(v0, (int, float)):
-        v = None
-    else:
-        v = float(v0)
-        if not math.isfinite(v):
-            v = None
-
-    conf = "OK"
-
-    w60 = _take_newest_finite(series_nf, 60)
-    w252 = _take_newest_finite(series_nf, 252)
-
-    z60 = _z_score_pop(v, w60) if (v is not None and w60 is not None) else None
-    p60 = _percentile_tie_aware(v, w60) if (v is not None and w60 is not None) else None
-
-    z252 = _z_score_pop(v, w252) if (v is not None and w252 is not None) else None
-    p252 = _percentile_tie_aware(v, w252) if (v is not None and w252 is not None) else None
-
-    if w60 is None:
-        conf = "DOWNGRADED"
-    if require_full_252 and w252 is None:
-        conf = "DOWNGRADED"
-
-    zD60 = None
-    pD60 = None
-    r1 = None
-
-    if want_delta_and_ret1:
-        # ret1 strictly adjacent
-        r1 = _strict_ret1_pct(series_nf)
-        if r1 is None:
-            conf = "DOWNGRADED"
-
-        # zΔ60/pΔ60 on delta series, but today's delta must be strictly adjacent
-        d_today = _strict_delta_today(series_nf)
-        deltas = _delta_series_nf(series_nf)
-        d60 = _take_newest_finite(deltas, 60)
-        if d_today is not None and d60 is not None:
-            zD60 = _z_score_pop(d_today, d60)
-            pD60 = _percentile_tie_aware(d_today, d60)
-        else:
-            conf = "DOWNGRADED"
-
-    return RowStats(v, z60, p60, z252, p252, zD60, pD60, r1, conf)
-
-
-# -------------- roll25.json parsing --------------
+# ---------------- roll25.json parsing ----------------
 
 def _extract_rows_roll25_json(obj: Any) -> List[Dict[str, Any]]:
     if isinstance(obj, list):
@@ -257,13 +207,6 @@ def _extract_rows_roll25_json(obj: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def _sort_newest_first(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    def key(r: Dict[str, Any]) -> str:
-        d = r.get("date")
-        return d if isinstance(d, str) else ""
-    return sorted(rows, key=key, reverse=True)
-
-
 def _get_float(r: Dict[str, Any], *keys: str) -> Optional[float]:
     for k in keys:
         v = r.get(k)
@@ -272,6 +215,27 @@ def _get_float(r: Dict[str, Any], *keys: str) -> Optional[float]:
             if math.isfinite(f):
                 return f
     return None
+
+
+def _row_date_key(r: Dict[str, Any], default_year: Optional[int]) -> Optional[date]:
+    raw = r.get("date")
+    if isinstance(raw, str):
+        return _parse_date(raw, default_year=default_year)
+    return None
+
+
+def _sort_rows_by_date_desc(rows: List[Dict[str, Any]], used_date: Optional[date]) -> List[Dict[str, Any]]:
+    default_year = used_date.year if used_date else datetime.now().year
+
+    keyed: List[Tuple[date, Dict[str, Any]]] = []
+    for r in rows:
+        d = _row_date_key(r, default_year)
+        if d is None:
+            continue
+        keyed.append((d, r))
+
+    keyed.sort(key=lambda x: x[0], reverse=True)
+    return [r for _, r in keyed]
 
 
 def _series_turnover(rows_nf: List[Dict[str, Any]]) -> List[float]:
@@ -285,28 +249,6 @@ def _series_close(rows_nf: List[Dict[str, Any]]) -> List[float]:
     out: List[float] = []
     for r in rows_nf:
         out.append(_get_float(r, "close", "Close") or float("nan"))
-    return out
-
-
-def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
-    """
-    pct_change[t] = (close[t] - close[t+1]) / abs(close[t+1]) * 100
-    Strict adjacency per step, but this is a SERIES (not ret1 field).
-    """
-    out: List[float] = []
-    for i in range(len(close_nf) - 1):
-        a = close_nf[i]
-        b = close_nf[i + 1]
-        if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
-            out.append(float("nan"))
-            continue
-        a = float(a)
-        b = float(b)
-        if not (math.isfinite(a) and math.isfinite(b)) or b == 0:
-            out.append(float("nan"))
-            continue
-        out.append((a - b) / abs(b) * 100.0)
-    out.append(float("nan"))
     return out
 
 
@@ -327,11 +269,24 @@ def _series_amplitude_pct(rows_nf: List[Dict[str, Any]]) -> List[float]:
     return out
 
 
+def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
+    out: List[float] = []
+    for i in range(len(close_nf) - 1):
+        a = close_nf[i]
+        b = close_nf[i + 1]
+        if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
+            out.append(float("nan"))
+            continue
+        a = float(a); b = float(b)
+        if not (math.isfinite(a) and math.isfinite(b)) or b == 0:
+            out.append(float("nan"))
+            continue
+        out.append((a - b) / abs(b) * 100.0)
+    out.append(float("nan"))
+    return out
+
+
 def _series_vol_multiplier_20(turnover_nf: List[float], min_points: int = 15, win: int = 20) -> List[float]:
-    """
-    vol_multiplier_20[t] = turnover[t] / avg(turnover[t+1..t+win]) (exclude today)
-    Require at least min_points finite values in the avg window.
-    """
     out: List[float] = []
     for i in range(len(turnover_nf)):
         a = turnover_nf[i]
@@ -368,7 +323,71 @@ def _truncate_to_common_length(*series: List[float]) -> List[List[float]]:
     return [s[:m] for s in series]
 
 
-# -------------- markdown helpers --------------
+# ---------------- Anchored stats computation ----------------
+
+def _anchored_stats(
+    series_nf: List[float],
+    anchor_idx: int,
+    *,
+    want_delta_and_ret1: bool,
+    require_full_252: bool = True,
+) -> RowStats:
+    conf = "OK"
+
+    if anchor_idx < 0 or anchor_idx >= len(series_nf):
+        return RowStats(None, None, None, None, None, None, None, None, "DOWNGRADED")
+
+    v = series_nf[anchor_idx]
+    v = float(v) if isinstance(v, (int, float)) and math.isfinite(float(v)) else None
+    if v is None:
+        conf = "DOWNGRADED"
+
+    # windows are taken from anchor forward (newer->older), i.e. series_nf[anchor_idx:]
+    tail = series_nf[anchor_idx:]
+
+    w60 = _take_newest_finite(tail, 60)
+    w252 = _take_newest_finite(tail, 252)
+
+    z60 = _z_score_pop(v, w60) if (v is not None and w60 is not None) else None
+    p60 = _percentile_tie_aware(v, w60) if (v is not None and w60 is not None) else None
+    z252 = _z_score_pop(v, w252) if (v is not None and w252 is not None) else None
+    p252 = _percentile_tie_aware(v, w252) if (v is not None and w252 is not None) else None
+
+    if w60 is None:
+        conf = "DOWNGRADED"
+    if require_full_252 and w252 is None:
+        conf = "DOWNGRADED"
+
+    zD60 = None
+    pD60 = None
+    r1 = None
+
+    if want_delta_and_ret1:
+        # strict adjacency at anchor: prev is anchor_idx+1
+        prev = None
+        if anchor_idx + 1 < len(series_nf):
+            pv = series_nf[anchor_idx + 1]
+            prev = float(pv) if isinstance(pv, (int, float)) and math.isfinite(float(pv)) else None
+
+        r1 = _ret1_pct_strict(v, prev)
+        if r1 is None:
+            conf = "DOWNGRADED"
+
+        # delta series computed on tail (anchor..older)
+        deltas = _delta_series_nf(tail)  # deltas[0] corresponds to anchor - next
+        d_today = deltas[0] if deltas else None
+        d60 = _take_newest_finite(deltas, 60)
+
+        if d_today is not None and d60 is not None:
+            zD60 = _z_score_pop(d_today, d60)
+            pD60 = _percentile_tie_aware(d_today, d60)
+        else:
+            conf = "DOWNGRADED"
+
+    return RowStats(v, z60, p60, z252, p252, zD60, pD60, r1, conf)
+
+
+# ---------------- markdown helpers ----------------
 
 def _md_table(rows: List[List[str]]) -> str:
     if not rows:
@@ -387,6 +406,7 @@ def main() -> int:
     ap.add_argument("--roll25", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--amp-mismatch-abs-threshold", type=float, default=float(os.getenv("AMP_MISMATCH_ABS_THRESHOLD", "0.01")))
+    ap.add_argument("--close-pct-mismatch-abs-threshold", type=float, default=float(os.getenv("CLOSE_PCT_MISMATCH_ABS_THRESHOLD", "0.05")))
     args = ap.parse_args()
 
     latest = _load_json(args.latest)
@@ -400,7 +420,10 @@ def main() -> int:
     numbers = latest.get("numbers") if isinstance(latest.get("numbers"), dict) else {}
     sig = latest.get("signal") if isinstance(latest.get("signal"), dict) else {}
 
-    used_date = numbers.get("UsedDate") if isinstance(numbers.get("UsedDate"), str) else "NA"
+    used_date_s = numbers.get("UsedDate") if isinstance(numbers.get("UsedDate"), str) else None
+    used_date_dt = _parse_date(used_date_s) if used_date_s else None
+
+    used_date = used_date_s if used_date_s else "NA"
     used_date_status = sig.get("UsedDateStatus") if isinstance(sig.get("UsedDateStatus"), str) else "NA"
     run_day_tag = sig.get("RunDayTag") if isinstance(sig.get("RunDayTag"), str) else "NA"
 
@@ -410,52 +433,71 @@ def main() -> int:
     amp_latest = numbers.get("AmplitudePct")
     vol_mult_latest = numbers.get("VolumeMultiplier")
 
-    rows = _sort_newest_first(_extract_rows_roll25_json(roll25_hist))
+    rows_raw = _extract_rows_roll25_json(roll25_hist)
+    rows = _sort_rows_by_date_desc(rows_raw, used_date_dt)
+
+    # build date index map (newest-first)
+    default_year = used_date_dt.year if used_date_dt else datetime.now().year
+    row_dates: List[date] = []
+    for r in rows:
+        d = _row_date_key(r, default_year)
+        if d is not None:
+            row_dates.append(d)
+
+    # anchor index for UsedDate
+    anchor_idx = -1
+    if used_date_dt is not None:
+        for i, d in enumerate(row_dates):
+            if d == used_date_dt:
+                anchor_idx = i
+                break
 
     turnover_nf = _series_turnover(rows)
     close_nf = _series_close(rows)
-    pctchg_nf = _series_pct_change_close_from_close(close_nf)
     amp_nf = _series_amplitude_pct(rows)
+
+    pctchg_nf = _series_pct_change_close_from_close(close_nf)
     volmult_nf = _series_vol_multiplier_20(turnover_nf, min_points=15, win=20)
 
     turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf = _truncate_to_common_length(
         turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf
     )
 
-    st_turnover = _compute_level_stats(turnover_nf, want_delta_and_ret1=True)
-    st_close = _compute_level_stats(close_nf, want_delta_and_ret1=True)
+    # if anchor not found, fallback to 0 (but downgrade confidence via DQ note)
+    dq_notes: List[str] = []
+    if anchor_idx < 0:
+        anchor_idx = 0
+        dq_notes.append("UsedDate anchor not found in roll25.json after date-parse; fallback to newest row (index 0).")
 
-    # PCT_CHANGE_CLOSE: show z/p on the series itself, suppress delta/ret
-    st_pct = _compute_level_stats(pctchg_nf, want_delta_and_ret1=False)
+    st_turnover = _anchored_stats(turnover_nf, anchor_idx, want_delta_and_ret1=True)
+    st_close = _anchored_stats(close_nf, anchor_idx, want_delta_and_ret1=True)
 
-    # AMPLITUDE_PCT: value from latest_report; stats from roll25.json; suppress delta/ret
-    st_amp = _compute_level_stats(amp_nf, want_delta_and_ret1=False)
+    st_pct = _anchored_stats(pctchg_nf, anchor_idx, want_delta_and_ret1=False)
+    st_amp = _anchored_stats(amp_nf, anchor_idx, want_delta_and_ret1=False)
+    st_volm = _anchored_stats(volmult_nf, anchor_idx, want_delta_and_ret1=False, require_full_252=False)
 
-    # VOL_MULTIPLIER_20: value from latest_report; stats from derived volmult_nf; suppress delta/ret
-    # z252 needs 252 finite points of volmult, but volmult starts having valid values only after enough history.
-    st_volm = _compute_level_stats(volmult_nf, want_delta_and_ret1=False)
-
-    # amplitude mismatch note (optional, conservative)
+    # --- DQ: amplitude mismatch (latest vs derived@UsedDate) ---
     amp_conf_override: Optional[str] = None
-    amp_mismatch_note: Optional[str] = None
-    if isinstance(amp_latest, (int, float)) and used_date != "NA":
-        amp_used = None
-        for r in rows:
-            if r.get("date") == used_date:
-                a = _get_float(r, "amplitude_pct", "AmplitudePct")
-                if a is None:
-                    h = _get_float(r, "high", "High")
-                    l = _get_float(r, "low", "Low")
-                    c = _get_float(r, "close", "Close")
-                    if h is not None and l is not None and c is not None and c != 0:
-                        a = (h - l) / abs(c) * 100.0
-                amp_used = a
-                break
+    if isinstance(amp_latest, (int, float)) and math.isfinite(float(amp_latest)):
+        amp_used = st_amp.value  # derived from roll25.json at anchor
         if isinstance(amp_used, (int, float)) and math.isfinite(float(amp_used)):
             diff = abs(float(amp_latest) - float(amp_used))
             if diff > float(args.amp_mismatch_abs_threshold):
                 amp_conf_override = "DOWNGRADED"
-                amp_mismatch_note = f"AMPLITUDE_PCT mismatch: abs(latest - roll25_derived@UsedDate) = {diff:.6f} > {args.amp_mismatch_abs_threshold}"
+                dq_notes.append(
+                    f"AMPLITUDE_PCT mismatch: abs(latest_report.AmplitudePct - roll25@UsedDate) = {diff:.6f} > {args.amp_mismatch_abs_threshold}"
+                )
+
+    # --- DQ: close pct mismatch (latest pct_change vs computed ret1%) ---
+    close_conf_override: Optional[str] = None
+    if isinstance(pct_change_latest, (int, float)) and isinstance(st_close.ret1, (int, float)):
+        diff = abs(float(pct_change_latest) - float(st_close.ret1))
+        if diff > float(args.close_pct_mismatch_abs_threshold):
+            close_conf_override = "DOWNGRADED"
+            dq_notes.append(
+                f"CLOSE pct mismatch: abs(latest_report.PctChange - computed_close_ret1%) = {diff:.6f} > {args.close_pct_mismatch_abs_threshold} "
+                f"(UsedDate={used_date})"
+            )
 
     md: List[str] = []
     md.append("# Roll25 Cache Report (TWSE Turnover)")
@@ -521,7 +563,7 @@ def main() -> int:
         ]
 
     table.append(_row("TURNOVER_TWD", st_turnover, value_override=turnover_latest if isinstance(turnover_latest, (int, float)) else None))
-    table.append(_row("CLOSE", st_close, value_override=close_latest if isinstance(close_latest, (int, float)) else None))
+    table.append(_row("CLOSE", st_close, value_override=close_latest if isinstance(close_latest, (int, float)) else None, force_conf=close_conf_override))
     table.append(_row("PCT_CHANGE_CLOSE", st_pct, value_override=pct_change_latest if isinstance(pct_change_latest, (int, float)) else None, suppress_delta_ret=True))
     table.append(_row("AMPLITUDE_PCT", st_amp, value_override=amp_latest if isinstance(amp_latest, (int, float)) else None, suppress_delta_ret=True, force_conf=amp_conf_override))
     table.append(_row("VOL_MULTIPLIER_20", st_volm, value_override=vol_mult_latest if isinstance(vol_mult_latest, (int, float)) else None, suppress_delta_ret=True))
@@ -530,15 +572,18 @@ def main() -> int:
     md.append("")
     md.append("## 6) Audit Notes")
     md.append("- This report is computed from local files only (no external fetch).")
+    md.append("- Date ordering uses parsed dates (not string sort).")
+    md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.")
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
-    md.append("- ret1% uses STRICT adjacency (series[0] vs series[1]); if day-1 missing => NA (no jumping).")
-    md.append("- zΔ60/pΔ60 are computed on the delta series (today - prev) over the last 60 deltas, not (z_today - z_prev).")
-    md.append("- AMPLITUDE_PCT value uses latest_report.json:numbers.AmplitudePct; stats use roll25.json series (amplitude_pct or derived from H/L/C).")
-    md.append(f"- AMPLITUDE_PCT mismatch check: abs(latest - roll25_derived@UsedDate) > {args.amp_mismatch_abs_threshold} => DQ note + AMPLITUDE row confidence=DOWNGRADED.")
-    if amp_mismatch_note:
-        md.append(f"- DQ_NOTE: {amp_mismatch_note}")
+    md.append("- ret1% is STRICT adjacency at UsedDate (UsedDate vs next older row); if missing => NA (no jumping).")
+    md.append("- zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).")
+    md.append(f"- AMPLITUDE mismatch threshold: {args.amp_mismatch_abs_threshold} (abs(latest - roll25@UsedDate) > threshold => DOWNGRADED).")
+    md.append(f"- CLOSE pct mismatch threshold: {args.close_pct_mismatch_abs_threshold} (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).")
     md.append("- PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.")
-    md.append("- If insufficient points for any required full window, corresponding stats remain NA and confidence is DOWNGRADED (no guessing).")
+    if dq_notes:
+        md.append("- DQ_NOTES:")
+        for n in dq_notes:
+            md.append(f"  - {n}")
     md.append("")
     md.append("## 7) Caveats / Sources (from latest_report.json)")
     md.append("```")
