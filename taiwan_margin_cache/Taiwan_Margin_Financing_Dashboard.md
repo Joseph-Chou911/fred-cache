@@ -1,8 +1,8 @@
 # Taiwan Margin Financing Dashboard
 
 ## 1) 結論
-- 狀態：NA｜信號：NA｜資料品質：PARTIAL
-  - rationale: insufficient total_20D% (NA)
+- 狀態：擴張｜信號：NONE｜資料品質：OK
+  - rationale: no rule triggered
 - 一致性判定（Margin × Roll25）：NA
   - rationale: roll25 missing/mismatch => resonance NA (strict)
 
@@ -20,11 +20,11 @@
 - 行動：代表短線槓桿加速結束，回到『擴張但不加速』。
 
 ## 2) 資料
-- 上市(TWSE)：融資餘額 3827.30 億元｜資料日期 NA｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows=0｜head_dates=[]｜tail_dates=[]
-- 上櫃(TPEX)：融資餘額 1334.50 億元｜資料日期 NA｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows=0｜head_dates=[]｜tail_dates=[]
-- 合計：NA（日期不一致或缺值，依規則不得合計）
+- 上市(TWSE)：融資餘額 3827.30 億元｜資料日期 2026-01-27｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+  - rows=30｜head_dates=['2026-01-27', '2026-01-26', '2026-01-23']｜tail_dates=['2025-12-17', '2025-12-16', '2025-12-15']
+- 上櫃(TPEX)：融資餘額 1334.50 億元｜資料日期 2026-01-27｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+  - rows=30｜head_dates=['2026-01-27', '2026-01-26', '2026-01-23']｜tail_dates=['2025-12-17', '2025-12-16', '2025-12-15']
+- 合計：融資餘額 5161.80 億元｜資料日期 2026-01-27｜來源：TWSE=HiStock / TPEX=HiStock
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
@@ -39,12 +39,12 @@ run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
 Mode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23
 RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
-freshness_ok=True | freshness_age_days=1
+freshness_ok=True | freshness_age_days=2
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-01-27T23:09:16.421816+08:00 (Asia/Taipei)
+- generated_at: 2026-01-28T03:37:25.116192+08:00 (Asia/Taipei)
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -66,12 +66,12 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - 20D：Δ=176.80 億元；Δ%=15.2717 %｜latest=1334.50｜base=1157.70（基期日=2025-12-29）
 
 ### 合計(上市+上櫃)
-- 1D：Δ=NA 億元；Δ%=NA %｜latest=NA｜base=NA（基期日=NA）
-- 5D：Δ=NA 億元；Δ%=NA %｜latest=NA｜base=NA（基期日=NA）
-- 20D：Δ=NA 億元；Δ%=NA %｜latest=NA｜base=NA（基期日=NA）
+- 1D：Δ=23.10 億元；Δ%=0.4495 %｜latest=5161.80｜base=5138.70（基期日=2026-01-26）
+- 5D：Δ=147.50 億元；Δ%=2.9416 %｜latest=5161.80｜base=5014.30（基期日=2026-01-20）
+- 20D：Δ=605.20 億元；Δ%=13.2818 %｜latest=5161.80｜base=4556.60（基期日=2025-12-29）
 
 ## 4) 提前示警輔助指標（不引入外部資料）
-- Accel = 1D% - (5D%/5)：NA
+- Accel = 1D% - (5D%/5)：-0.1388
 - Spread20 = TPEX_20D% - TWSE_20D%：2.6676
 
 ## 5) 稽核備註
@@ -82,16 +82,16 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - roll25 LookbackNActual 未滿 target 時：只做『信心降級註記』，不改 margin 資料品質。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25 僅供一致性判定）
-- Check-1 TWSE meta_date==series[0].date：❌（FAIL）
-- Check-1 TPEX meta_date==series[0].date：❌（FAIL）
-- Check-2 TWSE head5 dates 嚴格遞減且無重複：❌（FAIL）（head5 insufficient）
-- Check-2 TPEX head5 dates 嚴格遞減且無重複：❌（FAIL）（head5 insufficient）
-- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：❌（FAIL）（insufficient rows for head5 comparison）
+- Check-1 TWSE meta_date==series[0].date：✅（OK）
+- Check-1 TPEX meta_date==series[0].date：✅（OK）
+- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
+- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（OK）
+- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（OK）
 - Check-4 TWSE history rows>=21：✅（OK）（rows=33）
 - Check-4 TPEX history rows>=21：✅（OK）（rows=33）
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（UsedDate(2026-01-26) != TWSE meta_date(NA) or roll25 missing）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（UsedDate(2026-01-26) != TWSE meta_date(2026-01-27) or roll25 missing）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）
 
-_generated_at_utc: 2026-01-27T15:47:55Z_
+_generated_at_utc: 2026-01-27T23:12:45Z_
