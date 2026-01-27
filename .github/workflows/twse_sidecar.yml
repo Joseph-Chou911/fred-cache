@@ -1,4 +1,4 @@
-name: Update TWSE sidecar (roll25 + latest_report + stats + dashboard + report + manifest)
+name: Update TWSE sidecar (roll25 + latest_report + stats + report + manifest)
 
 on:
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
-      - name: Generate + sanity + dashboard + report + commit + manifest + push (retry-safe, no-rebase)
+      - name: Generate + sanity + report + commit + manifest + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
         run: |
@@ -54,7 +54,6 @@ jobs:
             "roll25_cache/roll25.json"
             "roll25_cache/latest_report.json"
             "roll25_cache/stats_latest.json"
-            "roll25_cache/dashboard_latest.json"
             "roll25_cache/report.md"
           )
           manifest_file="roll25_cache/manifest.json"
@@ -71,25 +70,19 @@ jobs:
 
             start_epoch="$(date +%s)"
 
-            # 1) Generate base outputs
+            # 1) Generate data
             python scripts/update_twse_sidecar.py
 
             # 2) Sanity
             python scripts/sanity_twse_roll25.py
 
-            # 3) Build dashboard_latest.json (stats table from roll25.json)
-            python scripts/roll25_dashboard_latest.py \
-              --roll "roll25_cache/roll25.json" \
-              --latest "roll25_cache/latest_report.json" \
-              --out "roll25_cache/dashboard_latest.json"
-
-            # 4) Render roll25 report.md
+            # 3) Render report (local-only)
             python scripts/render_roll25_report_md.py \
               --latest "roll25_cache/latest_report.json" \
-              --dash "roll25_cache/dashboard_latest.json" \
+              --roll25 "roll25_cache/roll25.json" \
               --out "roll25_cache/report.md"
 
-            # 5) Required outputs & stale-mtime check
+            # 4) Required outputs & stale-mtime check
             missing=0
             for f in "${data_files[@]}"; do
               if [ ! -f "$f" ]; then
@@ -108,13 +101,13 @@ jobs:
               exit 1
             fi
 
-            # 6) Fingerprint
+            # 5) Fingerprint
             for f in "${data_files[@]}"; do
               h="$(sha256sum "$f" | awk '{print $1}')"
               echo "$f  sha256=$h"
             done
 
-            # 7) Commit DATA
+            # 6) Commit DATA
             git add -A "${data_files[@]}"
             if git diff --cached --quiet; then
               echo "No staged data changes to commit."
@@ -123,11 +116,11 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Update TWSE sidecar data (roll25 + latest_report + stats + dashboard + report)"
+            git commit -m "Update TWSE sidecar data (roll25 + latest_report + stats + report)"
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 8) Generate manifest pinned to DATA_SHA
+            # 7) Generate manifest pinned to DATA_SHA
             python scripts/write_twse_manifest.py --data-sha "${DATA_SHA}" --out "${manifest_file}"
 
             git add -A "${manifest_file}"
@@ -142,8 +135,6 @@ jobs:
 
             echo "Snapshot URLs:"
             echo "  DATA (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
-            echo "  DASH (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/dashboard_latest.json"
-            echo "  REPORT (immutable):   https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/report.md"
             echo "  MANIFEST (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
             echo "  MANIFEST (main):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
@@ -187,7 +178,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests
 
-      - name: Backfill + sanity + dashboard + report + commit + manifest + push (retry-safe, no-rebase)
+      - name: Backfill + sanity + report + commit + manifest + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
           BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
@@ -201,7 +192,6 @@ jobs:
             "roll25_cache/roll25.json"
             "roll25_cache/latest_report.json"
             "roll25_cache/stats_latest.json"
-            "roll25_cache/dashboard_latest.json"
             "roll25_cache/report.md"
           )
           manifest_file="roll25_cache/manifest.json"
@@ -225,19 +215,13 @@ jobs:
             # 2) Sanity
             python scripts/sanity_twse_roll25.py
 
-            # 3) Build dashboard_latest.json
-            python scripts/roll25_dashboard_latest.py \
-              --roll "roll25_cache/roll25.json" \
-              --latest "roll25_cache/latest_report.json" \
-              --out "roll25_cache/dashboard_latest.json"
-
-            # 4) Render report.md
+            # 3) Render report (local-only)
             python scripts/render_roll25_report_md.py \
               --latest "roll25_cache/latest_report.json" \
-              --dash "roll25_cache/dashboard_latest.json" \
+              --roll25 "roll25_cache/roll25.json" \
               --out "roll25_cache/report.md"
 
-            # 5) Required outputs & stale-mtime check
+            # 4) Required outputs & stale-mtime check
             missing=0
             for f in "${data_files[@]}"; do
               if [ ! -f "$f" ]; then
@@ -256,13 +240,13 @@ jobs:
               exit 1
             fi
 
-            # 6) Fingerprint
+            # 5) Fingerprint
             for f in "${data_files[@]}"; do
               h="$(sha256sum "$f" | awk '{print $1}')"
               echo "$f  sha256=$h"
             done
 
-            # 7) Commit DATA
+            # 6) Commit DATA
             git add -A "${data_files[@]}"
             if git diff --cached --quiet; then
               echo "No staged data changes to commit."
@@ -271,11 +255,11 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Backfill TWSE sidecar data (roll25 + latest_report + stats + dashboard + report)"
+            git commit -m "Backfill TWSE sidecar data (roll25 + latest_report + stats + report)"
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 8) Manifest pinned to DATA_SHA
+            # 7) Manifest pinned to DATA_SHA
             python scripts/write_twse_manifest.py --data-sha "${DATA_SHA}" --out "${manifest_file}"
 
             git add -A "${manifest_file}"
@@ -290,8 +274,6 @@ jobs:
 
             echo "Snapshot URLs:"
             echo "  DATA (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
-            echo "  DASH (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/dashboard_latest.json"
-            echo "  REPORT (immutable):   https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/report.md"
             echo "  MANIFEST (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
             echo "  MANIFEST (main):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
