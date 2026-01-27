@@ -7,13 +7,12 @@ Render roll25_cache/latest_report.json + roll25_cache/roll25.json into roll25_ca
 - Column names aligned to market_cache style: zΔ60, pΔ60, ret1%
 - NO external fetch. Local files only.
 - Conservative NA handling:
-  - ret1% + zΔ60/pΔ60 are meaningful only for TURNOVER_TWD and CLOSE.
-  - For PCT_CHANGE_CLOSE / AMPLITUDE_PCT / VOL_MULTIPLIER_20, ret1% and zΔ60/pΔ60 => NA (avoid misleading).
+  - ret1% + zΔ60/pΔ60 are computed only for TURNOVER_TWD and CLOSE (avoid misleading ratios).
+  - For PCT_CHANGE_CLOSE / AMPLITUDE_PCT / VOL_MULTIPLIER_20, ret1% and zΔ60/pΔ60 => NA.
 - z-score uses population std (ddof=0).
 - Percentile is tie-aware: (less + 0.5*equal)/n * 100.
-- Formatting improvements:
-  - NewLow_N / ConsecutiveBreak as integers when possible
-  - Per-series value decimals (TURNOVER 0, CLOSE 2, pct/amp/ratio 6)
+- NEW:
+  - If amplitude_pct missing in roll25.json but high/low/close exist => derive amplitude_pct = (high-low)/close*100
 """
 
 from __future__ import annotations
@@ -47,7 +46,7 @@ def _now_utc_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# ---------------- Helpers: parsing roll25.json ----------------
+# ---------------- Helpers ----------------
 
 def _as_float(x: Any) -> Optional[float]:
     if isinstance(x, (int, float)):
@@ -92,19 +91,26 @@ def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Normalize to:
     - date: str (YYYY-MM-DD)
-    - turnover_twd: float (trade value)
+    - turnover_twd: float
     - close: float
-    - pct_change_close: float (percent)
-    - amplitude_pct: float (percent)
-    - vol_multiplier_20: float (ratio)
+    - high: float (optional)
+    - low: float (optional)
+    - pct_change_close: float (percent; optional; can be computed from close)
+    - amplitude_pct: float (percent; optional; can be derived from high/low/close)
+    - vol_multiplier_20: float (ratio; optional; can be computed from turnover history)
     """
     out: List[Dict[str, Any]] = []
 
     date_keys = ["date", "Date", "ymd", "YMD"]
     tv_keys = ["turnover_twd", "trade_value", "TradeValue", "tv", "成交金額", "turnover"]
     close_keys = ["close", "Close", "收盤價"]
+    high_keys = ["high", "High", "最高", "最高價"]
+    low_keys = ["low", "Low", "最低", "最低價"]
     pct_keys = ["pct_change", "PctChange", "pct_change_close", "漲跌幅", "pct"]
-    amp_keys = ["amplitude_pct", "AmplitudePct", "振幅", "amplitude"]
+    amp_keys = [
+        "amplitude_pct", "AmplitudePct", "振幅", "振幅(%)", "amplitude", "amp_pct",
+        # sometimes stored as fraction; still ok (we treat as numeric and don't auto-scale)
+    ]
     vm_keys = ["vol_multiplier_20", "VolMultiplier", "volume_multiplier", "VolumeMultiplier", "vol_multiplier"]
 
     for r in rows:
@@ -114,6 +120,8 @@ def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         tv = _as_float(_pick(r, tv_keys))
         close = _as_float(_pick(r, close_keys))
+        high = _as_float(_pick(r, high_keys))
+        low = _as_float(_pick(r, low_keys))
         pct = _as_float(_pick(r, pct_keys))
         amp = _as_float(_pick(r, amp_keys))
         vm = _as_float(_pick(r, vm_keys))
@@ -123,28 +131,24 @@ def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "date": date[:10],
                 "turnover_twd": tv,
                 "close": close,
+                "high": high,
+                "low": low,
                 "pct_change_close": pct,
                 "amplitude_pct": amp,
                 "vol_multiplier_20": vm,
             }
         )
 
-    # Sort by date ascending
     out.sort(key=lambda x: x["date"])
 
     # Dedup by date (keep last)
     dedup: Dict[str, Dict[str, Any]] = {}
     for r in out:
         dedup[r["date"]] = r
-    out2 = [dedup[k] for k in sorted(dedup.keys())]
-    return out2
+    return [dedup[k] for k in sorted(dedup.keys())]
 
 
 def _compute_pct_change_from_close(rows: List[Dict[str, Any]]) -> None:
-    """
-    If pct_change_close missing, compute from close:
-    pct_change_close = (close_t - close_{t-1}) / abs(close_{t-1}) * 100
-    """
     prev_close: Optional[float] = None
     for r in rows:
         c = r.get("close")
@@ -157,9 +161,24 @@ def _compute_pct_change_from_close(rows: List[Dict[str, Any]]) -> None:
             prev_close = c
 
 
+def _compute_amplitude_from_hlc(rows: List[Dict[str, Any]]) -> None:
+    """
+    If amplitude_pct missing but high/low/close exist:
+      amplitude_pct = (high - low) / close * 100
+    """
+    for r in rows:
+        if r.get("amplitude_pct") is not None:
+            continue
+        h = r.get("high")
+        l = r.get("low")
+        c = r.get("close")
+        if isinstance(h, (int, float)) and isinstance(l, (int, float)) and isinstance(c, (int, float)) and float(c) != 0.0:
+            r["amplitude_pct"] = (float(h) - float(l)) / abs(float(c)) * 100.0
+
+
 def _compute_vol_multiplier_20(rows: List[Dict[str, Any]], min_points: int = 15, win: int = 20) -> None:
     """
-    vol_multiplier_20 = today_turnover / avg(turnover_last20)  (including today)
+    vol_multiplier_20 = today_turnover / avg(turnover_last20) (including today)
     Require >= min_points non-null in window.
     """
     tvs: List[Optional[float]] = [
@@ -181,7 +200,7 @@ def _compute_vol_multiplier_20(rows: List[Dict[str, Any]], min_points: int = 15,
             rows[i]["vol_multiplier_20"] = float(tv_i) / abs(avg)
 
 
-# ---------------- Stats: z / percentile ----------------
+# ---------------- Stats ----------------
 
 def _mean(xs: List[float]) -> Optional[float]:
     return (sum(xs) / float(len(xs))) if xs else None
@@ -230,9 +249,6 @@ def _fmt_num(x: Any, nd: int) -> str:
 
 
 def _fmt_intish(x: Any) -> str:
-    """
-    If numeric and close to integer -> print integer; else fallback to raw/NA.
-    """
     if x is None:
         return "NA"
     if isinstance(x, bool):
@@ -257,7 +273,7 @@ def _fmt_intish(x: Any) -> str:
     return "NA"
 
 
-# ---------------- Window extraction ----------------
+# ---------------- Window helpers ----------------
 
 def _find_index_by_date(rows: List[Dict[str, Any]], used_date: str) -> Optional[int]:
     for i, r in enumerate(rows):
@@ -273,7 +289,6 @@ def _window_end_at(rows: List[Dict[str, Any]], idx: int, key: str, win: int) -> 
         v = r.get(key)
         if isinstance(v, (int, float)):
             vals.append(float(v))
-    # Require full window to avoid "120 days pretending to be 252"
     if len(vals) != win:
         return []
     return vals
@@ -290,10 +305,10 @@ def _delta60_value(rows: List[Dict[str, Any]], idx: int, key: str, lag: int = 60
 
 
 def _delta60_series_window(rows: List[Dict[str, Any]], idx: int, key: str, win: int = 60, lag: int = 60) -> List[float]:
-    out: List[float] = []
     start = idx - (win - 1)
     if start < 0:
         return []
+    out: List[float] = []
     for t in range(start, idx + 1):
         d = _delta60_value(rows, t, key, lag=lag)
         if d is None:
@@ -347,7 +362,6 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
         ("VOL_MULTIPLIER_20", "vol_multiplier_20", vol_mult, 6),
     ]
 
-    # Only these series get ret1% and zΔ60/pΔ60
     allow_ret_and_delta = {"TURNOVER_TWD", "CLOSE"}
 
     table_rows: List[Dict[str, Any]] = []
@@ -359,13 +373,8 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
             row_out.update(
                 {
                     "value": cur,
-                    "z60": None,
-                    "p60": None,
-                    "z252": None,
-                    "p252": None,
-                    "zΔ60": None,
-                    "pΔ60": None,
-                    "ret1%": None,
+                    "z60": None, "p60": None, "z252": None, "p252": None,
+                    "zΔ60": None, "pΔ60": None, "ret1%": None,
                     "confidence": "DOWNGRADED",
                 }
             )
@@ -395,9 +404,6 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
             pD = None
             r1 = None
 
-        # Confidence rule:
-        # - Require w60 and w252 for z/p
-        # - For gated series, also require zΔ60/pΔ60/ret1%
         need_ok = True
         if not w60 or not w252:
             need_ok = False
@@ -407,13 +413,8 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
 
         row_out.update(
             {
-                "z60": z60,
-                "p60": p60,
-                "z252": z252,
-                "p252": p252,
-                "zΔ60": zD,
-                "pΔ60": pD,
-                "ret1%": r1,
+                "z60": z60, "p60": p60, "z252": z252, "p252": p252,
+                "zΔ60": zD, "pΔ60": pD, "ret1%": r1,
                 "confidence": "OK" if need_ok else "DOWNGRADED",
             }
         )
@@ -473,6 +474,7 @@ def build_report(latest: Dict[str, Any], rows: List[Dict[str, Any]], out_path: s
     lines.append("## 6) Audit Notes")
     lines.append("- This report is computed from local files only (no external fetch).")
     lines.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
+    lines.append("- amplitude_pct is computed from roll25.json if present; otherwise derived from (high-low)/close*100 when possible; else NA.")
     lines.append("- ret1% and zΔ60/pΔ60 are only computed for TURNOVER_TWD and CLOSE; other series show NA to avoid misleading ratios.")
     lines.append("- If insufficient points for any required full window, corresponding stats remain NA and confidence is DOWNGRADED (no guessing).")
     lines.append("")
@@ -502,6 +504,7 @@ def main() -> int:
     rows = _normalize_rows(rows_raw)
 
     _compute_pct_change_from_close(rows)
+    _compute_amplitude_from_hlc(rows)
     _compute_vol_multiplier_20(rows, min_points=15, win=20)
 
     build_report(latest, rows, args.out)
