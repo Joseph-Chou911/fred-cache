@@ -16,7 +16,6 @@ permissions:
   contents: write
 
 concurrency:
-  # daily + dispatch(normal) share the same writer lock
   group: repo-writer-main
   cancel-in-progress: false
 
@@ -62,7 +61,6 @@ jobs:
           for attempt in 1 2 3; do
             echo "===== Attempt ${attempt} (daily) ====="
 
-            # Always start from latest remote main
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
@@ -72,7 +70,7 @@ jobs:
 
             start_epoch="$(date +%s)"
 
-            # 1) Generate (daily mode)
+            # 1) Generate (daily mode; no args)
             python scripts/update_twse_sidecar.py
 
             # 2) Sanity
@@ -103,7 +101,7 @@ jobs:
               echo "$f  sha256=$h"
             done
 
-            # 5) Commit DATA (first commit)
+            # 5) Commit DATA
             git add -A "${data_files[@]}"
             if git diff --cached --quiet; then
               echo "No staged data changes to commit."
@@ -116,7 +114,7 @@ jobs:
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 6) Generate manifest pinned to DATA_SHA (second commit)
+            # 6) Generate manifest pinned to DATA_SHA
             python scripts/write_twse_manifest.py --data-sha "${DATA_SHA}" --out "${manifest_file}"
 
             git add -A "${manifest_file}"
@@ -134,7 +132,6 @@ jobs:
             echo "  MANIFEST (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
             echo "  MANIFEST (main):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
-            # 7) Push. If rejected, retry from latest origin/main.
             if git push origin HEAD:main; then
               echo "Push succeeded."
               exit 0
@@ -155,7 +152,6 @@ jobs:
     timeout-minutes: 60
 
     concurrency:
-      # backfill uses its own writer lock to avoid fighting with daily schedule
       group: repo-writer-backfill
       cancel-in-progress: false
 
@@ -202,11 +198,10 @@ jobs:
 
             echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
             echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
-            echo "BACKFILL_MONTHS=${BACKFILL_MONTHS}"
 
             start_epoch="$(date +%s)"
 
-            # 1) Backfill generate (THIS is the key change)
+            # 1) Backfill generate
             python scripts/update_twse_sidecar.py --backfill-months "${BACKFILL_MONTHS}"
 
             # 2) Sanity
