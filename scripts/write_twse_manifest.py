@@ -5,42 +5,53 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from datetime import datetime, timezone
+from typing import Any, Dict
+
+DEFAULT_OUT = "roll25_cache/manifest.json"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data-sha", required=True, help="Git commit SHA that contains the updated data files")
-    ap.add_argument("--out", required=True, help="Output manifest path (e.g., roll25_cache/manifest.json)")
+    ap.add_argument("--data-sha", required=True, help="Commit SHA that contains data files")
+    ap.add_argument("--out", default=DEFAULT_OUT)
     args = ap.parse_args()
 
-    data_sha = args.data_sha.strip()
+    repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if not repo:
+        print("[FATAL] GITHUB_REPOSITORY env missing.")
+        sys.exit(1)
 
-    # IMPORTANT: do not hardcode repo; GitHub Actions will show GITHUB_REPOSITORY, but this script is generic.
-    # The workflow prints snapshot URLs; this manifest is a machine-readable "pinned pointers" object.
-    manifest = {
+    data_sha = args.data_sha.strip()
+    out_path = args.out
+
+    def raw_url(sha: str, path: str) -> str:
+        return f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
+
+    manifest: Dict[str, Any] = {
         "schema_version": "twse_manifest_v1",
         "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "repo": repo,
         "data_commit_sha": data_sha,
         "paths": {
             "roll25": "roll25_cache/roll25.json",
             "latest_report": "roll25_cache/latest_report.json",
-            "stats_latest": "roll25_cache/stats_latest.json",
+            "stats_latest": "roll25_cache/stats_latest.json"
         },
-        "pinned_raw_urls": {
-            "roll25": f"https://raw.githubusercontent.com/{{REPO}}/{data_sha}/roll25_cache/roll25.json",
-            "latest_report": f"https://raw.githubusercontent.com/{{REPO}}/{data_sha}/roll25_cache/latest_report.json",
-            "stats_latest": f"https://raw.githubusercontent.com/{{REPO}}/{data_sha}/roll25_cache/stats_latest.json",
-        },
-        "notes": [
-            "Replace {REPO} with your GitHub repository (owner/repo).",
-            "This manifest is pinned to data_commit_sha and should be immutable once committed.",
-        ]
+        "urls": {
+            "roll25_pinned": raw_url(data_sha, "roll25_cache/roll25.json"),
+            "latest_report_pinned": raw_url(data_sha, "roll25_cache/latest_report.json"),
+            "stats_latest_pinned": raw_url(data_sha, "roll25_cache/stats_latest.json"),
+            "manifest_main": f"https://raw.githubusercontent.com/{repo}/refs/heads/main/{out_path}"
+        }
     }
 
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2, sort_keys=False)
 
-    print(f"Wrote manifest: {args.out}")
+    print(f"Wrote manifest: {out_path}")
     print(f"data_commit_sha={data_sha}")
 
 if __name__ == "__main__":
