@@ -33,6 +33,11 @@ Notes (output semantics):
 - Add derived signals for unified dashboard consumption (volume multiplier, volume amplified,
   new low N, consecutive down days) using existing fields only.
 - All new fields are additive; existing keys/values are untouched.
+
+2026-01-27 ADDITIVE UPDATE #2 (does NOT change existing semantics/values):
+- Add "latest_row_date" (and common aliases) to help unified dashboard DQ checks.
+  This is derived from merged_roll[0].date (latest cached row), NOT from used_date.
+- All new fields are additive; existing keys/values are untouched.
 """
 
 from __future__ import annotations
@@ -572,12 +577,10 @@ def _consecutive_down_days(series_ret_desc: List[Tuple[str, float]], used_date: 
     Count consecutive days where daily return < 0 starting from used_date.
     Returns None if used_date return is missing.
     """
-    # Build map for quick lookup
     mret = {d: float(v) for d, v in series_ret_desc}
     if used_date not in mret:
         return None
     cnt = 0
-    # Walk in date-desc order using series_ret_desc ordering
     for d, v in series_ret_desc:
         if d > used_date:
             continue
@@ -627,6 +630,30 @@ def _volume_amplified(mult: Optional[float], threshold: float) -> Optional[bool]
     if mult is None:
         return None
     return bool(mult >= threshold)
+
+
+# ----------------- ADDITIVE unified-friendly latest_row_date helpers -----------------
+
+def _compute_latest_row_date_from_roll(merged_roll: List[Dict[str, Any]], today: date) -> Tuple[Optional[str], bool, Optional[int]]:
+    """
+    Derive latest_row_date from merged_roll[0].date (latest cached row).
+    Returns (latest_row_date_iso, parse_ok, age_days).
+    Additive only; does not affect used_date selection or any existing semantics.
+    """
+    latest_row_date: Optional[str] = None
+    parse_ok = False
+    age_days: Optional[int] = None
+    try:
+        if merged_roll and isinstance(merged_roll[0], dict):
+            latest_row_date = str(merged_roll[0].get("date", "")).strip() or None
+        if latest_row_date and re.match(r"^\d{4}-\d{2}-\d{2}$", latest_row_date):
+            dt = datetime.fromisoformat(latest_row_date).date()
+            parse_ok = True
+            age_days = (today - dt).days
+    except Exception:
+        parse_ok = False
+        age_days = None
+    return latest_row_date, parse_ok, age_days
 
 
 # ----------------- main -----------------
@@ -728,6 +755,9 @@ def main() -> None:
 
     merged_roll, dedupe_ok = _merge_roll(existing_roll, new_items)
 
+    # ---- ADDITIVE: latest_row_date helpers (for unified DQ; does not affect used_date) ----
+    latest_row_date, latest_row_date_parse_ok, latest_row_date_age_days = _compute_latest_row_date_from_roll(merged_roll, today)
+
     lookback = _extract_lookback(merged_roll, used_date)
     n_actual = len(lookback)
     oldest = lookback[-1]["date"] if lookback else "NA"
@@ -814,8 +844,6 @@ def main() -> None:
     series_ret = _series_pct_change_desc(m_all)
     cons_down = _consecutive_down_days(series_ret, used_date, max_n=60)
 
-    # We also provide aliases (VolAmplified vs VolumeAmplified) to reduce key mismatch risk.
-    # Keep all existing signal keys unchanged; just extend.
     additive_signal = {
         # unify-facing keys
         "VolumeAmplified": volume_ampl,
@@ -831,12 +859,24 @@ def main() -> None:
         "VolWin": VOL_WIN,
         "VolThreshold": VOL_THRESHOLD,
         "NewLowWin": NEWLOW_N,
+        "latest_row_date": latest_row_date,
+        "latest_row_date_parse_ok": latest_row_date_parse_ok,
+        "latest_row_date_age_days": latest_row_date_age_days,
     }
 
     latest_report = {
         "generated_at": _now_tz(tz).isoformat(),
         "timezone": str(tz),
         "summary": summary,
+
+        # ADDITIVE: latest row date (unified DQ helpers)
+        "latest_row_date": latest_row_date,
+        "latest_available_date": latest_row_date,  # alias
+        "latest_date": latest_row_date,            # alias
+        "LatestRowDate": latest_row_date,          # alias
+        "latest_row_date_parse_ok": latest_row_date_parse_ok,
+        "latest_row_date_age_days": latest_row_date_age_days,
+
         "numbers": {
             "UsedDate": used_date,
             "Close": None if today_close is None else round(float(today_close), 2),
@@ -849,6 +889,10 @@ def main() -> None:
             "VolumeMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
             "LookbackNTarget": LOOKBACK_TARGET,
             "LookbackNActual": n_actual,
+
+            # ADDITIVE: latest row date in numbers (some readers look here)
+            "LatestRowDate": latest_row_date,
+            "LatestRowDateAgeDays": latest_row_date_age_days,
         },
         "signal": {
             # existing keys (unchanged)
@@ -859,6 +903,10 @@ def main() -> None:
 
             # ADDITIVE keys
             **additive_signal,
+
+            # ADDITIVE aliases (some unified implementations look for these)
+            "LatestRowDate": latest_row_date,
+            "LatestRowDateParseOK": latest_row_date_parse_ok,
         },
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
         "caveats": "\n".join([
@@ -875,6 +923,9 @@ def main() -> None:
             f"(min_points={VOL_MIN_POINTS}); VolumeAmplified=(>= {VOL_THRESHOLD}); "
             f"NewLow_N: {NEWLOW_N} if close<=min(close_last{NEWLOW_N}) (min_points={NEWLOW_MIN_POINTS}) else 0; "
             f"ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.",
+            # additive latest_row_date audit line
+            f"ADDITIVE_LATEST_ROW_DATE: latest_row_date={latest_row_date} parse_ok={latest_row_date_parse_ok} age_days={latest_row_date_age_days} "
+            "(derived from merged_roll[0].date; does not affect UsedDate).",
         ]),
         "run_day_tag": run_day_tag,
         "used_date_status": used_date_status,
@@ -966,6 +1017,11 @@ def main() -> None:
             }
         },
 
+        # ADDITIVE: latest row date helpers (unified DQ)
+        "latest_row_date": latest_row_date,
+        "latest_row_date_parse_ok": latest_row_date_parse_ok,
+        "latest_row_date_age_days": latest_row_date_age_days,
+
         "sources": {
             "daily_fmtqik_url": daily_fmt_url,
             "daily_mi_5mins_hist_url": daily_ohlc_url,
@@ -981,6 +1037,7 @@ def main() -> None:
     print("TWSE sidecar updated:")
     print(f"  UsedDate={used_date} Mode={mode} freshness_ok={freshness_ok} age_days={freshness_age_days}")
     print(f"  run_day_tag={run_day_tag} used_date_status={used_date_status}")
+    print(f"  latest_row_date={latest_row_date} parse_ok={latest_row_date_parse_ok} age_days={latest_row_date_age_days}")
     print(f"  roll_records={len(merged_roll)} dedupe_ok={dedupe_ok}")
     print(f"  close_n={len(series_close)} tv_n={len(series_tv)} ret_n={len(series_ret)} amp_n={len(series_amp)}")
     print(f"  ADDITIVE: vol_multiplier_20={None if vol_mult_20 is None else round(float(vol_mult_20), 6)} "
