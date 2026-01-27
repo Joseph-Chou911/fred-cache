@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-27T15:19:43Z
+- unified_generated_at_utc: 2026-01-27T15:59:32Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -22,7 +22,7 @@
 
 **reasons**
 - trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, data_date=2026-01-26
-- fragility_parts: credit_fragile(BAMLH0A0HYM2=NONE)=false, rate_stress(DGS10=NONE)=false, tw_margin(WATCH)=true, cross_divergence(DIVERGENCE)=true
+- fragility_parts: credit_fragile(BAMLH0A0HYM2=NONE)=false, rate_stress(DGS10=NONE)=false, tw_margin(NA)=false, cross_divergence(CONVERGENCE)=false
 - vol_gate: market_cache.VIX only (signal=NONE, dir=HIGH, ret1%60=0.372902, data_date=2026-01-26)
 
 **dq_gates (no guessing; conservative defaults)**
@@ -31,18 +31,18 @@
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-27T13:55:03Z
-- run_ts_utc: 2026-01-27T14:00:27.770527+00:00
+- run_ts_utc: 2026-01-27T15:54:55.060667+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@cadcd15
+- script_fingerprint: render_dashboard_py_signals_v8@38509e4
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
 
 | series | signal | dir | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| OFR_FSI | WATCH | HIGH | JUMP | -2.680000 | 2026-01-22 | 0.090214 | -0.813691 | 30.000000 | 7.142857 | -0.645155 | -18.333333 | -9.611452 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 5 | 6 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
-| SP500 | INFO | HIGH | LONG | 6950.230000 | 2026-01-26 | 0.090214 | 1.214855 | 95.000000 | 98.809524 | 0.347042 | 13.333333 | 0.500607 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| VIX | NONE | HIGH | NONE | 16.150000 | 2026-01-26 | 0.090214 | -0.360856 | 45.000000 | 30.158730 | 0.027240 | 1.666667 | 0.372902 | NA | NA | WATCH | WATCH→NONE | 6 | 0 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| HYG_IEF_RATIO | NONE | LOW | NONE | 0.844833 | 2026-01-26 | 0.090214 | 1.731892 | 91.666667 | 75.793651 | -0.240425 | -3.333333 | -0.096471 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
+| OFR_FSI | WATCH | HIGH | JUMP | -2.680000 | 2026-01-22 | 1.997795 | -0.813691 | 30.000000 | 7.142857 | -0.645155 | -18.333333 | -9.611452 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 5 | 6 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| SP500 | INFO | HIGH | LONG | 6950.230000 | 2026-01-26 | 1.997795 | 1.214855 | 95.000000 | 98.809524 | 0.347042 | 13.333333 | 0.500607 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
+| VIX | NONE | HIGH | NONE | 16.150000 | 2026-01-26 | 1.997795 | -0.360856 | 45.000000 | 30.158730 | 0.027240 | 1.666667 | 0.372902 | NA | NA | WATCH | WATCH→NONE | 6 | 0 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
+| HYG_IEF_RATIO | NONE | LOW | NONE | 0.844833 | 2026-01-26 | 1.997795 | 1.731892 | 91.666667 | 75.793651 | -0.240425 | -3.333333 | -0.096471 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
 
 ## fred_cache (ALERT+WATCH+INFO)
 - as_of_ts: 2026-01-27T22:02:02+08:00
@@ -156,27 +156,27 @@
 ## taiwan_margin_financing (TWSE/TPEX)
 - status: OK
 - schema_version: taiwan_margin_financing_latest_v1
-- generated_at_utc: 2026-01-27T15:10:23Z
+- generated_at_utc: 2026-01-27T15:47:55Z
 
 ### cross_module (Margin × Roll25 consistency)
-- margin_signal: WATCH
+- margin_signal: NA
 - margin_signal_source: DERIVED.rule_v1(TWSE_chg_yi_last5)
 - margin_rule_version: rule_v1
-- chg_unit: 億 (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)
-- chg_last5: [11.5, 55.0, 43.4, 39.9, -34.8] 億
-- sum_last5: 115.000 億
-- pos_days_last5: 4
-- latest_chg: 11.500 億
-- margin_confidence: OK
+- chg_unit: NA (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)
+- chg_last5: NA
+- sum_last5: NA
+- pos_days_last5: 0
+- latest_chg: NA
+- margin_confidence: DOWNGRADED
 - roll25_heated_market: false
 - roll25_data_quality_issue: true
 - roll25_heated (legacy): false
 - roll25_confidence: OK
 - roll25_split_ref: heated_market=false, dq_issue=true (see roll25_cache section)
-- consistency: DIVERGENCE
-- date_alignment: twmargin_date=2026-01-27, roll25_used_date=2026-01-26, match=false
+- consistency: CONVERGENCE
+- date_alignment: twmargin_date=NA, roll25_used_date=2026-01-26, match=false
 
-<!-- rendered_at_utc: 2026-01-27T15:19:43Z -->
+<!-- rendered_at_utc: 2026-01-27T15:59:32Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->

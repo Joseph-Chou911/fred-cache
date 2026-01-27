@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-27T15:19:43Z",
+  "generated_at_utc": "2026-01-27T15:59:32Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -17,10 +17,10 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-27T14:00:27.770527+00:00",
+          "run_ts_utc": "2026-01-27T15:54:55.060667+00:00",
           "module": "market_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
+          "script_fingerprint": "render_dashboard_py_signals_v8@38509e4",
           "stale_hours": 36.0,
           "stats_path": "market_cache/stats_latest.json",
           "stats_generated_at_utc": "2026-01-27T13:55:03Z",
@@ -29,21 +29,21 @@
           "series_count": 4,
           "dash_history_path": "dashboard/history.json",
           "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
-          "history_items_loaded": 8,
-          "history_excluded_same_day": 0
+          "history_items_loaded": 9,
+          "history_excluded_same_day": 1
         },
         "rows": [
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
+            "script_fingerprint": "render_dashboard_py_signals_v8@38509e4",
             "series": "OFR_FSI",
             "value": -2.68,
             "data_date": "2026-01-22",
             "as_of_ts": "2026-01-27T13:55:03Z",
             "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
             "dq": "OK",
-            "age_hours": 0.09021403527777778,
+            "age_hours": 1.9977946297222222,
             "z60": -0.8136912270406668,
             "ret1_pct60": -9.611451942740299,
             "z_delta60": -0.6451549078442044,
@@ -65,14 +65,14 @@
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
+            "script_fingerprint": "render_dashboard_py_signals_v8@38509e4",
             "series": "SP500",
             "value": 6950.23,
             "data_date": "2026-01-26",
             "as_of_ts": "2026-01-27T13:55:03Z",
             "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
             "dq": "OK",
-            "age_hours": 0.09021403527777778,
+            "age_hours": 1.9977946297222222,
             "z60": 1.2148554889307452,
             "ret1_pct60": 0.5006065986948351,
             "z_delta60": 0.3470418017456982,
@@ -94,14 +94,14 @@
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
+            "script_fingerprint": "render_dashboard_py_signals_v8@38509e4",
             "series": "VIX",
             "value": 16.15,
             "data_date": "2026-01-26",
             "as_of_ts": "2026-01-27T13:55:03Z",
             "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
             "dq": "OK",
-            "age_hours": 0.09021403527777778,
+            "age_hours": 1.9977946297222222,
             "z60": -0.36085631266913765,
             "ret1_pct60": 0.3729024238657472,
             "z_delta60": 0.02723975338937812,
@@ -123,14 +123,14 @@
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
+            "script_fingerprint": "render_dashboard_py_signals_v8@38509e4",
             "series": "HYG_IEF_RATIO",
             "value": 0.8448329690914768,
             "data_date": "2026-01-26",
             "as_of_ts": "2026-01-27T13:55:03Z",
             "source_url": "DERIVED",
             "dq": "OK",
-            "age_hours": 0.09021403527777778,
+            "age_hours": 1.9977946297222222,
             "z60": 1.7318916416182217,
             "ret1_pct60": -0.09647105702835386,
             "z_delta60": -0.24042533428908808,
@@ -2438,384 +2438,66 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-01-27T15:10:23Z",
+        "generated_at_utc": "2026-01-27T15:47:55Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
             "source_url": "https://histock.tw/stock/three.aspx?m=mg",
-            "data_date": "2026-01-27",
-            "rows": [
-              {
-                "date": "2026-01-27",
-                "balance_yi": 3827.3,
-                "chg_yi": 11.5
-              },
-              {
-                "date": "2026-01-26",
-                "balance_yi": 3815.8,
-                "chg_yi": 55.0
-              },
-              {
-                "date": "2026-01-23",
-                "balance_yi": 3760.8,
-                "chg_yi": 43.4
-              },
-              {
-                "date": "2026-01-22",
-                "balance_yi": 3717.3,
-                "chg_yi": 39.9
-              },
-              {
-                "date": "2026-01-21",
-                "balance_yi": 3677.5,
-                "chg_yi": -34.8
-              },
-              {
-                "date": "2026-01-20",
-                "balance_yi": 3712.3,
-                "chg_yi": 18.1
-              },
-              {
-                "date": "2026-01-19",
-                "balance_yi": 3694.2,
-                "chg_yi": 60.2
-              },
-              {
-                "date": "2026-01-16",
-                "balance_yi": 3633.9,
-                "chg_yi": 40.9
-              },
-              {
-                "date": "2026-01-15",
-                "balance_yi": 3593.0,
-                "chg_yi": 8.5
-              },
-              {
-                "date": "2026-01-14",
-                "balance_yi": 3584.5,
-                "chg_yi": 28.1
-              },
-              {
-                "date": "2026-01-13",
-                "balance_yi": 3556.4,
-                "chg_yi": -8.5
-              },
-              {
-                "date": "2026-01-12",
-                "balance_yi": 3564.9,
-                "chg_yi": 50.0
-              },
-              {
-                "date": "2026-01-09",
-                "balance_yi": 3514.9,
-                "chg_yi": -8.9
-              },
-              {
-                "date": "2026-01-08",
-                "balance_yi": 3523.9,
-                "chg_yi": -46.7
-              },
-              {
-                "date": "2026-01-07",
-                "balance_yi": 3570.6,
-                "chg_yi": 25.1
-              },
-              {
-                "date": "2026-01-06",
-                "balance_yi": 3545.5,
-                "chg_yi": 36.0
-              },
-              {
-                "date": "2026-01-05",
-                "balance_yi": 3509.5,
-                "chg_yi": 43.2
-              },
-              {
-                "date": "2026-01-02",
-                "balance_yi": 3466.3,
-                "chg_yi": 32.2
-              },
-              {
-                "date": "2025-12-31",
-                "balance_yi": 3434.1,
-                "chg_yi": 20.4
-              },
-              {
-                "date": "2025-12-30",
-                "balance_yi": 3413.7,
-                "chg_yi": 14.8
-              },
-              {
-                "date": "2025-12-29",
-                "balance_yi": 3398.9,
-                "chg_yi": -4.5
-              },
-              {
-                "date": "2025-12-26",
-                "balance_yi": 3403.4,
-                "chg_yi": 14.3
-              },
-              {
-                "date": "2025-12-24",
-                "balance_yi": 3389.0,
-                "chg_yi": 13.1
-              },
-              {
-                "date": "2025-12-23",
-                "balance_yi": 3375.9,
-                "chg_yi": 23.9
-              },
-              {
-                "date": "2025-12-22",
-                "balance_yi": 3352.0,
-                "chg_yi": 18.9
-              },
-              {
-                "date": "2025-12-19",
-                "balance_yi": 3333.1,
-                "chg_yi": 9.3
-              },
-              {
-                "date": "2025-12-18",
-                "balance_yi": 3323.8,
-                "chg_yi": 2.1
-              },
-              {
-                "date": "2025-12-17",
-                "balance_yi": 3321.7,
-                "chg_yi": 33.9
-              },
-              {
-                "date": "2025-12-16",
-                "balance_yi": 3287.9,
-                "chg_yi": -30.7
-              },
-              {
-                "date": "2025-12-15",
-                "balance_yi": 3318.6,
-                "chg_yi": 25.1
-              }
-            ],
+            "data_date": null,
+            "rows": [],
             "notes": [
-              "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
-              "候選表[0]解析rows=30",
-              "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
-              "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
+              "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg"
             ],
             "chg_yi_unit": {
-              "code": "UNIT_YI",
-              "label": "億",
-              "raw": "億",
-              "source": "colname:融資增加(億)"
+              "code": "NA",
+              "label": "NA",
+              "raw": "NA",
+              "source": "NA"
             },
-            "fetched_at_utc": "2026-01-27T15:10:24Z",
-            "http_error": null,
-            "rows_count": 30
+            "fetched_at_utc": "2026-01-27T15:47:59Z",
+            "http_error": "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg",
+            "rows_count": 0
           },
           "TPEX": {
             "source": "HiStock",
             "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-            "data_date": "2026-01-27",
-            "rows": [
-              {
-                "date": "2026-01-27",
-                "balance_yi": 1334.5,
-                "chg_yi": 11.6
-              },
-              {
-                "date": "2026-01-26",
-                "balance_yi": 1322.9,
-                "chg_yi": 10.4
-              },
-              {
-                "date": "2026-01-23",
-                "balance_yi": 1312.5,
-                "chg_yi": 11.1
-              },
-              {
-                "date": "2026-01-22",
-                "balance_yi": 1301.4,
-                "chg_yi": 9.6
-              },
-              {
-                "date": "2026-01-21",
-                "balance_yi": 1291.8,
-                "chg_yi": -10.3
-              },
-              {
-                "date": "2026-01-20",
-                "balance_yi": 1302.0,
-                "chg_yi": 12.5
-              },
-              {
-                "date": "2026-01-19",
-                "balance_yi": 1289.5,
-                "chg_yi": -2.6
-              },
-              {
-                "date": "2026-01-16",
-                "balance_yi": 1292.1,
-                "chg_yi": 9.7
-              },
-              {
-                "date": "2026-01-15",
-                "balance_yi": 1282.3,
-                "chg_yi": 4.2
-              },
-              {
-                "date": "2026-01-14",
-                "balance_yi": 1278.1,
-                "chg_yi": 18.0
-              },
-              {
-                "date": "2026-01-13",
-                "balance_yi": 1260.2,
-                "chg_yi": 0.6
-              },
-              {
-                "date": "2026-01-12",
-                "balance_yi": 1259.6,
-                "chg_yi": 25.4
-              },
-              {
-                "date": "2026-01-09",
-                "balance_yi": 1234.2,
-                "chg_yi": 10.5
-              },
-              {
-                "date": "2026-01-08",
-                "balance_yi": 1223.7,
-                "chg_yi": 8.3
-              },
-              {
-                "date": "2026-01-07",
-                "balance_yi": 1215.4,
-                "chg_yi": -0.3
-              },
-              {
-                "date": "2026-01-06",
-                "balance_yi": 1215.6,
-                "chg_yi": 12.8
-              },
-              {
-                "date": "2026-01-05",
-                "balance_yi": 1202.8,
-                "chg_yi": 12.4
-              },
-              {
-                "date": "2026-01-02",
-                "balance_yi": 1190.4,
-                "chg_yi": 15.1
-              },
-              {
-                "date": "2025-12-31",
-                "balance_yi": 1175.2,
-                "chg_yi": 9.1
-              },
-              {
-                "date": "2025-12-30",
-                "balance_yi": 1166.1,
-                "chg_yi": 8.4
-              },
-              {
-                "date": "2025-12-29",
-                "balance_yi": 1157.7,
-                "chg_yi": 4.0
-              },
-              {
-                "date": "2025-12-26",
-                "balance_yi": 1153.7,
-                "chg_yi": 5.6
-              },
-              {
-                "date": "2025-12-24",
-                "balance_yi": 1148.1,
-                "chg_yi": 2.3
-              },
-              {
-                "date": "2025-12-23",
-                "balance_yi": 1145.8,
-                "chg_yi": 12.0
-              },
-              {
-                "date": "2025-12-22",
-                "balance_yi": 1133.8,
-                "chg_yi": 14.7
-              },
-              {
-                "date": "2025-12-19",
-                "balance_yi": 1119.1,
-                "chg_yi": 3.5
-              },
-              {
-                "date": "2025-12-18",
-                "balance_yi": 1115.6,
-                "chg_yi": -1.9
-              },
-              {
-                "date": "2025-12-17",
-                "balance_yi": 1117.5,
-                "chg_yi": 0.4
-              },
-              {
-                "date": "2025-12-16",
-                "balance_yi": 1117.1,
-                "chg_yi": -6.4
-              },
-              {
-                "date": "2025-12-15",
-                "balance_yi": 1123.5,
-                "chg_yi": -1.4
-              }
-            ],
+            "data_date": null,
+            "rows": [],
             "notes": [
-              "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
-              "候選表[0]解析rows=30",
-              "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
-              "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
+              "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
             ],
             "chg_yi_unit": {
-              "code": "UNIT_YI",
-              "label": "億",
-              "raw": "億",
-              "source": "colname:融資增加(億)"
+              "code": "NA",
+              "label": "NA",
+              "raw": "NA",
+              "source": "NA"
             },
-            "fetched_at_utc": "2026-01-27T15:10:24Z",
-            "http_error": null,
-            "rows_count": 30
+            "fetched_at_utc": "2026-01-27T15:48:03Z",
+            "http_error": "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
+            "rows_count": 0
           }
         }
       },
       "cross_module": {
-        "margin_signal": "WATCH",
+        "margin_signal": "NA",
         "margin_signal_source": "DERIVED.rule_v1(TWSE_chg_yi_last5)",
         "margin_rationale": {
           "method": "derived_rule",
           "basis": "TWSE chg_yi last5",
-          "chg_last5": [
-            11.5,
-            55.0,
-            43.4,
-            39.9,
-            -34.8
-          ],
-          "sum_last5": 115.00000000000001,
-          "pos_days_last5": 4,
-          "latest_chg": 11.5,
+          "chg_last5": [],
+          "sum_last5": 0.0,
+          "pos_days_last5": 0,
+          "latest_chg": null,
           "rule_version": "rule_v1",
-          "rule_hit": "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)",
-          "confidence": "OK",
-          "twse_data_date": "2026-01-27"
+          "rule_hit": "NA",
+          "confidence": "DOWNGRADED",
+          "twse_data_date": "NA"
         },
         "roll25_heated_market": false,
         "roll25_data_quality_issue": true,
         "roll25_heated": false,
         "roll25_confidence": "OK",
-        "consistency": "DIVERGENCE",
+        "consistency": "CONVERGENCE",
         "rationale": {
           "consistency_rule": "Deterministic Margin×Roll25MarketHeat (rule_v1).",
           "roll25_rationale": {
@@ -2859,7 +2541,7 @@
             "used_date": "2026-01-26"
           },
           "date_alignment": {
-            "twmargin_date": "2026-01-27",
+            "twmargin_date": "NA",
             "roll25_used_date": "2026-01-26",
             "used_date_match": false,
             "note": "confirm-only; does not change signal"
@@ -2872,11 +2554,11 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-27T15:19:42Z",
+        "generated_at_utc": "2026-01-27T15:59:31Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-01-27",
-        "quote_time_local": "2026-01-27T23:02:00+08:00",
+        "quote_time_local": "2026-01-27T23:42:00+08:00",
         "usd_twd": {
           "spot_buy": 31.355,
           "spot_sell": 31.505,
@@ -2886,7 +2568,7 @@
           "parse_dbg": {
             "format": "xrt_text_v2",
             "reason": "ok",
-            "text_len": 2601,
+            "text_len": 2599,
             "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/27 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
             "text_has_usd": true,
             "text_has_zh_usd": true
