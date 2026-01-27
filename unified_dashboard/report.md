@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-26T23:42:24Z
+- unified_generated_at_utc: 2026-01-27T03:36:39Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -106,47 +106,47 @@
 - status: OK
 - UsedDate: 2026-01-26
 - run_day_tag: TRADING_DAY
-- used_date_status: OK_LATEST
-- used_date_selection_tag: DATA_NOT_UPDATED
-- tag (legacy): DATA_NOT_UPDATED
+- used_date_status: UNKNOWN_LATEST_ROW_DATE
+- used_date_selection_tag: TRADING_DAY
+- tag (legacy): TRADING_DAY
 - note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
 - heat_split.heated_market: false
-- heat_split.dq_issue: false
-- risk_level: 低
+- heat_split.dq_issue: true
+- risk_level: NA
 - turnover_twd: 747339306040
 - turnover_unit: TWD
-- volume_multiplier: 0.971
-- vol_multiplier: 0.460
+- volume_multiplier: NA
+- vol_multiplier: NA
 - amplitude_pct: 0.647
 - pct_change: 0.322
 - close: 32064.52
-- LookbackNTarget: 20
-- LookbackNActual: 17
+- LookbackNTarget: NA
+- LookbackNActual: 20
 - signals.DownDay: false
-- signals.VolumeAmplified: false
-- signals.VolAmplified: false
-- signals.NewLow_N: false
-- signals.ConsecutiveBreak: false
+- signals.VolumeAmplified: NA
+- signals.VolAmplified: NA
+- signals.NewLow_N: NA
+- signals.ConsecutiveBreak: NA
 - signals.OhlcMissing: false
 
 ### roll25_derived (realized vol / drawdown)
 - status: OK
 - vol_n: 10
-- realized_vol_N_annualized_pct: 15.692428
-- realized_vol_points_used: 10
+- realized_vol_N_annualized_pct: NA
+- realized_vol_points_used: 0
 - dd_n: 10
-- max_drawdown_N_pct: -1.617192
-- max_drawdown_points_used: 10
+- max_drawdown_N_pct: NA
+- max_drawdown_points_used: 0
 - confidence: DOWNGRADED
 
 ## FX (USD/TWD)
 - status: OK
-- data_date: 2026-01-26
+- data_date: 2026-01-27
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.415000
-- spot_sell: 31.565000
-- mid: 31.490000
-- ret1_pct: -0.190174 (from 2026-01-23 to 2026-01-26)
+- spot_buy: 31.420000
+- spot_sell: 31.520000
+- mid: 31.470000
+- ret1_pct: -0.063512 (from 2026-01-26 to 2026-01-27)
 - chg_5d_pct: NA (from None to None)
 - dir: TWD_STRONG
 - fx_signal: NONE
@@ -169,14 +169,14 @@
 - latest_chg: 55.000 億
 - margin_confidence: OK
 - roll25_heated_market: false
-- roll25_data_quality_issue: false
+- roll25_data_quality_issue: true
 - roll25_heated (legacy): false
 - roll25_confidence: DOWNGRADED
-- roll25_split_ref: heated_market=false, dq_issue=false (see roll25_cache section)
+- roll25_split_ref: heated_market=false, dq_issue=true (see roll25_cache section)
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-26, roll25_used_date=2026-01-26, match=true
 
-<!-- rendered_at_utc: 2026-01-26T23:42:25Z -->
+<!-- rendered_at_utc: 2026-01-27T03:36:39Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
