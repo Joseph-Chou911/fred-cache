@@ -1,20 +1,20 @@
 {
   "schema_version": "fx_usdtwd_latest_v1",
-  "generated_at_utc": "2026-01-27T03:36:38Z",
+  "generated_at_utc": "2026-01-27T06:00:46Z",
   "source": "BOT",
   "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
   "data_date": "2026-01-27",
-  "quote_time_local": "2026-01-27T11:32:00+08:00",
+  "quote_time_local": "2026-01-27T13:45:00+08:00",
   "usd_twd": {
-    "spot_buy": 31.42,
-    "spot_sell": 31.52,
-    "mid": 31.47
+    "spot_buy": 31.41,
+    "spot_sell": 31.51,
+    "mid": 31.46
   },
   "raw": {
     "parse_dbg": {
       "format": "xrt_text_v2",
       "reason": "ok",
-      "text_len": 2582,
+      "text_len": 2594,
       "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/27 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
       "text_has_usd": true,
       "text_has_zh_usd": true
