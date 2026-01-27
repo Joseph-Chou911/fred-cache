@@ -3,16 +3,14 @@
 """
 Fetch TWSE official data and compute a *proxy* of "market margin maintenance ratio".
 
-Definition (proxy):
+Proxy definition:
   maint_ratio_pct = ( Σ_i (fin_shares_i * close_i * 1000) / total_financing_amount_twd ) * 100
 
-Where:
 - fin_shares_i: financing balance shares (張) for security i, from TWSE MI_MARGN JSON
 - close_i: closing price for security i, from TWSE MI_INDEX JSON
 - total_financing_amount_twd: market total financing balance amount, from MI_MARGN footer (融資金額(仟元) 今日餘額)
 
 This is a market-level proxy, NOT "per-account maintenance ratio".
-It is still useful as a crowd leverage fragility gauge.
 
 Outputs:
 - latest.json (always)
@@ -22,8 +20,12 @@ Robustness:
 - Retries with backoff (2s, 4s, 8s)
 - If any critical parse fails => DOWNGRADED, keep nulls.
 
-Notes:
-- Endpoints are TWSE official pages (often referenced by data.gov.tw as open data resources).
+Date sourcing:
+- --date YYYYMMDD takes priority.
+- else --date-from JSON path:
+  - try top-level: data_date / date / UsedDate / used_date
+  - then try: series.TWSE.data_date
+  - then try: series.TWSE.rows[0].date
 """
 
 from __future__ import annotations
@@ -32,7 +34,6 @@ import argparse
 import json
 import re
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -121,7 +122,6 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
                     continue
                 head = str(row[0])
                 if "融資金額" in head:
-                    # last numeric cell is usually 今日餘額
                     nums = [parse_number(x) for x in row[1:]]
                     nums = [x for x in nums if x is not None]
                     if nums:
@@ -152,7 +152,6 @@ def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, i
     if not isinstance(tables, list):
         return {}, "tables_not_found"
 
-    # Candidate tables: must have code and a financing-today-balance column.
     best: Optional[Dict[str, Any]] = None
     for t in tables:
         fields = t.get("fields") or []
@@ -172,7 +171,6 @@ def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, i
     if not isinstance(fields, list) or not isinstance(data, list):
         return {}, "fin_table_bad_shape"
 
-    # locate columns
     code_idx = None
     fin_today_idx = None
     for i, f in enumerate(fields):
@@ -242,10 +240,22 @@ def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], s
 
     return out, "ok"
 
+def normalize_date_to_yyyymmdd(s: str) -> Optional[str]:
+    ss = s.strip()
+    if re.fullmatch(r"\d{8}", ss):
+        return ss
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", ss):
+        return ss.replace("-", "")
+    return None
+
 def load_date_from_latest(path: str) -> Optional[str]:
     """
-    Try to read a YYYY-MM-DD (or YYYYMMDD) date from an existing latest.json (your margin cache).
-    We accept common keys: data_date, date, UsedDate.
+    Read a date from an existing taiwan_margin_cache/latest.json.
+
+    Supported locations:
+    - top-level: data_date / date / UsedDate / used_date
+    - series.TWSE.data_date
+    - series.TWSE.rows[0].date
     """
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -253,19 +263,40 @@ def load_date_from_latest(path: str) -> Optional[str]:
     except Exception:
         return None
 
+    # 1) top-level keys
     for k in ("data_date", "date", "UsedDate", "used_date"):
         v = obj.get(k)
-        if isinstance(v, str) and v.strip():
-            s = v.strip()
-            # normalize
-            if re.fullmatch(r"\d{8}", s):
-                return s
-            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
-                return s.replace("-", "")
+        if isinstance(v, str):
+            dd = normalize_date_to_yyyymmdd(v)
+            if dd:
+                return dd
+
+    # 2) series.TWSE.data_date
+    try:
+        v = obj.get("series", {}).get("TWSE", {}).get("data_date")
+        if isinstance(v, str):
+            dd = normalize_date_to_yyyymmdd(v)
+            if dd:
+                return dd
+    except Exception:
+        pass
+
+    # 3) series.TWSE.rows[0].date
+    try:
+        rows = obj.get("series", {}).get("TWSE", {}).get("rows", [])
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            v = rows[0].get("date")
+            if isinstance(v, str):
+                dd = normalize_date_to_yyyymmdd(v)
+                if dd:
+                    return dd
+    except Exception:
+        pass
+
     return None
 
 def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 1200) -> None:
-    data = {"schema_version": SCHEMA_HISTORY, "items": []}  # default
+    data = {"schema_version": SCHEMA_HISTORY, "items": []}
     try:
         with open(history_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -276,7 +307,6 @@ def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 120
     if not isinstance(items, list):
         items = []
 
-    # upsert by data_date
     dd = item.get("data_date")
     new_items: List[Dict[str, Any]] = []
     replaced = False
@@ -289,12 +319,10 @@ def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 120
     if not replaced:
         new_items.append(item)
 
-    # sort by data_date asc if possible
     def key_fn(x: Dict[str, Any]) -> str:
         return str(x.get("data_date") or "")
     new_items = sorted([x for x in new_items if x.get("data_date")], key=key_fn)
 
-    # cap
     if len(new_items) > max_items:
         new_items = new_items[-max_items:]
 
@@ -307,7 +335,7 @@ def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 120
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", help="YYYYMMDD (preferred). If omitted, try --date-from.", default="")
-    ap.add_argument("--date-from", help="Read date from an existing latest.json (data_date/date/UsedDate).", default="")
+    ap.add_argument("--date-from", help="Read date from an existing latest.json", default="")
     ap.add_argument("--out", required=True, help="Output latest.json path")
     ap.add_argument("--history", default="", help="Optional history.json path (upsert by data_date)")
     ap.add_argument("--tz", default="Asia/Taipei")
@@ -321,23 +349,16 @@ def main() -> int:
     date_yyyymmdd = args.date.strip()
     if not date_yyyymmdd and args.date_from.strip():
         date_yyyymmdd = load_date_from_latest(args.date_from.strip()) or ""
-    if date_yyyymmdd and re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_yyyymmdd):
-        date_yyyymmdd = date_yyyymmdd.replace("-", "")
+    date_yyyymmdd = normalize_date_to_yyyymmdd(date_yyyymmdd) or ""
 
     latest: Dict[str, Any] = {
         "schema_version": SCHEMA_LATEST,
-        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v1",
+        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v2",
         "generated_at_utc": gen_utc,
         "generated_at_local": gen_local,
         "timezone": args.tz,
-        "source_urls": {
-            "MI_MARGN": TWSE_MI_MARGN,
-            "MI_INDEX": TWSE_MI_INDEX,
-        },
-        "params": {
-            "date": date_yyyymmdd or None,
-            "exclude_non4": bool(args.exclude_non4),
-        },
+        "source_urls": {"MI_MARGN": TWSE_MI_MARGN, "MI_INDEX": TWSE_MI_INDEX},
+        "params": {"date": date_yyyymmdd or None, "exclude_non4": bool(args.exclude_non4)},
         "fetch_status": "DOWNGRADED",
         "confidence": "DOWNGRADED",
         "dq_reason": "init",
@@ -352,10 +373,9 @@ def main() -> int:
     }
 
     try:
-        if not date_yyyymmdd or not re.fullmatch(r"\d{8}", date_yyyymmdd):
+        if not date_yyyymmdd:
             raise ValueError("date_missing_or_invalid")
 
-        # 1) Fetch margin summary + per-security financing shares
         margn = request_json(
             TWSE_MI_MARGN,
             params={"response": "json", "date": date_yyyymmdd, "selectType": "ALL"},
@@ -369,11 +389,9 @@ def main() -> int:
         if not fin_shares:
             raise RuntimeError(f"financing_shares_not_found:{fin_src}")
 
-        # optional filtering
         if args.exclude_non4:
             fin_shares = {k: v for k, v in fin_shares.items() if re.fullmatch(r"\d{4}", k)}
 
-        # 2) Fetch close prices
         mi_index = request_json(
             TWSE_MI_INDEX,
             params={"response": "json", "date": date_yyyymmdd, "type": "ALLBUT0999"},
@@ -382,7 +400,6 @@ def main() -> int:
         if not close_by_code:
             raise RuntimeError(f"close_prices_not_found:{px_src}")
 
-        # 3) Compute collateral value
         total_collateral = 0.0
         missing_px = 0
         included = 0
@@ -391,7 +408,6 @@ def main() -> int:
             if px is None:
                 missing_px += 1
                 continue
-            # shares are 張, assume 1 張 = 1000 股
             total_collateral += float(shares) * float(px) * 1000.0
             included += 1
 
@@ -413,7 +429,6 @@ def main() -> int:
         latest["notes"].append(f"fin_shares: {fin_src}")
         latest["notes"].append(f"close_prices: {px_src}")
 
-        # history upsert
         if args.history.strip():
             hist_item = {
                 "data_date": latest["data_date"],
@@ -430,7 +445,6 @@ def main() -> int:
         latest["error"] = str(e)
         latest["dq_reason"] = "fetch_or_parse_failed"
 
-    # write latest.json always
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(latest, f, ensure_ascii=False, indent=2)
 
