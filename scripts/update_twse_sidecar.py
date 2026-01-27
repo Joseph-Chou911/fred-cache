@@ -685,10 +685,10 @@ def main() -> None:
     prefix = ""
     extra_note = ""
     if run_day_tag == "WEEKEND":
-        prefix = "今日非交易日；"
+        prefix = "今日為週末；"
     elif used_date_status == "DATA_NOT_UPDATED":
         prefix = "今日資料未更新；"
-        extra_note = " daily endpoint has not published today's row yet"
+        extra_note = "；daily endpoint has not published today's row yet"
 
     summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}{extra_note}"
 
