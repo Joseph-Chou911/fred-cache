@@ -56,9 +56,9 @@
       }
     },
     {
-      "run_ts_utc": "2026-01-27T06:59:00.580550Z",
-      "as_of_ts": "2026-01-27T14:59:00.580562+08:00",
-      "data_commit_sha": "6482652e1a42df6f1e13f55f3b57bdaf7511d7e3",
+      "run_ts_utc": "2026-01-27T15:58:59.954055Z",
+      "as_of_ts": "2026-01-27T23:58:59.954073+08:00",
+      "data_commit_sha": "ac2dd2237fb9194cd8be5151182f2adbb16c7c6d",
       "bottom_state_global": "NONE",
       "triggers_global": {
         "TRIG_PANIC": 0,
@@ -75,10 +75,10 @@
         "hyg_veto_gap_z": 3.7318916416182217,
         "ofr_veto_gap_z": 2.8136912270406667
       },
-      "tw_state": "NA",
+      "tw_state": "NONE",
       "tw_triggers": {
-        "TRIG_TW_PANIC": null,
-        "TRIG_TW_LEVERAGE_HEAT": 1,
+        "TRIG_TW_PANIC": 0,
+        "TRIG_TW_LEVERAGE_HEAT": null,
         "TRIG_TW_REVERSAL": 0
       }
     }

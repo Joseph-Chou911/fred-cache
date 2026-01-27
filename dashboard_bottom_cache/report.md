@@ -1,10 +1,10 @@
 # Bottom Cache Dashboard (v0)
 
-- as_of_ts (TPE): `2026-01-27T14:59:00.580562+08:00`
-- run_ts_utc: `2026-01-27T06:59:00.580550Z`
+- as_of_ts (TPE): `2026-01-27T23:58:59.954073+08:00`
+- run_ts_utc: `2026-01-27T15:58:59.954055Z`
 - bottom_state (Global): **NONE**  (streak=3)
-- market_cache_as_of_ts: `2026-01-27T04:17:10Z`
-- market_cache_generated_at_utc: `2026-01-27T04:17:10Z`
+- market_cache_as_of_ts: `2026-01-27T13:55:03Z`
+- market_cache_generated_at_utc: `2026-01-27T13:55:03Z`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -32,16 +32,16 @@
 - TRIG_REVERSAL: `0`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **NA**  (streak=1)
+- tw_state: **NONE**  (streak=3)
 - UsedDate: `2026-01-26`; run_day_tag: `WEEKDAY`; risk_level: `NA`
 - Lookback: `20/None`
-- margin_signal(TWSE): `WATCH`; unit: `億`
-- margin_balance(TWSE latest): `3815.8` 億
-- margin_chg(TWSE latest): `55.0` 億
+- margin_signal(TWSE): `None`; unit: `NA`
+- margin_balance(TWSE latest): `NA` NA
+- margin_chg(TWSE latest): `NA` NA
 
 ### TW Triggers (0/1/NA)
-- TRIG_TW_PANIC: `None`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))
-- TRIG_TW_LEVERAGE_HEAT: `1`  (margin_signal∈{WATCH,ALERT})
+- TRIG_TW_PANIC: `0`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))
+- TRIG_TW_LEVERAGE_HEAT: `None`  (margin_signal∈{WATCH,ALERT})
 - TRIG_TW_REVERSAL: `0`  (PANIC & NOT heat & pct_change>=0 & DownDay=false)
 
 ### TW Distances / Gating
@@ -50,10 +50,11 @@
 
 ### TW Snapshot (key fields)
 - pct_change: `0.322294`; amplitude_pct: `0.64731`; turnover_twd: `747339306040.0`; close: `32064.52`
-- signals: DownDay=False, VolumeAmplified=None, VolAmplified=None, NewLow_N=None, ConsecutiveBreak=None
+- signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=False
 
 ## Excluded / NA Reasons
-- TRIG_TW_PANIC: missing_fields:roll25.signal.*
+- TRIG_TW_LEVERAGE_HEAT: missing_fields:series.TWSE.rows[].chg_yi
+- TRIG_TW_LEVERAGE_HEAT: missing_fields:margin_signal (derived from taiwan_margin_cache.series.TWSE.rows)
 
 ## Action Map (v0)
 - Global NONE: 維持既定 DCA/資產配置紀律；不把它當成抄底時點訊號
@@ -67,7 +68,7 @@
 |---|---|---|---:|---:|---:|---|---:|---:|---:|---|
 | 2026-01-25 | 2026-01-25T19:40:31.851190+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
 | 2026-01-26 | 2026-01-26T16:06:45.700719+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
-| 2026-01-27 | 2026-01-27T14:59:00.580562+08:00 | NONE | 0 | 0 | 0 | NA | None | 1 | 0 | equity_extreme |
+| 2026-01-27 | 2026-01-27T23:58:59.954073+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | None | 0 | equity_extreme |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) | w60.z_delta | w60.p_delta |

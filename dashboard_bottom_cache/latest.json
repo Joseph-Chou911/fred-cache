@@ -1,13 +1,13 @@
 {
   "schema_version": "bottom_cache_v1",
-  "generated_at_utc": "2026-01-27T06:59:00.580550Z",
-  "as_of_ts": "2026-01-27T14:59:00.580562+08:00",
-  "data_commit_sha": "6482652e1a42df6f1e13f55f3b57bdaf7511d7e3",
+  "generated_at_utc": "2026-01-27T15:58:59.954055Z",
+  "as_of_ts": "2026-01-27T23:58:59.954073+08:00",
+  "data_commit_sha": "ac2dd2237fb9194cd8be5151182f2adbb16c7c6d",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-01-27T04:17:10Z",
-    "market_cache_as_of_ts": "2026-01-27T04:17:10Z",
+    "market_cache_generated_at_utc": "2026-01-27T13:55:03Z",
+    "market_cache_as_of_ts": "2026-01-27T13:55:03Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -31,7 +31,7 @@
     "ofr_veto_gap_z": 2.8136912270406667
   },
   "tw_local_gate": {
-    "tw_state": "NA",
+    "tw_state": "NONE",
     "UsedDate": "2026-01-26",
     "run_day_tag": "WEEKDAY",
     "risk_level": "NA",
@@ -43,30 +43,19 @@
     "close": 32064.52,
     "signals": {
       "DownDay": false,
-      "VolumeAmplified": null,
-      "VolAmplified": null,
-      "NewLow_N": null,
-      "ConsecutiveBreak": null
+      "VolumeAmplified": false,
+      "VolAmplified": false,
+      "NewLow_N": false,
+      "ConsecutiveBreak": false
     },
     "margin": {
-      "margin_signal_TWSE": "WATCH",
-      "unit": "億",
-      "dbg": {
-        "chg_last5_yi": [
-          55.0,
-          43.4,
-          39.9,
-          -34.8,
-          18.1
-        ],
-        "sum_last5_yi": 121.60000000000002,
-        "pos_days_last5": 4,
-        "rule": "WATCH(sum5>=100.0 & pos_days>=4); ALERT(sum5>=150.0 & pos_days>=4)"
-      }
+      "margin_signal_TWSE": null,
+      "unit": "NA",
+      "dbg": {}
     },
     "triggers": {
-      "TRIG_TW_PANIC": null,
-      "TRIG_TW_LEVERAGE_HEAT": 1,
+      "TRIG_TW_PANIC": 0,
+      "TRIG_TW_LEVERAGE_HEAT": null,
       "TRIG_TW_REVERSAL": 0
     },
     "distances": {
@@ -76,8 +65,12 @@
   },
   "excluded_triggers": [
     {
-      "trigger": "TRIG_TW_PANIC",
-      "reason": "missing_fields:roll25.signal.*"
+      "trigger": "TRIG_TW_LEVERAGE_HEAT",
+      "reason": "missing_fields:series.TWSE.rows[].chg_yi"
+    },
+    {
+      "trigger": "TRIG_TW_LEVERAGE_HEAT",
+      "reason": "missing_fields:margin_signal (derived from taiwan_margin_cache.series.TWSE.rows)"
     }
   ],
   "series_global": {
@@ -87,7 +80,7 @@
       "latest": {
         "data_date": "2026-01-26",
         "value": 16.15,
-        "as_of_ts": "2026-01-27T04:17:10Z",
+        "as_of_ts": "2026-01-27T13:55:03Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
@@ -109,7 +102,7 @@
       "latest": {
         "data_date": "2026-01-26",
         "value": 6950.23,
-        "as_of_ts": "2026-01-27T04:17:10Z",
+        "as_of_ts": "2026-01-27T13:55:03Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
@@ -131,7 +124,7 @@
       "latest": {
         "data_date": "2026-01-26",
         "value": 0.8448329690914768,
-        "as_of_ts": "2026-01-27T04:17:10Z",
+        "as_of_ts": "2026-01-27T13:55:03Z",
         "source_url": "DERIVED"
       },
       "w60": {
@@ -153,7 +146,7 @@
       "latest": {
         "data_date": "2026-01-22",
         "value": -2.68,
-        "as_of_ts": "2026-01-27T04:17:10Z",
+        "as_of_ts": "2026-01-27T13:55:03Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
