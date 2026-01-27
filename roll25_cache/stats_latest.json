@@ -1,7 +1,7 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-01-27T07:30:20Z",
-  "generated_at_local": "2026-01-27T15:30:20.487419+08:00",
+  "generated_at_utc": "2026-01-27T07:55:13Z",
+  "generated_at_local": "2026-01-27T15:55:13.872295+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-01-26",
   "run_day_tag": "WEEKDAY",
@@ -95,6 +95,21 @@
         "n_total_available": 259,
         "note": "amplitude_pct needs high/low + D-1 close; if OHLC missing, series is sparse and windows may be incomplete."
       }
+    }
+  },
+  "derived": {
+    "lookback_n_target": 20,
+    "lookback_n_actual": 20,
+    "vol_multiplier_20": 1.027252,
+    "volume_amplified": false,
+    "new_low_n": 0,
+    "consecutive_down_days": 0,
+    "definition": {
+      "vol_win": 20,
+      "vol_threshold": 1.5,
+      "vol_min_points": 15,
+      "newlow_win": 60,
+      "newlow_min_points": 40
     }
   },
   "sources": {
