@@ -1,138 +1,2018 @@
 [
   {
     "date": "2026-01-26",
-    "close": 32064.52,
+    "close": null,
     "change": 103.01,
     "trade_value": 747339306040,
-    "high": 32196.75,
-    "low": 31989.86
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-23",
-    "close": 31961.51,
+    "close": null,
     "change": 215.43,
     "trade_value": 818428930073,
-    "high": 32042.44,
-    "low": 31693.15
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-22",
-    "close": 31746.08,
+    "close": null,
     "change": 499.71,
     "trade_value": 814595841360,
-    "high": 31890.62,
-    "low": 31371.13
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-21",
-    "close": 31246.37,
+    "close": null,
     "change": -513.62,
     "trade_value": 899309076186,
-    "high": 31749.14,
-    "low": 31200.76
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-20",
-    "close": 31759.99,
+    "close": null,
     "change": 120.7,
     "trade_value": 799639371793,
-    "high": 31759.99,
-    "low": 31340.1
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-19",
-    "close": 31639.29,
+    "close": null,
     "change": 230.59,
     "trade_value": 823428003269,
-    "high": 31827.39,
-    "low": 31285.53
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-16",
-    "close": 31408.7,
+    "close": null,
     "change": 598.12,
     "trade_value": 851452408675,
-    "high": 31475.22,
-    "low": 30844.63
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-15",
-    "close": 30810.58,
+    "close": null,
     "change": -131.2,
     "trade_value": 671953720007,
-    "high": 30877.31,
-    "low": 30663.87
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-14",
-    "close": 30941.78,
+    "close": null,
     "change": 234.56,
     "trade_value": 681983353722,
-    "high": 30994.81,
-    "low": 30742.53
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-13",
-    "close": 30707.22,
+    "close": null,
     "change": 139.93,
     "trade_value": 749179436618,
-    "high": 30973.85,
-    "low": 30529.33
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-12",
-    "close": 30567.29,
+    "close": null,
     "change": 278.33,
     "trade_value": 626408176303,
-    "high": 30681.99,
-    "low": 30472.7
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-09",
-    "close": 30288.96,
+    "close": null,
     "change": -71.59,
     "trade_value": 704371387415,
-    "high": 30500.42,
-    "low": 29925.49
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-08",
-    "close": 30360.55,
+    "close": null,
     "change": -74.92,
     "trade_value": 759270755036,
-    "high": 30593.49,
-    "low": 30268.36
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-07",
-    "close": 30435.47,
+    "close": null,
     "change": -140.83,
     "trade_value": 881736707216,
-    "high": 30570.26,
-    "low": 30306.16
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-06",
-    "close": 30576.3,
+    "close": null,
     "change": 471.26,
     "trade_value": 763236739665,
-    "high": 30576.3,
-    "low": 29933.65
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-05",
-    "close": 30105.04,
+    "close": null,
     "change": 755.23,
     "trade_value": 800793653955,
-    "high": 30339.32,
-    "low": 29779.7
+    "high": null,
+    "low": null
   },
   {
     "date": "2026-01-02",
-    "close": 29349.81,
+    "close": null,
     "change": 386.21,
     "trade_value": 669781989470,
-    "high": 29363.43,
-    "low": 29007.75
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-31",
+    "close": null,
+    "change": 256.47,
+    "trade_value": 548425314258,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-30",
+    "close": null,
+    "change": -103.76,
+    "trade_value": 469871782250,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-29",
+    "close": null,
+    "change": 254.87,
+    "trade_value": 469061962836,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-26",
+    "close": null,
+    "change": 184.04,
+    "trade_value": 443994479984,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-24",
+    "close": null,
+    "change": 61.51,
+    "trade_value": 439061668896,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-23",
+    "close": null,
+    "change": 160.83,
+    "trade_value": 431994260374,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-22",
+    "close": null,
+    "change": 453.29,
+    "trade_value": 504472490831,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-19",
+    "close": null,
+    "change": 227.82,
+    "trade_value": 568327509178,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-18",
+    "close": null,
+    "change": -56.64,
+    "trade_value": 460035955277,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-17",
+    "close": null,
+    "change": -11.49,
+    "trade_value": 524829243071,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-16",
+    "close": null,
+    "change": -330.28,
+    "trade_value": 547186167710,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-15",
+    "close": null,
+    "change": -331.08,
+    "trade_value": 451740486315,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-12",
+    "close": null,
+    "change": 173.27,
+    "trade_value": 488652979581,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-11",
+    "close": null,
+    "change": -375.98,
+    "trade_value": 537128803314,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-10",
+    "close": null,
+    "change": 218.13,
+    "trade_value": 509141432257,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-09",
+    "close": null,
+    "change": -121.18,
+    "trade_value": 524525111897,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-08",
+    "close": null,
+    "change": 322.89,
+    "trade_value": 438297179091,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-05",
+    "close": null,
+    "change": 185.18,
+    "trade_value": 457238821346,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-04",
+    "close": null,
+    "change": 2.67,
+    "trade_value": 397985953488,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-03",
+    "close": null,
+    "change": 228.77,
+    "trade_value": 457284590648,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-02",
+    "close": null,
+    "change": 221.74,
+    "trade_value": 486538825279,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-12-01",
+    "close": null,
+    "change": -283.95,
+    "trade_value": 493440574126,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-28",
+    "close": null,
+    "change": 71.95,
+    "trade_value": 489885964092,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-27",
+    "close": null,
+    "change": 144.99,
+    "trade_value": 506517208172,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-26",
+    "close": null,
+    "change": 497.37,
+    "trade_value": 523531629362,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-25",
+    "close": null,
+    "change": 407.93,
+    "trade_value": 490750703418,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-24",
+    "close": null,
+    "change": 69.3,
+    "trade_value": 749163116671,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-21",
+    "close": null,
+    "change": -991.42,
+    "trade_value": 581860848616,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-20",
+    "close": null,
+    "change": 846.24,
+    "trade_value": 592368253864,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-19",
+    "close": null,
+    "change": -176.0,
+    "trade_value": 516180089038,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-18",
+    "close": null,
+    "change": -691.19,
+    "trade_value": 672757035089,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-17",
+    "close": null,
+    "change": 49.81,
+    "trade_value": 547722102923,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-14",
+    "close": null,
+    "change": -506.06,
+    "trade_value": 614575227909,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-13",
+    "close": null,
+    "change": -43.53,
+    "trade_value": 674189961874,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-12",
+    "close": null,
+    "change": 162.14,
+    "trade_value": 576091990790,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-11",
+    "close": null,
+    "change": -84.56,
+    "trade_value": 584494820328,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-10",
+    "close": null,
+    "change": 218.1,
+    "trade_value": 504213278890,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-07",
+    "close": null,
+    "change": -248.04,
+    "trade_value": 486727226387,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-06",
+    "close": null,
+    "change": 182.39,
+    "trade_value": 514272235406,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-05",
+    "close": null,
+    "change": -399.5,
+    "trade_value": 619346788683,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-04",
+    "close": null,
+    "change": -218.03,
+    "trade_value": 604283395876,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-11-03",
+    "close": null,
+    "change": 101.24,
+    "trade_value": 581496914983,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-31",
+    "close": null,
+    "change": -54.18,
+    "trade_value": 576144513446,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-30",
+    "close": null,
+    "change": -7.21,
+    "trade_value": 633558030252,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-29",
+    "close": null,
+    "change": 345.63,
+    "trade_value": 594219629472,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-28",
+    "close": null,
+    "change": -44.52,
+    "trade_value": 555663566461,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-27",
+    "close": null,
+    "change": 461.37,
+    "trade_value": 564293629882,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-23",
+    "close": null,
+    "change": -116.65,
+    "trade_value": 434561455546,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-22",
+    "close": null,
+    "change": -103.5,
+    "trade_value": 463157561102,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-21",
+    "close": null,
+    "change": 63.78,
+    "trade_value": 528880140832,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-20",
+    "close": null,
+    "change": 386.26,
+    "trade_value": 498961206376,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-17",
+    "close": null,
+    "change": -345.5,
+    "trade_value": 556452817043,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-16",
+    "close": null,
+    "change": 372.16,
+    "trade_value": 565481652363,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-15",
+    "close": null,
+    "change": 482.56,
+    "trade_value": 521429411299,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-14",
+    "close": null,
+    "change": -130.27,
+    "trade_value": 709086353790,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-13",
+    "close": null,
+    "change": -378.5,
+    "trade_value": 608460235868,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-09",
+    "close": null,
+    "change": 238.24,
+    "trade_value": 582670484489,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-08",
+    "close": null,
+    "change": -148.27,
+    "trade_value": 471275287964,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-07",
+    "close": null,
+    "change": 450.89,
+    "trade_value": 575780610445,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-03",
+    "close": null,
+    "change": 382.67,
+    "trade_value": 480095576070,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-02",
+    "close": null,
+    "change": 395.48,
+    "trade_value": 506683446386,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-10-01",
+    "close": null,
+    "change": 162.37,
+    "trade_value": 468840061902,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-30",
+    "close": null,
+    "change": 240.22,
+    "trade_value": 455296213373,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-26",
+    "close": null,
+    "change": -443.53,
+    "trade_value": 500052396638,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-25",
+    "close": null,
+    "change": -172.88,
+    "trade_value": 503204151623,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-24",
+    "close": null,
+    "change": -50.64,
+    "trade_value": 515187636594,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-23",
+    "close": null,
+    "change": 366.77,
+    "trade_value": 547004847440,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-22",
+    "close": null,
+    "change": 302.23,
+    "trade_value": 482061403631,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-19",
+    "close": null,
+    "change": -190.99,
+    "trade_value": 619694769912,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-18",
+    "close": null,
+    "change": 331.11,
+    "trade_value": 467374300986,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-17",
+    "close": null,
+    "change": -191.39,
+    "trade_value": 439687060953,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-16",
+    "close": null,
+    "change": 272.48,
+    "trade_value": 455107630117,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-15",
+    "close": null,
+    "change": -117.48,
+    "trade_value": 407891369036,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-12",
+    "close": null,
+    "change": 258.93,
+    "trade_value": 495051339127,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-11",
+    "close": null,
+    "change": 23.12,
+    "trade_value": 609494103234,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-10",
+    "close": null,
+    "change": 337.41,
+    "trade_value": 540470187649,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-09",
+    "close": null,
+    "change": 307.8,
+    "trade_value": 512534389842,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-08",
+    "close": null,
+    "change": 52.8,
+    "trade_value": 443185374596,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-05",
+    "close": null,
+    "change": 314.73,
+    "trade_value": 426569974111,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-04",
+    "close": null,
+    "change": 79.55,
+    "trade_value": 450547881333,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-03",
+    "close": null,
+    "change": 83.52,
+    "trade_value": 375154827165,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-02",
+    "close": null,
+    "change": -54.95,
+    "trade_value": 420249878093,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-09-01",
+    "close": null,
+    "change": -161.37,
+    "trade_value": 522538354934,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-29",
+    "close": null,
+    "change": -3.35,
+    "trade_value": 478348167874,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-28",
+    "close": null,
+    "change": -283.45,
+    "trade_value": 449197099212,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-27",
+    "close": null,
+    "change": 214.8,
+    "trade_value": 467302614203,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-26",
+    "close": null,
+    "change": 27.72,
+    "trade_value": 532063118603,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-25",
+    "close": null,
+    "change": 512.91,
+    "trade_value": 431825644540,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-22",
+    "close": null,
+    "change": -197.66,
+    "trade_value": 369732364563,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-21",
+    "close": null,
+    "change": 336.69,
+    "trade_value": 420673855060,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-20",
+    "close": null,
+    "change": -728.06,
+    "trade_value": 572237896405,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-19",
+    "close": null,
+    "change": -129.02,
+    "trade_value": 477889208524,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-18",
+    "close": null,
+    "change": 148.04,
+    "trade_value": 457868280041,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-15",
+    "close": null,
+    "change": 96.38,
+    "trade_value": 454217776031,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-14",
+    "close": null,
+    "change": -131.92,
+    "trade_value": 486603622585,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-13",
+    "close": null,
+    "change": 211.66,
+    "trade_value": 573873489672,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-12",
+    "close": null,
+    "change": 22.86,
+    "trade_value": 430747663190,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-11",
+    "close": null,
+    "change": 114.24,
+    "trade_value": 437210225957,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-08",
+    "close": null,
+    "change": 17.49,
+    "trade_value": 432109965420,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-07",
+    "close": null,
+    "change": 556.41,
+    "trade_value": 467380441728,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-06",
+    "close": null,
+    "change": -213.23,
+    "trade_value": 361183155977,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-05",
+    "close": null,
+    "change": 281.65,
+    "trade_value": 380074357026,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-04",
+    "close": null,
+    "change": -55.44,
+    "trade_value": 339596557905,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-08-01",
+    "close": null,
+    "change": -108.14,
+    "trade_value": 404788588802,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-30",
+    "close": null,
+    "change": -324.06,
+    "trade_value": 365764595737,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-27",
+    "close": null,
+    "change": 87.74,
+    "trade_value": 374841846059,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-26",
+    "close": null,
+    "change": 61.73,
+    "trade_value": 399984776279,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-25",
+    "close": null,
+    "change": 241.85,
+    "trade_value": 401074986062,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-24",
+    "close": null,
+    "change": 456.74,
+    "trade_value": 401630916668,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-23",
+    "close": null,
+    "change": -313.72,
+    "trade_value": 314404805401,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-20",
+    "close": null,
+    "change": 42.24,
+    "trade_value": 463891770965,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-19",
+    "close": null,
+    "change": -353.23,
+    "trade_value": 337907299094,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-18",
+    "close": null,
+    "change": 145.14,
+    "trade_value": 394797009579,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-17",
+    "close": null,
+    "change": 161.69,
+    "trade_value": 374245537952,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-16",
+    "close": null,
+    "change": -23.05,
+    "trade_value": 298283417109,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-13",
+    "close": null,
+    "change": -214.87,
+    "trade_value": 374682954150,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-12",
+    "close": null,
+    "change": -182.28,
+    "trade_value": 350086370163,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-11",
+    "close": null,
+    "change": 227.96,
+    "trade_value": 411974082607,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-10",
+    "close": null,
+    "change": 451.85,
+    "trade_value": 402770551130,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-09",
+    "close": null,
+    "change": 129.63,
+    "trade_value": 307755303958,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-06",
+    "close": null,
+    "change": -13.77,
+    "trade_value": 306326887550,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-05",
+    "close": null,
+    "change": 56.34,
+    "trade_value": 370407613418,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-04",
+    "close": null,
+    "change": 491.16,
+    "trade_value": 416698575220,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-03",
+    "close": null,
+    "change": 124.22,
+    "trade_value": 356029228852,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-06-02",
+    "close": null,
+    "change": -344.59,
+    "trade_value": 357964491699,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-29",
+    "close": null,
+    "change": -10.42,
+    "trade_value": 480476847321,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-28",
+    "close": null,
+    "change": 21.18,
+    "trade_value": 332260752364,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-27",
+    "close": null,
+    "change": -200.03,
+    "trade_value": 319554934321,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-26",
+    "close": null,
+    "change": -115.67,
+    "trade_value": 303248571571,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-23",
+    "close": null,
+    "change": -18.72,
+    "trade_value": 313775509301,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-22",
+    "close": null,
+    "change": -132.95,
+    "trade_value": 303639249474,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-21",
+    "close": null,
+    "change": 277.88,
+    "trade_value": 304825349622,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-20",
+    "close": null,
+    "change": 2.2,
+    "trade_value": 281060270227,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-19",
+    "close": null,
+    "change": -319.86,
+    "trade_value": 336411887107,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-16",
+    "close": null,
+    "change": 113.44,
+    "trade_value": 349825446057,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-15",
+    "close": null,
+    "change": -52.62,
+    "trade_value": 352701130386,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-14",
+    "close": null,
+    "change": 452.73,
+    "trade_value": 435325777480,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-13",
+    "close": null,
+    "change": 200.6,
+    "trade_value": 414876050071,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-12",
+    "close": null,
+    "change": 214.5,
+    "trade_value": 286880121757,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-09",
+    "close": null,
+    "change": 371.64,
+    "trade_value": 303145142635,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-08",
+    "close": null,
+    "change": -3.09,
+    "trade_value": 255842394901,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-07",
+    "close": null,
+    "change": 23.9,
+    "trade_value": 276452299522,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-06",
+    "close": null,
+    "change": -10.4,
+    "trade_value": 314921423075,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-05",
+    "close": null,
+    "change": -254.65,
+    "trade_value": 396674099865,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-05-02",
+    "close": null,
+    "change": 552.61,
+    "trade_value": 339534825350,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-30",
+    "close": null,
+    "change": 2.4,
+    "trade_value": 282189467291,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-29",
+    "close": null,
+    "change": 198.22,
+    "trade_value": 250105465896,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-28",
+    "close": null,
+    "change": 161.68,
+    "trade_value": 222995069262,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-25",
+    "close": null,
+    "change": 393.92,
+    "trade_value": 298510240543,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-24",
+    "close": null,
+    "change": -160.33,
+    "trade_value": 248994902573,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-23",
+    "close": null,
+    "change": 845.71,
+    "trade_value": 275548700667,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-22",
+    "close": null,
+    "change": -312.77,
+    "trade_value": 250003984052,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-21",
+    "close": null,
+    "change": -288.83,
+    "trade_value": 213646250942,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-18",
+    "close": null,
+    "change": 56.3,
+    "trade_value": 201639077744,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-17",
+    "close": null,
+    "change": -129.27,
+    "trade_value": 257584164735,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-16",
+    "close": null,
+    "change": -389.67,
+    "trade_value": 296550497546,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-15",
+    "close": null,
+    "change": 344.58,
+    "trade_value": 305561723714,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-14",
+    "close": null,
+    "change": -15.68,
+    "trade_value": 474947203845,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-11",
+    "close": null,
+    "change": 528.74,
+    "trade_value": 527108374659,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-10",
+    "close": null,
+    "change": 1608.27,
+    "trade_value": 208504485334,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-09",
+    "close": null,
+    "change": -1068.19,
+    "trade_value": 590040522967,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-08",
+    "close": null,
+    "change": -772.4,
+    "trade_value": 577950957444,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-07",
+    "close": null,
+    "change": -2065.87,
+    "trade_value": 166095041450,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-02",
+    "close": null,
+    "change": 18.05,
+    "trade_value": 240146859369,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-04-01",
+    "close": null,
+    "change": 584.27,
+    "trade_value": 278254400622,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-31",
+    "close": null,
+    "change": -906.99,
+    "trade_value": 437475392711,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-28",
+    "close": null,
+    "change": -348.87,
+    "trade_value": 327112874385,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-27",
+    "close": null,
+    "change": -308.53,
+    "trade_value": 279802802176,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-26",
+    "close": null,
+    "change": -12.9,
+    "trade_value": 223198487361,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-25",
+    "close": null,
+    "change": 166.55,
+    "trade_value": 256973561881,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-24",
+    "close": null,
+    "change": -102.46,
+    "trade_value": 251044538014,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-21",
+    "close": null,
+    "change": -168.16,
+    "trade_value": 333354118714,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-20",
+    "close": null,
+    "change": 416.43,
+    "trade_value": 278247603930,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-19",
+    "close": null,
+    "change": -310.84,
+    "trade_value": 316992611689,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-18",
+    "close": null,
+    "change": 153.04,
+    "trade_value": 282886860039,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-17",
+    "close": null,
+    "change": 150.58,
+    "trade_value": 310401135708,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-14",
+    "close": null,
+    "change": 6.37,
+    "trade_value": 348283533120,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-13",
+    "close": null,
+    "change": -316.68,
+    "trade_value": 378659811240,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-12",
+    "close": null,
+    "change": 207.27,
+    "trade_value": 350646223635,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-11",
+    "close": null,
+    "change": -388.06,
+    "trade_value": 428932802487,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-10",
+    "close": null,
+    "change": -116.92,
+    "trade_value": 354962067264,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-07",
+    "close": null,
+    "change": -139.36,
+    "trade_value": 367291980202,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-06",
+    "close": null,
+    "change": -156.47,
+    "trade_value": 360345720860,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-05",
+    "close": null,
+    "change": 275.02,
+    "trade_value": 369732472552,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-04",
+    "close": null,
+    "change": -159.37,
+    "trade_value": 415745130742,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-03-03",
+    "close": null,
+    "change": -296.93,
+    "trade_value": 439596984655,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-27",
+    "close": null,
+    "change": -349.37,
+    "trade_value": 549961479162,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-26",
+    "close": null,
+    "change": 116.83,
+    "trade_value": 383306082091,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-25",
+    "close": null,
+    "change": -279.59,
+    "trade_value": 412097170896,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-24",
+    "close": null,
+    "change": -164.94,
+    "trade_value": 373514736958,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-21",
+    "close": null,
+    "change": 242.79,
+    "trade_value": 400289543940,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-20",
+    "close": null,
+    "change": -116.62,
+    "trade_value": 391059983367,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-19",
+    "close": null,
+    "change": -62.03,
+    "trade_value": 389633272203,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-18",
+    "close": null,
+    "change": 160.78,
+    "trade_value": 339491493248,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-17",
+    "close": null,
+    "change": 352.72,
+    "trade_value": 371896633006,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-14",
+    "close": null,
+    "change": -246.8,
+    "trade_value": 415069809659,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-13",
+    "close": null,
+    "change": 109.66,
+    "trade_value": 386860774177,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-12",
+    "close": null,
+    "change": -94.3,
+    "trade_value": 378582968874,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-11",
+    "close": null,
+    "change": 131.91,
+    "trade_value": 355049928998,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-10",
+    "close": null,
+    "change": -226.13,
+    "trade_value": 334793847718,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-07",
+    "close": null,
+    "change": 161.67,
+    "trade_value": 362285982102,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-06",
+    "close": null,
+    "change": 155.02,
+    "trade_value": 341201513147,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-05",
+    "close": null,
+    "change": 367.62,
+    "trade_value": 358769679873,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-04",
+    "close": null,
+    "change": 99.25,
+    "trade_value": 422445543425,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-02-03",
+    "close": null,
+    "change": -830.7,
+    "trade_value": 525040931202,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-22",
+    "close": null,
+    "change": 225.4,
+    "trade_value": 357689238684,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-21",
+    "close": null,
+    "change": 33.19,
+    "trade_value": 262317819587,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-20",
+    "close": null,
+    "change": 118.74,
+    "trade_value": 279923971725,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-17",
+    "close": null,
+    "change": 122.98,
+    "trade_value": 328202713193,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-16",
+    "close": null,
+    "change": 510.53,
+    "trade_value": 342212868225,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-15",
+    "close": null,
+    "change": -282.95,
+    "trade_value": 301546910953,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-14",
+    "close": null,
+    "change": 309.19,
+    "trade_value": 281221487413,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-13",
+    "close": null,
+    "change": -523.53,
+    "trade_value": 461468820203,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-10",
+    "close": null,
+    "change": -69.27,
+    "trade_value": 342751185595,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-09",
+    "close": null,
+    "change": -326.2,
+    "trade_value": 393066234237,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-08",
+    "close": null,
+    "change": -243.94,
+    "trade_value": 371279269125,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-07",
+    "close": null,
+    "change": 103.56,
+    "trade_value": 439064706443,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-06",
+    "close": null,
+    "change": 639.41,
+    "trade_value": 423854591358,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-03",
+    "close": null,
+    "change": 76.24,
+    "trade_value": 337042271244,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2025-01-02",
+    "close": null,
+    "change": -203.04,
+    "trade_value": 379129283886,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-31",
+    "close": null,
+    "change": -155.1,
+    "trade_value": 273480515893,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-30",
+    "close": null,
+    "change": -85.48,
+    "trade_value": 274794064764,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-27",
+    "close": null,
+    "change": 28.74,
+    "trade_value": 292616349470,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-26",
+    "close": null,
+    "change": 26.81,
+    "trade_value": 306847345495,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-25",
+    "close": null,
+    "change": 99.89,
+    "trade_value": 310444641888,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-24",
+    "close": null,
+    "change": 15.7,
+    "trade_value": 347257591668,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-23",
+    "close": null,
+    "change": 594.29,
+    "trade_value": 361211114769,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-20",
+    "close": null,
+    "change": -422.0,
+    "trade_value": 479604508208,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-19",
+    "close": null,
+    "change": -236.42,
+    "trade_value": 422126123640,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-18",
+    "close": null,
+    "change": 150.66,
+    "trade_value": 411463787574,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-17",
+    "close": null,
+    "change": -21.89,
+    "trade_value": 410745816406,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-16",
+    "close": null,
+    "change": 19.42,
+    "trade_value": 422293280364,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-13",
+    "close": null,
+    "change": -26.32,
+    "trade_value": 355185043778,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-12",
+    "close": null,
+    "change": 143.17,
+    "trade_value": 361573943620,
+    "high": null,
+    "low": null
+  },
+  {
+    "date": "2024-12-11",
+    "close": null,
+    "change": -221.45,
+    "trade_value": 339359773405,
+    "high": null,
+    "low": null
   }
 ]
