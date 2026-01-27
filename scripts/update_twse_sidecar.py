@@ -1,5 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+TWSE sidecar updater (roll25_cache/) - backfill limit=252 + stats_latest.json
+
+Fetches (1 request each):
+  1) FMTQIK (MUST succeed): trade value / close / change
+  2) MI_5MINS_HIST (may degrade): OHLC (high/low)
+
+Writes (atomic):
+  - roll25_cache/roll25.json
+  - roll25_cache/latest_report.json
+  - roll25_cache/stats_latest.json
+
+Backfill policy:
+  - Build cache items from latest FMTQIK dates (DESC), up to BACKFILL_LIMIT=252.
+  - Merge into existing roll cache (dedupe by date), then keep STORE_CAP >= 252.
+
+Stats policy (audit-first, no guessing):
+  - Series: close, trade_value, pct_change, amplitude_pct
+  - Windows: 60 & 252
+  - If insufficient values for a window, z/p are NA (None) and window_n_actual is reported.
+  - Percentile uses tie-aware rank: p = 100 * (less + 0.5*equal) / n
+
+Freshness policy:
+  - freshness_age_days = (today - used_date).days
+  - If > 7 => freshness_ok=False (still writes, but you can choose to fail in sanity if you want)
+"""
 
 from __future__ import annotations
 
@@ -8,7 +34,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -17,11 +43,15 @@ import requests
 CACHE_DIR = "roll25_cache"
 SCHEMA_PATH = os.path.join(CACHE_DIR, "twse_schema.json")
 
-ROLL25_PATH = os.path.join(CACHE_DIR, "roll25.json")
-LATEST_REPORT_PATH = os.path.join(CACHE_DIR, "latest_report.json")
+ROLL_PATH = os.path.join(CACHE_DIR, "roll25.json")
+REPORT_PATH = os.path.join(CACHE_DIR, "latest_report.json")
+STATS_PATH = os.path.join(CACHE_DIR, "stats_latest.json")
 
 LOOKBACK_TARGET = 20
-STORE_CAP = 25
+BACKFILL_LIMIT = 252
+STORE_CAP = 400  # must be >= BACKFILL_LIMIT to preserve 252-trading-day context
+
+UA = "twse-sidecar/1.6 (+github-actions)"
 
 
 # ----------------- helpers -----------------
@@ -51,7 +81,7 @@ def _safe_float(x: Any) -> Optional[float]:
     if isinstance(x, (int, float)):
         return float(x)
     s = str(x).strip()
-    if s == "" or s.upper() == "NA" or s.lower() == "null":
+    if s == "" or s.upper() == "NA" or s.lower() == "null" or s == "-" or s == "—":
         return None
     s = s.replace(",", "")
     try:
@@ -96,8 +126,10 @@ def _roc_compact_to_iso(compact: str) -> Optional[str]:
 def _parse_date_any(v: Any) -> Optional[str]:
     if v is None:
         return None
-    if isinstance(v, (date, datetime)):
-        return v.date().isoformat() if isinstance(v, datetime) else v.isoformat()
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
     s = str(v).strip()
     if s == "":
         return None
@@ -118,7 +150,7 @@ def _parse_date_any(v: Any) -> Optional[str]:
     return None
 
 def _http_get_json(url: str, timeout: int = 25) -> Any:
-    headers = {"Accept": "application/json", "User-Agent": "twse-sidecar/1.4 (+github-actions)"}
+    headers = {"Accept": "application/json", "User-Agent": UA}
     r = requests.get(url, headers=headers, timeout=timeout)
     r.raise_for_status()
     return r.json()
@@ -149,6 +181,7 @@ def _unwrap_to_rows(payload: Any) -> List[Dict[str, Any]]:
             v = payload.get(k)
             if isinstance(v, list):
                 return [x for x in v if isinstance(x, dict)]
+        # single dict row
         if all(not isinstance(v, list) for v in payload.values()):
             return [payload]
     return []
@@ -170,6 +203,27 @@ def _diag_payload(name: str, payload: Any) -> None:
 
 def _avg(xs: List[float]) -> Optional[float]:
     return (sum(xs) / len(xs)) if xs else None
+
+def _std_pop(xs: List[float]) -> Optional[float]:
+    if not xs:
+        return None
+    mu = _avg(xs)
+    if mu is None:
+        return None
+    var = sum((x - mu) ** 2 for x in xs) / len(xs)
+    return var ** 0.5
+
+def _percentile_tie_aware(x: float, xs: List[float]) -> Optional[float]:
+    """
+    Tie-aware percentile rank in [0,100]:
+      p = 100 * (less + 0.5*equal) / n
+    """
+    if not xs:
+        return None
+    less = sum(1 for v in xs if v < x)
+    equal = sum(1 for v in xs if v == x)
+    n = len(xs)
+    return 100.0 * (less + 0.5 * equal) / n
 
 def _calc_amplitude_pct(high: float, low: float, prev_close: float) -> Optional[float]:
     if prev_close == 0:
@@ -238,39 +292,27 @@ def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]])
     merged = list(m.values())
     merged.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     merged = merged[:STORE_CAP]
-    dates = [str(x.get("date", "")) for x in merged]
+    dates = [str(x.get("date", "")) for x in merged if isinstance(x, dict)]
     dedupe_ok = (len(dates) == len(set(dates)))
     return merged, dedupe_ok
 
 def _latest_date(dates: List[str]) -> Optional[str]:
     return max(dates) if dates else None
 
-def _pick_used_date(today: date, fmt_dates: List[str]) -> Tuple[str, str, str]:
+def _pick_used_date(today: date, fmt_dates_sorted_asc: List[str]) -> Tuple[str, str, str]:
     """
     Return: (used_date, run_day_tag, used_date_status)
-
-    - run_day_tag describes the runner "today" status:
-        * NON_TRADING_DAY  -> weekend (or later you may extend to holidays)
-        * TRADING_DAY      -> otherwise
-
-    - used_date_status describes how used_date was selected:
-        * OK_TODAY         -> today exists in fmt_dates
-        * OK_LATEST        -> used latest available date (e.g., weekend run)
-        * DATA_NOT_UPDATED -> today not in fmt_dates; used latest available
-        * FMTQIK_EMPTY     -> no usable dates
     """
-    if not fmt_dates:
+    if not fmt_dates_sorted_asc:
         return ("NA", "FMTQIK_EMPTY", "FMTQIK_EMPTY")
 
     today_iso = today.isoformat()
-    latest = _latest_date(fmt_dates) or fmt_dates[-1]
+    latest = _latest_date(fmt_dates_sorted_asc) or fmt_dates_sorted_asc[-1]
 
     if _is_weekend(today):
-        # Run day is non-trading day; used_date is latest available trading day in feed
         return (latest, "NON_TRADING_DAY", "OK_LATEST")
 
-    # Run day is a trading day (calendar-wise). Data may still lag.
-    if today_iso not in fmt_dates:
+    if today_iso not in fmt_dates_sorted_asc:
         return (latest, "TRADING_DAY", "DATA_NOT_UPDATED")
 
     return (today_iso, "TRADING_DAY", "OK_TODAY")
@@ -287,6 +329,133 @@ def _find_dminus1(roll: List[Dict[str, Any]], used_date: str) -> Optional[Dict[s
     eligible.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     return eligible[0]
 
+def _build_items_backfill(
+    fmt_by_date: Dict[str, FmtRow],
+    ohlc_by_date: Dict[str, OhlcRow],
+    fmt_dates_desc: List[str],
+    limit: int
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for d in fmt_dates_desc[:limit]:
+        f = fmt_by_date.get(d)
+        o = ohlc_by_date.get(d)
+        close = (f.close if f else None) or (o.close if o else None)
+        out.append({
+            "date": d,
+            "close": close,
+            "change": (f.change if f else None),
+            "trade_value": (f.trade_value if f else None),
+            "high": (o.high if o else None),
+            "low": (o.low if o else None),
+        })
+    return out
+
+
+# ----------------- series + stats -----------------
+
+def _index_by_date(roll: List[Dict[str, Any]], used_date: str) -> Dict[str, Dict[str, Any]]:
+    m: Dict[str, Dict[str, Any]] = {}
+    for r in roll:
+        if not isinstance(r, dict):
+            continue
+        d = str(r.get("date", ""))
+        if not d or d > used_date:
+            continue
+        m[d] = r
+    return m
+
+def _dates_desc(m: Dict[str, Dict[str, Any]]) -> List[str]:
+    return sorted(m.keys(), reverse=True)
+
+def _series_value_desc(m: Dict[str, Dict[str, Any]], key: str) -> List[Tuple[str, float]]:
+    out: List[Tuple[str, float]] = []
+    for d in _dates_desc(m):
+        v = _safe_float(m[d].get(key))
+        if v is None:
+            continue
+        out.append((d, float(v)))
+    return out  # DESC
+
+def _series_pct_change_desc(m: Dict[str, Dict[str, Any]]) -> List[Tuple[str, float]]:
+    ds = _dates_desc(m)
+    out: List[Tuple[str, float]] = []
+    for i, d in enumerate(ds):
+        c = _safe_float(m[d].get("close"))
+        if c is None or i + 1 >= len(ds):
+            continue
+        dprev = ds[i + 1]
+        pc = _safe_float(m[dprev].get("close"))
+        if pc is None or pc == 0:
+            continue
+        out.append((d, (c - pc) / pc * 100.0))
+    return out
+
+def _series_amplitude_pct_desc(m: Dict[str, Dict[str, Any]]) -> List[Tuple[str, float]]:
+    ds = _dates_desc(m)
+    out: List[Tuple[str, float]] = []
+    for i, d in enumerate(ds):
+        h = _safe_float(m[d].get("high"))
+        l = _safe_float(m[d].get("low"))
+        if h is None or l is None:
+            continue
+        if i + 1 >= len(ds):
+            continue
+        dprev = ds[i + 1]
+        pc = _safe_float(m[dprev].get("close"))
+        if pc is None or pc == 0:
+            continue
+        out.append((d, (h - l) / pc * 100.0))
+    return out
+
+def _window_take(values_desc: List[Tuple[str, float]], n: int, used_date: str) -> List[float]:
+    xs: List[float] = []
+    for d, v in values_desc:
+        if d > used_date:
+            continue
+        xs.append(float(v))
+        if len(xs) >= n:
+            break
+    return xs
+
+def _calc_stats_for_series(values_desc: List[Tuple[str, float]], used_date: str, win: int) -> Dict[str, Any]:
+    """
+    Compute z/p for latest value at used_date, using up to win values.
+    """
+    # Find x at used_date
+    x = None
+    for d, v in values_desc:
+        if d == used_date:
+            x = float(v)
+            break
+    xs = _window_take(values_desc, win, used_date)
+    n_actual = len(xs)
+
+    if x is None or n_actual == 0:
+        return {
+            "value": x,
+            "window_n_target": win,
+            "window_n_actual": n_actual,
+            "z": None,
+            "p": None,
+        }
+
+    mu = _avg(xs)
+    sd = _std_pop(xs)
+
+    z = None
+    if mu is not None and sd is not None and sd != 0:
+        z = (x - mu) / sd
+
+    p = _percentile_tie_aware(x, xs)
+
+    return {
+        "value": x,
+        "window_n_target": win,
+        "window_n_actual": n_actual,
+        "z": None if z is None else round(float(z), 6),
+        "p": None if p is None else round(float(p), 3),
+    }
+
 
 # ----------------- main -----------------
 
@@ -300,7 +469,7 @@ def main() -> None:
     tz = _tz(schema)
     _ensure_cache_dir()
 
-    existing_roll = _read_json_file(ROLL25_PATH, default=[])
+    existing_roll = _read_json_file(ROLL_PATH, default=[])
     if not isinstance(existing_roll, list):
         existing_roll = []
 
@@ -328,247 +497,202 @@ def main() -> None:
 
     fmt_by_date = {x.date: x for x in fmt_rows}
     ohlc_by_date = {x.date: x for x in ohlc_rows}
-    fmt_dates = sorted(fmt_by_date.keys())
 
+    fmt_dates_asc = sorted(fmt_by_date.keys())
     today = _today_tz(tz)
-    used_date, run_day_tag, used_date_status = _pick_used_date(today, fmt_dates)
+
+    used_date, run_day_tag, used_date_status = _pick_used_date(today, fmt_dates_asc)
     if used_date == "NA":
         print("[FATAL] UsedDate could not be determined.")
         _diag_payload("FMTQIK", fmt_raw)
         sys.exit(1)
 
-    fmt_used = fmt_by_date.get(used_date)
-    ohlc_used = ohlc_by_date.get(used_date)
+    fmt_dates_desc = sorted(fmt_by_date.keys(), reverse=True)
+    new_items = _build_items_backfill(fmt_by_date, ohlc_by_date, fmt_dates_desc, limit=BACKFILL_LIMIT)
 
-    ohlc_ok = bool(ohlc_used and ohlc_used.high is not None and ohlc_used.low is not None)
-    mode = "FULL" if ohlc_ok else "MISSING_OHLC"
-    ohlc_status = "OK" if ohlc_ok else "MISSING"
-
-    close = fmt_used.close if fmt_used else (ohlc_used.close if ohlc_used else None)
-    change = fmt_used.change if fmt_used else None
-    trade_value = fmt_used.trade_value if fmt_used else None
-    high = ohlc_used.high if ohlc_used else None
-    low = ohlc_used.low if ohlc_used else None
-
-    cache_item = {
-        "date": used_date,
-        "close": close,
-        "change": change,
-        "trade_value": trade_value,
-        "high": high,
-        "low": low
-    }
-
-    merged_roll, dedupe_ok = _merge_roll(existing_roll, [cache_item])
+    merged_roll, dedupe_ok = _merge_roll(existing_roll, new_items)
 
     lookback = _extract_lookback(merged_roll, used_date)
     n_actual = len(lookback)
     oldest = lookback[-1]["date"] if lookback else "NA"
 
+    # Freshness by used_date age
     freshness_ok = True
-    if n_actual > 0:
-        try:
-            oldest_dt = datetime.fromisoformat(str(oldest)).date()
-            if (today - oldest_dt).days > 45:
-                freshness_ok = False
-        except Exception:
+    freshness_age_days = None
+    try:
+        used_dt = datetime.fromisoformat(str(used_date)).date()
+        freshness_age_days = (today - used_dt).days
+        if freshness_age_days > 7:
             freshness_ok = False
+    except Exception:
+        freshness_ok = False
 
+    # mode / ohlc status for used_date
+    m_used = _index_by_date(merged_roll, used_date)
+    row_used = m_used.get(used_date, {})
+    ohlc_ok = bool(
+        row_used
+        and _safe_float(row_used.get("high")) is not None
+        and _safe_float(row_used.get("low")) is not None
+    )
+    mode = "FULL" if ohlc_ok else "MISSING_OHLC"
+    ohlc_status = "OK" if ohlc_ok else "MISSING"
+
+    # D-1 info
     dminus1 = _find_dminus1(merged_roll, used_date)
     used_dminus1 = dminus1["date"] if dminus1 else "NA"
     prev_close = _safe_float(dminus1.get("close")) if dminus1 else None
 
-    today_close = _safe_float(close)
-    today_trade_value = _safe_float(trade_value)
-    today_change = _safe_float(change)
+    today_close = _safe_float(row_used.get("close"))
+    today_trade_value = _safe_float(row_used.get("trade_value"))
+    today_change = _safe_float(row_used.get("change"))
+    high = _safe_float(row_used.get("high"))
+    low = _safe_float(row_used.get("low"))
 
     pct_change = None
     if today_close is not None and prev_close is not None and prev_close != 0:
         pct_change = (today_close - prev_close) / prev_close * 100.0
 
-    prior_days = lookback[1:] if n_actual >= 2 else []
-    prior_tv = [_safe_float(x.get("trade_value")) for x in prior_days]
-    prior_tv = [x for x in prior_tv if x is not None]
-
-    volume_mult = None
-    if today_trade_value is not None and len(prior_tv) >= 9:
-        avg_tv = _avg(prior_tv[:LOOKBACK_TARGET - 1])
-        if avg_tv and avg_tv != 0:
-            volume_mult = today_trade_value / avg_tv
-
     amplitude_pct = None
-    vol_mult = None
-    if ohlc_ok and prev_close is not None and prev_close != 0:
-        h = _safe_float(high)
-        l = _safe_float(low)
-        if h is not None and l is not None:
-            amplitude_pct = _calc_amplitude_pct(h, l, prev_close)
+    if ohlc_ok and prev_close is not None and prev_close != 0 and high is not None and low is not None:
+        amplitude_pct = _calc_amplitude_pct(high, low, prev_close)
 
-            prior_amp: List[float] = []
-            for x in prior_days:
-                d = str(x.get("date", ""))
-                hh = _safe_float(x.get("high"))
-                ll = _safe_float(x.get("low"))
-                dm1 = _find_dminus1(merged_roll, d)
-                pc = _safe_float(dm1.get("close")) if dm1 else None
-                if hh is None or ll is None or pc is None or pc == 0:
-                    continue
-                amp = _calc_amplitude_pct(hh, ll, pc)
-                if amp is not None:
-                    prior_amp.append(amp)
-
-            if amplitude_pct is not None and len(prior_amp) >= 9:
-                avg_amp = _avg(prior_amp[:LOOKBACK_TARGET - 1])
-                if avg_amp and avg_amp != 0:
-                    vol_mult = amplitude_pct / avg_amp
-
+    # Simple signal summary (kept conservative)
     is_down_day = (pct_change is not None and pct_change < 0) or (today_change is not None and today_change < 0)
 
-    closes = []
-    for x in lookback:
-        c = _safe_float(x.get("close"))
-        if c is not None:
-            closes.append(c)
-
-    new_low = False
-    if today_close is not None and closes:
-        new_low = (today_close <= min(closes))
-
-    consecutive_break = False
-    if dminus1 is not None:
-        d1_date = str(dminus1.get("date"))
-        d1_close = _safe_float(dminus1.get("close"))
-        if d1_close is not None:
-            d1_lookback = _extract_lookback(merged_roll, d1_date)
-            d1_closes = [_safe_float(x.get("close")) for x in d1_lookback]
-            d1_closes = [x for x in d1_closes if x is not None]
-            if d1_closes:
-                d1_new_low = (d1_close <= min(d1_closes))
-                if new_low and d1_new_low:
-                    consecutive_break = True
-
-    risk_level = "未知"
-    signal_text = ""
-
-    if not freshness_ok:
-        risk_level = "未知（資料不可靠）"
-        signal_text = "資料過舊：lookback 最舊一筆距今 >45 天"
-    elif n_actual < 10:
-        risk_level = "未知（資料不足）"
-        signal_text = "可得交易日數 <10，倍數不計算"
-    else:
-        if mode == "FULL":
-            if is_down_day and (volume_mult is not None and volume_mult >= 1.2) and (vol_mult is not None and vol_mult >= 1.2):
-                if (volume_mult >= 1.5) and (vol_mult >= 1.5) and (pct_change is not None and pct_change <= -1.5):
-                    risk_level = "高"
-                elif (pct_change is not None and pct_change <= -1.0):
-                    risk_level = "中"
-                else:
-                    risk_level = "低"
-                signal_text = "去槓桿風險上升（放量下跌 + 振幅放大）"
-            else:
-                risk_level = "低"
-                signal_text = "未觸發 A) 規則"
-        else:
-            if is_down_day and (volume_mult is not None and volume_mult >= 1.3) and (pct_change is not None and pct_change <= -1.2):
-                risk_level = "中"
-                signal_text = "代理警訊：放量下跌；OHLC缺失可能漏報踩踏"
-            else:
-                risk_level = "未知（資料不足：OHLC缺失）"
-                signal_text = "OHLC缺失，無法套用完整模式"
-
-    # Prefix based on RUN-DAY + SELECTION status (avoid semantic confusion)
+    # Build latest report (kept human-readable, but still audit-friendly)
     prefix = ""
     if run_day_tag == "NON_TRADING_DAY":
         prefix = "今日非交易日；"
     elif used_date_status == "DATA_NOT_UPDATED":
         prefix = "今日資料未更新；"
 
-    if mode == "MISSING_OHLC":
-        summary = f"{prefix}UsedDate={used_date}：OHLC缺失，{signal_text}；風險等級={risk_level}"
-    else:
-        summary = f"{prefix}UsedDate={used_date}：{signal_text}；風險等級={risk_level}"
-
-    def _rnd(x: Optional[float], nd: int) -> Optional[float]:
-        return None if x is None else round(float(x), nd)
-
-    numbers = {
-        "UsedDate": used_date,
-        "Close": _rnd(today_close, 2),
-        "PctChange": _rnd(pct_change, 3),
-        "TradeValue": _safe_int(today_trade_value),
-        "VolumeMultiplier": _rnd(volume_mult, 3),
-        "AmplitudePct": _rnd(amplitude_pct, 3),
-        "VolMultiplier": _rnd(vol_mult, 3)
-    }
-
-    signal = {
-        "DownDay": bool(is_down_day) if (pct_change is not None or today_change is not None) else None,
-        "VolumeAmplified": (volume_mult is not None and volume_mult >= 1.2) if volume_mult is not None else None,
-        "VolAmplified": (vol_mult is not None and vol_mult >= 1.2) if vol_mult is not None else None,
-        "NewLow_N": bool(new_low) if today_close is not None else None,
-        "ConsecutiveBreak": bool(consecutive_break)
-    }
-
-    if risk_level in ("中", "高"):
-        if mode == "FULL" and "去槓桿風險上升" in signal_text:
-            action = "先下調槓桿與部位曝險、提高保證金緩衝（例如提高現金比重/降低融資占比），並觀察下一個交易日是否延續破位與放量。"
-        else:
-            action = "先控槓桿與保證金緩衝，暫不做激進判斷；等待 OHLC 補齊後再用完整模式重算是否觸發踩踏風險。"
-    else:
-        action = "維持風險控管紀律（槓桿與保證金緩衝不惡化），持續每日觀察量能倍數、是否破位與資料完整性。"
-
-    caveats_lines = [
-        f"Sources: FMTQIK={schema['fmtqik']['url']} ; MI_5MINS_HIST={schema['mi_5mins_hist']['url']}",
-    ]
-    if not ohlc_ok:
-        caveats_lines.append("OHLC: high 或 low 缺失（嚴格規則：不得硬猜；因此波動倍數=NA且不觸發完整模式）")
-    if dminus1 is None:
-        caveats_lines.append("D-1: 昨收缺失（無法計算漲跌幅與振幅%）")
-
-    caveats_lines.append(
-        f"Mode={mode} | UsedDate={used_date} | UsedDminus1={used_dminus1} | "
-        f"LookbackNTarget={LOOKBACK_TARGET} | LookbackNActual={n_actual} | "
-        f"LookbackOldest={oldest} | OHLC={ohlc_status} | "
-        f"RunDayTag={run_day_tag} | UsedDateStatus={used_date_status}"
-    )
+    summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}"
 
     latest_report = {
         "generated_at": _now_tz(tz).isoformat(),
         "timezone": str(tz),
         "summary": summary,
-        "numbers": numbers,
-        "signal": signal,
-        "action": action,
-        "caveats": "\n".join(caveats_lines),
-        "cache_roll25": merged_roll,
 
-        # New, unambiguous fields:
+        "numbers": {
+            "UsedDate": used_date,
+            "Close": None if today_close is None else round(float(today_close), 2),
+            "PctChange": None if pct_change is None else round(float(pct_change), 6),
+            "TradeValue": None if today_trade_value is None else int(round(float(today_trade_value))),
+            "AmplitudePct": None if amplitude_pct is None else round(float(amplitude_pct), 6),
+        },
+
+        "signal": {
+            "DownDay": None if (pct_change is None and today_change is None) else bool(is_down_day),
+            "OhlcMissing": (not ohlc_ok),
+            "UsedDateStatus": used_date_status,
+            "RunDayTag": run_day_tag,
+        },
+
+        "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
+
+        "caveats": "\n".join([
+            f"Sources: FMTQIK={schema['fmtqik']['url']} ; MI_5MINS_HIST={schema['mi_5mins_hist']['url']}",
+            f"BackfillLimit={BACKFILL_LIMIT} | StoreCap={STORE_CAP} | LookbackTarget={LOOKBACK_TARGET}",
+            f"Mode={mode} | OHLC={ohlc_status} | UsedDate={used_date} | UsedDminus1={used_dminus1}",
+            f"RunDayTag={run_day_tag} | UsedDateStatus={used_date_status}",
+            f"freshness_ok={freshness_ok} | freshness_age_days={freshness_age_days}",
+            f"dedupe_ok={dedupe_ok}",
+        ]),
+
         "run_day_tag": run_day_tag,
         "used_date_status": used_date_status,
-
-        # Keep backward compatibility if downstream still expects "tag"
-        # (tag previously mixed semantics; now map to run_day_tag)
-        "tag": run_day_tag,
+        "tag": run_day_tag,  # backward compatible
 
         "freshness_ok": freshness_ok,
-        "risk_level": risk_level,
+        "freshness_age_days": freshness_age_days,
         "mode": mode,
         "ohlc_status": ohlc_status,
         "used_date": used_date,
         "used_dminus1": used_dminus1,
         "lookback_n_actual": n_actual,
-        "lookback_oldest": oldest
+        "lookback_oldest": oldest,
+
+        # Keep cache light: only last STORE_CAP already; but don't embed whole list here.
+        "cache_tail": merged_roll[:25],
+    }
+
+    # Stats (machine-readable)
+    m = _index_by_date(merged_roll, used_date)
+
+    series_close = _series_value_desc(m, "close")
+    series_tv = _series_value_desc(m, "trade_value")
+    series_ret = _series_pct_change_desc(m)
+    series_amp = _series_amplitude_pct_desc(m)
+
+    stats = {
+        "schema_version": "twse_stats_v1",
+        "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "generated_at_local": _now_tz(tz).isoformat(),
+        "timezone": str(tz),
+
+        "used_date": used_date,
+        "run_day_tag": run_day_tag,
+        "used_date_status": used_date_status,
+
+        "freshness_ok": freshness_ok,
+        "freshness_age_days": freshness_age_days,
+
+        "mode": mode,
+        "ohlc_status": ohlc_status,
+
+        "backfill_limit": BACKFILL_LIMIT,
+        "store_cap": STORE_CAP,
+
+        "series": {
+            "close": {
+                "asof": used_date,
+                "win60": _calc_stats_for_series(series_close, used_date, 60),
+                "win252": _calc_stats_for_series(series_close, used_date, 252),
+                "window_note": {"n_total_available": len(series_close)}
+            },
+            "trade_value": {
+                "asof": used_date,
+                "win60": _calc_stats_for_series(series_tv, used_date, 60),
+                "win252": _calc_stats_for_series(series_tv, used_date, 252),
+                "window_note": {"n_total_available": len(series_tv)}
+            },
+            "pct_change": {
+                "asof": used_date,
+                "win60": _calc_stats_for_series(series_ret, used_date, 60),
+                "win252": _calc_stats_for_series(series_ret, used_date, 252),
+                "window_note": {
+                    "n_total_available": len(series_ret),
+                    "note": "pct_change needs D-1 close; with backfill=252, max pct_change points are typically <=251."
+                }
+            },
+            "amplitude_pct": {
+                "asof": used_date,
+                "win60": _calc_stats_for_series(series_amp, used_date, 60),
+                "win252": _calc_stats_for_series(series_amp, used_date, 252),
+                "window_note": {
+                    "n_total_available": len(series_amp),
+                    "note": "amplitude_pct needs high/low + D-1 close; if OHLC missing, series is sparse and windows may be incomplete."
+                }
+            },
+        },
+
+        "sources": {
+            "fmtqik_url": schema["fmtqik"]["url"],
+            "mi_5mins_hist_url": schema["mi_5mins_hist"]["url"],
+        },
     }
 
     # Write outputs atomically
-    _atomic_write_json(ROLL25_PATH, merged_roll)
-    _atomic_write_json(LATEST_REPORT_PATH, latest_report)
+    _atomic_write_json(ROLL_PATH, merged_roll)
+    _atomic_write_json(REPORT_PATH, latest_report)
+    _atomic_write_json(STATS_PATH, stats)
 
     print("TWSE sidecar updated:")
-    print(f"  UsedDate={used_date}  Mode={mode}  Risk={risk_level}  LookbackNActual={n_actual}")
+    print(f"  UsedDate={used_date}  Mode={mode}  freshness_ok={freshness_ok} age_days={freshness_age_days}")
     print(f"  run_day_tag={run_day_tag}  used_date_status={used_date_status}")
-    print(f"  roll25_records={len(merged_roll)}  dedupe_ok={dedupe_ok}")
+    print(f"  roll_records={len(merged_roll)}  dedupe_ok={dedupe_ok}")
+    print(f"  wrote: {ROLL_PATH}, {REPORT_PATH}, {STATS_PATH}")
 
 
 if __name__ == "__main__":
