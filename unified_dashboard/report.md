@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-27T08:08:11Z
+- unified_generated_at_utc: 2026-01-27T08:37:27Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -106,12 +106,12 @@
 - status: OK
 - UsedDate: 2026-01-26
 - run_day_tag: TRADING_DAY
-- used_date_status: UNKNOWN_LATEST_ROW_DATE
+- used_date_status: OK_LATEST
 - used_date_selection_tag: WEEKDAY
 - tag (legacy): WEEKDAY
 - note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
 - heat_split.heated_market: false
-- heat_split.dq_issue: true
+- heat_split.dq_issue: false
 - risk_level: NA
 - turnover_twd: 747339306040
 - turnover_unit: TWD
@@ -132,19 +132,19 @@
 ### roll25_derived (realized vol / drawdown)
 - status: OK
 - vol_n: 10
-- realized_vol_N_annualized_pct: NA
-- realized_vol_points_used: 0
+- realized_vol_N_annualized_pct: 15.692428
+- realized_vol_points_used: 10
 - dd_n: 10
-- max_drawdown_N_pct: NA
-- max_drawdown_points_used: 0
+- max_drawdown_N_pct: -1.617192
+- max_drawdown_points_used: 10
 - confidence: OK
 
 ## FX (USD/TWD)
 - status: OK
 - data_date: 2026-01-27
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.380000
-- spot_sell: 31.480000
+- spot_buy: 31.355000
+- spot_sell: 31.505000
 - mid: 31.430000
 - ret1_pct: -0.190537 (from 2026-01-26 to 2026-01-27)
 - chg_5d_pct: NA (from None to None)
@@ -169,14 +169,14 @@
 - latest_chg: 55.000 億
 - margin_confidence: OK
 - roll25_heated_market: false
-- roll25_data_quality_issue: true
+- roll25_data_quality_issue: false
 - roll25_heated (legacy): false
 - roll25_confidence: OK
-- roll25_split_ref: heated_market=false, dq_issue=true (see roll25_cache section)
+- roll25_split_ref: heated_market=false, dq_issue=false (see roll25_cache section)
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-26, roll25_used_date=2026-01-26, match=true
 
-<!-- rendered_at_utc: 2026-01-27T08:08:11Z -->
+<!-- rendered_at_utc: 2026-01-27T08:37:27Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
