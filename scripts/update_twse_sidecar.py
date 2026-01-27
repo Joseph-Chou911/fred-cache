@@ -1,54 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TWSE sidecar updater (roll25_cache/) - backfill limit=252 + stats_latest.json
-
-Fetches (1 request each):
-  1) FMTQIK (MUST succeed): trade value / close / change
-  2) MI_5MINS_HIST (may degrade): OHLC (high/low)
+TWSE sidecar updater (roll25_cache/) - supports daily + month backfill.
 
 Writes (atomic):
   - roll25_cache/roll25.json
   - roll25_cache/latest_report.json
   - roll25_cache/stats_latest.json
 
-Backfill policy:
-  - Build cache items from latest FMTQIK dates (DESC), up to BACKFILL_LIMIT=252.
-  - Merge into existing roll cache (dedupe by date), then keep STORE_CAP >= 252.
+Key:
+- Daily sources (OpenAPI):
+    https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK
+    https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
+- Backfill sources (monthly, www.twse.com.tw):
+    https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date=YYYYMM01
+    https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date=YYYYMM01
 
-Stats policy (audit-first, no guessing):
-  - Series: close, trade_value, pct_change, amplitude_pct
-  - Windows: 60 & 252
-  - If insufficient values for a window, z/p are NA (None) and window_n_actual is reported.
-  - Percentile uses tie-aware rank: p = 100 * (less + 0.5*equal) / n
-
-Freshness policy:
-  - freshness_age_days = (today - used_date).days
-  - If > 7 => freshness_ok=False (still writes, but you can choose to fail in sanity if you want)
-
-Run-day tag policy (IMPORTANT):
-  - run_day_tag is a WEEKDAY-ONLY HEURISTIC (NOT an exchange calendar).
-    - Weekend => NON_TRADING_DAY
-    - Weekday => TRADING_DAY
-  - Holidays/typhoon suspensions are NOT covered by this heuristic.
-  - To avoid misread, we persist run_day_tag_method="WEEKDAY_ONLY_HEURISTIC".
-
-UsedDateStatus semantics (IMPORTANT):
-  - DATA_NOT_UPDATED means: as of generated_at_local, the DAILY endpoint did NOT publish
-    a row whose date equals "today" (local). This is a data publication state, not a
-    statement about whether the exchange is open/closed.
+Backfill logic:
+- If --backfill-months > 0:
+    fetch last N months, merge into cache (dedupe by date).
+- Always keep STORE_CAP entries (>= BACKFILL_LIMIT).
+- Stats windows 60 & 252 computed from available values <= used_date.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime, date, timezone
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -61,15 +46,30 @@ STATS_PATH = os.path.join(CACHE_DIR, "stats_latest.json")
 
 LOOKBACK_TARGET = 20
 BACKFILL_LIMIT = 252
-STORE_CAP = 400  # must be >= BACKFILL_LIMIT to preserve 252-trading-day context
+STORE_CAP = 400  # must be >= BACKFILL_LIMIT
 
-UA = "twse-sidecar/1.7 (+github-actions)"
-
-# Weekday-only heuristic disclosure (scheme-1)
-RUN_DAY_TAG_METHOD = "WEEKDAY_ONLY_HEURISTIC"
+UA = "twse-sidecar/2.0 (+github-actions)"
 
 
 # ----------------- helpers -----------------
+
+def _ensure_cache_dir() -> None:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+
+def _read_json_file(path: str, default: Any) -> Any:
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+def _atomic_write_json(path: str, obj: Any) -> None:
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=False)
+    os.replace(tmp, path)
 
 def _load_schema() -> Dict[str, Any]:
     if not os.path.exists(SCHEMA_PATH):
@@ -78,8 +78,7 @@ def _load_schema() -> Dict[str, Any]:
         return json.load(f)
 
 def _tz(schema: Dict[str, Any]) -> ZoneInfo:
-    tz = schema.get("timezone", "Asia/Taipei")
-    return ZoneInfo(tz)
+    return ZoneInfo(schema.get("timezone", "Asia/Taipei"))
 
 def _now_tz(tz: ZoneInfo) -> datetime:
     return datetime.now(tz=tz)
@@ -90,13 +89,19 @@ def _today_tz(tz: ZoneInfo) -> date:
 def _is_weekend(d: date) -> bool:
     return d.weekday() >= 5
 
+def _http_get_json(url: str, timeout: int = 25) -> Any:
+    headers = {"Accept": "application/json", "User-Agent": UA}
+    r = requests.get(url, headers=headers, timeout=timeout)
+    r.raise_for_status()
+    return r.json()
+
 def _safe_float(x: Any) -> Optional[float]:
     if x is None:
         return None
     if isinstance(x, (int, float)):
         return float(x)
     s = str(x).strip()
-    if s == "" or s.upper() == "NA" or s.lower() == "null" or s == "-" or s == "—":
+    if s in ("", "NA", "na", "null", "-", "—"):
         return None
     s = s.replace(",", "")
     try:
@@ -164,39 +169,17 @@ def _parse_date_any(v: Any) -> Optional[str]:
         return iso2
     return None
 
-def _http_get_json(url: str, timeout: int = 25) -> Any:
-    headers = {"Accept": "application/json", "User-Agent": UA}
-    r = requests.get(url, headers=headers, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
-
-def _ensure_cache_dir() -> None:
-    os.makedirs(CACHE_DIR, exist_ok=True)
-
-def _read_json_file(path: str, default: Any) -> Any:
-    if not os.path.exists(path):
-        return default
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return default
-
-def _atomic_write_json(path: str, obj: Any) -> None:
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=False)
-    os.replace(tmp, path)
-
 def _unwrap_to_rows(payload: Any) -> List[Dict[str, Any]]:
     if isinstance(payload, list):
         return [x for x in payload if isinstance(x, dict)]
     if isinstance(payload, dict):
+        # common containers
         for k in ("data", "result", "records", "items", "aaData", "dataset"):
             v = payload.get(k)
             if isinstance(v, list):
                 return [x for x in v if isinstance(x, dict)]
-        # single dict row
+        # TWSE monthly endpoints often return dict with 'data' as list-of-lists
+        # If it's list-of-lists, we handle in monthly parsers separately.
         if all(not isinstance(v, list) for v in payload.values()):
             return [payload]
     return []
@@ -207,46 +190,31 @@ def _pick_first_key(row: Dict[str, Any], keys: List[str]) -> Any:
             return row.get(k)
     return None
 
-def _diag_payload(name: str, payload: Any) -> None:
-    print(f"[DIAG] {name}: type={type(payload).__name__}")
-    if isinstance(payload, dict):
-        print(f"[DIAG] {name}: top_keys={list(payload.keys())[:40]}")
-    rows = _unwrap_to_rows(payload)
-    print(f"[DIAG] {name}: unwrapped_rows={len(rows)}")
-    if rows:
-        print(f"[DIAG] {name}: row0_keys={list(rows[0].keys())[:40]}")
+def _month_yyyymm01(d: date) -> str:
+    return f"{d.year:04d}{d.month:02d}01"
 
-def _avg(xs: List[float]) -> Optional[float]:
-    return (sum(xs) / len(xs)) if xs else None
+def _month_add(d: date, delta_months: int) -> date:
+    y = d.year
+    m = d.month + delta_months
+    while m <= 0:
+        y -= 1
+        m += 12
+    while m > 12:
+        y += 1
+        m -= 12
+    return date(y, m, 1)
 
-def _std_pop(xs: List[float]) -> Optional[float]:
-    if not xs:
-        return None
-    mu = _avg(xs)
-    if mu is None:
-        return None
-    var = sum((x - mu) ** 2 for x in xs) / len(xs)
-    return var ** 0.5
-
-def _percentile_tie_aware(x: float, xs: List[float]) -> Optional[float]:
-    """
-    Tie-aware percentile rank in [0,100]:
-      p = 100 * (less + 0.5*equal) / n
-    """
-    if not xs:
-        return None
-    less = sum(1 for v in xs if v < x)
-    equal = sum(1 for v in xs if v == x)
-    n = len(xs)
-    return 100.0 * (less + 0.5 * equal) / n
-
-def _calc_amplitude_pct(high: float, low: float, prev_close: float) -> Optional[float]:
-    if prev_close == 0:
-        return None
-    return (high - low) / prev_close * 100.0
+def _iter_months_back(d_today: date, months: int) -> List[str]:
+    # return list of yyyymm01 strings, from newest -> oldest
+    base = date(d_today.year, d_today.month, 1)
+    out: List[str] = []
+    for i in range(months):
+        mm = _month_add(base, -i)
+        out.append(_month_yyyymm01(mm))
+    return out
 
 
-# ----------------- parsing -----------------
+# ----------------- parsing daily -----------------
 
 @dataclass
 class FmtRow:
@@ -255,7 +223,7 @@ class FmtRow:
     close: Optional[float]
     change: Optional[float]
 
-def _parse_fmtqik(payload: Any, schema: Dict[str, Any]) -> List[FmtRow]:
+def _parse_fmtqik_rows(payload: Any, schema: Dict[str, Any]) -> List[FmtRow]:
     s = schema["fmtqik"]
     rows = _unwrap_to_rows(payload)
     out: List[FmtRow] = []
@@ -277,7 +245,7 @@ class OhlcRow:
     low: Optional[float]
     close: Optional[float]
 
-def _parse_ohlc(payload: Any, schema: Dict[str, Any]) -> List[OhlcRow]:
+def _parse_ohlc_rows(payload: Any, schema: Dict[str, Any]) -> List[OhlcRow]:
     s = schema["mi_5mins_hist"]
     rows = _unwrap_to_rows(payload)
     out: List[OhlcRow] = []
@@ -293,6 +261,90 @@ def _parse_ohlc(payload: Any, schema: Dict[str, Any]) -> List[OhlcRow]:
     return out
 
 
+# ----------------- parsing monthly (www.twse.com.tw) -----------------
+
+def _parse_twse_monthly_fmtqik(payload: Any) -> List[FmtRow]:
+    """
+    Expected structure (monthly endpoint) often:
+      { "fields":[...], "data":[[...],[...],...], ... }
+    Date usually 'yyyy/mm/dd' or 'yyy/mm/dd' or 'yyyy-mm-dd'
+    """
+    if not isinstance(payload, dict):
+        return []
+    data = payload.get("data")
+    fields = payload.get("fields")
+    if not isinstance(data, list) or not data:
+        return []
+    # If list-of-dicts already, fallback to generic daily parser not here.
+    if isinstance(data[0], dict):
+        # convert via daily parser keys is tricky; skip.
+        return []
+    # map indices by field name
+    idx = {}
+    if isinstance(fields, list):
+        for i, f in enumerate(fields):
+            if isinstance(f, str):
+                idx[f.strip()] = i
+
+    def pick(row: List[Any], candidates: List[str]) -> Any:
+        for c in candidates:
+            if c in idx and idx[c] < len(row):
+                return row[idx[c]]
+        return None
+
+    out: List[FmtRow] = []
+    for row in data:
+        if not isinstance(row, list):
+            continue
+        d = _parse_date_any(pick(row, ["日期", "Date", "date"]))
+        if not d:
+            continue
+        tv = _safe_int(pick(row, ["成交金額", "TradeValue"]))
+        close = _safe_float(pick(row, ["收盤指數", "收盤", "TAIEX", "Close"]))
+        chg = _safe_float(pick(row, ["漲跌點數", "漲跌", "Change"]))
+        out.append(FmtRow(d, tv, close, chg))
+    out.sort(key=lambda x: x.date)
+    return out
+
+def _parse_twse_monthly_ohlc(payload: Any) -> List[OhlcRow]:
+    """
+    Monthly OHLC endpoint also tends to have fields + data(list-of-lists)
+    """
+    if not isinstance(payload, dict):
+        return []
+    data = payload.get("data")
+    fields = payload.get("fields")
+    if not isinstance(data, list) or not data:
+        return []
+    if isinstance(data[0], dict):
+        return []
+    idx = {}
+    if isinstance(fields, list):
+        for i, f in enumerate(fields):
+            if isinstance(f, str):
+                idx[f.strip()] = i
+
+    def pick(row: List[Any], candidates: List[str]) -> Any:
+        for c in candidates:
+            if c in idx and idx[c] < len(row):
+                return row[idx[c]]
+        return None
+
+    out: List[OhlcRow] = []
+    for row in data:
+        if not isinstance(row, list):
+            continue
+        d = _parse_date_any(pick(row, ["日期", "Date", "date"]))
+        if not d:
+            continue
+        high = _safe_float(pick(row, ["最高指數", "最高", "HighestIndex", "High"]))
+        low = _safe_float(pick(row, ["最低指數", "最低", "LowestIndex", "Low"]))
+        close = _safe_float(pick(row, ["收盤指數", "收盤", "ClosingIndex", "Close"]))
+        out.append(OhlcRow(d, high, low, close))
+    out.sort(key=lambda x: x.date)
+    return out
+
+
 # ----------------- cache logic -----------------
 
 def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
@@ -303,7 +355,6 @@ def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]])
     for it in new_items:
         if isinstance(it, dict) and "date" in it:
             m[str(it["date"])] = it
-
     merged = list(m.values())
     merged.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     merged = merged[:STORE_CAP]
@@ -314,27 +365,16 @@ def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]])
 def _latest_date(dates: List[str]) -> Optional[str]:
     return max(dates) if dates else None
 
-def _pick_used_date(today: date, fmt_dates_sorted_asc: List[str]) -> Tuple[str, str, str, str]:
-    """
-    Return: (used_date, run_day_tag, used_date_status, run_day_tag_method)
-
-    NOTE: run_day_tag is a weekday-only heuristic. It is NOT an exchange calendar.
-    """
+def _pick_used_date(today: date, fmt_dates_sorted_asc: List[str]) -> Tuple[str, str, str]:
     if not fmt_dates_sorted_asc:
-        return ("NA", "FMTQIK_EMPTY", "FMTQIK_EMPTY", RUN_DAY_TAG_METHOD)
-
+        return ("NA", "FMTQIK_EMPTY", "FMTQIK_EMPTY")
     today_iso = today.isoformat()
     latest = _latest_date(fmt_dates_sorted_asc) or fmt_dates_sorted_asc[-1]
-
     if _is_weekend(today):
-        # Weekend heuristic: treat as non-trading day
-        return (latest, "NON_TRADING_DAY", "OK_LATEST", RUN_DAY_TAG_METHOD)
-
-    # Weekday heuristic: treat as trading day; missing "today" row => data not yet published on daily endpoint.
+        return (latest, "NON_TRADING_DAY", "OK_LATEST")
     if today_iso not in fmt_dates_sorted_asc:
-        return (latest, "TRADING_DAY", "DATA_NOT_UPDATED", RUN_DAY_TAG_METHOD)
-
-    return (today_iso, "TRADING_DAY", "OK_TODAY", RUN_DAY_TAG_METHOD)
+        return (latest, "TRADING_DAY", "DATA_NOT_UPDATED")
+    return (today_iso, "TRADING_DAY", "OK_TODAY")
 
 def _extract_lookback(roll: List[Dict[str, Any]], used_date: str) -> List[Dict[str, Any]]:
     eligible = [r for r in roll if isinstance(r, dict) and str(r.get("date", "")) <= used_date]
@@ -348,14 +388,14 @@ def _find_dminus1(roll: List[Dict[str, Any]], used_date: str) -> Optional[Dict[s
     eligible.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     return eligible[0]
 
-def _build_items_backfill(
+def _build_items_from_maps(
     fmt_by_date: Dict[str, FmtRow],
     ohlc_by_date: Dict[str, OhlcRow],
-    fmt_dates_desc: List[str],
+    dates_desc: List[str],
     limit: int
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
-    for d in fmt_dates_desc[:limit]:
+    for d in dates_desc[:limit]:
         f = fmt_by_date.get(d)
         o = ohlc_by_date.get(d)
         close = (f.close if f else None) or (o.close if o else None)
@@ -370,7 +410,32 @@ def _build_items_backfill(
     return out
 
 
-# ----------------- series + stats -----------------
+# ----------------- stats helpers -----------------
+
+def _avg(xs: List[float]) -> Optional[float]:
+    return (sum(xs) / len(xs)) if xs else None
+
+def _std_pop(xs: List[float]) -> Optional[float]:
+    if not xs:
+        return None
+    mu = _avg(xs)
+    if mu is None:
+        return None
+    var = sum((x - mu) ** 2 for x in xs) / len(xs)
+    return var ** 0.5
+
+def _percentile_tie_aware(x: float, xs: List[float]) -> Optional[float]:
+    if not xs:
+        return None
+    less = sum(1 for v in xs if v < x)
+    equal = sum(1 for v in xs if v == x)
+    n = len(xs)
+    return 100.0 * (less + 0.5 * equal) / n
+
+def _calc_amplitude_pct(high: float, low: float, prev_close: float) -> Optional[float]:
+    if prev_close == 0:
+        return None
+    return (high - low) / prev_close * 100.0
 
 def _index_by_date(roll: List[Dict[str, Any]], used_date: str) -> Dict[str, Dict[str, Any]]:
     m: Dict[str, Dict[str, Any]] = {}
@@ -393,7 +458,7 @@ def _series_value_desc(m: Dict[str, Dict[str, Any]], key: str) -> List[Tuple[str
         if v is None:
             continue
         out.append((d, float(v)))
-    return out  # DESC
+    return out
 
 def _series_pct_change_desc(m: Dict[str, Dict[str, Any]]) -> List[Tuple[str, float]]:
     ds = _dates_desc(m)
@@ -437,9 +502,6 @@ def _window_take(values_desc: List[Tuple[str, float]], n: int, used_date: str) -
     return xs
 
 def _calc_stats_for_series(values_desc: List[Tuple[str, float]], used_date: str, win: int) -> Dict[str, Any]:
-    """
-    Compute z/p for latest value at used_date, using up to win values.
-    """
     x = None
     for d, v in values_desc:
         if d == used_date:
@@ -447,25 +509,14 @@ def _calc_stats_for_series(values_desc: List[Tuple[str, float]], used_date: str,
             break
     xs = _window_take(values_desc, win, used_date)
     n_actual = len(xs)
-
     if x is None or n_actual == 0:
-        return {
-            "value": x,
-            "window_n_target": win,
-            "window_n_actual": n_actual,
-            "z": None,
-            "p": None,
-        }
-
+        return {"value": x, "window_n_target": win, "window_n_actual": n_actual, "z": None, "p": None}
     mu = _avg(xs)
     sd = _std_pop(xs)
-
     z = None
     if mu is not None and sd is not None and sd != 0:
         z = (x - mu) / sd
-
     p = _percentile_tie_aware(x, xs)
-
     return {
         "value": x,
         "window_n_target": win,
@@ -478,6 +529,10 @@ def _calc_stats_for_series(values_desc: List[Tuple[str, float]], used_date: str,
 # ----------------- main -----------------
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--backfill-months", type=int, default=0, help="Fetch last N months from www.twse.com.tw monthly endpoints")
+    args = ap.parse_args()
+
     try:
         schema = _load_schema()
     except Exception as e:
@@ -491,42 +546,86 @@ def main() -> None:
     if not isinstance(existing_roll, list):
         existing_roll = []
 
-    # Fetch FMTQIK (fatal if fails)
-    try:
-        fmt_raw = _http_get_json(schema["fmtqik"]["url"])
-    except Exception as e:
-        print(f"[FATAL] FMTQIK fetch failed: {e}")
-        sys.exit(1)
-
-    # Fetch OHLC (non-fatal; allow downgrade)
-    try:
-        ohlc_raw = _http_get_json(schema["mi_5mins_hist"]["url"])
-    except Exception as e:
-        print(f"[WARN] MI_5MINS_HIST fetch failed (downgrade): {e}")
-        ohlc_raw = []
-
-    fmt_rows = _parse_fmtqik(fmt_raw, schema)
-    ohlc_rows = _parse_ohlc(ohlc_raw, schema)
-
-    if not fmt_rows:
-        print("[FATAL] FMTQIK returned no usable rows/dates after parsing.")
-        _diag_payload("FMTQIK", fmt_raw)
-        sys.exit(1)
-
-    fmt_by_date = {x.date: x for x in fmt_rows}
-    ohlc_by_date = {x.date: x for x in ohlc_rows}
-
-    fmt_dates_asc = sorted(fmt_by_date.keys())
     today = _today_tz(tz)
 
-    used_date, run_day_tag, used_date_status, run_day_tag_method = _pick_used_date(today, fmt_dates_asc)
+    # ---- 1) DAILY fetch (OpenAPI) ----
+    daily_fmt_rows: List[FmtRow] = []
+    daily_ohlc_rows: List[OhlcRow] = []
+
+    daily = schema.get("daily", {})
+    daily_fmt_url = daily.get("fmtqik_url")
+    daily_ohlc_url = daily.get("mi_5mins_hist_url")
+
+    daily_ok = True
+    try:
+        fmt_raw = _http_get_json(daily_fmt_url)
+        daily_fmt_rows = _parse_fmtqik_rows(fmt_raw, schema)
+        if not daily_fmt_rows:
+            daily_ok = False
+            print("[WARN] daily FMTQIK parsed 0 rows.")
+    except Exception as e:
+        daily_ok = False
+        print(f"[WARN] daily FMTQIK fetch/parse failed: {e}")
+
+    try:
+        ohlc_raw = _http_get_json(daily_ohlc_url)
+        daily_ohlc_rows = _parse_ohlc_rows(ohlc_raw, schema)
+    except Exception as e:
+        print(f"[WARN] daily MI_5MINS_HIST fetch/parse failed (downgrade): {e}")
+        daily_ohlc_rows = []
+
+    # ---- 2) BACKFILL fetch (monthly) ----
+    backfill_fmt_rows: List[FmtRow] = []
+    backfill_ohlc_rows: List[OhlcRow] = []
+
+    backfill = schema.get("backfill", {})
+    bf_fmt_tpl = backfill.get("fmtqik_url_tpl")
+    bf_ohlc_tpl = backfill.get("mi_5mins_hist_url_tpl")
+
+    if args.backfill_months and args.backfill_months > 0:
+        print(f"[INFO] backfill_months={args.backfill_months} enabled.")
+        yyyymm01_list = _iter_months_back(today, args.backfill_months)
+        for yyyymm01 in yyyymm01_list:
+            # monthly fmtqik
+            try:
+                url = bf_fmt_tpl.format(yyyymm01=yyyymm01)
+                p = _http_get_json(url)
+                backfill_fmt_rows.extend(_parse_twse_monthly_fmtqik(p))
+            except Exception as e:
+                print(f"[WARN] backfill FMTQIK month={yyyymm01} failed: {e}")
+            # monthly ohlc
+            try:
+                url = bf_ohlc_tpl.format(yyyymm01=yyyymm01)
+                p = _http_get_json(url)
+                backfill_ohlc_rows.extend(_parse_twse_monthly_ohlc(p))
+            except Exception as e:
+                print(f"[WARN] backfill MI_5MINS_HIST month={yyyymm01} failed: {e}")
+
+    # ---- 3) Merge daily + backfill rows ----
+    fmt_rows = (daily_fmt_rows or []) + (backfill_fmt_rows or [])
+    ohlc_rows = (daily_ohlc_rows or []) + (backfill_ohlc_rows or [])
+
+    # If daily failed completely and no backfill rows -> fatal
+    if not fmt_rows:
+        print("[FATAL] no usable FMTQIK rows from daily/backfill after parsing.")
+        sys.exit(1)
+
+    # de-dupe by date keeping "latest seen"
+    fmt_by_date: Dict[str, FmtRow] = {}
+    for r in fmt_rows:
+        fmt_by_date[r.date] = r
+    ohlc_by_date: Dict[str, OhlcRow] = {}
+    for r in ohlc_rows:
+        ohlc_by_date[r.date] = r
+
+    fmt_dates_asc = sorted(fmt_by_date.keys())
+    used_date, run_day_tag, used_date_status = _pick_used_date(today, fmt_dates_asc)
     if used_date == "NA":
         print("[FATAL] UsedDate could not be determined.")
-        _diag_payload("FMTQIK", fmt_raw)
         sys.exit(1)
 
     fmt_dates_desc = sorted(fmt_by_date.keys(), reverse=True)
-    new_items = _build_items_backfill(fmt_by_date, ohlc_by_date, fmt_dates_desc, limit=BACKFILL_LIMIT)
+    new_items = _build_items_from_maps(fmt_by_date, ohlc_by_date, fmt_dates_desc, limit=BACKFILL_LIMIT)
 
     merged_roll, dedupe_ok = _merge_roll(existing_roll, new_items)
 
@@ -534,7 +633,7 @@ def main() -> None:
     n_actual = len(lookback)
     oldest = lookback[-1]["date"] if lookback else "NA"
 
-    # Freshness by used_date age
+    # freshness
     freshness_ok = True
     freshness_age_days = None
     try:
@@ -545,9 +644,10 @@ def main() -> None:
     except Exception:
         freshness_ok = False
 
-    # mode / ohlc status for used_date
+    # used row
     m_used = _index_by_date(merged_roll, used_date)
     row_used = m_used.get(used_date, {})
+
     ohlc_ok = bool(
         row_used
         and _safe_float(row_used.get("high")) is not None
@@ -556,7 +656,7 @@ def main() -> None:
     mode = "FULL" if ohlc_ok else "MISSING_OHLC"
     ohlc_status = "OK" if ohlc_ok else "MISSING"
 
-    # D-1 info
+    # D-1
     dminus1 = _find_dminus1(merged_roll, used_date)
     used_dminus1 = dminus1["date"] if dminus1 else "NA"
     prev_close = _safe_float(dminus1.get("close")) if dminus1 else None
@@ -575,15 +675,13 @@ def main() -> None:
     if ohlc_ok and prev_close is not None and prev_close != 0 and high is not None and low is not None:
         amplitude_pct = _calc_amplitude_pct(high, low, prev_close)
 
-    # Simple signal summary (kept conservative)
     is_down_day = (pct_change is not None and pct_change < 0) or (today_change is not None and today_change < 0)
 
-    # Build latest report wording: make DATA_NOT_UPDATED semantics explicit (scheme-1)
     prefix = ""
     if run_day_tag == "NON_TRADING_DAY":
-        prefix = "今日為週末（非交易日推定）；"
+        prefix = "今日非交易日；"
     elif used_date_status == "DATA_NOT_UPDATED":
-        prefix = "daily endpoint 尚未提供今日列（資料發布狀態）；"
+        prefix = "今日資料未更新；"
 
     summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}"
 
@@ -591,7 +689,6 @@ def main() -> None:
         "generated_at": _now_tz(tz).isoformat(),
         "timezone": str(tz),
         "summary": summary,
-
         "numbers": {
             "UsedDate": used_date,
             "Close": None if today_close is None else round(float(today_close), 2),
@@ -599,35 +696,25 @@ def main() -> None:
             "TradeValue": None if today_trade_value is None else int(round(float(today_trade_value))),
             "AmplitudePct": None if amplitude_pct is None else round(float(amplitude_pct), 6),
         },
-
         "signal": {
             "DownDay": None if (pct_change is None and today_change is None) else bool(is_down_day),
             "OhlcMissing": (not ohlc_ok),
             "UsedDateStatus": used_date_status,
             "RunDayTag": run_day_tag,
-            "RunDayTagMethod": run_day_tag_method,
         },
-
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-
         "caveats": "\n".join([
-            f"Sources: FMTQIK={schema['fmtqik']['url']} ; MI_5MINS_HIST={schema['mi_5mins_hist']['url']}",
-            f"BackfillLimit={BACKFILL_LIMIT} | StoreCap={STORE_CAP} | LookbackTarget={LOOKBACK_TARGET}",
+            f"Sources: daily_fmtqik={daily_fmt_url} ; daily_mi_5mins_hist={daily_ohlc_url}",
+            f"Sources: backfill_fmtqik_tpl={bf_fmt_tpl} ; backfill_mi_5mins_hist_tpl={bf_ohlc_tpl}",
+            f"BackfillMonths={args.backfill_months} | BackfillLimit={BACKFILL_LIMIT} | StoreCap={STORE_CAP} | LookbackTarget={LOOKBACK_TARGET}",
             f"Mode={mode} | OHLC={ohlc_status} | UsedDate={used_date} | UsedDminus1={used_dminus1}",
             f"RunDayTag={run_day_tag} | UsedDateStatus={used_date_status}",
-            "NOTE: RunDayTag is a weekday-only heuristic (NOT an exchange calendar). "
-            "Holidays/typhoon suspensions are NOT covered.",
-            "NOTE: DATA_NOT_UPDATED means the DAILY endpoint has not published a row for 'today' as of generated_at_local.",
-            f"run_day_tag_method={run_day_tag_method}",
             f"freshness_ok={freshness_ok} | freshness_age_days={freshness_age_days}",
             f"dedupe_ok={dedupe_ok}",
         ]),
-
         "run_day_tag": run_day_tag,
-        "run_day_tag_method": run_day_tag_method,
         "used_date_status": used_date_status,
-        "tag": run_day_tag,  # backward compatible
-
+        "tag": run_day_tag,
         "freshness_ok": freshness_ok,
         "freshness_age_days": freshness_age_days,
         "mode": mode,
@@ -636,13 +723,11 @@ def main() -> None:
         "used_dminus1": used_dminus1,
         "lookback_n_actual": n_actual,
         "lookback_oldest": oldest,
-
         "cache_tail": merged_roll[:25],
     }
 
-    # Stats (machine-readable)
+    # stats
     m = _index_by_date(merged_roll, used_date)
-
     series_close = _series_value_desc(m, "close")
     series_tv = _series_value_desc(m, "trade_value")
     series_ret = _series_pct_change_desc(m)
@@ -656,7 +741,6 @@ def main() -> None:
 
         "used_date": used_date,
         "run_day_tag": run_day_tag,
-        "run_day_tag_method": run_day_tag_method,
         "used_date_status": used_date_status,
 
         "freshness_ok": freshness_ok,
@@ -665,6 +749,7 @@ def main() -> None:
         "mode": mode,
         "ohlc_status": ohlc_status,
 
+        "backfill_months": args.backfill_months,
         "backfill_limit": BACKFILL_LIMIT,
         "store_cap": STORE_CAP,
 
@@ -687,7 +772,7 @@ def main() -> None:
                 "win252": _calc_stats_for_series(series_ret, used_date, 252),
                 "window_note": {
                     "n_total_available": len(series_ret),
-                    "note": "pct_change needs D-1 close; with backfill=252, max pct_change points are typically <=251."
+                    "note": "pct_change needs D-1 close; with backfill_limit=252, max pct_change points are typically <=251."
                 }
             },
             "amplitude_pct": {
@@ -698,25 +783,26 @@ def main() -> None:
                     "n_total_available": len(series_amp),
                     "note": "amplitude_pct needs high/low + D-1 close; if OHLC missing, series is sparse and windows may be incomplete."
                 }
-            },
+            }
         },
 
         "sources": {
-            "fmtqik_url": schema["fmtqik"]["url"],
-            "mi_5mins_hist_url": schema["mi_5mins_hist"]["url"],
-        },
+            "daily_fmtqik_url": daily_fmt_url,
+            "daily_mi_5mins_hist_url": daily_ohlc_url,
+            "backfill_fmtqik_url_tpl": bf_fmt_tpl,
+            "backfill_mi_5mins_hist_url_tpl": bf_ohlc_tpl
+        }
     }
 
-    # Write outputs atomically
     _atomic_write_json(ROLL_PATH, merged_roll)
     _atomic_write_json(REPORT_PATH, latest_report)
     _atomic_write_json(STATS_PATH, stats)
 
     print("TWSE sidecar updated:")
-    print(f"  UsedDate={used_date}  Mode={mode}  freshness_ok={freshness_ok} age_days={freshness_age_days}")
-    print(f"  run_day_tag={run_day_tag}  used_date_status={used_date_status}")
-    print(f"  run_day_tag_method={run_day_tag_method}")
-    print(f"  roll_records={len(merged_roll)}  dedupe_ok={dedupe_ok}")
+    print(f"  UsedDate={used_date} Mode={mode} freshness_ok={freshness_ok} age_days={freshness_age_days}")
+    print(f"  run_day_tag={run_day_tag} used_date_status={used_date_status}")
+    print(f"  roll_records={len(merged_roll)} dedupe_ok={dedupe_ok}")
+    print(f"  close_n={len(series_close)} tv_n={len(series_tv)} ret_n={len(series_ret)} amp_n={len(series_amp)}")
     print(f"  wrote: {ROLL_PATH}, {REPORT_PATH}, {STATS_PATH}")
 
 
