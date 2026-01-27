@@ -1,0 +1,18 @@
+{
+  "schema_version": "tw_margin_maint_ratio_latest_v1",
+  "script_fingerprint": "fetch_macromicro_maint_ratio_py@v1",
+  "generated_at_utc": "2026-01-27T15:03:18Z",
+  "generated_at_local": "2026-01-27T23:03:18.904016+08:00",
+  "timezone": "Asia/Taipei",
+  "source_url": "https://www.macromicro.me/series/23204/taiwan-taiex-maintenance-margin",
+  "http_status": null,
+  "raw_sha256": null,
+  "raw_saved_path": null,
+  "fetch_status": "DOWNGRADED",
+  "confidence": "DOWNGRADED",
+  "dq_reason": "fetch failed",
+  "parse_note": "",
+  "data_date": null,
+  "maint_ratio_pct": null,
+  "error": "http_403"
+}
