@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-27T07:02:09Z
+- unified_generated_at_utc: 2026-01-27T07:10:42Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -143,14 +143,14 @@
 - status: OK
 - data_date: 2026-01-27
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 3.996000
-- spot_sell: 4.056000
-- mid: 4.026000
-- ret1_pct: -87.214989 (from 2026-01-26 to 2026-01-27)
+- spot_buy: 31.355000
+- spot_sell: 31.455000
+- mid: 31.405000
+- ret1_pct: -0.269927 (from 2026-01-26 to 2026-01-27)
 - chg_5d_pct: NA (from None to None)
 - dir: TWD_STRONG
-- fx_signal: WATCH
-- fx_reason: abs(chg_5d%)>=1.5 OR abs(ret1%)>=1.0
+- fx_signal: NONE
+- fx_reason: below thresholds
 - fx_confidence: DOWNGRADED
 
 ## taiwan_margin_financing (TWSE/TPEX)
@@ -176,7 +176,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-26, roll25_used_date=2026-01-26, match=true
 
-<!-- rendered_at_utc: 2026-01-27T07:02:09Z -->
+<!-- rendered_at_utc: 2026-01-27T07:10:42Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
