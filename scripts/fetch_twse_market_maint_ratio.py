@@ -3,29 +3,22 @@
 """
 Fetch TWSE official data and compute a *proxy* of "market margin maintenance ratio".
 
-Proxy definition:
+Proxy:
   maint_ratio_pct = ( Σ_i (fin_shares_i * close_i * 1000) / total_financing_amount_twd ) * 100
 
-- fin_shares_i: financing balance shares (張) for security i, from TWSE MI_MARGN JSON
-- close_i: closing price for security i, from TWSE MI_INDEX JSON
-- total_financing_amount_twd: market total financing balance amount, from MI_MARGN footer (融資金額(仟元) 今日餘額)
+Notes:
+- fin_shares_i uses MI_MARGN (融資今日餘額, 單位: 張)
+- close_i uses MI_INDEX (fields9/data9 收盤價)
+- total_financing_amount_twd uses MI_MARGN tfootData_two row '融資金額(仟元)' last numeric cell = 今日餘額 (仟元) -> *1000
 
-This is a market-level proxy, NOT "per-account maintenance ratio".
+Robustness:
+- Retries with backoff (2s, 4s, 8s)
+- Adds '_' timestamp param to reduce caching issues
+- Adds Referer / Accept headers (TWSE sometimes needs browser-like headers)
 
 Outputs:
 - latest.json (always)
 - history.json (upsert by data_date, if --history provided)
-
-Robustness:
-- Retries with backoff (2s, 4s, 8s)
-- If any critical parse fails => DOWNGRADED, keep nulls.
-
-Date sourcing:
-- --date YYYYMMDD takes priority.
-- else --date-from JSON path:
-  - try top-level: data_date / date / UsedDate / used_date
-  - then try: series.TWSE.data_date
-  - then try: series.TWSE.rows[0].date
 """
 
 from __future__ import annotations
@@ -45,7 +38,8 @@ UA = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-TWSE_MI_MARGN = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
+# Use exchangeReport endpoints (more common / consistent schema for JSON fields/data)
+TWSE_MI_MARGN = "https://www.twse.com.tw/exchangeReport/MI_MARGN"
 TWSE_MI_INDEX = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 
 SCHEMA_LATEST = "tw_market_maint_ratio_latest_v1"
@@ -83,40 +77,94 @@ def parse_int(s: Any) -> Optional[int]:
     except Exception:
         return None
 
-def request_json(url: str, params: Dict[str, str], timeout: int = 20) -> Dict[str, Any]:
+def normalize_date_to_yyyymmdd(s: str) -> Optional[str]:
+    ss = s.strip()
+    if re.fullmatch(r"\d{8}", ss):
+        return ss
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", ss):
+        return ss.replace("-", "")
+    return None
+
+def load_date_from_latest(path: str) -> Optional[str]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+    except Exception:
+        return None
+
+    for k in ("data_date", "date", "UsedDate", "used_date"):
+        v = obj.get(k)
+        if isinstance(v, str):
+            dd = normalize_date_to_yyyymmdd(v)
+            if dd:
+                return dd
+
+    try:
+        v = obj.get("series", {}).get("TWSE", {}).get("data_date")
+        if isinstance(v, str):
+            dd = normalize_date_to_yyyymmdd(v)
+            if dd:
+                return dd
+    except Exception:
+        pass
+
+    try:
+        rows = obj.get("series", {}).get("TWSE", {}).get("rows", [])
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            v = rows[0].get("date")
+            if isinstance(v, str):
+                dd = normalize_date_to_yyyymmdd(v)
+                if dd:
+                    return dd
+    except Exception:
+        pass
+
+    return None
+
+def _twse_headers(referer: str) -> Dict[str, str]:
+    return {
+        "User-Agent": UA,
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+        "Referer": referer,
+        "Connection": "keep-alive",
+    }
+
+def request_json(session: requests.Session, url: str, params: Dict[str, str], referer: str, timeout: int = 30) -> Dict[str, Any]:
     last_err: Optional[str] = None
+    # Add cache-buster
+    params = dict(params)
+    params["_"] = str(int(time.time() * 1000))
+
     for i, backoff in enumerate((2, 4, 8), start=1):
         try:
-            r = requests.get(url, params=params, headers={"User-Agent": UA}, timeout=timeout)
+            r = session.get(url, params=params, headers=_twse_headers(referer), timeout=timeout)
+            # Retry on typical throttling
+            if r.status_code in (429, 500, 502, 503, 504):
+                raise RuntimeError(f"http_{r.status_code}")
             r.raise_for_status()
-            return r.json()
+
+            # Some endpoints occasionally prepend BOM or whitespace; json() usually handles it but keep safe:
+            try:
+                return r.json()
+            except Exception:
+                text = r.text.lstrip("\ufeff").strip()
+                return json.loads(text)
+
         except Exception as e:
             last_err = f"try{i}:{type(e).__name__}:{e}"
             time.sleep(backoff)
     raise RuntimeError(last_err or "request_failed")
 
-def find_table_with_fields(tables: List[Dict[str, Any]], must_have: List[str]) -> Optional[Dict[str, Any]]:
-    for t in tables:
-        fields = t.get("fields") or []
-        if not isinstance(fields, list):
-            continue
-        ok = True
-        for key in must_have:
-            if not any(key in str(f) for f in fields):
-                ok = False
-                break
-        if ok:
-            return t
-    return None
-
 def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[int], str]:
     """
-    Prefer tfootData_two row that starts with '融資金額(仟元)' and take its last numeric cell as '今日餘額'.
-    Multiply by 1000 to convert 仟元 -> 元.
+    Prefer MI_MARGN root tfootData_two:
+      - find row where row[0] contains '融資金額'
+      - take last numeric cell as 今日餘額 (仟元) -> *1000
     """
-    # 1) root-level keys
-    for k, v in margn.items():
-        if "tfoot" in str(k) and isinstance(v, list) and v and isinstance(v[0], list):
+    for key in ("tfootData_two", "tfootDataTwo", "tfootData"):
+        v = margn.get(key)
+        if isinstance(v, list) and v and isinstance(v[0], list):
             for row in v:
                 if not row:
                     continue
@@ -125,63 +173,43 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
                     nums = [parse_number(x) for x in row[1:]]
                     nums = [x for x in nums if x is not None]
                     if nums:
-                        return int(round(nums[-1] * 1000)), f"from_root:{k}"
-    # 2) inside tables
-    tables = margn.get("tables") or []
-    if isinstance(tables, list):
-        for t in tables:
-            for k, v in (t or {}).items():
-                if "tfoot" in str(k) and isinstance(v, list) and v and isinstance(v[0], list):
-                    for row in v:
-                        if not row:
-                            continue
-                        head = str(row[0])
-                        if "融資金額" in head:
-                            nums = [parse_number(x) for x in row[1:]]
-                            nums = [x for x in nums if x is not None]
-                            if nums:
-                                return int(round(nums[-1] * 1000)), f"from_table:{k}"
+                        return int(round(nums[-1] * 1000)), f"from_root:{key}"
+
+    # fallback: scan any key containing 'tfoot'
+    for k, v in margn.items():
+        if "tfoot" in str(k).lower() and isinstance(v, list) and v and isinstance(v[0], list):
+            for row in v:
+                if row and "融資金額" in str(row[0]):
+                    nums = [parse_number(x) for x in row[1:]]
+                    nums = [x for x in nums if x is not None]
+                    if nums:
+                        return int(round(nums[-1] * 1000)), f"from_root_scan:{k}"
+
     return None, "not_found"
 
 def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, int], str]:
     """
-    Extract per-security financing '今日餘額' (張).
-    We look for a table containing '證券代號/股票代號' and '融資' + '今日餘額'.
+    MI_MARGN root has:
+      - fields: [... '股票代號', ... '融資今日餘額', ...]
+      - data: [[...], [...], ...]
     """
-    tables = margn.get("tables") or []
-    if not isinstance(tables, list):
-        return {}, "tables_not_found"
-
-    best: Optional[Dict[str, Any]] = None
-    for t in tables:
-        fields = t.get("fields") or []
-        if not isinstance(fields, list):
-            continue
-        has_code = any(("證券代號" in str(f)) or ("股票代號" in str(f)) for f in fields)
-        has_fin_today = any(("融資" in str(f) and "今日" in str(f) and "餘額" in str(f)) for f in fields)
-        if has_code and has_fin_today:
-            best = t
-            break
-
-    if best is None:
-        return {}, "fin_table_not_found"
-
-    fields = best.get("fields") or []
-    data = best.get("data") or []
+    fields = margn.get("fields")
+    data = margn.get("data")
     if not isinstance(fields, list) or not isinstance(data, list):
-        return {}, "fin_table_bad_shape"
+        return {}, "fields_or_data_not_found"
 
     code_idx = None
     fin_today_idx = None
+
     for i, f in enumerate(fields):
         sf = str(f)
-        if code_idx is None and (("證券代號" in sf) or ("股票代號" in sf)):
+        if code_idx is None and (("股票代號" in sf) or ("證券代號" in sf)):
             code_idx = i
         if fin_today_idx is None and ("融資" in sf and "今日" in sf and "餘額" in sf):
             fin_today_idx = i
 
     if code_idx is None or fin_today_idx is None:
-        return {}, "fin_table_missing_cols"
+        return {}, "missing_cols_in_fields"
 
     out: Dict[str, int] = {}
     for row in data:
@@ -199,21 +227,13 @@ def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, i
 
 def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], str]:
     """
-    Extract per-security close price from MI_INDEX JSON.
-    Look for a table with '證券代號' and '收盤價'.
+    MI_INDEX per-security after-hours table typically uses fields9/data9.
+    We look for '證券代號' and '收盤價' in fields9.
     """
-    tables = mi_index.get("tables") or []
-    if not isinstance(tables, list):
-        return {}, "tables_not_found"
-
-    t = find_table_with_fields(tables, must_have=["證券代號", "收盤價"])
-    if t is None:
-        return {}, "price_table_not_found"
-
-    fields = t.get("fields") or []
-    data = t.get("data") or []
+    fields = mi_index.get("fields9")
+    data = mi_index.get("data9")
     if not isinstance(fields, list) or not isinstance(data, list):
-        return {}, "price_table_bad_shape"
+        return {}, "fields9_or_data9_not_found"
 
     code_idx = None
     close_idx = None
@@ -223,8 +243,9 @@ def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], s
             code_idx = i
         if close_idx is None and "收盤價" in sf:
             close_idx = i
+
     if code_idx is None or close_idx is None:
-        return {}, "price_table_missing_cols"
+        return {}, "missing_cols_in_fields9"
 
     out: Dict[str, float] = {}
     for row in data:
@@ -239,61 +260,6 @@ def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], s
         out[code] = float(close)
 
     return out, "ok"
-
-def normalize_date_to_yyyymmdd(s: str) -> Optional[str]:
-    ss = s.strip()
-    if re.fullmatch(r"\d{8}", ss):
-        return ss
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", ss):
-        return ss.replace("-", "")
-    return None
-
-def load_date_from_latest(path: str) -> Optional[str]:
-    """
-    Read a date from an existing taiwan_margin_cache/latest.json.
-
-    Supported locations:
-    - top-level: data_date / date / UsedDate / used_date
-    - series.TWSE.data_date
-    - series.TWSE.rows[0].date
-    """
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            obj = json.load(f)
-    except Exception:
-        return None
-
-    # 1) top-level keys
-    for k in ("data_date", "date", "UsedDate", "used_date"):
-        v = obj.get(k)
-        if isinstance(v, str):
-            dd = normalize_date_to_yyyymmdd(v)
-            if dd:
-                return dd
-
-    # 2) series.TWSE.data_date
-    try:
-        v = obj.get("series", {}).get("TWSE", {}).get("data_date")
-        if isinstance(v, str):
-            dd = normalize_date_to_yyyymmdd(v)
-            if dd:
-                return dd
-    except Exception:
-        pass
-
-    # 3) series.TWSE.rows[0].date
-    try:
-        rows = obj.get("series", {}).get("TWSE", {}).get("rows", [])
-        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-            v = rows[0].get("date")
-            if isinstance(v, str):
-                dd = normalize_date_to_yyyymmdd(v)
-                if dd:
-                    return dd
-    except Exception:
-        pass
-
-    return None
 
 def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 1200) -> None:
     data = {"schema_version": SCHEMA_HISTORY, "items": []}
@@ -319,10 +285,7 @@ def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 120
     if not replaced:
         new_items.append(item)
 
-    def key_fn(x: Dict[str, Any]) -> str:
-        return str(x.get("data_date") or "")
-    new_items = sorted([x for x in new_items if x.get("data_date")], key=key_fn)
-
+    new_items = sorted([x for x in new_items if x.get("data_date")], key=lambda x: str(x.get("data_date") or ""))
     if len(new_items) > max_items:
         new_items = new_items[-max_items:]
 
@@ -334,12 +297,12 @@ def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 120
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", help="YYYYMMDD (preferred). If omitted, try --date-from.", default="")
+    ap.add_argument("--date", help="YYYYMMDD (required unless --date-from).", default="")
     ap.add_argument("--date-from", help="Read date from an existing latest.json", default="")
     ap.add_argument("--out", required=True, help="Output latest.json path")
     ap.add_argument("--history", default="", help="Optional history.json path (upsert by data_date)")
     ap.add_argument("--tz", default="Asia/Taipei")
-    ap.add_argument("--exclude-non4", action="store_true", help="Exclude codes not 4 digits (roughly filter ETFs/others)")
+    ap.add_argument("--exclude-non4", action="store_true", help="Exclude codes not 4 digits")
     ap.add_argument("--max-history", type=int, default=1200)
     args = ap.parse_args()
 
@@ -353,7 +316,7 @@ def main() -> int:
 
     latest: Dict[str, Any] = {
         "schema_version": SCHEMA_LATEST,
-        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v2",
+        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v3_exchangeReport_fields9",
         "generated_at_utc": gen_utc,
         "generated_at_local": gen_local,
         "timezone": args.tz,
@@ -376,45 +339,63 @@ def main() -> int:
         if not date_yyyymmdd:
             raise ValueError("date_missing_or_invalid")
 
-        margn = request_json(
-            TWSE_MI_MARGN,
-            params={"response": "json", "date": date_yyyymmdd, "selectType": "ALL"},
-        )
+        with requests.Session() as s:
+            # 1) MI_MARGN
+            margn = request_json(
+                s,
+                TWSE_MI_MARGN,
+                params={"response": "json", "date": date_yyyymmdd, "selectType": "ALL"},
+                referer="https://www.twse.com.tw/zh/trading/margin/mi-margn.html",
+            )
 
-        total_amt_twd, total_src = extract_total_financing_amount_twd(margn)
-        fin_shares, fin_src = extract_financing_shares_by_code(margn)
+            # TWSE often returns {"stat":"OK"} / or "很抱歉..." messages
+            stat = str(margn.get("stat") or "").upper()
+            if stat and stat != "OK":
+                raise RuntimeError(f"MI_MARGN_stat_not_ok:{margn.get('stat')}")
 
-        if total_amt_twd is None:
-            raise RuntimeError(f"total_financing_amount_not_found:{total_src}")
-        if not fin_shares:
-            raise RuntimeError(f"financing_shares_not_found:{fin_src}")
+            total_amt_twd, total_src = extract_total_financing_amount_twd(margn)
+            fin_shares, fin_src = extract_financing_shares_by_code(margn)
 
-        if args.exclude_non4:
-            fin_shares = {k: v for k, v in fin_shares.items() if re.fullmatch(r"\d{4}", k)}
+            if total_amt_twd is None:
+                raise RuntimeError(f"total_financing_amount_not_found:{total_src}")
+            if not fin_shares:
+                raise RuntimeError(f"financing_shares_not_found:{fin_src}")
 
-        mi_index = request_json(
-            TWSE_MI_INDEX,
-            params={"response": "json", "date": date_yyyymmdd, "type": "ALLBUT0999"},
-        )
-        close_by_code, px_src = extract_close_by_code(mi_index)
-        if not close_by_code:
-            raise RuntimeError(f"close_prices_not_found:{px_src}")
+            if args.exclude_non4:
+                fin_shares = {k: v for k, v in fin_shares.items() if re.fullmatch(r"\d{4}", k)}
 
-        total_collateral = 0.0
-        missing_px = 0
-        included = 0
-        for code, shares in fin_shares.items():
-            px = close_by_code.get(code)
-            if px is None:
-                missing_px += 1
-                continue
-            total_collateral += float(shares) * float(px) * 1000.0
-            included += 1
+            # 2) MI_INDEX
+            mi_index = request_json(
+                s,
+                TWSE_MI_INDEX,
+                params={"response": "json", "date": date_yyyymmdd, "type": "ALLBUT0999"},
+                referer="https://www.twse.com.tw/zh/trading/historical/mi-index.html",
+            )
 
-        if included == 0:
-            raise RuntimeError("all_prices_missing_after_merge")
+            stat2 = str(mi_index.get("stat") or "").upper()
+            if stat2 and stat2 != "OK":
+                raise RuntimeError(f"MI_INDEX_stat_not_ok:{mi_index.get('stat')}")
 
-        maint = (total_collateral / float(total_amt_twd)) * 100.0
+            close_by_code, px_src = extract_close_by_code(mi_index)
+            if not close_by_code:
+                raise RuntimeError(f"close_prices_not_found:{px_src}")
+
+            # 3) Merge + compute
+            total_collateral = 0.0
+            missing_px = 0
+            included = 0
+            for code, shares in fin_shares.items():
+                px = close_by_code.get(code)
+                if px is None:
+                    missing_px += 1
+                    continue
+                total_collateral += float(shares) * float(px) * 1000.0
+                included += 1
+
+            if included == 0:
+                raise RuntimeError("all_prices_missing_after_merge")
+
+            maint = (total_collateral / float(total_amt_twd)) * 100.0
 
         latest["fetch_status"] = "OK"
         latest["confidence"] = "OK"
@@ -422,7 +403,7 @@ def main() -> int:
         latest["data_date"] = f"{date_yyyymmdd[0:4]}-{date_yyyymmdd[4:6]}-{date_yyyymmdd[6:8]}"
         latest["total_financing_amount_twd"] = int(total_amt_twd)
         latest["total_collateral_value_twd"] = int(round(total_collateral))
-        latest["maint_ratio_pct"] = round(float(maint), 4)
+        latest["maint_ratio_pct"] = round(float(maint), 6)
         latest["included_count"] = int(included)
         latest["missing_price_count"] = int(missing_px)
         latest["notes"].append(f"total_financing_amount: {total_src}")
