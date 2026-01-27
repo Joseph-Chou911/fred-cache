@@ -21,6 +21,13 @@ Backfill logic:
     fetch last N months, merge into cache (dedupe by date).
 - Always keep STORE_CAP entries (>= BACKFILL_LIMIT).
 - Stats windows 60 & 252 computed from available values <= used_date.
+
+Notes (output semantics):
+- run_day_tag: WEEKDAY / WEEKEND (weekday-only heuristic; NOT exchange calendar)
+- used_date_status kept as-is:
+    OK_TODAY / DATA_NOT_UPDATED / OK_LATEST / ...
+- When used_date_status==DATA_NOT_UPDATED, summary adds:
+    "daily endpoint has not published today's row yet"
 """
 
 from __future__ import annotations
@@ -173,13 +180,10 @@ def _unwrap_to_rows(payload: Any) -> List[Dict[str, Any]]:
     if isinstance(payload, list):
         return [x for x in payload if isinstance(x, dict)]
     if isinstance(payload, dict):
-        # common containers
         for k in ("data", "result", "records", "items", "aaData", "dataset"):
             v = payload.get(k)
             if isinstance(v, list):
                 return [x for x in v if isinstance(x, dict)]
-        # TWSE monthly endpoints often return dict with 'data' as list-of-lists
-        # If it's list-of-lists, we handle in monthly parsers separately.
         if all(not isinstance(v, list) for v in payload.values()):
             return [payload]
     return []
@@ -205,7 +209,6 @@ def _month_add(d: date, delta_months: int) -> date:
     return date(y, m, 1)
 
 def _iter_months_back(d_today: date, months: int) -> List[str]:
-    # return list of yyyymm01 strings, from newest -> oldest
     base = date(d_today.year, d_today.month, 1)
     out: List[str] = []
     for i in range(months):
@@ -264,22 +267,14 @@ def _parse_ohlc_rows(payload: Any, schema: Dict[str, Any]) -> List[OhlcRow]:
 # ----------------- parsing monthly (www.twse.com.tw) -----------------
 
 def _parse_twse_monthly_fmtqik(payload: Any) -> List[FmtRow]:
-    """
-    Expected structure (monthly endpoint) often:
-      { "fields":[...], "data":[[...],[...],...], ... }
-    Date usually 'yyyy/mm/dd' or 'yyy/mm/dd' or 'yyyy-mm-dd'
-    """
     if not isinstance(payload, dict):
         return []
     data = payload.get("data")
     fields = payload.get("fields")
     if not isinstance(data, list) or not data:
         return []
-    # If list-of-dicts already, fallback to generic daily parser not here.
     if isinstance(data[0], dict):
-        # convert via daily parser keys is tricky; skip.
         return []
-    # map indices by field name
     idx = {}
     if isinstance(fields, list):
         for i, f in enumerate(fields):
@@ -307,9 +302,6 @@ def _parse_twse_monthly_fmtqik(payload: Any) -> List[FmtRow]:
     return out
 
 def _parse_twse_monthly_ohlc(payload: Any) -> List[OhlcRow]:
-    """
-    Monthly OHLC endpoint also tends to have fields + data(list-of-lists)
-    """
     if not isinstance(payload, dict):
         return []
     data = payload.get("data")
@@ -366,15 +358,31 @@ def _latest_date(dates: List[str]) -> Optional[str]:
     return max(dates) if dates else None
 
 def _pick_used_date(today: date, fmt_dates_sorted_asc: List[str]) -> Tuple[str, str, str]:
+    """
+    Return (used_date, run_day_tag, used_date_status)
+
+    run_day_tag: WEEKDAY / WEEKEND (weekday-only heuristic; NOT exchange calendar)
+    used_date_status:
+      - OK_TODAY if today's row exists in daily/backfill merged dates
+      - DATA_NOT_UPDATED if weekday but today's row absent (daily endpoint lag)
+      - OK_LATEST if weekend (use latest available)
+      - FMTQIK_EMPTY if no rows
+    """
     if not fmt_dates_sorted_asc:
-        return ("NA", "FMTQIK_EMPTY", "FMTQIK_EMPTY")
+        return ("NA", "WEEKDAY", "FMTQIK_EMPTY")
+
     today_iso = today.isoformat()
     latest = _latest_date(fmt_dates_sorted_asc) or fmt_dates_sorted_asc[-1]
+
+    run_day_tag = "WEEKEND" if _is_weekend(today) else "WEEKDAY"
+
     if _is_weekend(today):
-        return (latest, "NON_TRADING_DAY", "OK_LATEST")
+        return (latest, run_day_tag, "OK_LATEST")
+
     if today_iso not in fmt_dates_sorted_asc:
-        return (latest, "TRADING_DAY", "DATA_NOT_UPDATED")
-    return (today_iso, "TRADING_DAY", "OK_TODAY")
+        return (latest, run_day_tag, "DATA_NOT_UPDATED")
+
+    return (today_iso, run_day_tag, "OK_TODAY")
 
 def _extract_lookback(roll: List[Dict[str, Any]], used_date: str) -> List[Dict[str, Any]]:
     eligible = [r for r in roll if isinstance(r, dict) and str(r.get("date", "")) <= used_date]
@@ -586,14 +594,12 @@ def main() -> None:
         print(f"[INFO] backfill_months={args.backfill_months} enabled.")
         yyyymm01_list = _iter_months_back(today, args.backfill_months)
         for yyyymm01 in yyyymm01_list:
-            # monthly fmtqik
             try:
                 url = bf_fmt_tpl.format(yyyymm01=yyyymm01)
                 p = _http_get_json(url)
                 backfill_fmt_rows.extend(_parse_twse_monthly_fmtqik(p))
             except Exception as e:
                 print(f"[WARN] backfill FMTQIK month={yyyymm01} failed: {e}")
-            # monthly ohlc
             try:
                 url = bf_ohlc_tpl.format(yyyymm01=yyyymm01)
                 p = _http_get_json(url)
@@ -605,12 +611,10 @@ def main() -> None:
     fmt_rows = (daily_fmt_rows or []) + (backfill_fmt_rows or [])
     ohlc_rows = (daily_ohlc_rows or []) + (backfill_ohlc_rows or [])
 
-    # If daily failed completely and no backfill rows -> fatal
     if not fmt_rows:
         print("[FATAL] no usable FMTQIK rows from daily/backfill after parsing.")
         sys.exit(1)
 
-    # de-dupe by date keeping "latest seen"
     fmt_by_date: Dict[str, FmtRow] = {}
     for r in fmt_rows:
         fmt_by_date[r.date] = r
@@ -677,13 +681,16 @@ def main() -> None:
 
     is_down_day = (pct_change is not None and pct_change < 0) or (today_change is not None and today_change < 0)
 
+    # summary prefix + extra note for DATA_NOT_UPDATED
     prefix = ""
-    if run_day_tag == "NON_TRADING_DAY":
+    extra_note = ""
+    if run_day_tag == "WEEKEND":
         prefix = "今日非交易日；"
     elif used_date_status == "DATA_NOT_UPDATED":
         prefix = "今日資料未更新；"
+        extra_note = " daily endpoint has not published today's row yet"
 
-    summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}"
+    summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}{extra_note}"
 
     latest_report = {
         "generated_at": _now_tz(tz).isoformat(),
@@ -706,6 +713,7 @@ def main() -> None:
         "caveats": "\n".join([
             f"Sources: daily_fmtqik={daily_fmt_url} ; daily_mi_5mins_hist={daily_ohlc_url}",
             f"Sources: backfill_fmtqik_tpl={bf_fmt_tpl} ; backfill_mi_5mins_hist_tpl={bf_ohlc_tpl}",
+            "run_day_tag is weekday-only heuristic (not exchange calendar)",
             f"BackfillMonths={args.backfill_months} | BackfillLimit={BACKFILL_LIMIT} | StoreCap={STORE_CAP} | LookbackTarget={LOOKBACK_TARGET}",
             f"Mode={mode} | OHLC={ohlc_status} | UsedDate={used_date} | UsedDminus1={used_dminus1}",
             f"RunDayTag={run_day_tag} | UsedDateStatus={used_date_status}",
