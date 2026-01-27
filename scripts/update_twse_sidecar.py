@@ -28,6 +28,14 @@ Notes (output semantics):
     OK_TODAY / DATA_NOT_UPDATED / OK_LATEST / ...
 - When used_date_status==DATA_NOT_UPDATED, summary adds:
     "daily endpoint has not published today's row yet"
+
+Compatibility additions (NO logic changes):
+- latest_report.signal adds unified-friendly alias keys:
+    DownDay, OhlcMissing, UsedDateStatus, RunDayTag
+  plus snake_case aliases:
+    down_day, ohlc_missing, used_date_status, run_day_tag
+- latest_report adds cache_roll25 = merged_roll (for unified roll25_derived inputs)
+  while keeping cache_tail (human-readable).
 """
 
 from __future__ import annotations
@@ -275,7 +283,7 @@ def _parse_twse_monthly_fmtqik(payload: Any) -> List[FmtRow]:
         return []
     if isinstance(data[0], dict):
         return []
-    idx = {}
+    idx: Dict[str, int] = {}
     if isinstance(fields, list):
         for i, f in enumerate(fields):
             if isinstance(f, str):
@@ -310,7 +318,7 @@ def _parse_twse_monthly_ohlc(payload: Any) -> List[OhlcRow]:
         return []
     if isinstance(data[0], dict):
         return []
-    idx = {}
+    idx: Dict[str, int] = {}
     if isinstance(fields, list):
         for i, f in enumerate(fields):
             if isinstance(f, str):
@@ -692,6 +700,21 @@ def main() -> None:
 
     summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}{extra_note}"
 
+    # ---- Compatibility: signal alias keys (no computation change) ----
+    signal_obj = {
+        # original camel-case keys (kept)
+        "DownDay": None if (pct_change is None and today_change is None) else bool(is_down_day),
+        "OhlcMissing": (not ohlc_ok),
+        "UsedDateStatus": used_date_status,
+        "RunDayTag": run_day_tag,
+
+        # snake_case aliases for readers that expect them
+        "down_day": None if (pct_change is None and today_change is None) else bool(is_down_day),
+        "ohlc_missing": (not ohlc_ok),
+        "used_date_status": used_date_status,
+        "run_day_tag": run_day_tag,
+    }
+
     latest_report = {
         "generated_at": _now_tz(tz).isoformat(),
         "timezone": str(tz),
@@ -703,12 +726,7 @@ def main() -> None:
             "TradeValue": None if today_trade_value is None else int(round(float(today_trade_value))),
             "AmplitudePct": None if amplitude_pct is None else round(float(amplitude_pct), 6),
         },
-        "signal": {
-            "DownDay": None if (pct_change is None and today_change is None) else bool(is_down_day),
-            "OhlcMissing": (not ohlc_ok),
-            "UsedDateStatus": used_date_status,
-            "RunDayTag": run_day_tag,
-        },
+        "signal": signal_obj,
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
         "caveats": "\n".join([
             f"Sources: daily_fmtqik={daily_fmt_url} ; daily_mi_5mins_hist={daily_ohlc_url}",
@@ -731,6 +749,11 @@ def main() -> None:
         "used_dminus1": used_dminus1,
         "lookback_n_actual": n_actual,
         "lookback_oldest": oldest,
+
+        # ---- Compatibility: unified expects cache_roll25 ----
+        # Provide full roll (capped at STORE_CAP) for derived stats,
+        # while keeping cache_tail for quick human glance.
+        "cache_roll25": merged_roll,
         "cache_tail": merged_roll[:25],
     }
 
