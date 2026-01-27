@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-27T13:52:14Z",
+  "generated_at_utc": "2026-01-27T15:19:43Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -17,62 +17,33 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-26T23:33:12.597588+00:00",
+          "run_ts_utc": "2026-01-27T14:00:27.770527+00:00",
           "module": "market_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@3998fb8",
+          "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
           "stale_hours": 36.0,
           "stats_path": "market_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-01-26T23:32:28Z",
-          "stats_as_of_ts": "2026-01-26T23:32:28Z",
+          "stats_generated_at_utc": "2026-01-27T13:55:03Z",
+          "stats_as_of_ts": "2026-01-27T13:55:03Z",
           "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
           "series_count": 4,
           "dash_history_path": "dashboard/history.json",
           "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
           "history_items_loaded": 8,
-          "history_excluded_same_day": 1
+          "history_excluded_same_day": 0
         },
         "rows": [
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@3998fb8",
-            "series": "VIX",
-            "value": 16.09,
-            "data_date": "2026-01-23",
-            "as_of_ts": "2026-01-26T23:32:28Z",
-            "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-            "dq": "OK",
-            "age_hours": 0.012388218888888889,
-            "z60": -0.38809606605851577,
-            "ret1_pct60": 2.8772378516623993,
-            "z_delta60": 0.172147211058723,
-            "p_delta60": 13.333333333333336,
-            "p252": 28.57142857142857,
-            "p60": 43.333333333333336,
-            "z252": -0.5344846175189203,
-            "signal_level": "WATCH",
-            "reason": "abs(ret1%60)>=2",
-            "tag": "JUMP_RET",
-            "near": "NA",
-            "dir": "HIGH",
-            "dir_note": "DIR_UNCERTAIN_ABS",
-            "prev_signal": "WATCH",
-            "delta_signal": "SAME",
-            "streak_hist": 5,
-            "streak_wa": 6
-          },
-          {
-            "module": "market_cache",
-            "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@3998fb8",
+            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
             "series": "OFR_FSI",
             "value": -2.68,
             "data_date": "2026-01-22",
-            "as_of_ts": "2026-01-26T23:32:28Z",
+            "as_of_ts": "2026-01-27T13:55:03Z",
             "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
             "dq": "OK",
-            "age_hours": 0.012388218888888889,
+            "age_hours": 0.09021403527777778,
             "z60": -0.8136912270406668,
             "ret1_pct60": -9.611451942740299,
             "z_delta60": -0.6451549078442044,
@@ -88,20 +59,20 @@
             "dir_note": "DIR_UNCERTAIN_ABS",
             "prev_signal": "WATCH",
             "delta_signal": "SAME",
-            "streak_hist": 4,
-            "streak_wa": 5
+            "streak_hist": 5,
+            "streak_wa": 6
           },
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@3998fb8",
+            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
             "series": "SP500",
             "value": 6950.23,
             "data_date": "2026-01-26",
-            "as_of_ts": "2026-01-26T23:32:28Z",
+            "as_of_ts": "2026-01-27T13:55:03Z",
             "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
             "dq": "OK",
-            "age_hours": 0.012388218888888889,
+            "age_hours": 0.09021403527777778,
             "z60": 1.2148554889307452,
             "ret1_pct60": 0.5006065986948351,
             "z_delta60": 0.3470418017456982,
@@ -123,14 +94,43 @@
           {
             "module": "market_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@3998fb8",
+            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
+            "series": "VIX",
+            "value": 16.15,
+            "data_date": "2026-01-26",
+            "as_of_ts": "2026-01-27T13:55:03Z",
+            "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+            "dq": "OK",
+            "age_hours": 0.09021403527777778,
+            "z60": -0.36085631266913765,
+            "ret1_pct60": 0.3729024238657472,
+            "z_delta60": 0.02723975338937812,
+            "p_delta60": 1.6666666666666643,
+            "p252": 30.158730158730158,
+            "p60": 45.0,
+            "z252": -0.5210789011949287,
+            "signal_level": "NONE",
+            "reason": "NA",
+            "tag": "NA",
+            "near": "NA",
+            "dir": "HIGH",
+            "dir_note": "NA",
+            "prev_signal": "WATCH",
+            "delta_signal": "WATCH→NONE",
+            "streak_hist": 6,
+            "streak_wa": 0
+          },
+          {
+            "module": "market_cache",
+            "ruleset_id": "signals_v8",
+            "script_fingerprint": "render_dashboard_py_signals_v8@cadcd15",
             "series": "HYG_IEF_RATIO",
             "value": 0.8448329690914768,
             "data_date": "2026-01-26",
-            "as_of_ts": "2026-01-26T23:32:28Z",
+            "as_of_ts": "2026-01-27T13:55:03Z",
             "source_url": "DERIVED",
             "dq": "OK",
-            "age_hours": 0.012388218888888889,
+            "age_hours": 0.09021403527777778,
             "z60": 1.7318916416182217,
             "ret1_pct60": -0.09647105702835386,
             "z_delta60": -0.24042533428908808,
@@ -152,7 +152,7 @@
         ],
         "series_signals": {
           "OFR_FSI": "WATCH",
-          "VIX": "WATCH",
+          "VIX": "NONE",
           "SP500": "INFO",
           "HYG_IEF_RATIO": "NONE"
         }
@@ -162,11 +162,11 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-27T13:50:13.782435+00:00",
+          "run_ts_utc": "2026-01-27T14:54:41.220185+00:00",
           "module": "fred_cache",
           "stale_hours": 72.0,
-          "stats_generated_at_utc": "2026-01-27T13:49:15+00:00",
-          "stats_as_of_ts": "2026-01-27T21:49:13+08:00",
+          "stats_generated_at_utc": "2026-01-27T14:02:04+00:00",
+          "stats_as_of_ts": "2026-01-27T22:02:02+08:00",
           "script_version": "stats_v1_ddof0_w60_w252_pct_le_ret1_delta",
           "series_count": 13,
           "history_path": "dashboard_fred_cache/history.json",
@@ -183,14 +183,14 @@
           },
           "history_lite_series": 13,
           "day_key_local": "2026-01-27",
-          "snapshot_id": "commit:005b6f1996a4914661e5d7981e1896c4e4c5f987",
-          "data_commit_sha": "005b6f1996a4914661e5d7981e1896c4e4c5f987"
+          "snapshot_id": "commit:598bc4dec79a58a69d6ac72949d5b3497dd73e34",
+          "data_commit_sha": "598bc4dec79a58a69d6ac72949d5b3497dd73e34"
         },
         "rows": [
           {
             "series": "DTWEXBGS",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-23",
             "value": 119.2855,
             "z60": -2.5955763681243225,
@@ -211,12 +211,12 @@
             "hitbits": "Z+P",
             "dbg": "p60=1.666666666667;prev_p60=21.666666666667;z60=-2.595576368124;prev_z60=-1.045572439498;prev_v=120.4478;last_v=119.2855;zΔ60=-1.550003928626;pΔ60=-20;ret1%=-0.964982340898",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXBGS&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "DJIA",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-26",
             "value": 49412.4,
             "z60": 1.4591515981251961,
@@ -237,12 +237,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DJIA&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "NASDAQCOM",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-26",
             "value": 23601.36,
             "z60": 0.772501706087299,
@@ -263,12 +263,12 @@
             "hitbits": "P",
             "dbg": "p60=86.666666666667;prev_p60=63.333333333333;z60=0.772501706087;prev_z60=0.491716195057;prev_v=23501.240000000002;last_v=23601.360000000001;zΔ60=0.28078551103;pΔ60=23.333333333333;ret1%=0.426020073834",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=NASDAQCOM&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "NFCINONFINLEVERAGE",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-16",
             "value": -0.50568,
             "z60": 1.2376921248704504,
@@ -289,12 +289,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "SP500",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-26",
             "value": 6950.23,
             "z60": 1.2148554889307452,
@@ -315,12 +315,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "T10Y3M",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-26",
             "value": 0.55,
             "z60": 1.0263169584549376,
@@ -341,12 +341,12 @@
             "hitbits": "NA",
             "dbg": "p60=90;prev_p60=86.666666666667;z60=1.026316958455;prev_z60=1.001964960139;prev_v=0.54;last_v=0.55;zΔ60=0.024351998315;pΔ60=3.333333333333;ret1%=1.851851851852",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "BAMLH0A0HYM2",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-23",
             "value": 2.68,
             "z60": -1.6399931375370005,
@@ -367,12 +367,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=BAMLH0A0HYM2&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "DCOILWTICO",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-20",
             "value": 60.3,
             "z60": 0.6093511436214766,
@@ -393,12 +393,12 @@
             "hitbits": "P",
             "dbg": "p60=73.333333333333;prev_p60=56.666666666667;z60=0.609351143621;prev_z60=0.029178106248;prev_v=59.39;last_v=60.3;zΔ60=0.580173037373;pΔ60=16.666666666667;ret1%=1.532244485604",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DCOILWTICO&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "DGS10",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-23",
             "value": 4.24,
             "z60": 1.6497122812180876,
@@ -419,12 +419,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "DGS2",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-23",
             "value": 3.6,
             "z60": 1.2634106162043315,
@@ -445,12 +445,12 @@
             "hitbits": "NA",
             "dbg": "NA",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DGS2&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "STLFSI4",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-16",
             "value": -0.651,
             "z60": -0.39795300587574917,
@@ -471,12 +471,12 @@
             "hitbits": "R",
             "dbg": "p60=35;prev_p60=31.666666666667;z60=-0.397953005876;prev_z60=-0.454103944422;prev_v=-0.6644;last_v=-0.651;zΔ60=0.056150938546;pΔ60=3.333333333333;ret1%=2.016857314871",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=STLFSI4&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "T10Y2Y",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-26",
             "value": 0.66,
             "z60": 0.7298785891316505,
@@ -497,12 +497,12 @@
             "hitbits": "R",
             "dbg": "p60=70;prev_p60=60;z60=0.729878589132;prev_z60=0.465646487809;prev_v=0.64;last_v=0.66;zΔ60=0.264232101322;pΔ60=10;ret1%=3.125",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           },
           {
             "series": "VIXCLS",
             "dq": "OK",
-            "age_hours": 0.016328454166666666,
+            "age_hours": 0.8770056069444445,
             "data_date": "2026-01-23",
             "value": 16.09,
             "z60": -0.3953517850251429,
@@ -523,7 +523,7 @@
             "hitbits": "R",
             "dbg": "p60=41.666666666667;prev_p60=30;z60=-0.395351785025;prev_z60=-0.564433146607;prev_v=15.64;last_v=16.09;zΔ60=0.169081361582;pΔ60=11.666666666667;ret1%=2.877237851662",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1",
-            "effective_as_of_ts": "2026-01-27T21:49:13+08:00"
+            "effective_as_of_ts": "2026-01-27T22:02:02+08:00"
           }
         ]
       }
@@ -531,7 +531,7 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-27T20:32:21.579821+08:00",
+        "generated_at": "2026-01-27T23:09:16.421816+08:00",
         "timezone": "Asia/Taipei",
         "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
         "numbers": {
@@ -2438,13 +2438,18 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-01-26T23:40:36Z",
+        "generated_at_utc": "2026-01-27T15:10:23Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
             "source_url": "https://histock.tw/stock/three.aspx?m=mg",
-            "data_date": "2026-01-26",
+            "data_date": "2026-01-27",
             "rows": [
+              {
+                "date": "2026-01-27",
+                "balance_yi": 3827.3,
+                "chg_yi": 11.5
+              },
               {
                 "date": "2026-01-26",
                 "balance_yi": 3815.8,
@@ -2589,16 +2594,11 @@
                 "date": "2025-12-15",
                 "balance_yi": 3318.6,
                 "chg_yi": 25.1
-              },
-              {
-                "date": "2025-12-12",
-                "balance_yi": 3293.5,
-                "chg_yi": 26.8
               }
             ],
             "notes": [
               "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "候選表[0]原始日期樣本：01/26, 01/23, 01/22, 01/21, 01/20",
+              "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
               "候選表[0]解析rows=30",
               "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
               "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
@@ -2610,15 +2610,20 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-01-26T23:40:37Z",
+            "fetched_at_utc": "2026-01-27T15:10:24Z",
             "http_error": null,
             "rows_count": 30
           },
           "TPEX": {
             "source": "HiStock",
             "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-            "data_date": "2026-01-26",
+            "data_date": "2026-01-27",
             "rows": [
+              {
+                "date": "2026-01-27",
+                "balance_yi": 1334.5,
+                "chg_yi": 11.6
+              },
               {
                 "date": "2026-01-26",
                 "balance_yi": 1322.9,
@@ -2763,16 +2768,11 @@
                 "date": "2025-12-15",
                 "balance_yi": 1123.5,
                 "chg_yi": -1.4
-              },
-              {
-                "date": "2025-12-12",
-                "balance_yi": 1124.9,
-                "chg_yi": 13.9
               }
             ],
             "notes": [
               "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-              "候選表[0]原始日期樣本：01/26, 01/23, 01/22, 01/21, 01/20",
+              "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
               "候選表[0]解析rows=30",
               "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
               "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
@@ -2784,7 +2784,7 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-01-26T23:40:38Z",
+            "fetched_at_utc": "2026-01-27T15:10:24Z",
             "http_error": null,
             "rows_count": 30
           }
@@ -2797,19 +2797,19 @@
           "method": "derived_rule",
           "basis": "TWSE chg_yi last5",
           "chg_last5": [
+            11.5,
             55.0,
             43.4,
             39.9,
-            -34.8,
-            18.1
+            -34.8
           ],
-          "sum_last5": 121.60000000000002,
+          "sum_last5": 115.00000000000001,
           "pos_days_last5": 4,
-          "latest_chg": 55.0,
+          "latest_chg": 11.5,
           "rule_version": "rule_v1",
           "rule_hit": "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)",
           "confidence": "OK",
-          "twse_data_date": "2026-01-26"
+          "twse_data_date": "2026-01-27"
         },
         "roll25_heated_market": false,
         "roll25_data_quality_issue": true,
@@ -2859,9 +2859,9 @@
             "used_date": "2026-01-26"
           },
           "date_alignment": {
-            "twmargin_date": "2026-01-26",
+            "twmargin_date": "2026-01-27",
             "roll25_used_date": "2026-01-26",
-            "used_date_match": true,
+            "used_date_match": false,
             "note": "confirm-only; does not change signal"
           },
           "note": "consistency uses roll25_heated_market only; roll25_data_quality_issue does NOT flip consistency, but should downgrade trust in interpretation."
@@ -2872,11 +2872,11 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-27T13:52:12Z",
+        "generated_at_utc": "2026-01-27T15:19:42Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-01-27",
-        "quote_time_local": "2026-01-27T21:42:00+08:00",
+        "quote_time_local": "2026-01-27T23:02:00+08:00",
         "usd_twd": {
           "spot_buy": 31.355,
           "spot_sell": 31.505,
@@ -2886,7 +2886,7 @@
           "parse_dbg": {
             "format": "xrt_text_v2",
             "reason": "ok",
-            "text_len": 2609,
+            "text_len": 2601,
             "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/27 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
             "text_has_usd": true,
             "text_has_zh_usd": true
