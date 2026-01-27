@@ -1,27 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Render roll25_cache/report.md from roll25_cache/latest_report.json (+ stats_latest.json).
+render_roll25_report_md.py
 
-Design goals:
-- Deterministic output: no "now()" timestamps.
-- No external fetch.
-- No impact to existing computation logic (read-only rendering).
-- If inputs unchanged => report.md unchanged => avoids meaningless commits.
-- Still safe for workflow mtime check (file is always written by this run; content may be identical).
+Render roll25_cache/report.md from:
+- roll25_cache/latest_report.json (authoritative for UsedDate + signals + dq flags)
+- roll25_cache/dashboard_latest.json (stats table: z60/p60/z252/p252/zD60/pD60/ret1)
 
-Inputs:
-- --latest-report roll25_cache/latest_report.json
-- --stats        roll25_cache/stats_latest.json (optional but recommended)
+NO external fetch.
+
 Output:
-- --out          roll25_cache/report.md
-
-Notes:
-- Uses latest_report["generated_at"] as the "version stamp" (data-derived), not runtime.
-- Focuses on "成交量狀況" readability:
-  - TradeValue (TWD)
-  - VolMultiplier / VolumeMultiplier vs threshold (from latest_report.signal)
-  - TradeValue stats (z/p) from stats_latest.json if available
+- roll25_cache/report.md
 """
 
 from __future__ import annotations
@@ -29,24 +18,35 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from typing import Any, Dict, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 
-def _read_text(path: str) -> str:
+def _read_json(path: str) -> Any:
     with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+        return json.load(f)
 
 
-def _load_json(path: str) -> Any:
-    return json.loads(_read_text(path))
-
-
-def _atomic_write_text(path: str, text: str) -> None:
+def _write_text(path: str, text: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(text)
-    os.replace(tmp, path)
+
+
+def _now_utc_z() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _fmt_num(x: Any, digits: int = 3) -> str:
+    if x is None:
+        return "NA"
+    if isinstance(x, bool):
+        return "true" if x else "false"
+    if isinstance(x, int):
+        return str(x)
+    if isinstance(x, float):
+        return f"{x:.{digits}f}"
+    return str(x)
 
 
 def _safe_get(d: Any, *keys: str) -> Any:
@@ -58,248 +58,117 @@ def _safe_get(d: Any, *keys: str) -> Any:
     return cur
 
 
-def _fmt_int(n: Any) -> str:
-    if isinstance(n, bool):
-        return "NA"
-    if isinstance(n, int):
-        return f"{n:,}"
-    if isinstance(n, float) and n.is_integer():
-        return f"{int(n):,}"
-    return "NA"
-
-
-def _fmt_float(x: Any, nd: int = 6) -> str:
-    if isinstance(x, bool):
-        return "NA"
-    if isinstance(x, (int, float)):
-        return f"{float(x):.{nd}f}"
-    return "NA"
-
-
-def _fmt_pct(x: Any, nd: int = 3) -> str:
-    s = _fmt_float(x, nd=nd)
-    return "NA" if s == "NA" else f"{s}%"
-
-
-def _fmt_bool(x: Any) -> str:
-    if isinstance(x, bool):
-        return "true" if x else "false"
-    return "NA"
-
-
-def _extract_stats_trade_value(stats: Dict[str, Any]) -> Dict[str, Any]:
-    # Expected:
-    # stats["series"]["trade_value"]["win60"] = {value, z, p, window_n_actual...}
-    tv = _safe_get(stats, "series", "trade_value")
-    if not isinstance(tv, dict):
-        return {"ok": False}
-
-    win60 = tv.get("win60") if isinstance(tv.get("win60"), dict) else None
-    win252 = tv.get("win252") if isinstance(tv.get("win252"), dict) else None
-
-    def pull(win: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        if not isinstance(win, dict):
-            return {"value": None, "z": None, "p": None, "n_actual": None, "n_target": None}
-        return {
-            "value": win.get("value"),
-            "z": win.get("z"),
-            "p": win.get("p"),
-            "n_actual": win.get("window_n_actual"),
-            "n_target": win.get("window_n_target"),
-        }
-
-    return {
-        "ok": True,
-        "asof": tv.get("asof"),
-        "win60": pull(win60),
-        "win252": pull(win252),
-        "n_total_available": _safe_get(tv, "window_note", "n_total_available"),
-    }
-
-
-def _interpret_volume(mult: Any, threshold: Any, tv_stats: Dict[str, Any]) -> str:
-    """
-    Deterministic interpretation, conservative:
-    - primary: vol_multiplier vs threshold (if available)
-    - secondary: z/p of TradeValue (if available)
-    """
-    lines = []
-
-    # Primary rule: multiplier
-    if isinstance(mult, (int, float)) and isinstance(threshold, (int, float)):
-        m = float(mult)
-        th = float(threshold)
-        if m >= th:
-            lines.append(f"- 依倍數判讀：vol_multiplier={m:.3f} ≥ {th:.3f} → **放量（觸發門檻）**")
-        else:
-            lines.append(f"- 依倍數判讀：vol_multiplier={m:.3f} < {th:.3f} → **未達放量門檻**")
-    elif isinstance(mult, (int, float)):
-        lines.append(f"- 依倍數判讀：vol_multiplier={float(mult):.3f}，但缺少 threshold → **無法用門檻判斷**")
-    else:
-        lines.append("- 依倍數判讀：vol_multiplier=NA → **無法用門檻判斷**")
-
-    # Secondary: z/p (60D/252D)
-    if tv_stats.get("ok") is True:
-        w60 = tv_stats.get("win60", {})
-        w252 = tv_stats.get("win252", {})
-        z60 = w60.get("z")
-        p60 = w60.get("p")
-        z252 = w252.get("z")
-        p252 = w252.get("p")
-
-        # Only interpret if present
-        hint = []
-        if isinstance(z60, (int, float)) or isinstance(p60, (int, float)):
-            hint.append(f"60D z={_fmt_float(z60, 3)}, p={_fmt_float(p60, 1)}")
-        if isinstance(z252, (int, float)) or isinstance(p252, (int, float)):
-            hint.append(f"252D z={_fmt_float(z252, 3)}, p={_fmt_float(p252, 1)}")
-        if hint:
-            lines.append(f"- 位階參考（TradeValue）：{'; '.join(hint)}")
-        else:
-            lines.append("- 位階參考（TradeValue）：z/p 皆為 NA")
-    else:
-        lines.append("- 位階參考（TradeValue）：stats_latest.json 缺失或格式不符 → NA")
-
-    return "\n".join(lines)
+def _md_table(rows: List[Dict[str, Any]]) -> str:
+    cols = ["series", "value", "z60", "p60", "z252", "p252", "zD60", "pD60", "ret1_pct", "confidence"]
+    header = "| " + " | ".join(cols) + " |"
+    sep = "| " + " | ".join(["---"] * len(cols)) + " |"
+    lines = [header, sep]
+    for r in rows:
+        line = "| " + " | ".join([
+            str(r.get("series", "NA")),
+            _fmt_num(r.get("value"), 6),
+            _fmt_num(r.get("z60"), 6),
+            _fmt_num(r.get("p60"), 3),
+            _fmt_num(r.get("z252"), 6),
+            _fmt_num(r.get("p252"), 3),
+            _fmt_num(r.get("zD60"), 6),
+            _fmt_num(r.get("pD60"), 3),
+            _fmt_num(r.get("ret1_pct"), 6),
+            str(r.get("confidence", "NA")),
+        ]) + " |"
+        lines.append(line)
+    return "\n".join(lines) + "\n"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--latest-report", default="roll25_cache/latest_report.json")
-    ap.add_argument("--stats", default="roll25_cache/stats_latest.json")
+    ap.add_argument("--latest", default="roll25_cache/latest_report.json")
+    ap.add_argument("--dash", default="roll25_cache/dashboard_latest.json")
     ap.add_argument("--out", default="roll25_cache/report.md")
     args = ap.parse_args()
 
-    latest = _load_json(args.latest_report)
-    stats: Optional[Dict[str, Any]] = None
-    if os.path.exists(args.stats):
-        try:
-            s = _load_json(args.stats)
-            stats = s if isinstance(s, dict) else None
-        except Exception:
-            stats = None
-
-    if not isinstance(latest, dict):
-        raise SystemExit("[FATAL] latest_report.json is not a JSON object.")
-
-    gen_at = latest.get("generated_at") if isinstance(latest.get("generated_at"), str) else "NA"
-    tz = latest.get("timezone") if isinstance(latest.get("timezone"), str) else "NA"
-    summary = latest.get("summary") if isinstance(latest.get("summary"), str) else "NA"
+    latest = _read_json(args.latest)
+    dash = _read_json(args.dash)
 
     nums = latest.get("numbers") if isinstance(latest.get("numbers"), dict) else {}
-    sig = latest.get("signal") if isinstance(latest.get("signal"), dict) else {}
+    sigs = latest.get("signal") if isinstance(latest.get("signal"), dict) else {}
 
-    used_date = nums.get("UsedDate") if isinstance(nums.get("UsedDate"), str) else latest.get("used_date")
-    if not isinstance(used_date, str):
-        used_date = "NA"
+    used_date = nums.get("UsedDate")
+    used_date_status = sigs.get("UsedDateStatus") if "UsedDateStatus" in sigs else latest.get("used_date_status")
+    run_day_tag = sigs.get("RunDayTag") if "RunDayTag" in sigs else latest.get("run_day_tag")
 
-    trade_value = nums.get("TradeValue")
-    vol_mult = nums.get("VolMultiplier")
-    vol_mult2 = nums.get("VolumeMultiplier")
-    # prefer VolMultiplier if present
-    vol_multiplier = vol_mult if isinstance(vol_mult, (int, float)) else vol_mult2
-
-    pct_change = nums.get("PctChange")
-    amp_pct = nums.get("AmplitudePct")
+    # key market numbers
+    tv = nums.get("TradeValue")
     close = nums.get("Close")
+    pct_chg = nums.get("PctChange")
+    amp = nums.get("AmplitudePct")
+    vol_mult = nums.get("VolumeMultiplier") if nums.get("VolumeMultiplier") is not None else nums.get("VolMultiplier")
 
-    used_date_status = sig.get("UsedDateStatus") if isinstance(sig.get("UsedDateStatus"), str) else latest.get("used_date_status")
-    if not isinstance(used_date_status, str):
-        used_date_status = "NA"
+    # signals
+    down_day = sigs.get("DownDay")
+    vol_amp = sigs.get("VolumeAmplified") if "VolumeAmplified" in sigs else sigs.get("VolAmplified")
+    new_low_n = sigs.get("NewLow_N")
+    cons_break = sigs.get("ConsecutiveBreak")
+    ohlc_missing = sigs.get("OhlcMissing")
 
-    run_day_tag = sig.get("RunDayTag") if isinstance(sig.get("RunDayTag"), str) else latest.get("run_day_tag")
-    if not isinstance(run_day_tag, str):
-        run_day_tag = "NA"
+    # dashboard table
+    table = dash.get("table") if isinstance(dash, dict) else None
+    if not isinstance(table, list):
+        table = []
 
-    ohlc_missing = sig.get("OhlcMissing")
-    volume_amplified = sig.get("VolumeAmplified")
-    vol_threshold = sig.get("VolThreshold")
+    generated_at_utc = _now_utc_z()
+    generated_at_local = latest.get("generated_at")
+    tz = latest.get("timezone")
 
-    newlow_n = sig.get("NewLow_N")
-    cons_break = sig.get("ConsecutiveBreak")
-    down_day = sig.get("DownDay")
+    # build markdown
+    out: List[str] = []
+    out.append("# Roll25 Cache Report (TWSE Turnover)\n")
+    out.append("## 1) Summary\n")
+    out.append(f"- generated_at_utc: `{generated_at_utc}`\n")
+    out.append(f"- generated_at_local: `{generated_at_local}`\n")
+    out.append(f"- timezone: `{tz}`\n")
+    out.append(f"- UsedDate: `{used_date}`\n")
+    out.append(f"- UsedDateStatus: `{used_date_status}`\n")
+    out.append(f"- RunDayTag: `{run_day_tag}`\n")
+    out.append(f"- summary: {latest.get('summary','NA')}\n")
 
-    lookback_target = nums.get("LookbackNTarget")
-    lookback_actual = nums.get("LookbackNActual")
+    out.append("\n## 2) Key Numbers (from latest_report.json)\n")
+    out.append(f"- turnover_twd: `{tv}`\n")
+    out.append(f"- close: `{_fmt_num(close, 2)}`\n")
+    out.append(f"- pct_change: `{_fmt_num(pct_chg, 6)}`\n")
+    out.append(f"- amplitude_pct: `{_fmt_num(amp, 6)}`\n")
+    out.append(f"- volume_multiplier_20: `{_fmt_num(vol_mult, 6)}`\n")
 
-    freshness_ok = latest.get("freshness_ok")
-    freshness_age_days = latest.get("freshness_age_days")
-    mode = latest.get("mode")
-    ohlc_status = latest.get("ohlc_status")
+    out.append("\n## 3) Market Behavior Signals (from latest_report.json)\n")
+    out.append(f"- DownDay: `{_fmt_num(down_day)}`\n")
+    out.append(f"- VolumeAmplified: `{_fmt_num(vol_amp)}`\n")
+    out.append(f"- NewLow_N: `{_fmt_num(new_low_n)}`\n")
+    out.append(f"- ConsecutiveBreak: `{_fmt_num(cons_break)}`\n")
 
-    tv_stats = _extract_stats_trade_value(stats) if isinstance(stats, dict) else {"ok": False}
+    out.append("\n## 4) Data Quality Flags (from latest_report.json)\n")
+    out.append(f"- OhlcMissing: `{_fmt_num(ohlc_missing)}`\n")
+    out.append(f"- freshness_ok: `{_fmt_num(latest.get('freshness_ok'))}`\n")
+    out.append(f"- freshness_age_days: `{_fmt_num(latest.get('freshness_age_days'))}`\n")
+    out.append(f"- ohlc_status: `{latest.get('ohlc_status','NA')}`\n")
+    out.append(f"- mode: `{latest.get('mode','NA')}`\n")
 
-    # Build deterministic report (no runtime stamp)
-    lines = []
-    lines.append("# TWSE Roll25 (Turnover) Report")
-    lines.append("")
-    lines.append("## 1) Audit Header")
-    lines.append(f"- source_latest_report: `{args.latest_report}`")
-    lines.append(f"- source_stats_latest: `{args.stats}`")
-    lines.append(f"- latest_report.generated_at: `{gen_at}`")
-    lines.append(f"- timezone: `{tz}`")
-    lines.append(f"- UsedDate (data date): `{used_date}`")
-    lines.append(f"- run_day_tag (from latest_report): `{run_day_tag}`")
-    lines.append(f"- used_date_status: `{used_date_status}`")
-    lines.append("")
+    out.append("\n## 5) Z/P Table (market_cache-like; computed from roll25.json)\n")
+    out.append(_md_table([r for r in table if isinstance(r, dict)]))
 
-    lines.append("## 2) Summary (from latest_report)")
-    lines.append(f"- `{summary}`")
-    lines.append("")
+    out.append("\n## 6) Audit Notes\n")
+    out.append("- This report is computed from local files only (no external fetch).\n")
+    out.append("- z-score uses population std (ddof=0). Percentile is tie-aware.\n")
+    out.append("- If insufficient points, corresponding stats remain NA (no guessing).\n")
 
-    lines.append("## 3) 成交量狀況（可讀版）")
-    lines.append(f"- Turnover (TradeValue, TWD): `{_fmt_int(trade_value)}`")
-    lines.append(f"- vol_multiplier (20D avg): `{_fmt_float(vol_multiplier, 3)}`")
-    lines.append(f"- vol_threshold: `{_fmt_float(vol_threshold, 3)}`")
-    lines.append(f"- signals.VolumeAmplified: `{_fmt_bool(volume_amplified)}`")
-    lines.append("")
-    lines.append("### 3.1 判斷邏輯（固定規則、無猜測）")
-    lines.append(_interpret_volume(vol_multiplier, vol_threshold, tv_stats))
-    lines.append("")
+    cav = latest.get("caveats")
+    if isinstance(cav, str) and cav.strip():
+        out.append("\n## 7) Caveats / Sources (from latest_report.json)\n")
+        out.append("```\n")
+        out.append(cav.rstrip() + "\n")
+        out.append("```\n")
 
-    lines.append("## 4) 價格/波動概況")
-    lines.append(f"- Close: `{_fmt_float(close, 2)}`")
-    lines.append(f"- PctChange (D vs D-1): `{_fmt_pct(pct_change, 3)}`")
-    lines.append(f"- AmplitudePct (High-Low vs prev close): `{_fmt_pct(amp_pct, 3)}`")
-    lines.append(f"- signals.DownDay: `{_fmt_bool(down_day)}`")
-    lines.append("")
-
-    lines.append("## 5) 市場行為 Signals（供 cross_module / heated_market 用）")
-    lines.append(f"- signals.NewLow_N: `{_fmt_int(newlow_n)}`")
-    lines.append(f"- signals.ConsecutiveBreak: `{_fmt_int(cons_break)}`")
-    lines.append("")
-    lines.append("> 解讀提醒：NewLow_N=0 表示未創近 N 日新低；ConsecutiveBreak=0 表示未出現連續下跌（日報酬<0）延伸。")
-    lines.append("")
-
-    lines.append("## 6) Data Quality / Confidence 線索")
-    lines.append(f"- ohlc_status: `{ohlc_status if isinstance(ohlc_status, str) else 'NA'}`")
-    lines.append(f"- signals.OhlcMissing: `{_fmt_bool(ohlc_missing)}`")
-    lines.append(f"- freshness_ok: `{_fmt_bool(freshness_ok)}`")
-    lines.append(f"- freshness_age_days: `{_fmt_int(freshness_age_days)}`")
-    lines.append(f"- mode: `{mode if isinstance(mode, str) else 'NA'}`")
-    lines.append(f"- LookbackNActual/Target: `{_fmt_int(lookback_actual)}/{_fmt_int(lookback_target)}`")
-    lines.append("")
-
-    lines.append("## 7) TradeValue 位階（stats_latest.json）")
-    if tv_stats.get("ok") is True:
-        w60 = tv_stats["win60"]
-        w252 = tv_stats["win252"]
-        lines.append(f"- asof: `{tv_stats.get('asof')}`")
-        lines.append(f"- 60D: value={_fmt_float(w60.get('value'), 3)}, z={_fmt_float(w60.get('z'), 3)}, p={_fmt_float(w60.get('p'), 1)}, n={_fmt_int(w60.get('n_actual'))}/{_fmt_int(w60.get('n_target'))}")
-        lines.append(f"- 252D: value={_fmt_float(w252.get('value'), 3)}, z={_fmt_float(w252.get('z'), 3)}, p={_fmt_float(w252.get('p'), 1)}, n={_fmt_int(w252.get('n_actual'))}/{_fmt_int(w252.get('n_target'))}")
-        lines.append(f"- points_total_available(trade_value): `{_fmt_int(tv_stats.get('n_total_available'))}`")
-    else:
-        lines.append("- NA (stats_latest.json missing/invalid)")
-    lines.append("")
-
-    lines.append("## 8) Notes (deterministic)")
-    lines.append("- 本報告不含任何 runtime timestamp，僅以 latest_report.generated_at 代表資料版本。")
-    lines.append("- 本報告僅做可讀化彙整，不改變 roll25_cache 的任何運算結果。")
-    lines.append("")
-
-    text = "\n".join(lines)
-    _atomic_write_text(args.out, text)
-    print(f"Wrote {args.out}")
+    _write_text(args.out, "".join(out))
+    print(f"OK wrote: {args.out}")
     return 0
 
 
