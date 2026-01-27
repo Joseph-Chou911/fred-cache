@@ -62,6 +62,16 @@ jobs:
             --history taiwan_margin_cache/history.json \
             --max_items 800
 
+      - name: Fetch TWSE market maintenance ratio (proxy; official MI_MARGN + MI_INDEX)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/fetch_twse_market_maint_ratio.py \
+            --date-from taiwan_margin_cache/latest.json \
+            --out taiwan_margin_cache/maint_ratio_latest.json \
+            --history taiwan_margin_cache/maint_ratio_history.json \
+            --tz Asia/Taipei
+
       - name: "Audit: list roll25_cache (confirm-only input)"
         shell: bash
         run: |
