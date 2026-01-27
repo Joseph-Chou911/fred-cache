@@ -54,6 +54,7 @@ jobs:
             "roll25_cache/roll25.json"
             "roll25_cache/latest_report.json"
             "roll25_cache/stats_latest.json"
+            "roll25_cache/report.md"
           )
           manifest_file="roll25_cache/manifest.json"
 
@@ -74,6 +75,12 @@ jobs:
 
             # 2) Sanity
             python scripts/sanity_twse_roll25.py
+
+            # 2.5) Render report.md (deterministic; no runtime stamp)
+            python scripts/render_roll25_report_md.py \
+              --latest-report roll25_cache/latest_report.json \
+              --stats roll25_cache/stats_latest.json \
+              --out roll25_cache/report.md
 
             # 3) Required outputs & stale-mtime check
             missing=0
@@ -109,7 +116,7 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Update TWSE sidecar data (roll25 + latest_report + stats)"
+            git commit -m "Update TWSE sidecar data (roll25 + latest_report + stats + report)"
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
@@ -185,6 +192,7 @@ jobs:
             "roll25_cache/roll25.json"
             "roll25_cache/latest_report.json"
             "roll25_cache/stats_latest.json"
+            "roll25_cache/report.md"
           )
           manifest_file="roll25_cache/manifest.json"
 
@@ -206,6 +214,12 @@ jobs:
 
             # 2) Sanity
             python scripts/sanity_twse_roll25.py
+
+            # 2.5) Render report.md (deterministic; no runtime stamp)
+            python scripts/render_roll25_report_md.py \
+              --latest-report roll25_cache/latest_report.json \
+              --stats roll25_cache/stats_latest.json \
+              --out roll25_cache/report.md
 
             # 3) Required outputs & stale-mtime check
             missing=0
@@ -241,7 +255,7 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Backfill TWSE sidecar data (roll25 + latest_report + stats)"
+            git commit -m "Backfill TWSE sidecar data (roll25 + latest_report + stats + report)"
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
