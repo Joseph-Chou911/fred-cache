@@ -1,29 +1,29 @@
 {
-  "generated_at": "2026-01-27T10:52:13.403747+08:00",
+  "generated_at": "2026-01-27T11:33:29.730734+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=MISSING_OHLC；freshness_ok=True",
+  "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True",
   "numbers": {
     "UsedDate": "2026-01-26",
-    "Close": null,
-    "PctChange": null,
+    "Close": 32064.52,
+    "PctChange": 0.322294,
     "TradeValue": 747339306040,
-    "AmplitudePct": null
+    "AmplitudePct": 0.64731
   },
   "signal": {
     "DownDay": false,
-    "OhlcMissing": true,
+    "OhlcMissing": false,
     "UsedDateStatus": "DATA_NOT_UPDATED",
     "RunDayTag": "TRADING_DAY"
   },
   "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-  "caveats": "Daily sources: FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nBackfill sources: FMTQIK=https://www.twse.com.tw/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST\nBackfillMonths=24 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=MISSING_OHLC | OHLC=MISSING | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=TRADING_DAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True",
+  "caveats": "Sources(daily): FMTQIK=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; MI_5MINS_HIST=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources(backfill): FMTQIK=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; MI_5MINS_HIST=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nBackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=TRADING_DAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True",
   "run_day_tag": "TRADING_DAY",
   "used_date_status": "DATA_NOT_UPDATED",
   "tag": "TRADING_DAY",
   "freshness_ok": true,
   "freshness_age_days": 1,
-  "mode": "MISSING_OHLC",
-  "ohlc_status": "MISSING",
+  "mode": "FULL",
+  "ohlc_status": "OK",
   "used_date": "2026-01-26",
   "used_dminus1": "2026-01-23",
   "lookback_n_actual": 20,
@@ -31,203 +31,203 @@
   "cache_tail": [
     {
       "date": "2026-01-26",
-      "close": null,
+      "close": 32064.52,
       "change": 103.01,
       "trade_value": 747339306040,
-      "high": null,
-      "low": null
+      "high": 32196.75,
+      "low": 31989.86
     },
     {
       "date": "2026-01-23",
-      "close": null,
+      "close": 31961.51,
       "change": 215.43,
       "trade_value": 818428930073,
-      "high": null,
-      "low": null
+      "high": 32042.44,
+      "low": 31693.15
     },
     {
       "date": "2026-01-22",
-      "close": null,
+      "close": 31746.08,
       "change": 499.71,
       "trade_value": 814595841360,
-      "high": null,
-      "low": null
+      "high": 31890.62,
+      "low": 31371.13
     },
     {
       "date": "2026-01-21",
-      "close": null,
+      "close": 31246.37,
       "change": -513.62,
       "trade_value": 899309076186,
-      "high": null,
-      "low": null
+      "high": 31749.14,
+      "low": 31200.76
     },
     {
       "date": "2026-01-20",
-      "close": null,
+      "close": 31759.99,
       "change": 120.7,
       "trade_value": 799639371793,
-      "high": null,
-      "low": null
+      "high": 31759.99,
+      "low": 31340.1
     },
     {
       "date": "2026-01-19",
-      "close": null,
+      "close": 31639.29,
       "change": 230.59,
       "trade_value": 823428003269,
-      "high": null,
-      "low": null
+      "high": 31827.39,
+      "low": 31285.53
     },
     {
       "date": "2026-01-16",
-      "close": null,
+      "close": 31408.7,
       "change": 598.12,
       "trade_value": 851452408675,
-      "high": null,
-      "low": null
+      "high": 31475.22,
+      "low": 30844.63
     },
     {
       "date": "2026-01-15",
-      "close": null,
+      "close": 30810.58,
       "change": -131.2,
       "trade_value": 671953720007,
-      "high": null,
-      "low": null
+      "high": 30877.31,
+      "low": 30663.87
     },
     {
       "date": "2026-01-14",
-      "close": null,
+      "close": 30941.78,
       "change": 234.56,
       "trade_value": 681983353722,
-      "high": null,
-      "low": null
+      "high": 30994.81,
+      "low": 30742.53
     },
     {
       "date": "2026-01-13",
-      "close": null,
+      "close": 30707.22,
       "change": 139.93,
       "trade_value": 749179436618,
-      "high": null,
-      "low": null
+      "high": 30973.85,
+      "low": 30529.33
     },
     {
       "date": "2026-01-12",
-      "close": null,
+      "close": 30567.29,
       "change": 278.33,
       "trade_value": 626408176303,
-      "high": null,
-      "low": null
+      "high": 30681.99,
+      "low": 30472.7
     },
     {
       "date": "2026-01-09",
-      "close": null,
+      "close": 30288.96,
       "change": -71.59,
       "trade_value": 704371387415,
-      "high": null,
-      "low": null
+      "high": 30500.42,
+      "low": 29925.49
     },
     {
       "date": "2026-01-08",
-      "close": null,
+      "close": 30360.55,
       "change": -74.92,
       "trade_value": 759270755036,
-      "high": null,
-      "low": null
+      "high": 30593.49,
+      "low": 30268.36
     },
     {
       "date": "2026-01-07",
-      "close": null,
+      "close": 30435.47,
       "change": -140.83,
       "trade_value": 881736707216,
-      "high": null,
-      "low": null
+      "high": 30570.26,
+      "low": 30306.16
     },
     {
       "date": "2026-01-06",
-      "close": null,
+      "close": 30576.3,
       "change": 471.26,
       "trade_value": 763236739665,
-      "high": null,
-      "low": null
+      "high": 30576.3,
+      "low": 29933.65
     },
     {
       "date": "2026-01-05",
-      "close": null,
+      "close": 30105.04,
       "change": 755.23,
       "trade_value": 800793653955,
-      "high": null,
-      "low": null
+      "high": 30339.32,
+      "low": 29779.7
     },
     {
       "date": "2026-01-02",
-      "close": null,
+      "close": 29349.81,
       "change": 386.21,
       "trade_value": 669781989470,
-      "high": null,
-      "low": null
+      "high": 29363.43,
+      "low": 29007.75
     },
     {
       "date": "2025-12-31",
-      "close": null,
+      "close": 28963.6,
       "change": 256.47,
       "trade_value": 548425314258,
-      "high": null,
-      "low": null
+      "high": 29009.81,
+      "low": 28687.9
     },
     {
       "date": "2025-12-30",
-      "close": null,
+      "close": 28707.13,
       "change": -103.76,
       "trade_value": 469871782250,
-      "high": null,
-      "low": null
+      "high": 28833.03,
+      "low": 28553.64
     },
     {
       "date": "2025-12-29",
-      "close": null,
+      "close": 28810.89,
       "change": 254.87,
       "trade_value": 469061962836,
-      "high": null,
-      "low": null
+      "high": 28841.64,
+      "low": 28595.35
     },
     {
       "date": "2025-12-26",
-      "close": null,
+      "close": 28556.02,
       "change": 184.04,
       "trade_value": 443994479984,
-      "high": null,
-      "low": null
+      "high": 28590.91,
+      "low": 28404.34
     },
     {
       "date": "2025-12-24",
-      "close": null,
+      "close": 28371.98,
       "change": 61.51,
       "trade_value": 439061668896,
-      "high": null,
-      "low": null
+      "high": 28486.38,
+      "low": 28280.59
     },
     {
       "date": "2025-12-23",
-      "close": null,
+      "close": 28310.47,
       "change": 160.83,
       "trade_value": 431994260374,
-      "high": null,
-      "low": null
+      "high": 28350.37,
+      "low": 28212.84
     },
     {
       "date": "2025-12-22",
-      "close": null,
+      "close": 28149.64,
       "change": 453.29,
       "trade_value": 504472490831,
-      "high": null,
-      "low": null
+      "high": 28168.75,
+      "low": 27986.66
     },
     {
       "date": "2025-12-19",
-      "close": null,
+      "close": 27696.35,
       "change": 227.82,
       "trade_value": 568327509178,
-      "high": null,
-      "low": null
+      "high": 27869.78,
+      "low": 27672.05
     }
   ]
 }

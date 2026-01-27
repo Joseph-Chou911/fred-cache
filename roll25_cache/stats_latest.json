@@ -1,36 +1,36 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-01-27T02:52:13Z",
-  "generated_at_local": "2026-01-27T10:52:13.404015+08:00",
+  "generated_at_utc": "2026-01-27T03:33:29Z",
+  "generated_at_local": "2026-01-27T11:33:29.731363+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-01-26",
   "run_day_tag": "TRADING_DAY",
   "used_date_status": "DATA_NOT_UPDATED",
   "freshness_ok": true,
   "freshness_age_days": 1,
-  "mode": "MISSING_OHLC",
-  "ohlc_status": "MISSING",
+  "mode": "FULL",
+  "ohlc_status": "OK",
   "backfill_limit": 252,
   "store_cap": 400,
   "series": {
     "close": {
       "asof": "2026-01-26",
       "win60": {
-        "value": null,
+        "value": 32064.52,
         "window_n_target": 60,
-        "window_n_actual": 0,
-        "z": null,
-        "p": null
+        "window_n_actual": 60,
+        "z": 2.182688,
+        "p": 99.167
       },
       "win252": {
-        "value": null,
+        "value": 32064.52,
         "window_n_target": 252,
-        "window_n_actual": 0,
-        "z": null,
-        "p": null
+        "window_n_actual": 252,
+        "z": 2.453498,
+        "p": 99.802
       },
       "window_note": {
-        "n_total_available": 0
+        "n_total_available": 260
       }
     },
     "trade_value": {
@@ -46,52 +46,52 @@
         "value": 747339306040.0,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 2.221839,
+        "z": 2.221586,
         "p": 95.04
       },
       "window_note": {
-        "n_total_available": 252
+        "n_total_available": 275
       }
     },
     "pct_change": {
       "asof": "2026-01-26",
       "win60": {
-        "value": null,
+        "value": 0.3222939091425969,
         "window_n_target": 60,
-        "window_n_actual": 0,
-        "z": null,
-        "p": null
+        "window_n_actual": 60,
+        "z": 0.091742,
+        "p": 47.5
       },
       "win252": {
-        "value": null,
+        "value": 0.3222939091425969,
         "window_n_target": 252,
-        "window_n_actual": 0,
-        "z": null,
-        "p": null
+        "window_n_actual": 252,
+        "z": 0.111997,
+        "p": 53.373
       },
       "window_note": {
-        "n_total_available": 0,
+        "n_total_available": 259,
         "note": "pct_change needs D-1 close; with backfill=252, max pct_change points are typically <=251."
       }
     },
     "amplitude_pct": {
       "asof": "2026-01-26",
       "win60": {
-        "value": null,
+        "value": 0.6473098423697736,
         "window_n_target": 60,
-        "window_n_actual": 0,
-        "z": null,
-        "p": null
+        "window_n_actual": 60,
+        "z": -1.192265,
+        "p": 2.5
       },
       "win252": {
-        "value": null,
+        "value": 0.6473098423697736,
         "window_n_target": 252,
-        "window_n_actual": 0,
-        "z": null,
-        "p": null
+        "window_n_actual": 252,
+        "z": -0.780508,
+        "p": 6.548
       },
       "window_note": {
-        "n_total_available": 0,
+        "n_total_available": 259,
         "note": "amplitude_pct needs high/low + D-1 close; if OHLC missing, series is sparse and windows may be incomplete."
       }
     }
@@ -99,7 +99,7 @@
   "sources": {
     "daily_fmtqik_url": "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK",
     "daily_mi_5mins_hist_url": "https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST",
-    "backfill_fmtqik_url": "https://www.twse.com.tw/exchangeReport/FMTQIK",
-    "backfill_mi_5mins_hist_url": "https://www.twse.com.tw/indicesReport/MI_5MINS_HIST"
+    "backfill_fmtqik_url_tpl": "https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01}",
+    "backfill_mi_5mins_hist_url_tpl": "https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}"
   }
 }
