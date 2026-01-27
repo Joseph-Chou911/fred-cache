@@ -32,11 +32,8 @@ Notes (output semantics):
 2026-01-27 ADDITIVE UPDATE (does NOT change existing semantics/values):
 - Add derived signals for unified dashboard consumption (volume multiplier, volume amplified,
   new low N, consecutive down days) using existing fields only.
-- All new fields are additive; existing keys/values are untouched.
-
-2026-01-27 ADDITIVE UPDATE #2 (does NOT change existing semantics/values):
-- Add "latest_row_date" (and common aliases) to help unified dashboard DQ checks.
-  This is derived from merged_roll[0].date (latest cached row), NOT from used_date.
+- Add cache_roll25 (newest->oldest) for unified builder compatibility.
+  (Keeps existing cache_tail untouched; cache_roll25 is additive.)
 - All new fields are additive; existing keys/values are untouched.
 """
 
@@ -64,6 +61,9 @@ STATS_PATH = os.path.join(CACHE_DIR, "stats_latest.json")
 LOOKBACK_TARGET = 20
 BACKFILL_LIMIT = 252
 STORE_CAP = 400  # must be >= BACKFILL_LIMIT
+
+# NEW (additive): how many points to embed into latest_report.cache_roll25 for unified builder
+REPORT_CACHE_ROLL25_CAP = 200  # keep it bounded; must be >= max(vol_n+1, dd_n, etc.)
 
 UA = "twse-sidecar/2.0 (+github-actions)"
 
@@ -107,6 +107,8 @@ def _is_weekend(d: date) -> bool:
     return d.weekday() >= 5
 
 def _http_get_json(url: str, timeout: int = 25) -> Any:
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("URL is missing/empty")
     headers = {"Accept": "application/json", "User-Agent": UA}
     r = requests.get(url, headers=headers, timeout=timeout)
     r.raise_for_status()
@@ -358,7 +360,7 @@ def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]])
         if isinstance(it, dict) and "date" in it:
             m[str(it["date"])] = it
     merged = list(m.values())
-    merged.sort(key=lambda x: str(x.get("date", "")), reverse=True)
+    merged.sort(key=lambda x: str(x.get("date", "")), reverse=True)  # newest->oldest
     merged = merged[:STORE_CAP]
     dates = [str(x.get("date", "")) for x in merged if isinstance(x, dict)]
     dedupe_ok = (len(dates) == len(set(dates)))
@@ -632,30 +634,6 @@ def _volume_amplified(mult: Optional[float], threshold: float) -> Optional[bool]
     return bool(mult >= threshold)
 
 
-# ----------------- ADDITIVE unified-friendly latest_row_date helpers -----------------
-
-def _compute_latest_row_date_from_roll(merged_roll: List[Dict[str, Any]], today: date) -> Tuple[Optional[str], bool, Optional[int]]:
-    """
-    Derive latest_row_date from merged_roll[0].date (latest cached row).
-    Returns (latest_row_date_iso, parse_ok, age_days).
-    Additive only; does not affect used_date selection or any existing semantics.
-    """
-    latest_row_date: Optional[str] = None
-    parse_ok = False
-    age_days: Optional[int] = None
-    try:
-        if merged_roll and isinstance(merged_roll[0], dict):
-            latest_row_date = str(merged_roll[0].get("date", "")).strip() or None
-        if latest_row_date and re.match(r"^\d{4}-\d{2}-\d{2}$", latest_row_date):
-            dt = datetime.fromisoformat(latest_row_date).date()
-            parse_ok = True
-            age_days = (today - dt).days
-    except Exception:
-        parse_ok = False
-        age_days = None
-    return latest_row_date, parse_ok, age_days
-
-
 # ----------------- main -----------------
 
 def main() -> None:
@@ -686,6 +664,12 @@ def main() -> None:
     daily_fmt_url = daily.get("fmtqik_url")
     daily_ohlc_url = daily.get("mi_5mins_hist_url")
 
+    if not isinstance(daily_fmt_url, str) or not daily_fmt_url.strip():
+        print("[FATAL] schema.daily.fmtqik_url missing/empty")
+        sys.exit(1)
+    if not isinstance(daily_ohlc_url, str) or not daily_ohlc_url.strip():
+        print("[WARN] schema.daily.mi_5mins_hist_url missing/empty -> OHLC will be downgraded")
+
     daily_ok = True
     try:
         fmt_raw = _http_get_json(daily_fmt_url)
@@ -698,8 +682,11 @@ def main() -> None:
         print(f"[WARN] daily FMTQIK fetch/parse failed: {e}")
 
     try:
-        ohlc_raw = _http_get_json(daily_ohlc_url)
-        daily_ohlc_rows = _parse_ohlc_rows(ohlc_raw, schema)
+        if isinstance(daily_ohlc_url, str) and daily_ohlc_url.strip():
+            ohlc_raw = _http_get_json(daily_ohlc_url)
+            daily_ohlc_rows = _parse_ohlc_rows(ohlc_raw, schema)
+        else:
+            daily_ohlc_rows = []
     except Exception as e:
         print(f"[WARN] daily MI_5MINS_HIST fetch/parse failed (downgrade): {e}")
         daily_ohlc_rows = []
@@ -713,6 +700,13 @@ def main() -> None:
     bf_ohlc_tpl = backfill.get("mi_5mins_hist_url_tpl")
 
     if args.backfill_months and args.backfill_months > 0:
+        if not isinstance(bf_fmt_tpl, str) or "{yyyymm01}" not in bf_fmt_tpl:
+            print("[FATAL] schema.backfill.fmtqik_url_tpl missing/invalid (needs '{yyyymm01}')")
+            sys.exit(1)
+        if not isinstance(bf_ohlc_tpl, str) or "{yyyymm01}" not in bf_ohlc_tpl:
+            print("[FATAL] schema.backfill.mi_5mins_hist_url_tpl missing/invalid (needs '{yyyymm01}')")
+            sys.exit(1)
+
         print(f"[INFO] backfill_months={args.backfill_months} enabled.")
         yyyymm01_list = _iter_months_back(today, args.backfill_months)
         for yyyymm01 in yyyymm01_list:
@@ -737,12 +731,8 @@ def main() -> None:
         print("[FATAL] no usable FMTQIK rows from daily/backfill after parsing.")
         sys.exit(1)
 
-    fmt_by_date: Dict[str, FmtRow] = {}
-    for r in fmt_rows:
-        fmt_by_date[r.date] = r
-    ohlc_by_date: Dict[str, OhlcRow] = {}
-    for r in ohlc_rows:
-        ohlc_by_date[r.date] = r
+    fmt_by_date: Dict[str, FmtRow] = {r.date: r for r in fmt_rows}
+    ohlc_by_date: Dict[str, OhlcRow] = {r.date: r for r in ohlc_rows}
 
     fmt_dates_asc = sorted(fmt_by_date.keys())
     used_date, run_day_tag, used_date_status = _pick_used_date(today, fmt_dates_asc)
@@ -754,9 +744,6 @@ def main() -> None:
     new_items = _build_items_from_maps(fmt_by_date, ohlc_by_date, fmt_dates_desc, limit=BACKFILL_LIMIT)
 
     merged_roll, dedupe_ok = _merge_roll(existing_roll, new_items)
-
-    # ---- ADDITIVE: latest_row_date helpers (for unified DQ; does not affect used_date) ----
-    latest_row_date, latest_row_date_parse_ok, latest_row_date_age_days = _compute_latest_row_date_from_roll(merged_roll, today)
 
     lookback = _extract_lookback(merged_roll, used_date)
     n_actual = len(lookback)
@@ -818,13 +805,6 @@ def main() -> None:
     summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}{extra_note}"
 
     # -------- ADDITIVE derived signals for unified (do not change existing values) --------
-    # These are designed to be deterministic, auditable, and NA-safe.
-    # If insufficient points -> None.
-    # Definitions:
-    # - vol_multiplier_20 = today_trade_value / avg(last 20 trade_value)
-    # - VolumeAmplified = vol_multiplier_20 >= 1.5
-    # - NewLow_N (default N=60) = 60 if today_close <= min(last 60 closes) else 0
-    # - ConsecutiveBreak = consecutive down days count from used_date (daily return < 0)
     VOL_WIN = 20
     VOL_MIN_POINTS = 15
     VOL_THRESHOLD = 1.5
@@ -845,38 +825,30 @@ def main() -> None:
     cons_down = _consecutive_down_days(series_ret, used_date, max_n=60)
 
     additive_signal = {
-        # unify-facing keys
         "VolumeAmplified": volume_ampl,
         "VolAmplified": volume_ampl,          # alias
         "NewLow_N": new_low_n,
         "ConsecutiveBreak": cons_down,
-        # also include explicit lookback target (some renderers want this)
         "LookbackNTarget": LOOKBACK_TARGET,
         "LookbackNActual": n_actual,
-        # debugging notes (kept minimal and additive)
         "VolMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
         "VolumeMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
         "VolWin": VOL_WIN,
         "VolThreshold": VOL_THRESHOLD,
         "NewLowWin": NEWLOW_N,
-        "latest_row_date": latest_row_date,
-        "latest_row_date_parse_ok": latest_row_date_parse_ok,
-        "latest_row_date_age_days": latest_row_date_age_days,
     }
+
+    # NEW (additive): cache_roll25 for unified builder
+    # Requirements:
+    # - Must be list of dicts
+    # - Newest->oldest
+    # - Must include "date" and "close" (and ideally other fields)
+    cache_roll25 = merged_roll[: max(LOOKBACK_TARGET + 5, min(REPORT_CACHE_ROLL25_CAP, len(merged_roll)))]
 
     latest_report = {
         "generated_at": _now_tz(tz).isoformat(),
         "timezone": str(tz),
         "summary": summary,
-
-        # ADDITIVE: latest row date (unified DQ helpers)
-        "latest_row_date": latest_row_date,
-        "latest_available_date": latest_row_date,  # alias
-        "latest_date": latest_row_date,            # alias
-        "LatestRowDate": latest_row_date,          # alias
-        "latest_row_date_parse_ok": latest_row_date_parse_ok,
-        "latest_row_date_age_days": latest_row_date_age_days,
-
         "numbers": {
             "UsedDate": used_date,
             "Close": None if today_close is None else round(float(today_close), 2),
@@ -889,10 +861,6 @@ def main() -> None:
             "VolumeMultiplier": None if vol_mult_20 is None else round(float(vol_mult_20), 6),
             "LookbackNTarget": LOOKBACK_TARGET,
             "LookbackNActual": n_actual,
-
-            # ADDITIVE: latest row date in numbers (some readers look here)
-            "LatestRowDate": latest_row_date,
-            "LatestRowDateAgeDays": latest_row_date_age_days,
         },
         "signal": {
             # existing keys (unchanged)
@@ -903,10 +871,6 @@ def main() -> None:
 
             # ADDITIVE keys
             **additive_signal,
-
-            # ADDITIVE aliases (some unified implementations look for these)
-            "LatestRowDate": latest_row_date,
-            "LatestRowDateParseOK": latest_row_date_parse_ok,
         },
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
         "caveats": "\n".join([
@@ -918,14 +882,13 @@ def main() -> None:
             f"RunDayTag={run_day_tag} | UsedDateStatus={used_date_status}",
             f"freshness_ok={freshness_ok} | freshness_age_days={freshness_age_days}",
             f"dedupe_ok={dedupe_ok}",
+            f"REPORT_CACHE_ROLL25_CAP={REPORT_CACHE_ROLL25_CAP} (cache_roll25 points embedded in latest_report)",
             # additive derived definition audit line
             f"ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last{VOL_WIN}) "
             f"(min_points={VOL_MIN_POINTS}); VolumeAmplified=(>= {VOL_THRESHOLD}); "
             f"NewLow_N: {NEWLOW_N} if close<=min(close_last{NEWLOW_N}) (min_points={NEWLOW_MIN_POINTS}) else 0; "
             f"ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.",
-            # additive latest_row_date audit line
-            f"ADDITIVE_LATEST_ROW_DATE: latest_row_date={latest_row_date} parse_ok={latest_row_date_parse_ok} age_days={latest_row_date_age_days} "
-            "(derived from merged_roll[0].date; does not affect UsedDate).",
+            "ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).",
         ]),
         "run_day_tag": run_day_tag,
         "used_date_status": used_date_status,
@@ -938,7 +901,12 @@ def main() -> None:
         "used_dminus1": used_dminus1,
         "lookback_n_actual": n_actual,
         "lookback_oldest": oldest,
+
+        # EXISTING (kept): cache_tail
         "cache_tail": merged_roll[:25],
+
+        # NEW (additive): unified builder expects this key
+        "cache_roll25": cache_roll25,
     }
 
     # stats
@@ -1017,11 +985,6 @@ def main() -> None:
             }
         },
 
-        # ADDITIVE: latest row date helpers (unified DQ)
-        "latest_row_date": latest_row_date,
-        "latest_row_date_parse_ok": latest_row_date_parse_ok,
-        "latest_row_date_age_days": latest_row_date_age_days,
-
         "sources": {
             "daily_fmtqik_url": daily_fmt_url,
             "daily_mi_5mins_hist_url": daily_ohlc_url,
@@ -1037,11 +1000,11 @@ def main() -> None:
     print("TWSE sidecar updated:")
     print(f"  UsedDate={used_date} Mode={mode} freshness_ok={freshness_ok} age_days={freshness_age_days}")
     print(f"  run_day_tag={run_day_tag} used_date_status={used_date_status}")
-    print(f"  latest_row_date={latest_row_date} parse_ok={latest_row_date_parse_ok} age_days={latest_row_date_age_days}")
     print(f"  roll_records={len(merged_roll)} dedupe_ok={dedupe_ok}")
     print(f"  close_n={len(series_close)} tv_n={len(series_tv)} ret_n={len(series_ret)} amp_n={len(series_amp)}")
     print(f"  ADDITIVE: vol_multiplier_20={None if vol_mult_20 is None else round(float(vol_mult_20), 6)} "
           f"VolumeAmplified={volume_ampl} NewLow_N={new_low_n} ConsecutiveBreak={cons_down}")
+    print(f"  ADDITIVE: latest_report.cache_roll25 points={len(cache_roll25)} (newest->oldest)")
     print(f"  wrote: {ROLL_PATH}, {REPORT_PATH}, {STATS_PATH}")
 
 
