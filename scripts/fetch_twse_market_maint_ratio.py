@@ -3,22 +3,36 @@
 """
 Fetch TWSE official data and compute a *proxy* of "market margin maintenance ratio".
 
-Proxy:
+Proxy definition:
   maint_ratio_pct = ( Σ_i (fin_shares_i * close_i * 1000) / total_financing_amount_twd ) * 100
 
-Notes:
-- fin_shares_i uses MI_MARGN (融資今日餘額, 單位: 張)
-- close_i uses MI_INDEX (fields9/data9 收盤價)
-- total_financing_amount_twd uses MI_MARGN tfootData_two row '融資金額(仟元)' last numeric cell = 今日餘額 (仟元) -> *1000
+- fin_shares_i: financing balance shares (張) for security i, from TWSE MI_MARGN JSON
+- close_i: closing price for security i, from TWSE MI_INDEX JSON
+- total_financing_amount_twd: market total financing balance amount, from MI_MARGN footer
+  ('融資金額(仟元)' row, last numeric cell = 今日餘額 in 仟元) => *1000 to TWD.
 
-Robustness:
-- Retries with backoff (2s, 4s, 8s)
-- Adds '_' timestamp param to reduce caching issues
-- Adds Referer / Accept headers (TWSE sometimes needs browser-like headers)
+This is a market-level proxy, NOT "per-account maintenance ratio".
 
 Outputs:
 - latest.json (always)
 - history.json (upsert by data_date, if --history provided)
+
+Robustness / Fixes vs your v2:
+- Use MI_MARGN exchangeReport endpoint (schema is more consistent):
+    https://www.twse.com.tw/exchangeReport/MI_MARGN
+- Add cache-buster param '_' (ms timestamp) to reduce caching issues
+- Add browser-like headers + Referer
+- Check 'stat' != 'OK' early (holiday / not published / throttled message)
+- Parsing supports BOTH shapes:
+  - root-level fields/data + tfootData_two (exchangeReport style)
+  - tables + tfoot* (rwd style) as fallback
+
+Date sourcing:
+- --date YYYYMMDD takes priority.
+- else --date-from JSON path:
+  - try top-level: data_date / date / UsedDate / used_date
+  - then try: series.TWSE.data_date
+  - then try: series.TWSE.rows[0].date
 """
 
 from __future__ import annotations
@@ -38,7 +52,7 @@ UA = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Use exchangeReport endpoints (more common / consistent schema for JSON fields/data)
+# FIX: use exchangeReport endpoints
 TWSE_MI_MARGN = "https://www.twse.com.tw/exchangeReport/MI_MARGN"
 TWSE_MI_INDEX = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 
@@ -86,6 +100,14 @@ def normalize_date_to_yyyymmdd(s: str) -> Optional[str]:
     return None
 
 def load_date_from_latest(path: str) -> Optional[str]:
+    """
+    Read a date from an existing latest.json.
+
+    Supported locations:
+    - top-level: data_date / date / UsedDate / used_date
+    - series.TWSE.data_date
+    - series.TWSE.rows[0].date
+    """
     try:
         with open(path, "r", encoding="utf-8") as f:
             obj = json.load(f)
@@ -131,51 +153,84 @@ def _twse_headers(referer: str) -> Dict[str, str]:
     }
 
 def request_json(session: requests.Session, url: str, params: Dict[str, str], referer: str, timeout: int = 30) -> Dict[str, Any]:
+    """
+    Robust GET JSON:
+    - Adds cache buster '_' ms timestamp
+    - Retries 2/4/8s
+    - Treats 429/5xx as retryable
+    """
     last_err: Optional[str] = None
-    # Add cache-buster
-    params = dict(params)
-    params["_"] = str(int(time.time() * 1000))
+    p = dict(params)
+    p["_"] = str(int(time.time() * 1000))
 
     for i, backoff in enumerate((2, 4, 8), start=1):
         try:
-            r = session.get(url, params=params, headers=_twse_headers(referer), timeout=timeout)
-            # Retry on typical throttling
+            r = session.get(url, params=p, headers=_twse_headers(referer), timeout=timeout)
             if r.status_code in (429, 500, 502, 503, 504):
                 raise RuntimeError(f"http_{r.status_code}")
             r.raise_for_status()
-
-            # Some endpoints occasionally prepend BOM or whitespace; json() usually handles it but keep safe:
             try:
                 return r.json()
             except Exception:
                 text = r.text.lstrip("\ufeff").strip()
                 return json.loads(text)
-
         except Exception as e:
             last_err = f"try{i}:{type(e).__name__}:{e}"
             time.sleep(backoff)
     raise RuntimeError(last_err or "request_failed")
 
+def _stat_guard(obj: Dict[str, Any], name: str) -> None:
+    """
+    TWSE often includes {"stat":"OK"}.
+    When not OK, it may be a message about holiday / data not ready.
+    """
+    stat = obj.get("stat")
+    if stat is None:
+        return
+    s = str(stat).strip()
+    if s.upper() != "OK":
+        raise RuntimeError(f"{name}_stat_not_ok:{s}")
+
+def find_table_with_fields(tables: List[Dict[str, Any]], must_have: List[str]) -> Optional[Dict[str, Any]]:
+    for t in tables:
+        fields = t.get("fields") or []
+        if not isinstance(fields, list):
+            continue
+        ok = True
+        for key in must_have:
+            if not any(key in str(f) for f in fields):
+                ok = False
+                break
+        if ok:
+            return t
+    return None
+
 def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[int], str]:
     """
-    Prefer MI_MARGN root tfootData_two:
-      - find row where row[0] contains '融資金額'
-      - take last numeric cell as 今日餘額 (仟元) -> *1000
+    Prefer MI_MARGN root footer keys:
+      - tfootData_two (most common)
+      - tfootDataTwo / tfootData
+    Find row whose first cell contains '融資金額', take last numeric cell as 今日餘額(仟元) -> *1000.
+
+    Fallback:
+      - scan any key containing 'tfoot'
+      - scan rwd-style tables[*].tfoot*
     """
+    # 1) preferred root keys
     for key in ("tfootData_two", "tfootDataTwo", "tfootData"):
         v = margn.get(key)
         if isinstance(v, list) and v and isinstance(v[0], list):
             for row in v:
                 if not row:
                     continue
-                head = str(row[0])
+                head = str(row[0]).strip()
                 if "融資金額" in head:
                     nums = [parse_number(x) for x in row[1:]]
                     nums = [x for x in nums if x is not None]
                     if nums:
                         return int(round(nums[-1] * 1000)), f"from_root:{key}"
 
-    # fallback: scan any key containing 'tfoot'
+    # 2) root scan for any tfoot-like key
     for k, v in margn.items():
         if "tfoot" in str(k).lower() and isinstance(v, list) and v and isinstance(v[0], list):
             for row in v:
@@ -185,19 +240,55 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
                     if nums:
                         return int(round(nums[-1] * 1000)), f"from_root_scan:{k}"
 
+    # 3) rwd-style tables fallback
+    tables = margn.get("tables") or []
+    if isinstance(tables, list):
+        for t in tables:
+            if not isinstance(t, dict):
+                continue
+            for k, v in t.items():
+                if "tfoot" in str(k).lower() and isinstance(v, list) and v and isinstance(v[0], list):
+                    for row in v:
+                        if row and "融資金額" in str(row[0]):
+                            nums = [parse_number(x) for x in row[1:]]
+                            nums = [x for x in nums if x is not None]
+                            if nums:
+                                return int(round(nums[-1] * 1000)), f"from_table:{k}"
+
     return None, "not_found"
 
 def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, int], str]:
     """
-    MI_MARGN root has:
-      - fields: [... '股票代號', ... '融資今日餘額', ...]
-      - data: [[...], [...], ...]
+    Extract per-security financing '今日餘額' (張).
+
+    Supports:
+    - exchangeReport root-level fields/data
+    - rwd tables[*].fields/data
     """
+    # A) exchangeReport root fields/data
     fields = margn.get("fields")
     data = margn.get("data")
-    if not isinstance(fields, list) or not isinstance(data, list):
-        return {}, "fields_or_data_not_found"
+    if isinstance(fields, list) and isinstance(data, list):
+        out, status = _extract_fin_shares_from_fields_data(fields, data)
+        if out:
+            return out, f"root:{status}"
 
+    # B) rwd tables fallback
+    tables = margn.get("tables") or []
+    if isinstance(tables, list):
+        for t in tables:
+            if not isinstance(t, dict):
+                continue
+            fields = t.get("fields")
+            data = t.get("data")
+            if isinstance(fields, list) and isinstance(data, list):
+                out, status = _extract_fin_shares_from_fields_data(fields, data)
+                if out:
+                    return out, f"table:{status}"
+
+    return {}, "fin_table_not_found"
+
+def _extract_fin_shares_from_fields_data(fields: List[Any], data: List[Any]) -> Tuple[Dict[str, int], str]:
     code_idx = None
     fin_today_idx = None
 
@@ -209,7 +300,7 @@ def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, i
             fin_today_idx = i
 
     if code_idx is None or fin_today_idx is None:
-        return {}, "missing_cols_in_fields"
+        return {}, "missing_cols"
 
     out: Dict[str, int] = {}
     for row in data:
@@ -227,25 +318,47 @@ def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, i
 
 def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], str]:
     """
-    MI_INDEX per-security after-hours table typically uses fields9/data9.
-    We look for '證券代號' and '收盤價' in fields9.
-    """
-    fields = mi_index.get("fields9")
-    data = mi_index.get("data9")
-    if not isinstance(fields, list) or not isinstance(data, list):
-        return {}, "fields9_or_data9_not_found"
+    Extract per-security close price from MI_INDEX JSON.
 
+    Prefer:
+    - exchangeReport usually provides fields9/data9 for per-security after-hours (contains '證券代號','收盤價')
+
+    Fallback:
+    - tables[*] with fields containing '證券代號' + '收盤價'
+    """
+    # A) fields9/data9
+    fields9 = mi_index.get("fields9")
+    data9 = mi_index.get("data9")
+    if isinstance(fields9, list) and isinstance(data9, list):
+        out, status = _extract_close_from_fields_data(fields9, data9, code_key="證券代號", close_key="收盤價")
+        if out:
+            return out, f"fields9:{status}"
+
+    # B) tables fallback
+    tables = mi_index.get("tables") or []
+    if isinstance(tables, list):
+        t = find_table_with_fields(tables, must_have=["證券代號", "收盤價"])
+        if t is not None:
+            fields = t.get("fields") or []
+            data = t.get("data") or []
+            if isinstance(fields, list) and isinstance(data, list):
+                out, status = _extract_close_from_fields_data(fields, data, code_key="證券代號", close_key="收盤價")
+                if out:
+                    return out, f"table:{status}"
+
+    return {}, "price_table_not_found"
+
+def _extract_close_from_fields_data(fields: List[Any], data: List[Any], code_key: str, close_key: str) -> Tuple[Dict[str, float], str]:
     code_idx = None
     close_idx = None
     for i, f in enumerate(fields):
         sf = str(f)
-        if code_idx is None and "證券代號" in sf:
+        if code_idx is None and code_key in sf:
             code_idx = i
-        if close_idx is None and "收盤價" in sf:
+        if close_idx is None and close_key in sf:
             close_idx = i
-
     if code_idx is None or close_idx is None:
-        return {}, "missing_cols_in_fields9"
+        return {}, "missing_cols"
 
     out: Dict[str, float] = {}
     for row in data:
@@ -297,12 +410,12 @@ def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 120
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", help="YYYYMMDD (required unless --date-from).", default="")
+    ap.add_argument("--date", help="YYYYMMDD (preferred). If omitted, try --date-from.", default="")
     ap.add_argument("--date-from", help="Read date from an existing latest.json", default="")
     ap.add_argument("--out", required=True, help="Output latest.json path")
     ap.add_argument("--history", default="", help="Optional history.json path (upsert by data_date)")
     ap.add_argument("--tz", default="Asia/Taipei")
-    ap.add_argument("--exclude-non4", action="store_true", help="Exclude codes not 4 digits")
+    ap.add_argument("--exclude-non4", action="store_true", help="Exclude codes not 4 digits (roughly filter ETFs/others)")
     ap.add_argument("--max-history", type=int, default=1200)
     args = ap.parse_args()
 
@@ -316,7 +429,7 @@ def main() -> int:
 
     latest: Dict[str, Any] = {
         "schema_version": SCHEMA_LATEST,
-        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v3_exchangeReport_fields9",
+        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v3_fix_margn_footer_fields9",
         "generated_at_utc": gen_utc,
         "generated_at_local": gen_local,
         "timezone": args.tz,
@@ -335,6 +448,9 @@ def main() -> int:
         "error": None,
     }
 
+    margn: Optional[Dict[str, Any]] = None
+    mi_index: Optional[Dict[str, Any]] = None
+
     try:
         if not date_yyyymmdd:
             raise ValueError("date_missing_or_invalid")
@@ -347,11 +463,7 @@ def main() -> int:
                 params={"response": "json", "date": date_yyyymmdd, "selectType": "ALL"},
                 referer="https://www.twse.com.tw/zh/trading/margin/mi-margn.html",
             )
-
-            # TWSE often returns {"stat":"OK"} / or "很抱歉..." messages
-            stat = str(margn.get("stat") or "").upper()
-            if stat and stat != "OK":
-                raise RuntimeError(f"MI_MARGN_stat_not_ok:{margn.get('stat')}")
+            _stat_guard(margn, "MI_MARGN")
 
             total_amt_twd, total_src = extract_total_financing_amount_twd(margn)
             fin_shares, fin_src = extract_financing_shares_by_code(margn)
@@ -371,10 +483,7 @@ def main() -> int:
                 params={"response": "json", "date": date_yyyymmdd, "type": "ALLBUT0999"},
                 referer="https://www.twse.com.tw/zh/trading/historical/mi-index.html",
             )
-
-            stat2 = str(mi_index.get("stat") or "").upper()
-            if stat2 and stat2 != "OK":
-                raise RuntimeError(f"MI_INDEX_stat_not_ok:{mi_index.get('stat')}")
+            _stat_guard(mi_index, "MI_INDEX")
 
             close_by_code, px_src = extract_close_by_code(mi_index)
             if not close_by_code:
@@ -425,6 +534,16 @@ def main() -> int:
     except Exception as e:
         latest["error"] = str(e)
         latest["dq_reason"] = "fetch_or_parse_failed"
+        # Add minimal schema hints for audit/debug (no raw dump)
+        try:
+            if isinstance(margn, dict):
+                latest["notes"].append("margn_keys=" + ",".join(sorted(list(margn.keys()))))
+                latest["notes"].append("margn_stat=" + str(margn.get("stat")))
+            if isinstance(mi_index, dict):
+                latest["notes"].append("mi_index_keys=" + ",".join(sorted(list(mi_index.keys()))))
+                latest["notes"].append("mi_index_stat=" + str(mi_index.get("stat")))
+        except Exception:
+            pass
 
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(latest, f, ensure_ascii=False, indent=2)
