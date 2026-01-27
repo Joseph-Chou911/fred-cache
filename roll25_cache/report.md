@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-27T12:24:22Z`
-- generated_at_local: `2026-01-27T20:24:22.682656+08:00`
+- generated_at_utc: `2026-01-27T12:32:21Z`
+- generated_at_local: `2026-01-27T20:32:21.669935+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-01-26`
 - UsedDateStatus: `DATA_NOT_UPDATED`
@@ -31,21 +31,22 @@
 ## 5) Z/P Table (market_cache-like; computed from roll25.json)
 | series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TURNOVER_TWD | 747339306040 | 1.628202 | 90.833333 | 2.682746 | 97.81746 | 0.818931 | 74.166667 | 9.402053 | OK |
-| CLOSE | 32064.52 | 2.206849 | 99.166667 | 2.492607 | 99.801587 | 0.564419 | 77.5 | 0.790282 | OK |
-| PCT_CHANGE_CLOSE | 0.322294 | 0.480532 | 72.5 | 0.42251 | 70.833333 | NA | NA | NA | OK |
-| AMPLITUDE_PCT | 0.64731 | -0.289286 | 47.5 | -0.234214 | 50.198413 | NA | NA | NA | OK |
-| VOL_MULTIPLIER_20 | 1.027252 | 0.271798 | 69.166667 | 0.425788 | 73.611111 | NA | NA | NA | OK |
+| TURNOVER_TWD | 747339306040 | 1.160229 | 79.166667 | 2.221586 | 95.039683 | -0.903339 | 12.5 | -8.686108 | OK |
+| CLOSE | 32064.52 | 2.182688 | 99.166667 | 2.453498 | 99.801587 | 0.122205 | 49.166667 | 0.322294 | OK |
+| PCT_CHANGE_CLOSE | 0.322294 | 0.091742 | 47.5 | 0.111997 | 53.373016 | NA | NA | NA | OK |
+| AMPLITUDE_PCT | 0.64731 | -1.18707 | 2.5 | -0.769002 | 6.547619 | NA | NA | NA | OK |
+| VOL_MULTIPLIER_20 | 1.027252 | -0.089874 | 52.5 | 0.067455 | 58.134921 | NA | NA | NA | OK |
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
+- Date ordering uses parsed dates (not string sort).
+- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
-- ret1% uses STRICT adjacency (series[0] vs series[1]); if day-1 missing => NA (no jumping).
-- zΔ60/pΔ60 are computed on the delta series (today - prev) over the last 60 deltas, not (z_today - z_prev).
-- AMPLITUDE_PCT value uses latest_report.json:numbers.AmplitudePct; stats use roll25.json series (amplitude_pct or derived from H/L/C).
-- AMPLITUDE_PCT mismatch check: abs(latest - roll25_derived@UsedDate) > 0.01 => DQ note + AMPLITUDE row confidence=DOWNGRADED.
+- ret1% is STRICT adjacency at UsedDate (UsedDate vs next older row); if missing => NA (no jumping).
+- zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).
+- AMPLITUDE mismatch threshold: 0.01 (abs(latest - roll25@UsedDate) > threshold => DOWNGRADED).
+- CLOSE pct mismatch threshold: 0.05 (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).
 - PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.
-- If insufficient points for any required full window, corresponding stats remain NA and confidence is DOWNGRADED (no guessing).
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
