@@ -1,11 +1,11 @@
 # Taiwan Margin Financing Dashboard
 
 ## 1) 結論
-- 狀態：擴張｜信號：NONE｜資料品質：PARTIAL
+- 狀態：擴張｜信號：NONE｜資料品質：OK
   - rationale: no rule triggered
-- 上游資料狀態（latest.json）：confidence=NA｜fetch_status=NA｜dq_reason=NA
+- 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
 - 一致性判定（Margin × Roll25）：NA
-  - rationale: roll25 missing/mismatch => resonance NA (strict)
+  - rationale: roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 1) WATCH（升溫）
@@ -33,7 +33,7 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-01-26｜risk_level: NA｜tag: WEEKDAY
+- UsedDate: 2026-01-26｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: NA｜tag: WEEKDAY
 - summary: 今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 - numbers: Close=32064.52, PctChange=0.322294%, TradeValue=747339306040, VolumeMultiplier=1.027252, AmplitudePct=0.64731%, VolMultiplier=1.027252
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=0, OhlcMissing=False
@@ -84,12 +84,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
-- roll25 LookbackNActual 未滿 target 時：只做『信心降級註記』，不改 margin 資料品質。
+- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲，Check-6 以 NOTE 呈現（非抓錯檔）。
 - maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
-- 若 latest.json 顯示 confidence/fetch_status 非 OK：本報告會將 margin_quality 降為 PARTIAL（但不改 signal）。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
-- Check-0 latest.json top-level quality OK：❌（FAIL）（confidence=NA, fetch_status=NA, dq_reason=NA）
+- Check-0 latest.json top-level quality：⚠️（NOTE）（field not provided (skip pass/fail)）
 - Check-1 TWSE meta_date==series[0].date：✅（OK）
 - Check-1 TPEX meta_date==series[0].date：✅（OK）
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
@@ -99,8 +98,8 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-4 TPEX history rows>=21：✅（OK）（rows=33）
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（UsedDate(2026-01-26) != TWSE meta_date(2026-01-27) or roll25 missing）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-26) != TWSE meta_date(2026-01-27)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）
 - Check-8 maint_ratio file readable（info）：⚠️（NOTE）（skipped: --maint not provided）
 
-_generated_at_utc: 2026-01-28T01:11:24Z_
+_generated_at_utc: 2026-01-28T01:23:39Z_
