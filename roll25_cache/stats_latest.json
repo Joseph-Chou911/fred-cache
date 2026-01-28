@@ -1,74 +1,74 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-01-28T08:11:48Z",
-  "generated_at_local": "2026-01-28T16:11:48.295273+08:00",
+  "generated_at_utc": "2026-01-28T08:48:13Z",
+  "generated_at_local": "2026-01-28T16:48:13.694118+08:00",
   "timezone": "Asia/Taipei",
-  "used_date": "2026-01-27",
+  "used_date": "2026-01-28",
   "run_day_tag": "WEEKDAY",
-  "used_date_status": "DATA_NOT_UPDATED",
+  "used_date_status": "OK_TODAY",
   "freshness_ok": true,
-  "freshness_age_days": 1,
-  "mode": "FULL",
-  "ohlc_status": "OK",
-  "backfill_months": 0,
+  "freshness_age_days": 0,
+  "mode": "MISSING_OHLC",
+  "ohlc_status": "MISSING",
+  "backfill_months": 1,
   "backfill_limit": 252,
   "store_cap": 400,
   "series": {
     "close": {
-      "asof": "2026-01-27",
+      "asof": "2026-01-28",
       "win60": {
-        "value": 32317.92,
+        "value": null,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 2.206849,
-        "p": 99.167
+        "z": null,
+        "p": null
       },
       "win252": {
-        "value": 32317.92,
+        "value": null,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 2.492607,
-        "p": 99.802
+        "z": null,
+        "p": null
       },
       "window_note": {
         "n_total_available": 261
       }
     },
     "trade_value": {
-      "asof": "2026-01-27",
+      "asof": "2026-01-28",
       "win60": {
-        "value": 817604546187.0,
+        "value": 850393655366.0,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 1.628202,
-        "p": 90.833
+        "z": 1.789046,
+        "p": 94.167
       },
       "win252": {
-        "value": 817604546187.0,
+        "value": 850393655366.0,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 2.682746,
-        "p": 97.817
+        "z": 2.859864,
+        "p": 98.611
       },
       "window_note": {
-        "n_total_available": 276
+        "n_total_available": 277
       }
     },
     "pct_change": {
-      "asof": "2026-01-27",
+      "asof": "2026-01-28",
       "win60": {
-        "value": 0.7902815947346095,
+        "value": null,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 0.480532,
-        "p": 72.5
+        "z": null,
+        "p": null
       },
       "win252": {
-        "value": 0.7902815947346095,
+        "value": null,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 0.42251,
-        "p": 70.833
+        "z": null,
+        "p": null
       },
       "window_note": {
         "n_total_available": 260,
@@ -76,20 +76,20 @@
       }
     },
     "amplitude_pct": {
-      "asof": "2026-01-27",
+      "asof": "2026-01-28",
       "win60": {
-        "value": 1.0388117458174846,
+        "value": null,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": -0.275363,
-        "p": 47.5
+        "z": null,
+        "p": null
       },
       "win252": {
-        "value": 1.0388117458174846,
+        "value": null,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": -0.226071,
-        "p": 50.198
+        "z": null,
+        "p": null
       },
       "window_note": {
         "n_total_available": 260,
@@ -100,10 +100,10 @@
   "derived": {
     "lookback_n_target": 20,
     "lookback_n_actual": 20,
-    "vol_multiplier_20": 1.097543,
+    "vol_multiplier_20": 1.113129,
     "volume_amplified": false,
-    "new_low_n": 0,
-    "consecutive_down_days": 0,
+    "new_low_n": null,
+    "consecutive_down_days": null,
     "definition": {
       "vol_win": 20,
       "vol_threshold": 1.5,
