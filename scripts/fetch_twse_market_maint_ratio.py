@@ -10,33 +10,28 @@ Proxy definition:
 - close_i: closing price for security i, from TWSE MI_INDEX JSON
 - total_financing_amount_twd: market total financing balance amount.
 
-Why your run still failed (from your latest.json):
-- MI_MARGN returned only {date, stat=OK, tables=[...]} with tables_n=2
-- total financing amount extraction passed (otherwise you'd still see total_financing_amount_not_found)
-- now failing at: financing_shares_not_found: fin_table_not_found
-=> The detail table exists but its column labels likely DO NOT contain exact substring
-   '融資' + '今日' + '餘額' in one field string (could be split / formatted / different wording).
+v6 hardening (vs v5):
+- Prevent mis-picking "融券 今日餘額" when MI_MARGN fields do NOT explicitly say '融資'.
+  Strategy:
+  1) Prefer column whose field text contains ('融資' AND '餘額') (+bonus for '今日')
+  2) If not found, detect *two repeated groups* of trading/balance columns in the same table
+     (融資 group then 融券 group), and pick the first group's '今日餘額' column.
+     We locate group boundaries by repeated patterns like 買進/賣出/現金(或現券)償還/前日餘額/今日餘額.
+  3) If still ambiguous, fallback to the first '今日餘額' occurrence, but mark confidence DOWNGRADED.
 
-Fix in v5:
-- Much more tolerant column matching:
-  - code column: any field containing '代號' (not only '股票代號'/'證券代號')
-  - financing-balance column: any field containing ('融資' AND '餘額')
-    - prefer if also contains '今日'
-    - fallback to '融資餘額' / '今日餘額' variants
-  - normalize field text: remove whitespace, punctuation, HTML-ish chars.
-- Add audit/debug notes when not found:
-  - list each table title + first ~12 fields (normalized) so you can see TWSE schema of that day
-    without dumping full raw response.
+- Keep audit-friendly notes:
+  - table titles + fields previews
+  - fin_pick_method + chosen indices
 
-Outputs:
-- latest.json (always)
-- history.json (upsert by data_date, if --history provided)
-
-Robustness:
+Other robustness:
 - Retries with backoff (2s, 4s, 8s)
 - Adds cache-buster '_' (ms timestamp)
 - Adds browser-like headers + Referer
 - Checks 'stat' != 'OK' early
+
+Outputs:
+- latest.json (always)
+- history.json (upsert by data_date, if --history provided)
 """
 
 from __future__ import annotations
@@ -232,7 +227,7 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
                         val, why = got
                         return val, f"S2_{prefix}:{k}:{why}"
 
-            # S3: any list-of-lists inside table (including 'data' if it is list-of-lists)
+            # S3: any list-of-lists inside table (including 'data')
             for k, v in t.items():
                 if _is_list_of_lists(v):
                     got = _scan_rows_for_total(v)  # type: ignore[arg-type]
@@ -250,43 +245,69 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
     return None, "not_found"
 
 def _norm_field(x: Any) -> str:
-    """
-    Normalize field name:
-    - stringify
-    - remove whitespace and common punctuation / html-ish chars
-    """
     s = str(x)
-    # remove spaces and control chars
     s = re.sub(r"\s+", "", s)
-    # remove common separators
     s = s.replace("\u3000", "")
     s = re.sub(r"[()（）\[\]【】<>《》:：/／\-—_]", "", s)
     return s
 
-def _pick_idx(fields: List[Any]) -> Tuple[Optional[int], Optional[int], str]:
-    """
-    Find code_idx and fin_balance_idx from fields with tolerant matching.
-    Returns (code_idx, fin_idx, reason)
-    """
-    f_norm = [_norm_field(f) for f in fields]
+def _find_all_indices(fields_norm: List[str], token: str) -> List[int]:
+    return [i for i, f in enumerate(fields_norm) if token in f]
 
-    # code column: prefer contains '證券代號' or '股票代號', else any '代號'
-    code_idx = None
-    for i, sf in enumerate(f_norm):
-        if "證券代號" in sf or "股票代號" in sf:
-            code_idx = i
-            break
-    if code_idx is None:
-        for i, sf in enumerate(f_norm):
-            if "代號" in sf:
-                code_idx = i
-                break
+def _find_repeated_group_bounds(fields_norm: List[str]) -> Optional[Tuple[int, int]]:
+    """
+    Try to detect that this table contains two groups (融資 then 融券) by finding a second occurrence
+    of a common group-start token among: 買進,賣出,前日餘額,今日餘額,償還.
+    Return (group1_start, group2_start) indices if found.
+    """
+    # group-start candidates that often appear at both groups
+    starts = ["買進", "賣出", "前日餘額", "今日餘額"]
+    cand_positions: List[int] = []
 
-    # financing balance column:
-    # score candidates: want '融資' + '餘額' (must), bonus if has '今日'
+    # find repeated occurrences for each token; keep the 2nd occurrence as possible group2 start
+    for tok in starts:
+        idxs = _find_all_indices(fields_norm, tok)
+        if len(idxs) >= 2:
+            cand_positions.append(idxs[1])
+
+    if not cand_positions:
+        return None
+
+    group2_start = min(cand_positions)
+
+    # group1 start: the first occurrence among the same tokens
+    group1_positions: List[int] = []
+    for tok in starts:
+        idxs = _find_all_indices(fields_norm, tok)
+        if idxs:
+            group1_positions.append(idxs[0])
+    if not group1_positions:
+        return None
+    group1_start = min(group1_positions)
+
+    # sanity: group2_start should be after group1_start by at least a few columns
+    if group2_start <= group1_start + 2:
+        return None
+
+    return group1_start, group2_start
+
+def _pick_fin_today_idx(fields: List[Any]) -> Tuple[Optional[int], str, bool]:
+    """
+    Pick financing-balance column index.
+
+    Returns (fin_idx, method, is_confident)
+
+    method:
+      - explicit_finz: found ('融資' AND '餘額') column
+      - grouped_first_today: inferred two groups; pick first group's 今日餘額
+      - fallback_first_today: pick first 今日餘額; low confidence
+    """
+    fn = [_norm_field(f) for f in fields]
+
+    # 1) explicit融資餘額 preferred
     best_i = None
     best_score = -1
-    for i, sf in enumerate(f_norm):
+    for i, sf in enumerate(fn):
         if ("融資" in sf) and ("餘額" in sf):
             score = 10
             if "今日" in sf:
@@ -296,23 +317,45 @@ def _pick_idx(fields: List[Any]) -> Tuple[Optional[int], Optional[int], str]:
             if score > best_score:
                 best_score = score
                 best_i = i
+    if best_i is not None:
+        return best_i, "explicit_finz", True
 
-    # extra fallback: sometimes the column might be just '今日餘額' under a financing group,
-    # so also allow '今日餘額' if no '融資餘額' matched.
-    if best_i is None:
-        for i, sf in enumerate(f_norm):
-            if "今日餘額" in sf:
-                best_i = i
-                best_score = 1
-                break
+    # 2) group inference: pick first group's 今日餘額
+    bounds = _find_repeated_group_bounds(fn)
+    if bounds is not None:
+        group1_start, group2_start = bounds
+        # find 今日餘額 within [group1_start, group2_start)
+        for i in range(group1_start, group2_start):
+            if "今日餘額" in fn[i] or fn[i] == "今日餘額":
+                return i, f"grouped_first_today:g1={group1_start},g2={group2_start}", True
+        # if no exact 今日餘額, allow '餘額' with 今日 keyword
+        for i in range(group1_start, group2_start):
+            if ("今日" in fn[i]) and ("餘額" in fn[i]):
+                return i, f"grouped_first_today_loose:g1={group1_start},g2={group2_start}", True
 
-    reason = f"code_idx={code_idx},fin_idx={best_i},fin_score={best_score}"
-    return code_idx, best_i, reason
+    # 3) fallback: first 今日餘額 occurrence (low confidence)
+    for i, sf in enumerate(fn):
+        if "今日餘額" in sf:
+            return i, "fallback_first_today", False
 
-def _extract_fin_shares_from_fields_data(fields: List[Any], data: List[Any]) -> Tuple[Dict[str, int], str]:
-    code_idx, fin_idx, why = _pick_idx(fields)
+    return None, "not_found", False
+
+def _pick_code_idx(fields: List[Any]) -> Optional[int]:
+    fn = [_norm_field(f) for f in fields]
+    for i, sf in enumerate(fn):
+        if "證券代號" in sf or "股票代號" in sf:
+            return i
+    for i, sf in enumerate(fn):
+        if "代號" in sf:
+            return i
+    return None
+
+def _extract_fin_shares_from_fields_data(fields: List[Any], data: List[Any]) -> Tuple[Dict[str, int], str, bool]:
+    code_idx = _pick_code_idx(fields)
+    fin_idx, method, confident = _pick_fin_today_idx(fields)
+
     if code_idx is None or fin_idx is None:
-        return {}, f"missing_cols:{why}"
+        return {}, f"missing_cols:code_idx={code_idx},fin_idx={fin_idx},method={method}", False
 
     out: Dict[str, int] = {}
     for row in data:
@@ -326,51 +369,46 @@ def _extract_fin_shares_from_fields_data(fields: List[Any], data: List[Any]) -> 
             continue
         out[code] = shares
 
-    return out, f"ok:{why}"
+    return out, f"ok:code_idx={code_idx},fin_idx={fin_idx},method={method}", confident
 
-def extract_financing_shares_by_code(margn: Dict[str, Any], debug_notes: List[str]) -> Tuple[Dict[str, int], str]:
+def extract_financing_shares_by_code(margn: Dict[str, Any], debug_notes: List[str]) -> Tuple[Dict[str, int], str, bool]:
     """
     Extract per-security financing '今日餘額' (張).
 
-    Supports:
-    - root fields/data
-    - tables[*].fields/data (typical for your case: margn has only date/stat/tables)
+    Returns (map, status, confident)
     """
     # A) root
     fields = margn.get("fields")
     data = margn.get("data")
     if isinstance(fields, list) and isinstance(data, list):
-        out, status = _extract_fin_shares_from_fields_data(fields, data)
+        out, status, conf = _extract_fin_shares_from_fields_data(fields, data)
         if out:
-            return out, f"root:{status}"
+            return out, f"root:{status}", conf
 
     # B) tables
     tables = margn.get("tables")
     if isinstance(tables, list):
-        # emit audit of table fields (first ~12) to debug_notes
         for ti, t in enumerate(tables):
             if not isinstance(t, dict):
                 continue
             title = str(t.get("title") or "")
             fields = t.get("fields")
             data = t.get("data")
+
             if isinstance(fields, list):
                 preview = ",".join(_norm_field(x) for x in fields[:12])
                 debug_notes.append(f"margn_table[{ti}]_title={title or 'NA'}")
                 debug_notes.append(f"margn_table[{ti}]_fields_preview={preview}")
-            if isinstance(fields, list) and isinstance(data, list):
-                out, status = _extract_fin_shares_from_fields_data(fields, data)
-                if out:
-                    return out, f"table[{ti}]:{title}:{status}" if title else f"table[{ti}]:{status}"
 
-    return {}, "fin_table_not_found"
+            if isinstance(fields, list) and isinstance(data, list):
+                out, status, conf = _extract_fin_shares_from_fields_data(fields, data)
+                if out:
+                    return out, f"table[{ti}]:{title}:{status}" if title else f"table[{ti}]:{status}", conf
+
+    return {}, "fin_table_not_found", False
 
 def extract_close_by_code(mi_index: Dict[str, Any], debug_notes: List[str]) -> Tuple[Dict[str, float], str]:
-    """
-    Extract per-security close price from MI_INDEX JSON.
-
-    Prefer fields9/data9; fallback tables[*].fields/data.
-    """
+    # prefer fields9/data9
     fields9 = mi_index.get("fields9")
     data9 = mi_index.get("data9")
     if isinstance(fields9, list) and isinstance(data9, list):
@@ -378,9 +416,9 @@ def extract_close_by_code(mi_index: Dict[str, Any], debug_notes: List[str]) -> T
         if out:
             return out, f"fields9:{status}"
 
+    # fallback tables
     tables = mi_index.get("tables")
     if isinstance(tables, list):
-        # (optional) add one preview for audit if needed
         for ti, t in enumerate(tables[:3]):
             if isinstance(t, dict) and isinstance(t.get("fields"), list):
                 title = str(t.get("title") or "")
@@ -404,13 +442,12 @@ def extract_close_by_code(mi_index: Dict[str, Any], debug_notes: List[str]) -> T
 def _extract_close_from_fields_data(fields: List[Any], data: List[Any], code_key: str, close_key: str) -> Tuple[Dict[str, float], str]:
     code_idx = None
     close_idx = None
-    f_norm = [_norm_field(f) for f in fields]
-    for i, sf in enumerate(f_norm):
+    fn = [_norm_field(f) for f in fields]
+    for i, sf in enumerate(fn):
         if code_idx is None and code_key in sf:
             code_idx = i
         if close_idx is None and close_key in sf:
             close_idx = i
-
     if code_idx is None or close_idx is None:
         return {}, "missing_cols"
 
@@ -425,7 +462,6 @@ def _extract_close_from_fields_data(fields: List[Any], data: List[Any], code_key
         if close is None:
             continue
         out[code] = float(close)
-
     return out, "ok"
 
 def upsert_history(history_path: str, item: Dict[str, Any], max_items: int = 1200) -> None:
@@ -483,7 +519,7 @@ def main() -> int:
 
     latest: Dict[str, Any] = {
         "schema_version": SCHEMA_LATEST,
-        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v5_loose_margn_fields_match",
+        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v6_guard_short_table_grouping",
         "generated_at_utc": gen_utc,
         "generated_at_local": gen_local,
         "timezone": args.tz,
@@ -523,7 +559,7 @@ def main() -> int:
             if total_amt_twd is None:
                 raise RuntimeError(f"total_financing_amount_not_found:{total_src}")
 
-            fin_shares, fin_src = extract_financing_shares_by_code(margn, latest["notes"])
+            fin_shares, fin_src, fin_conf = extract_financing_shares_by_code(margn, latest["notes"])
             if not fin_shares:
                 raise RuntimeError(f"financing_shares_not_found:{fin_src}")
 
@@ -561,8 +597,9 @@ def main() -> int:
             maint = (total_collateral / float(total_amt_twd)) * 100.0
 
         latest["fetch_status"] = "OK"
-        latest["confidence"] = "OK"
-        latest["dq_reason"] = ""
+        # confidence downgraded if financing column pick relied on weak fallback
+        latest["confidence"] = "OK" if fin_conf else "DOWNGRADED"
+        latest["dq_reason"] = "" if fin_conf else "fin_col_pick_low_confidence"
         latest["data_date"] = f"{date_yyyymmdd[0:4]}-{date_yyyymmdd[4:6]}-{date_yyyymmdd[6:8]}"
         latest["total_financing_amount_twd"] = int(total_amt_twd)
         latest["total_collateral_value_twd"] = int(round(total_collateral))
@@ -571,6 +608,7 @@ def main() -> int:
         latest["missing_price_count"] = int(missing_px)
         latest["notes"].append(f"total_financing_amount: {total_src}")
         latest["notes"].append(f"fin_shares: {fin_src}")
+        latest["notes"].append(f"fin_pick_confident: {bool(fin_conf)}")
         latest["notes"].append(f"close_prices: {px_src}")
 
         if args.history.strip():
@@ -581,6 +619,8 @@ def main() -> int:
                 "total_collateral_value_twd": latest["total_collateral_value_twd"],
                 "included_count": latest["included_count"],
                 "missing_price_count": latest["missing_price_count"],
+                "confidence": latest["confidence"],
+                "dq_reason": latest["dq_reason"],
                 "generated_at_utc": gen_utc,
             }
             upsert_history(args.history.strip(), hist_item, max_items=int(args.max_history))
