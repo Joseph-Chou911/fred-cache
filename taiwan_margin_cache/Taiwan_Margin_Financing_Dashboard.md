@@ -92,25 +92,25 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
-- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲，Check-6/7 以 NOTE 呈現（非抓錯檔）。
+- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
 - maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
 - Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）
-- Check-1 TWSE meta_date==series[0].date：✅（OK）
-- Check-1 TPEX meta_date==series[0].date：✅（OK）
-- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
-- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（OK）
-- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（OK）
-- Check-4 TWSE history rows>=21：✅（OK）（rows=33）
-- Check-4 TPEX history rows>=21：✅（OK）（rows=33）
-- Check-5 TWSE 20D base_date 存在於 series：✅（OK）
-- Check-5 TPEX 20D base_date 存在於 series：✅（OK）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-26) != TWSE meta_date(2026-01-27)）
+- Check-1 TWSE meta_date==series[0].date：✅（PASS）
+- Check-1 TPEX meta_date==series[0].date：✅（PASS）
+- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
+- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（PASS）
+- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（PASS）
+- Check-4 TWSE history rows>=21：✅（PASS）（rows=33）
+- Check-4 TPEX history rows>=21：✅（PASS）（rows=33）
+- Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
+- Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-26) vs TWSE(2026-01-27)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
-- Check-8 maint_ratio latest readable（info）：✅（OK）
-- Check-9 maint_ratio history readable（info）：✅（OK）
-- Check-10 maint latest vs history[0] date（info）：✅（OK）
+- Check-8 maint_ratio latest readable（info）：✅（PASS）
+- Check-9 maint_ratio history readable（info）：✅（PASS）
+- Check-10 maint latest vs history[0] date（info）：✅（PASS）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：⚠️（NOTE）（head5 insufficient (history_rows=1)）
 
-_generated_at_utc: 2026-01-28T01:58:21Z_
+_generated_at_utc: 2026-01-28T02:15:47Z_
