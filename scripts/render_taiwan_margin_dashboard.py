@@ -17,9 +17,12 @@ Noise control (this version)
 - roll25 window NOTE appears once only (in Summary).
 - 2.2 does NOT repeat the same window note again.
 
-2026-01-28 patch
-- Check-6: if roll25 is stale (UsedDateStatus=DATA_NOT_UPDATED) => NOTE (not FAIL); mismatch only FAIL when not stale.
-- Check-11: maint history rows<5 => NOTE (insufficient) not FAIL; only validate strict-desc/unique when rows>=5.
+PASS/NOTE/FAIL policy (定版)
+- Check-0: always NOTE (top-level quality fields may be absent; not PASS/FAIL)
+- Check-1~5: PASS/FAIL only (these drive margin_quality)
+- Check-6: PASS / NOTE(stale) / FAIL(missing or mismatch)
+- Check-7: always NOTE (info-only)
+- Check-8~11 (maint): PASS/NOTE only (no FAIL; display-only)
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 
+# ----------------- basic utils -----------------
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -51,20 +55,30 @@ def fmt_pct(x: Optional[float], nd: int = 4) -> str:
     return f"{x:.{nd}f}"
 
 
-def yesno(ok: bool) -> str:
-    return "✅（OK）" if ok else "❌（FAIL）"
+STATUS_PASS = "PASS"
+STATUS_NOTE = "NOTE"
+STATUS_FAIL = "FAIL"
 
 
-def note(msg: str) -> str:
-    return f"⚠️（NOTE）（{msg}）"
+def badge(status: str) -> str:
+    if status == STATUS_PASS:
+        return "✅（PASS）"
+    if status == STATUS_FAIL:
+        return "❌（FAIL）"
+    return "⚠️（NOTE）"
 
 
-def line_check(name: str, ok: bool, msg: str) -> str:
-    if ok:
-        return f"- {name}：{yesno(True)}" if msg == "OK" else f"- {name}：{yesno(True)}（{msg}）"
-    return f"- {name}：{yesno(False)}（{msg}）"
+def line_status(name: str, status: str, msg: str) -> str:
+    if not msg or msg == "OK":
+        return f"- {name}：{badge(status)}"
+    return f"- {name}：{badge(status)}（{msg}）"
 
 
+def note_inline(msg: str) -> str:
+    return f"{badge(STATUS_NOTE)}（{msg}）"
+
+
+# ----------------- margin series helpers -----------------
 def build_series_from_history(history_items: List[Dict[str, Any]], market: str) -> List[Tuple[str, float]]:
     tmp: Dict[str, float] = {}
     for it in history_items:
@@ -220,6 +234,7 @@ def _get(d: Dict[str, Any], k: str, default: Any = None) -> Any:
     return d.get(k, default) if isinstance(d, dict) else default
 
 
+# ----------------- roll25 (confirm-only) -----------------
 def load_roll25(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     try:
         obj = read_json(path)
@@ -282,6 +297,7 @@ def roll25_lookback_note(roll: Dict[str, Any], default_target: int = 20) -> Tupl
     return False, f"LookbackNActual={na}/{nt}（window 未滿 → 信心降級）"
 
 
+# ----------------- derived metrics -----------------
 def calc_accel(one_d_pct: Optional[float], five_d_pct: Optional[float]) -> Optional[float]:
     if one_d_pct is None or five_d_pct is None:
         return None
@@ -354,7 +370,7 @@ def determine_resonance(margin_signal: str, roll: Optional[Dict[str, Any]], stri
     return ("QUIET", "no resonance rule triggered")
 
 
-# ---------- maint_ratio (proxy) : display-only ----------
+# ----------------- maint_ratio (proxy; display-only) -----------------
 def load_maint_latest(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     try:
         obj = read_json(path)
@@ -384,7 +400,6 @@ def maint_hist_items(hist_obj: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not isinstance(items, list):
         return []
     out = [it for it in items if isinstance(it, dict) and it.get("data_date")]
-    # sort desc by date string YYYY-MM-DD
     out.sort(key=lambda x: str(x.get("data_date")), reverse=True)
     return out
 
@@ -399,10 +414,12 @@ def maint_head5(hist_items: List[Dict[str, Any]]) -> List[Tuple[str, Optional[fl
 
 
 def maint_check_head5_dates_strict(hist_items: List[Dict[str, Any]]) -> Tuple[bool, str]:
+    # For maint (info-only): treat insufficient as "not OK" but should be NOTE (not FAIL)
     dates = [str(it.get("data_date")) for it in hist_items[:5] if it.get("data_date")]
     return check_head5_strict_desc_unique(dates)
 
 
+# ----------------- main -----------------
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
@@ -415,6 +432,7 @@ def main() -> None:
 
     latest = read_json(args.latest)
     hist = read_json(args.history)
+
     items = hist.get("items", []) if isinstance(hist, dict) else []
     if not isinstance(items, list):
         items = []
@@ -459,12 +477,16 @@ def main() -> None:
         spread20=spread20,
     )
 
-    # margin checks
-    c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (
-        twse_meta_date == latest_date_from_series(twse_s)
+    # ----------------- margin checks (PASS/FAIL only) -----------------
+    c1_tw_ok = (
+        (twse_meta_date is not None)
+        and (latest_date_from_series(twse_s) is not None)
+        and (twse_meta_date == latest_date_from_series(twse_s))
     )
-    c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (
-        tpex_meta_date == latest_date_from_series(tpex_s)
+    c1_tp_ok = (
+        (tpex_meta_date is not None)
+        and (latest_date_from_series(tpex_s) is not None)
+        and (tpex_meta_date == latest_date_from_series(tpex_s))
     )
 
     twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
@@ -485,53 +507,46 @@ def main() -> None:
     c5_tp_ok, c5_tp_msg = check_base_date_in_series(tpex_s, tp20.get("base_date"), "TPEX_20D")
 
     margin_any_fail = (
-        (not c1_tw_ok)
-        or (not c1_tp_ok)
-        or (not c2_tw_ok)
-        or (not c2_tp_ok)
-        or (not c3_ok)
-        or (not c4_tw_ok)
-        or (not c4_tp_ok)
-        or (not c5_tw_ok)
-        or (not c5_tp_ok)
+        (not c1_tw_ok) or (not c1_tp_ok) or
+        (not c2_tw_ok) or (not c2_tp_ok) or
+        (not c3_ok) or
+        (not c4_tw_ok) or (not c4_tp_ok) or
+        (not c5_tw_ok) or (not c5_tp_ok)
     )
     margin_quality = "PARTIAL" if margin_any_fail else "OK"
 
-    # roll25 confirm-only
+    # ----------------- roll25 confirm-only -----------------
     roll, roll_err = load_roll25(args.roll25)
     roll_ok = (roll is not None and roll_err is None)
     roll_used = roll25_used_date(roll) if roll else None
     roll_used_status = roll25_used_date_status(roll) if roll else None
 
-    # strict rule:
-    # - must be same-day match AND not stale (UsedDateStatus != DATA_NOT_UPDATED)
-    strict_roll_match = bool(
-        roll_ok
-        and twse_meta_date
-        and roll_used
-        and (roll_used == twse_meta_date)
-        and (roll_used_status is None or roll_used_status != "DATA_NOT_UPDATED")
-    )
-
-    # Explain strict check in output
-    if roll_ok and (roll_used_status == "DATA_NOT_UPDATED"):
-        # For resonance logic: keep strict unmet
-        resonance_label, resonance_rationale = (
-            "NA",
-            "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied",
-        )
-        # For Check-6 output: treat as NOTE (not FAIL)
-        c6_roll_ok = False
-        c6_roll_msg = (
-            f"roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'})"
-        )
+    # Check-6 status (PASS / NOTE(stale) / FAIL(missing or mismatch))
+    if not roll_ok:
+        c6_status = STATUS_FAIL
+        c6_msg = roll_err or "roll25 missing"
+        strict_roll_match = False
+        resonance_label, resonance_rationale = ("NA", "roll25 missing/mismatch => resonance NA (strict)")
+    elif roll_used_status == "DATA_NOT_UPDATED":
+        c6_status = STATUS_NOTE
+        c6_msg = f"roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate({roll_used or 'NA'}) vs TWSE({twse_meta_date or 'NA'})"
+        strict_roll_match = False
+        resonance_label, resonance_rationale = ("NA", "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied")
     else:
-        c6_roll_ok = strict_roll_match
-        c6_roll_msg = "OK" if c6_roll_ok else f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'}) or roll25 missing"
-        resonance_label, resonance_rationale = determine_resonance(margin_signal, roll, strict_roll_match)
+        if roll_used and twse_meta_date and (roll_used == twse_meta_date):
+            c6_status = STATUS_PASS
+            c6_msg = "OK"
+            strict_roll_match = True
+            resonance_label, resonance_rationale = determine_resonance(margin_signal, roll, strict_roll_match)
+        else:
+            c6_status = STATUS_FAIL
+            c6_msg = f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'})"
+            strict_roll_match = False
+            resonance_label, resonance_rationale = ("NA", "roll25 missing/mismatch => resonance NA (strict)")
 
+    # Check-7 (always NOTE; info-only)
     c7_lb_ok: Optional[bool] = None
-    c7_lb_msg: str = "roll25 missing"
+    c7_lb_msg: str = "NA"
     if roll_ok and roll is not None:
         c7_lb_ok, c7_lb_msg = roll25_lookback_note(roll, default_target=20)
 
@@ -540,7 +555,7 @@ def main() -> None:
     if strict_roll_match and (c7_lb_ok is False or c7_lb_ok is None):
         roll25_window_note = c7_lb_msg
 
-    # maint_ratio proxy (display-only)
+    # ----------------- maint_ratio proxy (PASS/NOTE only; info-only) -----------------
     maint_latest, maint_err = load_maint_latest(args.maint) if args.maint else (None, "maint path not provided")
     maint_ok = (maint_latest is not None and maint_err is None)
 
@@ -549,35 +564,42 @@ def main() -> None:
     maint_hist_list: List[Dict[str, Any]] = maint_hist_items(maint_hist_obj) if maint_hist_ok and maint_hist_obj else []
     maint_head = maint_head5(maint_hist_list) if maint_hist_list else []
 
-    # (Patch) Check-11: only evaluate strict-desc/unique when rows>=5; else NOTE in rendering
-    if len(maint_hist_list) >= 5:
-        c11_mhist_ok, c11_mhist_msg = maint_check_head5_dates_strict(maint_hist_list)
-    else:
-        c11_mhist_ok, c11_mhist_msg = False, f"head5 insufficient (history_rows={len(maint_hist_list)})"
-
-    # latest vs history[0] date check (info only)
-    c10_msync_ok = True
-    c10_msync_msg = "OK"
-    if maint_ok and maint_hist_list:
+    # Check-10 maint latest vs history[0] date (PASS/NOTE only)
+    c10_status = STATUS_NOTE
+    c10_msg = "skipped: maint latest/history missing"
+    if maint_ok and maint_hist_ok and maint_hist_list:
         ld = _get(maint_latest, "data_date", None)
         hd = maint_hist_list[0].get("data_date")
-        if ld and hd and str(ld) != str(hd):
-            c10_msync_ok = False
-            c10_msync_msg = f"latest.data_date({ld}) != hist[0].data_date({hd})"
-    elif maint_ok and not maint_hist_list:
-        c10_msync_ok = False
-        c10_msync_msg = "history empty/NA"
-    else:
-        c10_msync_ok = False
-        c10_msync_msg = "maint latest missing/NA"
+        if ld and hd and str(ld) == str(hd):
+            c10_status = STATUS_PASS
+            c10_msg = "OK"
+        else:
+            c10_status = STATUS_NOTE
+            c10_msg = f"latest.data_date({ld or 'NA'}) != hist[0].data_date({hd or 'NA'})"
+    elif maint_ok and maint_hist_ok and not maint_hist_list:
+        c10_status = STATUS_NOTE
+        c10_msg = "history empty/NA"
 
-    # upstream (latest.json) top-level quality fields: may be absent -> NOTE only
+    # Check-11 maint history head5 strict (PASS/NOTE only)
+    c11_status = STATUS_NOTE
+    c11_msg = f"head5 insufficient (history_rows={len(maint_hist_list)})"
+    if maint_hist_ok and len(maint_hist_list) >= 2:
+        ok, msg = maint_check_head5_dates_strict(maint_hist_list)
+        if ok:
+            c11_status = STATUS_PASS
+            c11_msg = "OK"
+        else:
+            c11_status = STATUS_NOTE
+            # keep msg, but still NOTE
+            c11_msg = msg
+
+    # ----------------- upstream (latest.json) top-level quality fields: NOTE only if absent -----------------
     top_conf = latest.get("confidence", None) if isinstance(latest, dict) else None
     top_fetch = latest.get("fetch_status", None) if isinstance(latest, dict) else None
     top_dq = latest.get("dq_reason", None) if isinstance(latest, dict) else None
     has_top_quality = (top_conf is not None) or (top_fetch is not None) or (top_dq is not None)
 
-    # render
+    # ----------------- render -----------------
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
@@ -588,7 +610,7 @@ def main() -> None:
     if has_top_quality:
         md.append(f"- 上游資料狀態（latest.json）：confidence={top_conf or 'NA'}｜fetch_status={top_fetch or 'NA'}｜dq_reason={top_dq or 'NA'}")
     else:
-        md.append(f"- 上游資料狀態（latest.json）：{note('top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL')}")
+        md.append(f"- 上游資料狀態（latest.json）：{note_inline('top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL')}")
 
     md.append(f"- 一致性判定（Margin × Roll25）：{resonance_label}")
     md.append(f"  - rationale: {resonance_rationale}")
@@ -750,49 +772,37 @@ def main() -> None:
     md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。")
     md.append("- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
     md.append("- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。")
-    md.append("- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲，Check-6/7 以 NOTE 呈現（非抓錯檔）。")
+    md.append("- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。")
     md.append("- maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。")
     md.append("")
 
     md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）")
-    md.append(f"- Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）")
-    md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
-    md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
-    md.append(line_check("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
-    md.append(line_check("Check-2 TPEX head5 dates 嚴格遞減且無重複", c2_tp_ok, c2_tp_msg))
-    md.append(line_check("Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁", c3_ok, c3_msg))
-    md.append(line_check("Check-4 TWSE history rows>=21", c4_tw_ok, c4_tw_msg))
-    md.append(line_check("Check-4 TPEX history rows>=21", c4_tp_ok, c4_tp_msg))
-    md.append(line_check("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
-    md.append(line_check("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
+    md.append(f"- Check-0 latest.json top-level quality：{note_inline('field may be absent; does not affect margin_quality')}")
+    md.append(line_status("Check-1 TWSE meta_date==series[0].date", STATUS_PASS if c1_tw_ok else STATUS_FAIL, "OK" if c1_tw_ok else "meta_date != series[0].date or NA"))
+    md.append(line_status("Check-1 TPEX meta_date==series[0].date", STATUS_PASS if c1_tp_ok else STATUS_FAIL, "OK" if c1_tp_ok else "meta_date != series[0].date or NA"))
+    md.append(line_status("Check-2 TWSE head5 dates 嚴格遞減且無重複", STATUS_PASS if c2_tw_ok else STATUS_FAIL, c2_tw_msg))
+    md.append(line_status("Check-2 TPEX head5 dates 嚴格遞減且無重複", STATUS_PASS if c2_tp_ok else STATUS_FAIL, c2_tp_msg))
+    md.append(line_status("Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁", STATUS_PASS if c3_ok else STATUS_FAIL, c3_msg))
+    md.append(line_status("Check-4 TWSE history rows>=21", STATUS_PASS if c4_tw_ok else STATUS_FAIL, c4_tw_msg))
+    md.append(line_status("Check-4 TPEX history rows>=21", STATUS_PASS if c4_tp_ok else STATUS_FAIL, c4_tp_msg))
+    md.append(line_status("Check-5 TWSE 20D base_date 存在於 series", STATUS_PASS if c5_tw_ok else STATUS_FAIL, c5_tw_msg))
+    md.append(line_status("Check-5 TPEX 20D base_date 存在於 series", STATUS_PASS if c5_tp_ok else STATUS_FAIL, c5_tp_msg))
 
-    # (Patch) Check-6 rendering: if roll25 stale => NOTE, else use PASS/FAIL
-    if roll_ok and (roll_used_status == "DATA_NOT_UPDATED"):
-        md.append(f"- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：{note(c6_roll_msg)}")
-    else:
-        md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_roll_ok, c6_roll_msg))
+    md.append(line_status("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_status, c6_msg))
 
-    if strict_roll_match and c7_lb_ok is True:
-        md.append(f"- Check-7 roll25 Lookback window（info）：✅（OK）（{c7_lb_msg}）")
-    elif roll_ok and (roll_used_status == "DATA_NOT_UPDATED"):
-        md.append(f"- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）")
-    elif strict_roll_match:
-        md.append(f"- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（{c7_lb_msg}）")
+    # Check-7: always NOTE (info-only)
+    if c6_status == STATUS_PASS:
+        md.append(line_status("Check-7 roll25 Lookback window（info）", STATUS_NOTE, c7_lb_msg))
+    elif c6_status == STATUS_NOTE:
+        md.append(line_status("Check-7 roll25 Lookback window（info）", STATUS_NOTE, "skipped: roll25 stale (DATA_NOT_UPDATED)"))
     else:
-        md.append("- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）")
+        md.append(line_status("Check-7 roll25 Lookback window（info）", STATUS_NOTE, "skipped: roll25 missing/mismatch"))
 
-    md.append(line_check("Check-8 maint_ratio latest readable（info）", maint_ok, maint_err or "OK"))
-    md.append(line_check("Check-9 maint_ratio history readable（info）", maint_hist_ok, maint_hist_err or "OK"))
-    if maint_ok and maint_hist_ok:
-        md.append(line_check("Check-10 maint latest vs history[0] date（info）", c10_msync_ok, c10_msync_msg))
-        # (Patch) Check-11 rendering: rows<5 => NOTE (insufficient), else PASS/FAIL
-        if len(maint_hist_list) < 5:
-            md.append(f"- Check-11 maint history head5 dates 嚴格遞減且無重複（info）：{note(c11_mhist_msg)}")
-        else:
-            md.append(line_check("Check-11 maint history head5 dates 嚴格遞減且無重複（info）", c11_mhist_ok, c11_mhist_msg))
-    else:
-        md.append("- Check-10 maint latest vs history[0] date（info）：⚠️（NOTE）（skipped: maint latest/history missing）")
-        md.append("- Check-11 maint history head5 dates 嚴格遞減且無重複（info）：⚠️（NOTE）（skipped: maint history missing）")
+    # maint checks (PASS/NOTE only)
+    md.append(line_status("Check-8 maint_ratio latest readable（info）", STATUS_PASS if maint_ok else STATUS_NOTE, maint_err or "OK"))
+    md.append(line_status("Check-9 maint_ratio history readable（info）", STATUS_PASS if maint_hist_ok else STATUS_NOTE, maint_hist_err or "OK"))
+    md.append(line_status("Check-10 maint latest vs history[0] date（info）", c10_status, c10_msg))
+    md.append(line_status("Check-11 maint history head5 dates 嚴格遞減且無重複（info）", c11_status, c11_msg))
 
     md.append("")
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
