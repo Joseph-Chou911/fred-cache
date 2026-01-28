@@ -1,8 +1,8 @@
 {
   "schema_version": "tw_market_maint_ratio_latest_v1",
-  "script_fingerprint": "fetch_twse_market_maint_ratio_py@v3_fix_margn_footer_fields9",
-  "generated_at_utc": "2026-01-27T23:57:17Z",
-  "generated_at_local": "2026-01-28T07:57:17.806130+08:00",
+  "script_fingerprint": "fetch_twse_market_maint_ratio_py@v4_total_from_table_rows",
+  "generated_at_utc": "2026-01-28T00:03:30Z",
+  "generated_at_local": "2026-01-28T08:03:30.352085+08:00",
   "timezone": "Asia/Taipei",
   "source_urls": {
     "MI_MARGN": "https://www.twse.com.tw/exchangeReport/MI_MARGN",
@@ -23,7 +23,8 @@
   "missing_price_count": null,
   "notes": [
     "margn_keys=date,stat,tables",
-    "margn_stat=OK"
+    "margn_stat=OK",
+    "margn_tables_n=2"
   ],
-  "error": "total_financing_amount_not_found:not_found"
+  "error": "financing_shares_not_found:fin_table_not_found"
 }
