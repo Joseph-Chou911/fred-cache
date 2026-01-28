@@ -16,6 +16,10 @@ Key guarantees
 Noise control (this version)
 - roll25 window NOTE appears once only (in Summary).
 - 2.2 does NOT repeat the same window note again.
+
+2026-01-28 patch
+- Check-6: if roll25 is stale (UsedDateStatus=DATA_NOT_UPDATED) => NOTE (not FAIL); mismatch only FAIL when not stale.
+- Check-11: maint history rows<5 => NOTE (insufficient) not FAIL; only validate strict-desc/unique when rows>=5.
 """
 
 from __future__ import annotations
@@ -106,24 +110,52 @@ def total_calc(
     tp = calc_horizon(tpex_s, n)
 
     if (twse_meta_date is None) or (tpex_meta_date is None) or (twse_meta_date != tpex_meta_date):
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "latest date mismatch/NA"}
+        return {
+            "delta": None,
+            "pct": None,
+            "base_date": None,
+            "latest": None,
+            "base": None,
+            "ok": False,
+            "reason": "latest date mismatch/NA",
+        }
 
     if tw["base_date"] is None or tp["base_date"] is None:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "insufficient history"}
+        return {
+            "delta": None,
+            "pct": None,
+            "base_date": None,
+            "latest": None,
+            "base": None,
+            "ok": False,
+            "reason": "insufficient history",
+        }
 
     if tw["base_date"] != tp["base_date"]:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "base_date mismatch"}
+        return {
+            "delta": None,
+            "pct": None,
+            "base_date": None,
+            "latest": None,
+            "base": None,
+            "ok": False,
+            "reason": "base_date mismatch",
+        }
 
     latest_tot = twse_s[0][1] + tpex_s[0][1]
     base_tot = twse_s[n][1] + tpex_s[n][1]
     delta = latest_tot - base_tot
     pct = (delta / base_tot * 100.0) if base_tot != 0 else None
 
-    return {"delta": delta, "pct": pct, "base_date": tw["base_date"], "latest": latest_tot, "base": base_tot,
-            "ok": True, "reason": ""}
+    return {
+        "delta": delta,
+        "pct": pct,
+        "base_date": tw["base_date"],
+        "latest": latest_tot,
+        "base": base_tot,
+        "ok": True,
+        "reason": "",
+    }
 
 
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
@@ -274,7 +306,13 @@ def determine_signal(
 
     state = "擴張" if tot20_pct >= 8.0 else ("收縮" if tot20_pct <= -8.0 else "中性")
 
-    if (tot20_pct >= 8.0) and (tot1_pct is not None) and (tot5_pct is not None) and (tot1_pct < 0.0) and (tot5_pct < 0.0):
+    if (
+        (tot20_pct >= 8.0)
+        and (tot1_pct is not None)
+        and (tot5_pct is not None)
+        and (tot1_pct < 0.0)
+        and (tot5_pct < 0.0)
+    ):
         return (state, "ALERT", "20D expansion + 1D%<0 and 5D%<0 (possible deleveraging)")
 
     watch = False
@@ -422,8 +460,12 @@ def main() -> None:
     )
 
     # margin checks
-    c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
-    c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
+    c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (
+        twse_meta_date == latest_date_from_series(twse_s)
+    )
+    c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (
+        tpex_meta_date == latest_date_from_series(tpex_s)
+    )
 
     twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
     tpex_dates_from_rows = [str(r.get("date")) for r in tpex_rows if r.get("date")]
@@ -443,11 +485,15 @@ def main() -> None:
     c5_tp_ok, c5_tp_msg = check_base_date_in_series(tpex_s, tp20.get("base_date"), "TPEX_20D")
 
     margin_any_fail = (
-        (not c1_tw_ok) or (not c1_tp_ok) or
-        (not c2_tw_ok) or (not c2_tp_ok) or
-        (not c3_ok) or
-        (not c4_tw_ok) or (not c4_tp_ok) or
-        (not c5_tw_ok) or (not c5_tp_ok)
+        (not c1_tw_ok)
+        or (not c1_tp_ok)
+        or (not c2_tw_ok)
+        or (not c2_tp_ok)
+        or (not c3_ok)
+        or (not c4_tw_ok)
+        or (not c4_tp_ok)
+        or (not c5_tw_ok)
+        or (not c5_tp_ok)
     )
     margin_quality = "PARTIAL" if margin_any_fail else "OK"
 
@@ -460,16 +506,25 @@ def main() -> None:
     # strict rule:
     # - must be same-day match AND not stale (UsedDateStatus != DATA_NOT_UPDATED)
     strict_roll_match = bool(
-        roll_ok and twse_meta_date and roll_used and
-        (roll_used == twse_meta_date) and
-        (roll_used_status is None or roll_used_status != "DATA_NOT_UPDATED")
+        roll_ok
+        and twse_meta_date
+        and roll_used
+        and (roll_used == twse_meta_date)
+        and (roll_used_status is None or roll_used_status != "DATA_NOT_UPDATED")
     )
 
     # Explain strict check in output
     if roll_ok and (roll_used_status == "DATA_NOT_UPDATED"):
+        # For resonance logic: keep strict unmet
+        resonance_label, resonance_rationale = (
+            "NA",
+            "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied",
+        )
+        # For Check-6 output: treat as NOTE (not FAIL)
         c6_roll_ok = False
-        c6_roll_msg = f"roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'})"
-        resonance_label, resonance_rationale = ("NA", "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied")
+        c6_roll_msg = (
+            f"roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'})"
+        )
     else:
         c6_roll_ok = strict_roll_match
         c6_roll_msg = "OK" if c6_roll_ok else f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'}) or roll25 missing"
@@ -493,7 +548,12 @@ def main() -> None:
     maint_hist_ok = (maint_hist_obj is not None and maint_hist_err is None)
     maint_hist_list: List[Dict[str, Any]] = maint_hist_items(maint_hist_obj) if maint_hist_ok and maint_hist_obj else []
     maint_head = maint_head5(maint_hist_list) if maint_hist_list else []
-    c11_mhist_ok, c11_mhist_msg = maint_check_head5_dates_strict(maint_hist_list) if maint_hist_list else (False, "head5 insufficient")
+
+    # (Patch) Check-11: only evaluate strict-desc/unique when rows>=5; else NOTE in rendering
+    if len(maint_hist_list) >= 5:
+        c11_mhist_ok, c11_mhist_msg = maint_check_head5_dates_strict(maint_hist_list)
+    else:
+        c11_mhist_ok, c11_mhist_msg = False, f"head5 insufficient (history_rows={len(maint_hist_list)})"
 
     # latest vs history[0] date check (info only)
     c10_msync_ok = True
@@ -705,7 +765,13 @@ def main() -> None:
     md.append(line_check("Check-4 TPEX history rows>=21", c4_tp_ok, c4_tp_msg))
     md.append(line_check("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
     md.append(line_check("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
-    md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_roll_ok, c6_roll_msg))
+
+    # (Patch) Check-6 rendering: if roll25 stale => NOTE, else use PASS/FAIL
+    if roll_ok and (roll_used_status == "DATA_NOT_UPDATED"):
+        md.append(f"- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：{note(c6_roll_msg)}")
+    else:
+        md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_roll_ok, c6_roll_msg))
+
     if strict_roll_match and c7_lb_ok is True:
         md.append(f"- Check-7 roll25 Lookback window（info）：✅（OK）（{c7_lb_msg}）")
     elif roll_ok and (roll_used_status == "DATA_NOT_UPDATED"):
@@ -719,7 +785,11 @@ def main() -> None:
     md.append(line_check("Check-9 maint_ratio history readable（info）", maint_hist_ok, maint_hist_err or "OK"))
     if maint_ok and maint_hist_ok:
         md.append(line_check("Check-10 maint latest vs history[0] date（info）", c10_msync_ok, c10_msync_msg))
-        md.append(line_check("Check-11 maint history head5 dates 嚴格遞減且無重複（info）", c11_mhist_ok, c11_mhist_msg))
+        # (Patch) Check-11 rendering: rows<5 => NOTE (insufficient), else PASS/FAIL
+        if len(maint_hist_list) < 5:
+            md.append(f"- Check-11 maint history head5 dates 嚴格遞減且無重複（info）：{note(c11_mhist_msg)}")
+        else:
+            md.append(line_check("Check-11 maint history head5 dates 嚴格遞減且無重複（info）", c11_mhist_ok, c11_mhist_msg))
     else:
         md.append("- Check-10 maint latest vs history[0] date（info）：⚠️（NOTE）（skipped: maint latest/history missing）")
         md.append("- Check-11 maint history head5 dates 嚴格遞減且無重複（info）：⚠️（NOTE）（skipped: maint history missing）")
