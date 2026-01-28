@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-27T15:59:32Z",
+  "generated_at_utc": "2026-01-28T02:31:58Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -531,17 +531,17 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-27T23:09:16.421816+08:00",
+        "generated_at": "2026-01-28T10:30:05.710301+08:00",
         "timezone": "Asia/Taipei",
-        "summary": "今日資料未更新；UsedDate=2026-01-26：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
+        "summary": "今日資料未更新；UsedDate=2026-01-27：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
         "numbers": {
-          "UsedDate": "2026-01-26",
-          "Close": 32064.52,
-          "PctChange": 0.322294,
-          "TradeValue": 747339306040,
-          "AmplitudePct": 0.64731,
-          "VolMultiplier": 1.027252,
-          "VolumeMultiplier": 1.027252,
+          "UsedDate": "2026-01-27",
+          "Close": 32317.92,
+          "PctChange": 0.790282,
+          "TradeValue": 817604546187,
+          "AmplitudePct": 1.038812,
+          "VolMultiplier": 1.097543,
+          "VolumeMultiplier": 1.097543,
           "LookbackNTarget": 20,
           "LookbackNActual": 20
         },
@@ -556,14 +556,14 @@
           "ConsecutiveBreak": 0,
           "LookbackNTarget": 20,
           "LookbackNActual": 20,
-          "VolMultiplier": 1.027252,
-          "VolumeMultiplier": 1.027252,
+          "VolMultiplier": 1.097543,
+          "VolumeMultiplier": 1.097543,
           "VolWin": 20,
           "VolThreshold": 1.5,
           "NewLowWin": 60
         },
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-        "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-26 | UsedDminus1=2026-01-23\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).",
+        "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-27 | UsedDminus1=2026-01-26\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).",
         "run_day_tag": "WEEKDAY",
         "used_date_status": "DATA_NOT_UPDATED",
         "tag": "WEEKDAY",
@@ -571,10 +571,10 @@
         "freshness_age_days": 1,
         "mode": "FULL",
         "ohlc_status": "OK",
-        "used_date": "2026-01-26",
-        "used_dminus1": "2026-01-23",
+        "used_date": "2026-01-27",
+        "used_dminus1": "2026-01-26",
         "lookback_n_actual": 20,
-        "lookback_oldest": "2025-12-29",
+        "lookback_oldest": "2025-12-30",
         "cache_tail": [
           {
             "date": "2026-01-27",
@@ -2381,11 +2381,11 @@
         ]
       },
       "core": {
-        "UsedDate": "2026-01-26",
+        "UsedDate": "2026-01-27",
         "run_day_tag": "TRADING_DAY",
-        "used_date_status": "DATA_NOT_UPDATED",
+        "used_date_status": "OK_LATEST",
         "used_date_status_dbg": {
-          "used_date": "2026-01-26",
+          "used_date": "2026-01-27",
           "latest_row_date": "2026-01-27",
           "ohlc_status": "OK",
           "freshness_ok": true
@@ -2393,13 +2393,13 @@
         "used_date_selection_tag": "WEEKDAY",
         "tag_legacy": "WEEKDAY",
         "risk_level": "NA",
-        "turnover_twd": 747339306040,
+        "turnover_twd": 817604546187,
         "turnover_unit": "TWD",
-        "close": 32064.52,
-        "pct_change": 0.322294,
-        "amplitude_pct": 0.64731,
-        "volume_multiplier": 1.027252,
-        "vol_multiplier": 1.027252,
+        "close": 32317.92,
+        "pct_change": 0.790282,
+        "amplitude_pct": 1.038812,
+        "volume_multiplier": 1.097543,
+        "vol_multiplier": 1.097543,
         "LookbackNTarget": 20,
         "LookbackNActual": 20,
         "signals": {
@@ -2438,66 +2438,384 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-01-27T15:47:55Z",
+        "generated_at_utc": "2026-01-28T02:27:37Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
             "source_url": "https://histock.tw/stock/three.aspx?m=mg",
-            "data_date": null,
-            "rows": [],
+            "data_date": "2026-01-27",
+            "rows": [
+              {
+                "date": "2026-01-27",
+                "balance_yi": 3827.3,
+                "chg_yi": 11.5
+              },
+              {
+                "date": "2026-01-26",
+                "balance_yi": 3815.8,
+                "chg_yi": 55.0
+              },
+              {
+                "date": "2026-01-23",
+                "balance_yi": 3760.8,
+                "chg_yi": 43.4
+              },
+              {
+                "date": "2026-01-22",
+                "balance_yi": 3717.3,
+                "chg_yi": 39.9
+              },
+              {
+                "date": "2026-01-21",
+                "balance_yi": 3677.5,
+                "chg_yi": -34.8
+              },
+              {
+                "date": "2026-01-20",
+                "balance_yi": 3712.3,
+                "chg_yi": 18.1
+              },
+              {
+                "date": "2026-01-19",
+                "balance_yi": 3694.2,
+                "chg_yi": 60.2
+              },
+              {
+                "date": "2026-01-16",
+                "balance_yi": 3633.9,
+                "chg_yi": 40.9
+              },
+              {
+                "date": "2026-01-15",
+                "balance_yi": 3593.0,
+                "chg_yi": 8.5
+              },
+              {
+                "date": "2026-01-14",
+                "balance_yi": 3584.5,
+                "chg_yi": 28.1
+              },
+              {
+                "date": "2026-01-13",
+                "balance_yi": 3556.4,
+                "chg_yi": -8.5
+              },
+              {
+                "date": "2026-01-12",
+                "balance_yi": 3564.9,
+                "chg_yi": 50.0
+              },
+              {
+                "date": "2026-01-09",
+                "balance_yi": 3514.9,
+                "chg_yi": -8.9
+              },
+              {
+                "date": "2026-01-08",
+                "balance_yi": 3523.9,
+                "chg_yi": -46.7
+              },
+              {
+                "date": "2026-01-07",
+                "balance_yi": 3570.6,
+                "chg_yi": 25.1
+              },
+              {
+                "date": "2026-01-06",
+                "balance_yi": 3545.5,
+                "chg_yi": 36.0
+              },
+              {
+                "date": "2026-01-05",
+                "balance_yi": 3509.5,
+                "chg_yi": 43.2
+              },
+              {
+                "date": "2026-01-02",
+                "balance_yi": 3466.3,
+                "chg_yi": 32.2
+              },
+              {
+                "date": "2025-12-31",
+                "balance_yi": 3434.1,
+                "chg_yi": 20.4
+              },
+              {
+                "date": "2025-12-30",
+                "balance_yi": 3413.7,
+                "chg_yi": 14.8
+              },
+              {
+                "date": "2025-12-29",
+                "balance_yi": 3398.9,
+                "chg_yi": -4.5
+              },
+              {
+                "date": "2025-12-26",
+                "balance_yi": 3403.4,
+                "chg_yi": 14.3
+              },
+              {
+                "date": "2025-12-24",
+                "balance_yi": 3389.0,
+                "chg_yi": 13.1
+              },
+              {
+                "date": "2025-12-23",
+                "balance_yi": 3375.9,
+                "chg_yi": 23.9
+              },
+              {
+                "date": "2025-12-22",
+                "balance_yi": 3352.0,
+                "chg_yi": 18.9
+              },
+              {
+                "date": "2025-12-19",
+                "balance_yi": 3333.1,
+                "chg_yi": 9.3
+              },
+              {
+                "date": "2025-12-18",
+                "balance_yi": 3323.8,
+                "chg_yi": 2.1
+              },
+              {
+                "date": "2025-12-17",
+                "balance_yi": 3321.7,
+                "chg_yi": 33.9
+              },
+              {
+                "date": "2025-12-16",
+                "balance_yi": 3287.9,
+                "chg_yi": -30.7
+              },
+              {
+                "date": "2025-12-15",
+                "balance_yi": 3318.6,
+                "chg_yi": 25.1
+              }
+            ],
             "notes": [
-              "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg"
+              "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
+              "候選表[0]解析rows=30",
+              "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
+              "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
             ],
             "chg_yi_unit": {
-              "code": "NA",
-              "label": "NA",
-              "raw": "NA",
-              "source": "NA"
+              "code": "UNIT_YI",
+              "label": "億",
+              "raw": "億",
+              "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-01-27T15:47:59Z",
-            "http_error": "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg",
-            "rows_count": 0
+            "fetched_at_utc": "2026-01-28T02:27:38Z",
+            "http_error": null,
+            "rows_count": 30
           },
           "TPEX": {
             "source": "HiStock",
             "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-            "data_date": null,
-            "rows": [],
+            "data_date": "2026-01-27",
+            "rows": [
+              {
+                "date": "2026-01-27",
+                "balance_yi": 1334.5,
+                "chg_yi": 11.6
+              },
+              {
+                "date": "2026-01-26",
+                "balance_yi": 1322.9,
+                "chg_yi": 10.4
+              },
+              {
+                "date": "2026-01-23",
+                "balance_yi": 1312.5,
+                "chg_yi": 11.1
+              },
+              {
+                "date": "2026-01-22",
+                "balance_yi": 1301.4,
+                "chg_yi": 9.6
+              },
+              {
+                "date": "2026-01-21",
+                "balance_yi": 1291.8,
+                "chg_yi": -10.3
+              },
+              {
+                "date": "2026-01-20",
+                "balance_yi": 1302.0,
+                "chg_yi": 12.5
+              },
+              {
+                "date": "2026-01-19",
+                "balance_yi": 1289.5,
+                "chg_yi": -2.6
+              },
+              {
+                "date": "2026-01-16",
+                "balance_yi": 1292.1,
+                "chg_yi": 9.7
+              },
+              {
+                "date": "2026-01-15",
+                "balance_yi": 1282.3,
+                "chg_yi": 4.2
+              },
+              {
+                "date": "2026-01-14",
+                "balance_yi": 1278.1,
+                "chg_yi": 18.0
+              },
+              {
+                "date": "2026-01-13",
+                "balance_yi": 1260.2,
+                "chg_yi": 0.6
+              },
+              {
+                "date": "2026-01-12",
+                "balance_yi": 1259.6,
+                "chg_yi": 25.4
+              },
+              {
+                "date": "2026-01-09",
+                "balance_yi": 1234.2,
+                "chg_yi": 10.5
+              },
+              {
+                "date": "2026-01-08",
+                "balance_yi": 1223.7,
+                "chg_yi": 8.3
+              },
+              {
+                "date": "2026-01-07",
+                "balance_yi": 1215.4,
+                "chg_yi": -0.3
+              },
+              {
+                "date": "2026-01-06",
+                "balance_yi": 1215.6,
+                "chg_yi": 12.8
+              },
+              {
+                "date": "2026-01-05",
+                "balance_yi": 1202.8,
+                "chg_yi": 12.4
+              },
+              {
+                "date": "2026-01-02",
+                "balance_yi": 1190.4,
+                "chg_yi": 15.1
+              },
+              {
+                "date": "2025-12-31",
+                "balance_yi": 1175.2,
+                "chg_yi": 9.1
+              },
+              {
+                "date": "2025-12-30",
+                "balance_yi": 1166.1,
+                "chg_yi": 8.4
+              },
+              {
+                "date": "2025-12-29",
+                "balance_yi": 1157.7,
+                "chg_yi": 4.0
+              },
+              {
+                "date": "2025-12-26",
+                "balance_yi": 1153.7,
+                "chg_yi": 5.6
+              },
+              {
+                "date": "2025-12-24",
+                "balance_yi": 1148.1,
+                "chg_yi": 2.3
+              },
+              {
+                "date": "2025-12-23",
+                "balance_yi": 1145.8,
+                "chg_yi": 12.0
+              },
+              {
+                "date": "2025-12-22",
+                "balance_yi": 1133.8,
+                "chg_yi": 14.7
+              },
+              {
+                "date": "2025-12-19",
+                "balance_yi": 1119.1,
+                "chg_yi": 3.5
+              },
+              {
+                "date": "2025-12-18",
+                "balance_yi": 1115.6,
+                "chg_yi": -1.9
+              },
+              {
+                "date": "2025-12-17",
+                "balance_yi": 1117.5,
+                "chg_yi": 0.4
+              },
+              {
+                "date": "2025-12-16",
+                "balance_yi": 1117.1,
+                "chg_yi": -6.4
+              },
+              {
+                "date": "2025-12-15",
+                "balance_yi": 1123.5,
+                "chg_yi": -1.4
+              }
+            ],
             "notes": [
-              "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
+              "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
+              "候選表[0]解析rows=30",
+              "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+              "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
+              "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
             ],
             "chg_yi_unit": {
-              "code": "NA",
-              "label": "NA",
-              "raw": "NA",
-              "source": "NA"
+              "code": "UNIT_YI",
+              "label": "億",
+              "raw": "億",
+              "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-01-27T15:48:03Z",
-            "http_error": "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-            "rows_count": 0
+            "fetched_at_utc": "2026-01-28T02:27:39Z",
+            "http_error": null,
+            "rows_count": 30
           }
         }
       },
       "cross_module": {
-        "margin_signal": "NA",
+        "margin_signal": "WATCH",
         "margin_signal_source": "DERIVED.rule_v1(TWSE_chg_yi_last5)",
         "margin_rationale": {
           "method": "derived_rule",
           "basis": "TWSE chg_yi last5",
-          "chg_last5": [],
-          "sum_last5": 0.0,
-          "pos_days_last5": 0,
-          "latest_chg": null,
+          "chg_last5": [
+            11.5,
+            55.0,
+            43.4,
+            39.9,
+            -34.8
+          ],
+          "sum_last5": 115.00000000000001,
+          "pos_days_last5": 4,
+          "latest_chg": 11.5,
           "rule_version": "rule_v1",
-          "rule_hit": "NA",
-          "confidence": "DOWNGRADED",
-          "twse_data_date": "NA"
+          "rule_hit": "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)",
+          "confidence": "OK",
+          "twse_data_date": "2026-01-27"
         },
         "roll25_heated_market": false,
-        "roll25_data_quality_issue": true,
+        "roll25_data_quality_issue": false,
         "roll25_heated": false,
         "roll25_confidence": "OK",
-        "consistency": "CONVERGENCE",
+        "consistency": "DIVERGENCE",
         "rationale": {
           "consistency_rule": "Deterministic Margin×Roll25MarketHeat (rule_v1).",
           "roll25_rationale": {
@@ -2517,9 +2835,9 @@
               "OhlcMissing": false,
               "ohlc_status": "OK",
               "freshness_ok": true,
-              "used_date_status": "DATA_NOT_UPDATED",
+              "used_date_status": "OK_LATEST",
               "used_date_status_dbg": {
-                "used_date": "2026-01-26",
+                "used_date": "2026-01-27",
                 "latest_row_date": "2026-01-27",
                 "ohlc_status": "OK",
                 "freshness_ok": true
@@ -2536,14 +2854,14 @@
               "OhlcMissing(signal)": false,
               "OHLCStatusMissing(field)": false,
               "FreshnessNotOK(field)": false,
-              "UsedDateStatusBad(derived)": true
+              "UsedDateStatusBad(derived)": false
             },
-            "used_date": "2026-01-26"
+            "used_date": "2026-01-27"
           },
           "date_alignment": {
-            "twmargin_date": "NA",
-            "roll25_used_date": "2026-01-26",
-            "used_date_match": false,
+            "twmargin_date": "2026-01-27",
+            "roll25_used_date": "2026-01-27",
+            "used_date_match": true,
             "note": "confirm-only; does not change signal"
           },
           "note": "consistency uses roll25_heated_market only; roll25_data_quality_issue does NOT flip consistency, but should downgrade trust in interpretation."
@@ -2554,26 +2872,26 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-27T15:59:31Z",
+        "generated_at_utc": "2026-01-28T02:31:57Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
-        "data_date": "2026-01-27",
-        "quote_time_local": "2026-01-27T23:42:00+08:00",
+        "data_date": "2026-01-28",
+        "quote_time_local": "2026-01-28T10:31:00+08:00",
         "usd_twd": {
-          "spot_buy": 31.355,
-          "spot_sell": 31.505,
-          "mid": 31.43
+          "spot_buy": 31.28,
+          "spot_sell": 31.38,
+          "mid": 31.33
         },
         "raw": {
           "parse_dbg": {
             "format": "xrt_text_v2",
             "reason": "ok",
-            "text_len": 2599,
-            "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/27 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
+            "text_len": 2578,
+            "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/28 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
             "text_has_usd": true,
             "text_has_zh_usd": true
           },
-          "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/27 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏"
+          "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/28 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽"
         },
         "http": {
           "status_code": 200,
@@ -2584,20 +2902,20 @@
         "status": "OK",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
-        "data_date": "2026-01-27",
+        "data_date": "2026-01-28",
         "usd_twd": {
-          "spot_buy": 31.355,
-          "spot_sell": 31.505,
-          "mid": 31.43
+          "spot_buy": 31.28,
+          "spot_sell": 31.38,
+          "mid": 31.33
         },
         "momentum": {
-          "ret1_pct": -0.190536678310582,
-          "ret1_from": "2026-01-26",
-          "ret1_to": "2026-01-27",
+          "ret1_pct": -0.3181673560292759,
+          "ret1_from": "2026-01-27",
+          "ret1_to": "2026-01-28",
           "chg_5d_pct": null,
           "chg_5d_from": null,
           "chg_5d_to": null,
-          "points": 3
+          "points": 4
         },
         "dir": "TWD_STRONG",
         "fx_signal": "NONE",
@@ -2610,33 +2928,33 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-27T09:50:58.388639+00:00",
+          "run_ts_utc": "2026-01-27T17:48:04.540167+00:00",
           "module": "inflation_realrate_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+          "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
           "stale_hours": 36.0,
           "stats_path": "inflation_realrate_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-01-27T09:50:58Z",
-          "stats_as_of_ts": "2026-01-27T17:50:51+08:00",
+          "stats_generated_at_utc": "2026-01-27T17:48:04Z",
+          "stats_as_of_ts": "2026-01-28T01:48:00+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 2,
           "dash_history_path": "inflation_realrate_cache/history_dashboard.json",
           "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
           "history_items_loaded": 3,
-          "history_excluded_same_day": 1
+          "history_excluded_same_day": 0
         },
         "rows": [
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+            "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
             "series": "DFII10",
             "value": 1.92,
             "data_date": "2026-01-23",
-            "as_of_ts": "2026-01-27T17:50:51+08:00",
+            "as_of_ts": "2026-01-28T01:48:00+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0020523997222222225,
+            "age_hours": 0.0012611575000000001,
             "z60": 0.9134085593597231,
             "ret1_pct60": -1.538461538461544,
             "z_delta60": -0.5580087133600272,
@@ -2658,14 +2976,14 @@
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+            "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
             "series": "T10YIE",
             "value": 2.32,
             "data_date": "2026-01-26",
-            "as_of_ts": "2026-01-27T17:50:51+08:00",
+            "as_of_ts": "2026-01-28T01:48:00+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0020523997222222225,
+            "age_hours": 0.0012611575000000001,
             "z60": 1.7544731105849156,
             "ret1_pct60": 0.0,
             "z_delta60": -0.06284802349685537,
@@ -2695,33 +3013,33 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-27T09:50:58.435719+00:00",
+          "run_ts_utc": "2026-01-27T17:48:04.587327+00:00",
           "module": "asset_proxy_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+          "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
           "stale_hours": 36.0,
           "stats_path": "asset_proxy_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-01-27T09:50:58Z",
-          "stats_as_of_ts": "2026-01-27T17:50:55+08:00",
+          "stats_generated_at_utc": "2026-01-27T17:48:04Z",
+          "stats_as_of_ts": "2026-01-28T01:48:00+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 4,
           "dash_history_path": "asset_proxy_cache/history_dashboard.json",
           "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
           "history_items_loaded": 3,
-          "history_excluded_same_day": 1
+          "history_excluded_same_day": 0
         },
         "rows": [
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+            "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
             "series": "GLD.US_CLOSE",
             "value": 464.7,
             "data_date": "2026-01-26",
-            "as_of_ts": "2026-01-27T17:50:55+08:00",
+            "as_of_ts": "2026-01-28T01:48:00+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20251228&d2=20260127&i=d",
             "dq": "OK",
-            "age_hours": 0.000954366388888889,
+            "age_hours": 0.0012742575,
             "z60": 2.885037011492699,
             "ret1_pct60": 1.4628820960698619,
             "z_delta60": 0.04860564462483197,
@@ -2737,20 +3055,20 @@
             "dir_note": "MOVE_ONLY",
             "prev_signal": "ALERT",
             "delta_signal": "SAME",
-            "streak_hist": 2,
-            "streak_wa": 3
+            "streak_hist": 3,
+            "streak_wa": 4
           },
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+            "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
             "series": "IAU.US_CLOSE",
             "value": 95.18,
             "data_date": "2026-01-26",
-            "as_of_ts": "2026-01-27T17:50:55+08:00",
+            "as_of_ts": "2026-01-28T01:48:00+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20251228&d2=20260127&i=d",
             "dq": "OK",
-            "age_hours": 0.000954366388888889,
+            "age_hours": 0.0012742575,
             "z60": 2.8852981501654353,
             "ret1_pct60": 1.482034332018345,
             "z_delta60": 0.052217139894167985,
@@ -2766,20 +3084,20 @@
             "dir_note": "MOVE_ONLY",
             "prev_signal": "ALERT",
             "delta_signal": "SAME",
-            "streak_hist": 2,
-            "streak_wa": 3
+            "streak_hist": 3,
+            "streak_wa": 4
           },
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+            "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
             "series": "IYR.US_CLOSE",
             "value": 95.94,
             "data_date": "2026-01-26",
-            "as_of_ts": "2026-01-27T17:50:55+08:00",
+            "as_of_ts": "2026-01-28T01:48:00+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20251228&d2=20260127&i=d",
             "dq": "OK",
-            "age_hours": 0.000954366388888889,
+            "age_hours": 0.0012742575,
             "z60": 0.9290118121483077,
             "ret1_pct60": -0.10412328196585108,
             "z_delta60": -0.11036139771930475,
@@ -2801,14 +3119,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@dceeb07",
+            "script_fingerprint": "render_dashboard_py_signals_v8@e4698b0",
             "series": "VNQ.US_CLOSE",
             "value": 90.42,
             "data_date": "2026-01-26",
-            "as_of_ts": "2026-01-27T17:50:55+08:00",
+            "as_of_ts": "2026-01-28T01:48:00+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20251228&d2=20260127&i=d",
             "dq": "OK",
-            "age_hours": 0.000954366388888889,
+            "age_hours": 0.0012742575,
             "z60": 0.8705871907824033,
             "ret1_pct60": -0.1325381047051044,
             "z_delta60": -0.14105566615288467,
