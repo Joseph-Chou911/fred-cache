@@ -10,18 +10,23 @@ Proxy definition:
 - close_i: closing price for security i, from TWSE MI_INDEX JSON
 - total_financing_amount_twd: market total financing balance amount.
 
-IMPORTANT FIX (v4):
-TWSE MI_MARGN sometimes returns ONLY:
-  { "date": "...", "stat": "OK", "tables": [...] }
+Why your run still failed (from your latest.json):
+- MI_MARGN returned only {date, stat=OK, tables=[...]} with tables_n=2
+- total financing amount extraction passed (otherwise you'd still see total_financing_amount_not_found)
+- now failing at: financing_shares_not_found: fin_table_not_found
+=> The detail table exists but its column labels likely DO NOT contain exact substring
+   '融資' + '今日' + '餘額' in one field string (could be split / formatted / different wording).
 
-and the market total "融資金額(仟元) 今日餘額" may appear NOT in tfootData_two,
-but inside a *summary table's data rows* (e.g., row label "融資金額(仟元)").
-
-So this script extracts total financing amount via multiple strategies:
-  S1) root footer keys: tfootData_two / tfootData...
-  S2) scan each table's footer-like keys (any key containing 'tfoot')
-  S3) scan each table's list-of-lists blocks (including 'data') for a row starting with '融資金額'
-  S4) deep-scan the whole response for any list-of-lists row starting with '融資金額'
+Fix in v5:
+- Much more tolerant column matching:
+  - code column: any field containing '代號' (not only '股票代號'/'證券代號')
+  - financing-balance column: any field containing ('融資' AND '餘額')
+    - prefer if also contains '今日'
+    - fallback to '融資餘額' / '今日餘額' variants
+  - normalize field text: remove whitespace, punctuation, HTML-ish chars.
+- Add audit/debug notes when not found:
+  - list each table title + first ~12 fields (normalized) so you can see TWSE schema of that day
+    without dumping full raw response.
 
 Outputs:
 - latest.json (always)
@@ -31,14 +36,7 @@ Robustness:
 - Retries with backoff (2s, 4s, 8s)
 - Adds cache-buster '_' (ms timestamp)
 - Adds browser-like headers + Referer
-- Checks 'stat' != 'OK' early (holiday / not published / throttled message)
-
-Date sourcing:
-- --date YYYYMMDD takes priority.
-- else --date-from JSON path:
-  - try top-level: data_date / date / UsedDate / used_date
-  - then try: series.TWSE.data_date
-  - then try: series.TWSE.rows[0].date
+- Checks 'stat' != 'OK' early
 """
 
 from __future__ import annotations
@@ -182,9 +180,6 @@ def _is_list_of_lists(v: Any) -> bool:
     return isinstance(v, list) and (len(v) == 0 or all(isinstance(x, list) for x in v))
 
 def _scan_rows_for_total(row_block: List[List[Any]]) -> Optional[Tuple[int, str]]:
-    """
-    Look for a row where row[0] contains '融資金額' and return last numeric cell (仟元) converted to 元.
-    """
     for row in row_block:
         if not row:
             continue
@@ -197,9 +192,6 @@ def _scan_rows_for_total(row_block: List[List[Any]]) -> Optional[Tuple[int, str]
     return None
 
 def _deep_iter_list_of_lists(obj: Any) -> Iterable[Tuple[str, List[List[Any]]]]:
-    """
-    Yield (path, block) for any list-of-lists found inside nested dict/list structures.
-    """
     stack: List[Tuple[str, Any]] = [("$", obj)]
     while stack:
         path, cur = stack.pop()
@@ -214,14 +206,6 @@ def _deep_iter_list_of_lists(obj: Any) -> Iterable[Tuple[str, List[List[Any]]]]:
                 stack.append((f"{path}[{i}]", v))
 
 def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[int], str]:
-    """
-    Multi-strategy extraction for market total financing amount (元).
-
-    S1) root footer keys: tfootData_two / tfootDataTwo / tfootData
-    S2) scan each table's footer-like keys containing 'tfoot'
-    S3) scan each table's list-of-lists blocks (including 'data') for a row label '融資金額'
-    S4) deep scan full response for any list-of-lists row label '融資金額'
-    """
     # S1: preferred root keys
     for key in ("tfootData_two", "tfootDataTwo", "tfootData"):
         v = margn.get(key)
@@ -231,10 +215,9 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
                 val, why = got
                 return val, f"S1_root:{key}:{why}"
 
-    # tables
+    # S2/S3: tables
     tables = margn.get("tables")
     if isinstance(tables, list):
-        # S2/S3: per-table scan
         for ti, t in enumerate(tables):
             if not isinstance(t, dict):
                 continue
@@ -249,7 +232,7 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
                         val, why = got
                         return val, f"S2_{prefix}:{k}:{why}"
 
-            # S3: scan all list-of-lists blocks inside this table (including data)
+            # S3: any list-of-lists inside table (including 'data' if it is list-of-lists)
             for k, v in t.items():
                 if _is_list_of_lists(v):
                     got = _scan_rows_for_total(v)  # type: ignore[arg-type]
@@ -257,7 +240,7 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
                         val, why = got
                         return val, f"S3_{prefix}:{k}:{why}"
 
-    # S4: deep scan full response (last resort)
+    # S4: deep scan
     for path, block in _deep_iter_list_of_lists(margn):
         got = _scan_rows_for_total(block)
         if got:
@@ -266,14 +249,94 @@ def extract_total_financing_amount_twd(margn: Dict[str, Any]) -> Tuple[Optional[
 
     return None, "not_found"
 
-def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, int], str]:
+def _norm_field(x: Any) -> str:
+    """
+    Normalize field name:
+    - stringify
+    - remove whitespace and common punctuation / html-ish chars
+    """
+    s = str(x)
+    # remove spaces and control chars
+    s = re.sub(r"\s+", "", s)
+    # remove common separators
+    s = s.replace("\u3000", "")
+    s = re.sub(r"[()（）\[\]【】<>《》:：/／\-—_]", "", s)
+    return s
+
+def _pick_idx(fields: List[Any]) -> Tuple[Optional[int], Optional[int], str]:
+    """
+    Find code_idx and fin_balance_idx from fields with tolerant matching.
+    Returns (code_idx, fin_idx, reason)
+    """
+    f_norm = [_norm_field(f) for f in fields]
+
+    # code column: prefer contains '證券代號' or '股票代號', else any '代號'
+    code_idx = None
+    for i, sf in enumerate(f_norm):
+        if "證券代號" in sf or "股票代號" in sf:
+            code_idx = i
+            break
+    if code_idx is None:
+        for i, sf in enumerate(f_norm):
+            if "代號" in sf:
+                code_idx = i
+                break
+
+    # financing balance column:
+    # score candidates: want '融資' + '餘額' (must), bonus if has '今日'
+    best_i = None
+    best_score = -1
+    for i, sf in enumerate(f_norm):
+        if ("融資" in sf) and ("餘額" in sf):
+            score = 10
+            if "今日" in sf:
+                score += 5
+            if "張" in sf:
+                score += 1
+            if score > best_score:
+                best_score = score
+                best_i = i
+
+    # extra fallback: sometimes the column might be just '今日餘額' under a financing group,
+    # so also allow '今日餘額' if no '融資餘額' matched.
+    if best_i is None:
+        for i, sf in enumerate(f_norm):
+            if "今日餘額" in sf:
+                best_i = i
+                best_score = 1
+                break
+
+    reason = f"code_idx={code_idx},fin_idx={best_i},fin_score={best_score}"
+    return code_idx, best_i, reason
+
+def _extract_fin_shares_from_fields_data(fields: List[Any], data: List[Any]) -> Tuple[Dict[str, int], str]:
+    code_idx, fin_idx, why = _pick_idx(fields)
+    if code_idx is None or fin_idx is None:
+        return {}, f"missing_cols:{why}"
+
+    out: Dict[str, int] = {}
+    for row in data:
+        if not isinstance(row, list) or len(row) <= max(code_idx, fin_idx):
+            continue
+        code = str(row[code_idx]).strip()
+        if not code or code in ("合計", "總計", "說明"):
+            continue
+        shares = parse_int(row[fin_idx])
+        if shares is None:
+            continue
+        out[code] = shares
+
+    return out, f"ok:{why}"
+
+def extract_financing_shares_by_code(margn: Dict[str, Any], debug_notes: List[str]) -> Tuple[Dict[str, int], str]:
     """
     Extract per-security financing '今日餘額' (張).
 
     Supports:
-    - exchangeReport root-level fields/data
-    - tables[*].fields/data
+    - root fields/data
+    - tables[*].fields/data (typical for your case: margn has only date/stat/tables)
     """
+    # A) root
     fields = margn.get("fields")
     data = margn.get("data")
     if isinstance(fields, list) and isinstance(data, list):
@@ -281,56 +344,32 @@ def extract_financing_shares_by_code(margn: Dict[str, Any]) -> Tuple[Dict[str, i
         if out:
             return out, f"root:{status}"
 
-    tables = margn.get("tables") or []
+    # B) tables
+    tables = margn.get("tables")
     if isinstance(tables, list):
-        for t in tables:
+        # emit audit of table fields (first ~12) to debug_notes
+        for ti, t in enumerate(tables):
             if not isinstance(t, dict):
                 continue
+            title = str(t.get("title") or "")
             fields = t.get("fields")
             data = t.get("data")
+            if isinstance(fields, list):
+                preview = ",".join(_norm_field(x) for x in fields[:12])
+                debug_notes.append(f"margn_table[{ti}]_title={title or 'NA'}")
+                debug_notes.append(f"margn_table[{ti}]_fields_preview={preview}")
             if isinstance(fields, list) and isinstance(data, list):
                 out, status = _extract_fin_shares_from_fields_data(fields, data)
                 if out:
-                    title = str(t.get("title") or "")
-                    return out, f"table:{title}:{status}" if title else f"table:{status}"
+                    return out, f"table[{ti}]:{title}:{status}" if title else f"table[{ti}]:{status}"
 
     return {}, "fin_table_not_found"
 
-def _extract_fin_shares_from_fields_data(fields: List[Any], data: List[Any]) -> Tuple[Dict[str, int], str]:
-    code_idx = None
-    fin_today_idx = None
-    for i, f in enumerate(fields):
-        sf = str(f)
-        if code_idx is None and (("股票代號" in sf) or ("證券代號" in sf)):
-            code_idx = i
-        if fin_today_idx is None and ("融資" in sf and "今日" in sf and "餘額" in sf):
-            fin_today_idx = i
-
-    if code_idx is None or fin_today_idx is None:
-        return {}, "missing_cols"
-
-    out: Dict[str, int] = {}
-    for row in data:
-        if not isinstance(row, list) or len(row) <= max(code_idx, fin_today_idx):
-            continue
-        code = str(row[code_idx]).strip()
-        if not code or code in ("合計", "總計", "說明"):
-            continue
-        shares = parse_int(row[fin_today_idx])
-        if shares is None:
-            continue
-        out[code] = shares
-
-    return out, "ok"
-
-def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], str]:
+def extract_close_by_code(mi_index: Dict[str, Any], debug_notes: List[str]) -> Tuple[Dict[str, float], str]:
     """
     Extract per-security close price from MI_INDEX JSON.
 
-    Prefer:
-    - exchangeReport: fields9/data9 contains '證券代號','收盤價'
-    Fallback:
-    - tables[*] with fields containing '證券代號' + '收盤價'
+    Prefer fields9/data9; fallback tables[*].fields/data.
     """
     fields9 = mi_index.get("fields9")
     data9 = mi_index.get("data9")
@@ -339,8 +378,16 @@ def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], s
         if out:
             return out, f"fields9:{status}"
 
-    tables = mi_index.get("tables") or []
+    tables = mi_index.get("tables")
     if isinstance(tables, list):
+        # (optional) add one preview for audit if needed
+        for ti, t in enumerate(tables[:3]):
+            if isinstance(t, dict) and isinstance(t.get("fields"), list):
+                title = str(t.get("title") or "")
+                preview = ",".join(_norm_field(x) for x in t["fields"][:12])
+                debug_notes.append(f"mi_index_table[{ti}]_title={title or 'NA'}")
+                debug_notes.append(f"mi_index_table[{ti}]_fields_preview={preview}")
+
         for t in tables:
             if not isinstance(t, dict):
                 continue
@@ -357,8 +404,8 @@ def extract_close_by_code(mi_index: Dict[str, Any]) -> Tuple[Dict[str, float], s
 def _extract_close_from_fields_data(fields: List[Any], data: List[Any], code_key: str, close_key: str) -> Tuple[Dict[str, float], str]:
     code_idx = None
     close_idx = None
-    for i, f in enumerate(fields):
-        sf = str(f)
+    f_norm = [_norm_field(f) for f in fields]
+    for i, sf in enumerate(f_norm):
         if code_idx is None and code_key in sf:
             code_idx = i
         if close_idx is None and close_key in sf:
@@ -436,7 +483,7 @@ def main() -> int:
 
     latest: Dict[str, Any] = {
         "schema_version": SCHEMA_LATEST,
-        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v4_total_from_table_rows",
+        "script_fingerprint": "fetch_twse_market_maint_ratio_py@v5_loose_margn_fields_match",
         "generated_at_utc": gen_utc,
         "generated_at_local": gen_local,
         "timezone": args.tz,
@@ -473,10 +520,10 @@ def main() -> int:
             _stat_guard(margn, "MI_MARGN")
 
             total_amt_twd, total_src = extract_total_financing_amount_twd(margn)
-            fin_shares, fin_src = extract_financing_shares_by_code(margn)
-
             if total_amt_twd is None:
                 raise RuntimeError(f"total_financing_amount_not_found:{total_src}")
+
+            fin_shares, fin_src = extract_financing_shares_by_code(margn, latest["notes"])
             if not fin_shares:
                 raise RuntimeError(f"financing_shares_not_found:{fin_src}")
 
@@ -492,7 +539,7 @@ def main() -> int:
             )
             _stat_guard(mi_index, "MI_INDEX")
 
-            close_by_code, px_src = extract_close_by_code(mi_index)
+            close_by_code, px_src = extract_close_by_code(mi_index, latest["notes"])
             if not close_by_code:
                 raise RuntimeError(f"close_prices_not_found:{px_src}")
 
@@ -545,7 +592,6 @@ def main() -> int:
             if isinstance(margn, dict):
                 latest["notes"].append("margn_keys=" + ",".join(sorted(list(margn.keys()))))
                 latest["notes"].append("margn_stat=" + str(margn.get("stat")))
-                # add count of tables to help audit
                 tb = margn.get("tables")
                 if isinstance(tb, list):
                     latest["notes"].append(f"margn_tables_n={len(tb)}")
