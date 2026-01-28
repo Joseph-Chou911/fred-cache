@@ -1,41 +1,41 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-28T08:48:13Z`
-- generated_at_local: `2026-01-28T16:48:13.782136+08:00`
+- generated_at_utc: `2026-01-28T09:13:25Z`
+- generated_at_local: `2026-01-28T17:13:25.317987+08:00`
 - timezone: `Asia/Taipei`
-- UsedDate: `2026-01-28`
-- UsedDateStatus: `OK_TODAY`
+- UsedDate: `2026-01-27`
+- UsedDateStatus: `DATA_NOT_UPDATED`
 - RunDayTag: `WEEKDAY`
-- summary: UsedDate=2026-01-28：Mode=MISSING_OHLC；freshness_ok=True
+- summary: 今日資料未更新；UsedDate=2026-01-27：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 
 ## 2) Key Numbers (from latest_report.json)
-- turnover_twd: `850393655366`
-- close: `NA`
-- pct_change: `NA`
-- amplitude_pct: `NA`
-- volume_multiplier_20: `1.113129`
+- turnover_twd: `817604546187`
+- close: `32317.92`
+- pct_change: `0.790282`
+- amplitude_pct: `1.038812`
+- volume_multiplier_20: `1.097543`
 
 ## 3) Market Behavior Signals (from latest_report.json)
 - DownDay: `false`
 - VolumeAmplified: `false`
 - VolAmplified: `false`
-- NewLow_N: `NA`
-- ConsecutiveBreak: `NA`
+- NewLow_N: `0`
+- ConsecutiveBreak: `0`
 
 ## 4) Data Quality Flags (from latest_report.json)
-- OhlcMissing: `true`
+- OhlcMissing: `false`
 - freshness_ok: `true`
-- ohlc_status: `MISSING`
-- mode: `MISSING_OHLC`
+- ohlc_status: `OK`
+- mode: `FULL`
 
 ## 5) Z/P Table (market_cache-like; computed from roll25.json)
 | series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TURNOVER_TWD | 850393655366 | 1.789046 | 94.166667 | 2.859864 | 98.611111 | 0.349602 | 70.833333 | 4.010387 | OK |
-| CLOSE | NA | NA | NA | NA | NA | 0.564419 | 77.5 | NA | DOWNGRADED |
-| PCT_CHANGE_CLOSE | NA | NA | NA | NA | NA | NA | NA | NA | DOWNGRADED |
-| AMPLITUDE_PCT | NA | NA | NA | NA | NA | NA | NA | NA | DOWNGRADED |
-| VOL_MULTIPLIER_20 | 1.113129 | 0.352216 | 69.166667 | 0.507123 | 75.595238 | NA | NA | NA | OK |
+| TURNOVER_TWD | 817604546187 | 1.628202 | 90.833333 | 2.682746 | 97.81746 | 0.818931 | 74.166667 | 9.402053 | OK |
+| CLOSE | 32317.92 | 2.206849 | 99.166667 | 2.492607 | 99.801587 | 0.564419 | 77.5 | 0.790282 | OK |
+| PCT_CHANGE_CLOSE | 0.790282 | 0.480532 | 72.5 | 0.42251 | 70.833333 | NA | NA | NA | OK |
+| AMPLITUDE_PCT | 1.038812 | -0.289286 | 47.5 | -0.234214 | 50.198413 | NA | NA | NA | OK |
+| VOL_MULTIPLIER_20 | 1.097543 | 0.271798 | 69.166667 | 0.425788 | 73.611111 | NA | NA | NA | OK |
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
@@ -53,10 +53,10 @@
 Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
 run_day_tag is weekday-only heuristic (not exchange calendar)
-BackfillMonths=1 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
-Mode=MISSING_OHLC | OHLC=MISSING | UsedDate=2026-01-28 | UsedDminus1=2026-01-27
-RunDayTag=WEEKDAY | UsedDateStatus=OK_TODAY
-freshness_ok=True | freshness_age_days=0
+BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
+Mode=FULL | OHLC=OK | UsedDate=2026-01-27 | UsedDminus1=2026-01-26
+RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
+freshness_ok=True | freshness_age_days=1
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
