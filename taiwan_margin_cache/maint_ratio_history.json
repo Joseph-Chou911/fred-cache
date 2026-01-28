@@ -1,0 +1,14 @@
+{
+  "schema_version": "tw_market_maint_ratio_history_v1",
+  "items": [
+    {
+      "data_date": "2026-01-27",
+      "maint_ratio_pct": 185.449854,
+      "total_financing_amount_twd": 382728015000,
+      "total_collateral_value_twd": 709768544330,
+      "included_count": 1245,
+      "missing_price_count": 1,
+      "generated_at_utc": "2026-01-28T00:07:47Z"
+    }
+  ]
+}
