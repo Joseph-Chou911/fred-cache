@@ -106,11 +106,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-4 TPEX history rows>=21：✅（OK）（rows=33）
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-26) != TWSE meta_date(2026-01-27)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-26) != TWSE meta_date(2026-01-27)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（OK）
 - Check-9 maint_ratio history readable（info）：✅（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（OK）
-- Check-11 maint history head5 dates 嚴格遞減且無重複（info）：❌（FAIL）（head5 insufficient）
+- Check-11 maint history head5 dates 嚴格遞減且無重複（info）：⚠️（NOTE）（head5 insufficient (history_rows=1)）
 
-_generated_at_utc: 2026-01-28T01:46:00Z_
+_generated_at_utc: 2026-01-28T01:58:21Z_
