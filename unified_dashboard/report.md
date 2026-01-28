@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-28T02:31:58Z
+- unified_generated_at_utc: 2026-01-28T02:37:18Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -21,86 +21,86 @@
 - mode: NORMAL_DCA
 
 **reasons**
-- trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, data_date=2026-01-26
+- trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, data_date=2026-01-27
 - fragility_parts: credit_fragile(BAMLH0A0HYM2=NONE)=false, rate_stress(DGS10=NONE)=false, tw_margin(WATCH)=true, cross_divergence(DIVERGENCE)=true
-- vol_gate: market_cache.VIX only (signal=NONE, dir=HIGH, ret1%60=0.372902, data_date=2026-01-26)
+- vol_gate: market_cache.VIX only (signal=NONE, dir=HIGH, ret1%60=1.238390, data_date=2026-01-27)
 
 **dq_gates (no guessing; conservative defaults)**
 - roll25_derived_confidence=OK (derived metrics not used for upgrade triggers)
 - fx_confidence=DOWNGRADED (fx not used as primary trigger)
 
 ## market_cache (detailed)
-- as_of_ts: 2026-01-27T13:55:03Z
-- run_ts_utc: 2026-01-27T15:54:55.060667+00:00
+- as_of_ts: 2026-01-28T02:34:01Z
+- run_ts_utc: 2026-01-28T02:34:30.569833+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@38509e4
+- script_fingerprint: render_dashboard_py_signals_v8@9eca080
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
 
 | series | signal | dir | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| OFR_FSI | WATCH | HIGH | JUMP | -2.680000 | 2026-01-22 | 1.997795 | -0.813691 | 30.000000 | 7.142857 | -0.645155 | -18.333333 | -9.611452 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 5 | 6 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
-| SP500 | INFO | HIGH | LONG | 6950.230000 | 2026-01-26 | 1.997795 | 1.214855 | 95.000000 | 98.809524 | 0.347042 | 13.333333 | 0.500607 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| VIX | NONE | HIGH | NONE | 16.150000 | 2026-01-26 | 1.997795 | -0.360856 | 45.000000 | 30.158730 | 0.027240 | 1.666667 | 0.372902 | NA | NA | WATCH | WATCH→NONE | 6 | 0 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| HYG_IEF_RATIO | NONE | LOW | NONE | 0.844833 | 2026-01-26 | 1.997795 | 1.731892 | 91.666667 | 75.793651 | -0.240425 | -3.333333 | -0.096471 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
+| OFR_FSI | WATCH | HIGH | JUMP | -2.505000 | 2026-01-23 | 0.008214 | -0.316485 | 41.666667 | 11.111111 | 0.497207 | 11.666667 | 6.529851 | abs(ret1%60)>=2 | JUMP_RET | WATCH | SAME | 6 | 7 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| SP500 | INFO | HIGH | LONG | 6978.600000 | 2026-01-27 | 0.008214 | 1.475446 | 100.000000 | 100.000000 | 0.260590 | 5.000000 | 0.408188 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
+| HYG_IEF_RATIO | NONE | LOW | NONE | 0.845697 | 2026-01-27 | 0.008214 | 1.811259 | 95.000000 | 79.761905 | 0.079367 | 3.333333 | 0.102275 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
+| VIX | NONE | HIGH | NONE | 16.350000 | 2026-01-27 | 0.008214 | -0.280135 | 48.333333 | 33.730159 | 0.080721 | 3.333333 | 1.238390 | NA | NA | NONE | SAME | 0 | 0 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
 
 ## fred_cache (ALERT+WATCH+INFO)
-- as_of_ts: 2026-01-27T22:02:02+08:00
-- run_ts_utc: 2026-01-27T14:54:41.220185+00:00
+- as_of_ts: 2026-01-28T10:33:47+08:00
+- run_ts_utc: 2026-01-28T02:35:05.451342+00:00
 - ruleset_id: NA
 - script_fingerprint: NA
 - script_version: stats_v1_ddof0_w60_w252_pct_le_ret1_delta
 - ALERT: 1
-- WATCH: 0
+- WATCH: 1
 - INFO: 5
-- NONE: 7
-- CHANGED: 5
+- NONE: 6
+- CHANGED: 1
 
 | series | signal | fred_dir | fred_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1% | reason | tag | prev | delta | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DTWEXBGS | ALERT | NA | LEVEL | 119.285500 | 2026-01-23 | 0.877006 | -2.595576 | 1.666667 | 0.396825 | -1.550004 | -20.000000 | -0.964982 | P252<=2;abs(Z60)>=2.5 | EXTREME_Z | NONE | NONE→ALERT | https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXBGS&file_type=json&sort_order=desc&limit=1 |
-| DJIA | INFO | NA | LONG | 49412.400000 | 2026-01-26 | 0.877006 | 1.459152 | 93.333333 | 98.412698 | 0.279193 | 8.333333 | 0.638897 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DJIA&file_type=json&sort_order=desc&limit=1 |
-| NASDAQCOM | INFO | NA | LONG | 23601.360000 | 2026-01-26 | 0.877006 | 0.772502 | 86.666667 | 96.031746 | 0.280786 | 23.333333 | 0.426020 | P252>=95 | LONG_EXTREME | NONE | NONE→INFO | https://api.stlouisfed.org/fred/series/observations?series_id=NASDAQCOM&file_type=json&sort_order=desc&limit=1 |
-| NFCINONFINLEVERAGE | INFO | NA | LONG | -0.505680 | 2026-01-16 | 0.877006 | 1.237692 | 90.000000 | 97.619048 | 0.020070 | 1.666667 | 0.850947 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1 |
-| SP500 | INFO | NA | LONG | 6950.230000 | 2026-01-26 | 0.877006 | 1.214855 | 95.000000 | 98.809524 | 0.347042 | 13.333333 | 0.500607 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
-| T10Y3M | INFO | NA | LONG | 0.550000 | 2026-01-26 | 0.877006 | 1.026317 | 90.000000 | 97.619048 | 0.024352 | 3.333333 | 1.851852 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1 |
-| BAMLH0A0HYM2 | NONE | NA | NONE | 2.680000 | 2026-01-23 | 0.877006 | -1.639993 | 5.000000 | 5.555556 | 0.307346 | 3.333333 | 1.515152 | NA | NA | ALERT | ALERT→NONE | https://api.stlouisfed.org/fred/series/observations?series_id=BAMLH0A0HYM2&file_type=json&sort_order=desc&limit=1 |
-| DCOILWTICO | NONE | NA | JUMP | 60.300000 | 2026-01-20 | 0.877006 | 0.609351 | 73.333333 | 19.444444 | 0.580173 | 16.666667 | 1.532244 | NA | JUMP_DELTA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DCOILWTICO&file_type=json&sort_order=desc&limit=1 |
-| DGS10 | NONE | NA | NONE | 4.240000 | 2026-01-23 | 0.877006 | 1.649712 | 95.000000 | 46.825397 | -0.368474 | -3.333333 | -0.469484 | NA | NA | WATCH | WATCH→NONE | https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1 |
-| DGS2 | NONE | NA | NONE | 3.600000 | 2026-01-23 | 0.877006 | 1.263411 | 91.666667 | 35.714286 | -0.223695 | -5.000000 | -0.277008 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DGS2&file_type=json&sort_order=desc&limit=1 |
-| STLFSI4 | NONE | NA | JUMP | -0.651000 | 2026-01-16 | 0.877006 | -0.397953 | 35.000000 | 38.888889 | 0.056151 | 3.333333 | 2.016857 | NA | JUMP_RET | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=STLFSI4&file_type=json&sort_order=desc&limit=1 |
-| T10Y2Y | NONE | NA | JUMP | 0.660000 | 2026-01-26 | 0.877006 | 0.729879 | 70.000000 | 92.460317 | 0.264232 | 10.000000 | 3.125000 | NA | JUMP_RET | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&file_type=json&sort_order=desc&limit=1 |
-| VIXCLS | NONE | NA | JUMP | 16.090000 | 2026-01-23 | 0.877006 | -0.395352 | 41.666667 | 28.174603 | 0.169081 | 11.666667 | 2.877238 | NA | JUMP_RET | WATCH | WATCH→NONE | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
+| DTWEXBGS | ALERT | NA | LEVEL | 119.285500 | 2026-01-23 | 0.021236 | -2.595576 | 1.666667 | 0.396825 | -1.550004 | -20.000000 | -0.964982 | P252<=2;abs(Z60)>=2.5 | EXTREME_Z | ALERT | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXBGS&file_type=json&sort_order=desc&limit=1 |
+| T10Y2Y | WATCH | NA | LONG | 0.710000 | 2026-01-27 | 0.021236 | 1.412703 | 96.666667 | 99.206349 | 0.682824 | 26.666667 | 7.575758 | P252>=95;abs(pΔ60)>=15;abs(ret1%)>=2 | LONG_EXTREME | NONE | NONE→WATCH | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&file_type=json&sort_order=desc&limit=1 |
+| DJIA | INFO | NA | LONG | 49003.410000 | 2026-01-27 | 0.021236 | 0.998284 | 80.000000 | 95.238095 | -0.460867 | -13.333333 | -0.827707 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DJIA&file_type=json&sort_order=desc&limit=1 |
+| NASDAQCOM | INFO | NA | LONG | 23601.360000 | 2026-01-26 | 0.021236 | 0.772502 | 86.666667 | 96.031746 | 0.280786 | 23.333333 | 0.426020 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NASDAQCOM&file_type=json&sort_order=desc&limit=1 |
+| NFCINONFINLEVERAGE | INFO | NA | LONG | -0.505680 | 2026-01-16 | 0.021236 | 1.237692 | 90.000000 | 97.619048 | 0.020070 | 1.666667 | 0.850947 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1 |
+| SP500 | INFO | NA | LONG | 6978.600000 | 2026-01-27 | 0.021236 | 1.475446 | 100.000000 | 100.000000 | 0.260590 | 5.000000 | 0.408188 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1 |
+| T10Y3M | INFO | NA | LONG | 0.570000 | 2026-01-27 | 0.021236 | 1.108480 | 98.333333 | 99.603175 | 0.082163 | 8.333333 | 3.636364 | P252>=95 | LONG_EXTREME | INFO | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1 |
+| BAMLH0A0HYM2 | NONE | NA | NONE | 2.690000 | 2026-01-26 | 0.021236 | -1.525323 | 8.333333 | 6.746032 | 0.114670 | 3.333333 | 0.373134 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=BAMLH0A0HYM2&file_type=json&sort_order=desc&limit=1 |
+| DCOILWTICO | NONE | NA | JUMP | 60.300000 | 2026-01-20 | 0.021236 | 0.609351 | 73.333333 | 19.444444 | 0.580173 | 16.666667 | 1.532244 | NA | JUMP_DELTA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DCOILWTICO&file_type=json&sort_order=desc&limit=1 |
+| DGS10 | NONE | NA | NONE | 4.220000 | 2026-01-26 | 0.021236 | 1.302349 | 91.666667 | 42.460317 | -0.347363 | -3.333333 | -0.471698 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1 |
+| DGS2 | NONE | NA | JUMP | 3.560000 | 2026-01-26 | 0.021236 | 0.535093 | 66.666667 | 25.000000 | -0.728317 | -25.000000 | -1.111111 | NA | JUMP_DELTA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=DGS2&file_type=json&sort_order=desc&limit=1 |
+| STLFSI4 | NONE | NA | JUMP | -0.651000 | 2026-01-16 | 0.021236 | -0.397953 | 35.000000 | 38.888889 | 0.056151 | 3.333333 | 2.016857 | NA | JUMP_RET | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=STLFSI4&file_type=json&sort_order=desc&limit=1 |
+| VIXCLS | NONE | NA | NONE | 16.150000 | 2026-01-26 | 0.021236 | -0.367979 | 43.333333 | 29.761905 | 0.027373 | 1.666667 | 0.372902 | NA | NA | NONE | SAME | https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1 |
 
 ## inflation_realrate_cache (detailed)
 - status: OK
-- as_of_ts: 2026-01-28T01:48:00+08:00
-- run_ts_utc: 2026-01-27T17:48:04.540167+00:00
+- as_of_ts: 2026-01-28T10:36:04+08:00
+- run_ts_utc: 2026-01-28T02:36:09.313636+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@e4698b0
+- script_fingerprint: render_dashboard_py_signals_v8@76af506
 - script_version: cycle_sidecars_stats_v1
 - series_count: 2
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DFII10 | NONE | MOVE | NONE | 1.920000 | 2026-01-23 | 0.001261 | 0.913409 | 86.666667 | 48.015873 | -0.558009 | -11.638418 | -1.538462 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
-| T10YIE | NONE | MOVE | NONE | 2.320000 | 2026-01-26 | 0.001261 | 1.754473 | 95.000000 | 50.793651 | -0.062848 | 0.084746 | 0.000000 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| DFII10 | WATCH | MOVE | JUMP | 1.900000 | 2026-01-26 | 0.001476 | 0.527410 | 65.000000 | 40.873016 | -0.386970 | -21.440678 | -1.041667 | abs(PΔ60)>=15 | JUMP_P | NONE | NONE→WATCH | 0 | 1 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| T10YIE | WATCH | MOVE | LEVEL | 2.340000 | 2026-01-27 | 0.001476 | 2.284664 | 100.000000 | 61.507937 | 0.535263 | 5.084746 | 0.862069 | abs(Z60)>=2 | EXTREME_Z | NONE | NONE→WATCH | 0 | 1 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
 
 ## asset_proxy_cache (detailed)
 - status: OK
-- as_of_ts: 2026-01-28T01:48:00+08:00
-- run_ts_utc: 2026-01-27T17:48:04.587327+00:00
+- as_of_ts: 2026-01-28T10:36:06+08:00
+- run_ts_utc: 2026-01-28T02:36:09.363473+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@e4698b0
+- script_fingerprint: render_dashboard_py_signals_v8@76af506
 - script_version: cycle_sidecars_stats_v1
 - series_count: 4
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GLD.US_CLOSE | ALERT | MOVE | LONG | 464.700000 | 2026-01-26 | 0.001274 | 2.885037 | 100.000000 | 100.000000 | 0.048606 | 0.000000 | 1.462882 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 3 | 4 | https://stooq.com/q/d/l/?s=gld.us&d1=20251228&d2=20260127&i=d |
-| IAU.US_CLOSE | ALERT | MOVE | LONG | 95.180000 | 2026-01-26 | 0.001274 | 2.885298 | 100.000000 | 100.000000 | 0.052217 | 0.000000 | 1.482034 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 3 | 4 | https://stooq.com/q/d/l/?s=iau.us&d1=20251228&d2=20260127&i=d |
-| IYR.US_CLOSE | NONE | MOVE | NONE | 95.940000 | 2026-01-26 | 0.001274 | 0.929012 | 83.333333 | 65.873016 | -0.110361 | -1.412429 | -0.104123 | NA | NA | NONE | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=iyr.us&d1=20251228&d2=20260127&i=d |
-| VNQ.US_CLOSE | NONE | MOVE | NONE | 90.420000 | 2026-01-26 | 0.001274 | 0.870587 | 81.666667 | 60.317460 | -0.141056 | -3.079096 | -0.132538 | NA | NA | NONE | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=vnq.us&d1=20251228&d2=20260127&i=d |
+| GLD.US_CLOSE | ALERT | MOVE | LONG | 475.970000 | 2026-01-27 | 0.000934 | 3.061661 | 100.000000 | 100.000000 | 0.175386 | 0.000000 | 2.425221 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95;abs(ret1%60)>=2 | EXTREME_Z,LONG_EXTREME,JUMP_RET | ALERT | SAME | 3 | 4 | https://stooq.com/q/d/l/?s=gld.us&d1=20251229&d2=20260128&i=d |
+| IAU.US_CLOSE | ALERT | MOVE | LONG | 97.480000 | 2026-01-27 | 0.000934 | 3.060502 | 100.000000 | 100.000000 | 0.173707 | 0.000000 | 2.416474 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95;abs(ret1%60)>=2 | EXTREME_Z,LONG_EXTREME,JUMP_RET | ALERT | SAME | 3 | 4 | https://stooq.com/q/d/l/?s=iau.us&d1=20251229&d2=20260128&i=d |
+| IYR.US_CLOSE | NONE | MOVE | NONE | 96.030000 | 2026-01-27 | 0.000934 | 0.981871 | 83.333333 | 67.857143 | 0.069569 | 0.282486 | 0.093809 | NA | NA | NONE | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=iyr.us&d1=20251229&d2=20260128&i=d |
+| VNQ.US_CLOSE | NONE | MOVE | NONE | 90.390000 | 2026-01-27 | 0.000934 | 0.810019 | 80.000000 | 59.523810 | -0.043576 | -1.355932 | -0.033179 | NA | NA | NONE | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=vnq.us&d1=20251229&d2=20260128&i=d |
 
 ## roll25_cache (TW turnover)
 - status: OK
@@ -143,10 +143,10 @@
 - status: OK
 - data_date: 2026-01-28
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.280000
-- spot_sell: 31.380000
-- mid: 31.330000
-- ret1_pct: -0.318167 (from 2026-01-27 to 2026-01-28)
+- spot_buy: 31.275000
+- spot_sell: 31.375000
+- mid: 31.325000
+- ret1_pct: -0.334076 (from 2026-01-27 to 2026-01-28)
 - chg_5d_pct: NA (from None to None)
 - dir: TWD_STRONG
 - fx_signal: NONE
@@ -176,7 +176,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-27, roll25_used_date=2026-01-27, match=true
 
-<!-- rendered_at_utc: 2026-01-28T02:31:58Z -->
+<!-- rendered_at_utc: 2026-01-28T02:37:18Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
