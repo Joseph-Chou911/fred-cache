@@ -1,8 +1,8 @@
 {
   "schema_version": "tw_market_maint_ratio_latest_v1",
-  "script_fingerprint": "fetch_twse_market_maint_ratio_py@v5_loose_margn_fields_match",
-  "generated_at_utc": "2026-01-28T00:07:47Z",
-  "generated_at_local": "2026-01-28T08:07:47.998019+08:00",
+  "script_fingerprint": "fetch_twse_market_maint_ratio_py@v6_guard_short_table_grouping",
+  "generated_at_utc": "2026-01-28T00:12:42Z",
+  "generated_at_local": "2026-01-28T08:12:42.296811+08:00",
   "timezone": "Asia/Taipei",
   "source_urls": {
     "MI_MARGN": "https://www.twse.com.tw/exchangeReport/MI_MARGN",
@@ -33,7 +33,8 @@
     "mi_index_table[2]_title=價格指數(臺灣指數公司)",
     "mi_index_table[2]_fields_preview=指數,收盤指數,漲跌+,漲跌點數,漲跌百分比%,特殊處理註記",
     "total_financing_amount: S3_table[0]:115年01月27日 信用交易統計:data:row_label_match",
-    "fin_shares: table[1]:115年01月27日 融資融券彙總 (全部):ok:code_idx=0,fin_idx=6,fin_score=1",
+    "fin_shares: table[1]:115年01月27日 融資融券彙總 (全部):ok:code_idx=0,fin_idx=6,method=grouped_first_today:g1=2,g2=8",
+    "fin_pick_confident: True",
     "close_prices: table:115年01月27日 每日收盤行情(全部(不含權證、牛熊證)):ok"
   ],
   "error": null
