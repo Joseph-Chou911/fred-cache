@@ -4,8 +4,8 @@
 - 狀態：擴張｜信號：NONE｜資料品質：OK
   - rationale: no rule triggered
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
-- 一致性判定（Margin × Roll25）：NA（原因：ROLL25_MISMATCH）
-  - rationale: roll25 date mismatch => strict same-day match not satisfied
+- 一致性判定（Margin × Roll25）：NA（原因：ROLL25_STALE）
+  - rationale: roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 1) WATCH（升溫）
@@ -41,23 +41,23 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-01-28｜UsedDateStatus: OK_TODAY｜risk_level: NA｜tag: WEEKDAY
-- summary: UsedDate=2026-01-28：Mode=MISSING_OHLC；freshness_ok=True
-- numbers: Close=None, PctChange=None%, TradeValue=850393655366, VolumeMultiplier=1.113129, AmplitudePct=None%, VolMultiplier=1.113129
-- signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=None, ConsecutiveBreak=None, OhlcMissing=True
+- UsedDate: 2026-01-27｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: NA｜tag: WEEKDAY
+- summary: 今日資料未更新；UsedDate=2026-01-27：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
+- numbers: Close=32317.92, PctChange=0.790282%, TradeValue=817604546187, VolumeMultiplier=1.097543, AmplitudePct=1.038812%, VolMultiplier=1.097543
+- signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=0, OhlcMissing=False
 - action: 維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。
 - caveats: Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
 run_day_tag is weekday-only heuristic (not exchange calendar)
-BackfillMonths=1 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
-Mode=MISSING_OHLC | OHLC=MISSING | UsedDate=2026-01-28 | UsedDminus1=2026-01-27
-RunDayTag=WEEKDAY | UsedDateStatus=OK_TODAY
-freshness_ok=True | freshness_age_days=0
+BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
+Mode=FULL | OHLC=OK | UsedDate=2026-01-27 | UsedDminus1=2026-01-26
+RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
+freshness_ok=True | freshness_age_days=1
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-01-28T16:48:13.693559+08:00 (Asia/Taipei)
+- generated_at: 2026-01-28T17:13:25.225951+08:00 (Asia/Taipei)
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -65,7 +65,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
   2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
-- 判定：NA（原因：ROLL25_MISMATCH）（roll25 date mismatch => strict same-day match not satisfied）
+- 判定：NA（原因：ROLL25_STALE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -106,11 +106,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-4 TPEX history rows>=21：✅（PASS）（rows=33）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（UsedDate(2026-01-28) != TWSE(2026-01-27)）
-- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-27) vs TWSE(2026-01-27)）
+- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：⚠️（NOTE）（head5 insufficient (history_rows=1)）
 
-_generated_at_utc: 2026-01-28T09:09:41Z_
+_generated_at_utc: 2026-01-28T09:16:59Z_
