@@ -9,18 +9,25 @@ Key guarantees
 - Δ/Δ% strictly computed from history balance series (not site chg column).
 - 合計 only if (TWSE latest date == TPEX latest date) AND horizon base_date matches.
 - roll25_cache is confirm-only: read repo JSON only; never fetch external data here.
+- maint_ratio (proxy) is display-only: never affects margin_signal.
 - Deterministic Margin × Roll25 resonance classification (no guessing).
 - roll25 lookback inadequacy -> confidence NOTE (does NOT affect margin_quality).
 
 Noise control (this version)
 - roll25 window NOTE appears once only (in Summary).
 - 2.2 does NOT repeat the same window note again.
+
+vX changes (requested)
+- Add optional --maint to display "market maint ratio proxy" (display-only).
+- Surface latest.json top-level fetch_status/confidence/dq_reason into Summary and Audit.
+- If top-level confidence/fetch_status not OK => margin_quality downgraded to PARTIAL (signal unchanged).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -56,15 +63,38 @@ def line_check(name: str, ok: bool, msg: str) -> str:
     return f"- {name}：{yesno(False)}（{msg}）"
 
 
+def _get(d: Any, k: str, default: Any = None) -> Any:
+    return d.get(k, default) if isinstance(d, dict) else default
+
+
+def norm_date_str(d: Any) -> Optional[str]:
+    """
+    Normalize date into YYYY-MM-DD if possible.
+    Accepts:
+      - YYYY-MM-DD
+      - YYYYMMDD
+    Returns None if cannot normalize.
+    """
+    if d is None:
+        return None
+    s = str(d).strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        return s
+    if re.fullmatch(r"\d{8}", s):
+        return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
+    return s if s else None
+
+
 def build_series_from_history(history_items: List[Dict[str, Any]], market: str) -> List[Tuple[str, float]]:
     tmp: Dict[str, float] = {}
     for it in history_items:
         if it.get("market") != market:
             continue
-        d = it.get("data_date")
+        d = norm_date_str(it.get("data_date"))
         b = it.get("balance_yi")
         if d and isinstance(b, (int, float)):
             tmp[str(d)] = float(b)
+    # sort desc by YYYY-MM-DD lexicographic
     return sorted(tmp.items(), key=lambda x: x[0], reverse=True)
 
 
@@ -97,6 +127,12 @@ def total_calc(
     twse_meta_date: Optional[str],
     tpex_meta_date: Optional[str],
 ) -> Dict[str, Any]:
+    """
+    Total (TWSE+TPEX) horizon calc is allowed only if:
+      - TWSE meta_date == TPEX meta_date (latest alignment rule)
+      - Both horizons have base_date and base_date matches
+    Note: meta_date remains the "strict" gate as per your original rules.
+    """
     tw = calc_horizon(twse_s, n)
     tp = calc_horizon(tpex_s, n)
 
@@ -134,7 +170,7 @@ def extract_meta_date(latest_obj: Dict[str, Any], market: str) -> Optional[str]:
     series = latest_obj.get("series") or {}
     meta = series.get(market) or {}
     d = meta.get("data_date")
-    return str(d) if d else None
+    return norm_date_str(d)
 
 
 def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
@@ -173,14 +209,10 @@ def check_head5_strict_desc_unique(dates: List[str]) -> Tuple[bool, str]:
 def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]:
     out: List[Tuple[str, Optional[float]]] = []
     for r in rows[:5]:
-        d = r.get("date")
+        d = norm_date_str(r.get("date")) or "NA"
         b = r.get("balance_yi")
-        out.append((str(d) if d else "NA", float(b) if isinstance(b, (int, float)) else None))
+        out.append((str(d), float(b) if isinstance(b, (int, float)) else None))
     return out
-
-
-def _get(d: Dict[str, Any], k: str, default: Any = None) -> Any:
-    return d.get(k, default) if isinstance(d, dict) else default
 
 
 def load_roll25(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -195,9 +227,23 @@ def load_roll25(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         return None, f"roll25 read failed: {type(e).__name__}: {e}"
 
 
+def load_maint(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not path:
+        return None, "maint path not provided"
+    try:
+        obj = read_json(path)
+        if not isinstance(obj, dict):
+            return None, "maint JSON not an object"
+        return obj, None
+    except FileNotFoundError:
+        return None, f"maint file not found: {path}"
+    except Exception as e:
+        return None, f"maint read failed: {type(e).__name__}: {e}"
+
+
 def roll25_used_date(roll: Dict[str, Any]) -> Optional[str]:
     ud = _get(_get(roll, "numbers", {}), "UsedDate", None)
-    return str(ud) if ud else None
+    return norm_date_str(ud)
 
 
 def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
@@ -309,6 +355,7 @@ def main() -> None:
     ap.add_argument("--history", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--roll25", default="roll25_cache/latest_report.json")
+    ap.add_argument("--maint", default="", help="Optional maint_ratio_latest.json (proxy; display only)")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -316,6 +363,11 @@ def main() -> None:
     items = hist.get("items", []) if isinstance(hist, dict) else []
     if not isinstance(items, list):
         items = []
+
+    # Surface latest top-level quality (if exists)
+    top_fetch_status = str(latest.get("fetch_status") or "NA")
+    top_confidence = str(latest.get("confidence") or "NA")
+    top_dq_reason = str(latest.get("dq_reason") or "NA")
 
     twse_s = build_series_from_history(items, "TWSE")
     tpex_s = build_series_from_history(items, "TPEX")
@@ -329,10 +381,10 @@ def main() -> None:
     twse_src, twse_url = extract_source(latest, "TWSE")
     tpex_src, tpex_url = extract_source(latest, "TPEX")
 
-    twse_head_dates = [str(r.get("date")) for r in twse_rows[:3] if r.get("date")]
-    twse_tail_dates = [str(r.get("date")) for r in twse_rows[-3:] if r.get("date")]
-    tpex_head_dates = [str(r.get("date")) for r in tpex_rows[:3] if r.get("date")]
-    tpex_tail_dates = [str(r.get("date")) for r in tpex_rows[-3:] if r.get("date")]
+    twse_head_dates = [norm_date_str(r.get("date")) for r in twse_rows[:3] if r.get("date")]
+    twse_tail_dates = [norm_date_str(r.get("date")) for r in twse_rows[-3:] if r.get("date")]
+    tpex_head_dates = [norm_date_str(r.get("date")) for r in tpex_rows[:3] if r.get("date")]
+    tpex_tail_dates = [norm_date_str(r.get("date")) for r in tpex_rows[-3:] if r.get("date")]
 
     tw1 = calc_horizon(twse_s, 1)
     tw5 = calc_horizon(twse_s, 5)
@@ -361,10 +413,13 @@ def main() -> None:
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
     c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
-    twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
-    tpex_dates_from_rows = [str(r.get("date")) for r in tpex_rows if r.get("date")]
-    c2_tw_ok, c2_tw_msg = check_head5_strict_desc_unique(twse_dates_from_rows)
-    c2_tp_ok, c2_tp_msg = check_head5_strict_desc_unique(tpex_dates_from_rows)
+    twse_dates_from_rows = [norm_date_str(r.get("date")) for r in twse_rows if r.get("date")]
+    tpex_dates_from_rows = [norm_date_str(r.get("date")) for r in tpex_rows if r.get("date")]
+    twse_dates_from_rows = [d for d in twse_dates_from_rows if d]
+    tpex_dates_from_rows = [d for d in tpex_dates_from_rows if d]
+
+    c2_tw_ok, c2_tw_msg = check_head5_strict_desc_unique([str(d) for d in twse_dates_from_rows])
+    c2_tp_ok, c2_tp_msg = check_head5_strict_desc_unique([str(d) for d in tpex_dates_from_rows])
 
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
         c3_ok = (head5_pairs(twse_rows) != head5_pairs(tpex_rows))
@@ -387,6 +442,11 @@ def main() -> None:
     )
     margin_quality = "PARTIAL" if margin_any_fail else "OK"
 
+    # Additional downgrade based on top-level quality (signal unchanged)
+    top_quality_ok = (top_fetch_status == "OK" and top_confidence == "OK")
+    if not top_quality_ok:
+        margin_quality = "PARTIAL"
+
     # roll25 confirm-only
     roll, roll_err = load_roll25(args.roll25)
     roll_ok = (roll is not None and roll_err is None)
@@ -408,6 +468,10 @@ def main() -> None:
     if strict_roll_match and (c7_lb_ok is False or c7_lb_ok is None):
         roll25_window_note = c7_lb_msg
 
+    # maint (proxy) display-only
+    maint, maint_err = load_maint(args.maint)
+    maint_ok = (maint is not None and maint_err is None)
+
     # render
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
@@ -415,6 +479,7 @@ def main() -> None:
     md.append("## 1) 結論")
     md.append(f"- 狀態：{state_label}｜信號：{margin_signal}｜資料品質：{margin_quality}")
     md.append(f"  - rationale: {rationale}")
+    md.append(f"- 上游資料狀態（latest.json）：confidence={top_confidence}｜fetch_status={top_fetch_status}｜dq_reason={top_dq_reason}")
 
     if resonance_label != "NA":
         md.append(f"- 一致性判定（Margin × Roll25）：{resonance_label}")
@@ -459,6 +524,18 @@ def main() -> None:
         )
     else:
         md.append("- 合計：NA（日期不一致或缺值，依規則不得合計）")
+    md.append("")
+
+    md.append("## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）")
+    md.append(f"- maint_path: {args.maint or 'NA'}")
+    if maint_ok and maint is not None:
+        md.append(f"- data_date: {_get(maint,'data_date','NA')}")
+        md.append(f"- maint_ratio_pct(proxy): {_get(maint,'maint_ratio_pct','NA')}")
+        md.append(f"- confidence: {_get(maint,'confidence','NA')}｜dq_reason: {_get(maint,'dq_reason','NA')}")
+        md.append(f"- included_count: {_get(maint,'included_count','NA')}｜missing_price_count: {_get(maint,'missing_price_count','NA')}")
+        md.append("- note: 此為由公開表格推算之 proxy，口徑可能與外部平台不同；只建議用於趨勢觀察，不建議用絕對值設閾值。")
+    else:
+        md.append(f"- maint_error: {maint_err or 'maint missing'}")
     md.append("")
 
     md.append("## 2.1) 台股成交量/波動（roll25_cache；confirm-only）")
@@ -550,9 +627,12 @@ def main() -> None:
     md.append("- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
     md.append("- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。")
     md.append("- roll25 LookbackNActual 未滿 target 時：只做『信心降級註記』，不改 margin 資料品質。")
+    md.append("- maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。")
+    md.append("- 若 latest.json 顯示 confidence/fetch_status 非 OK：本報告會將 margin_quality 降為 PARTIAL（但不改 signal）。")
     md.append("")
 
-    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25 僅供一致性判定）")
+    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）")
+    md.append(f"- Check-0 latest.json top-level quality OK：{yesno(top_quality_ok)}（confidence={top_confidence}, fetch_status={top_fetch_status}, dq_reason={top_dq_reason}）")
     md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
     md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
     md.append(line_check("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
@@ -569,6 +649,14 @@ def main() -> None:
         md.append(f"- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（{c7_lb_msg}）")
     else:
         md.append("- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）")
+
+    if args.maint:
+        if maint_ok and maint is not None:
+            md.append(f"- Check-8 maint_ratio file readable（info）：✅（OK）（confidence={_get(maint,'confidence','NA')}, dq_reason={_get(maint,'dq_reason','NA')}）")
+        else:
+            md.append(f"- Check-8 maint_ratio file readable（info）：❌（FAIL）（{maint_err or 'maint missing'}）")
+    else:
+        md.append("- Check-8 maint_ratio file readable（info）：⚠️（NOTE）（skipped: --maint not provided）")
     md.append("")
 
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
