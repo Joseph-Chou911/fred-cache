@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-28T02:37:18Z
+- unified_generated_at_utc: 2026-01-28T07:59:21Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -143,10 +143,10 @@
 - status: OK
 - data_date: 2026-01-28
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.275000
-- spot_sell: 31.375000
-- mid: 31.325000
-- ret1_pct: -0.334076 (from 2026-01-27 to 2026-01-28)
+- spot_buy: 31.240000
+- spot_sell: 31.340000
+- mid: 31.290000
+- ret1_pct: -0.445434 (from 2026-01-27 to 2026-01-28)
 - chg_5d_pct: NA (from None to None)
 - dir: TWD_STRONG
 - fx_signal: NONE
@@ -176,7 +176,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-27, roll25_used_date=2026-01-27, match=true
 
-<!-- rendered_at_utc: 2026-01-28T02:37:18Z -->
+<!-- rendered_at_utc: 2026-01-28T07:59:21Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
