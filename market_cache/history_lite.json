@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-01-28T02:34:01Z",
-  "as_of_ts": "2026-01-28T02:34:01Z",
+  "generated_at_utc": "2026-01-28T04:15:06Z",
+  "as_of_ts": "2026-01-28T04:15:06Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "lite_keep_n": 400,
   "series": {
