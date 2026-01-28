@@ -9,24 +9,18 @@ Key guarantees
 - Δ/Δ% strictly computed from history balance series (not site chg column).
 - 合計 only if (TWSE latest date == TPEX latest date) AND horizon base_date matches.
 - roll25_cache is confirm-only: read repo JSON only; never fetch external data here.
-- maint_ratio (proxy) is display-only: never affects margin_signal.
 - Deterministic Margin × Roll25 resonance classification (no guessing).
-- roll25 lookback inadequacy -> confidence NOTE (does NOT affect margin_quality).
+- roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => resonance NA with explicit rationale.
+- maint_ratio is proxy (display-only): read JSON if provided; NEVER used as signal input.
 
 Noise control
 - roll25 window NOTE appears once only (in Summary).
-- 2.2 does NOT repeat the same window note again.
-
-This version fixes
-- Do NOT treat missing latest.json top-level quality fields as FAIL.
-- If roll25 indicates UsedDateStatus=DATA_NOT_UPDATED, show Check-6 as NOTE (stale), not FAIL.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -56,35 +50,14 @@ def yesno(ok: bool) -> str:
     return "✅（OK）" if ok else "❌（FAIL）"
 
 
+def note_tag(msg: str) -> str:
+    return f"⚠️（NOTE）（{msg}）"
+
+
 def line_check(name: str, ok: bool, msg: str) -> str:
     if ok:
         return f"- {name}：{yesno(True)}" if msg == "OK" else f"- {name}：{yesno(True)}（{msg}）"
     return f"- {name}：{yesno(False)}（{msg}）"
-
-
-def line_note(name: str, msg: str) -> str:
-    return f"- {name}：⚠️（NOTE）（{msg}）"
-
-
-def _get(d: Any, k: str, default: Any = None) -> Any:
-    return d.get(k, default) if isinstance(d, dict) else default
-
-
-def norm_date_str(d: Any) -> Optional[str]:
-    """
-    Normalize date into YYYY-MM-DD if possible.
-    Accepts:
-      - YYYY-MM-DD
-      - YYYYMMDD
-    """
-    if d is None:
-        return None
-    s = str(d).strip()
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
-        return s
-    if re.fullmatch(r"\d{8}", s):
-        return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
-    return s if s else None
 
 
 def build_series_from_history(history_items: List[Dict[str, Any]], market: str) -> List[Tuple[str, float]]:
@@ -92,7 +65,7 @@ def build_series_from_history(history_items: List[Dict[str, Any]], market: str) 
     for it in history_items:
         if it.get("market") != market:
             continue
-        d = norm_date_str(it.get("data_date"))
+        d = it.get("data_date")
         b = it.get("balance_yi")
         if d and isinstance(b, (int, float)):
             tmp[str(d)] = float(b)
@@ -132,24 +105,32 @@ def total_calc(
     tp = calc_horizon(tpex_s, n)
 
     if (twse_meta_date is None) or (tpex_meta_date is None) or (twse_meta_date != tpex_meta_date):
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "latest date mismatch/NA"}
+        return {
+            "delta": None, "pct": None, "base_date": None, "latest": None, "base": None,
+            "ok": False, "reason": "latest date mismatch/NA"
+        }
 
     if tw["base_date"] is None or tp["base_date"] is None:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "insufficient history"}
+        return {
+            "delta": None, "pct": None, "base_date": None, "latest": None, "base": None,
+            "ok": False, "reason": "insufficient history"
+        }
 
     if tw["base_date"] != tp["base_date"]:
-        return {"delta": None, "pct": None, "base_date": None, "latest": None, "base": None, "ok": False,
-                "reason": "base_date mismatch"}
+        return {
+            "delta": None, "pct": None, "base_date": None, "latest": None, "base": None,
+            "ok": False, "reason": "base_date mismatch"
+        }
 
     latest_tot = twse_s[0][1] + tpex_s[0][1]
     base_tot = twse_s[n][1] + tpex_s[n][1]
     delta = latest_tot - base_tot
     pct = (delta / base_tot * 100.0) if base_tot != 0 else None
 
-    return {"delta": delta, "pct": pct, "base_date": tw["base_date"], "latest": latest_tot, "base": base_tot,
-            "ok": True, "reason": ""}
+    return {
+        "delta": delta, "pct": pct, "base_date": tw["base_date"], "latest": latest_tot, "base": base_tot,
+        "ok": True, "reason": ""
+    }
 
 
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
@@ -164,7 +145,8 @@ def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[st
 def extract_meta_date(latest_obj: Dict[str, Any], market: str) -> Optional[str]:
     series = latest_obj.get("series") or {}
     meta = series.get(market) or {}
-    return norm_date_str(meta.get("data_date"))
+    d = meta.get("data_date")
+    return str(d) if d else None
 
 
 def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
@@ -203,48 +185,44 @@ def check_head5_strict_desc_unique(dates: List[str]) -> Tuple[bool, str]:
 def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]:
     out: List[Tuple[str, Optional[float]]] = []
     for r in rows[:5]:
-        d = norm_date_str(r.get("date")) or "NA"
+        d = r.get("date")
         b = r.get("balance_yi")
-        out.append((str(d), float(b) if isinstance(b, (int, float)) else None))
+        out.append((str(d) if d else "NA", float(b) if isinstance(b, (int, float)) else None))
     return out
 
 
-def load_roll25(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    try:
-        obj = read_json(path)
-        if not isinstance(obj, dict):
-            return None, "roll25 JSON not an object"
-        return obj, None
-    except FileNotFoundError:
-        return None, f"roll25 file not found: {path}"
-    except Exception as e:
-        return None, f"roll25 read failed: {type(e).__name__}: {e}"
+def _get(d: Dict[str, Any], k: str, default: Any = None) -> Any:
+    return d.get(k, default) if isinstance(d, dict) else default
 
 
-def load_maint(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def load_optional_json(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     if not path:
-        return None, "maint path not provided"
+        return None, "path not provided"
     try:
         obj = read_json(path)
         if not isinstance(obj, dict):
-            return None, "maint JSON not an object"
+            return None, "JSON not an object"
         return obj, None
     except FileNotFoundError:
-        return None, f"maint file not found: {path}"
+        return None, f"file not found: {path}"
     except Exception as e:
-        return None, f"maint read failed: {type(e).__name__}: {e}"
+        return None, f"read failed: {type(e).__name__}: {e}"
 
 
 def roll25_used_date(roll: Dict[str, Any]) -> Optional[str]:
     ud = _get(_get(roll, "numbers", {}), "UsedDate", None)
-    return norm_date_str(ud)
+    return str(ud) if ud else None
 
 
 def roll25_used_date_status(roll: Dict[str, Any]) -> Optional[str]:
-    # your roll25 report keeps this in signal.UsedDateStatus
+    # support both legacy and unified-like layouts
     sig = _get(roll, "signal", {})
     uds = _get(sig, "UsedDateStatus", None)
-    return str(uds) if uds is not None else None
+    if uds:
+        return str(uds)
+    core = _get(roll, "core", {})
+    uds2 = _get(core, "used_date_status", None)
+    return str(uds2) if uds2 else None
 
 
 def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
@@ -330,9 +308,22 @@ def determine_signal(
     return (state, "NONE", "no rule triggered")
 
 
-def determine_resonance(margin_signal: str, roll: Optional[Dict[str, Any]], strict_ok: bool) -> Tuple[str, str]:
-    if roll is None or not strict_ok:
-        return ("NA", "roll25 missing/mismatch => resonance NA (strict)")
+def determine_resonance(
+    margin_signal: str,
+    roll: Optional[Dict[str, Any]],
+    strict_ok: bool,
+    stale_ok: bool,
+    roll_used: Optional[str],
+    twse_meta_date: Optional[str],
+    used_status: Optional[str],
+) -> Tuple[str, str]:
+    # strict_ok means same-day match satisfied
+    if roll is None:
+        return ("NA", "roll25 missing => resonance NA (strict)")
+    if used_status == "DATA_NOT_UPDATED":
+        return ("NA", "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied")
+    if not strict_ok or not stale_ok:
+        return ("NA", f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'}) => resonance NA (strict)")
 
     heated = roll25_is_heated(roll)
     if heated is None:
@@ -350,13 +341,32 @@ def determine_resonance(margin_signal: str, roll: Optional[Dict[str, Any]], stri
     return ("QUIET", "no resonance rule triggered")
 
 
+def parse_maint_proxy(maint: Dict[str, Any]) -> Dict[str, Any]:
+    # keep as display-only, tolerate missing fields
+    return {
+        "schema_version": _get(maint, "schema_version", "NA"),
+        "data_date": _get(maint, "data_date", None),
+        "maint_ratio_pct": _get(maint, "maint_ratio_pct", None),
+        "total_financing_amount_twd": _get(maint, "total_financing_amount_twd", None),
+        "total_collateral_value_twd": _get(maint, "total_collateral_value_twd", None),
+        "included_count": _get(maint, "included_count", None),
+        "missing_price_count": _get(maint, "missing_price_count", None),
+        "fetch_status": _get(maint, "fetch_status", None),
+        "confidence": _get(maint, "confidence", None),
+        "dq_reason": _get(maint, "dq_reason", None),
+        "generated_at_utc": _get(maint, "generated_at_utc", None),
+        "generated_at_local": _get(maint, "generated_at_local", None),
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
     ap.add_argument("--history", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--roll25", default="roll25_cache/latest_report.json")
-    ap.add_argument("--maint", default="", help="Optional maint_ratio_latest.json (proxy; display only)")
+    ap.add_argument("--maint", default="taiwan_margin_cache/maint_ratio_latest.json",
+                    help="Optional maint_ratio_latest.json path (proxy, display-only)")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -364,15 +374,6 @@ def main() -> None:
     items = hist.get("items", []) if isinstance(hist, dict) else []
     if not isinstance(items, list):
         items = []
-
-    # Top-level quality fields may not exist (your current latest.json doesn't have them)
-    has_top_quality_fields = any(k in latest for k in ("fetch_status", "confidence", "dq_reason"))
-    top_fetch_status = str(latest.get("fetch_status") or "NA")
-    top_confidence = str(latest.get("confidence") or "NA")
-    top_dq_reason = str(latest.get("dq_reason") or "NA")
-    top_quality_ok: Optional[bool] = None
-    if has_top_quality_fields:
-        top_quality_ok = (top_fetch_status == "OK" and top_confidence == "OK")
 
     twse_s = build_series_from_history(items, "TWSE")
     tpex_s = build_series_from_history(items, "TPEX")
@@ -386,10 +387,10 @@ def main() -> None:
     twse_src, twse_url = extract_source(latest, "TWSE")
     tpex_src, tpex_url = extract_source(latest, "TPEX")
 
-    twse_head_dates = [norm_date_str(r.get("date")) for r in twse_rows[:3] if r.get("date")]
-    twse_tail_dates = [norm_date_str(r.get("date")) for r in twse_rows[-3:] if r.get("date")]
-    tpex_head_dates = [norm_date_str(r.get("date")) for r in tpex_rows[:3] if r.get("date")]
-    tpex_tail_dates = [norm_date_str(r.get("date")) for r in tpex_rows[-3:] if r.get("date")]
+    twse_head_dates = [str(r.get("date")) for r in twse_rows[:3] if r.get("date")]
+    twse_tail_dates = [str(r.get("date")) for r in twse_rows[-3:] if r.get("date")]
+    tpex_head_dates = [str(r.get("date")) for r in tpex_rows[:3] if r.get("date")]
+    tpex_tail_dates = [str(r.get("date")) for r in tpex_rows[-3:] if r.get("date")]
 
     tw1 = calc_horizon(twse_s, 1)
     tw5 = calc_horizon(twse_s, 5)
@@ -414,17 +415,14 @@ def main() -> None:
         spread20=spread20,
     )
 
-    # margin checks
+    # margin checks (quality)
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
     c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
-    twse_dates_from_rows = [norm_date_str(r.get("date")) for r in twse_rows if r.get("date")]
-    tpex_dates_from_rows = [norm_date_str(r.get("date")) for r in tpex_rows if r.get("date")]
-    twse_dates_from_rows = [d for d in twse_dates_from_rows if d]
-    tpex_dates_from_rows = [d for d in tpex_dates_from_rows if d]
-
-    c2_tw_ok, c2_tw_msg = check_head5_strict_desc_unique([str(d) for d in twse_dates_from_rows])
-    c2_tp_ok, c2_tp_msg = check_head5_strict_desc_unique([str(d) for d in tpex_dates_from_rows])
+    twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
+    tpex_dates_from_rows = [str(r.get("date")) for r in tpex_rows if r.get("date")]
+    c2_tw_ok, c2_tw_msg = check_head5_strict_desc_unique(twse_dates_from_rows)
+    c2_tp_ok, c2_tp_msg = check_head5_strict_desc_unique(tpex_dates_from_rows)
 
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
         c3_ok = (head5_pairs(twse_rows) != head5_pairs(tpex_rows))
@@ -447,52 +445,67 @@ def main() -> None:
     )
     margin_quality = "PARTIAL" if margin_any_fail else "OK"
 
-    # IMPORTANT: only downgrade based on top-level quality if those fields exist
-    if top_quality_ok is False:
-        margin_quality = "PARTIAL"
-
     # roll25 confirm-only
-    roll, roll_err = load_roll25(args.roll25)
+    roll, roll_err = load_optional_json(args.roll25)
     roll_ok = (roll is not None and roll_err is None)
     roll_used = roll25_used_date(roll) if roll else None
     roll_used_status = roll25_used_date_status(roll) if roll else None
     strict_roll_match = bool(roll_ok and twse_meta_date and roll_used and (roll_used == twse_meta_date))
+    stale_ok = (roll_used_status != "DATA_NOT_UPDATED")
 
-    # Check-6 display policy:
-    # - strict match => OK
-    # - if roll indicates DATA_NOT_UPDATED => NOTE (stale) rather than FAIL
-    # - otherwise => FAIL
-    c6_roll_ok = strict_roll_match
-    c6_roll_msg = "OK" if c6_roll_ok else f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'})"
+    c6_roll_ok = strict_roll_match and stale_ok
+    if not roll_ok:
+        c6_roll_msg = f"roll25 missing/read error: {roll_err}"
+    elif roll_used_status == "DATA_NOT_UPDATED":
+        c6_roll_msg = f"roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'})"
+    else:
+        c6_roll_msg = "OK" if c6_roll_ok else f"UsedDate({roll_used or 'NA'}) != TWSE meta_date({twse_meta_date or 'NA'})"
 
     c7_lb_ok: Optional[bool] = None
     c7_lb_msg: str = "roll25 missing"
     if roll_ok and roll is not None:
         c7_lb_ok, c7_lb_msg = roll25_lookback_note(roll, default_target=20)
 
-    resonance_label, resonance_rationale = determine_resonance(margin_signal, roll, strict_roll_match)
+    resonance_label, resonance_rationale = determine_resonance(
+        margin_signal=margin_signal,
+        roll=roll,
+        strict_ok=strict_roll_match,
+        stale_ok=stale_ok,
+        roll_used=roll_used,
+        twse_meta_date=twse_meta_date,
+        used_status=roll_used_status,
+    )
 
     # roll25 window note shown ONCE in Summary only
     roll25_window_note: Optional[str] = None
-    if strict_roll_match and (c7_lb_ok is False or c7_lb_ok is None):
+    if strict_roll_match and stale_ok and (c7_lb_ok is False or c7_lb_ok is None):
         roll25_window_note = c7_lb_msg
 
-    # maint (proxy) display-only
-    maint, maint_err = load_maint(args.maint)
-    maint_ok = (maint is not None and maint_err is None)
+    # maint_ratio proxy (display-only)
+    maint_obj, maint_err = load_optional_json(args.maint)
+    maint_parsed: Optional[Dict[str, Any]] = None
+    if maint_obj is not None and maint_err is None:
+        maint_parsed = parse_maint_proxy(maint_obj)
 
-    # render
+    # upstream latest.json top-level quality (may be absent)
+    top_conf = latest.get("confidence", None)
+    top_fetch = latest.get("fetch_status", None)
+    top_dq = latest.get("dq_reason", None)
+
+    top_quality_line = ""
+    if top_conf is None and top_fetch is None and top_dq is None:
+        top_quality_line = f"- 上游資料狀態（latest.json）：{note_tag('top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL')}"
+    else:
+        top_quality_line = f"- 上游資料狀態（latest.json）：confidence={top_conf or 'NA'}｜fetch_status={top_fetch or 'NA'}｜dq_reason={top_dq or 'NA'}"
+
+    # render markdown
     md: List[str] = []
     md.append("# Taiwan Margin Financing Dashboard")
     md.append("")
     md.append("## 1) 結論")
     md.append(f"- 狀態：{state_label}｜信號：{margin_signal}｜資料品質：{margin_quality}")
     md.append(f"  - rationale: {rationale}")
-
-    if has_top_quality_fields:
-        md.append(f"- 上游資料狀態（latest.json）：confidence={top_confidence}｜fetch_status={top_fetch_status}｜dq_reason={top_dq_reason}")
-    else:
-        md.append("- 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）")
+    md.append(top_quality_line)
 
     if resonance_label != "NA":
         md.append(f"- 一致性判定（Margin × Roll25）：{resonance_label}")
@@ -501,11 +514,7 @@ def main() -> None:
             md.append(f"  - roll25_window_note: {roll25_window_note}")
     else:
         md.append(f"- 一致性判定（Margin × Roll25）：NA")
-        # make the reason more explicit when stale
-        if roll_ok and roll_used_status == "DATA_NOT_UPDATED":
-            md.append("  - rationale: roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied")
-        else:
-            md.append(f"  - rationale: {resonance_rationale}")
+        md.append(f"  - rationale: {resonance_rationale}")
         if roll_err:
             md.append(f"  - roll25_error: {roll_err}")
     md.append("")
@@ -544,15 +553,24 @@ def main() -> None:
     md.append("")
 
     md.append("## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）")
-    md.append(f"- maint_path: {args.maint or 'NA'}")
-    if maint_ok and maint is not None:
-        md.append(f"- data_date: {_get(maint,'data_date','NA')}")
-        md.append(f"- maint_ratio_pct(proxy): {_get(maint,'maint_ratio_pct','NA')}")
-        md.append(f"- confidence: {_get(maint,'confidence','NA')}｜dq_reason: {_get(maint,'dq_reason','NA')}")
-        md.append(f"- included_count: {_get(maint,'included_count','NA')}｜missing_price_count: {_get(maint,'missing_price_count','NA')}")
-        md.append("- note: 此為由公開表格推算之 proxy，口徑可能與外部平台不同；只建議用於趨勢觀察，不建議用絕對值設閾值。")
+    md.append(f"- maint_path: {args.maint if args.maint else 'NA'}")
+    if maint_parsed is None:
+        md.append(f"- maint_error: {maint_err or 'maint not available'}")
     else:
-        md.append(f"- maint_error: {maint_err or 'maint missing'}")
+        md.append(
+            f"- data_date: {maint_parsed.get('data_date') or 'NA'}｜maint_ratio_pct: {maint_parsed.get('maint_ratio_pct') if maint_parsed.get('maint_ratio_pct') is not None else 'NA'}"
+        )
+        md.append(
+            f"- totals: financing_amount_twd={maint_parsed.get('total_financing_amount_twd') or 'NA'}, "
+            f"collateral_value_twd={maint_parsed.get('total_collateral_value_twd') or 'NA'}"
+        )
+        md.append(
+            f"- coverage: included_count={maint_parsed.get('included_count') if maint_parsed.get('included_count') is not None else 'NA'}, "
+            f"missing_price_count={maint_parsed.get('missing_price_count') if maint_parsed.get('missing_price_count') is not None else 'NA'}"
+        )
+        md.append(
+            f"- quality: fetch_status={maint_parsed.get('fetch_status') or 'NA'}, confidence={maint_parsed.get('confidence') or 'NA'}, dq_reason={maint_parsed.get('dq_reason') or 'NA'}"
+        )
     md.append("")
 
     md.append("## 2.1) 台股成交量/波動（roll25_cache；confirm-only）")
@@ -648,11 +666,7 @@ def main() -> None:
     md.append("")
 
     md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）")
-    if has_top_quality_fields:
-        md.append(f"- Check-0 latest.json top-level quality OK：{yesno(bool(top_quality_ok))}（confidence={top_confidence}, fetch_status={top_fetch_status}, dq_reason={top_dq_reason}）")
-    else:
-        md.append(line_note("Check-0 latest.json top-level quality", "field not provided (skip pass/fail)"))
-
+    md.append("- Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）")
     md.append(f"- Check-1 TWSE meta_date==series[0].date：{yesno(c1_tw_ok)}")
     md.append(f"- Check-1 TPEX meta_date==series[0].date：{yesno(c1_tp_ok)}")
     md.append(line_check("Check-2 TWSE head5 dates 嚴格遞減且無重複", c2_tw_ok, c2_tw_msg))
@@ -662,30 +676,24 @@ def main() -> None:
     md.append(line_check("Check-4 TPEX history rows>=21", c4_tp_ok, c4_tp_msg))
     md.append(line_check("Check-5 TWSE 20D base_date 存在於 series", c5_tw_ok, c5_tw_msg))
     md.append(line_check("Check-5 TPEX 20D base_date 存在於 series", c5_tp_ok, c5_tp_msg))
-
-    # Check-6 policy
-    if strict_roll_match:
-        md.append("- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（OK）")
+    if roll_used_status == "DATA_NOT_UPDATED":
+        md.append(f"- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（{c6_roll_msg}）")
     else:
-        if roll_ok and roll_used_status == "DATA_NOT_UPDATED":
-            md.append(line_note("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", f"roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | {c6_roll_msg}"))
-        else:
-            md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", False, f"{c6_roll_msg} or roll25 missing"))
+        md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_roll_ok, c6_roll_msg))
 
-    if strict_roll_match and c7_lb_ok is True:
+    if strict_roll_match and stale_ok and c7_lb_ok is True:
         md.append(f"- Check-7 roll25 Lookback window（info）：✅（OK）（{c7_lb_msg}）")
-    elif strict_roll_match:
+    elif strict_roll_match and stale_ok:
         md.append(f"- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（{c7_lb_msg}）")
+    elif roll_used_status == "DATA_NOT_UPDATED":
+        md.append("- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）")
     else:
         md.append("- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）")
 
-    if args.maint:
-        if maint_ok and maint is not None:
-            md.append(f"- Check-8 maint_ratio file readable（info）：✅（OK）（confidence={_get(maint,'confidence','NA')}, dq_reason={_get(maint,'dq_reason','NA')}）")
-        else:
-            md.append(f"- Check-8 maint_ratio file readable（info）：❌（FAIL）（{maint_err or 'maint missing'}）")
+    if maint_parsed is None:
+        md.append(f"- Check-8 maint_ratio file readable（info）：⚠️（NOTE）（{maint_err or 'maint not available'}）")
     else:
-        md.append("- Check-8 maint_ratio file readable（info）：⚠️（NOTE）（skipped: --maint not provided）")
+        md.append("- Check-8 maint_ratio file readable（info）：✅（OK）")
     md.append("")
 
     md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
