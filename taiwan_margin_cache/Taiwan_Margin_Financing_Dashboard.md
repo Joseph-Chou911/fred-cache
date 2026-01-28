@@ -28,8 +28,11 @@
 - 合計：融資餘額 5161.80 億元｜資料日期 2026-01-27｜來源：TWSE=HiStock / TPEX=HiStock
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
-- maint_path: NA
-- maint_error: maint path not provided
+- maint_path: taiwan_margin_cache/maint_ratio_latest.json
+- data_date: 2026-01-27｜maint_ratio_pct: 185.449854
+- totals: financing_amount_twd=382728015000, collateral_value_twd=709768544330
+- coverage: included_count=1245, missing_price_count=1
+- quality: fetch_status=OK, confidence=OK, dq_reason=NA
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
@@ -57,7 +60,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
   2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
-- 判定：NA（roll25 missing/mismatch => resonance NA (strict)）
+- 判定：NA（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -88,7 +91,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
-- Check-0 latest.json top-level quality：⚠️（NOTE）（field not provided (skip pass/fail)）
+- Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）
 - Check-1 TWSE meta_date==series[0].date：✅（OK）
 - Check-1 TPEX meta_date==series[0].date：✅（OK）
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
@@ -99,7 +102,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-5 TWSE 20D base_date 存在於 series：✅（OK）
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-26) != TWSE meta_date(2026-01-27)）
-- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）
-- Check-8 maint_ratio file readable（info）：⚠️（NOTE）（skipped: --maint not provided）
+- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
+- Check-8 maint_ratio file readable（info）：✅（OK）
 
-_generated_at_utc: 2026-01-28T01:23:39Z_
+_generated_at_utc: 2026-01-28T01:37:07Z_
