@@ -1,8 +1,9 @@
 # Taiwan Margin Financing Dashboard
 
 ## 1) 結論
-- 狀態：擴張｜信號：NONE｜資料品質：OK
+- 狀態：擴張｜信號：NONE｜資料品質：PARTIAL
   - rationale: no rule triggered
+- 上游資料狀態（latest.json）：confidence=NA｜fetch_status=NA｜dq_reason=NA
 - 一致性判定（Margin × Roll25）：NA
   - rationale: roll25 missing/mismatch => resonance NA (strict)
 
@@ -25,6 +26,10 @@
 - 上櫃(TPEX)：融資餘額 1334.50 億元｜資料日期 2026-01-27｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
   - rows=30｜head_dates=['2026-01-27', '2026-01-26', '2026-01-23']｜tail_dates=['2025-12-17', '2025-12-16', '2025-12-15']
 - 合計：融資餘額 5161.80 億元｜資料日期 2026-01-27｜來源：TWSE=HiStock / TPEX=HiStock
+
+## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
+- maint_path: NA
+- maint_error: maint path not provided
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
@@ -80,8 +85,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
 - roll25 LookbackNActual 未滿 target 時：只做『信心降級註記』，不改 margin 資料品質。
+- maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
+- 若 latest.json 顯示 confidence/fetch_status 非 OK：本報告會將 margin_quality 降為 PARTIAL（但不改 signal）。
 
-## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25 僅供一致性判定）
+## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
+- Check-0 latest.json top-level quality OK：❌（FAIL）（confidence=NA, fetch_status=NA, dq_reason=NA）
 - Check-1 TWSE meta_date==series[0].date：✅（OK）
 - Check-1 TPEX meta_date==series[0].date：✅（OK）
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（OK）
@@ -93,5 +101,6 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-5 TPEX 20D base_date 存在於 series：✅（OK）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：❌（FAIL）（UsedDate(2026-01-26) != TWSE meta_date(2026-01-27) or roll25 missing）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 strict mismatch/missing）
+- Check-8 maint_ratio file readable（info）：⚠️（NOTE）（skipped: --maint not provided）
 
-_generated_at_utc: 2026-01-28T00:12:40Z_
+_generated_at_utc: 2026-01-28T01:11:24Z_
