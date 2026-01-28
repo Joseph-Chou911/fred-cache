@@ -1,11 +1,11 @@
 [
   {
     "date": "2026-01-28",
-    "close": null,
+    "close": 32803.82,
     "change": 485.9,
-    "trade_value": 850393655366,
-    "high": null,
-    "low": null
+    "trade_value": 853922428449,
+    "high": 32803.82,
+    "low": 32381.76
   },
   {
     "date": "2026-01-27",
