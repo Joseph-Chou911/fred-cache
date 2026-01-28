@@ -1,12 +1,17 @@
 {
   "schema_version": "taiwan_margin_financing_latest_v1",
-  "generated_at_utc": "2026-01-28T09:16:59Z",
+  "generated_at_utc": "2026-01-28T16:00:39Z",
   "series": {
     "TWSE": {
       "source": "HiStock",
       "source_url": "https://histock.tw/stock/three.aspx?m=mg",
-      "data_date": "2026-01-27",
+      "data_date": "2026-01-28",
       "rows": [
+        {
+          "date": "2026-01-28",
+          "balance_yi": 3849.2,
+          "chg_yi": 21.9
+        },
         {
           "date": "2026-01-27",
           "balance_yi": 3827.3,
@@ -151,16 +156,11 @@
           "date": "2025-12-16",
           "balance_yi": 3287.9,
           "chg_yi": -30.7
-        },
-        {
-          "date": "2025-12-15",
-          "balance_yi": 3318.6,
-          "chg_yi": 25.1
         }
       ],
       "notes": [
         "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-        "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
+        "候選表[0]原始日期樣本：01/28, 01/27, 01/26, 01/23, 01/22",
         "候選表[0]解析rows=30",
         "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
         "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
@@ -172,15 +172,20 @@
         "raw": "億",
         "source": "colname:融資增加(億)"
       },
-      "fetched_at_utc": "2026-01-28T09:16:59Z",
+      "fetched_at_utc": "2026-01-28T16:00:40Z",
       "http_error": null,
       "rows_count": 30
     },
     "TPEX": {
       "source": "HiStock",
       "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-      "data_date": "2026-01-27",
+      "data_date": "2026-01-28",
       "rows": [
+        {
+          "date": "2026-01-28",
+          "balance_yi": 1358.7,
+          "chg_yi": 24.2
+        },
         {
           "date": "2026-01-27",
           "balance_yi": 1334.5,
@@ -325,16 +330,11 @@
           "date": "2025-12-16",
           "balance_yi": 1117.1,
           "chg_yi": -6.4
-        },
-        {
-          "date": "2025-12-15",
-          "balance_yi": 1123.5,
-          "chg_yi": -1.4
         }
       ],
       "notes": [
         "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
-        "候選表[0]原始日期樣本：01/27, 01/26, 01/23, 01/22, 01/21",
+        "候選表[0]原始日期樣本：01/28, 01/27, 01/26, 01/23, 01/22",
         "候選表[0]解析rows=30",
         "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
         "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
@@ -346,7 +346,7 @@
         "raw": "億",
         "source": "colname:融資增加(億)"
       },
-      "fetched_at_utc": "2026-01-28T09:16:59Z",
+      "fetched_at_utc": "2026-01-28T16:00:40Z",
       "http_error": null,
       "rows_count": 30
     }
