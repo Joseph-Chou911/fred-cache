@@ -4,7 +4,7 @@
 - 狀態：擴張｜信號：NONE｜資料品質：OK
   - rationale: no rule triggered
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
-- 一致性判定（Margin × Roll25）：NA
+- 一致性判定（Margin × Roll25）：NA（原因：ROLL25_STALE）
   - rationale: roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
@@ -65,7 +65,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
   2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
-- 判定：NA（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied）
+- 判定：NA（原因：ROLL25_STALE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -108,9 +108,9 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-26) vs TWSE(2026-01-27)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
-- Check-8 maint_ratio latest readable（info）：✅（PASS）
-- Check-9 maint_ratio history readable（info）：✅（PASS）
-- Check-10 maint latest vs history[0] date（info）：✅（PASS）
+- Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
+- Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
+- Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：⚠️（NOTE）（head5 insufficient (history_rows=1)）
 
-_generated_at_utc: 2026-01-28T02:15:47Z_
+_generated_at_utc: 2026-01-28T02:27:37Z_
