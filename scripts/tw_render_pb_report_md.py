@@ -5,10 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
-
-TZ = "Asia/Taipei"
 
 
 def _read(path: str):
@@ -25,40 +21,30 @@ def main():
 
     latest = _read(args.latest)
     stats = _read(args.stats)
-
-    now_local = datetime.now(ZoneInfo(TZ))
-    now_utc = now_local.astimezone(timezone.utc)
+    p = stats.get("pbr", {})
 
     lines = []
-    lines.append("# TW PB Sidecar Report (TAIEX P/B)")
+    lines.append("# TW PB Sidecar Report (TAIEX P/B, MONTHLY)")
     lines.append("")
     lines.append("## 1) Summary")
-    lines.append(f"- generated_at_utc: `{now_utc.replace(microsecond=0).isoformat().replace('+00:00','Z')}`")
-    lines.append(f"- generated_at_local: `{now_local.isoformat()}`")
-    lines.append(f"- timezone: `{TZ}`")
     lines.append(f"- source_vendor: `{latest.get('source_vendor')}` (THIRD_PARTY)")
     lines.append(f"- source_url: `{latest.get('source_url')}`")
     lines.append(f"- fetch_status: `{latest.get('fetch_status')}` / confidence: `{latest.get('confidence')}` / dq_reason: `{latest.get('dq_reason')}`")
-    lines.append(f"- data_date: `{latest.get('data_date')}` data_time_local: `{latest.get('data_time_local')}`")
+    lines.append(f"- freq: `{latest.get('freq')}`")
+    lines.append(f"- period_ym: `{latest.get('period_ym')}` / data_date: `{latest.get('data_date')}`")
+    lines.append(f"- series_len: `{latest.get('series_len')}`")
     lines.append("")
-    lines.append("## 2) Latest Values")
+    lines.append("## 2) Latest (from monthly table)")
     lines.append(f"- PBR: `{latest.get('pbr')}`")
-    lines.append(f"- PER: `{latest.get('per')}`")
-    lines.append(f"- Dividend Yield (%): `{latest.get('dividend_yield_pct')}`")
+    lines.append(f"- Monthly Close: `{latest.get('monthly_close')}`")
     lines.append("")
     lines.append("## 3) Stats (z / percentile)")
+    lines.append(f"- z60: `{p.get('z60')}` / p60: `{p.get('p60')}` / na_reason_60: `{p.get('na_reason_60')}`")
+    lines.append(f"- z252: `{p.get('z252')}` / p252: `{p.get('p252')}` / na_reason_252: `{p.get('na_reason_252')}`")
     lines.append("")
-    for k in ["pbr", "per", "dividend_yield_pct"]:
-        obj = stats.get(k, {})
-        lines.append(f"### {k}")
-        lines.append(f"- value: `{obj.get('value')}`")
-        lines.append(f"- z60: `{obj.get('z60')}` / p60: `{obj.get('p60')}` / na_reason_60: `{obj.get('na_reason_60')}`")
-        lines.append(f"- z252: `{obj.get('z252')}` / p252: `{obj.get('p252')}` / na_reason_252: `{obj.get('na_reason_252')}`")
-        lines.append("")
-
     lines.append("## 4) Caveats")
-    lines.append("- THIRD_PARTY aggregated source; HTML structure may change => parse failure possible.")
-    lines.append("- Windows are observation-count based; schedule determines effective frequency.")
+    lines.append("- This module uses the MONTHLY river table series for stats; intraday values are not used for z/p.")
+    lines.append("- z252/p252 will remain NA until >=252 monthly observations exist (likely unavailable with current public table).")
     lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as f:
