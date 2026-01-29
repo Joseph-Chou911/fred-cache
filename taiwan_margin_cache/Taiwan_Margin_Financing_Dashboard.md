@@ -44,7 +44,7 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-01-28｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 低(derived)｜risk_level_raw: NA｜tag: WEEKDAY
+- UsedDate: 2026-01-28｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 低(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
 - summary: 今日資料未更新；UsedDate=2026-01-28：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 - numbers: Close=32803.82, PctChange=1.5035%, TradeValue=853922428449, VolumeMultiplier=1.11749, AmplitudePct=1.305963%, VolMultiplier=1.11749
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=0, OhlcMissing=False
@@ -98,7 +98,8 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
-- resonance_policy=latest：若 roll25 stale 或 date mismatch，仍使用最新可用資料判定，但標示 resonance_confidence=DOWNGRADED。
+- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
+- resonance_policy=latest：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。
 - maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
@@ -113,10 +114,10 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-28) == TWSE(2026-01-28)）
-- Check-7 roll25 Lookback window（info）：✅（PASS）（LookbackNActual=20/20（OK））
+- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-01-29T01:46:43Z_
+_generated_at_utc: 2026-01-29T01:56:27Z_
