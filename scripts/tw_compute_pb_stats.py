@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Compute z60/p60 and z252/p252 for PBR (and PER/Yield, optional).
-
-Inputs:
-- tw_pb_cache/history.json
-- tw_pb_cache/latest.json
-
-Output:
-- tw_pb_cache/stats_latest.json
-
-Rules:
-- If insufficient history => stats fields are NA with reason.
-- Windows are N=60 and N=252 observations (not necessarily trading days; depends on update frequency).
-"""
 
 from __future__ import annotations
 
@@ -71,19 +57,14 @@ def _percentile_leq(xs: List[float], x: float) -> float:
 
 def _calc_window(values: List[float], n: int) -> Tuple[Optional[float], Optional[float], Optional[str]]:
     if len(values) < n:
-        return None, None, f"insufficient_history:{len(values)}/{n}"
+        return None, None, f"INSUFFICIENT_HISTORY:{len(values)}/{n}"
     w = values[-n:]
     x = w[-1]
     mu = _mean(w)
     sd = _std_pop(w, mu)
     if sd == 0:
-        z = 0.0
-        reason = "std_zero"
-    else:
-        z = (x - mu) / sd
-        reason = None
-    p = _percentile_leq(w, x)
-    return z, p, reason
+        return 0.0, _percentile_leq(w, x), "STD_ZERO"
+    return (x - mu) / sd, _percentile_leq(w, x), None
 
 
 def main() -> None:
@@ -92,61 +73,33 @@ def main() -> None:
     latest = _read_json(IN_LATEST, default={})
 
     pbr_series = [r["pbr"] for r in hist if isinstance(r.get("pbr"), (int, float))]
-    per_series = [r["per"] for r in hist if isinstance(r.get("per"), (int, float))]
-    yld_series = [r["dividend_yield_pct"] for r in hist if isinstance(r.get("dividend_yield_pct"), (int, float))]
 
-    z60_pbr, p60_pbr, r60_pbr = _calc_window(pbr_series, 60)
-    z252_pbr, p252_pbr, r252_pbr = _calc_window(pbr_series, 252)
-
-    z60_per, p60_per, r60_per = _calc_window(per_series, 60)
-    z252_per, p252_per, r252_per = _calc_window(per_series, 252)
-
-    z60_y, p60_y, r60_y = _calc_window(yld_series, 60)
-    z252_y, p252_y, r252_y = _calc_window(yld_series, 252)
+    z60, p60, r60 = _calc_window(pbr_series, 60)
+    z252, p252, r252 = _calc_window(pbr_series, 252)
 
     out = {
-        "schema_version": "tw_pb_sidecar_stats_latest_v1",
-        "script_fingerprint": "tw_compute_pb_stats_py@v1",
+        "schema_version": "tw_pb_sidecar_stats_latest_v2",
+        "script_fingerprint": "tw_compute_pb_stats_py@v2_pbr_only",
         **meta,
         "source_vendor": latest.get("source_vendor"),
         "source_url": latest.get("source_url"),
+        "freq": latest.get("freq"),
         "data_date": latest.get("data_date"),
+        "period_ym": latest.get("period_ym"),
         "fetch_status": latest.get("fetch_status"),
         "confidence": latest.get("confidence"),
         "dq_reason": latest.get("dq_reason"),
-        "series_len": {
-            "pbr": len(pbr_series),
-            "per": len(per_series),
-            "dividend_yield_pct": len(yld_series),
-        },
+        "series_len": len(pbr_series),
         "pbr": {
             "value": latest.get("pbr"),
-            "z60": z60_pbr,
-            "p60": p60_pbr,
-            "z252": z252_pbr,
-            "p252": p252_pbr,
-            "na_reason_60": r60_pbr,
-            "na_reason_252": r252_pbr,
+            "z60": z60,
+            "p60": p60,
+            "z252": z252,
+            "p252": p252,
+            "na_reason_60": r60,
+            "na_reason_252": r252,
         },
-        "per": {
-            "value": latest.get("per"),
-            "z60": z60_per,
-            "p60": p60_per,
-            "z252": z252_per,
-            "p252": p252_per,
-            "na_reason_60": r60_per,
-            "na_reason_252": r252_per,
-        },
-        "dividend_yield_pct": {
-            "value": latest.get("dividend_yield_pct"),
-            "z60": z60_y,
-            "p60": p60_y,
-            "z252": z252_y,
-            "p252": p252_y,
-            "na_reason_60": r60_y,
-            "na_reason_252": r252_y,
-        },
-        "notes": "Windows are observation-count based (60/252 points). Frequency depends on workflow schedule.",
+        "notes": "MONTHLY series. z/p windows are observation-count based. Expect z252/p252 to be NA until >=252 monthly points exist.",
     }
 
     _write_json(OUT_STATS, out)
