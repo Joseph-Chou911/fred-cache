@@ -1,13 +1,13 @@
 {
   "schema_version": "stats_latest_v1",
-  "generated_at_utc": "2026-01-28T23:41:35Z",
-  "as_of_ts": "2026-01-29T07:41:31+08:00",
+  "generated_at_utc": "2026-01-29T04:57:50Z",
+  "as_of_ts": "2026-01-29T12:57:46+08:00",
   "script_version": "cycle_sidecars_stats_v1",
   "series_count": 2,
   "series": {
     "DFII10": {
       "latest": {
-        "as_of_ts": "2026-01-29T07:41:31+08:00",
+        "as_of_ts": "2026-01-29T12:57:46+08:00",
         "data_date": "2026-01-27",
         "value": 1.9,
         "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
@@ -34,7 +34,7 @@
     },
     "T10YIE": {
       "latest": {
-        "as_of_ts": "2026-01-29T07:41:31+08:00",
+        "as_of_ts": "2026-01-29T12:57:46+08:00",
         "data_date": "2026-01-28",
         "value": 2.36,
         "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
