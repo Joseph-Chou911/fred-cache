@@ -1,18 +1,17 @@
 {
-  "confidence": "OK",
-  "data_date": null,
-  "dq_reason": null,
-  "endpoint": "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK",
-  "fetch_status": "OK",
-  "generated_at_local": "2026-01-29T20:03:39+08:00",
-  "generated_at_utc": "2026-01-29T12:03:39+00:00",
-  "latest": {
-    "close": 32536.27,
-    "date": "2026-01-29",
-    "pbr": null
-  },
   "schema_version": "tw_pb_latest_v1",
-  "source_policy": "RWD_JSON",
-  "source_vendor": "twse",
-  "timezone": "Asia/Taipei"
+  "script_fingerprint": "update_tw_pb_sidecar_py@v1",
+  "generated_at_utc": "2026-01-29T12:34:26Z",
+  "generated_at_local": "2026-01-29T20:34:26.766746+08:00",
+  "timezone": "Asia/Taipei",
+  "source_vendor": "statementdog",
+  "source_class": "THIRD_PARTY",
+  "source_url": "https://statementdog.com/taiex",
+  "fetch_status": "DOWNGRADED",
+  "confidence": "DOWNGRADED",
+  "dq_reason": "parse_failed_or_missing_fields",
+  "data_date": "2026-01-29",
+  "close": null,
+  "pbr": null,
+  "notes": []
 }
