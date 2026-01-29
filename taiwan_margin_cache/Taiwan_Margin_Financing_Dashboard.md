@@ -24,27 +24,27 @@
 - 行動：代表短線槓桿加速結束，回到『擴張但不加速』。
 
 ## 2) 資料
-- 上市(TWSE)：融資餘額 3849.20 億元｜資料日期 2026-01-28｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows=30｜head_dates=['2026-01-28', '2026-01-27', '2026-01-26']｜tail_dates=['2025-12-18', '2025-12-17', '2025-12-16']
-- 上櫃(TPEX)：融資餘額 1358.70 億元｜資料日期 2026-01-28｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows=30｜head_dates=['2026-01-28', '2026-01-27', '2026-01-26']｜tail_dates=['2025-12-18', '2025-12-17', '2025-12-16']
-- 合計：融資餘額 5207.90 億元｜資料日期 2026-01-28｜來源：TWSE=HiStock / TPEX=HiStock
+- 上市(TWSE)：融資餘額 3817.80 億元｜資料日期 2026-01-29｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+  - rows=30｜head_dates=['2026-01-29', '2026-01-28', '2026-01-27']｜tail_dates=['2025-12-19', '2025-12-18', '2025-12-17']
+- 上櫃(TPEX)：融資餘額 1347.70 億元｜資料日期 2026-01-29｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+  - rows=30｜head_dates=['2026-01-29', '2026-01-28', '2026-01-27']｜tail_dates=['2025-12-19', '2025-12-18', '2025-12-17']
+- 合計：融資餘額 5165.50 億元｜資料日期 2026-01-29｜來源：TWSE=HiStock / TPEX=HiStock
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
 - maint_path: taiwan_margin_cache/maint_ratio_latest.json
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED
-- data_date: 2026-01-28｜maint_ratio_pct: 188.131701
-- maint_ratio_1d_delta_pctpt: 2.681847｜maint_ratio_1d_pct_change: 1.446131
-- maint_ratio_trend_note: trend_from: today=188.131701(2026-01-28), prev=185.449854(2026-01-27)
-- totals: financing_amount_twd=384920473000, collateral_value_twd=724157432230
-- coverage: included_count=1245, missing_price_count=1
+- data_date: 2026-01-29｜maint_ratio_pct: 185.890277
+- maint_ratio_1d_delta_pctpt: -2.241424｜maint_ratio_1d_pct_change: -1.191412
+- maint_ratio_trend_note: trend_from: today=185.890277(2026-01-29), prev=188.131701(2026-01-28)
+- totals: financing_amount_twd=381778070000, collateral_value_twd=709688311330
+- coverage: included_count=1244, missing_price_count=2
 - quality: fetch_status=OK, confidence=OK, dq_reason=
 
 ## 2.0.1) 大盤融資維持率（history；display-only）
 - maint_hist_path: taiwan_margin_cache/maint_ratio_history.json
-- history_rows: 2
-- head5: [('2026-01-28', 188.131701), ('2026-01-27', 185.449854)]
+- history_rows: 3
+- head5: [('2026-01-29', 185.890277), ('2026-01-28', 188.131701), ('2026-01-27', 185.449854)]
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
@@ -64,7 +64,7 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-01-29T18:54:23.083920+08:00 (Asia/Taipei)
+- generated_at: 2026-01-29T22:34:32.879510+08:00 (Asia/Taipei)
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -79,23 +79,23 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
-- 1D：Δ=21.90 億元；Δ%=0.5722 %｜latest=3849.20｜base=3827.30（基期日=2026-01-27）
-- 5D：Δ=171.70 億元；Δ%=4.6689 %｜latest=3849.20｜base=3677.50（基期日=2026-01-21）
-- 20D：Δ=435.50 億元；Δ%=12.7574 %｜latest=3849.20｜base=3413.70（基期日=2025-12-30）
+- 1D：Δ=-31.40 億元；Δ%=-0.8158 %｜latest=3817.80｜base=3849.20（基期日=2026-01-28）
+- 5D：Δ=100.50 億元；Δ%=2.7036 %｜latest=3817.80｜base=3717.30（基期日=2026-01-22）
+- 20D：Δ=383.70 億元；Δ%=11.1732 %｜latest=3817.80｜base=3434.10（基期日=2025-12-31）
 
 ### 上櫃(TPEX)
-- 1D：Δ=24.20 億元；Δ%=1.8134 %｜latest=1358.70｜base=1334.50（基期日=2026-01-27）
-- 5D：Δ=66.90 億元；Δ%=5.1788 %｜latest=1358.70｜base=1291.80（基期日=2026-01-21）
-- 20D：Δ=192.60 億元；Δ%=16.5166 %｜latest=1358.70｜base=1166.10（基期日=2025-12-30）
+- 1D：Δ=-11.00 億元；Δ%=-0.8096 %｜latest=1347.70｜base=1358.70（基期日=2026-01-28）
+- 5D：Δ=46.30 億元；Δ%=3.5577 %｜latest=1347.70｜base=1301.40（基期日=2026-01-22）
+- 20D：Δ=172.50 億元；Δ%=14.6784 %｜latest=1347.70｜base=1175.20（基期日=2025-12-31）
 
 ### 合計(上市+上櫃)
-- 1D：Δ=46.10 億元；Δ%=0.8931 %｜latest=5207.90｜base=5161.80（基期日=2026-01-27）
-- 5D：Δ=238.60 億元；Δ%=4.8015 %｜latest=5207.90｜base=4969.30（基期日=2026-01-21）
-- 20D：Δ=628.10 億元；Δ%=13.7146 %｜latest=5207.90｜base=4579.80（基期日=2025-12-30）
+- 1D：Δ=-42.40 億元；Δ%=-0.8141 %｜latest=5165.50｜base=5207.90（基期日=2026-01-28）
+- 5D：Δ=146.80 億元；Δ%=2.9251 %｜latest=5165.50｜base=5018.70（基期日=2026-01-22）
+- 20D：Δ=556.20 億元；Δ%=12.0669 %｜latest=5165.50｜base=4609.30（基期日=2025-12-31）
 
 ## 4) 提前示警輔助指標（不引入外部資料）
-- Accel = 1D% - (5D%/5)：-0.0672
-- Spread20 = TPEX_20D% - TWSE_20D%：3.7592
+- Accel = 1D% - (5D%/5)：-1.3992
+- Spread20 = TPEX_20D% - TWSE_20D%：3.5051
 
 ## 5) 稽核備註
 - 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。
@@ -113,15 +113,15 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（PASS）
-- Check-4 TWSE history rows>=21：✅（PASS）（rows=34）
-- Check-4 TPEX history rows>=21：✅（PASS）（rows=34）
+- Check-4 TWSE history rows>=21：✅（PASS）（rows=35）
+- Check-4 TPEX history rows>=21：✅（PASS）（rows=35）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-28) == TWSE(2026-01-28)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-28) vs TWSE(2026-01-29)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-01-29T10:56:20Z_
+_generated_at_utc: 2026-01-29T14:35:11Z_
