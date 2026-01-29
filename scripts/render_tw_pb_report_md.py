@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def read_json(path: str) -> Any:
@@ -56,9 +56,10 @@ def main() -> None:
 
     caveats = [
         "## 4) Caveats",
-        "- This module stores a DAILY time series by appending the page's latest PBR into history.json on each successful run.",
+        "- History builds forward only (NO historical backfill; NO inferred dates).",
+        "- This module appends the page's latest PBR into history.json on each successful run.",
         "- z/p requires enough observations; NA is expected until the history grows (no guessing).",
-        "- Data source is third-party (StatementDog). Treat absolute thresholds cautiously; definition may differ from other vendors.",
+        "- Data source is third-party. Treat absolute thresholds cautiously; definition may differ from other vendors.",
         "",
     ]
 
