@@ -32,7 +32,11 @@
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
 - maint_path: taiwan_margin_cache/maint_ratio_latest.json
+- maint_ratio_policy: PROXY_TREND_ONLY
+- maint_ratio_confidence: DOWNGRADED
 - data_date: 2026-01-28｜maint_ratio_pct: 188.131701
+- maint_ratio_1d_delta_pctpt: 2.681847｜maint_ratio_1d_pct_change: 1.446131
+- maint_ratio_trend_note: trend_from: today=188.131701(2026-01-28), prev=185.449854(2026-01-27)
 - totals: financing_amount_twd=384920473000, collateral_value_twd=724157432230
 - coverage: included_count=1245, missing_price_count=1
 - quality: fetch_status=OK, confidence=OK, dq_reason=
@@ -100,7 +104,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
 - roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
 - resonance_policy=latest：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。
-- maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
+- maint_ratio 為 proxy（display-only）：僅看趨勢與變化（Δ），不得用 proxy 絕對水位做門檻判斷。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
 - Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）
@@ -120,4 +124,4 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-01-29T01:56:27Z_
+_generated_at_utc: 2026-01-29T02:50:05Z_
