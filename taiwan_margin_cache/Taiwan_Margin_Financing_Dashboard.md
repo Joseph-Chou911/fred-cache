@@ -4,8 +4,11 @@
 - 狀態：擴張｜信號：WATCH｜資料品質：OK
   - rationale: 20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
-- 一致性判定（Margin × Roll25）：NA（原因：ROLL25_STALE）
-  - rationale: roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied
+- 一致性判定（Margin × Roll25）：DIVERGENCE
+  - rationale: Margin(WATCH/ALERT) but roll25 not heated
+  - resonance_policy: latest
+  - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
+  - resonance_confidence: DOWNGRADED
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 1) WATCH（升溫）
@@ -43,7 +46,7 @@
 - roll25_path: roll25_cache/latest_report.json
 - UsedDate: 2026-01-28｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: NA｜tag: WEEKDAY
 - summary: 今日資料未更新；UsedDate=2026-01-28：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
-- numbers: Close=32803.82, PctChange=1.5035%, TradeValue=853922428449, VolumeMultiplier=1.11749, AmplitudePct=1.305963%, VolMultiplier=1.11749
+- numbers: Close=32803.82, PctChange=1.5035%, TradeValue=853922428449, VolumeMultiplier=1.11749, AmplitudePct=1.305963%, VolMultiplier=1.11749, VolMultiplier20=NA
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=0, OhlcMissing=False
 - action: 維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。
 - caveats: Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
@@ -65,7 +68,9 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
   2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
-- 判定：NA（原因：ROLL25_STALE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) => strict same-day match not satisfied）
+- 判定：DIVERGENCE（Margin(WATCH/ALERT) but roll25 not heated）
+- resonance_confidence: DOWNGRADED
+- resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -93,6 +98,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
 - roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
+- resonance_policy=latest：若 roll25 stale 但日期對齊，仍可判定共振/背離，但會標示 resonance_confidence=DOWNGRADED。
 - maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
@@ -106,11 +112,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-4 TPEX history rows>=21：✅（PASS）（rows=34）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-28) vs TWSE(2026-01-28)）
-- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-28) == TWSE(2026-01-28)）
+- Check-7 roll25 Lookback window（info）：✅（PASS）（LookbackNActual=20/20（OK））
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-01-29T00:14:21Z_
+_generated_at_utc: 2026-01-29T01:34:20Z_
