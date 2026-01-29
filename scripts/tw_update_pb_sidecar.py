@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-tw_pb_cache sidecar (Wantgoo, TAIEX/0000):
+TW PB sidecar (monthly PBR history from WantGoo "price-book-river" page)
 
-- Fetch: PBR / PER / Dividend Yield for Taiwan TAIEX index (0000) from Wantgoo page
-- Output:
-  - tw_pb_cache/latest.json
-  - tw_pb_cache/history.json  (upsert by data_date)
-- Strict / audit:
-  - If fetch/parse fails => latest.json marked DOWNGRADED, history NOT modified
-  - Keep source_url, generated_at_utc/local, timezone, dq_reason
+Source:
+- https://www.wantgoo.com/index/0000/price-book-river
 
-NOTE:
-- THIRD_PARTY aggregated source (wantgoo). Treat as estimate/vendor aggregated.
+Behavior:
+- Download full visible monthly table (YYYY/MM pbr ... monthly_close)
+- Write:
+  - tw_pb_cache/history.json  (rebuild from parsed table; sorted asc; unique by period)
+  - tw_pb_cache/latest.json   (latest_month = most recent period row)
+- Strict:
+  - If fetch/parse fails => latest.json DOWNGRADED; history.json kept as-is (do NOT overwrite)
+- Note:
+  - The page also shows an intraday PBR at top; we treat this module as "monthly series" for stats.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import requests
@@ -33,77 +35,28 @@ UA = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-SOURCE_URL = "https://www.wantgoo.com/index/0000/price-to-earning-river"
+SOURCE_URL = "https://www.wantgoo.com/index/0000/price-book-river"
 
 OUT_LATEST = "tw_pb_cache/latest.json"
 OUT_HISTORY = "tw_pb_cache/history.json"
 
 
 @dataclass
-class FetchResult:
+class Result:
     fetch_status: str  # OK / DOWNGRADED
     confidence: str    # OK / DOWNGRADED
     dq_reason: Optional[str]
-    data_date: Optional[str]         # YYYY-MM-DD
-    data_time_local: Optional[str]   # HH:MM
-    per: Optional[float]
-    dividend_yield: Optional[float]
-    pbr: Optional[float]
+    rows: List[Dict[str, Any]]  # monthly rows (asc)
 
 
-def _now(ts_tz: str) -> Dict[str, str]:
-    tzinfo = ZoneInfo(ts_tz)
-    now_local = datetime.now(tzinfo)
+def _now() -> Dict[str, str]:
+    now_local = datetime.now(ZoneInfo(TZ))
     now_utc = now_local.astimezone(timezone.utc)
     return {
         "generated_at_utc": now_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "generated_at_local": now_local.isoformat(),
-        "timezone": ts_tz,
+        "timezone": TZ,
     }
-
-
-def _safe_float(x: str) -> Optional[float]:
-    try:
-        return float(x)
-    except Exception:
-        return None
-
-
-def fetch_wantgoo() -> FetchResult:
-    try:
-        resp = requests.get(
-            SOURCE_URL,
-            headers={"User-Agent": UA, "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8"},
-            timeout=20,
-        )
-        if resp.status_code != 200:
-            return FetchResult("DOWNGRADED", "DOWNGRADED", f"http_{resp.status_code}", None, None, None, None, None)
-
-        html = resp.text
-
-        # Parse snippet like:
-        # "0000 2026-01-29 13:30 ... 本益比23.22 ... 殖利率2.36 ... 股淨比3.03"
-        m_dt = re.search(r"\b0000\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\b", html)
-        m_per = re.search(r"本益比\s*([0-9]+(?:\.[0-9]+)?)", html)
-        m_yld = re.search(r"殖利率\s*([0-9]+(?:\.[0-9]+)?)", html)
-        m_pbr = re.search(r"股淨比\s*([0-9]+(?:\.[0-9]+)?)", html)
-
-        if not (m_dt and m_per and m_yld and m_pbr):
-            return FetchResult("DOWNGRADED", "DOWNGRADED", "parse_failed", None, None, None, None, None)
-
-        data_date = m_dt.group(1)
-        data_time_local = m_dt.group(2)
-        per = _safe_float(m_per.group(1))
-        dividend_yield = _safe_float(m_yld.group(1))
-        pbr = _safe_float(m_pbr.group(1))
-
-        if per is None or dividend_yield is None or pbr is None:
-            return FetchResult("DOWNGRADED", "DOWNGRADED", "numeric_cast_failed", None, None, None, None, None)
-
-        return FetchResult("OK", "OK", None, data_date, data_time_local, per, dividend_yield, pbr)
-
-    except Exception as e:
-        return FetchResult("DOWNGRADED", "DOWNGRADED", f"exception:{type(e).__name__}", None, None, None, None, None)
 
 
 def _read_json(path: str, default: Any) -> Any:
@@ -119,58 +72,122 @@ def _write_json(path: str, obj: Any) -> None:
         json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=True)
 
 
-def upsert_history(history: List[Dict[str, Any]], row: Dict[str, Any]) -> List[Dict[str, Any]]:
-    dd = row.get("data_date")
-    if not dd:
-        return history
+def _safe_float(s: str) -> Optional[float]:
+    try:
+        return float(s)
+    except Exception:
+        return None
 
-    by_date: Dict[str, Dict[str, Any]] = {r.get("data_date"): r for r in history if r.get("data_date")}
-    by_date[dd] = row
-    out = list(by_date.values())
-    out.sort(key=lambda r: r["data_date"])
-    return out
+
+def _ym_to_date(ym: str) -> str:
+    # YYYY/MM -> YYYY-MM-01 (monthly series anchor)
+    y, m = ym.split("/")
+    return f"{y}-{m}-01"
+
+
+def fetch_and_parse() -> Result:
+    try:
+        r = requests.get(
+            SOURCE_URL,
+            headers={"User-Agent": UA, "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8"},
+            timeout=25,
+        )
+        if r.status_code != 200:
+            return Result("DOWNGRADED", "DOWNGRADED", f"http_{r.status_code}", [])
+
+        html = r.text
+
+        # Lines like:
+        # 2025/12 3.03 4779.47 ... 28963.60
+        # We capture:
+        # - period (YYYY/MM)
+        # - pbr (2nd column)
+        # - monthly_close (last column)
+        pattern = re.compile(
+            r"\b(\d{4}/\d{2})\s+([0-9]+(?:\.[0-9]+)?)\s+"
+            r"(?:[0-9]+(?:\.[0-9]+)?\s+){6}"  # 0.5x..3x columns
+            r"([0-9]+(?:\.[0-9]+)?)\b"        # monthly close (last)
+        )
+
+        matches = pattern.findall(html)
+        if not matches:
+            return Result("DOWNGRADED", "DOWNGRADED", "parse_failed_no_rows", [])
+
+        tmp: Dict[str, Dict[str, Any]] = {}
+        for ym, pbr_s, close_s in matches:
+            pbr = _safe_float(pbr_s)
+            close = _safe_float(close_s)
+            if pbr is None or close is None:
+                continue
+            tmp[ym] = {
+                "period_ym": ym,
+                "data_date": _ym_to_date(ym),
+                "pbr": pbr,
+                "monthly_close": close,
+                "source_vendor": "wantgoo",
+                "source_url": SOURCE_URL,
+                "freq": "MONTHLY",
+            }
+
+        if not tmp:
+            return Result("DOWNGRADED", "DOWNGRADED", "parse_failed_all_rows_invalid", [])
+
+        rows = list(tmp.values())
+        rows.sort(key=lambda x: x["period_ym"])  # asc
+        return Result("OK", "OK", None, rows)
+
+    except Exception as e:
+        return Result("DOWNGRADED", "DOWNGRADED", f"exception:{type(e).__name__}", [])
 
 
 def main() -> None:
-    meta = _now(TZ)
-    r = fetch_wantgoo()
+    meta = _now()
+    res = fetch_and_parse()
 
-    latest = {
-        "schema_version": "tw_pb_sidecar_latest_v1",
-        "script_fingerprint": "tw_update_pb_sidecar_py@v1",
-        **meta,
-        "source_vendor": "wantgoo",
-        "source_url": SOURCE_URL,
-        "fetch_status": r.fetch_status,
-        "confidence": r.confidence,
-        "dq_reason": r.dq_reason,
-        "data_date": r.data_date,
-        "data_time_local": r.data_time_local,
-        "per": r.per,
-        "dividend_yield_pct": r.dividend_yield,
-        "pbr": r.pbr,
-        "notes": "THIRD_PARTY aggregated indicator; for research only.",
-    }
-
-    _write_json(OUT_LATEST, latest)
-
-    # Only update history when OK and data_date exists
-    if r.fetch_status == "OK" and r.data_date:
-        hist = _read_json(OUT_HISTORY, default=[])
-        row = {
-            "data_date": r.data_date,
-            "data_time_local": r.data_time_local,
-            "per": r.per,
-            "dividend_yield_pct": r.dividend_yield,
-            "pbr": r.pbr,
+    # If OK: rewrite history from parsed rows (deterministic)
+    if res.fetch_status == "OK":
+        _write_json(OUT_HISTORY, res.rows)
+        latest_row = res.rows[-1]
+        latest = {
+            "schema_version": "tw_pb_sidecar_latest_v2",
+            "script_fingerprint": "tw_update_pb_sidecar_py@v2_monthly_table",
+            **meta,
             "source_vendor": "wantgoo",
+            "source_url": SOURCE_URL,
+            "fetch_status": "OK",
+            "confidence": "OK",
+            "dq_reason": None,
+            "freq": "MONTHLY",
+            "data_date": latest_row["data_date"],
+            "period_ym": latest_row["period_ym"],
+            "pbr": latest_row["pbr"],
+            "monthly_close": latest_row["monthly_close"],
+            "series_len": len(res.rows),
+            "notes": "Monthly series parsed from river table. z/p stats are based on MONTHLY observations.",
         }
-        hist2 = upsert_history(hist, row)
-        _write_json(OUT_HISTORY, hist2)
+        _write_json(OUT_LATEST, latest)
     else:
-        # keep history unchanged; if missing, initialize empty
+        # DOWNGRADED: keep history unchanged (do not overwrite)
         if not os.path.exists(OUT_HISTORY):
             _write_json(OUT_HISTORY, [])
+        latest = {
+            "schema_version": "tw_pb_sidecar_latest_v2",
+            "script_fingerprint": "tw_update_pb_sidecar_py@v2_monthly_table",
+            **meta,
+            "source_vendor": "wantgoo",
+            "source_url": SOURCE_URL,
+            "fetch_status": "DOWNGRADED",
+            "confidence": "DOWNGRADED",
+            "dq_reason": res.dq_reason,
+            "freq": "MONTHLY",
+            "data_date": None,
+            "period_ym": None,
+            "pbr": None,
+            "monthly_close": None,
+            "series_len": len(_read_json(OUT_HISTORY, [])),
+            "notes": "Fetch/parse failed; history preserved.",
+        }
+        _write_json(OUT_LATEST, latest)
 
     print("Wrote:", OUT_LATEST, OUT_HISTORY)
 
