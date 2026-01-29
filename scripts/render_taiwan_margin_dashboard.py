@@ -13,17 +13,15 @@ Key guarantees
 - roll25 lookback inadequacy -> NOTE (info-only; does NOT affect margin_quality).
 - maint_ratio (proxy) is display-only (NOT signal input).
 
-Noise control (this version)
-- roll25 window NOTE appears once only (in Summary, when same-day match and window inadequate/NA).
-- 2.2 does NOT repeat the window note.
-- NA reasons for resonance are standardized: (原因：ROLL25_STALE / ROLL25_MISSING / ROLL25_MISMATCH / ROLL25_FIELDS_INSUFFICIENT)
-- Checks use fixed PASS/NOTE/FAIL semantics.
+Policy update (align with unified-like behavior)
+- resonance_policy = "latest" (LATEST_AVAILABLE):
+  - If roll25 is available but stale and/or date-mismatch, still use latest available roll25 to判定共振/背離。
+  - 同時標示 resonance_confidence=DOWNGRADED 與 resonance_note，避免過度解讀。
+  - 只有 roll25 缺檔/讀取失敗/欄位不足 才會使 resonance=NA。
 
-2026-01-29 update (LATEST_AVAILABLE resonance option)
-- Added --resonance-policy {latest,strict} (default=latest)
-- latest: if roll25 UsedDate == TWSE meta_date, still classify resonance even if UsedDateStatus=DATA_NOT_UPDATED,
-         but add resonance_confidence=DOWNGRADED + resonance_note.
-- strict: keep original behavior (stale => resonance NA with ROLL25_STALE)
+Noise control
+- roll25 window NOTE appears once only (in Summary) when window inadequate/NA.
+- Checks use PASS/NOTE/FAIL semantics; under "latest" policy, date mismatch is NOTE (not FAIL).
 """
 
 from __future__ import annotations
@@ -304,6 +302,13 @@ def roll25_used_date_status(roll: Dict[str, Any]) -> Optional[str]:
 
 
 def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
+    """
+    Deterministic heated判定（不猜）：
+    - risk_level ∈ {中,高}  => heated True
+    - 或 signals 任一為 True/非零 => heated True
+    - 否則 => False
+    若必要欄位不足 => None
+    """
     risk = _get(roll, "risk_level", None)
     sig = _get(roll, "signal", {})
     if risk is None and not isinstance(sig, dict):
@@ -319,6 +324,28 @@ def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
 
     risk_heated = (str(risk) in ("中", "高")) if risk is not None else False
     return bool(risk_heated or any(flags))
+
+
+def roll25_risk_level_display(roll: Dict[str, Any]) -> Tuple[str, str, Optional[bool]]:
+    """
+    為了避免 roll25.risk_level 缺失就顯示 NA（但 signals 已足夠判定），提供 display-only fallback。
+    回傳：(display, raw, heated)
+      - display: "低/中/高" 或 "低(derived)/高(derived)/NA"
+      - raw: 原始 risk_level（可能 NA）
+      - heated: True/False/None（供共振判定與稽核）
+    """
+    raw = _get(roll, "risk_level", None)
+    raw_s = str(raw) if raw is not None else "NA"
+
+    # 若 raw 已是合理等級，直接使用
+    if raw_s in ("低", "中", "高"):
+        heated = roll25_is_heated(roll)
+        return raw_s, raw_s, heated
+
+    heated = roll25_is_heated(roll)
+    if heated is None:
+        return "NA", raw_s, None
+    return ("高(derived)" if heated else "低(derived)"), raw_s, heated
 
 
 def roll25_lookback_note(roll: Dict[str, Any], default_target: int = 20) -> Tuple[Optional[bool], str]:
@@ -340,14 +367,12 @@ def roll25_lookback_note(roll: Dict[str, Any], default_target: int = 20) -> Tupl
     return False, f"LookbackNActual={na}/{nt}（window 未滿 → 信心降級）"
 
 
-def determine_resonance(margin_signal: str, roll: Dict[str, Any]) -> Tuple[str, str, Optional[str]]:
+def determine_resonance(margin_signal: str, heated: Optional[bool]) -> Tuple[str, str, Optional[str]]:
     """
     Returns (label, rationale, na_code).
-    na_code is only set when label == "NA".
     """
-    heated = roll25_is_heated(roll)
     if heated is None:
-        return ("NA", "roll25 heated 判定欄位不足 => resonance NA (strict)", "ROLL25_FIELDS_INSUFFICIENT")
+        return ("NA", "roll25 heated 判定欄位不足 => resonance NA", "ROLL25_FIELDS_INSUFFICIENT")
 
     hot = bool(heated)
     ms_hot = (margin_signal in ("WATCH", "ALERT"))
@@ -417,12 +442,6 @@ def main() -> None:
     ap.add_argument("--roll25", default="roll25_cache/latest_report.json")
     ap.add_argument("--maint", default="taiwan_margin_cache/maint_ratio_latest.json")
     ap.add_argument("--maint-hist", default="taiwan_margin_cache/maint_ratio_history.json")
-    ap.add_argument(
-        "--resonance-policy",
-        choices=["latest", "strict"],
-        default="latest",
-        help="Resonance gating policy. strict=stale => NA; latest=use latest available and downgrade confidence when stale.",
-    )
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -473,133 +492,121 @@ def main() -> None:
     )
 
     # ---------- Margin data quality checks (these determine margin_quality) ----------
-    # Check-1: meta_date == series[0].date
-    c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (
-        twse_meta_date == latest_date_from_series(twse_s)
-    )
-    c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (
-        tpex_meta_date == latest_date_from_series(tpex_s)
-    )
+    c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
+    c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
-    # Check-2: head5 strict decreasing & unique (from latest rows)
     twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
     tpex_dates_from_rows = [str(r.get("date")) for r in tpex_rows if r.get("date")]
     c2_tw_ok, c2_tw_msg = check_head5_strict_desc_unique(twse_dates_from_rows)
     c2_tp_ok, c2_tp_msg = check_head5_strict_desc_unique(tpex_dates_from_rows)
 
-    # Check-3: head5 identical => likely wrong page
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
         c3_ok = (head5_pairs(twse_rows) != head5_pairs(tpex_rows))
         c3_msg = "OK" if c3_ok else "head5 identical (date+balance) => likely wrong page"
     else:
         c3_ok, c3_msg = False, "insufficient rows for head5 comparison"
 
-    # Check-4: history rows >= 21
     c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
     c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
 
-    # Check-5: 20D base_date exists in series
     c5_tw_ok, c5_tw_msg = check_base_date_in_series(twse_s, tw20.get("base_date"), "TWSE_20D")
     c5_tp_ok, c5_tp_msg = check_base_date_in_series(tpex_s, tp20.get("base_date"), "TPEX_20D")
 
     margin_any_fail = (
-        (not c1_tw_ok)
-        or (not c1_tp_ok)
-        or (not c2_tw_ok)
-        or (not c2_tp_ok)
-        or (not c3_ok)
-        or (not c4_tw_ok)
-        or (not c4_tp_ok)
-        or (not c5_tw_ok)
-        or (not c5_tp_ok)
+        (not c1_tw_ok) or (not c1_tp_ok) or
+        (not c2_tw_ok) or (not c2_tp_ok) or
+        (not c3_ok) or
+        (not c4_tw_ok) or (not c4_tp_ok) or
+        (not c5_tw_ok) or (not c5_tp_ok)
     )
     margin_quality = "PARTIAL" if margin_any_fail else "OK"
 
-    # ---------- roll25 confirm-only ----------
+    # ---------- roll25 confirm-only (LATEST_AVAILABLE policy) ----------
+    resonance_policy = "latest"  # unify naming system
     roll, roll_err = load_roll25(args.roll25)
     roll_ok = (roll is not None and roll_err is None)
+
     roll_used = roll25_used_date(roll) if roll else None
     roll_used_status = roll25_used_date_status(roll) if roll else None
 
+    date_aligned = bool(roll_ok and roll_used and twse_meta_date and (roll_used == twse_meta_date))
+    is_stale = bool(roll_ok and (roll_used_status == "DATA_NOT_UPDATED"))
+    is_mismatch = bool(roll_ok and roll_used and twse_meta_date and (roll_used != twse_meta_date))
+
+    # risk level display + heated (deterministic)
+    roll_risk_level_display = "NA"
+    roll_risk_level_raw = "NA"
+    heated: Optional[bool] = None
+    if roll_ok and roll is not None:
+        roll_risk_level_display, roll_risk_level_raw, heated = roll25_risk_level_display(roll)
+
+    # resonance_confidence / note (沿用命名體系)
     resonance_confidence = "OK"
-    resonance_note: Optional[str] = None
-
-    # same-day match definition depends on policy:
-    # - strict: require same-day match AND not stale
-    # - latest: require same-day match only; stale => still classify, but downgrade
-    if args.resonance_policy == "strict":
-        same_day_match = bool(
-            roll_ok
-            and twse_meta_date
-            and roll_used
-            and (roll_used == twse_meta_date)
-            and (roll_used_status is None or roll_used_status != "DATA_NOT_UPDATED")
-        )
+    resonance_note_parts: List[str] = []
+    if not roll_ok:
+        resonance_confidence = "DOWNGRADED"
+        resonance_label = "NA"
+        resonance_rationale = "roll25 missing/unreadable => cannot determine resonance"
+        resonance_code = "ROLL25_MISSING"
     else:
-        same_day_match = bool(roll_ok and twse_meta_date and roll_used and (roll_used == twse_meta_date))
+        # roll present, compute resonance even if stale/mismatch (LATEST_AVAILABLE)
+        resonance_label, resonance_rationale, resonance_code = determine_resonance(margin_signal, heated)
 
-    # Check-6 / resonance classification
+        if is_stale:
+            resonance_confidence = "DOWNGRADED"
+            resonance_note_parts.append("roll25 stale")
+        if is_mismatch:
+            resonance_confidence = "DOWNGRADED"
+            resonance_note_parts.append("roll25 date mismatch")
+        if not date_aligned and not is_mismatch:
+            # missing date fields, but still computed (may degrade)
+            if (roll_used is None) or (twse_meta_date is None):
+                resonance_confidence = "DOWNGRADED"
+                resonance_note_parts.append("roll25/TWSE date missing")
+
+        if resonance_label == "NA":
+            # already has code; confidence should be down
+            resonance_confidence = "DOWNGRADED"
+
+    resonance_note = ""
+    if resonance_note_parts:
+        resonance_note = "、".join(resonance_note_parts) + "，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）"
+
+    # Check-6/7 semantics under latest policy
+    # Check-6: date alignment / staleness are NOTE (not FAIL). Missing/unreadable => NOTE.
     if not roll_ok:
         c6_status = "NOTE"
         c6_msg = f"roll25 missing/unreadable ({roll_err or 'unknown'})"
-        resonance_label = "NA"
-        resonance_rationale = "roll25 missing => cannot classify resonance"
-        resonance_code = "ROLL25_MISSING"
     else:
-        if (roll_used is None) or (twse_meta_date is None):
+        # roll_ok == True
+        if roll_used is None or twse_meta_date is None:
             c6_status = "NOTE"
-            c6_msg = f"UsedDate({roll_used or 'NA'}) vs TWSE({twse_meta_date or 'NA'}) (NA)"
-            resonance_label = "NA"
-            resonance_rationale = "roll25 UsedDate/TWSE meta_date missing => cannot classify resonance"
-            resonance_code = "ROLL25_MISSING"
-
-        elif roll_used != twse_meta_date:
-            c6_status = "FAIL"
-            c6_msg = f"UsedDate({roll_used}) != TWSE({twse_meta_date})"
-            resonance_label = "NA"
-            resonance_rationale = "roll25 date mismatch => cannot classify resonance"
-            resonance_code = "ROLL25_MISMATCH"
-
-        else:
-            # roll_used == twse_meta_date (same-day alignment)
-            if roll_used_status == "DATA_NOT_UPDATED":
+            c6_msg = f"UsedDate({roll_used or 'NA'}) vs TWSE({twse_meta_date or 'NA'}) (NA) | policy=latest"
+        elif roll_used_status == "DATA_NOT_UPDATED":
+            if date_aligned:
                 c6_status = "NOTE"
                 c6_msg = f"roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate({roll_used}) == TWSE({twse_meta_date})"
-
-                if args.resonance_policy == "strict":
-                    resonance_label = "NA"
-                    resonance_rationale = "roll25 stale => strict policy blocks resonance classification"
-                    resonance_code = "ROLL25_STALE"
-                else:
-                    resonance_label, resonance_rationale, resonance_code = determine_resonance(margin_signal, roll)  # type: ignore[arg-type]
-                    if resonance_label != "NA":
-                        resonance_confidence = "DOWNGRADED"
-                        resonance_note = "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）"
             else:
+                c6_status = "NOTE"
+                c6_msg = f"roll25 stale (DATA_NOT_UPDATED) + date mismatch | UsedDate({roll_used}) != TWSE({twse_meta_date})"
+        else:
+            if date_aligned:
                 c6_status = "PASS"
                 c6_msg = "OK"
-                resonance_label, resonance_rationale, resonance_code = determine_resonance(margin_signal, roll)  # type: ignore[arg-type]
+            else:
+                c6_status = "NOTE"
+                c6_msg = f"date mismatch (UsedDate({roll_used}) != TWSE({twse_meta_date})) | policy=latest"
 
-    # Lookback note (only meaningful when same-day match is satisfied per policy)
-    c7_status: str
-    c7_msg: str
+    # Check-7 lookback window (info): no longer skipped by strict gating; always assess when roll_ok
+    c7_status, c7_msg = "NOTE", "skipped: roll25 missing"
     roll25_window_note: Optional[str] = None
-    if roll_ok and same_day_match and roll is not None:
+    if roll_ok and roll is not None:
         lb_ok, lb_msg = roll25_lookback_note(roll, default_target=20)
         if lb_ok is True:
             c7_status, c7_msg = "PASS", lb_msg
         else:
             c7_status, c7_msg = "NOTE", lb_msg
-            roll25_window_note = lb_msg  # show ONCE in Summary
-    else:
-        c7_status = "NOTE"
-        if roll_ok and roll_used_status == "DATA_NOT_UPDATED":
-            if args.resonance_policy == "latest":
-                c7_msg = "skipped: roll25 stale (DATA_NOT_UPDATED) but policy=latest; window check requires same-day match"
-            else:
-                c7_msg = "skipped: roll25 stale (DATA_NOT_UPDATED)"
-        else:
-            c7_msg = "skipped: roll25 mismatch/missing"
+            roll25_window_note = lb_msg  # show ONCE in Summary (noise control)
 
     # ---------- maint_ratio (proxy; display-only) ----------
     maint_latest, maint_err = load_maint_json(args.maint, "maint") if args.maint else (None, "maint path not provided")
@@ -611,7 +618,6 @@ def main() -> None:
     maint_hist_list: List[Dict[str, Any]] = maint_hist_items(maint_hist_obj) if maint_hist_ok and maint_hist_obj else []
     maint_head = maint_head5(maint_hist_list) if maint_hist_list else []
 
-    # Check-10: latest vs history[0] date (info-only)
     c10_status, c10_msg = "NOTE", "skipped: maint latest/history missing"
     if maint_ok and maint_hist_list:
         ld = _get(maint_latest, "data_date", None)
@@ -625,14 +631,12 @@ def main() -> None:
     elif (not maint_ok) and maint_hist_list:
         c10_status, c10_msg = "NOTE", "maint latest missing"
 
-    # Check-11: head5 strict desc & unique (info-only)
     if maint_hist_list:
         c11_ok, c11_msg = maint_check_head5_dates_strict(maint_hist_list)
         c11_status = "PASS" if c11_ok else "NOTE"
     else:
         c11_status, c11_msg = "NOTE", "head5 insufficient (history_rows=0)"
 
-    # Upstream (latest.json) top-level quality fields: may be absent -> NOTE only
     top_conf = latest.get("confidence", None) if isinstance(latest, dict) else None
     top_fetch = latest.get("fetch_status", None) if isinstance(latest, dict) else None
     top_dq = latest.get("dq_reason", None) if isinstance(latest, dict) else None
@@ -653,11 +657,10 @@ def main() -> None:
 
     md.append(f"- 一致性判定（Margin × Roll25）：{resonance_na(resonance_label, resonance_code)}")
     md.append(f"  - rationale: {resonance_rationale}")
-    md.append(f"  - resonance_policy: {args.resonance_policy}")
+    md.append(f"  - resonance_policy: {resonance_policy}")
     if resonance_note:
         md.append(f"  - resonance_note: {resonance_note}")
-    if resonance_confidence != "OK":
-        md.append(f"  - resonance_confidence: {resonance_confidence}")
+    md.append(f"  - resonance_confidence: {resonance_confidence}")
     if roll25_window_note:
         md.append(f"  - roll25_window_note: {roll25_window_note}")
     md.append("")
@@ -731,7 +734,10 @@ def main() -> None:
     md.append("## 2.1) 台股成交量/波動（roll25_cache；confirm-only）")
     md.append(f"- roll25_path: {args.roll25}")
     if roll_ok and roll is not None:
-        md.append(f"- UsedDate: {roll_used or 'NA'}｜UsedDateStatus: {roll_used_status or 'NA'}｜risk_level: {_get(roll,'risk_level','NA')}｜tag: {_get(roll,'tag','NA')}")
+        md.append(
+            f"- UsedDate: {roll_used or 'NA'}｜UsedDateStatus: {roll_used_status or 'NA'}｜"
+            f"risk_level: {roll_risk_level_display}｜risk_level_raw: {roll_risk_level_raw}｜tag: {_get(roll,'tag','NA')}"
+        )
         md.append(f"- summary: {_get(roll,'summary','NA')}")
         nums = _get(roll, "numbers", {})
         md.append(
@@ -741,8 +747,7 @@ def main() -> None:
             f"TradeValue={_get(nums,'TradeValue','NA')}, "
             f"VolumeMultiplier={_get(nums,'VolumeMultiplier','NA')}, "
             f"AmplitudePct={_get(nums,'AmplitudePct','NA')}%, "
-            f"VolMultiplier={_get(nums,'VolMultiplier','NA')}, "
-            f"VolMultiplier20={_get(nums,'VolMultiplier20','NA')}"
+            f"VolMultiplier={_get(nums,'VolMultiplier','NA')}"
         )
         sig = _get(roll, "signal", {})
         md.append(
@@ -757,8 +762,11 @@ def main() -> None:
         md.append(f"- action: {_get(roll,'action','NA')}")
         md.append(f"- caveats: {_get(roll,'caveats','NA')}")
         md.append(f"- generated_at: {_get(roll,'generated_at','NA')} ({_get(roll,'timezone','NA')})")
+        # 沿用命名體系：在 2.1 也明示同一個 confidence（避免 risk_level 顯示與 2.2 判定的信心分裂）
+        md.append(f"- resonance_confidence: {resonance_confidence}")
     else:
         md.append(f"- roll25_error: {roll_err or 'roll25 missing'}")
+        md.append(f"- resonance_confidence: {resonance_confidence}")
     md.append("")
 
     md.append("## 2.2) 一致性判定（Margin × Roll25 共振）")
@@ -768,8 +776,7 @@ def main() -> None:
     md.append("  3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）")
     md.append("  4. 其餘 → QUIET")
     md.append(f"- 判定：{resonance_na(resonance_label, resonance_code)}（{resonance_rationale}）")
-    if resonance_confidence != "OK":
-        md.append(f"- resonance_confidence: {resonance_confidence}")
+    md.append(f"- resonance_confidence: {resonance_confidence}")
     if resonance_note:
         md.append(f"- resonance_note: {resonance_note}")
     md.append("")
@@ -821,8 +828,7 @@ def main() -> None:
     md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。")
     md.append("- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
     md.append("- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。")
-    md.append("- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。")
-    md.append("- resonance_policy=latest：若 roll25 stale 但日期對齊，仍可判定共振/背離，但會標示 resonance_confidence=DOWNGRADED。")
+    md.append("- resonance_policy=latest：若 roll25 stale 或 date mismatch，仍使用最新可用資料判定，但標示 resonance_confidence=DOWNGRADED。")
     md.append("- maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。")
     md.append("")
 
@@ -841,7 +847,6 @@ def main() -> None:
     md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_status, c6_msg))
     md.append(line_check("Check-7 roll25 Lookback window（info）", c7_status, c7_msg))
 
-    # maint checks are info-only => NOTE on missing
     md.append(line_check("Check-8 maint_ratio latest readable（info）", "PASS" if maint_ok else "NOTE", "OK" if maint_ok else (maint_err or "maint missing")))
     md.append(line_check("Check-9 maint_ratio history readable（info）", "PASS" if maint_hist_ok else "NOTE", "OK" if maint_hist_ok else (maint_hist_err or "maint_hist missing")))
     md.append(line_check("Check-10 maint latest vs history[0] date（info）", c10_status, c10_msg))
