@@ -27,6 +27,12 @@ Display tweak (requested)
 - In 2.1, derived risk_level is shown as 低/中/高(derived) when raw is NA.
 - If UsedDateStatus=DATA_NOT_UPDATED, risk_level display gets “（stale）” suffix to avoid misread.
 - Use existing resonance_confidence naming consistently across sections.
+
+Maint ratio trend metrics (added; display-only)
+- maint_ratio_1d_delta_pctpt: today - prev (pct-pt)
+- maint_ratio_1d_pct_change: (today - prev) / prev * 100 (%)
+- maint_ratio_policy: PROXY_TREND_ONLY
+- maint_ratio_confidence: DOWNGRADED (always; proxy trend only, not absolute level)
 """
 
 from __future__ import annotations
@@ -324,7 +330,6 @@ def roll25_is_heated(roll: Dict[str, Any]) -> Optional[bool]:
             v = sig.get(k, None)
             if v is None:
                 continue
-            # NewLow_N / ConsecutiveBreak may be numeric
             if isinstance(v, (int, float)):
                 flags.append(v > 0)
             else:
@@ -356,7 +361,6 @@ def roll25_risk_level_display(roll: Dict[str, Any]) -> Tuple[str, str]:
     if not isinstance(sig, dict):
         return "NA", raw_s
 
-    # count positive flags
     cnt = 0
     for k in ("VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"):
         v = sig.get(k, None)
@@ -463,6 +467,67 @@ def maint_check_head5_dates_strict(hist_items: List[Dict[str, Any]]) -> Tuple[bo
     return False, msg
 
 
+def maint_derive_1d_trend(
+    maint_latest: Optional[Dict[str, Any]],
+    maint_hist_list: List[Dict[str, Any]],
+) -> Tuple[Optional[float], Optional[float], str]:
+    """
+    Returns:
+      - delta_pctpt: today - prev (pct-pt)
+      - pct_change: (today - prev) / prev * 100 (%)
+      - note: diagnostic string (for auditing)
+    Uses ONLY existing JSON data. No external fetch.
+
+    Priority:
+      1) Use maint_latest.maint_ratio_pct as today.
+      2) Use history list to find prev:
+         - If hist[0] matches latest.data_date and hist has >=2, prev=hist[1]
+         - Else if hist has >=1 and hist[0] is different date, treat hist[0] as prev (best-effort)
+    """
+    if not isinstance(maint_latest, dict):
+        return None, None, "maint_latest missing"
+    today = maint_latest.get("maint_ratio_pct")
+    today_date = maint_latest.get("data_date")
+    if not isinstance(today, (int, float)):
+        return None, None, "maint_latest.maint_ratio_pct missing/non-numeric"
+
+    if not maint_hist_list:
+        return None, None, "maint_hist missing/empty"
+
+    # helper to parse numeric
+    def _num(x: Any) -> Optional[float]:
+        return float(x) if isinstance(x, (int, float)) else None
+
+    # candidate prev
+    prev: Optional[float] = None
+    prev_date: Optional[str] = None
+
+    # strict-ish match: hist[0] is same date as latest -> prev should be hist[1]
+    h0d = str(maint_hist_list[0].get("data_date") or "")
+    if today_date is not None and h0d == str(today_date):
+        if len(maint_hist_list) >= 2:
+            prev = _num(maint_hist_list[1].get("maint_ratio_pct"))
+            prev_date = str(maint_hist_list[1].get("data_date") or "NA")
+            if prev is None:
+                return None, None, "maint_hist[1].maint_ratio_pct missing/non-numeric"
+        else:
+            return None, None, "maint_hist has <2 rows; cannot compute 1D trend"
+    else:
+        # best-effort: treat hist[0] as prev if it's a different date
+        prev = _num(maint_hist_list[0].get("maint_ratio_pct"))
+        prev_date = str(maint_hist_list[0].get("data_date") or "NA")
+        if prev is None:
+            return None, None, "maint_hist[0].maint_ratio_pct missing/non-numeric"
+        # note: may not be true D-1 if history gap exists
+        # still acceptable as trend-only, but mark note
+        # (report will already label proxy & downgraded)
+    delta = float(today) - float(prev)
+    pct_change = (delta / float(prev) * 100.0) if float(prev) != 0.0 else None
+
+    note = f"trend_from: today={today}({today_date}), prev={prev}({prev_date})"
+    return delta, pct_change, note
+
+
 # ----------------- main -----------------
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -523,28 +588,23 @@ def main() -> None:
     )
 
     # ---------- Margin data quality checks (these determine margin_quality) ----------
-    # Check-1: meta_date == series[0].date
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
     c1_tp_ok = (tpex_meta_date is not None) and (latest_date_from_series(tpex_s) is not None) and (tpex_meta_date == latest_date_from_series(tpex_s))
 
-    # Check-2: head5 strict decreasing & unique (from latest rows)
     twse_dates_from_rows = [str(r.get("date")) for r in twse_rows if r.get("date")]
     tpex_dates_from_rows = [str(r.get("date")) for r in tpex_rows if r.get("date")]
     c2_tw_ok, c2_tw_msg = check_head5_strict_desc_unique(twse_dates_from_rows)
     c2_tp_ok, c2_tp_msg = check_head5_strict_desc_unique(tpex_dates_from_rows)
 
-    # Check-3: head5 identical => likely wrong page
     if len(twse_rows) >= 5 and len(tpex_rows) >= 5:
         c3_ok = (head5_pairs(twse_rows) != head5_pairs(tpex_rows))
         c3_msg = "OK" if c3_ok else "head5 identical (date+balance) => likely wrong page"
     else:
         c3_ok, c3_msg = False, "insufficient rows for head5 comparison"
 
-    # Check-4: history rows >= 21
     c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
     c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
 
-    # Check-5: 20D base_date exists in series
     c5_tw_ok, c5_tw_msg = check_base_date_in_series(twse_s, tw20.get("base_date"), "TWSE_20D")
     c5_tp_ok, c5_tp_msg = check_base_date_in_series(tpex_s, tp20.get("base_date"), "TPEX_20D")
 
@@ -564,21 +624,14 @@ def main() -> None:
     roll_used = roll25_used_date(roll) if roll else None
     roll_used_status = roll25_used_date_status(roll) if roll else None
 
-    # For display in 2.1
     roll_risk_level_disp, roll_risk_level_raw = (("NA", "NA") if not roll_ok or not roll else roll25_risk_level_display(roll))
-    # Display tweak: append “（stale）” when DATA_NOT_UPDATED
     if roll_used_status == "DATA_NOT_UPDATED" and roll_risk_level_disp != "NA":
         roll_risk_level_disp = f"{roll_risk_level_disp}（stale）"
 
-    # Check-6/7 gating (check semantics remain strict)
-    # - stale -> NOTE
-    # - missing -> NOTE
-    # - mismatch (non-stale) -> FAIL
     strict_same_day = bool(roll_ok and roll_used and twse_meta_date and (roll_used == twse_meta_date))
     strict_not_stale = bool(roll_ok and (roll_used_status is None or roll_used_status != "DATA_NOT_UPDATED"))
     strict_roll_match = bool(strict_same_day and strict_not_stale)
 
-    # Resonance output fields
     resonance_policy = args.resonance_policy
     resonance_label: str = "NA"
     resonance_rationale: str = "NA"
@@ -595,7 +648,6 @@ def main() -> None:
         resonance_confidence = "DOWNGRADED"
         resonance_note = None
     else:
-        # Check-6 status/message (strict check)
         if roll_used_status == "DATA_NOT_UPDATED":
             c6_status = "NOTE"
             if strict_same_day:
@@ -613,7 +665,6 @@ def main() -> None:
                 c6_status = "PASS"
                 c6_msg = "OK"
 
-        # Resonance classification depends on policy
         if resonance_policy == "strict":
             if not strict_roll_match:
                 resonance_label = "NA"
@@ -631,9 +682,7 @@ def main() -> None:
                 resonance_label, resonance_rationale, resonance_code = determine_resonance(margin_signal, roll)
                 resonance_confidence = "OK" if resonance_label != "NA" else "DOWNGRADED"
         else:
-            # latest policy: always try to classify using latest available roll25, but downgrade when stale/mismatch
             resonance_label, resonance_rationale, resonance_code = determine_resonance(margin_signal, roll)
-            # downgrade conditions
             if not strict_same_day or (roll_used_status == "DATA_NOT_UPDATED"):
                 resonance_confidence = "DOWNGRADED"
                 if roll_used_status == "DATA_NOT_UPDATED":
@@ -646,7 +695,6 @@ def main() -> None:
                 resonance_confidence = "OK"
                 resonance_note = None
 
-    # Lookback note (only meaningful when strict match; otherwise skipped)
     c7_status: str
     c7_msg: str
     roll25_window_note: Optional[str] = None
@@ -656,7 +704,7 @@ def main() -> None:
             c7_status, c7_msg = "PASS", lb_msg
         else:
             c7_status, c7_msg = "NOTE", lb_msg
-            roll25_window_note = lb_msg  # show ONCE in Summary
+            roll25_window_note = lb_msg
     else:
         c7_status = "NOTE"
         if roll_ok and roll_used_status == "DATA_NOT_UPDATED":
@@ -673,6 +721,19 @@ def main() -> None:
 
     maint_hist_list: List[Dict[str, Any]] = maint_hist_items(maint_hist_obj) if maint_hist_ok and maint_hist_obj else []
     maint_head = maint_head5(maint_hist_list) if maint_hist_list else []
+
+    # Added trend metrics (display-only)
+    maint_ratio_policy = "PROXY_TREND_ONLY"
+    maint_ratio_confidence = "DOWNGRADED"  # fixed: proxy trend only, not absolute level
+    maint_ratio_1d_delta_pctpt: Optional[float] = None
+    maint_ratio_1d_pct_change: Optional[float] = None
+    maint_ratio_trend_note: Optional[str] = None
+
+    if maint_ok:
+        dlt, pchg, note = maint_derive_1d_trend(maint_latest, maint_hist_list)
+        maint_ratio_1d_delta_pctpt = dlt
+        maint_ratio_1d_pct_change = pchg
+        maint_ratio_trend_note = note
 
     # Check-10: latest vs history[0] date (info-only)
     c10_status, c10_msg = "NOTE", "skipped: maint latest/history missing"
@@ -695,7 +756,6 @@ def main() -> None:
     else:
         c11_status, c11_msg = "NOTE", "head5 insufficient (history_rows=0)"
 
-    # Upstream (latest.json) top-level quality fields: may be absent -> NOTE only
     top_conf = latest.get("confidence", None) if isinstance(latest, dict) else None
     top_fetch = latest.get("fetch_status", None) if isinstance(latest, dict) else None
     top_dq = latest.get("dq_reason", None) if isinstance(latest, dict) else None
@@ -759,8 +819,18 @@ def main() -> None:
 
     md.append("## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）")
     md.append(f"- maint_path: {args.maint if args.maint else 'NA'}")
+    md.append(f"- maint_ratio_policy: {maint_ratio_policy}")
+    md.append(f"- maint_ratio_confidence: {maint_ratio_confidence}")
+
     if maint_ok and maint_latest is not None:
         md.append(f"- data_date: {_get(maint_latest,'data_date','NA')}｜maint_ratio_pct: {_get(maint_latest,'maint_ratio_pct','NA')}")
+        md.append(
+            f"- maint_ratio_1d_delta_pctpt: {fmt_num(maint_ratio_1d_delta_pctpt, 6)}"
+            f"｜maint_ratio_1d_pct_change: {fmt_num(maint_ratio_1d_pct_change, 6)}"
+        )
+        if maint_ratio_trend_note:
+            md.append(f"- maint_ratio_trend_note: {maint_ratio_trend_note}")
+
         md.append(
             f"- totals: financing_amount_twd={_get(maint_latest,'total_financing_amount_twd','NA')}, "
             f"collateral_value_twd={_get(maint_latest,'total_collateral_value_twd','NA')}"
@@ -888,7 +958,7 @@ def main() -> None:
     md.append("- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。")
     md.append("- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。")
     md.append(f"- resonance_policy={resonance_policy}：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。")
-    md.append("- maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。")
+    md.append("- maint_ratio 為 proxy（display-only）：僅看趨勢與變化（Δ），不得用 proxy 絕對水位做門檻判斷。")
     md.append("")
 
     md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）")
@@ -906,7 +976,6 @@ def main() -> None:
     md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_status, c6_msg))
     md.append(line_check("Check-7 roll25 Lookback window（info）", c7_status, c7_msg))
 
-    # maint checks are info-only => NOTE on missing
     md.append(line_check("Check-8 maint_ratio latest readable（info）", "PASS" if maint_ok else "NOTE", "OK" if maint_ok else (maint_err or "maint missing")))
     md.append(line_check("Check-9 maint_ratio history readable（info）", "PASS" if maint_hist_ok else "NOTE", "OK" if maint_hist_ok else (maint_hist_err or "maint_hist missing")))
     md.append(line_check("Check-10 maint latest vs history[0] date（info）", c10_status, c10_msg))
