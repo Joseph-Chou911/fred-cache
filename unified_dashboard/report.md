@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-29T01:43:14Z
+- unified_generated_at_utc: 2026-01-29T07:35:37Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -74,33 +74,33 @@
 
 ## inflation_realrate_cache (detailed)
 - status: OK
-- as_of_ts: 2026-01-29T07:41:31+08:00
-- run_ts_utc: 2026-01-28T23:41:35.496547+00:00
+- as_of_ts: 2026-01-29T12:57:46+08:00
+- run_ts_utc: 2026-01-29T04:57:50.954457+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@3274a17
+- script_fingerprint: render_dashboard_py_signals_v8@3a05ce0
 - script_version: cycle_sidecars_stats_v1
 - series_count: 2
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T10YIE | ALERT | MOVE | LEVEL | 2.360000 | 2026-01-28 | 0.001249 | 2.726922 | 100.000000 | 71.031746 | 0.424608 | 0.000000 | 0.854701 | abs(Z60)>=2;abs(Z60)>=2.5 | EXTREME_Z | WATCH | WATCH→ALERT | 1 | 2 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
-| DFII10 | NONE | MOVE | NONE | 1.900000 | 2026-01-27 | 0.001249 | 0.509469 | 65.000000 | 41.269841 | -0.005433 | 0.593220 | 0.000000 | NA | NA | WATCH | WATCH→NONE | 1 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| T10YIE | ALERT | MOVE | LEVEL | 2.360000 | 2026-01-28 | 0.001376 | 2.726922 | 100.000000 | 71.031746 | 0.424608 | 0.000000 | 0.854701 | abs(Z60)>=2;abs(Z60)>=2.5 | EXTREME_Z | WATCH | WATCH→ALERT | 1 | 2 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| DFII10 | NONE | MOVE | NONE | 1.900000 | 2026-01-27 | 0.001376 | 0.509469 | 65.000000 | 41.269841 | -0.005433 | 0.593220 | 0.000000 | NA | NA | WATCH | WATCH→NONE | 1 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
 
 ## asset_proxy_cache (detailed)
 - status: OK
-- as_of_ts: 2026-01-29T07:41:32+08:00
-- run_ts_utc: 2026-01-28T23:41:35.545865+00:00
+- as_of_ts: 2026-01-29T12:57:47+08:00
+- run_ts_utc: 2026-01-29T04:57:50.996828+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@3274a17
+- script_fingerprint: render_dashboard_py_signals_v8@3a05ce0
 - script_version: cycle_sidecars_stats_v1
 - series_count: 4
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| IYR.US_CLOSE | ALERT | MOVE | JUMP | 95.060000 | 2026-01-28 | 0.000985 | 0.043638 | 58.333333 | 46.428571 | -0.922914 | -24.717514 | -1.010101 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | JUMP_ZD,JUMP_P | NONE | NONE→ALERT | 0 | 1 | https://stooq.com/q/d/l/?s=iyr.us&d1=20251229&d2=20260128&i=d |
-| VNQ.US_CLOSE | ALERT | MOVE | JUMP | 89.450000 | 2026-01-28 | 0.000985 | -0.210342 | 51.666667 | 35.317460 | -1.004854 | -27.994350 | -1.039938 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | JUMP_ZD,JUMP_P | NONE | NONE→ALERT | 0 | 1 | https://stooq.com/q/d/l/?s=vnq.us&d1=20251229&d2=20260128&i=d |
-| GLD.US_CLOSE | ALERT | MOVE | LONG | 494.560000 | 2026-01-28 | 0.000985 | 3.371203 | 100.000000 | 100.000000 | 0.321839 | 0.000000 | 3.905708 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95;abs(ret1%60)>=2 | EXTREME_Z,LONG_EXTREME,JUMP_RET | ALERT | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=gld.us&d1=20251229&d2=20260128&i=d |
-| IAU.US_CLOSE | ALERT | MOVE | LONG | 101.270000 | 2026-01-28 | 0.000985 | 3.367673 | 100.000000 | 100.000000 | 0.319424 | 0.000000 | 3.887977 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95;abs(ret1%60)>=2 | EXTREME_Z,LONG_EXTREME,JUMP_RET | ALERT | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=iau.us&d1=20251229&d2=20260128&i=d |
+| IYR.US_CLOSE | ALERT | MOVE | JUMP | 95.080000 | 2026-01-28 | 0.001110 | 0.043638 | 58.333333 | 46.428571 | -0.922914 | -24.717514 | -1.010101 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | JUMP_ZD,JUMP_P | NONE | NONE→ALERT | 0 | 1 | https://stooq.com/q/d/l/?s=iyr.us&d1=20251230&d2=20260129&i=d |
+| VNQ.US_CLOSE | ALERT | MOVE | JUMP | 89.460000 | 2026-01-28 | 0.001110 | -0.210342 | 51.666667 | 35.317460 | -1.004854 | -27.994350 | -1.039938 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | JUMP_ZD,JUMP_P | NONE | NONE→ALERT | 0 | 1 | https://stooq.com/q/d/l/?s=vnq.us&d1=20251230&d2=20260129&i=d |
+| GLD.US_CLOSE | ALERT | MOVE | LONG | 494.560000 | 2026-01-28 | 0.001110 | 3.371203 | 100.000000 | 100.000000 | 0.321839 | 0.000000 | 3.905708 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95;abs(ret1%60)>=2 | EXTREME_Z,LONG_EXTREME,JUMP_RET | ALERT | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=gld.us&d1=20251230&d2=20260129&i=d |
+| IAU.US_CLOSE | ALERT | MOVE | LONG | 101.250000 | 2026-01-28 | 0.001110 | 3.367673 | 100.000000 | 100.000000 | 0.319424 | 0.000000 | 3.887977 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95;abs(ret1%60)>=2 | EXTREME_Z,LONG_EXTREME,JUMP_RET | ALERT | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=iau.us&d1=20251230&d2=20260129&i=d |
 
 ## roll25_cache (TW turnover)
 - status: OK
@@ -143,10 +143,10 @@
 - status: OK
 - data_date: 2026-01-29
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.270000
-- spot_sell: 31.370000
-- mid: 31.320000
-- ret1_pct: 0.095877 (from 2026-01-28 to 2026-01-29)
+- spot_buy: 31.250000
+- spot_sell: 31.350000
+- mid: 31.300000
+- ret1_pct: 0.031959 (from 2026-01-28 to 2026-01-29)
 - chg_5d_pct: NA (from None to None)
 - dir: TWD_WEAK
 - fx_signal: NONE
@@ -156,7 +156,7 @@
 ## taiwan_margin_financing (TWSE/TPEX)
 - status: OK
 - schema_version: taiwan_margin_financing_latest_v1
-- generated_at_utc: 2026-01-29T01:34:20Z
+- generated_at_utc: 2026-01-29T02:50:05Z
 
 ### cross_module (Margin × Roll25 consistency)
 - margin_signal: WATCH
@@ -176,7 +176,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-01-28, roll25_used_date=2026-01-28, match=true
 
-<!-- rendered_at_utc: 2026-01-29T01:43:14Z -->
+<!-- rendered_at_utc: 2026-01-29T07:35:37Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
