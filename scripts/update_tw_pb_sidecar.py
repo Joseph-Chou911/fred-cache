@@ -1,407 +1,321 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-scripts/update_tw_pb_sidecar.py
+TW PB sidecar: TAIEX P/B ratio (PBR) from StatementDog public page (HTML).
 
-TW PB cache (TAIEX P/B ratio proxy) from TWSE RWD JSON endpoint.
+Outputs:
+- tw_pb_cache/latest.json
+- tw_pb_cache/history.json  (upsert by date)
+- tw_pb_cache/stats_latest.json (z60/p60/z252/p252 computed from history PBR series)
 
-Design goals (audit-first):
-- Deterministic outputs
-- History upsert by trading date (ISO yyyy-mm-dd)
-- Backfill by months (loop months, fetch that month's table, merge)
-- Produce:
-  - tw_pb_cache/history.json
-  - tw_pb_cache/latest.json
-  - tw_pb_cache/stats_latest.json
-  - (report.md rendered by separate script)
-- Strict NA handling (no guessing).
-
-NOTE:
-This module intentionally avoids third-party sources that may block bots (e.g., wantgoo 403).
+Design constraints:
+- Deterministic, audit-friendly.
+- If fetch or parse fails => DOWNGRADED and preserve NA (do NOT guess).
+- History is built forward by daily runs. Optional tiny backfill uses "昨日" shown on the page if available.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from zoneinfo import ZoneInfo
-
-
-TZ = "Asia/Taipei"
-OUT_DIR = "tw_pb_cache"
-
-# Public examples reference this endpoint for market data retrieval. (RWD JSON)
-# We keep it configurable via env in case TWSE changes the path.
-DEFAULT_ENDPOINT = "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"
 
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+SOURCE_URL = "https://statementdog.com/taiex"
+OUTDIR_DEFAULT = "tw_pb_cache"
 
-def now_utc_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+SCHEMA_LATEST = "tw_pb_latest_v1"
+SCHEMA_STATS = "tw_pb_stats_latest_v1"
 
-
-def now_local_iso(tz_name: str) -> str:
-    tz = ZoneInfo(tz_name)
-    return datetime.now(tz).isoformat(timespec="seconds")
-
-
-def ensure_dir(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
+SCRIPT_FINGERPRINT = "update_tw_pb_sidecar_py@v1"
 
 
-def read_json(path: str) -> Optional[Dict[str, Any]]:
+def now_ts(tz: ZoneInfo) -> Tuple[str, str]:
+    utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    local = datetime.now(tz).isoformat()
+    return utc, local
+
+
+def read_json(path: str, default: Any) -> Any:
     if not os.path.exists(path):
-        return None
+        return default
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def write_json(path: str, obj: Dict[str, Any]) -> None:
+def write_json(path: str, obj: Any) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=True)
+        json.dump(obj, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
 
-def ym_first_day(ym: str) -> str:
-    # ym: YYYYMM -> YYYYMM01
-    return ym + "01"
-
-
-def iter_ym_backfill(end_local: datetime, months: int) -> List[str]:
-    # Return list like ["202601", "202512", ...] inclusive of current month, length=months+1 maybe
-    y = end_local.year
-    m = end_local.month
-    out = []
-    for k in range(months + 1):
-        yy = y
-        mm = m - k
-        while mm <= 0:
-            yy -= 1
-            mm += 12
-        out.append(f"{yy:04d}{mm:02d}")
-    return out
-
-
-def parse_minguo_date(s: str, fallback_year: int) -> Optional[str]:
-    """
-    TWSE often returns dates like '115/01/28' (Minguo year) or '2026/01/28'.
-    Convert to ISO yyyy-mm-dd.
-    """
-    s = s.strip()
-    # 115/01/28
-    m = re.match(r"^(\d{2,4})/(\d{1,2})/(\d{1,2})$", s)
-    if not m:
-        return None
-    y = int(m.group(1))
-    mo = int(m.group(2))
-    d = int(m.group(3))
-    if y < 1911:  # minguo
-        y = y + 1911
-    if y < 1900:  # still weird, fallback
-        y = fallback_year
+def safe_float(s: str) -> Optional[float]:
     try:
-        dt = datetime(y, mo, d)
-        return dt.strftime("%Y-%m-%d")
-    except Exception:
-        return None
-
-
-def to_float(x: Any) -> Optional[float]:
-    if x is None:
-        return None
-    if isinstance(x, (int, float)):
-        return float(x)
-    s = str(x).strip()
-    if s in ("", "—", "-", "NA", "N/A", "null", "None"):
-        return None
-    s = s.replace(",", "")
-    # keep only first numeric pattern
-    m = re.search(r"-?\d+(\.\d+)?", s)
-    if not m:
-        return None
-    try:
-        return float(m.group(0))
+        s = s.strip().replace(",", "")
+        return float(s)
     except Exception:
         return None
 
 
 @dataclass
-class FetchResult:
-    ok: bool
-    status: str
-    dq_reason: Optional[str]
-    data: Optional[Dict[str, Any]]
-    url: str
+class Parsed:
+    data_date: Optional[str]          # YYYY-MM-DD
+    close: Optional[float]
+    pbr: Optional[float]
+    pbr_yesterday: Optional[float]
 
 
-def fetch_json(url: str, timeout: int = 20) -> FetchResult:
-    headers = {
-        "User-Agent": UA,
-        "Accept": "application/json,text/plain,*/*",
-        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.7",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-    }
-    try:
-        r = requests.get(url, headers=headers, timeout=timeout)
-        if r.status_code != 200:
-            return FetchResult(False, f"http_{r.status_code}", f"http_{r.status_code}", None, url)
-        j = r.json()
-        return FetchResult(True, "OK", None, j, url)
-    except Exception as e:
-        return FetchResult(False, "DOWNGRADED", "fetch_or_parse_failed", None, url)
+def parse_statementdog(html: str) -> Parsed:
+    # last update: "最後更新：2026/01/29"
+    m = re.search(r"最後更新：\s*(\d{4})/(\d{2})/(\d{2})", html)
+    data_date = None
+    if m:
+        y, mo, d = m.group(1), m.group(2), m.group(3)
+        data_date = f"{y}-{mo}-{d}"
+
+    # close: the page contains:
+    # "上市指數收盤" then a number line
+    close = None
+    m2 = re.search(r"上市指數收盤\s*([\d,]+(?:\.\d+)?)", html)
+    if m2:
+        close = safe_float(m2.group(1))
+
+    # pbr: "台股股價淨值比" then number then "倍"
+    pbr = None
+    m3 = re.search(r"台股股價淨值比\s*([\d,]+(?:\.\d+)?)\s*倍", html)
+    if m3:
+        pbr = safe_float(m3.group(1))
+
+    # yesterday pbr: "昨日 3.43 倍" appears after PBR block; keep it as optional
+    pbr_y = None
+    m4 = re.search(r"台股股價淨值比.*?昨日\s*([\d,]+(?:\.\d+)?)\s*倍", html, flags=re.S)
+    if m4:
+        pbr_y = safe_float(m4.group(1))
+
+    return Parsed(data_date=data_date, close=close, pbr=pbr, pbr_yesterday=pbr_y)
 
 
-def extract_rows(j: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """
-    Attempt to locate:
-      - date
-      - close
-      - pb (P/B or 淨值比)
-    from TWSE response structure.
-    Returns: (rows, schema_hint)
-    """
-    rows: List[Dict[str, Any]] = []
-    if not isinstance(j, dict):
-        return rows, None
+def percentile_rank(window: List[float], x: float) -> float:
+    # Deterministic inclusive percentile: % of values <= x
+    if not window:
+        return float("nan")
+    le = sum(1 for v in window if v <= x)
+    return (le / len(window)) * 100.0
 
-    fields = j.get("fields")
-    data = j.get("data")
 
-    if not isinstance(fields, list) or not isinstance(data, list):
-        return rows, None
-
-    # identify columns
-    def find_col(keys: List[str]) -> Optional[int]:
-        for k in keys:
-            for i, f in enumerate(fields):
-                if k in str(f):
-                    return i
+def zscore(window: List[float], x: float) -> Optional[float]:
+    # sample std (ddof=1). If std==0 or insufficient => NA
+    n = len(window)
+    if n < 2:
         return None
-
-    col_date = find_col(["日期"])
-    col_close = find_col(["收盤指數", "收盤", "指數"])
-    # P/B could be named 股價淨值比 / 淨值比 / P/B
-    col_pb = find_col(["股價淨值比", "淨值比", "P/B", "PBR", "P/B Ratio"])
-
-    schema_hint = f"fields={fields}"
-
-    # fallback year: from query meta if present, else current year
-    fallback_year = datetime.now(ZoneInfo(TZ)).year
-
-    for row in data:
-        if not isinstance(row, list):
-            continue
-        ds = None
-        if col_date is not None and col_date < len(row):
-            ds = parse_minguo_date(str(row[col_date]), fallback_year=fallback_year)
-        if not ds:
-            continue
-
-        close = None
-        if col_close is not None and col_close < len(row):
-            close = to_float(row[col_close])
-
-        pb = None
-        if col_pb is not None and col_pb < len(row):
-            pb = to_float(row[col_pb])
-
-        # keep row even if pb is None (audit), but signal will be downgraded later
-        rows.append(
-            {
-                "date": ds,
-                "close": close,
-                "pbr": pb,
-            }
-        )
-    return rows, schema_hint
+    mean = sum(window) / n
+    var = sum((v - mean) ** 2 for v in window) / (n - 1)
+    if var <= 0:
+        return None
+    return (x - mean) / (var ** 0.5)
 
 
-def upsert_history(existing: List[Dict[str, Any]], new_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    m: Dict[str, Dict[str, Any]] = {r["date"]: r for r in existing if isinstance(r, dict) and "date" in r}
-    for r in new_rows:
-        if not isinstance(r, dict) or "date" not in r:
-            continue
-        m[r["date"]] = r
-    out = list(m.values())
-    out.sort(key=lambda x: x["date"])
+def compute_stats(pbr_series: List[Tuple[str, float]], latest_date: Optional[str]) -> Dict[str, Any]:
+    # pbr_series: list of (date, pbr) sorted ascending
+    out: Dict[str, Any] = {
+        "schema_version": SCHEMA_STATS,
+        "script_fingerprint": SCRIPT_FINGERPRINT,
+        "generated_at_utc": None,
+        "generated_at_local": None,
+        "timezone": "Asia/Taipei",
+        "data_date": latest_date,
+        "series_len_pbr": len(pbr_series),
+        "z60": None,
+        "p60": None,
+        "na_reason_60": None,
+        "z252": None,
+        "p252": None,
+        "na_reason_252": None,
+        "window_60": {"n": 0, "from": None, "to": None},
+        "window_252": {"n": 0, "from": None, "to": None},
+    }
     return out
 
 
-def rolling_stats(values: List[float], window: int) -> Tuple[Optional[float], Optional[float], Optional[str]]:
-    """
-    Compute z-score and percentile of the last value in values[-window:].
-    Percentile: rank of last value within window as [0,100].
-    """
-    if len(values) < window:
-        return None, None, f"INSUFFICIENT_HISTORY:{len(values)}/{window}"
-    w = values[-window:]
-    x = w[-1]
-    mu = sum(w) / window
-    var = sum((v - mu) ** 2 for v in w) / window
-    sd = math.sqrt(var)
-    if sd == 0:
-        return None, None, "STD_ZERO"
-    z = (x - mu) / sd
+def fill_stats_values(stats: Dict[str, Any], pbr_series: List[Tuple[str, float]]) -> None:
+    if not pbr_series:
+        stats["na_reason_60"] = "INSUFFICIENT_HISTORY:0/60"
+        stats["na_reason_252"] = "INSUFFICIENT_HISTORY:0/252"
+        return
 
-    # percentile (inclusive rank)
-    sorted_w = sorted(w)
-    # count <= x
-    le = 0
-    for v in sorted_w:
-        if v <= x:
-            le += 1
-        else:
-            break
-    p = (le / window) * 100.0
-    return z, p, None
+    latest_date, latest_pbr = pbr_series[-1]
+    stats["data_date"] = latest_date
+
+    def compute_for_window(w: int) -> Tuple[Optional[float], Optional[float], Optional[str], Dict[str, Any]]:
+        if len(pbr_series) < w:
+            return None, None, f"INSUFFICIENT_HISTORY:{len(pbr_series)}/{w}", {"n": len(pbr_series), "from": pbr_series[0][0], "to": latest_date}
+        window = [v for (_, v) in pbr_series[-w:]]
+        z = zscore(window, latest_pbr)
+        p = percentile_rank(window, latest_pbr)
+        return z, p, None, {"n": w, "from": pbr_series[-w][0], "to": latest_date}
+
+    z60, p60, r60, w60meta = compute_for_window(60)
+    z252, p252, r252, w252meta = compute_for_window(252)
+
+    stats["z60"] = z60
+    stats["p60"] = p60
+    stats["na_reason_60"] = r60
+    stats["window_60"] = w60meta
+
+    stats["z252"] = z252
+    stats["p252"] = p252
+    stats["na_reason_252"] = r252
+    stats["window_252"] = w252meta
+
+
+def upsert_history(history: List[Dict[str, Any]], date: str, close: Optional[float], pbr: Optional[float]) -> List[Dict[str, Any]]:
+    # remove same date
+    history = [r for r in history if r.get("date") != date]
+    history.append({"date": date, "close": close, "pbr": pbr})
+    history.sort(key=lambda r: r.get("date") or "")
+    return history
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tz", default=TZ)
-    ap.add_argument("--endpoint", default=os.getenv("TW_PB_ENDPOINT", DEFAULT_ENDPOINT))
-    ap.add_argument("--backfill-months", type=int, default=int(os.getenv("BACKFILL_MONTHS", "0")))
+    ap.add_argument("--tz", default="Asia/Taipei")
+    ap.add_argument("--outdir", default=OUTDIR_DEFAULT)
+    ap.add_argument("--backfill-days", default="0")
     args = ap.parse_args()
 
-    tz = args.tz
-    endpoint = args.endpoint.rstrip("?")
-    backfill_months = max(0, args.backfill_months)
+    tz = ZoneInfo(args.tz)
+    outdir = args.outdir
+    backfill_days = int(args.backfill_days or "0")
 
-    ensure_dir(OUT_DIR)
+    gen_utc, gen_local = now_ts(tz)
 
-    generated_at_utc = now_utc_iso()
-    generated_at_local = now_local_iso(tz)
+    latest_path = os.path.join(outdir, "latest.json")
+    hist_path = os.path.join(outdir, "history.json")
+    stats_path = os.path.join(outdir, "stats_latest.json")
 
-    # Load existing history
-    hist_path = os.path.join(OUT_DIR, "history.json")
-    existing = read_json(hist_path)
-    existing_rows: List[Dict[str, Any]] = []
-    if existing and isinstance(existing.get("rows"), list):
-        existing_rows = existing["rows"]
-
-    # Build YM list
-    end_local = datetime.now(ZoneInfo(tz))
-    ym_list = iter_ym_backfill(end_local, backfill_months)
-
-    all_new: List[Dict[str, Any]] = []
-    fetch_status = "OK"
-    confidence = "OK"
-    dq_reason = None
-    schema_hint = None
-
-    # Fetch months
-    for ym in ym_list:
-        d = ym_first_day(ym)
-        url = f"{endpoint}?date={d}&response=json"
-        fr = fetch_json(url)
-        if not fr.ok or not fr.data:
-            fetch_status = "DOWNGRADED"
-            confidence = "DOWNGRADED"
-            dq_reason = fr.dq_reason or "fetch_failed"
-            continue
-        rows, hint = extract_rows(fr.data)
-        if hint:
-            schema_hint = hint
-        if rows:
-            all_new.extend(rows)
-        else:
-            # no rows is also a data quality issue
-            fetch_status = "DOWNGRADED"
-            confidence = "DOWNGRADED"
-            dq_reason = dq_reason or "empty_rows"
-
-    merged = upsert_history(existing_rows, all_new)
-
-    # latest
-    latest_row = merged[-1] if merged else None
-
-    # stats: use pbr series only where not None
-    pbr_series = [r["pbr"] for r in merged if r.get("pbr") is not None]
-    z60, p60, na60 = rolling_stats([float(x) for x in pbr_series], 60)
-    z252, p252, na252 = rolling_stats([float(x) for x in pbr_series], 252)
-
-    # Derive data_date as latest date with pbr not None (stronger)
-    data_date = None
-    if merged:
-        for r in reversed(merged):
-            if r.get("pbr") is not None:
-                data_date = r["date"]
-                break
-
-    # Write history.json
-    history_out = {
-        "schema_version": "tw_pb_history_v1",
-        "generated_at_utc": generated_at_utc,
-        "generated_at_local": generated_at_local,
-        "timezone": tz,
-        "source_vendor": "twse",
-        "source_policy": "RWD_JSON",
-        "endpoint": endpoint,
-        "backfill_months": backfill_months,
-        "fetch_status": fetch_status,
-        "confidence": confidence,
-        "dq_reason": dq_reason,
-        "schema_hint": schema_hint,
-        "rows": merged,
+    latest: Dict[str, Any] = {
+        "schema_version": SCHEMA_LATEST,
+        "script_fingerprint": SCRIPT_FINGERPRINT,
+        "generated_at_utc": gen_utc,
+        "generated_at_local": gen_local,
+        "timezone": args.tz,
+        "source_vendor": "statementdog",
+        "source_class": "THIRD_PARTY",
+        "source_url": SOURCE_URL,
+        "fetch_status": None,
+        "confidence": None,
+        "dq_reason": None,
+        "data_date": None,
+        "close": None,
+        "pbr": None,
+        "notes": [],
     }
-    write_json(hist_path, history_out)
 
-    # Write latest.json
-    latest_out = {
-        "schema_version": "tw_pb_latest_v1",
-        "generated_at_utc": generated_at_utc,
-        "generated_at_local": generated_at_local,
-        "timezone": tz,
-        "source_vendor": "twse",
-        "source_policy": "RWD_JSON",
-        "endpoint": endpoint,
-        "fetch_status": fetch_status,
-        "confidence": confidence,
-        "dq_reason": dq_reason,
-        "data_date": data_date,
-        "latest": latest_row,
-    }
-    write_json(os.path.join(OUT_DIR, "latest.json"), latest_out)
+    # Fetch
+    try:
+        resp = requests.get(
+            SOURCE_URL,
+            headers={
+                "User-Agent": UA,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.5",
+                "Connection": "close",
+            },
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            latest["fetch_status"] = "DOWNGRADED"
+            latest["confidence"] = "DOWNGRADED"
+            latest["dq_reason"] = f"http_{resp.status_code}"
+            write_json(latest_path, latest)
+            # keep stats/history unchanged if fetch failed
+            if not os.path.exists(hist_path):
+                write_json(hist_path, [])
+            if not os.path.exists(stats_path):
+                write_json(stats_path, compute_stats([], None))
+            return
+        html = resp.text
+    except Exception as e:
+        latest["fetch_status"] = "DOWNGRADED"
+        latest["confidence"] = "DOWNGRADED"
+        latest["dq_reason"] = "fetch_failed"
+        latest["notes"].append(str(e))
+        write_json(latest_path, latest)
+        if not os.path.exists(hist_path):
+            write_json(hist_path, [])
+        if not os.path.exists(stats_path):
+            write_json(stats_path, compute_stats([], None))
+        return
 
-    # Write stats_latest.json
-    stats_out = {
-        "schema_version": "tw_pb_stats_latest_v1",
-        "generated_at_utc": generated_at_utc,
-        "generated_at_local": generated_at_local,
-        "timezone": tz,
-        "source_vendor": "twse",
-        "source_policy": "RWD_JSON",
-        "endpoint": endpoint,
-        "fetch_status": fetch_status,
-        "confidence": confidence,
-        "dq_reason": dq_reason,
-        "data_date": data_date,
-        "series_len_rows": len(merged),
-        "series_len_pbr": len(pbr_series),
-        "stats": {
-            "z60": z60,
-            "p60": p60,
-            "na_reason_60": na60,
-            "z252": z252,
-            "p252": p252,
-            "na_reason_252": na252,
-        },
-    }
-    write_json(os.path.join(OUT_DIR, "stats_latest.json"), stats_out)
+    parsed = parse_statementdog(html)
+
+    # Validate parse
+    if parsed.data_date is None or parsed.pbr is None:
+        latest["fetch_status"] = "DOWNGRADED"
+        latest["confidence"] = "DOWNGRADED"
+        latest["dq_reason"] = "parse_failed_or_missing_fields"
+    else:
+        latest["fetch_status"] = "OK"
+        latest["confidence"] = "OK"
+        latest["dq_reason"] = None
+
+    latest["data_date"] = parsed.data_date
+    latest["close"] = parsed.close
+    latest["pbr"] = parsed.pbr
+
+    # Load history and upsert
+    history = read_json(hist_path, [])
+    if not isinstance(history, list):
+        history = []
+
+    if parsed.data_date and parsed.pbr is not None:
+        history = upsert_history(history, parsed.data_date, parsed.close, parsed.pbr)
+
+    # Tiny backfill (optional): use the "昨日 PBR" as a hint for previous calendar day
+    # WARNING: date mapping assumes "昨日" corresponds to previous trading day; if market holidays, it may be wrong.
+    # Therefore we only do it when user explicitly asks backfill-days>0 AND we can infer a date safely.
+    if backfill_days > 0 and parsed.data_date and parsed.pbr_yesterday is not None:
+        try:
+            d0 = datetime.strptime(parsed.data_date, "%Y-%m-%d")
+            d_prev = (d0 - timedelta(days=1)).strftime("%Y-%m-%d")
+            # insert only if not exists
+            if all(r.get("date") != d_prev for r in history):
+                history = upsert_history(history, d_prev, None, parsed.pbr_yesterday)
+        except Exception:
+            pass
+
+    write_json(latest_path, latest)
+    write_json(hist_path, history)
+
+    # Build pbr_series from history
+    pbr_series: List[Tuple[str, float]] = []
+    for r in history:
+        dt = r.get("date")
+        pv = r.get("pbr")
+        if isinstance(dt, str) and isinstance(pv, (int, float)):
+            pbr_series.append((dt, float(pv)))
+    pbr_series.sort(key=lambda x: x[0])
+
+    stats = compute_stats(pbr_series, parsed.data_date)
+    stats["generated_at_utc"] = gen_utc
+    stats["generated_at_local"] = gen_local
+    stats["timezone"] = args.tz
+    fill_stats_values(stats, pbr_series)
+
+    write_json(stats_path, stats)
 
 
 if __name__ == "__main__":
