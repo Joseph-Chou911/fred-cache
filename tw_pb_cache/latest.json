@@ -1,0 +1,19 @@
+{
+  "confidence": "DOWNGRADED",
+  "data_date": null,
+  "dq_reason": "http_403",
+  "fetch_status": "DOWNGRADED",
+  "freq": "MONTHLY",
+  "generated_at_local": "2026-01-29T19:41:32.836416+08:00",
+  "generated_at_utc": "2026-01-29T11:41:32Z",
+  "monthly_close": null,
+  "notes": "Fetch/parse failed; history preserved.",
+  "pbr": null,
+  "period_ym": null,
+  "schema_version": "tw_pb_sidecar_latest_v2",
+  "script_fingerprint": "tw_update_pb_sidecar_py@v2_monthly_table",
+  "series_len": 0,
+  "source_url": "https://www.wantgoo.com/index/0000/price-book-river",
+  "source_vendor": "wantgoo",
+  "timezone": "Asia/Taipei"
+}

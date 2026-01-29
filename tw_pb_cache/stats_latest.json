@@ -1,0 +1,26 @@
+{
+  "confidence": "DOWNGRADED",
+  "data_date": null,
+  "dq_reason": "http_403",
+  "fetch_status": "DOWNGRADED",
+  "freq": "MONTHLY",
+  "generated_at_local": "2026-01-29T19:41:33.004839+08:00",
+  "generated_at_utc": "2026-01-29T11:41:33Z",
+  "notes": "MONTHLY series. z/p windows are observation-count based. Expect z252/p252 to be NA until >=252 monthly points exist.",
+  "pbr": {
+    "na_reason_252": "INSUFFICIENT_HISTORY:0/252",
+    "na_reason_60": "INSUFFICIENT_HISTORY:0/60",
+    "p252": null,
+    "p60": null,
+    "value": null,
+    "z252": null,
+    "z60": null
+  },
+  "period_ym": null,
+  "schema_version": "tw_pb_sidecar_stats_latest_v2",
+  "script_fingerprint": "tw_compute_pb_stats_py@v2_pbr_only",
+  "series_len": 0,
+  "source_url": "https://www.wantgoo.com/index/0000/price-book-river",
+  "source_vendor": "wantgoo",
+  "timezone": "Asia/Taipei"
+}
