@@ -44,9 +44,9 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-01-28｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: NA｜tag: WEEKDAY
+- UsedDate: 2026-01-28｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 低(derived)｜risk_level_raw: NA｜tag: WEEKDAY
 - summary: 今日資料未更新；UsedDate=2026-01-28：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
-- numbers: Close=32803.82, PctChange=1.5035%, TradeValue=853922428449, VolumeMultiplier=1.11749, AmplitudePct=1.305963%, VolMultiplier=1.11749, VolMultiplier20=NA
+- numbers: Close=32803.82, PctChange=1.5035%, TradeValue=853922428449, VolumeMultiplier=1.11749, AmplitudePct=1.305963%, VolMultiplier=1.11749
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=0, OhlcMissing=False
 - action: 維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。
 - caveats: Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
@@ -61,6 +61,7 @@ REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
 - generated_at: 2026-01-29T08:13:21.574134+08:00 (Asia/Taipei)
+- resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -97,8 +98,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
 - rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
-- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
-- resonance_policy=latest：若 roll25 stale 但日期對齊，仍可判定共振/背離，但會標示 resonance_confidence=DOWNGRADED。
+- resonance_policy=latest：若 roll25 stale 或 date mismatch，仍使用最新可用資料判定，但標示 resonance_confidence=DOWNGRADED。
 - maint_ratio 為 proxy（display-only）：不作為 margin_signal 的輸入，僅供趨勢觀察。
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
@@ -119,4 +119,4 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-01-29T01:34:20Z_
+_generated_at_utc: 2026-01-29T01:46:43Z_
