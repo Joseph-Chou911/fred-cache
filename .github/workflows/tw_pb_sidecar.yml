@@ -1,16 +1,16 @@
-name: Update TW PB sidecar (tw_pb_cache + latest + stats + report + manifest)
+name: Update TW PB sidecar (taiex P/B + stats + report + manifest)
 
 on:
   workflow_dispatch:
     inputs:
-      backfill_months:
-        description: "One-shot backfill months (0=disabled). Suggested: 18~48"
+      backfill_days:
+        description: "One-shot backfill days (0=disabled). Suggested: 0~5"
         required: false
         default: "0"
   schedule:
-    # Every 9 hours at minute 10 (UTC): 00:10, 09:10, 18:10
-    # Asia/Taipei (UTC+8): 08:10, 17:10, 02:10 (next day)
-    - cron: "10 */9 * * *"
+    # Every 9 hours at minute 12 (UTC): 00:12, 09:12, 18:12
+    # Asia/Taipei (UTC+8): 08:12, 17:12, 02:12 (next day)
+    - cron: "12 */9 * * *"
 
 permissions:
   contents: write
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   update_daily:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill_months == '' || github.event.inputs.backfill_months == '0'))
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill_days == '' || github.event.inputs.backfill_days == '0'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -51,8 +51,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           data_files=(
-            "tw_pb_cache/history.json"
             "tw_pb_cache/latest.json"
+            "tw_pb_cache/history.json"
             "tw_pb_cache/stats_latest.json"
             "tw_pb_cache/report.md"
           )
@@ -80,7 +80,6 @@ jobs:
             python scripts/render_tw_pb_report_md.py \
               --latest "tw_pb_cache/latest.json" \
               --stats  "tw_pb_cache/stats_latest.json" \
-              --history "tw_pb_cache/history.json" \
               --out    "tw_pb_cache/report.md"
 
             # 4) Required outputs & stale-mtime check
@@ -117,7 +116,7 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Update TW PB sidecar data (history + latest + stats + report)"
+            git commit -m "Update TW PB sidecar data (taiex pb + stats + report)"
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
@@ -135,10 +134,10 @@ jobs:
             echo "MANIFEST_SHA=${MANIFEST_SHA}"
 
             echo "Snapshot URLs:"
-            echo "  DATA latest (immutable):  https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/tw_pb_cache/latest.json"
-            echo "  REPORT (immutable):       https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/tw_pb_cache/report.md"
-            echo "  MANIFEST (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/tw_pb_cache/manifest.json"
-            echo "  MANIFEST (main):          https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/tw_pb_cache/manifest.json"
+            echo "  DATA latest (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/tw_pb_cache/latest.json"
+            echo "  REPORT (immutable):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/tw_pb_cache/report.md"
+            echo "  MANIFEST (immutable):    https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/tw_pb_cache/manifest.json"
+            echo "  MANIFEST (main):         https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/tw_pb_cache/manifest.json"
 
             if git push origin HEAD:main; then
               echo "Push succeeded."
@@ -155,9 +154,9 @@ jobs:
           exit 1
 
   backfill:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill_days != '' && github.event.inputs.backfill_days != '0'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     concurrency:
       group: repo-writer-backfill
@@ -183,7 +182,7 @@ jobs:
       - name: Backfill + sanity + report + commit + manifest + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
-          BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
+          BACKFILL_DAYS: ${{ github.event.inputs.backfill_days }}
         run: |
           set -euo pipefail
 
@@ -191,8 +190,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           data_files=(
-            "tw_pb_cache/history.json"
             "tw_pb_cache/latest.json"
+            "tw_pb_cache/history.json"
             "tw_pb_cache/stats_latest.json"
             "tw_pb_cache/report.md"
           )
@@ -207,24 +206,18 @@ jobs:
 
             echo "Runner time (UTC):    $(date -u '+%Y-%m-%d %H:%M:%S %Z')"
             echo "Runner time (Taipei): $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
-            echo "BackfillMonths=${BACKFILL_MONTHS}"
+            echo "BackfillDays=${BACKFILL_DAYS}"
 
             start_epoch="$(date +%s)"
 
-            # 1) Generate (backfill)
-            python scripts/update_tw_pb_sidecar.py --backfill-months "${BACKFILL_MONTHS}"
-
-            # 2) Sanity
+            python scripts/update_tw_pb_sidecar.py --backfill-days "${BACKFILL_DAYS}"
             python scripts/sanity_tw_pb.py
 
-            # 3) Render report
             python scripts/render_tw_pb_report_md.py \
               --latest "tw_pb_cache/latest.json" \
               --stats  "tw_pb_cache/stats_latest.json" \
-              --history "tw_pb_cache/history.json" \
               --out    "tw_pb_cache/report.md"
 
-            # 4) Required outputs & stale-mtime check
             missing=0
             for f in "${data_files[@]}"; do
               if [ ! -f "$f" ]; then
@@ -243,13 +236,11 @@ jobs:
               exit 1
             fi
 
-            # 5) Fingerprint
             for f in "${data_files[@]}"; do
               h="$(sha256sum "$f" | awk '{print $1}')"
               echo "$f  sha256=$h"
             done
 
-            # 6) Commit DATA
             git add -A "${data_files[@]}"
             if git diff --cached --quiet; then
               echo "No staged data changes to commit."
@@ -258,11 +249,10 @@ jobs:
               exit 0
             fi
 
-            git commit -m "Backfill TW PB sidecar data (history + latest + stats + report)"
+            git commit -m "Backfill TW PB sidecar data (taiex pb + stats + report)"
             DATA_SHA="$(git rev-parse HEAD)"
             echo "DATA_SHA=${DATA_SHA}"
 
-            # 7) Manifest pinned to DATA_SHA
             python scripts/write_tw_pb_manifest.py --data-sha "${DATA_SHA}" --out "${manifest_file}"
 
             git add -A "${manifest_file}"
@@ -274,12 +264,6 @@ jobs:
             git commit -m "Update TW PB manifest (pinned to ${DATA_SHA})"
             MANIFEST_SHA="$(git rev-parse HEAD)"
             echo "MANIFEST_SHA=${MANIFEST_SHA}"
-
-            echo "Snapshot URLs:"
-            echo "  DATA latest (immutable):  https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/tw_pb_cache/latest.json"
-            echo "  REPORT (immutable):       https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/tw_pb_cache/report.md"
-            echo "  MANIFEST (immutable):     https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/tw_pb_cache/manifest.json"
-            echo "  MANIFEST (main):          https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/tw_pb_cache/manifest.json"
 
             if git push origin HEAD:main; then
               echo "Push succeeded."
