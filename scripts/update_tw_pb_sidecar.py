@@ -7,14 +7,13 @@ TW PB sidecar: TAIEX P/B ratio (PBR) from StatementDog public page (HTML).
 
 Outputs:
 - tw_pb_cache/latest.json
-- tw_pb_cache/history.json  (upsert by date)
+- tw_pb_cache/history.json  (upsert by date; forward-only, NO backfill)
 - tw_pb_cache/stats_latest.json (z60/p60/z252/p252 computed from history PBR series)
 
 Design constraints:
 - Deterministic, audit-friendly.
 - If fetch or parse fails => DOWNGRADED and preserve NA (do NOT guess).
-- History is built forward by daily runs.
-- Optional tiny backfill: uses "昨日 PBR" shown on the page (WARNING: may be wrong on holidays).
+- History builds forward only (no inferred dates, no backfill).
 """
 
 from __future__ import annotations
@@ -25,12 +24,11 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-
 
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -75,27 +73,23 @@ def safe_float(s: str) -> Optional[float]:
 
 
 def _html_to_text(raw: str) -> str:
-    """
-    Convert HTML to plain text for robust regex extraction.
-    - Drop <script>/<style>
-    - Strip tags
-    - Unescape entities
-    - Normalize whitespace
-    """
+    # drop scripts/styles (noise)
     s = re.sub(r"<script\b[^>]*>.*?</script>", " ", raw, flags=re.I | re.S)
     s = re.sub(r"<style\b[^>]*>.*?</style>", " ", s, flags=re.I | re.S)
+    # strip tags
     s = re.sub(r"<[^>]+>", " ", s)
+    # unescape entities
     s = htmllib.unescape(s)
+    # normalize whitespace
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
 @dataclass
 class Parsed:
-    data_date: Optional[str]          # YYYY-MM-DD
+    data_date: Optional[str]  # YYYY-MM-DD
     close: Optional[float]
     pbr: Optional[float]
-    pbr_yesterday: Optional[float]
 
 
 def parse_statementdog(html: str) -> Parsed:
@@ -119,17 +113,11 @@ def parse_statementdog(html: str) -> Parsed:
     if m3:
         pbr = safe_float(m3.group(1))
 
-    # 昨日 3.43 倍（可選）
-    pbr_y = None
-    m4 = re.search(r"台股股價淨值比.*?昨日\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*倍", text)
-    if m4:
-        pbr_y = safe_float(m4.group(1))
-
-    return Parsed(data_date=data_date, close=close, pbr=pbr, pbr_yesterday=pbr_y)
+    return Parsed(data_date=data_date, close=close, pbr=pbr)
 
 
 def percentile_rank(window: List[float], x: float) -> float:
-    # Inclusive percentile: % of values <= x
+    # inclusive percentile: % of values <= x
     if not window:
         return float("nan")
     le = sum(1 for v in window if v <= x)
@@ -137,7 +125,7 @@ def percentile_rank(window: List[float], x: float) -> float:
 
 
 def zscore_sample(window: List[float], x: float) -> Optional[float]:
-    # Sample std (ddof=1). If insufficient or std==0 => NA
+    # sample std (ddof=1)
     n = len(window)
     if n < 2:
         return None
@@ -148,7 +136,7 @@ def zscore_sample(window: List[float], x: float) -> Optional[float]:
     return (x - mean) / (var ** 0.5)
 
 
-def upsert_history(history: List[Dict[str, Any]], date: str, close: Optional[float], pbr: Optional[float]) -> List[Dict[str, Any]]:
+def upsert_history(history: List[Dict[str, Any]], date: str, close: Optional[float], pbr: float) -> List[Dict[str, Any]]:
     history = [r for r in history if r.get("date") != date]
     history.append({"date": date, "close": close, "pbr": pbr})
     history.sort(key=lambda r: r.get("date") or "")
@@ -159,6 +147,8 @@ def fill_stats(stats: Dict[str, Any], pbr_series: List[Tuple[str, float]]) -> No
     if not pbr_series:
         stats["na_reason_60"] = "INSUFFICIENT_HISTORY:0/60"
         stats["na_reason_252"] = "INSUFFICIENT_HISTORY:0/252"
+        stats["window_60"] = {"n": 0, "from": None, "to": None}
+        stats["window_252"] = {"n": 0, "from": None, "to": None}
         return
 
     latest_date, latest_pbr = pbr_series[-1]
@@ -166,9 +156,10 @@ def fill_stats(stats: Dict[str, Any], pbr_series: List[Tuple[str, float]]) -> No
     stats["series_len_pbr"] = len(pbr_series)
 
     def compute_for_window(w: int) -> Tuple[Optional[float], Optional[float], Optional[str], Dict[str, Any]]:
-        if len(pbr_series) < w:
-            return None, None, f"INSUFFICIENT_HISTORY:{len(pbr_series)}/{w}", {
-                "n": len(pbr_series),
+        n = len(pbr_series)
+        if n < w:
+            return None, None, f"INSUFFICIENT_HISTORY:{n}/{w}", {
+                "n": n,
                 "from": pbr_series[0][0],
                 "to": latest_date,
             }
@@ -195,12 +186,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tz", default="Asia/Taipei")
     ap.add_argument("--outdir", default=OUTDIR_DEFAULT)
-    ap.add_argument("--backfill-days", default="0")
     args = ap.parse_args()
 
     tz = ZoneInfo(args.tz)
     outdir = args.outdir
-    backfill_days = int(args.backfill_days or "0")
 
     gen_utc, gen_local = now_ts(tz)
 
@@ -245,7 +234,6 @@ def main() -> None:
             latest["confidence"] = "DOWNGRADED"
             latest["dq_reason"] = f"http_{resp.status_code}"
             write_json(latest_path, latest)
-            # keep empty placeholders if first run
             if not os.path.exists(hist_path):
                 write_json(hist_path, [])
             if not os.path.exists(stats_path):
@@ -304,24 +292,14 @@ def main() -> None:
     latest["close"] = parsed.close
     latest["pbr"] = parsed.pbr
 
-    # Load history (list of {date, close, pbr})
+    # Load history
     history = read_json(hist_path, [])
     if not isinstance(history, list):
         history = []
 
-    # Upsert today's row only if we have reliable pbr
-    if parsed.data_date and parsed.pbr is not None:
-        history = upsert_history(history, parsed.data_date, parsed.close, parsed.pbr)
-
-    # Optional tiny backfill (WARNING: yesterday mapping may be wrong on holidays)
-    if backfill_days > 0 and parsed.data_date and parsed.pbr_yesterday is not None:
-        try:
-            d0 = datetime.strptime(parsed.data_date, "%Y-%m-%d")
-            d_prev = (d0 - timedelta(days=1)).strftime("%Y-%m-%d")
-            if all((isinstance(r, dict) and r.get("date") != d_prev) for r in history):
-                history = upsert_history(history, d_prev, None, parsed.pbr_yesterday)
-        except Exception:
-            pass
+    # Forward-only: upsert only when date + numeric pbr exist
+    if parsed.data_date and isinstance(parsed.pbr, (int, float)):
+        history = upsert_history(history, parsed.data_date, parsed.close, float(parsed.pbr))
 
     # Write latest/history
     write_json(latest_path, latest)
