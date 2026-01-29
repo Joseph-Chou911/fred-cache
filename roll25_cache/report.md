@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-29T14:34:32Z`
-- generated_at_local: `2026-01-29T22:34:32.974637+08:00`
+- generated_at_utc: `2026-01-29T19:44:55Z`
+- generated_at_local: `2026-01-30T03:44:55.274722+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-01-28`
 - UsedDateStatus: `DATA_NOT_UPDATED`
@@ -58,7 +58,7 @@ run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
 Mode=FULL | OHLC=OK | UsedDate=2026-01-28 | UsedDminus1=2026-01-27
 RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
-freshness_ok=True | freshness_age_days=1
+freshness_ok=True | freshness_age_days=2
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
