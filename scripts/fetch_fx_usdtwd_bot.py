@@ -15,6 +15,7 @@ Outputs:
 
 Strict:
 - require data_date + spot_buy + spot_sell + spot_sell>=spot_buy
+- PLUS sanity range check for USD/TWD (default: 20~40) to avoid wrong-currency capture.
 """
 
 from __future__ import annotations
@@ -36,6 +37,10 @@ UA = (
 )
 
 BOT_XRT_PAGE = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
+
+# Sanity range for USD/TWD mid (to block HKD~4.x being mis-captured as USD)
+USD_TWD_MID_MIN = 20.0
+USD_TWD_MID_MAX = 40.0
 
 
 def _read_text(path: str) -> str:
@@ -114,19 +119,29 @@ def _html_to_text(html: str) -> str:
     return s
 
 
+def _slice_window(text: str, start: int, pre: int = 60, post: int = 520) -> str:
+    """Return a bounded window around an anchor index for safer regex parsing."""
+    a = max(0, start - pre)
+    b = min(len(text), start + post)
+    return text[a:b]
+
+
 def _parse_xrt_text(text: str, tz_name: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     """
-    We parse on "flattened" text.
+    Parse on "flattened" text.
 
     Targets (Chinese page):
     - page date: 2026/01/26 ... 本行營業時間牌告匯率
     - quote time: 牌價最新掛牌時間：2026/01/26 14:38
     - USD row: 美金 (USD) ... <cash_buy> <cash_sell> <spot_buy> <spot_sell>
 
-    If Chinese anchors fail, we also try English-like anchors.
+    Critical fix:
+    - Allow integer numbers (e.g., cash_buy can be "31" without decimals).
+    - Bind parsing to a small window near the "美金(USD)" anchor; never scan globally for 4 floats.
+    - Sanity range check on USD/TWD mid to block wrong-currency capture (e.g., HKD~4.x).
     """
     dbg: Dict[str, Any] = {
-        "format": "xrt_text_v2",
+        "format": "xrt_text_v3_windowed",
         "reason": "NA",
         "text_len": len(text),
         "text_head": text[:220],
@@ -141,7 +156,11 @@ def _parse_xrt_text(text: str, tz_name: str) -> Tuple[Optional[Dict[str, Any]], 
         page_date = m1.group(1)
     else:
         # fallback: any yyyy/mm/dd near "Foreign Exchange Rate" (English page)
-        m1b = re.search(r"(\d{4}/\d{2}/\d{2}).{0,40}Foreign Exchange Rate", text, flags=re.IGNORECASE)
+        m1b = re.search(
+            r"(\d{4}/\d{2}/\d{2}).{0,40}Foreign Exchange Rate",
+            text,
+            flags=re.IGNORECASE,
+        )
         if m1b:
             page_date = m1b.group(1)
 
@@ -153,37 +172,77 @@ def _parse_xrt_text(text: str, tz_name: str) -> Tuple[Optional[Dict[str, Any]], 
         dt = datetime.strptime(f"{m2.group(1)} {m2.group(2)}", "%Y/%m/%d %H:%M").replace(tzinfo=tz)
         quote_dt_iso = dt.isoformat()
 
-    # (3) USD numbers: cash_buy cash_sell spot_buy spot_sell (as in the table snippet)
+    # (3) USD numbers: cash_buy cash_sell spot_buy spot_sell
     cash_buy = cash_sell = spot_buy = spot_sell = None
 
-    # Preferred: Chinese anchor
-    m3 = re.search(
-        r"美金\s*\(USD\).*?(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)",
-        text
-    )
-    if not m3:
-        # Fallback: any USD anchor then capture 4 floats after it (avoid grabbing forwards, keep it local window)
-        m3 = re.search(
-            r"USD.{0,120}?(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)",
-            text
-        )
+    num = r"(\d+(?:\.\d+)?)"  # allow integer or decimal
 
-    if m3:
-        cash_buy = _to_float(m3.group(1))
-        cash_sell = _to_float(m3.group(2))
-        spot_buy = _to_float(m3.group(3))
-        spot_sell = _to_float(m3.group(4))
+    # Find the Chinese anchor and parse within a local window
+    anchor = re.search(r"美金\s*\(USD\)", text)
+    if anchor:
+        w = _slice_window(text, anchor.start(), pre=80, post=650)
+        dbg["usd_anchor"] = "zh:美金(USD)"
+        dbg["usd_window"] = w[:520]  # store part of window for audit/debug (bounded)
+        m3 = re.search(
+            rf"美金\s*\(USD\).*?{num}\s+{num}\s+{num}\s+{num}",
+            w,
+        )
+        if m3:
+            cash_buy = _to_float(m3.group(1))
+            cash_sell = _to_float(m3.group(2))
+            spot_buy = _to_float(m3.group(3))
+            spot_sell = _to_float(m3.group(4))
+    else:
+        dbg["usd_anchor"] = "zh:missing"
+
+    # If still not found, try a tighter English-ish anchor within a local window
+    if spot_buy is None or spot_sell is None:
+        anchor2 = re.search(r"\(USD\)", text)
+        if anchor2:
+            w2 = _slice_window(text, anchor2.start(), pre=80, post=650)
+            dbg["usd_anchor2"] = "en:(USD)"
+            dbg["usd_window2"] = w2[:520]
+            m3b = re.search(
+                rf"USD.{0,160}?{num}\s+{num}\s+{num}\s+{num}",
+                w2,
+            )
+            if m3b:
+                cash_buy = _to_float(m3b.group(1))
+                cash_sell = _to_float(m3b.group(2))
+                spot_buy = _to_float(m3b.group(3))
+                spot_sell = _to_float(m3b.group(4))
+        else:
+            dbg["usd_anchor2"] = "en:missing"
 
     if not page_date:
         dbg["reason"] = "cannot_find_page_date"
         return None, dbg
+
     if spot_buy is None or spot_sell is None:
         dbg["reason"] = "cannot_find_usd_spot"
-        dbg["usd_match_window"] = text[text.find("USD")-80:text.find("USD")+220] if "USD" in text else "NA"
+        dbg["extracted"] = {
+            "cash_buy": cash_buy,
+            "cash_sell": cash_sell,
+            "spot_buy": spot_buy,
+            "spot_sell": spot_sell,
+        }
+        return None, dbg
+
+    # Sanity check: block wrong-currency capture (e.g., HKD~4.x)
+    mid = (spot_buy + spot_sell) / 2.0
+    if not (USD_TWD_MID_MIN <= mid <= USD_TWD_MID_MAX):
+        dbg["reason"] = "sanity_range_fail_usd_mid"
+        dbg["extracted"] = {
+            "cash_buy": cash_buy,
+            "cash_sell": cash_sell,
+            "spot_buy": spot_buy,
+            "spot_sell": spot_sell,
+            "mid": mid,
+            "range": [USD_TWD_MID_MIN, USD_TWD_MID_MAX],
+        }
         return None, dbg
 
     data_date = page_date.replace("/", "-")
-
     parsed = {
         "data_date": data_date,
         "quote_time_local": quote_dt_iso,
@@ -195,6 +254,13 @@ def _parse_xrt_text(text: str, tz_name: str) -> Tuple[Optional[Dict[str, Any]], 
         },
     }
     dbg["reason"] = "ok"
+    dbg["extracted"] = {
+        "cash_buy": cash_buy,
+        "cash_sell": cash_sell,
+        "spot_buy": spot_buy,
+        "spot_sell": spot_sell,
+        "mid": mid,
+    }
     return parsed, dbg
 
 
@@ -215,7 +281,7 @@ def main() -> int:
     status_code, html, http_err = _fetch(session, args.source_url, args.timeout)
 
     parsed: Optional[Dict[str, Any]] = None
-    parse_dbg: Dict[str, Any] = {"format": "xrt_text_v2", "reason": "http_not_200_or_empty"}
+    parse_dbg: Dict[str, Any] = {"format": "xrt_text_v3_windowed", "reason": "http_not_200_or_empty"}
 
     text = ""
     if status_code == 200 and html:
@@ -230,6 +296,7 @@ def main() -> int:
     if spot_buy is not None and spot_sell is not None:
         mid = (spot_buy + spot_sell) / 2.0
 
+    # strict_ok includes sanity check indirectly because _parse_xrt_text would return None on sanity failure.
     strict_ok = bool(
         data_date
         and spot_buy is not None
@@ -270,7 +337,7 @@ def main() -> int:
         _dump_json(args.history, history)
 
     print(
-        "FX(BOT:XRT_HTML_v2) strict_ok={ok} date={date} spot_buy={b} spot_sell={s} mid={m} http={http} reason={reason}".format(
+        "FX(BOT:XRT_HTML_v3_windowed) strict_ok={ok} date={date} spot_buy={b} spot_sell={s} mid={m} http={http} reason={reason}".format(
             ok=str(strict_ok).lower(),
             date=data_date or "NA",
             b="None" if spot_buy is None else f"{spot_buy:.6f}",
