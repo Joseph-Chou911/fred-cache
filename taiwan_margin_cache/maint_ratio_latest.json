@@ -1,41 +1,41 @@
 {
   "schema_version": "tw_market_maint_ratio_latest_v1",
   "script_fingerprint": "fetch_twse_market_maint_ratio_py@v6_guard_short_table_grouping",
-  "generated_at_utc": "2026-01-30T00:05:31Z",
-  "generated_at_local": "2026-01-30T08:05:31.031992+08:00",
+  "generated_at_utc": "2026-01-30T14:22:20Z",
+  "generated_at_local": "2026-01-30T22:22:20.645968+08:00",
   "timezone": "Asia/Taipei",
   "source_urls": {
     "MI_MARGN": "https://www.twse.com.tw/exchangeReport/MI_MARGN",
     "MI_INDEX": "https://www.twse.com.tw/exchangeReport/MI_INDEX"
   },
   "params": {
-    "date": "20260129",
+    "date": "20260130",
     "exclude_non4": false
   },
   "fetch_status": "OK",
   "confidence": "OK",
   "dq_reason": "",
-  "data_date": "2026-01-29",
-  "total_financing_amount_twd": 381778070000,
-  "total_collateral_value_twd": 709688311330,
-  "maint_ratio_pct": 185.890277,
-  "included_count": 1244,
-  "missing_price_count": 2,
+  "data_date": "2026-01-30",
+  "total_financing_amount_twd": 383893252000,
+  "total_collateral_value_twd": 706350772630,
+  "maint_ratio_pct": 183.996663,
+  "included_count": 1242,
+  "missing_price_count": 4,
   "notes": [
-    "margn_table[0]_title=115年01月29日 信用交易統計",
+    "margn_table[0]_title=115年01月30日 信用交易統計",
     "margn_table[0]_fields_preview=項目,買進,賣出,現金券償還,前日餘額,今日餘額",
-    "margn_table[1]_title=115年01月29日 融資融券彙總 (全部)",
+    "margn_table[1]_title=115年01月30日 融資融券彙總 (全部)",
     "margn_table[1]_fields_preview=代號,名稱,買進,賣出,現金償還,前日餘額,今日餘額,次一營業日限額,買進,賣出,現券償還,前日餘額",
-    "mi_index_table[0]_title=115年01月29日 價格指數(臺灣證券交易所)",
+    "mi_index_table[0]_title=115年01月30日 價格指數(臺灣證券交易所)",
     "mi_index_table[0]_fields_preview=指數,收盤指數,漲跌+,漲跌點數,漲跌百分比%,特殊處理註記",
     "mi_index_table[1]_title=價格指數(跨市場)",
     "mi_index_table[1]_fields_preview=指數,收盤指數,漲跌+,漲跌點數,漲跌百分比%,特殊處理註記",
     "mi_index_table[2]_title=價格指數(臺灣指數公司)",
     "mi_index_table[2]_fields_preview=指數,收盤指數,漲跌+,漲跌點數,漲跌百分比%,特殊處理註記",
-    "total_financing_amount: S3_table[0]:115年01月29日 信用交易統計:data:row_label_match",
-    "fin_shares: table[1]:115年01月29日 融資融券彙總 (全部):ok:code_idx=0,fin_idx=6,method=grouped_first_today:g1=2,g2=8",
+    "total_financing_amount: S3_table[0]:115年01月30日 信用交易統計:data:row_label_match",
+    "fin_shares: table[1]:115年01月30日 融資融券彙總 (全部):ok:code_idx=0,fin_idx=6,method=grouped_first_today:g1=2,g2=8",
     "fin_pick_confident: True",
-    "close_prices: table:115年01月29日 每日收盤行情(全部(不含權證、牛熊證)):ok"
+    "close_prices: table:115年01月30日 每日收盤行情(全部(不含權證、牛熊證)):ok"
   ],
   "error": null
 }
