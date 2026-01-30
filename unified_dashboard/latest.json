@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-01-29T17:26:21Z",
+  "generated_at_utc": "2026-01-30T01:10:11Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -531,39 +531,39 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-01-29T22:34:32.879510+08:00",
+        "generated_at": "2026-01-30T08:04:20.857760+08:00",
         "timezone": "Asia/Taipei",
-        "summary": "今日資料未更新；UsedDate=2026-01-28：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
+        "summary": "今日資料未更新；UsedDate=2026-01-29：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
         "numbers": {
-          "UsedDate": "2026-01-28",
-          "Close": 32803.82,
-          "PctChange": 1.5035,
-          "TradeValue": 853922428449,
-          "AmplitudePct": 1.305963,
-          "VolMultiplier": 1.11749,
-          "VolumeMultiplier": 1.11749,
+          "UsedDate": "2026-01-29",
+          "Close": 32536.27,
+          "PctChange": -0.815606,
+          "TradeValue": 959652045839,
+          "AmplitudePct": 1.596095,
+          "VolMultiplier": 1.222947,
+          "VolumeMultiplier": 1.222947,
           "LookbackNTarget": 20,
           "LookbackNActual": 20
         },
         "signal": {
-          "DownDay": false,
+          "DownDay": true,
           "OhlcMissing": false,
           "UsedDateStatus": "DATA_NOT_UPDATED",
           "RunDayTag": "WEEKDAY",
           "VolumeAmplified": false,
           "VolAmplified": false,
           "NewLow_N": 0,
-          "ConsecutiveBreak": 0,
+          "ConsecutiveBreak": 1,
           "LookbackNTarget": 20,
           "LookbackNActual": 20,
-          "VolMultiplier": 1.11749,
-          "VolumeMultiplier": 1.11749,
+          "VolMultiplier": 1.222947,
+          "VolumeMultiplier": 1.222947,
           "VolWin": 20,
           "VolThreshold": 1.5,
           "NewLowWin": 60
         },
         "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-        "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-28 | UsedDminus1=2026-01-27\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).",
+        "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-01-29 | UsedDminus1=2026-01-28\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).",
         "run_day_tag": "WEEKDAY",
         "used_date_status": "DATA_NOT_UPDATED",
         "tag": "WEEKDAY",
@@ -571,11 +571,19 @@
         "freshness_age_days": 1,
         "mode": "FULL",
         "ohlc_status": "OK",
-        "used_date": "2026-01-28",
-        "used_dminus1": "2026-01-27",
+        "used_date": "2026-01-29",
+        "used_dminus1": "2026-01-28",
         "lookback_n_actual": 20,
-        "lookback_oldest": "2025-12-31",
+        "lookback_oldest": "2026-01-02",
         "cache_tail": [
+          {
+            "date": "2026-01-29",
+            "close": 32536.27,
+            "change": -267.55,
+            "trade_value": 959652045839,
+            "high": 32996.03,
+            "low": 32472.45
+          },
           {
             "date": "2026-01-28",
             "close": 32803.82,
@@ -767,17 +775,17 @@
             "trade_value": 439061668896,
             "high": 28486.38,
             "low": 28280.59
-          },
-          {
-            "date": "2025-12-23",
-            "close": 28310.47,
-            "change": 160.83,
-            "trade_value": 431994260374,
-            "high": 28350.37,
-            "low": 28212.84
           }
         ],
         "cache_roll25": [
+          {
+            "date": "2026-01-29",
+            "close": 32536.27,
+            "change": -267.55,
+            "trade_value": 959652045839,
+            "high": 32996.03,
+            "low": 32472.45
+          },
           {
             "date": "2026-01-28",
             "close": 32803.82,
@@ -2369,45 +2377,37 @@
             "trade_value": 305561723714,
             "high": 19895.43,
             "low": 19576.15
-          },
-          {
-            "date": "2025-04-14",
-            "close": 19513.09,
-            "change": -15.68,
-            "trade_value": 474947203845,
-            "high": 20023.63,
-            "low": 19508.93
           }
         ]
       },
       "core": {
-        "UsedDate": "2026-01-28",
+        "UsedDate": "2026-01-29",
         "run_day_tag": "TRADING_DAY",
         "used_date_status": "OK_LATEST",
         "used_date_status_dbg": {
-          "used_date": "2026-01-28",
-          "latest_row_date": "2026-01-28",
+          "used_date": "2026-01-29",
+          "latest_row_date": "2026-01-29",
           "ohlc_status": "OK",
           "freshness_ok": true
         },
         "used_date_selection_tag": "WEEKDAY",
         "tag_legacy": "WEEKDAY",
         "risk_level": "NA",
-        "turnover_twd": 853922428449,
+        "turnover_twd": 959652045839,
         "turnover_unit": "TWD",
-        "close": 32803.82,
-        "pct_change": 1.5035,
-        "amplitude_pct": 1.305963,
-        "volume_multiplier": 1.11749,
-        "vol_multiplier": 1.11749,
+        "close": 32536.27,
+        "pct_change": -0.815606,
+        "amplitude_pct": 1.596095,
+        "volume_multiplier": 1.222947,
+        "vol_multiplier": 1.222947,
         "LookbackNTarget": 20,
         "LookbackNActual": 20,
         "signals": {
-          "DownDay": false,
+          "DownDay": true,
           "VolumeAmplified": false,
           "VolAmplified": false,
           "NewLow_N": 0,
-          "ConsecutiveBreak": 0,
+          "ConsecutiveBreak": 1,
           "OhlcMissing": false
         },
         "ohlc_status": "OK",
@@ -2419,7 +2419,7 @@
           "vol_n": 10,
           "dd_n": 10
         },
-        "realized_vol_N_annualized_pct": 16.501908619807555,
+        "realized_vol_N_annualized_pct": 17.277041748819087,
         "realized_vol_points_used": 10,
         "max_drawdown_N_pct": -1.6171919449596839,
         "max_drawdown_points_used": 10,
@@ -2438,7 +2438,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-01-29T14:35:11Z",
+        "generated_at_utc": "2026-01-30T00:05:29Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
@@ -2610,7 +2610,7 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-01-29T14:35:24Z",
+            "fetched_at_utc": "2026-01-30T00:05:29Z",
             "http_error": null,
             "rows_count": 30
           },
@@ -2784,7 +2784,7 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-01-29T14:35:25Z",
+            "fetched_at_utc": "2026-01-30T00:05:30Z",
             "http_error": null,
             "rows_count": 30
           }
@@ -2811,11 +2811,11 @@
           "confidence": "OK",
           "twse_data_date": "2026-01-29"
         },
-        "roll25_heated_market": false,
+        "roll25_heated_market": true,
         "roll25_data_quality_issue": false,
-        "roll25_heated": false,
+        "roll25_heated": true,
         "roll25_confidence": "OK",
-        "consistency": "DIVERGENCE",
+        "consistency": "CONVERGENCE",
         "rationale": {
           "consistency_rule": "Deterministic Margin×Roll25MarketHeat (rule_v1).",
           "roll25_rationale": {
@@ -2825,11 +2825,11 @@
             "risk_level": "NA",
             "window_note": "LookbackNActual=20/20",
             "signals_market_used": {
-              "DownDay": false,
+              "DownDay": true,
               "VolumeAmplified": false,
               "VolAmplified": false,
               "NewLow_N": 0,
-              "ConsecutiveBreak": 0
+              "ConsecutiveBreak": 1
             },
             "signals_data_quality_used": {
               "OhlcMissing": false,
@@ -2837,18 +2837,18 @@
               "freshness_ok": true,
               "used_date_status": "OK_LATEST",
               "used_date_status_dbg": {
-                "used_date": "2026-01-28",
-                "latest_row_date": "2026-01-28",
+                "used_date": "2026-01-29",
+                "latest_row_date": "2026-01-29",
                 "ohlc_status": "OK",
                 "freshness_ok": true
               }
             },
             "market_hits": {
-              "DownDay": false,
+              "DownDay": true,
               "VolumeAmplified": false,
               "VolAmplified": false,
               "NewLow_N": false,
-              "ConsecutiveBreak": false
+              "ConsecutiveBreak": true
             },
             "data_quality_hits": {
               "OhlcMissing(signal)": false,
@@ -2856,12 +2856,12 @@
               "FreshnessNotOK(field)": false,
               "UsedDateStatusBad(derived)": false
             },
-            "used_date": "2026-01-28"
+            "used_date": "2026-01-29"
           },
           "date_alignment": {
             "twmargin_date": "2026-01-29",
-            "roll25_used_date": "2026-01-28",
-            "used_date_match": false,
+            "roll25_used_date": "2026-01-29",
+            "used_date_match": true,
             "note": "confirm-only; does not change signal"
           },
           "note": "consistency uses roll25_heated_market only; roll25_data_quality_issue does NOT flip consistency, but should downgrade trust in interpretation."
@@ -2872,26 +2872,26 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-01-29T17:26:20Z",
+        "generated_at_utc": "2026-01-30T01:10:10Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
-        "data_date": "2026-01-29",
-        "quote_time_local": "2026-01-30T01:21:00+08:00",
+        "data_date": "2026-01-30",
+        "quote_time_local": "2026-01-30T09:04:00+08:00",
         "usd_twd": {
-          "spot_buy": 31.225,
-          "spot_sell": 31.375,
-          "mid": 31.3
+          "spot_buy": 31.33,
+          "spot_sell": 31.43,
+          "mid": 31.38
         },
         "raw": {
           "parse_dbg": {
             "format": "xrt_text_v2",
             "reason": "ok",
-            "text_len": 2599,
-            "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/29 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
+            "text_len": 2582,
+            "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/30 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
             "text_has_usd": true,
             "text_has_zh_usd": true
           },
-          "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/29 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏"
+          "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/01/30 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽"
         },
         "http": {
           "status_code": 200,
@@ -2902,59 +2902,59 @@
         "status": "OK",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
-        "data_date": "2026-01-29",
+        "data_date": "2026-01-30",
         "usd_twd": {
-          "spot_buy": 31.225,
-          "spot_sell": 31.375,
-          "mid": 31.3
+          "spot_buy": 31.33,
+          "spot_sell": 31.43,
+          "mid": 31.38
         },
         "momentum": {
-          "ret1_pct": 0.031959092361781925,
-          "ret1_from": "2026-01-28",
-          "ret1_to": "2026-01-29",
-          "chg_5d_pct": null,
-          "chg_5d_from": null,
-          "chg_5d_to": null,
-          "points": 5
+          "ret1_pct": 0.2555910543130936,
+          "ret1_from": "2026-01-29",
+          "ret1_to": "2026-01-30",
+          "chg_5d_pct": -0.5388272583201322,
+          "chg_5d_from": "2026-01-23",
+          "chg_5d_to": "2026-01-30",
+          "points": 6
         },
         "dir": "TWD_WEAK",
         "fx_signal": "NONE",
         "fx_reason": "below thresholds",
         "fx_rule_version": "rule_v1",
-        "fx_confidence": "DOWNGRADED"
+        "fx_confidence": "OK"
       }
     },
     "inflation_realrate_cache": {
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-29T10:08:30.291124+00:00",
+          "run_ts_utc": "2026-01-29T18:03:36.850242+00:00",
           "module": "inflation_realrate_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
+          "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
           "stale_hours": 36.0,
           "stats_path": "inflation_realrate_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-01-29T10:08:30Z",
-          "stats_as_of_ts": "2026-01-29T18:08:27+08:00",
+          "stats_generated_at_utc": "2026-01-29T18:03:36Z",
+          "stats_as_of_ts": "2026-01-30T02:03:32+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 2,
           "dash_history_path": "inflation_realrate_cache/history_dashboard.json",
           "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
           "history_items_loaded": 5,
-          "history_excluded_same_day": 1
+          "history_excluded_same_day": 0
         },
         "rows": [
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
+            "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
             "series": "T10YIE",
             "value": 2.36,
             "data_date": "2026-01-28",
-            "as_of_ts": "2026-01-29T18:08:27+08:00",
+            "as_of_ts": "2026-01-30T02:03:32+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0009142011111111111,
+            "age_hours": 0.0013472894444444444,
             "z60": 2.726922260767065,
             "ret1_pct60": 0.8547008547008517,
             "z_delta60": 0.42460788498860413,
@@ -2968,22 +2968,22 @@
             "near": "NA",
             "dir": "MOVE",
             "dir_note": "MOVE_ONLY",
-            "prev_signal": "WATCH",
-            "delta_signal": "WATCH→ALERT",
-            "streak_hist": 1,
-            "streak_wa": 2
+            "prev_signal": "ALERT",
+            "delta_signal": "SAME",
+            "streak_hist": 2,
+            "streak_wa": 3
           },
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
+            "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
             "series": "DFII10",
             "value": 1.9,
             "data_date": "2026-01-27",
-            "as_of_ts": "2026-01-29T18:08:27+08:00",
+            "as_of_ts": "2026-01-30T02:03:32+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0009142011111111111,
+            "age_hours": 0.0013472894444444444,
             "z60": 0.5094690531208523,
             "ret1_pct60": 0.0,
             "z_delta60": -0.0054332464559191385,
@@ -2997,9 +2997,9 @@
             "near": "NA",
             "dir": "MOVE",
             "dir_note": "MOVE_ONLY",
-            "prev_signal": "WATCH",
-            "delta_signal": "WATCH→NONE",
-            "streak_hist": 1,
+            "prev_signal": "NONE",
+            "delta_signal": "SAME",
+            "streak_hist": 0,
             "streak_wa": 0
           }
         ],
@@ -3013,91 +3013,33 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-01-29T10:08:30.344111+00:00",
+          "run_ts_utc": "2026-01-29T18:03:36.894165+00:00",
           "module": "asset_proxy_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
+          "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
           "stale_hours": 36.0,
           "stats_path": "asset_proxy_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-01-29T10:08:30Z",
-          "stats_as_of_ts": "2026-01-29T18:08:27+08:00",
+          "stats_generated_at_utc": "2026-01-29T18:03:36Z",
+          "stats_as_of_ts": "2026-01-30T02:03:33+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 4,
           "dash_history_path": "asset_proxy_cache/history_dashboard.json",
           "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
           "history_items_loaded": 5,
-          "history_excluded_same_day": 1
+          "history_excluded_same_day": 0
         },
         "rows": [
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
-            "series": "IYR.US_CLOSE",
-            "value": 95.08,
-            "data_date": "2026-01-28",
-            "as_of_ts": "2026-01-29T18:08:27+08:00",
-            "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20251230&d2=20260129&i=d",
-            "dq": "OK",
-            "age_hours": 0.0009289197222222222,
-            "z60": 0.04363848930725069,
-            "ret1_pct60": -1.0101010101010055,
-            "z_delta60": -0.9229137091931319,
-            "p_delta60": -24.71751412429378,
-            "p252": 46.42857142857143,
-            "p60": 58.333333333333336,
-            "z252": -0.05604923993340912,
-            "signal_level": "ALERT",
-            "reason": "abs(ZΔ60)>=0.75;abs(PΔ60)>=15",
-            "tag": "JUMP_ZD,JUMP_P",
-            "near": "NA",
-            "dir": "MOVE",
-            "dir_note": "MOVE_ONLY",
-            "prev_signal": "NONE",
-            "delta_signal": "NONE→ALERT",
-            "streak_hist": 0,
-            "streak_wa": 1
-          },
-          {
-            "module": "asset_proxy_cache",
-            "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
-            "series": "VNQ.US_CLOSE",
-            "value": 89.46,
-            "data_date": "2026-01-28",
-            "as_of_ts": "2026-01-29T18:08:27+08:00",
-            "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20251230&d2=20260129&i=d",
-            "dq": "OK",
-            "age_hours": 0.0009289197222222222,
-            "z60": -0.21034197679806316,
-            "ret1_pct60": -1.0399380462440488,
-            "z_delta60": -1.0048540562469768,
-            "p_delta60": -27.994350282485875,
-            "p252": 35.317460317460316,
-            "p60": 51.666666666666664,
-            "z252": -0.2664659013724524,
-            "signal_level": "ALERT",
-            "reason": "abs(ZΔ60)>=0.75;abs(PΔ60)>=15",
-            "tag": "JUMP_ZD,JUMP_P",
-            "near": "NA",
-            "dir": "MOVE",
-            "dir_note": "MOVE_ONLY",
-            "prev_signal": "NONE",
-            "delta_signal": "NONE→ALERT",
-            "streak_hist": 0,
-            "streak_wa": 1
-          },
-          {
-            "module": "asset_proxy_cache",
-            "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
+            "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
             "series": "GLD.US_CLOSE",
             "value": 494.56,
             "data_date": "2026-01-28",
-            "as_of_ts": "2026-01-29T18:08:27+08:00",
+            "as_of_ts": "2026-01-30T02:03:33+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20251230&d2=20260129&i=d",
             "dq": "OK",
-            "age_hours": 0.0009289197222222222,
+            "age_hours": 0.0010817125,
             "z60": 3.371203103159998,
             "ret1_pct60": 3.905708342962777,
             "z_delta60": 0.32183924292287225,
@@ -3113,20 +3055,20 @@
             "dir_note": "MOVE_ONLY",
             "prev_signal": "ALERT",
             "delta_signal": "SAME",
-            "streak_hist": 4,
-            "streak_wa": 5
+            "streak_hist": 5,
+            "streak_wa": 6
           },
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@0aeef5d",
+            "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
             "series": "IAU.US_CLOSE",
             "value": 101.25,
             "data_date": "2026-01-28",
-            "as_of_ts": "2026-01-29T18:08:27+08:00",
+            "as_of_ts": "2026-01-30T02:03:33+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20251230&d2=20260129&i=d",
             "dq": "OK",
-            "age_hours": 0.0009289197222222222,
+            "age_hours": 0.0010817125,
             "z60": 3.3676727841446716,
             "ret1_pct60": 3.887977020927358,
             "z_delta60": 0.3194244441428489,
@@ -3142,8 +3084,66 @@
             "dir_note": "MOVE_ONLY",
             "prev_signal": "ALERT",
             "delta_signal": "SAME",
-            "streak_hist": 4,
-            "streak_wa": 5
+            "streak_hist": 5,
+            "streak_wa": 6
+          },
+          {
+            "module": "asset_proxy_cache",
+            "ruleset_id": "signals_v8",
+            "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
+            "series": "IYR.US_CLOSE",
+            "value": 95.08,
+            "data_date": "2026-01-28",
+            "as_of_ts": "2026-01-30T02:03:33+08:00",
+            "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20251230&d2=20260129&i=d",
+            "dq": "OK",
+            "age_hours": 0.0010817125,
+            "z60": 0.04363848930725069,
+            "ret1_pct60": -1.0101010101010055,
+            "z_delta60": -0.9229137091931319,
+            "p_delta60": -24.71751412429378,
+            "p252": 46.42857142857143,
+            "p60": 58.333333333333336,
+            "z252": -0.05604923993340912,
+            "signal_level": "ALERT",
+            "reason": "abs(ZΔ60)>=0.75;abs(PΔ60)>=15",
+            "tag": "JUMP_ZD,JUMP_P",
+            "near": "NA",
+            "dir": "MOVE",
+            "dir_note": "MOVE_ONLY",
+            "prev_signal": "ALERT",
+            "delta_signal": "SAME",
+            "streak_hist": 1,
+            "streak_wa": 2
+          },
+          {
+            "module": "asset_proxy_cache",
+            "ruleset_id": "signals_v8",
+            "script_fingerprint": "render_dashboard_py_signals_v8@7ef5304",
+            "series": "VNQ.US_CLOSE",
+            "value": 89.46,
+            "data_date": "2026-01-28",
+            "as_of_ts": "2026-01-30T02:03:33+08:00",
+            "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20251230&d2=20260129&i=d",
+            "dq": "OK",
+            "age_hours": 0.0010817125,
+            "z60": -0.21034197679806316,
+            "ret1_pct60": -1.0399380462440488,
+            "z_delta60": -1.0048540562469768,
+            "p_delta60": -27.994350282485875,
+            "p252": 35.317460317460316,
+            "p60": 51.666666666666664,
+            "z252": -0.2664659013724524,
+            "signal_level": "ALERT",
+            "reason": "abs(ZΔ60)>=0.75;abs(PΔ60)>=15",
+            "tag": "JUMP_ZD,JUMP_P",
+            "near": "NA",
+            "dir": "MOVE",
+            "dir_note": "MOVE_ONLY",
+            "prev_signal": "ALERT",
+            "delta_signal": "SAME",
+            "streak_hist": 1,
+            "streak_wa": 2
           }
         ],
         "series_signals": {
