@@ -1,26 +1,26 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-29T19:44:55Z`
-- generated_at_local: `2026-01-30T03:44:55.274722+08:00`
+- generated_at_utc: `2026-01-30T00:04:20Z`
+- generated_at_local: `2026-01-30T08:04:20.953343+08:00`
 - timezone: `Asia/Taipei`
-- UsedDate: `2026-01-28`
+- UsedDate: `2026-01-29`
 - UsedDateStatus: `DATA_NOT_UPDATED`
 - RunDayTag: `WEEKDAY`
-- summary: 今日資料未更新；UsedDate=2026-01-28：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
+- summary: 今日資料未更新；UsedDate=2026-01-29：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 
 ## 2) Key Numbers (from latest_report.json)
-- turnover_twd: `853922428449`
-- close: `32803.82`
-- pct_change: `1.5035`
-- amplitude_pct: `1.305963`
-- volume_multiplier_20: `1.11749`
+- turnover_twd: `959652045839`
+- close: `32536.27`
+- pct_change: `-0.815606`
+- amplitude_pct: `1.596095`
+- volume_multiplier_20: `1.222947`
 
 ## 3) Market Behavior Signals (from latest_report.json)
-- DownDay: `false`
+- DownDay: `true`
 - VolumeAmplified: `false`
 - VolAmplified: `false`
 - NewLow_N: `0`
-- ConsecutiveBreak: `0`
+- ConsecutiveBreak: `1`
 
 ## 4) Data Quality Flags (from latest_report.json)
 - OhlcMissing: `false`
@@ -31,11 +31,11 @@
 ## 5) Z/P Table (market_cache-like; computed from roll25.json)
 | series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TURNOVER_TWD | 853922428449 | 1.81283 | 95.833333 | 2.883827 | 99.007937 | 0.39235 | 70.833333 | 4.441986 | OK |
-| CLOSE | 32803.82 | 2.345237 | 99.166667 | 2.599967 | 99.801587 | 1.23675 | 90.833333 | 1.5035 | OK |
-| PCT_CHANGE_CLOSE | 1.5035 | 1.067858 | 85.833333 | 0.886156 | 87.896825 | NA | NA | NA | OK |
-| AMPLITUDE_PCT | 1.305963 | 0.308744 | 67.5 | 0.120019 | 68.452381 | NA | NA | NA | DOWNGRADED |
-| VOL_MULTIPLIER_20 | 1.11749 | 0.374962 | 70.833333 | 0.530204 | 76.785714 | NA | NA | NA | OK |
+| TURNOVER_TWD | 959652045839 | 2.408511 | 99.166667 | 3.524925 | 99.801587 | 1.217248 | 85.833333 | 12.381642 | OK |
+| CLOSE | 32536.27 | 2.067957 | 97.5 | 2.474721 | 99.404762 | -1.023303 | 15.833333 | -0.815606 | OK |
+| PCT_CHANGE_CLOSE | -0.815606 | -0.908641 | 17.5 | -0.638527 | 18.452381 | NA | NA | NA | OK |
+| AMPLITUDE_PCT | 1.596095 | 1.089467 | 82.5 | 0.565955 | 86.309524 | NA | NA | NA | DOWNGRADED |
+| VOL_MULTIPLIER_20 | 1.222947 | 0.892299 | 82.5 | 1.058791 | 88.293651 | NA | NA | NA | OK |
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
@@ -48,7 +48,7 @@
 - CLOSE pct mismatch threshold: 0.05 (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).
 - PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.
 - DQ_NOTES:
-  - AMPLITUDE_PCT mismatch: abs(latest_report.AmplitudePct - roll25@UsedDate) = 0.019345 > 0.01
+  - AMPLITUDE_PCT mismatch: abs(latest_report.AmplitudePct - roll25@UsedDate) = 0.013124 > 0.01
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
@@ -56,9 +56,9 @@ Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; dai
 Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
 run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
-Mode=FULL | OHLC=OK | UsedDate=2026-01-28 | UsedDminus1=2026-01-27
+Mode=FULL | OHLC=OK | UsedDate=2026-01-29 | UsedDminus1=2026-01-28
 RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
-freshness_ok=True | freshness_age_days=2
+freshness_ok=True | freshness_age_days=1
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
