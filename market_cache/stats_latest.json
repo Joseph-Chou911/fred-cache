@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-01-30T01:17:17Z",
-  "as_of_ts": "2026-01-30T01:17:17Z",
+  "generated_at_utc": "2026-01-30T05:01:20Z",
+  "as_of_ts": "2026-01-30T05:01:20Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "windows": {
     "w60": 60,
@@ -17,7 +17,7 @@
         "data_date": "2026-01-27",
         "value": -2.383,
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
-        "as_of_ts": "2026-01-30T01:17:17Z"
+        "as_of_ts": "2026-01-30T05:01:20Z"
       },
       "windows": {
         "w60": {
@@ -57,43 +57,43 @@
     "VIX": {
       "series_id": "VIX",
       "latest": {
-        "data_date": "2026-01-28",
-        "value": 16.35,
+        "data_date": "2026-01-29",
+        "value": 16.88,
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-        "as_of_ts": "2026-01-30T01:17:17Z"
+        "as_of_ts": "2026-01-30T05:01:20Z"
       },
       "windows": {
         "w60": {
           "n": 60,
           "window": 60,
-          "start_date": "2025-11-04",
-          "end_date": "2026-01-28",
-          "mean": 17.095333333333336,
-          "std": 2.71113227678441,
-          "z": -0.27491588651563376,
-          "p": 50.0,
-          "ma": 17.095333333333336,
-          "dev_ma": -0.7453333333333347,
-          "ret1_delta": 0.0,
-          "ret1_pct": 0.0,
-          "z_delta": 0.0052192250824261155,
-          "p_delta": 1.6666666666666643
+          "start_date": "2025-11-05",
+          "end_date": "2026-01-29",
+          "mean": 17.060000000000006,
+          "std": 2.6998703672583986,
+          "z": -0.06666986762878879,
+          "p": 61.66666666666667,
+          "ma": 17.060000000000006,
+          "dev_ma": -0.18000000000000682,
+          "ret1_delta": 0.5299999999999976,
+          "ret1_pct": 3.241590214067263,
+          "z_delta": 0.20824601888684496,
+          "p_delta": 11.666666666666671
         },
         "w252": {
           "n": 252,
           "window": 252,
-          "start_date": "2025-02-06",
-          "end_date": "2026-01-28",
-          "mean": 18.921111111111102,
-          "std": 5.3202940636925575,
-          "z": -0.4832648497114495,
-          "p": 33.730158730158735,
-          "ma": 18.921111111111102,
-          "dev_ma": -2.571111111111101,
-          "ret1_delta": 0.0,
-          "ret1_pct": 0.0,
-          "z_delta": -0.0005448487254017809,
-          "p_delta": 0.0
+          "start_date": "2025-02-07",
+          "end_date": "2026-01-29",
+          "mean": 18.926587301587293,
+          "std": 5.317479362083877,
+          "z": -0.3848792185599106,
+          "p": 46.82539682539682,
+          "ma": 18.926587301587293,
+          "dev_ma": -2.0465873015872944,
+          "ret1_delta": 0.5299999999999976,
+          "ret1_pct": 3.241590214067263,
+          "z_delta": 0.09838563115153892,
+          "p_delta": 13.095238095238088
         }
       }
     },
@@ -103,7 +103,7 @@
         "data_date": "2026-01-29",
         "value": 6969.01,
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
-        "as_of_ts": "2026-01-30T01:17:17Z"
+        "as_of_ts": "2026-01-30T05:01:20Z"
       },
       "windows": {
         "w60": {
@@ -146,7 +146,7 @@
         "data_date": "2026-01-29",
         "value": 0.8440625,
         "source_url": "DERIVED",
-        "as_of_ts": "2026-01-30T01:17:17Z",
+        "as_of_ts": "2026-01-30T05:01:20Z",
         "sources": [
           "https://stooq.com/q/d/l/?s=hyg.us&i=d",
           "https://stooq.com/q/d/l/?s=ief.us&i=d"
