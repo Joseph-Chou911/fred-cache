@@ -1,8 +1,8 @@
 {
   "schema_version": "tw_pb_latest_v1",
   "script_fingerprint": "update_tw_pb_sidecar_py@v1",
-  "generated_at_utc": "2026-01-30T05:01:04Z",
-  "generated_at_local": "2026-01-30T13:01:04.941765+08:00",
+  "generated_at_utc": "2026-01-30T08:57:26Z",
+  "generated_at_local": "2026-01-30T16:57:26.970413+08:00",
   "timezone": "Asia/Taipei",
   "source_vendor": "statementdog",
   "source_class": "THIRD_PARTY",
@@ -10,8 +10,8 @@
   "fetch_status": "OK",
   "confidence": "OK",
   "dq_reason": null,
-  "data_date": "2026-01-29",
-  "close": 32536.27,
-  "pbr": 3.41,
+  "data_date": "2026-01-30",
+  "close": 32063.75,
+  "pbr": 3.36,
   "notes": []
 }
