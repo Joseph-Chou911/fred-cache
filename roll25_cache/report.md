@@ -1,12 +1,12 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-30T11:00:57Z`
-- generated_at_local: `2026-01-30T19:00:57.048269+08:00`
+- generated_at_utc: `2026-01-30T19:47:38Z`
+- generated_at_local: `2026-01-31T03:47:38.877165+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-01-29`
-- UsedDateStatus: `DATA_NOT_UPDATED`
-- RunDayTag: `WEEKDAY`
-- summary: 今日資料未更新；UsedDate=2026-01-29：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
+- UsedDateStatus: `OK_LATEST`
+- RunDayTag: `WEEKEND`
+- summary: 今日為週末；UsedDate=2026-01-29：Mode=FULL；freshness_ok=True
 
 ## 2) Key Numbers (from latest_report.json)
 - turnover_twd: `959652045839`
@@ -57,8 +57,8 @@ Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?respo
 run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
 Mode=FULL | OHLC=OK | UsedDate=2026-01-29 | UsedDminus1=2026-01-28
-RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
-freshness_ok=True | freshness_age_days=1
+RunDayTag=WEEKEND | UsedDateStatus=OK_LATEST
+freshness_ok=True | freshness_age_days=2
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
