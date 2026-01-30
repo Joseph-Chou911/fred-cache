@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-01-30T01:39:34Z
+- unified_generated_at_utc: 2026-01-30T02:11:57Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -31,18 +31,18 @@
 
 ## market_cache (detailed)
 - as_of_ts: 2026-01-30T01:17:17Z
-- run_ts_utc: 2026-01-30T01:37:48.817461+00:00
+- run_ts_utc: 2026-01-30T02:10:23.439910+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@536b2ed
+- script_fingerprint: render_dashboard_py_signals_v8@92aa960
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
 
 | series | signal | dir | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| OFR_FSI | WATCH | HIGH | JUMP | -2.383000 | 2026-01-27 | 0.342172 | 0.040159 | 65.000000 | 23.015873 | 0.277705 | 20.000000 | 3.833737 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | NONE | NONE→WATCH | 0 | 1 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
-| SP500 | INFO | HIGH | LONG | 6969.010000 | 2026-01-29 | 0.342172 | 1.285483 | 95.000000 | 98.809524 | -0.132528 | -3.333333 | -0.129263 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| HYG_IEF_RATIO | NONE | LOW | NONE | 0.844063 | 2026-01-29 | 0.342172 | 1.389845 | 86.666667 | 73.412698 | -0.231278 | -3.333333 | -0.116493 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
-| VIX | NONE | HIGH | NONE | 16.350000 | 2026-01-28 | 0.342172 | -0.274916 | 50.000000 | 33.730159 | 0.005219 | 1.666667 | 0.000000 | NA | NA | NONE | SAME | 0 | 0 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
+| OFR_FSI | WATCH | HIGH | JUMP | -2.383000 | 2026-01-27 | 0.885122 | 0.040159 | 65.000000 | 23.015873 | 0.277705 | 20.000000 | 3.833737 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | NONE | NONE→WATCH | 0 | 1 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| SP500 | INFO | HIGH | LONG | 6969.010000 | 2026-01-29 | 0.885122 | 1.285483 | 95.000000 | 98.809524 | -0.132528 | -3.333333 | -0.129263 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
+| HYG_IEF_RATIO | NONE | LOW | NONE | 0.844063 | 2026-01-29 | 0.885122 | 1.389845 | 86.666667 | 73.412698 | -0.231278 | -3.333333 | -0.116493 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
+| VIX | NONE | HIGH | NONE | 16.350000 | 2026-01-28 | 0.885122 | -0.274916 | 50.000000 | 33.730159 | 0.005219 | 1.666667 | 0.000000 | NA | NA | NONE | SAME | 0 | 0 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
 
 ## fred_cache (ALERT+WATCH+INFO)
 - as_of_ts: 2026-01-30T09:18:01+08:00
@@ -143,14 +143,14 @@
 - status: OK
 - data_date: 2026-01-30
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.335000
-- spot_sell: 31.435000
-- mid: 31.385000
-- ret1_pct: 0.271565 (from 2026-01-29 to 2026-01-30)
-- chg_5d_pct: -0.522979 (from 2026-01-23 to 2026-01-30)
-- dir: TWD_WEAK
-- fx_signal: NONE
-- fx_reason: below thresholds
+- spot_buy: 3.991000
+- spot_sell: 4.051000
+- mid: 4.021000
+- ret1_pct: -87.153355 (from 2026-01-29 to 2026-01-30)
+- chg_5d_pct: -87.255151 (from 2026-01-23 to 2026-01-30)
+- dir: TWD_STRONG
+- fx_signal: WATCH
+- fx_reason: abs(chg_5d%)>=1.5 OR abs(ret1%)>=1.0
 - fx_confidence: OK
 
 ## taiwan_margin_financing (TWSE/TPEX)
@@ -176,7 +176,7 @@
 - consistency: CONVERGENCE
 - date_alignment: twmargin_date=2026-01-29, roll25_used_date=2026-01-29, match=true
 
-<!-- rendered_at_utc: 2026-01-30T01:39:34Z -->
+<!-- rendered_at_utc: 2026-01-30T02:11:57Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
