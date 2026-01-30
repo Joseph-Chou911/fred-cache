@@ -1,43 +1,16 @@
 {
   "schema_version": "stats_latest_v1",
-  "generated_at_utc": "2026-01-30T17:59:04Z",
-  "as_of_ts": "2026-01-31T01:59:01+08:00",
+  "generated_at_utc": "2026-01-30T23:38:41Z",
+  "as_of_ts": "2026-01-31T07:38:37+08:00",
   "script_version": "cycle_sidecars_stats_v1",
   "series_count": 2,
   "series": {
     "DFII10": {
       "latest": {
-        "as_of_ts": "2026-01-31T01:59:01+08:00",
-        "data_date": "2026-01-28",
-        "value": 1.9,
-        "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
-        "notes": "NA",
-        "data_lag_days": 3
-      },
-      "windows": {
-        "w60": {
-          "n": 60,
-          "ok": true,
-          "z": 0.4833923984930022,
-          "p": 65.0,
-          "z_delta": -0.0050475204548245944,
-          "p_delta": 0.5932203389830448,
-          "ret1_pct": 0.0
-        },
-        "w252": {
-          "n": 252,
-          "ok": true,
-          "z": -0.30845954924298036,
-          "p": 41.666666666666664
-        }
-      }
-    },
-    "T10YIE": {
-      "latest": {
-        "as_of_ts": "2026-01-31T01:59:01+08:00",
+        "as_of_ts": "2026-01-31T07:38:37+08:00",
         "data_date": "2026-01-29",
-        "value": 2.35,
-        "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
+        "value": 1.89,
+        "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
         "notes": "NA",
         "data_lag_days": 2
       },
@@ -45,17 +18,44 @@
         "w60": {
           "n": 60,
           "ok": true,
-          "z": 2.293613850086055,
-          "p": 98.33333333333333,
-          "z_delta": -0.4296905783924996,
-          "p_delta": -1.6666666666666714,
-          "ret1_pct": -0.4237288135593098
+          "z": 0.24482738160314413,
+          "p": 53.333333333333336,
+          "z_delta": -0.2197157789076619,
+          "p_delta": -11.07344632768362,
+          "ret1_pct": -0.5263157894736858
         },
         "w252": {
           "n": 252,
           "ok": true,
-          "z": 0.4104460598703442,
-          "p": 67.85714285714286
+          "z": -0.376233234717123,
+          "p": 38.095238095238095
+        }
+      }
+    },
+    "T10YIE": {
+      "latest": {
+        "as_of_ts": "2026-01-31T07:38:37+08:00",
+        "data_date": "2026-01-30",
+        "value": 2.36,
+        "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
+        "notes": "NA",
+        "data_lag_days": 1
+      },
+      "windows": {
+        "w60": {
+          "n": 60,
+          "ok": true,
+          "z": 2.436420740374457,
+          "p": 100.0,
+          "z_delta": 0.13351588204510367,
+          "p_delta": 1.6949152542372872,
+          "ret1_pct": 0.42553191489360653
+        },
+        "w252": {
+          "n": 252,
+          "ok": true,
+          "z": 0.5704152428178783,
+          "p": 71.82539682539682
         }
       }
     }

@@ -80,16 +80,16 @@
       }
     },
     {
-      "run_ts_utc": "2026-01-30T17:59:04.477552+00:00",
-      "stats_as_of_ts": "2026-01-31T01:59:02+08:00",
+      "run_ts_utc": "2026-01-30T23:38:41.913410+00:00",
+      "stats_as_of_ts": "2026-01-31T07:38:37+08:00",
       "module": "asset_proxy_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@9fc10a9",
+      "script_fingerprint": "render_dashboard_py_signals_v8@302ee63",
       "series_signals": {
         "GLD.US_CLOSE": "ALERT",
         "IAU.US_CLOSE": "ALERT",
-        "VNQ.US_CLOSE": "ALERT",
-        "IYR.US_CLOSE": "ALERT"
+        "VNQ.US_CLOSE": "NONE",
+        "IYR.US_CLOSE": "NONE"
       }
     }
   ]
