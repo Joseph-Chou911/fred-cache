@@ -16,6 +16,13 @@ Stats:
 DQ checks:
 - AMPLITUDE mismatch: abs(latest - derived@UsedDate) > threshold => AMPLITUDE row DOWNGRADED + note
 - CLOSE pct mismatch: abs(ret1_close - latest_pct_change) > threshold => CLOSE row DOWNGRADED + note
+
+IMPORTANT (2026-01-xx fix):
+- AMPLITUDE_PCT derived from roll25.json now prefers prev_close denominator if possible:
+  prev_close = close - change
+  amplitude = (high - low) / abs(prev_close) * 100
+  fallback only if prev_close unavailable: (high - low) / abs(close) * 100
+This aligns the definition with latest_report.json AmplitudePct (commonly based on prev close).
 """
 
 from __future__ import annotations
@@ -77,7 +84,7 @@ def _safe_get(d: Any, *keys: str) -> Any:
         if not isinstance(cur, dict):
             return None
         cur = cur.get(k)
-    return cur
+    return None if cur is None else cur
 
 
 # ---------------- Date parsing ----------------
@@ -252,18 +259,48 @@ def _series_close(rows_nf: List[Dict[str, Any]]) -> List[float]:
     return out
 
 
+def _derive_amplitude_pct_prevclose_first(r: Dict[str, Any]) -> Tuple[Optional[float], str]:
+    """
+    Derive amplitude% from a roll25.json row.
+
+    Policy:
+    1) If high/low exist:
+       - prefer prev_close denominator if change exists: prev_close = close - change
+       - else fallback to close denominator
+    2) If cannot derive, fall back to stored amplitude_pct/AmplitudePct if present.
+
+    Returns: (amplitude_pct, denom_tag)
+      denom_tag in {"prev_close", "close", "amp_field", "na"}
+    """
+    amp_field = _get_float(r, "amplitude_pct", "AmplitudePct")
+    h = _get_float(r, "high", "High")
+    l = _get_float(r, "low", "Low")
+    c = _get_float(r, "close", "Close")
+    chg = _get_float(r, "change", "Change")
+
+    if h is not None and l is not None:
+        prev = None
+        if c is not None and chg is not None:
+            prev = c - chg
+
+        if prev is not None and prev != 0 and math.isfinite(prev):
+            return ((h - l) / abs(prev) * 100.0), "prev_close"
+
+        if c is not None and c != 0 and math.isfinite(c):
+            return ((h - l) / abs(c) * 100.0), "close"
+
+    if amp_field is not None:
+        return amp_field, "amp_field"
+
+    return None, "na"
+
+
 def _series_amplitude_pct(rows_nf: List[Dict[str, Any]]) -> List[float]:
     out: List[float] = []
     for r in rows_nf:
-        amp = _get_float(r, "amplitude_pct", "AmplitudePct")
-        if amp is not None:
-            out.append(amp)
-            continue
-        h = _get_float(r, "high", "High")
-        l = _get_float(r, "low", "Low")
-        c = _get_float(r, "close", "Close")
-        if h is not None and l is not None and c is not None and c != 0:
-            out.append((h - l) / abs(c) * 100.0)
+        amp, _tag = _derive_amplitude_pct_prevclose_first(r)
+        if amp is not None and math.isfinite(float(amp)):
+            out.append(float(amp))
         else:
             out.append(float("nan"))
     return out
@@ -484,8 +521,12 @@ def main() -> int:
             diff = abs(float(amp_latest) - float(amp_used))
             if diff > float(args.amp_mismatch_abs_threshold):
                 amp_conf_override = "DOWNGRADED"
+                denom_tag = "na"
+                if 0 <= anchor_idx < len(rows):
+                    _amp_dbg, denom_tag = _derive_amplitude_pct_prevclose_first(rows[anchor_idx])
                 dq_notes.append(
-                    f"AMPLITUDE_PCT mismatch: abs(latest_report.AmplitudePct - roll25@UsedDate) = {diff:.6f} > {args.amp_mismatch_abs_threshold}"
+                    f"AMPLITUDE_PCT mismatch: abs(latest_report.AmplitudePct - roll25@UsedDate_derived) = {diff:.6f} > {args.amp_mismatch_abs_threshold} "
+                    f"(derived_denom={denom_tag})"
                 )
 
     # --- DQ: close pct mismatch (latest pct_change vs computed ret1%) ---
@@ -577,7 +618,8 @@ def main() -> int:
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
     md.append("- ret1% is STRICT adjacency at UsedDate (UsedDate vs next older row); if missing => NA (no jumping).")
     md.append("- zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).")
-    md.append(f"- AMPLITUDE mismatch threshold: {args.amp_mismatch_abs_threshold} (abs(latest - roll25@UsedDate) > threshold => DOWNGRADED).")
+    md.append("- AMPLITUDE derived policy: prefer prev_close (= close - change) as denominator when available; fallback to close.")
+    md.append(f"- AMPLITUDE mismatch threshold: {args.amp_mismatch_abs_threshold} (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).")
     md.append(f"- CLOSE pct mismatch threshold: {args.close_pct_mismatch_abs_threshold} (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).")
     md.append("- PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.")
     if dq_notes:
