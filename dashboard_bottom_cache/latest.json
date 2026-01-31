@@ -1,13 +1,13 @@
 {
   "schema_version": "bottom_cache_v1",
-  "generated_at_utc": "2026-01-30T17:21:50.557410Z",
-  "as_of_ts": "2026-01-31T01:21:50.557420+08:00",
-  "data_commit_sha": "7a3277453624c30b82a205c7701b7c32b67cc5e6",
+  "generated_at_utc": "2026-01-31T15:54:06.356740Z",
+  "as_of_ts": "2026-01-31T23:54:06.356750+08:00",
+  "data_commit_sha": "3c786613b235f39e013d4f7e883d5912cb9b2441",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-01-30T05:01:20Z",
-    "market_cache_as_of_ts": "2026-01-30T05:01:20Z",
+    "market_cache_generated_at_utc": "2026-01-31T04:52:16Z",
+    "market_cache_as_of_ts": "2026-01-31T04:52:16Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -22,25 +22,25 @@
   },
   "context_global": {
     "context_equity_extreme_sp500_p252_ge_95": 1,
-    "sp500_p252": 98.80952380952381
+    "sp500_p252": 96.03174603174604
   },
   "distances_global": {
-    "vix_panic_gap": 3.120000000000001,
-    "sp500_ret1_panic_gap": 1.3707371564754016,
-    "hyg_veto_gap_z": 3.389844661581545,
-    "ofr_veto_gap_z": 1.9598413454677566
+    "vix_panic_gap": 2.5599999999999987,
+    "sp500_ret1_panic_gap": 1.0698097721197062,
+    "hyg_veto_gap_z": 3.588299171163176,
+    "ofr_veto_gap_z": 2.0048545895215306
   },
   "tw_local_gate": {
     "tw_state": "TW_BOTTOM_WATCH",
-    "UsedDate": "2026-01-29",
-    "run_day_tag": "WEEKDAY",
+    "UsedDate": "2026-01-30",
+    "run_day_tag": "WEEKEND",
     "risk_level": "NA",
     "lookback_n_actual": 20,
     "lookback_n_target": null,
-    "pct_change": -0.815606,
-    "amplitude_pct": 1.596095,
-    "turnover_twd": 959652045839.0,
-    "close": 32536.27,
+    "pct_change": -1.452287,
+    "amplitude_pct": 1.692142,
+    "turnover_twd": 941320964545.0,
+    "close": 32063.75,
     "signals": {
       "DownDay": true,
       "VolumeAmplified": false,
@@ -70,7 +70,7 @@
       "TRIG_TW_REVERSAL": 0
     },
     "distances": {
-      "pct_change_to_nonnegative_gap": -0.815606,
+      "pct_change_to_nonnegative_gap": -1.452287,
       "lookback_missing_points": null
     }
   },
@@ -80,21 +80,21 @@
       "series_id": "VIX",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-01-29",
-        "value": 16.88,
-        "as_of_ts": "2026-01-30T05:01:20Z",
+        "data_date": "2026-01-30",
+        "value": 17.44,
+        "as_of_ts": "2026-01-31T04:52:16Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
-        "z": -0.06666986762878879,
-        "p": 61.66666666666667,
-        "ret1_pct": 3.241590214067263,
-        "z_delta": 0.20824601888684496,
-        "p_delta": 11.666666666666671
+        "z": 0.14439227679851765,
+        "p": 73.33333333333333,
+        "ret1_pct": 3.31753554502371,
+        "z_delta": 0.21106214442730645,
+        "p_delta": 11.666666666666657
       },
       "w252": {
-        "z": -0.3848792185599106,
-        "p": 46.82539682539682
+        "z": -0.28030643860407295,
+        "p": 55.158730158730165
       },
       "series_signal": "NONE"
     },
@@ -102,21 +102,21 @@
       "series_id": "SP500",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-01-29",
-        "value": 6969.01,
-        "as_of_ts": "2026-01-30T05:01:20Z",
+        "data_date": "2026-01-30",
+        "value": 6939.03,
+        "as_of_ts": "2026-01-31T04:52:16Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
-        "z": 1.2854828306091972,
-        "p": 95.0,
-        "ret1_pct": -0.1292628435245983,
-        "z_delta": -0.13252833362952088,
-        "p_delta": -3.3333333333333286
+        "z": 0.9612222920141924,
+        "p": 83.33333333333334,
+        "ret1_pct": -0.4301902278802939,
+        "z_delta": -0.3242605385950048,
+        "p_delta": -11.666666666666657
       },
       "w252": {
-        "z": 1.391756397819898,
-        "p": 98.80952380952381
+        "z": 1.3193310770146414,
+        "p": 96.03174603174604
       },
       "series_signal": "INFO"
     },
@@ -124,21 +124,21 @@
       "series_id": "HYG_IEF_RATIO",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-01-29",
-        "value": 0.8440625,
-        "as_of_ts": "2026-01-30T05:01:20Z",
+        "data_date": "2026-01-30",
+        "value": 0.8455284552845529,
+        "as_of_ts": "2026-01-31T04:52:16Z",
         "source_url": "DERIVED"
       },
       "w60": {
-        "z": 1.389844661581545,
-        "p": 86.66666666666667,
-        "ret1_pct": -0.11649339832181196,
-        "z_delta": -0.23127779129627912,
-        "p_delta": -3.3333333333333286
+        "z": 1.5882991711631762,
+        "p": 91.66666666666666,
+        "ret1_pct": 0.173678523160648,
+        "z_delta": 0.19845450958163124,
+        "p_delta": 4.999999999999986
       },
       "w252": {
-        "z": 0.5864071532292146,
-        "p": 73.4126984126984
+        "z": 0.7436157429785538,
+        "p": 79.76190476190477
       },
       "series_signal": "NONE"
     },
@@ -146,21 +146,21 @@
       "series_id": "OFR_FSI",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-01-27",
-        "value": -2.383,
-        "as_of_ts": "2026-01-30T05:01:20Z",
+        "data_date": "2026-01-28",
+        "value": -2.404,
+        "as_of_ts": "2026-01-31T04:52:16Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
-        "z": 0.04015865453224352,
-        "p": 65.0,
-        "ret1_pct": 3.83373688458435,
-        "z_delta": 0.2777046371315133,
-        "p_delta": 20.0
+        "z": -0.0048545895215304025,
+        "p": 61.66666666666667,
+        "ret1_pct": -0.8812421317666767,
+        "z_delta": -0.045013244053773924,
+        "p_delta": -3.3333333333333286
       },
       "w252": {
-        "z": -0.6856701558219658,
-        "p": 23.015873015873016
+        "z": -0.70604763543735,
+        "p": 21.03174603174603
       },
       "series_signal": "NONE"
     }
