@@ -1,9 +1,9 @@
 {
   "schema_version": "tw_pb_manifest_v1",
-  "generated_at_utc": "2026-01-31T09:55:02Z",
-  "generated_at_local": "2026-01-31T17:55:02.151770+08:00",
+  "generated_at_utc": "2026-01-31T19:02:24Z",
+  "generated_at_local": "2026-02-01T03:02:24.937801+08:00",
   "timezone": "Asia/Taipei",
-  "data_commit_sha": "beced0d6b0fdfd4066c772ebc1959dce02a28785",
+  "data_commit_sha": "5cffd3630987afa84584ecf34da6fbc0f77c428d",
   "paths": {
     "latest": "tw_pb_cache/latest.json",
     "history": "tw_pb_cache/history.json",
@@ -11,10 +11,10 @@
     "report": "tw_pb_cache/report.md"
   },
   "pinned_urls": {
-    "latest": "https://raw.githubusercontent.com/{REPO}/beced0d6b0fdfd4066c772ebc1959dce02a28785/tw_pb_cache/latest.json",
-    "history": "https://raw.githubusercontent.com/{REPO}/beced0d6b0fdfd4066c772ebc1959dce02a28785/tw_pb_cache/history.json",
-    "stats_latest": "https://raw.githubusercontent.com/{REPO}/beced0d6b0fdfd4066c772ebc1959dce02a28785/tw_pb_cache/stats_latest.json",
-    "report": "https://raw.githubusercontent.com/{REPO}/beced0d6b0fdfd4066c772ebc1959dce02a28785/tw_pb_cache/report.md"
+    "latest": "https://raw.githubusercontent.com/{REPO}/5cffd3630987afa84584ecf34da6fbc0f77c428d/tw_pb_cache/latest.json",
+    "history": "https://raw.githubusercontent.com/{REPO}/5cffd3630987afa84584ecf34da6fbc0f77c428d/tw_pb_cache/history.json",
+    "stats_latest": "https://raw.githubusercontent.com/{REPO}/5cffd3630987afa84584ecf34da6fbc0f77c428d/tw_pb_cache/stats_latest.json",
+    "report": "https://raw.githubusercontent.com/{REPO}/5cffd3630987afa84584ecf34da6fbc0f77c428d/tw_pb_cache/report.md"
   },
   "notes": [
     "Replace {REPO} with owner/repo when consuming pinned_urls.",
