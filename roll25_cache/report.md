@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-01-30T23:39:54Z`
-- generated_at_local: `2026-01-31T07:39:54.402222+08:00`
+- generated_at_utc: `2026-01-31T00:45:14Z`
+- generated_at_local: `2026-01-31T08:45:14.483512+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-01-30`
 - UsedDateStatus: `OK_LATEST`
@@ -34,7 +34,7 @@
 | TURNOVER_TWD | 941320964545 | 2.155248 | 97.5 | 3.311797 | 99.404762 | -0.288839 | 40.833333 | -1.91018 | OK |
 | CLOSE | 32063.75 | 1.720001 | 92.5 | 2.29406 | 98.214286 | -1.625331 | 7.5 | -1.452287 | OK |
 | PCT_CHANGE_CLOSE | -1.452287 | -1.449896 | 7.5 | -1.052663 | 8.531746 | NA | NA | NA | OK |
-| AMPLITUDE_PCT | 1.692142 | 1.32813 | 87.5 | 0.712493 | 89.087302 | NA | NA | NA | DOWNGRADED |
+| AMPLITUDE_PCT | 1.692142 | 1.272775 | 85.833333 | 0.693741 | 88.293651 | NA | NA | NA | OK |
 | VOL_MULTIPLIER_20 | 1.179184 | 0.610222 | 72.5 | 0.777912 | 83.134921 | NA | NA | NA | OK |
 
 ## 6) Audit Notes
@@ -44,11 +44,10 @@
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
 - ret1% is STRICT adjacency at UsedDate (UsedDate vs next older row); if missing => NA (no jumping).
 - zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).
-- AMPLITUDE mismatch threshold: 0.01 (abs(latest - roll25@UsedDate) > threshold => DOWNGRADED).
+- AMPLITUDE derived policy: prefer prev_close (= close - change) as denominator when available; fallback to close.
+- AMPLITUDE mismatch threshold: 0.01 (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).
 - CLOSE pct mismatch threshold: 0.05 (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).
 - PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.
-- DQ_NOTES:
-  - AMPLITUDE_PCT mismatch: abs(latest_report.AmplitudePct - roll25@UsedDate) = 0.024937 > 0.01
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
