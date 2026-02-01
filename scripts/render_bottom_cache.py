@@ -18,13 +18,10 @@ Principles:
 - TW leverage heat: flow-only signal is always computed if enough rows.
   Optional "level gate" is applied when there are enough balance points; otherwise downgrade (does not NA-out the signal).
 
-Patch v0.1.3:
-- report.md adds TW panic hit explanation (which sub-condition triggered panic).
-- report.md Recent History table adds: margin_final_signal, margin_confidence
-- history.json items now store those two fields (older rows will show NA).
-- Keep v0.1.2 fixes:
-  * DO NOT render legitimate "NONE" as "NA"
-  * Canonicalize margin signal to {"NONE","WATCH","ALERT"} or None
+Patch v0.1.4:
+- Fix tw_panic_hit formatter bug: previously always rendered Stress/Miss as empty {}.
+  Now prints actual hit/miss flags deterministically.
+- Keep v0.1.3 features: panic_hit in report; history columns for margin_final/confidence.
 """
 
 from __future__ import annotations
@@ -37,7 +34,7 @@ from typing import Any, Dict, Optional, List, Tuple
 from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
-RENDERER_VERSION = "v0.1.3"
+RENDERER_VERSION = "v0.1.4"
 
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
@@ -296,11 +293,11 @@ def _tw_panic_hit_explain(
     """
     Deterministic explanation string for TW panic trigger.
 
-    Output examples:
+    Examples:
     - "NA:missing_fields"
     - "DownDay=False"
     - "DownDay=True + Stress={ConsecutiveBreak>=2}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1}"
-    - "DownDay=True + Stress={VolumeAmplified,NewLow_N>=1}"
+    - "DownDay=True + Stress={} (no stress flags)"
     """
     fields = [sig_downday, sig_volamp, sig_volamp2, stress_newlow, stress_consec]
     if any(x is None for x in fields):
@@ -313,7 +310,6 @@ def _tw_panic_hit_explain(
     hits: List[str] = []
     misses: List[str] = []
 
-    # stress component definitions (stable labels)
     def _flag(name: str, val: bool) -> None:
         if val:
             hits.append(name)
@@ -328,10 +324,10 @@ def _tw_panic_hit_explain(
     if not hits:
         return "DownDay=True + Stress={} (no stress flags)"
 
-    return f"DownDay=True + Stress={{{{}}}}; Miss={{{{}}}}".format(
-        ",".join(hits),
-        ",".join(misses),
-    )
+    hits_s = ",".join(hits)
+    miss_s = ",".join(misses)
+    # IMPORTANT: render braces around the joined strings deterministically
+    return f"DownDay=True + Stress={{{hits_s}}}; Miss={{{miss_s}}}"
 
 
 # ---------------- TW helpers ----------------
@@ -672,6 +668,11 @@ def main() -> None:
     margin_level_dbg: Dict[str, Any] = {}
     margin_confidence = "OK"
 
+    def _sort_rows_newest_first_local(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        def _k(r: Dict[str, Any]) -> str:
+            return _as_str(r.get("date")) or ""
+        return sorted(rows, key=_k, reverse=True)
+
     if ok_margin and twse_rows:
         margin_flow_signal, margin_flow_dbg = _derive_margin_flow_signal(twse_rows)
         margin_flow_signal = _canon_margin_signal(margin_flow_signal)
@@ -687,12 +688,8 @@ def main() -> None:
     else:
         if ok_margin:
             excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:series.TWSE.rows"})
-        # if ok_margin is False, already excluded by TW:INPUT_MARGIN
 
     # final margin signal (canonical)
-    # - if flow is NA => final NA
-    # - if level gate FAIL => force NONE (level not extreme, block heat)
-    # - otherwise keep flow signal
     tw_margin_signal: Optional[str] = None
     if margin_flow_signal is None:
         tw_margin_signal = None
@@ -719,14 +716,13 @@ def main() -> None:
             trig_tw_panic = 1 if (sig_downday and any_stress) else 0
 
     # TRIG_TW_LEVERAGE_HEAT
-    # IMPORTANT: if margin signal is NA/None => trigger must be NA (None), not 0
     trig_tw_heat: Optional[int] = None
     if tw_margin_signal is None:
         trig_tw_heat = None
     else:
         trig_tw_heat = 1 if (tw_margin_signal in ("WATCH", "ALERT")) else 0
 
-    # TRIG_TW_REVERSAL: PANIC & NOT heat & pct_change>=0 & DownDay=false
+    # TRIG_TW_REVERSAL
     trig_tw_rev: Optional[int] = None
     if trig_tw_panic != 1:
         trig_tw_rev = 0 if trig_tw_panic in (0, None) else None
@@ -766,7 +762,7 @@ def main() -> None:
     twse_latest_balance_yi: Optional[float] = None
     twse_latest_chg_yi: Optional[float] = None
     if twse_rows:
-        rows2 = _sort_rows_newest_first(twse_rows)
+        rows2 = _sort_rows_newest_first_local(twse_rows)
         twse_latest_balance_yi = _as_float(rows2[0].get("balance_yi"))
         twse_latest_chg_yi = _as_float(rows2[0].get("chg_yi"))
 
@@ -856,8 +852,7 @@ def main() -> None:
             "ret1_pct unit is percent (%)",
             "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
             "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
-            "Patch v0.1.2: report formatting no longer maps legitimate 'NONE' -> 'NA'; margin signal is canonicalized.",
-            "Patch v0.1.3: report adds panic_hit explanation and history columns (margin_final_signal/confidence).",
+            "v0.1.4: fix tw_panic_hit formatter; now prints actual stress hits/misses.",
         ],
     }
 
@@ -883,7 +878,6 @@ def main() -> None:
         "distances_global": latest_out["distances_global"],
         "tw_state": tw_state,
         "tw_triggers": latest_out["tw_local_gate"]["triggers"],
-        # NEW (v0.1.3): for recent history readability
         "tw_margin_final_signal": tw_margin_signal,
         "tw_margin_confidence": margin_confidence,
     }
