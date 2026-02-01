@@ -1,8 +1,8 @@
 {
-  "schema_version": "bottom_cache_v1",
-  "generated_at_utc": "2026-02-01T06:09:26.480367Z",
-  "as_of_ts": "2026-02-01T14:09:26.480386+08:00",
-  "data_commit_sha": "fa6801c8139fbfa64849b390e66350bf87328c93",
+  "schema_version": "bottom_cache_v1_1",
+  "generated_at_utc": "2026-02-01T07:07:38.844445Z",
+  "as_of_ts": "2026-02-01T15:07:38.844459+08:00",
+  "data_commit_sha": "83d8c883ac5caca43074947eafe23b5c3c4a8ead",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -34,7 +34,7 @@
     "tw_state": "TW_BOTTOM_WATCH",
     "UsedDate": "2026-01-30",
     "run_day_tag": "WEEKEND",
-    "risk_level": "NA",
+    "used_date_status": "OK_LATEST",
     "lookback_n_actual": 20,
     "lookback_n_target": 20,
     "pct_change": -1.452287,
@@ -45,41 +45,49 @@
       "DownDay": true,
       "VolumeAmplified": false,
       "VolAmplified": false,
-      "NewLow_N": false,
-      "ConsecutiveBreak": true
+      "NewLow_N": 0,
+      "ConsecutiveBreak": 2,
+      "stress_newlow": false,
+      "stress_consecutive_break": true
     },
     "margin": {
-      "margin_signal_TWSE": null,
+      "data_date": "2026-01-30",
       "unit": "億",
-      "dbg": {
-        "reason": "insufficient_balance_points_for_level_gate",
-        "points": 30,
-        "min_points": 60
+      "flow_signal": "NONE",
+      "flow_dbg": {
+        "chg_last5_yi": [
+          21.2,
+          -31.4,
+          21.9,
+          11.5,
+          55.0
+        ],
+        "sum_last5_yi": 78.2,
+        "pos_days_last5": 4,
+        "rule": "WATCH(sum5>=100.0 & pos_days>=4); ALERT(sum5>=150.0 & pos_days>=4)"
       },
-      "policy": {
-        "flow_two_windows": true,
-        "level_gate_enabled": true,
-        "level_p_min": 95.0,
-        "level_window": 252,
-        "level_min_points": 60
-      }
+      "level_gate": null,
+      "level_dbg": {
+        "reason": "insufficient_level_points",
+        "min_points": 60,
+        "have_points": 30
+      },
+      "final_signal": "NONE",
+      "confidence": "DOWNGRADED",
+      "latest_balance_yi": 3838.9,
+      "latest_chg_yi": 21.2
     },
     "triggers": {
       "TRIG_TW_PANIC": 1,
-      "TRIG_TW_LEVERAGE_HEAT": null,
+      "TRIG_TW_LEVERAGE_HEAT": 0,
       "TRIG_TW_REVERSAL": 0
     },
     "distances": {
-      "pct_change_to_nonnegative_gap": -1.452287,
+      "pct_change_to_nonnegative_gap": 1.452287,
       "lookback_missing_points": 0
     }
   },
-  "excluded_triggers": [
-    {
-      "trigger": "TRIG_TW_LEVERAGE_HEAT",
-      "reason": "margin_signal_NA:insufficient_flow_or_level_data"
-    }
-  ],
+  "excluded_triggers": [],
   "series_global": {
     "VIX": {
       "series_id": "VIX",
@@ -175,6 +183,7 @@
     "TW: uses existing repo outputs only (no external fetch here)",
     "Signals are deterministic; missing fields => NA + excluded reasons",
     "ret1_pct unit is percent (%)",
-    "TW margin heat: Flow + Level (balance percentile gate) to reduce false heat & flip-flop"
+    "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
+    "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade"
   ]
 }
