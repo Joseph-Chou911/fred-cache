@@ -18,9 +18,12 @@ Principles:
 - TW leverage heat: flow-only signal is always computed if enough rows.
   Optional "level gate" is applied when there are enough balance points; otherwise downgrade (does not NA-out the signal).
 
-Patch v0.1.1:
+Patch v0.1.2:
 - report.md Recent History table: normalize None -> "NA" (fix legacy history rows)
-- Also normalize other trigger cells consistently for audit readability
+- Fix a critical formatting bug: DO NOT render legitimate signal "NONE" as "NA"
+  (previous _fmt_na used s.lower()=="none" which incorrectly mapped "NONE" -> "NA")
+- Normalize margin signal to canonical {"NONE","WATCH","ALERT"} or None
+  so TRIG_TW_LEVERAGE_HEAT cannot show 0 when margin signal is actually NA/None.
 """
 
 from __future__ import annotations
@@ -210,19 +213,57 @@ def _iso_sort_key(iso: str) -> Tuple[int, str]:
 def _fmt_na(x: Any) -> str:
     """
     Normalize any null-ish value for report rendering.
+    IMPORTANT: "NONE" is a legitimate signal value and must NOT be rendered as "NA".
+
     - None -> "NA"
     - empty string -> "NA"
-    - "None" (legacy string) -> "NA"
+    - "NA"/"N/A"/"NULL"/"NaN" (case-insensitive) -> "NA"
+    - legacy null strings: "None" or "none" -> "NA"  (but "NONE" stays "NONE")
     Otherwise -> str(x)
     """
     if x is None:
         return "NA"
+
     if isinstance(x, str):
         s = x.strip()
-        if s == "" or s.upper() == "NA" or s.lower() == "none":
+        if s == "":
             return "NA"
+
+        up = s.upper()
+        if up in ("NA", "N/A", "NULL", "NAN"):
+            return "NA"
+
+        # legacy null strings (do NOT collapse "NONE")
+        if s in ("None", "none"):
+            return "NA"
+
         return s
+
     return str(x)
+
+
+def _canon_margin_signal(x: Any) -> Optional[str]:
+    """
+    Canonicalize margin signal:
+    - returns one of {"NONE","WATCH","ALERT"} or None
+    - treats "NA"/"None"/""/"null"/"nan" as None
+    - normalizes case (e.g., "watch" -> "WATCH")
+    """
+    if x is None:
+        return None
+    if isinstance(x, str):
+        s = x.strip()
+        if s == "":
+            return None
+        up = s.upper()
+        if up in ("NA", "N/A", "NULL", "NAN"):
+            return None
+        if s in ("None", "none"):
+            return None
+        if up in ("NONE", "WATCH", "ALERT"):
+            return up
+        return None
+    return None
 
 
 # ---------------- TW helpers ----------------
@@ -509,7 +550,11 @@ def main() -> None:
 
     # roll25 key fields
     tw_used_date = _as_str(tw_roll25.get("used_date") or _get(tw_roll25, ["numbers", "UsedDate"]))
-    tw_run_day_tag = _as_str(tw_roll25.get("run_day_tag") or _get(tw_roll25, ["signal", "RunDayTag"]) or tw_roll25.get("tag"))
+    tw_run_day_tag = _as_str(
+        tw_roll25.get("run_day_tag")
+        or _get(tw_roll25, ["signal", "RunDayTag"])
+        or tw_roll25.get("tag")
+    )
     tw_used_date_status = _as_str(tw_roll25.get("used_date_status") or _get(tw_roll25, ["signal", "UsedDateStatus"]))
     tw_lookback_actual = _as_int(_get(tw_roll25, ["numbers", "LookbackNActual"]) or tw_roll25.get("lookback_n_actual"))
     tw_lookback_target = _as_int(_get(tw_roll25, ["numbers", "LookbackNTarget"]) or tw_roll25.get("lookback_n_target"))
@@ -559,8 +604,11 @@ def main() -> None:
 
     if ok_margin and twse_rows:
         margin_flow_signal, margin_flow_dbg = _derive_margin_flow_signal(twse_rows)
+        margin_flow_signal = _canon_margin_signal(margin_flow_signal)
+
         if margin_flow_signal is None:
             excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "margin_flow_signal_NA"})
+
         # level gate
         margin_level_gate, margin_level_dbg = _derive_margin_level_gate(twse_rows)
         if margin_level_gate is None and TW_MARGIN_LEVEL_GATE_ENABLED:
@@ -571,11 +619,10 @@ def main() -> None:
             excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:series.TWSE.rows"})
         # if ok_margin is False, already excluded by TW:INPUT_MARGIN
 
-    # final margin signal
+    # final margin signal (canonical)
     # - if flow is NA => final NA
-    # - if level gate PASS => keep flow signal
     # - if level gate FAIL => force NONE (level not extreme, block heat)
-    # - if level gate NA => keep flow signal but confidence DOWNGRADED
+    # - otherwise keep flow signal
     tw_margin_signal: Optional[str] = None
     if margin_flow_signal is None:
         tw_margin_signal = None
@@ -584,6 +631,8 @@ def main() -> None:
             tw_margin_signal = "NONE"
         else:
             tw_margin_signal = margin_flow_signal
+
+    tw_margin_signal = _canon_margin_signal(tw_margin_signal)
 
     # TRIG_TW_PANIC
     trig_tw_panic: Optional[int] = None
@@ -600,6 +649,7 @@ def main() -> None:
             trig_tw_panic = 1 if (sig_downday and any_stress) else 0
 
     # TRIG_TW_LEVERAGE_HEAT
+    # IMPORTANT: if margin signal is NA/None => trigger must be NA (None), not 0
     trig_tw_heat: Optional[int] = None
     if tw_margin_signal is None:
         trig_tw_heat = None
@@ -734,6 +784,7 @@ def main() -> None:
             "ret1_pct unit is percent (%)",
             "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
             "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
+            "Patch v0.1.2: report formatting no longer maps legitimate 'NONE' -> 'NA'; margin signal is canonicalized.",
         ],
     }
 
