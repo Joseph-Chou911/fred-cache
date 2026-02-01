@@ -17,6 +17,10 @@ Principles:
 - Missing fields => NA + excluded reasons.
 - TW leverage heat: flow-only signal is always computed if enough rows.
   Optional "level gate" is applied when there are enough balance points; otherwise downgrade (does not NA-out the signal).
+
+Patch v0.1.1:
+- report.md Recent History table: normalize None -> "NA" (fix legacy history rows)
+- Also normalize other trigger cells consistently for audit readability
 """
 
 from __future__ import annotations
@@ -204,8 +208,20 @@ def _iso_sort_key(iso: str) -> Tuple[int, str]:
 
 
 def _fmt_na(x: Any) -> str:
+    """
+    Normalize any null-ish value for report rendering.
+    - None -> "NA"
+    - empty string -> "NA"
+    - "None" (legacy string) -> "NA"
+    Otherwise -> str(x)
+    """
     if x is None:
         return "NA"
+    if isinstance(x, str):
+        s = x.strip()
+        if s == "" or s.upper() == "NA" or s.lower() == "none":
+            return "NA"
+        return s
     return str(x)
 
 
@@ -836,15 +852,18 @@ def main() -> None:
             asof = _as_str(it.get("as_of_ts")) or "NA"
             dk2 = _day_key_tpe_from_iso(asof)
             st = it.get("bottom_state_global") or "NA"
+
             tr = it.get("triggers_global") if isinstance(it.get("triggers_global"), dict) else {}
-            p = tr.get("TRIG_PANIC", "NA")
-            v = tr.get("TRIG_SYSTEMIC_VETO", "NA")
-            r = tr.get("TRIG_REVERSAL", "NA")
+            p = _fmt_na(tr.get("TRIG_PANIC", None))
+            v = _fmt_na(tr.get("TRIG_SYSTEMIC_VETO", None))
+            r = _fmt_na(tr.get("TRIG_REVERSAL", None))
+
             tws = it.get("tw_state") or "NA"
             twtr = it.get("tw_triggers") if isinstance(it.get("tw_triggers"), dict) else {}
-            twp = twtr.get("TRIG_TW_PANIC", "NA")
-            twh = twtr.get("TRIG_TW_LEVERAGE_HEAT", "NA")
-            twr = twtr.get("TRIG_TW_REVERSAL", "NA")
+            twp = _fmt_na(twtr.get("TRIG_TW_PANIC", None))
+            twh = _fmt_na(twtr.get("TRIG_TW_LEVERAGE_HEAT", None))
+            twr = _fmt_na(twtr.get("TRIG_TW_REVERSAL", None))
+
             md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {tws} | {twp} | {twh} | {twr} |\n")
         md.append("\n")
 
