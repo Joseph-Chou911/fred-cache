@@ -2,9 +2,9 @@
   "schema_version": "bottom_history_v1",
   "items": [
     {
-      "run_ts_utc": "2026-02-01T10:45:53.388202Z",
-      "as_of_ts": "2026-02-01T18:45:53.388215+08:00",
-      "data_commit_sha": "1304e8254ca68127091d6ae6c5b1cc79a7c2d958",
+      "run_ts_utc": "2026-02-01T10:31:05.486183Z",
+      "as_of_ts": "2026-02-01T18:31:05.486199+08:00",
+      "data_commit_sha": "eb0fc83f66e9029fc51950d632a59bb77672bebe",
       "bottom_state_global": "NONE",
       "triggers_global": {
         "TRIG_PANIC": 0,
@@ -21,9 +21,9 @@
         "hyg_veto_gap_z": 3.588299171163176,
         "ofr_veto_gap_z": 2.0048545895215306
       },
-      "tw_state": "NONE",
+      "tw_state": "TW_BOTTOM_WATCH",
       "tw_triggers": {
-        "TRIG_TW_PANIC": 0,
+        "TRIG_TW_PANIC": 1,
         "TRIG_TW_LEVERAGE_HEAT": 0,
         "TRIG_TW_REVERSAL": 0
       },

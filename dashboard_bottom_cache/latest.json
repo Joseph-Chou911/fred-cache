@@ -1,9 +1,9 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "renderer_version": "v0.1.8",
-  "generated_at_utc": "2026-02-01T10:31:05.486183Z",
-  "as_of_ts": "2026-02-01T18:31:05.486199+08:00",
-  "data_commit_sha": "eb0fc83f66e9029fc51950d632a59bb77672bebe",
+  "renderer_version": "v0.1.9",
+  "generated_at_utc": "2026-02-01T10:45:53.388202Z",
+  "as_of_ts": "2026-02-01T18:45:53.388215+08:00",
+  "data_commit_sha": "1304e8254ca68127091d6ae6c5b1cc79a7c2d958",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -32,7 +32,7 @@
     "ofr_veto_gap_z": 2.0048545895215306
   },
   "tw_local_gate": {
-    "tw_state": "TW_BOTTOM_WATCH",
+    "tw_state": "NONE",
     "UsedDate": "2026-01-30",
     "run_day_tag": "WEEKEND",
     "used_date_status": "OK_LATEST",
@@ -49,7 +49,9 @@
       "NewLow_N": 0,
       "ConsecutiveBreak": 2,
       "stress_newlow": false,
-      "stress_consecutive_break": true
+      "stress_consecutive_break_raw": true,
+      "stress_consecutive_break_paired": false,
+      "stress_consec_pair_required": true
     },
     "margin": {
       "data_date": "2026-01-30",
@@ -79,7 +81,7 @@
       "latest_chg_yi": 21.2
     },
     "triggers": {
-      "TRIG_TW_PANIC": 1,
+      "TRIG_TW_PANIC": 0,
       "TRIG_TW_LEVERAGE_HEAT": 0,
       "TRIG_TW_REVERSAL": 0
     },
@@ -185,7 +187,7 @@
     "loaded_items": 1,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260201T103105Z.json",
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260201T104553Z.json",
     "backup_bytes": 998,
     "backup_keep_n": 30,
     "backup_prune": {
@@ -212,6 +214,7 @@
     "ret1_pct unit is percent (%)",
     "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
     "v0.1.7: always backup history.json before write",
-    "v0.1.8: fail-closed history writes + unique-day shrink guard + backup retention"
+    "v0.1.8: fail-closed history writes + unique-day shrink guard + backup retention",
+    "v0.1.9: TW panic hardening (ConsecutiveBreak stress requires pairing)"
   ]
 }
