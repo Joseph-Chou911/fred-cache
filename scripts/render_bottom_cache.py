@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-bottom_cache renderer (v0.1.7)
+bottom_cache renderer (v0.1.8)
 
 - Global bottom/reversal workflow from market_cache (single-source):
     * market_cache/stats_latest.json
@@ -20,10 +20,20 @@ Principles:
 - TW leverage heat: flow-only signal is always computed if enough rows.
   Optional "level gate" is applied when there are enough balance points; otherwise DOWNGRADED (does not NA-out the flow signal).
 
-Patch v0.1.7 (anti-clobber & audit):
+Patch v0.1.7:
 - Always back up existing history.json BEFORE parsing/writing.
 - Report history_pre_items / history_post_items and backup status (file + bytes).
-- Keep deterministic behavior; no “silent” reset without leaving a backup trail.
+
+Patch v0.1.8 (hardening):
+- Fail-Closed history writes:
+    * If history.json exists but load/parse is not OK => default SKIP writing history (avoid clobber).
+    * Allow explicit reset only when env BOTTOM_HISTORY_ALLOW_RESET=1.
+- Shrink Guard (unique TPE day buckets):
+    * If unique day buckets decrease => default SKIP writing history (avoid silent shrink).
+    * Allow override only when env BOTTOM_HISTORY_ALLOW_SHRINK=1.
+- Backup retention:
+    * Keep last N backups (default 30; env BOTTOM_HISTORY_BACKUP_KEEP_N).
+- Reset leaves trace in latest.json/report.md when executed.
 
 Note:
 - This script does NOT fetch external URLs directly. It only reads local JSON files produced by other workflows.
@@ -39,7 +49,7 @@ from typing import Any, Dict, Optional, List, Tuple
 from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
-RENDERER_VERSION = "v0.1.7"
+RENDERER_VERSION = "v0.1.8"
 
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
@@ -89,6 +99,13 @@ TW_MARGIN_LEVEL_MIN_POINTS = 60     # below this => downgrade to flow-only
 TW_MARGIN_LEVEL_WINDOW = 252        # use up to last252 points if available
 TW_MARGIN_LEVEL_P_MIN = 95.0        # high percentile => "level is extreme"
 
+# --- history hardening controls (env overrides) ---
+ENV_ALLOW_RESET = "BOTTOM_HISTORY_ALLOW_RESET"
+ENV_ALLOW_SHRINK = "BOTTOM_HISTORY_ALLOW_SHRINK"
+ENV_RESET_REASON = "BOTTOM_HISTORY_RESET_REASON"
+ENV_BACKUP_KEEP_N = "BOTTOM_HISTORY_BACKUP_KEEP_N"
+DEFAULT_BACKUP_KEEP_N = 30
+
 
 # ---------------- basic io ----------------
 
@@ -123,7 +140,6 @@ def _safe_ts_for_filename(run_ts_utc: str) -> str:
         dt = datetime.fromisoformat(run_ts_utc.replace("Z", "+00:00"))
         return dt.strftime("%Y%m%dT%H%M%SZ")
     except Exception:
-        # fallback: remove problematic chars
         s = run_ts_utc.replace(":", "").replace("-", "").replace(".", "")
         return s.replace("Z", "Z")
 
@@ -288,6 +304,21 @@ def _canon_margin_signal(x: Any) -> Optional[str]:
     return None
 
 
+def _env_flag(name: str) -> bool:
+    v = os.environ.get(name, "").strip().lower()
+    return v in ("1", "true", "yes", "y", "on")
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        s = os.environ.get(name, "").strip()
+        if s == "":
+            return default
+        return max(0, int(float(s)))
+    except Exception:
+        return default
+
+
 # ---------------- TW helpers ----------------
 
 def _load_tw_roll25(excluded: List[Dict[str, str]]) -> Tuple[Dict[str, Any], bool]:
@@ -423,11 +454,50 @@ def _derive_margin_level_gate(rows: List[Dict[str, Any]]) -> Tuple[Optional[str]
     return (gate, dbg)
 
 
-# ---------------- history (v0.1.7) ----------------
+# ---------------- history (v0.1.8 hardened) ----------------
+
+def _list_backup_files(history_path: str) -> List[str]:
+    # expected: dashboard_bottom_cache/history.json.bak.YYYYMMDDTHHMMSSZ.json
+    prefix = history_path + ".bak."
+    d = os.path.dirname(history_path) or "."
+    out: List[str] = []
+    try:
+        for fn in os.listdir(d):
+            full = os.path.join(d, fn)
+            if full.startswith(prefix) and full.endswith(".json"):
+                out.append(full)
+    except Exception:
+        return []
+    return sorted(out)  # lexical ok for YYYYMMDDTHHMMSSZ timestamps
+
+
+def _prune_old_backups(history_path: str, keep_n: int) -> Dict[str, Any]:
+    files = _list_backup_files(history_path)
+    audit = {"prune_status": "SKIPPED", "prune_reason": "no_backups_or_keep_all", "deleted": 0}
+    if keep_n <= 0:
+        return audit
+    if len(files) <= keep_n:
+        audit.update({"prune_status": "OK", "prune_reason": f"within_keep_n:{keep_n}", "deleted": 0})
+        return audit
+
+    to_delete = files[: max(0, len(files) - keep_n)]
+    deleted = 0
+    for p in to_delete:
+        try:
+            os.remove(p)
+            deleted += 1
+        except Exception:
+            # best-effort prune; do not fail run
+            pass
+
+    audit.update({"prune_status": "OK", "prune_reason": f"pruned_to_keep_n:{keep_n}", "deleted": deleted})
+    return audit
+
 
 def _backup_history_if_exists(out_history: str, run_ts_utc: str) -> Dict[str, Any]:
     """
     Always back up the existing history.json BEFORE parsing/writing.
+    Also prunes old backups (keep last N).
     Returns audit dict.
     """
     os.makedirs(os.path.dirname(out_history), exist_ok=True)
@@ -437,6 +507,8 @@ def _backup_history_if_exists(out_history: str, run_ts_utc: str) -> Dict[str, An
         "backup_reason": "no_existing_history",
         "backup_path": None,
         "backup_bytes": None,
+        "backup_keep_n": _env_int(ENV_BACKUP_KEEP_N, DEFAULT_BACKUP_KEEP_N),
+        "backup_prune": {"prune_status": "SKIPPED", "prune_reason": "not_run", "deleted": 0},
     }
 
     if not os.path.exists(out_history):
@@ -455,7 +527,6 @@ def _backup_history_if_exists(out_history: str, run_ts_utc: str) -> Dict[str, An
                 "backup_bytes": int(bsz),
             }
         )
-        return audit
     except Exception as e:
         audit.update(
             {
@@ -465,7 +536,11 @@ def _backup_history_if_exists(out_history: str, run_ts_utc: str) -> Dict[str, An
                 "backup_bytes": None,
             }
         )
-        return audit
+        # even if copy failed, still try prune (it’s independent)
+    # prune old backups
+    keep_n = int(audit.get("backup_keep_n", DEFAULT_BACKUP_KEEP_N) or DEFAULT_BACKUP_KEEP_N)
+    audit["backup_prune"] = _prune_old_backups(out_history, keep_n)
+    return audit
 
 
 def _load_history(out_history: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -516,7 +591,6 @@ def _load_history(out_history: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
             )
             return hist, audit
 
-        # common corruption: items exists but wrong type
         audit.update(
             {
                 "history_load_status": "DOWNGRADED",
@@ -537,12 +611,28 @@ def _load_history(out_history: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         return hist, audit
 
 
+def _unique_day_buckets(items: List[Dict[str, Any]]) -> int:
+    days: set[str] = set()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        asof = _as_str(it.get("as_of_ts")) or "NA"
+        dk = _day_key_tpe_from_iso(asof)
+        if dk != "NA":
+            days.add(dk)
+    return len(days)
+
+
 def main() -> None:
     run_ts_utc = _utc_now()
     as_of_ts_tpe = _tpe_now()
     git_sha = os.environ.get("GITHUB_SHA", "NA")
 
     excluded: List[Dict[str, str]] = []
+
+    allow_reset = _env_flag(ENV_ALLOW_RESET)
+    allow_shrink = _env_flag(ENV_ALLOW_SHRINK)
+    reset_reason = os.environ.get(ENV_RESET_REASON, "").strip() or "unspecified"
 
     # ---- read market_cache stats ----
     try:
@@ -748,17 +838,12 @@ def main() -> None:
         # level gate
         margin_level_gate, margin_level_dbg = _derive_margin_level_gate(twse_rows)
         if margin_level_gate is None and TW_MARGIN_LEVEL_GATE_ENABLED:
-            # downgrade but do not block flow signal
             margin_confidence = "DOWNGRADED"
     else:
         if ok_margin:
             excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:series.TWSE.rows"})
-        # if ok_margin is False, already excluded by TW:INPUT_MARGIN
 
     # final margin signal (canonical)
-    # - if flow is NA => final NA
-    # - if level gate FAIL => force NONE (level not extreme, block heat)
-    # - otherwise keep flow signal
     tw_margin_signal: Optional[str] = None
     if margin_flow_signal is None:
         tw_margin_signal = None
@@ -835,13 +920,20 @@ def main() -> None:
         twse_latest_balance_yi = _as_float(rows2[0].get("balance_yi"))
         twse_latest_chg_yi = _as_float(rows2[0].get("chg_yi"))
 
-    # ---- history backup & load (v0.1.7) ----
+    # ---- history backup & load ----
+    history_file_exists = os.path.exists(OUT_HISTORY)
     backup_audit = _backup_history_if_exists(OUT_HISTORY, run_ts_utc)
     hist, history_load_audit = _load_history(OUT_HISTORY)
-    history_pre_items = int(history_load_audit.get("loaded_items", 0))
 
-    # ---- build latest.json ----
-    latest_out = {
+    history_pre_items = int(history_load_audit.get("loaded_items", 0))
+    old_items = hist.get("items", [])
+    if not isinstance(old_items, list):
+        old_items = []
+    old_items = [it for it in old_items if isinstance(it, dict)]
+    pre_unique_days = _unique_day_buckets(old_items)
+
+    # ---- build latest.json (base) ----
+    latest_out: Dict[str, Any] = {
         "schema_version": "bottom_cache_v1_1",
         "renderer_version": RENDERER_VERSION,
         "generated_at_utc": run_ts_utc,
@@ -921,8 +1013,17 @@ def main() -> None:
         "history_audit": {
             **history_load_audit,
             **backup_audit,
+            "history_file_exists": history_file_exists,
             "history_pre_items": history_pre_items,
-            # post items will be filled after write
+            "history_pre_unique_days": pre_unique_days,
+            "history_post_items": None,
+            "history_post_unique_days": None,
+            "history_write_status": "NA",
+            "history_write_reason": "not_decided",
+            "history_reset": False,
+            "history_reset_reason": None,
+            "allow_reset": allow_reset,
+            "allow_shrink": allow_shrink,
         },
         "notes": [
             "Global: single source = market_cache/stats_latest.json",
@@ -930,11 +1031,34 @@ def main() -> None:
             "Signals are deterministic; missing fields => NA + excluded reasons",
             "ret1_pct unit is percent (%)",
             "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
-            "v0.1.7: always backup history.json before write; report pre/post counts and backup status",
+            "v0.1.7: always backup history.json before write",
+            "v0.1.8: fail-closed history writes + unique-day shrink guard + backup retention",
         ],
     }
 
-    # ---- history.json append (overwrite same TPE day bucket) ----
+    # ---------------- history append / guards ----------------
+    history_write_status = "OK"
+    history_write_reason = "ok"
+    history_reset = False
+    history_reset_reason = None
+
+    # Fail-Closed: if history exists but load is not OK
+    if history_file_exists and history_load_audit.get("history_load_status") != "OK":
+        if allow_reset:
+            history_reset = True
+            history_reset_reason = reset_reason or history_load_audit.get("history_load_reason")
+            hist = {"schema_version": "bottom_history_v1", "items": []}
+            old_items = []
+            history_pre_items = 0
+            pre_unique_days = 0
+            latest_out["history_audit"]["history_load_status"] = "RESET"
+            latest_out["history_audit"]["history_load_reason"] = f"allowed_reset:{history_load_audit.get('history_load_reason')}"
+        else:
+            history_write_status = "SKIPPED"
+            history_write_reason = "FAIL_CLOSED:history_load_not_ok"
+    # else: OK or file_not_found => proceed
+
+    # Build the history item for this run (even if we might skip writing, report/latest still reflect current run)
     item = {
         "run_ts_utc": run_ts_utc,
         "as_of_ts": as_of_ts_tpe,
@@ -949,33 +1073,57 @@ def main() -> None:
         "margin_confidence": margin_confidence,
     }
 
+    # Compute would-be new history (1 row per TPE day)
     dk = _day_key_tpe_from_iso(as_of_ts_tpe)
-    old_items = hist.get("items", [])
-    if not isinstance(old_items, list):
-        old_items = []
+    if isinstance(hist, dict) and isinstance(hist.get("items"), list):
+        base_items = [it for it in hist.get("items", []) if isinstance(it, dict)]
+    else:
+        base_items = []
 
     new_items = [
-        it for it in old_items
+        it for it in base_items
         if _day_key_tpe_from_iso(_as_str(it.get("as_of_ts")) or "NA") != dk
     ]
     new_items.append(item)
-    hist["schema_version"] = hist.get("schema_version") or "bottom_history_v1"
-    hist["items"] = new_items
 
+    post_unique_days = _unique_day_buckets(new_items)
     history_post_items = len(new_items)
 
-    # write history.json and latest.json
-    _write_json(OUT_HISTORY, hist)
+    # Shrink Guard (unique day buckets)
+    if history_write_status == "OK":
+        if history_file_exists and pre_unique_days > 0 and post_unique_days < pre_unique_days and not allow_shrink:
+            history_write_status = "SKIPPED"
+            history_write_reason = f"FAIL_SHRINK_GUARD:unique_days {post_unique_days} < {pre_unique_days}"
 
+    # If allowed, write history.json (and reflect post counts)
+    effective_items_for_report = base_items  # default if we skip
+    if history_write_status == "OK":
+        hist2 = dict(hist) if isinstance(hist, dict) else {}
+        hist2["schema_version"] = hist2.get("schema_version") or "bottom_history_v1"
+        hist2["items"] = new_items
+        _write_json(OUT_HISTORY, hist2)
+        effective_items_for_report = new_items
+    else:
+        history_post_items = history_pre_items
+        post_unique_days = pre_unique_days
+
+    # finalize history audit in latest_out
+    latest_out["history_audit"]["history_write_status"] = history_write_status
+    latest_out["history_audit"]["history_write_reason"] = history_write_reason
+    latest_out["history_audit"]["history_reset"] = history_reset
+    latest_out["history_audit"]["history_reset_reason"] = history_reset_reason
     latest_out["history_audit"]["history_post_items"] = history_post_items
+    latest_out["history_audit"]["history_post_unique_days"] = post_unique_days
+
+    # write latest.json always (even if history write skipped)
     _write_json(OUT_LATEST, latest_out)
 
-    # ---- analytics on history for report.md ----
-    items_sorted: List[Dict[str, Any]] = [it for it in hist.get("items", []) if isinstance(it, dict)]
+    # ---------------- report analytics (use effective history, i.e., persisted state) ----------------
+    items_sorted: List[Dict[str, Any]] = [it for it in effective_items_for_report if isinstance(it, dict)]
     items_sorted.sort(key=lambda x: _iso_sort_key(_as_str(x.get("as_of_ts")) or "NA"))
     recent = items_sorted[-HISTORY_SHOW_N:] if items_sorted else []
 
-    # streaks
+    # streaks based on effective history (if history write skipped, streak excludes this run)
     streak_global = 0
     for it in reversed(items_sorted):
         if (it.get("bottom_state_global") or "NA") == bottom_state:
@@ -991,14 +1139,12 @@ def main() -> None:
             break
 
     # ---- TW audit strings for report.md ----
-    # margin flow audit
     flow_sum5 = None
     flow_pos5 = None
     if isinstance(margin_flow_dbg, dict):
         flow_sum5 = _as_float(margin_flow_dbg.get("sum_last5_yi"))
         flow_pos5 = _as_int(margin_flow_dbg.get("pos_days_last5"))
 
-    # level gate audit
     level_have = None
     level_min = None
     level_p = None
@@ -1024,7 +1170,6 @@ def main() -> None:
     else:
         stress_hit: List[str] = []
         stress_miss: List[str] = []
-        # Stress components (must be True to count)
         if bool(sig_volamp):
             stress_hit.append("VolumeAmplified")
         else:
@@ -1044,9 +1189,7 @@ def main() -> None:
 
         stress_str = ",".join(stress_hit) if stress_hit else ""
         miss_str = ",".join(stress_miss) if stress_miss else ""
-        tw_panic_hit = f"DownDay={sig_downday} + Stress={{{{ {stress_str} }}}}; Miss={{{{ {miss_str} }}}}"
-        # clean braces spacing: keep identical to your v0.1.6 style
-        tw_panic_hit = tw_panic_hit.replace("{{ ", "{").replace(" }}", "}").replace("{{", "{").replace("}}", "}")
+        tw_panic_hit = f"DownDay={sig_downday} + Stress={{{stress_str}}}; Miss={{{miss_str}}}"
 
     # ---- report.md ----
     md: List[str] = []
@@ -1059,17 +1202,30 @@ def main() -> None:
     md.append(f"- market_cache_generated_at_utc: `{meta['generated_at_utc'] or 'NA'}`\n")
 
     md.append(
-        f"- history_load_status: `{history_load_audit.get('history_load_status','NA')}`; "
-        f"reason: `{history_load_audit.get('history_load_reason','NA')}`; "
+        f"- history_load_status: `{latest_out['history_audit'].get('history_load_status','NA')}`; "
+        f"reason: `{latest_out['history_audit'].get('history_load_reason','NA')}`; "
         f"loaded_items: `{history_pre_items}`\n"
     )
-    md.append(f"- history_pre_items: `{history_pre_items}`; history_post_items: `{history_post_items}`\n")
-
     md.append(
-        f"- history_backup: status=`{backup_audit.get('backup_status','NA')}`; "
-        f"reason=`{backup_audit.get('backup_reason','NA')}`; "
-        f"file=`{backup_audit.get('backup_path') or 'NA'}`; "
-        f"bytes=`{backup_audit.get('backup_bytes') if backup_audit.get('backup_bytes') is not None else 'NA'}`\n\n"
+        f"- history_pre_items: `{history_pre_items}`; history_post_items: `{history_post_items}`; "
+        f"pre_unique_days: `{pre_unique_days}`; post_unique_days: `{post_unique_days}`\n"
+    )
+    md.append(
+        f"- history_write: status=`{history_write_status}`; reason=`{history_write_reason}`; "
+        f"allow_reset=`{allow_reset}`; allow_shrink=`{allow_shrink}`\n"
+    )
+    if history_reset:
+        md.append(f"- history_reset: `true`; reset_reason: `{history_reset_reason}`\n")
+
+    ba = latest_out["history_audit"]
+    prune = ba.get("backup_prune", {}) if isinstance(ba.get("backup_prune"), dict) else {}
+    md.append(
+        f"- history_backup: status=`{ba.get('backup_status','NA')}`; "
+        f"reason=`{ba.get('backup_reason','NA')}`; "
+        f"file=`{ba.get('backup_path') or 'NA'}`; "
+        f"bytes=`{ba.get('backup_bytes') if ba.get('backup_bytes') is not None else 'NA'}`; "
+        f"keep_n=`{ba.get('backup_keep_n','NA')}`; "
+        f"prune_deleted=`{prune.get('deleted','NA')}`\n\n"
     )
 
     md.append("## Rationale (Decision Chain) - Global\n")
@@ -1121,7 +1277,7 @@ def main() -> None:
 
     md.append("## Recent History (last 10 buckets)\n")
     if not recent:
-        md.append("- NA (history empty)\n")
+        md.append("- NA (history empty)\n\n")
     else:
         md.append("| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |\n")
         md.append("|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|\n")
