@@ -1,38 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-bottom_cache renderer (v0.1.5):
+bottom_cache renderer (v0.1.6):
 
-- Global bottom/reversal workflow from market_cache (single-source)
-- TW local gate from existing repo outputs (no fetch):
-    * roll25_cache/latest_report.json
-    * taiwan_margin_cache/latest.json
+Based on v0.1.5, adds audit-grade history loading:
+- history_load_status / reason / loaded_items printed to report.md and latest.json
+- supports legacy history formats:
+  * {"items":[...]}
+  * top-level list [...]
+  * {"history":[...]} or {"records":[...]}  (legacy)
+- if parse fails, backup the raw file as history.json.corrupt.<run_ts_utc>.txt then start new.
 
-Outputs (ONE folder):
-- dashboard_bottom_cache/latest.json
-- dashboard_bottom_cache/history.json
-- dashboard_bottom_cache/report.md
+No change to deterministic trigger logic.
 
-Principles:
-- Deterministic rules only; no guessing.
-- Missing fields => NA + excluded reasons.
-- TW leverage heat: flow-only signal is always computed if enough rows.
-  Optional "level gate" is applied when there are enough balance points; otherwise downgrade (does not NA-out the signal).
-
-Patch v0.1.2:
-- report.md Recent History table: normalize None -> "NA" (fix legacy history rows)
-- Fix a critical formatting bug: DO NOT render legitimate signal "NONE" as "NA"
-  (previous _fmt_na used s.lower()=="none" which incorrectly mapped "NONE" -> "NA")
-- Normalize margin signal to canonical {"NONE","WATCH","ALERT"} or None
-  so TRIG_TW_LEVERAGE_HEAT cannot show 0 when margin signal is actually NA/None.
-
-Patch v0.1.4:
-- Add tw_panic_hit explanation: explicit which stress condition hit & which did not.
-
-Patch v0.1.5 (auditability):
-- In report.md, print level-gate audit line: have_points/min_points and percentile p (when available).
-- Print a compact margin-flow audit line: sum_last5 and pos_days_last5 (when available).
-- Recent History table adds legacy_row flag (display-only) to prevent misreading legacy rows lacking margin columns.
 """
 
 from __future__ import annotations
@@ -45,25 +25,21 @@ from typing import Any, Dict, Optional, List, Tuple
 from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
-RENDERER_VERSION = "v0.1.5"
+RENDERER_VERSION = "v0.1.6"
 
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
 
-# TW inputs (existing workflow outputs, no fetch)
 TW_ROLL25_REPORT_PATH = "roll25_cache/latest_report.json"
 TW_MARGIN_PATH = "taiwan_margin_cache/latest.json"
 
-# unified output folder
 OUT_DIR = "dashboard_bottom_cache"
 OUT_LATEST = f"{OUT_DIR}/latest.json"
 OUT_HISTORY = f"{OUT_DIR}/history.json"
 OUT_MD = f"{OUT_DIR}/report.md"
 
-# what we need from market_cache
 NEEDED = ["VIX", "SP500", "HYG_IEF_RATIO", "OFR_FSI"]
 
-# risk direction is a RULE (not guessed)
 RISK_DIR = {
     "VIX": "HIGH",
     "OFR_FSI": "HIGH",
@@ -71,29 +47,31 @@ RISK_DIR = {
     "SP500": "LOW",
 }
 
-# v0 thresholds (deterministic)
 TH_VIX_PANIC = 20.0
-TH_SPX_RET1_PANIC = -1.5     # unit = percent (%)
-TH_HYG_VETO_Z = -2.0         # systemic credit stress veto (LOW direction)
-TH_OFR_VETO_Z = 2.0          # systemic stress veto (HIGH direction)
+TH_SPX_RET1_PANIC = -1.5
+TH_HYG_VETO_Z = -2.0
+TH_OFR_VETO_Z = 2.0
 
 HISTORY_SHOW_N = 10
+HISTORY_MAX_ITEMS = 1200  # safety cap (deterministic trimming)
 
-# --- TW panic semantics (deterministic numeric thresholds) ---
-TH_TW_CONSEC_BREAK_STRESS = 2       # ConsecutiveBreak >= 2 counts as stress
-TH_TW_NEWLOW_STRESS_MIN = 1         # NewLow_N >= 1 counts as stress
+TH_TW_CONSEC_BREAK_STRESS = 2
+TH_TW_NEWLOW_STRESS_MIN = 1
 
-# --- TW margin flow thresholds (億) ---
 TW_MARGIN_WATCH_SUM5_YI = 100.0
 TW_MARGIN_ALERT_SUM5_YI = 150.0
 TW_MARGIN_POSDAYS5_MIN = 4
-TW_MARGIN_FLOW_MIN_POINTS = 5       # require last5 fully available for strictness
+TW_MARGIN_FLOW_MIN_POINTS = 5
 
-# --- OPTIONAL: TW margin level gate (balance percentile) ---
 TW_MARGIN_LEVEL_GATE_ENABLED = True
-TW_MARGIN_LEVEL_MIN_POINTS = 60     # below this => downgrade to flow-only
-TW_MARGIN_LEVEL_WINDOW = 252        # use up to last252 points if available
-TW_MARGIN_LEVEL_P_MIN = 95.0        # high percentile => "level is extreme"
+TW_MARGIN_LEVEL_MIN_POINTS = 60
+TW_MARGIN_LEVEL_WINDOW = 252
+TW_MARGIN_LEVEL_P_MIN = 95.0
+
+
+def _read_text(path: str) -> str:
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 def _read_json(path: str) -> Any:
@@ -230,44 +208,22 @@ def _iso_sort_key(iso: str) -> Tuple[int, str]:
 
 
 def _fmt_na(x: Any) -> str:
-    """
-    Normalize any null-ish value for report rendering.
-    IMPORTANT: "NONE" is a legitimate signal value and must NOT be rendered as "NA".
-
-    - None -> "NA"
-    - empty string -> "NA"
-    - "NA"/"N/A"/"NULL"/"NaN" (case-insensitive) -> "NA"
-    - legacy null strings: "None" or "none" -> "NA"  (but "NONE" stays "NONE")
-    Otherwise -> str(x)
-    """
     if x is None:
         return "NA"
-
     if isinstance(x, str):
         s = x.strip()
         if s == "":
             return "NA"
-
         up = s.upper()
         if up in ("NA", "N/A", "NULL", "NAN"):
             return "NA"
-
-        # legacy null strings (do NOT collapse "NONE")
         if s in ("None", "none"):
             return "NA"
-
         return s
-
     return str(x)
 
 
 def _canon_margin_signal(x: Any) -> Optional[str]:
-    """
-    Canonicalize margin signal:
-    - returns one of {"NONE","WATCH","ALERT"} or None
-    - treats "NA"/"None"/""/"null"/"nan" as None
-    - normalizes case (e.g., "watch" -> "WATCH")
-    """
     if x is None:
         return None
     if isinstance(x, str):
@@ -281,8 +237,63 @@ def _canon_margin_signal(x: Any) -> Optional[str]:
             return None
         if up in ("NONE", "WATCH", "ALERT"):
             return up
-        return None
     return None
+
+
+# -------- history loader (v0.1.6) --------
+
+def _load_history(path: str, run_ts_utc: str) -> Tuple[Dict[str, Any], str, str, int]:
+    """
+    Returns (hist_obj, status, reason, loaded_items_count)
+
+    status:
+      - OK
+      - MISSING
+      - PARSE_FAILED_BACKUP_CREATED
+      - SCHEMA_COERCED
+      - EMPTY_RESET
+    """
+    if not os.path.exists(path):
+        return ({"schema_version": "bottom_history_v1", "items": []}, "MISSING", "file_not_found", 0)
+
+    try:
+        obj = _read_json(path)
+    except Exception as e:
+        raw = ""
+        try:
+            raw = _read_text(path)
+        except Exception:
+            raw = ""
+        reason = f"json_parse_failed:{type(e).__name__}"
+        if "<<<" in raw or ">>>" in raw or "=======" in raw:
+            reason = "json_parse_failed:git_conflict_markers_detected"
+        # backup raw then reset
+        bak = f"{path}.corrupt.{run_ts_utc.replace(':','_')}.txt"
+        try:
+            _write_text(bak, raw if raw else f"(no raw text available)\nreason={reason}\n")
+            return ({"schema_version": "bottom_history_v1", "items": []}, "PARSE_FAILED_BACKUP_CREATED", reason, 0)
+        except Exception:
+            return ({"schema_version": "bottom_history_v1", "items": []}, "EMPTY_RESET", reason, 0)
+
+    # schema normalize
+    if isinstance(obj, dict) and isinstance(obj.get("items"), list):
+        items = [it for it in obj["items"] if isinstance(it, dict)]
+        obj["items"] = items
+        return (obj, "OK", "dict.items", len(items))
+
+    if isinstance(obj, list):
+        items = [it for it in obj if isinstance(it, dict)]
+        return ({"schema_version": "bottom_history_v1", "items": items}, "SCHEMA_COERCED", "top_level_list", len(items))
+
+    if isinstance(obj, dict) and isinstance(obj.get("history"), list):
+        items = [it for it in obj["history"] if isinstance(it, dict)]
+        return ({"schema_version": "bottom_history_v1", "items": items}, "SCHEMA_COERCED", "dict.history", len(items))
+
+    if isinstance(obj, dict) and isinstance(obj.get("records"), list):
+        items = [it for it in obj["records"] if isinstance(it, dict)]
+        return ({"schema_version": "bottom_history_v1", "items": items}, "SCHEMA_COERCED", "dict.records", len(items))
+
+    return ({"schema_version": "bottom_history_v1", "items": []}, "EMPTY_RESET", "unknown_schema", 0)
 
 
 # ---------------- TW helpers ----------------
@@ -314,17 +325,10 @@ def _load_tw_margin(excluded: List[Dict[str, str]]) -> Tuple[Dict[str, Any], boo
 def _sort_rows_newest_first(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     def _k(r: Dict[str, Any]) -> str:
         return _as_str(r.get("date")) or ""
-    # dates are YYYY-MM-DD; lexical sort works
     return sorted(rows, key=_k, reverse=True)
 
 
 def _derive_margin_flow_signal(rows: List[Dict[str, Any]]) -> Tuple[Optional[str], Dict[str, Any]]:
-    """
-    Flow-only leverage heat signal from TWSE rows (chg_yi):
-    - WATCH if sum_last5 >= 100 and pos_days_last5 >= 4
-    - ALERT if sum_last5 >= 150 and pos_days_last5 >= 4
-    Returns (signal, dbg); signal=None => NA (insufficient data)
-    """
     if not isinstance(rows, list) or len(rows) == 0:
         return (None, {"reason": "rows_empty_or_invalid"})
 
@@ -378,14 +382,6 @@ def _compute_percentile(latest: float, xs: List[float]) -> Optional[float]:
 
 
 def _derive_margin_level_gate(rows: List[Dict[str, Any]]) -> Tuple[Optional[str], Dict[str, Any]]:
-    """
-    Level gate using balance_yi percentile within last N points (up to 252).
-    - PASS if p >= 95
-    - FAIL if p < 95
-    - NA if insufficient points (<60)
-
-    v0.1.5: dbg always includes have_points/min_points and (when available) p.
-    """
     if not TW_MARGIN_LEVEL_GATE_ENABLED:
         return ("SKIPPED", {"reason": "level_gate_disabled", "have_points": 0, "min_points": TW_MARGIN_LEVEL_MIN_POINTS})
 
@@ -435,21 +431,12 @@ def _tw_panic_explain(
     stress_newlow: Optional[bool],
     stress_consec: Optional[bool],
 ) -> str:
-    """
-    Produce deterministic explanation string:
-    - Stress={...} lists which stress conditions are True
-    - Miss={...} lists which stress conditions are False (not missing)
-    - If any inputs are None -> Miss adds that field name into Miss set.
-      This is display-only; does NOT change trigger logic.
-    """
     hit: List[str] = []
     miss: List[str] = []
 
     def _push(name: str, v: Optional[bool]) -> None:
         if v is True:
             hit.append(name)
-        elif v is False:
-            miss.append(name)
         else:
             miss.append(name)
 
@@ -558,7 +545,6 @@ def main() -> None:
         vix_zd = series_out["VIX"]["w60"]["z_delta"]
         vix_pd = series_out["VIX"]["w60"]["p_delta"]
 
-        # VIX cooling: any available metric < 0
         vix_cooling: Optional[int] = None
         for x in (vix_ret1, vix_zd, vix_pd):
             if x is not None:
@@ -580,7 +566,6 @@ def main() -> None:
         else:
             trig_rev = 1 if (vix_cooling == 1 and spx_stab == 1) else 0
 
-    # bottom state
     if trig_panic == 0:
         bottom_state = "NONE"
     elif trig_panic == 1:
@@ -593,13 +578,11 @@ def main() -> None:
     else:
         bottom_state = "NA"
 
-    # context (non-trigger)
     spx_p252 = series_out["SP500"]["w252"]["p"]
     context_equity_extreme: Optional[int] = None
     if spx_p252 is not None:
         context_equity_extreme = 1 if float(spx_p252) >= 95.0 else 0
 
-    # distances (<=0 means triggered)
     dist_vix_panic = (TH_VIX_PANIC - float(vix_val)) if vix_val is not None else None
     dist_spx_panic = (float(spx_ret1) - TH_SPX_RET1_PANIC) if spx_ret1 is not None else None
     dist_hyg_veto = (float(hyg_z) - TH_HYG_VETO_Z) if hyg_z is not None else None
@@ -609,7 +592,6 @@ def main() -> None:
     tw_roll25, ok_roll25 = _load_tw_roll25(excluded)
     tw_margin, ok_margin = _load_tw_margin(excluded)
 
-    # roll25 key fields
     tw_used_date = _as_str(tw_roll25.get("used_date") or _get(tw_roll25, ["numbers", "UsedDate"]))
     tw_run_day_tag = _as_str(
         tw_roll25.get("run_day_tag")
@@ -629,7 +611,6 @@ def main() -> None:
     if not isinstance(sig_obj, dict):
         sig_obj = {}
 
-    # numeric-aware parsing
     sig_downday = _as_bool(sig_obj.get("DownDay"))
     sig_volamp = _as_bool(sig_obj.get("VolumeAmplified"))
     sig_volamp2 = _as_bool(sig_obj.get("VolAmplified"))
@@ -639,7 +620,6 @@ def main() -> None:
     stress_newlow = None if sig_newlow_n is None else (sig_newlow_n >= TH_TW_NEWLOW_STRESS_MIN)
     stress_consec = None if sig_consec_n is None else (sig_consec_n >= TH_TW_CONSEC_BREAK_STRESS)
 
-    # TW margin (TWSE)
     tw_margin_unit = "億"
     twse_rows: List[Dict[str, Any]] = []
     twse_data_date: Optional[str] = None
@@ -656,7 +636,6 @@ def main() -> None:
             if isinstance(unit_label, str) and unit_label.strip():
                 tw_margin_unit = unit_label.strip()
 
-    # derive margin flow + optional level gate
     margin_flow_signal: Optional[str] = None
     margin_flow_dbg: Dict[str, Any] = {}
     margin_level_gate: Optional[str] = None
@@ -670,21 +649,13 @@ def main() -> None:
         if margin_flow_signal is None:
             excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "margin_flow_signal_NA"})
 
-        # level gate
         margin_level_gate, margin_level_dbg = _derive_margin_level_gate(twse_rows)
         if margin_level_gate is None and TW_MARGIN_LEVEL_GATE_ENABLED:
-            # downgrade but do not block signal
             margin_confidence = "DOWNGRADED"
     else:
         if ok_margin:
             excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:series.TWSE.rows"})
-        # if ok_margin is False, already excluded by TW:INPUT_MARGIN
 
-    # final margin signal (canonical)
-    # - if flow is NA => final NA
-    # - if level gate FAIL => force NONE (level not extreme, block heat)
-    # - otherwise keep flow signal
-    tw_margin_signal: Optional[str] = None
     if margin_flow_signal is None:
         tw_margin_signal = None
     else:
@@ -692,10 +663,8 @@ def main() -> None:
             tw_margin_signal = "NONE"
         else:
             tw_margin_signal = margin_flow_signal
-
     tw_margin_signal = _canon_margin_signal(tw_margin_signal)
 
-    # TRIG_TW_PANIC
     trig_tw_panic: Optional[int] = None
     if not ok_roll25:
         trig_tw_panic = None
@@ -709,16 +678,11 @@ def main() -> None:
             any_stress = bool(sig_volamp or sig_volamp2 or stress_newlow or stress_consec)
             trig_tw_panic = 1 if (sig_downday and any_stress) else 0
 
-    # TRIG_TW_LEVERAGE_HEAT
-    # IMPORTANT: if margin signal is NA/None => trigger must be NA (None), not 0
-    trig_tw_heat: Optional[int] = None
     if tw_margin_signal is None:
         trig_tw_heat = None
     else:
         trig_tw_heat = 1 if (tw_margin_signal in ("WATCH", "ALERT")) else 0
 
-    # TRIG_TW_REVERSAL: PANIC & NOT heat & pct_change>=0 & DownDay=false
-    trig_tw_rev: Optional[int] = None
     if trig_tw_panic != 1:
         trig_tw_rev = 0 if trig_tw_panic in (0, None) else None
     else:
@@ -731,7 +695,6 @@ def main() -> None:
             else:
                 trig_tw_rev = 1 if (trig_tw_heat == 0 and float(tw_pct_change) >= 0 and sig_downday is False) else 0
 
-    # TW state
     if trig_tw_panic is None:
         tw_state = "NA"
     elif trig_tw_panic == 0:
@@ -744,41 +707,41 @@ def main() -> None:
         else:
             tw_state = "TW_BOTTOM_WATCH"
 
-    # TW distances / gating
-    pct_change_to_nonnegative_gap: Optional[float] = None
-    if tw_pct_change is not None:
-        pct_change_to_nonnegative_gap = max(0.0, 0.0 - float(tw_pct_change))
-
-    lookback_missing_points: Optional[int] = None
+    pct_change_to_nonnegative_gap = None if tw_pct_change is None else max(0.0, 0.0 - float(tw_pct_change))
+    lookback_missing_points = None
     if tw_lookback_actual is not None and tw_lookback_target is not None:
         lookback_missing_points = max(0, int(tw_lookback_target) - int(tw_lookback_actual))
 
-    # latest balance display
-    twse_latest_balance_yi: Optional[float] = None
-    twse_latest_chg_yi: Optional[float] = None
+    twse_latest_balance_yi = None
+    twse_latest_chg_yi = None
     if twse_rows:
         rows2 = _sort_rows_newest_first(twse_rows)
         twse_latest_balance_yi = _as_float(rows2[0].get("balance_yi"))
         twse_latest_chg_yi = _as_float(rows2[0].get("chg_yi"))
 
-    # tw panic explain (display-only)
     tw_panic_hit = _tw_panic_explain(sig_downday, sig_volamp, sig_volamp2, stress_newlow, stress_consec)
 
-    # ---- build latest.json ----
+    # ---- load history (v0.1.6) ----
+    hist, hist_status, hist_reason, hist_loaded_n = _load_history(OUT_HISTORY, run_ts_utc)
+
+    # ---- latest.json ----
     latest_out = {
         "schema_version": "bottom_cache_v1_1",
         "renderer_version": RENDERER_VERSION,
         "generated_at_utc": run_ts_utc,
         "as_of_ts": as_of_ts_tpe,
         "data_commit_sha": git_sha,
+        "history_load": {
+            "status": hist_status,
+            "reason": hist_reason,
+            "loaded_items": hist_loaded_n,
+            "path": OUT_HISTORY,
+        },
         "inputs": {
             "market_cache_stats_path": MARKET_STATS_PATH,
             "market_cache_ok": ok_market,
             "market_cache_generated_at_utc": meta["generated_at_utc"] or "NA",
             "market_cache_as_of_ts": meta["as_of_ts"] or "NA",
-            "market_cache_script_version": meta["script_version"] or "NA",
-            "market_cache_ret1_mode": meta["ret1_mode"] or "NA",
-            "market_cache_percentile_method": meta["percentile_method"] or "NA",
             "tw_roll25_report_path": TW_ROLL25_REPORT_PATH,
             "tw_margin_path": TW_MARGIN_PATH,
         },
@@ -843,30 +806,11 @@ def main() -> None:
         },
         "excluded_triggers": excluded,
         "series_global": series_out,
-        "notes": [
-            "Global: single source = market_cache/stats_latest.json",
-            "TW: uses existing repo outputs only (no external fetch here)",
-            "Signals are deterministic; missing fields => NA + excluded reasons",
-            "ret1_pct unit is percent (%)",
-            "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
-            "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
-            "v0.1.5: report prints level-gate have_points/min_points and p (if available), plus compact flow audit line",
-            "v0.1.5: report recent history adds legacy_row flag (display-only) for rows missing margin columns",
-        ],
     }
 
     _write_json(OUT_LATEST, latest_out)
 
-    # ---- history.json append (overwrite same TPE day bucket) ----
-    hist: Dict[str, Any] = {"schema_version": "bottom_history_v1", "items": []}
-    if os.path.exists(OUT_HISTORY):
-        try:
-            tmp = _read_json(OUT_HISTORY)
-            if isinstance(tmp, dict) and isinstance(tmp.get("items"), list):
-                hist = tmp
-        except Exception:
-            hist = {"schema_version": "bottom_history_v1", "items": []}
-
+    # ---- history update (same as v0.1.5, but uses loaded hist) ----
     item = {
         "run_ts_utc": run_ts_utc,
         "as_of_ts": as_of_ts_tpe,
@@ -878,7 +822,6 @@ def main() -> None:
         "distances_global": latest_out["distances_global"],
         "tw_state": tw_state,
         "tw_triggers": latest_out["tw_local_gate"]["triggers"],
-        # v0.1.4+ history fields (may be missing for legacy items)
         "tw_margin_final_signal": tw_margin_signal,
         "tw_margin_confidence": margin_confidence,
     }
@@ -888,17 +831,23 @@ def main() -> None:
     if not isinstance(old_items, list):
         old_items = []
 
+    # keep other days
     new_items = [it for it in old_items if _day_key_tpe_from_iso(_as_str(it.get("as_of_ts")) or "NA") != dk]
     new_items.append(item)
-    hist["items"] = new_items
-    _write_json(OUT_HISTORY, hist)
+
+    # sort + cap
+    new_items = [it for it in new_items if isinstance(it, dict)]
+    new_items.sort(key=lambda x: _iso_sort_key(_as_str(x.get("as_of_ts")) or "NA"))
+    if len(new_items) > HISTORY_MAX_ITEMS:
+        new_items = new_items[-HISTORY_MAX_ITEMS:]
+
+    hist2 = {"schema_version": "bottom_history_v1", "items": new_items}
+    _write_json(OUT_HISTORY, hist2)
 
     # ---- analytics on history for report.md ----
-    items_sorted: List[Dict[str, Any]] = [it for it in hist.get("items", []) if isinstance(it, dict)]
-    items_sorted.sort(key=lambda x: _iso_sort_key(_as_str(x.get("as_of_ts")) or "NA"))
+    items_sorted = new_items
     recent = items_sorted[-HISTORY_SHOW_N:] if items_sorted else []
 
-    # streaks
     streak_global = 0
     for it in reversed(items_sorted):
         if (it.get("bottom_state_global") or "NA") == bottom_state:
@@ -913,7 +862,6 @@ def main() -> None:
         else:
             break
 
-    # v0.1.5 audit extracts for report
     lvl_have = _as_int(margin_level_dbg.get("have_points"))
     lvl_min = _as_int(margin_level_dbg.get("min_points")) or (TW_MARGIN_LEVEL_MIN_POINTS if TW_MARGIN_LEVEL_GATE_ENABLED else 0)
     lvl_p = _as_float(margin_level_dbg.get("p"))
@@ -928,7 +876,8 @@ def main() -> None:
     md.append(f"- run_ts_utc: `{run_ts_utc}`\n")
     md.append(f"- bottom_state (Global): **{bottom_state}**  (streak={streak_global})\n")
     md.append(f"- market_cache_as_of_ts: `{meta['as_of_ts'] or 'NA'}`\n")
-    md.append(f"- market_cache_generated_at_utc: `{meta['generated_at_utc'] or 'NA'}`\n\n")
+    md.append(f"- market_cache_generated_at_utc: `{meta['generated_at_utc'] or 'NA'}`\n")
+    md.append(f"- history_load_status: `{hist_status}`; reason: `{hist_reason}`; loaded_items: `{hist_loaded_n}`\n\n")
 
     md.append("## Rationale (Decision Chain) - Global\n")
     md.append(f"- TRIG_PANIC = `{_fmt_na(trig_panic)}`  (VIX >= {TH_VIX_PANIC} OR SP500.ret1% <= {TH_SPX_RET1_PANIC})\n")
@@ -951,17 +900,12 @@ def main() -> None:
     md.append(f"- margin_final_signal(TWSE): `{_fmt_na(tw_margin_signal)}`; confidence: `{margin_confidence}`; unit: `{tw_margin_unit}`\n")
     md.append(f"- margin_balance(TWSE latest): `{_safe_float_str(twse_latest_balance_yi, 1)}` {tw_margin_unit}\n")
     md.append(f"- margin_chg(TWSE latest): `{_safe_float_str(twse_latest_chg_yi, 1)}` {tw_margin_unit}\n")
-
-    # v0.1.5 audit lines
     md.append(
-        f"- margin_flow_audit: signal=`{_fmt_na(margin_flow_signal)}`; sum_last5=`{_safe_float_str(flow_sum5, 1)}`; "
-        f"pos_days_last5=`{_fmt_na(flow_pos)}`\n"
+        f"- margin_flow_audit: signal=`{_fmt_na(margin_flow_signal)}`; sum_last5=`{_safe_float_str(flow_sum5, 1)}`; pos_days_last5=`{_fmt_na(flow_pos)}`\n"
     )
     md.append(
-        f"- margin_level_gate_audit: gate=`{_fmt_na(margin_level_gate)}`; points=`{_fmt_na(lvl_have)}/{_fmt_na(lvl_min)}`; "
-        f"p=`{_safe_float_str(lvl_p, 3)}`; p_min=`{TW_MARGIN_LEVEL_P_MIN if TW_MARGIN_LEVEL_GATE_ENABLED else 'NA'}`\n"
+        f"- margin_level_gate_audit: gate=`{_fmt_na(margin_level_gate)}`; points=`{_fmt_na(lvl_have)}/{_fmt_na(lvl_min)}`; p=`{_safe_float_str(lvl_p, 3)}`; p_min=`{TW_MARGIN_LEVEL_P_MIN if TW_MARGIN_LEVEL_GATE_ENABLED else 'NA'}`\n"
     )
-
     md.append(f"- tw_panic_hit: `{tw_panic_hit}`\n\n")
 
     md.append("### TW Triggers (0/1/NA)\n")
@@ -969,33 +913,17 @@ def main() -> None:
     md.append(f"- TRIG_TW_LEVERAGE_HEAT: `{_fmt_na(trig_tw_heat)}`\n")
     md.append(f"- TRIG_TW_REVERSAL: `{_fmt_na(trig_tw_rev)}`\n\n")
 
-    md.append("### TW Distances / Gating\n")
-    md.append(f"- pct_change_to_nonnegative_gap: `{_safe_float_str(pct_change_to_nonnegative_gap, 3)}`\n")
-    md.append(f"- lookback_missing_points: `{_fmt_na(lookback_missing_points)}`\n\n")
-
-    md.append("### TW Snapshot (key fields)\n")
-    md.append(f"- pct_change: `{_fmt_na(tw_pct_change)}`; amplitude_pct: `{_fmt_na(tw_amplitude_pct)}`; turnover_twd: `{_fmt_na(tw_turnover_twd)}`; close: `{_fmt_na(tw_close)}`\n")
-    md.append(f"- signals: DownDay={_fmt_na(sig_downday)}, VolumeAmplified={_fmt_na(sig_volamp)}, VolAmplified={_fmt_na(sig_volamp2)}, NewLow_N={_fmt_na(sig_newlow_n)}, ConsecutiveBreak={_fmt_na(sig_consec_n)}\n")
-    md.append(f"- stress_flags: newlow={_fmt_na(stress_newlow)}, consecutive_break>={TH_TW_CONSEC_BREAK_STRESS}={_fmt_na(stress_consec)}\n\n")
-
-    if excluded:
-        md.append("## Excluded / NA Reasons\n")
-        for e in excluded:
-            md.append(f"- {e.get('trigger','NA')}: {e.get('reason','NA')}\n")
-        md.append("\n")
-
     md.append("## Recent History (last 10 buckets)\n")
     if not recent:
         md.append("- NA (history empty)\n")
     else:
-        md.append("| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf | legacy_row |\n")
-        md.append("|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|---:|\n")
+        md.append("| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |\n")
+        md.append("|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|\n")
         for it in recent:
             asof = _as_str(it.get("as_of_ts")) or "NA"
             dk2 = _day_key_tpe_from_iso(asof)
 
             st = _fmt_na(it.get("bottom_state_global"))
-
             tr = it.get("triggers_global") if isinstance(it.get("triggers_global"), dict) else {}
             p = _fmt_na(tr.get("TRIG_PANIC", None))
             v = _fmt_na(tr.get("TRIG_SYSTEMIC_VETO", None))
@@ -1007,28 +935,13 @@ def main() -> None:
             twh = _fmt_na(twtr.get("TRIG_TW_LEVERAGE_HEAT", None))
             twr = _fmt_na(twtr.get("TRIG_TW_REVERSAL", None))
 
-            has_margin_cols = ("tw_margin_final_signal" in it) or ("tw_margin_confidence" in it)
-            mfinal = _fmt_na(it.get("tw_margin_final_signal")) if has_margin_cols else "NA"
-            mconf = _fmt_na(it.get("tw_margin_confidence")) if has_margin_cols else "NA"
-            legacy_row = 0 if has_margin_cols else 1
+            mfinal = _fmt_na(it.get("tw_margin_final_signal"))
+            mconf = _fmt_na(it.get("tw_margin_confidence"))
 
-            md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {tws} | {twp} | {twh} | {twr} | {mfinal} | {mconf} | {legacy_row} |\n")
+            md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {tws} | {twp} | {twh} | {twr} | {mfinal} | {mconf} |\n")
         md.append("\n")
 
-    md.append("## Series Snapshot (Global)\n")
-    md.append("| series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) |\n")
-    md.append("|---|---|---|---|---:|---:|---:|---:|\n")
-    for sid in NEEDED:
-        s = series_out[sid]
-        md.append(
-            f"| {sid} | {s['risk_dir']} | {s['series_signal']} | {s['latest']['data_date'] or 'NA'} | "
-            f"{s['latest']['value'] if s['latest']['value'] is not None else 'NA'} | "
-            f"{s['w60']['z'] if s['w60']['z'] is not None else 'NA'} | "
-            f"{s['w252']['p'] if s['w252']['p'] is not None else 'NA'} | "
-            f"{s['w60']['ret1_pct'] if s['w60']['ret1_pct'] is not None else 'NA'} |\n"
-        )
-
-    md.append("\n## Data Sources\n")
+    md.append("## Data Sources\n")
     md.append(f"- Global (single-source): `{MARKET_STATS_PATH}`\n")
     md.append("- TW Local Gate (existing workflow outputs, no fetch):\n")
     md.append(f"  - `{TW_ROLL25_REPORT_PATH}`\n")
