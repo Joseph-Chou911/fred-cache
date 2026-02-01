@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-bottom_cache renderer (v0.1.8)
+bottom_cache renderer (v0.1.9)
 
 - Global bottom/reversal workflow from market_cache (single-source):
     * market_cache/stats_latest.json
@@ -35,6 +35,11 @@ Patch v0.1.8 (hardening):
     * Keep last N backups (default 30; env BOTTOM_HISTORY_BACKUP_KEEP_N).
 - Reset leaves trace in latest.json/report.md when executed.
 
+Patch v0.1.9 (TW panic hardening):
+- ConsecutiveBreak>=2 no longer counts as stress by itself.
+  It must be paired with (VolumeAmplified OR VolAmplified OR NewLow_N>=1) to count as stress.
+  This reduces false positives for TW_BOTTOM_WATCH.
+
 Note:
 - This script does NOT fetch external URLs directly. It only reads local JSON files produced by other workflows.
 """
@@ -49,7 +54,7 @@ from typing import Any, Dict, Optional, List, Tuple
 from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
-RENDERER_VERSION = "v0.1.8"
+RENDERER_VERSION = "v0.1.9"
 
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
@@ -84,8 +89,11 @@ TH_OFR_VETO_Z = 2.0          # systemic stress veto (HIGH direction)
 HISTORY_SHOW_N = 10
 
 # --- TW panic semantics (deterministic numeric thresholds) ---
-TH_TW_CONSEC_BREAK_STRESS = 2       # ConsecutiveBreak >= 2 counts as stress
+TH_TW_CONSEC_BREAK_STRESS = 2       # ConsecutiveBreak >= 2 is eligible stress
 TH_TW_NEWLOW_STRESS_MIN = 1         # NewLow_N >= 1 counts as stress
+
+# v0.1.9 change: ConsecutiveBreak must be paired with (volume or newlow) to count as stress
+TW_CONSEC_STRESS_REQUIRE_PAIR = True
 
 # --- TW margin flow thresholds (億) ---
 TW_MARGIN_WATCH_SUM5_YI = 100.0
@@ -537,7 +545,7 @@ def _backup_history_if_exists(out_history: str, run_ts_utc: str) -> Dict[str, An
             }
         )
         # even if copy failed, still try prune (it’s independent)
-    # prune old backups
+
     keep_n = int(audit.get("backup_keep_n", DEFAULT_BACKUP_KEEP_N) or DEFAULT_BACKUP_KEEP_N)
     audit["backup_prune"] = _prune_old_backups(out_history, keep_n)
     return audit
@@ -802,7 +810,18 @@ def main() -> None:
     sig_consec_n = _as_int(sig_obj.get("ConsecutiveBreak"))
 
     stress_newlow = None if sig_newlow_n is None else (sig_newlow_n >= TH_TW_NEWLOW_STRESS_MIN)
-    stress_consec = None if sig_consec_n is None else (sig_consec_n >= TH_TW_CONSEC_BREAK_STRESS)
+
+    # v0.1.9: consecutive break is eligible, but may require pairing
+    stress_consec_raw = None if sig_consec_n is None else (sig_consec_n >= TH_TW_CONSEC_BREAK_STRESS)
+    stress_consec_paired: Optional[bool] = None
+    if stress_consec_raw is None or stress_newlow is None or sig_volamp is None or sig_volamp2 is None:
+        stress_consec_paired = None
+    else:
+        if not stress_consec_raw:
+            stress_consec_paired = False
+        else:
+            paired = bool(sig_volamp or sig_volamp2 or stress_newlow)
+            stress_consec_paired = paired if TW_CONSEC_STRESS_REQUIRE_PAIR else True
 
     # TW margin (TWSE)
     tw_margin_unit = "億"
@@ -861,12 +880,14 @@ def main() -> None:
         trig_tw_panic = None
         excluded.append({"trigger": "TRIG_TW_PANIC", "reason": "missing_input:roll25_cache/latest_report.json"})
     else:
-        need = [sig_downday, sig_volamp, sig_volamp2, stress_newlow, stress_consec]
+        need = [sig_downday, sig_volamp, sig_volamp2, stress_newlow, stress_consec_raw, stress_consec_paired]
         if any(x is None for x in need):
             excluded.append({"trigger": "TRIG_TW_PANIC", "reason": "missing_fields:roll25.signal.*"})
             trig_tw_panic = None
         else:
-            any_stress = bool(sig_volamp or sig_volamp2 or stress_newlow or stress_consec)
+            # v0.1.9: consecutive-break stress counts only if paired (when enabled)
+            consec_counts = bool(stress_consec_paired)
+            any_stress = bool(sig_volamp or sig_volamp2 or stress_newlow or consec_counts)
             trig_tw_panic = 1 if (sig_downday and any_stress) else 0
 
     # TRIG_TW_LEVERAGE_HEAT
@@ -984,7 +1005,9 @@ def main() -> None:
                 "NewLow_N": sig_newlow_n,
                 "ConsecutiveBreak": sig_consec_n,
                 "stress_newlow": stress_newlow,
-                "stress_consecutive_break": stress_consec,
+                "stress_consecutive_break_raw": stress_consec_raw,
+                "stress_consecutive_break_paired": stress_consec_paired,
+                "stress_consec_pair_required": TW_CONSEC_STRESS_REQUIRE_PAIR,
             },
             "margin": {
                 "data_date": twse_data_date,
@@ -1033,6 +1056,7 @@ def main() -> None:
             "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
             "v0.1.7: always backup history.json before write",
             "v0.1.8: fail-closed history writes + unique-day shrink guard + backup retention",
+            "v0.1.9: TW panic hardening (ConsecutiveBreak stress requires pairing)",
         ],
     }
 
@@ -1153,7 +1177,7 @@ def main() -> None:
         level_min = _as_int(margin_level_dbg.get("min_points"))
         level_p = _as_float(margin_level_dbg.get("p"))
 
-    # tw panic hit string
+    # tw panic hit string (v0.1.9 aware)
     tw_panic_hit = "NA"
     required = {
         "DownDay": sig_downday,
@@ -1162,7 +1186,8 @@ def main() -> None:
         "NewLow_N": sig_newlow_n,
         "ConsecutiveBreak": sig_consec_n,
         "stress_newlow": stress_newlow,
-        "stress_consec": stress_consec,
+        "stress_consec_raw": stress_consec_raw,
+        "stress_consec_paired": stress_consec_paired,
     }
     if any(v is None for v in required.values()):
         missing = [k for k, v in required.items() if v is None]
@@ -1170,22 +1195,38 @@ def main() -> None:
     else:
         stress_hit: List[str] = []
         stress_miss: List[str] = []
+
+        # volume / newlow are direct stress
         if bool(sig_volamp):
             stress_hit.append("VolumeAmplified")
         else:
             stress_miss.append("VolumeAmplified")
+
         if bool(sig_volamp2):
             stress_hit.append("VolAmplified")
         else:
             stress_miss.append("VolAmplified")
+
         if bool(stress_newlow):
             stress_hit.append(f"NewLow_N>={TH_TW_NEWLOW_STRESS_MIN}")
         else:
             stress_miss.append(f"NewLow_N>={TH_TW_NEWLOW_STRESS_MIN}")
-        if bool(stress_consec):
-            stress_hit.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}")
+
+        # consecutive-break: show paired semantics
+        if TW_CONSEC_STRESS_REQUIRE_PAIR:
+            if bool(stress_consec_paired):
+                stress_hit.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}&paired")
+            else:
+                # distinguish raw hit but unpaired
+                if bool(stress_consec_raw):
+                    stress_miss.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}&paired(FAILED)")
+                else:
+                    stress_miss.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}&paired")
         else:
-            stress_miss.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}")
+            if bool(stress_consec_raw):
+                stress_hit.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}")
+            else:
+                stress_miss.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}")
 
         stress_str = ",".join(stress_hit) if stress_hit else ""
         miss_str = ",".join(stress_miss) if stress_miss else ""
