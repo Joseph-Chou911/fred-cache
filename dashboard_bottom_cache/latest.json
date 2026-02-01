@@ -1,17 +1,20 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "renderer_version": "v0.1.5",
-  "generated_at_utc": "2026-02-01T09:43:23.568406Z",
-  "as_of_ts": "2026-02-01T17:43:23.568417+08:00",
-  "data_commit_sha": "fb0fac7cc6700954aceb38e3a43144165b075cbe",
+  "renderer_version": "v0.1.6",
+  "generated_at_utc": "2026-02-01T09:56:54.083393Z",
+  "as_of_ts": "2026-02-01T17:56:54.083411+08:00",
+  "data_commit_sha": "fb266891e96875485423ad24af4af5ae06da8893",
+  "history_load": {
+    "status": "OK",
+    "reason": "dict.items",
+    "loaded_items": 1,
+    "path": "dashboard_bottom_cache/history.json"
+  },
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
     "market_cache_generated_at_utc": "2026-02-01T05:39:45Z",
     "market_cache_as_of_ts": "2026-02-01T05:39:45Z",
-    "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
-    "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
-    "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
     "tw_roll25_report_path": "roll25_cache/latest_report.json",
     "tw_margin_path": "taiwan_margin_cache/latest.json"
   },
@@ -180,15 +183,5 @@
       },
       "series_signal": "NONE"
     }
-  },
-  "notes": [
-    "Global: single source = market_cache/stats_latest.json",
-    "TW: uses existing repo outputs only (no external fetch here)",
-    "Signals are deterministic; missing fields => NA + excluded reasons",
-    "ret1_pct unit is percent (%)",
-    "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
-    "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
-    "v0.1.5: report prints level-gate have_points/min_points and p (if available), plus compact flow audit line",
-    "v0.1.5: report recent history adds legacy_row flag (display-only) for rows missing margin columns"
-  ]
+  }
 }
