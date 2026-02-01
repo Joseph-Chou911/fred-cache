@@ -1,13 +1,13 @@
 {
   "schema_version": "bottom_cache_v1",
-  "generated_at_utc": "2026-01-31T15:54:06.356740Z",
-  "as_of_ts": "2026-01-31T23:54:06.356750+08:00",
-  "data_commit_sha": "3c786613b235f39e013d4f7e883d5912cb9b2441",
+  "generated_at_utc": "2026-02-01T06:09:26.480367Z",
+  "as_of_ts": "2026-02-01T14:09:26.480386+08:00",
+  "data_commit_sha": "fa6801c8139fbfa64849b390e66350bf87328c93",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-01-31T04:52:16Z",
-    "market_cache_as_of_ts": "2026-01-31T04:52:16Z",
+    "market_cache_generated_at_utc": "2026-02-01T05:39:45Z",
+    "market_cache_as_of_ts": "2026-02-01T05:39:45Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -36,7 +36,7 @@
     "run_day_tag": "WEEKEND",
     "risk_level": "NA",
     "lookback_n_actual": 20,
-    "lookback_n_target": null,
+    "lookback_n_target": 20,
     "pct_change": -1.452287,
     "amplitude_pct": 1.692142,
     "turnover_twd": 941320964545.0,
@@ -49,32 +49,37 @@
       "ConsecutiveBreak": true
     },
     "margin": {
-      "margin_signal_TWSE": "NONE",
+      "margin_signal_TWSE": null,
       "unit": "億",
       "dbg": {
-        "chg_last5_yi": [
-          21.2,
-          -31.4,
-          21.9,
-          11.5,
-          55.0
-        ],
-        "sum_last5_yi": 78.2,
-        "pos_days_last5": 4,
-        "rule": "WATCH(sum5>=100.0 & pos_days>=4); ALERT(sum5>=150.0 & pos_days>=4)"
+        "reason": "insufficient_balance_points_for_level_gate",
+        "points": 30,
+        "min_points": 60
+      },
+      "policy": {
+        "flow_two_windows": true,
+        "level_gate_enabled": true,
+        "level_p_min": 95.0,
+        "level_window": 252,
+        "level_min_points": 60
       }
     },
     "triggers": {
       "TRIG_TW_PANIC": 1,
-      "TRIG_TW_LEVERAGE_HEAT": 0,
+      "TRIG_TW_LEVERAGE_HEAT": null,
       "TRIG_TW_REVERSAL": 0
     },
     "distances": {
       "pct_change_to_nonnegative_gap": -1.452287,
-      "lookback_missing_points": null
+      "lookback_missing_points": 0
     }
   },
-  "excluded_triggers": [],
+  "excluded_triggers": [
+    {
+      "trigger": "TRIG_TW_LEVERAGE_HEAT",
+      "reason": "margin_signal_NA:insufficient_flow_or_level_data"
+    }
+  ],
   "series_global": {
     "VIX": {
       "series_id": "VIX",
@@ -82,7 +87,7 @@
       "latest": {
         "data_date": "2026-01-30",
         "value": 17.44,
-        "as_of_ts": "2026-01-31T04:52:16Z",
+        "as_of_ts": "2026-02-01T05:39:45Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
@@ -104,7 +109,7 @@
       "latest": {
         "data_date": "2026-01-30",
         "value": 6939.03,
-        "as_of_ts": "2026-01-31T04:52:16Z",
+        "as_of_ts": "2026-02-01T05:39:45Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
@@ -126,7 +131,7 @@
       "latest": {
         "data_date": "2026-01-30",
         "value": 0.8455284552845529,
-        "as_of_ts": "2026-01-31T04:52:16Z",
+        "as_of_ts": "2026-02-01T05:39:45Z",
         "source_url": "DERIVED"
       },
       "w60": {
@@ -148,7 +153,7 @@
       "latest": {
         "data_date": "2026-01-28",
         "value": -2.404,
-        "as_of_ts": "2026-01-31T04:52:16Z",
+        "as_of_ts": "2026-02-01T05:39:45Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
@@ -169,6 +174,7 @@
     "Global: single source = market_cache/stats_latest.json",
     "TW: uses existing repo outputs only (no external fetch here)",
     "Signals are deterministic; missing fields => NA + excluded reasons",
-    "ret1_pct unit is percent (%)"
+    "ret1_pct unit is percent (%)",
+    "TW margin heat: Flow + Level (balance percentile gate) to reduce false heat & flip-flop"
   ]
 }

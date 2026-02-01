@@ -1,10 +1,10 @@
 # Bottom Cache Dashboard (v0)
 
-- as_of_ts (TPE): `2026-01-31T23:54:06.356750+08:00`
-- run_ts_utc: `2026-01-31T15:54:06.356740Z`
-- bottom_state (Global): **NONE**  (streak=6)
-- market_cache_as_of_ts: `2026-01-31T04:52:16Z`
-- market_cache_generated_at_utc: `2026-01-31T04:52:16Z`
+- as_of_ts (TPE): `2026-02-01T14:09:26.480386+08:00`
+- run_ts_utc: `2026-02-01T06:09:26.480367Z`
+- bottom_state (Global): **NONE**  (streak=7)
+- market_cache_as_of_ts: `2026-02-01T05:39:45Z`
+- market_cache_generated_at_utc: `2026-02-01T05:39:45Z`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -32,25 +32,29 @@
 - TRIG_REVERSAL: `0`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **TW_BOTTOM_WATCH**  (streak=1)
+- tw_state: **TW_BOTTOM_WATCH**  (streak=2)
 - UsedDate: `2026-01-30`; run_day_tag: `WEEKEND`; risk_level: `NA`
-- Lookback: `20/None`
-- margin_signal(TWSE): `NONE`; unit: `億`
+- Lookback: `20/20`
+- margin_signal(TWSE): `None`; unit: `億`
+- margin_policy: flow_two_windows=True; level_gate=True; level_p_min=95.0
 - margin_balance(TWSE latest): `3838.9` 億
 - margin_chg(TWSE latest): `21.2` 億
 
 ### TW Triggers (0/1/NA)
 - TRIG_TW_PANIC: `1`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))
-- TRIG_TW_LEVERAGE_HEAT: `0`  (margin_signal∈{WATCH,ALERT})
+- TRIG_TW_LEVERAGE_HEAT: `None`  (margin_signal∈{WATCH,ALERT}; requires Flow+Level)
 - TRIG_TW_REVERSAL: `0`  (PANIC & NOT heat & pct_change>=0 & DownDay=false)
 
 ### TW Distances / Gating
 - pct_change_to_nonnegative_gap: `-1.452`
-- lookback_missing_points: `NA`
+- lookback_missing_points: `0`
 
 ### TW Snapshot (key fields)
 - pct_change: `-1.452287`; amplitude_pct: `1.692142`; turnover_twd: `941320964545.0`; close: `32063.75`
 - signals: DownDay=True, VolumeAmplified=False, VolAmplified=False, NewLow_N=False, ConsecutiveBreak=True
+
+## Excluded / NA Reasons
+- TRIG_TW_LEVERAGE_HEAT: margin_signal_NA:insufficient_flow_or_level_data
 
 ## Action Map (v0)
 - Global NONE: 維持既定 DCA/資產配置紀律；不把它當成抄底時點訊號
@@ -68,6 +72,7 @@
 | 2026-01-29 | 2026-01-29T01:08:17.402179+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
 | 2026-01-30 | 2026-01-30T01:25:46.779800+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | equity_extreme |
 | 2026-01-31 | 2026-01-31T23:54:06.356750+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | equity_extreme |
+| 2026-02-01 | 2026-02-01T14:09:26.480386+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | None | 0 | equity_extreme |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) | w60.z_delta | w60.p_delta |
