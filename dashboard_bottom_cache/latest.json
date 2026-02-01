@@ -1,8 +1,8 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "generated_at_utc": "2026-02-01T07:07:38.844445Z",
-  "as_of_ts": "2026-02-01T15:07:38.844459+08:00",
-  "data_commit_sha": "83d8c883ac5caca43074947eafe23b5c3c4a8ead",
+  "generated_at_utc": "2026-02-01T07:36:43.137366Z",
+  "as_of_ts": "2026-02-01T15:36:43.137391+08:00",
+  "data_commit_sha": "f70a0f5df34f6815b9127c569b9a8a5a654ed9fb",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
