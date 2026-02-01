@@ -1,8 +1,8 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "generated_at_utc": "2026-02-01T07:36:43.137366Z",
-  "as_of_ts": "2026-02-01T15:36:43.137391+08:00",
-  "data_commit_sha": "f70a0f5df34f6815b9127c569b9a8a5a654ed9fb",
+  "generated_at_utc": "2026-02-01T07:50:02.557711Z",
+  "as_of_ts": "2026-02-01T15:50:02.557728+08:00",
+  "data_commit_sha": "73b57ca7a7d4f439bd877ae6f9d37ca5e82279f7",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -184,6 +184,7 @@
     "Signals are deterministic; missing fields => NA + excluded reasons",
     "ret1_pct unit is percent (%)",
     "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
-    "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade"
+    "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
+    "Patch v0.1.2: report formatting no longer maps legitimate 'NONE' -> 'NA'; margin signal is canonicalized."
   ]
 }
