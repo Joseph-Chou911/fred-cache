@@ -5,7 +5,7 @@ bottom_cache renderer:
 - Global bottom/reversal workflow from market_cache (single-source)
 - TW local gate from existing repo outputs (no fetch):
     * roll25_cache/latest_report.json
-    * taiwan_margin_cache/latest.json   ✅ (your actual path)
+    * taiwan_margin_cache/latest.json
 Outputs (ONE folder):
 - dashboard_bottom_cache/latest.json
 - dashboard_bottom_cache/history.json
@@ -14,6 +14,13 @@ Outputs (ONE folder):
 Principles:
 - Deterministic rules only; no guessing.
 - Missing fields => NA + excluded reasons.
+
+2026-02-01 patch:
+- TW margin "leverage heat" upgraded to Flow + Level (水位) gate:
+    (1) FLOW gate: use max(sum_last5, sum_prev5) to reduce flip-flop
+    (2) LEVEL gate: require balance_yi percentile (p<=latest) >= 95 (default) using last up-to-252 points
+  If LEVEL not satisfied => margin_signal = NONE (not heated)
+  If LEVEL cannot be computed due to insufficient balance points => margin_signal = NA (excluded)
 """
 
 from __future__ import annotations
@@ -62,12 +69,22 @@ HISTORY_SHOW_N = 10          # for report only
 TW_PANIC_REQUIRES = ["DownDay"]
 TW_PANIC_ANY_OF = ["VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]
 
-# leverage heat: derived from margin flow; conservative rule similar to your margin dashboard feel
-# WATCH if 5-day sum chg_yi >= 100 (億) AND pos_days_last5 >= 4
-# ALERT if 5-day sum chg_yi >= 150 (億) AND pos_days_last5 >= 4
+# ---- TW margin heat (v1 = Flow + Level) ----
+# FLOW:
+#   WATCH if 5-day sum chg_yi >= 100 (億) AND pos_days_last5 >= 4
+#   ALERT if 5-day sum chg_yi >= 150 (億) AND pos_days_last5 >= 4
+#   Use effective_sum = max(sum_last5, sum_prev5) to reduce flip-flop.
 TW_MARGIN_WATCH_SUM5_YI = 100.0
 TW_MARGIN_ALERT_SUM5_YI = 150.0
 TW_MARGIN_POSDAYS5_MIN = 4
+
+# LEVEL (水位):
+#   Require balance_yi percentile (P = count(x<=latest)/n*100) >= 95 to allow WATCH/ALERT.
+#   Compute percentile using last up-to-252 balance points (newest->older).
+#   If not enough points => NA (excluded), not guessed.
+TW_MARGIN_LEVEL_P_MIN = 95.0
+TW_MARGIN_LEVEL_WINDOW = 252
+TW_MARGIN_LEVEL_MIN_POINTS = 60
 
 
 def _read_json(path: str) -> Any:
@@ -99,6 +116,9 @@ def _as_float(x: Any) -> Optional[float]:
     try:
         if x is None:
             return None
+        if isinstance(x, bool):
+            # avoid bool -> 1.0/0.0 silently for fields that should be numeric
+            return float(int(x))
         if isinstance(x, (int, float)):
             return float(x)
         s = str(x).strip()
@@ -229,43 +249,135 @@ def _load_tw_margin(excluded: List[Dict[str, str]]) -> Tuple[Dict[str, Any], boo
         return ({}, False)
 
 
+def _percentile_leq(xs: List[float], latest: float) -> Optional[float]:
+    """
+    Deterministic percentile:
+    P = count(x<=latest)/n * 100
+    """
+    if not xs:
+        return None
+    n = len(xs)
+    c = sum(1 for x in xs if x <= latest)
+    return (c / n) * 100.0
+
+
 def _derive_margin_signal_from_rows(rows: List[Dict[str, Any]]) -> Tuple[Optional[str], Dict[str, Any]]:
     """
-    Derive margin heat signal from TWSE rows (chg_yi):
-    - WATCH if sum_last5 >= 100 and pos_days_last5 >= 4
-    - ALERT if sum_last5 >= 150 and pos_days_last5 >= 4
-    Returns (signal, dbg)
+    Derive margin heat signal from TWSE rows (chg_yi + balance_yi), deterministic.
+
+    FLOW gate:
+      - compute sum_last5 on rows[:5]
+      - compute sum_prev5 on rows[1:6]
+      - effective_sum = max(sum_last5, sum_prev5)
+      - pos_days_effective = max(pos_days_last5, pos_days_prev5)
+
+    LEVEL gate (水位):
+      - compute percentile of latest balance_yi against last up-to-252 balances (newest->older)
+      - require p_balance >= TW_MARGIN_LEVEL_P_MIN to allow WATCH/ALERT
+      - if not enough balance points => return (None, reason)  (NA)
+
+    Final:
+      - if level_ok is False => signal = "NONE"
+      - if level_ok is True => apply WATCH/ALERT thresholds on effective_sum + pos_days_effective
     """
     if not isinstance(rows, list) or len(rows) == 0:
         return (None, {"reason": "rows_empty_or_invalid"})
 
-    # assume rows are newest-first as in your sample
-    last5 = rows[:5]
-    chgs: List[float] = []
-    for r in last5:
-        v = _as_float(r.get("chg_yi"))
-        if v is None:
+    if len(rows) < 6:
+        return (None, {"reason": "need_at_least_6_rows_for_prev_window", "rows_len": len(rows)})
+
+    def _window_stats(win: List[Dict[str, Any]]) -> Tuple[List[float], float, int]:
+        chgs: List[float] = []
+        for r in win:
+            v = _as_float(r.get("chg_yi"))
+            if v is None:
+                continue
+            chgs.append(v)
+        if not chgs:
+            return ([], 0.0, 0)
+        s = float(sum(chgs))
+        posd = sum(1 for x in chgs if x > 0)
+        return (chgs, s, posd)
+
+    # FLOW: two windows (reduce flip-flop)
+    w0 = rows[:5]
+    w1 = rows[1:6]
+
+    chg0, sum0, pos0 = _window_stats(w0)
+    chg1, sum1, pos1 = _window_stats(w1)
+
+    # keep the same minimum flow points constraint as your original spirit
+    if len(chg0) < 3:
+        return (None, {"reason": "insufficient_chg_yi_points_last5", "points": len(chg0)})
+    if len(chg1) < 3:
+        return (None, {"reason": "insufficient_chg_yi_points_prev5", "points": len(chg1)})
+
+    sum_eff = max(sum0, sum1)
+    pos_eff = max(pos0, pos1)
+
+    # LEVEL: balance percentile
+    balances_all: List[float] = []
+    for r in rows:
+        b = _as_float(r.get("balance_yi"))
+        if b is None:
             continue
-        chgs.append(v)
+        balances_all.append(b)
 
-    if len(chgs) < 3:
-        return (None, {"reason": "insufficient_chg_yi_points", "points": len(chgs)})
+    if len(balances_all) < TW_MARGIN_LEVEL_MIN_POINTS:
+        return (None, {
+            "reason": "insufficient_balance_points_for_level_gate",
+            "points": len(balances_all),
+            "min_points": TW_MARGIN_LEVEL_MIN_POINTS
+        })
 
-    sum5 = float(sum(chgs))
-    pos_days = sum(1 for x in chgs if x > 0)
+    latest_balance = balances_all[0]
+    bal_win_n = min(TW_MARGIN_LEVEL_WINDOW, len(balances_all))
+    bal_window = balances_all[:bal_win_n]
+    bal_p = _percentile_leq(bal_window, latest_balance)
 
+    if bal_p is None:
+        return (None, {"reason": "balance_percentile_compute_failed"})
+
+    level_ok = True if float(bal_p) >= float(TW_MARGIN_LEVEL_P_MIN) else False
+
+    # Final
     sig = "NONE"
-    if pos_days >= TW_MARGIN_POSDAYS5_MIN and sum5 >= TW_MARGIN_ALERT_SUM5_YI:
-        sig = "ALERT"
-    elif pos_days >= TW_MARGIN_POSDAYS5_MIN and sum5 >= TW_MARGIN_WATCH_SUM5_YI:
-        sig = "WATCH"
+    if level_ok:
+        if pos_eff >= TW_MARGIN_POSDAYS5_MIN and sum_eff >= TW_MARGIN_ALERT_SUM5_YI:
+            sig = "ALERT"
+        elif pos_eff >= TW_MARGIN_POSDAYS5_MIN and sum_eff >= TW_MARGIN_WATCH_SUM5_YI:
+            sig = "WATCH"
+        else:
+            sig = "NONE"
+    else:
+        sig = "NONE"
 
     dbg = {
-        "chg_last5_yi": chgs,
-        "sum_last5_yi": sum5,
-        "pos_days_last5": pos_days,
-        "rule": f"WATCH(sum5>={TW_MARGIN_WATCH_SUM5_YI} & pos_days>={TW_MARGIN_POSDAYS5_MIN}); "
-                f"ALERT(sum5>={TW_MARGIN_ALERT_SUM5_YI} & pos_days>={TW_MARGIN_POSDAYS5_MIN})"
+        "flow": {
+            "chg_last5_yi": chg0,
+            "sum_last5_yi": sum0,
+            "pos_days_last5": pos0,
+            "chg_prev5_yi": chg1,
+            "sum_prev5_yi": sum1,
+            "pos_days_prev5": pos1,
+            "sum5_effective_yi": sum_eff,
+            "pos5_effective": pos_eff,
+            "rule_flow": (
+                f"effective_sum=max(sum_last5,sum_prev5); "
+                f"WATCH(sum>={TW_MARGIN_WATCH_SUM5_YI} & pos>={TW_MARGIN_POSDAYS5_MIN}); "
+                f"ALERT(sum>={TW_MARGIN_ALERT_SUM5_YI} & pos>={TW_MARGIN_POSDAYS5_MIN})"
+            ),
+        },
+        "level": {
+            "latest_balance_yi": latest_balance,
+            "balance_window_n": bal_win_n,
+            "percentile_method": "P=count(x<=latest)/n*100",
+            "balance_p": float(bal_p),
+            "level_p_min": float(TW_MARGIN_LEVEL_P_MIN),
+            "level_ok": level_ok,
+            "rule_level": f"require balance_p >= {TW_MARGIN_LEVEL_P_MIN} (window<= {TW_MARGIN_LEVEL_WINDOW}, min_points={TW_MARGIN_LEVEL_MIN_POINTS})",
+        },
+        "final_rule": "heat = (level_ok) AND (flow triggers WATCH/ALERT); else NONE; insufficient level data => NA"
     }
     return (sig, dbg)
 
@@ -420,11 +532,11 @@ def main() -> None:
 
     # roll25 fields from latest_report.json
     tw_used_date = _as_str(tw_roll25.get("used_date") or _get(tw_roll25, ["numbers", "UsedDate"]))
-    tw_tag = _as_str(tw_roll25.get("tag"))
+    # run_day_tag may be stored as "tag" or "run_day_tag"; keep deterministic fallback
+    tw_tag = _as_str(tw_roll25.get("tag") or tw_roll25.get("run_day_tag"))
     tw_risk_level = _as_str(tw_roll25.get("risk_level"))
-    tw_lookback_actual = _as_int(tw_roll25.get("lookback_n_actual"))
-    # if target missing in this report schema, show as NA (do not guess)
-    tw_lookback_target = _as_int(tw_roll25.get("lookback_n_target"))
+    tw_lookback_actual = _as_int(tw_roll25.get("lookback_n_actual") or _get(tw_roll25, ["numbers", "LookbackNActual"]) or _get(tw_roll25, ["signal", "LookbackNActual"]))
+    tw_lookback_target = _as_int(tw_roll25.get("lookback_n_target") or _get(tw_roll25, ["numbers", "LookbackNTarget"]) or _get(tw_roll25, ["signal", "LookbackNTarget"]))
 
     tw_pct_change = _as_float(_get(tw_roll25, ["numbers", "PctChange"]))
     tw_amplitude_pct = _as_float(_get(tw_roll25, ["numbers", "AmplitudePct"]))
@@ -448,7 +560,7 @@ def main() -> None:
 
     twse_rows: List[Dict[str, Any]] = []
     if ok_margin:
-        # accept both taiwan_margin_cache schema variants:
+        # accept schema:
         # - { "series": { "TWSE": { "rows": [...] , "chg_yi_unit": {...}}}}
         series = tw_margin.get("series")
         if isinstance(series, dict) and isinstance(series.get("TWSE"), dict):
@@ -463,9 +575,12 @@ def main() -> None:
 
     if ok_margin and twse_rows:
         tw_margin_signal, tw_margin_dbg = _derive_margin_signal_from_rows(twse_rows)
+        if tw_margin_signal is None:
+            # level gate NA or flow insufficient -> excluded
+            excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "margin_signal_NA:insufficient_flow_or_level_data"})
     else:
         if ok_margin:
-            excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:series.TWSE.rows[].chg_yi"})
+            excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:series.TWSE.rows[].chg_yi/balance_yi"})
         else:
             # already excluded by TW:INPUT_MARGIN
             pass
@@ -488,12 +603,7 @@ def main() -> None:
     trig_tw_heat: Optional[int] = None
     if tw_margin_signal is None:
         trig_tw_heat = None
-        # excluded reason already appended above if margin present but invalid
-        if ok_margin is False:
-            # already excluded by input missing
-            pass
-        else:
-            excluded.append({"trigger": "TRIG_TW_LEVERAGE_HEAT", "reason": "missing_fields:margin_signal (derived from taiwan_margin_cache.series.TWSE.rows)"})
+        # excluded reason already appended above
     else:
         trig_tw_heat = 1 if (tw_margin_signal in ("WATCH", "ALERT")) else 0
 
@@ -502,7 +612,6 @@ def main() -> None:
     if trig_tw_panic != 1:
         trig_tw_rev = 0 if trig_tw_panic in (0, None) else None
     else:
-        # need pct_change + DownDay
         if tw_pct_change is None or sig_downday is None:
             excluded.append({"trigger": "TRIG_TW_REVERSAL", "reason": "missing_fields:pct_change or DownDay"})
             trig_tw_rev = None
@@ -531,12 +640,10 @@ def main() -> None:
     # TW distances
     pct_change_gap_nonneg: Optional[float] = None
     if tw_pct_change is not None:
-        # gap to non-negative (>=0 is "good"); if already >=0, show current value for reference
         pct_change_gap_nonneg = float(tw_pct_change)
 
     lookback_missing_points: Optional[int] = None
     if tw_lookback_actual is not None:
-        # if target not available, do not compute missing strictly
         if tw_lookback_target is None:
             lookback_missing_points = None
         else:
@@ -597,6 +704,13 @@ def main() -> None:
                 "margin_signal_TWSE": tw_margin_signal,
                 "unit": tw_margin_unit,
                 "dbg": tw_margin_dbg,
+                "policy": {
+                    "flow_two_windows": True,
+                    "level_gate_enabled": True,
+                    "level_p_min": TW_MARGIN_LEVEL_P_MIN,
+                    "level_window": TW_MARGIN_LEVEL_WINDOW,
+                    "level_min_points": TW_MARGIN_LEVEL_MIN_POINTS,
+                }
             },
             "triggers": {
                 "TRIG_TW_PANIC": trig_tw_panic,
@@ -615,6 +729,7 @@ def main() -> None:
             "TW: uses existing repo outputs only (no external fetch here)",
             "Signals are deterministic; missing fields => NA + excluded reasons",
             "ret1_pct unit is percent (%)",
+            "TW margin heat: Flow + Level (balance percentile gate) to reduce false heat & flip-flop",
         ],
     }
 
@@ -764,6 +879,7 @@ def main() -> None:
     md.append(f"- UsedDate: `{tw_used_date or 'NA'}`; run_day_tag: `{tw_tag or 'NA'}`; risk_level: `{tw_risk_level or 'NA'}`\n")
     md.append(f"- Lookback: `{tw_lookback_actual}/{tw_lookback_target}`\n")
     md.append(f"- margin_signal(TWSE): `{tw_margin_signal}`; unit: `{tw_margin_unit}`\n")
+    md.append(f"- margin_policy: flow_two_windows=True; level_gate=True; level_p_min={TW_MARGIN_LEVEL_P_MIN}\n")
     if twse_latest_balance_yi is not None:
         md.append(f"- margin_balance(TWSE latest): `{_safe_float_str(twse_latest_balance_yi, 1)}` {tw_margin_unit}\n")
     else:
@@ -776,7 +892,7 @@ def main() -> None:
 
     md.append("### TW Triggers (0/1/NA)\n")
     md.append(f"- TRIG_TW_PANIC: `{trig_tw_panic}`  (DownDay & (VolumeAmplified/VolAmplified/NewLow/ConsecutiveBreak))\n")
-    md.append(f"- TRIG_TW_LEVERAGE_HEAT: `{trig_tw_heat}`  (margin_signal∈{{WATCH,ALERT}})\n")
+    md.append(f"- TRIG_TW_LEVERAGE_HEAT: `{trig_tw_heat}`  (margin_signal∈{{WATCH,ALERT}}; requires Flow+Level)\n")
     md.append(f"- TRIG_TW_REVERSAL: `{trig_tw_rev}`  (PANIC & NOT heat & pct_change>=0 & DownDay=false)\n\n")
 
     md.append("### TW Distances / Gating\n")
