@@ -1,9 +1,9 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "renderer_version": "v0.1.7",
-  "generated_at_utc": "2026-02-01T10:08:06.357539Z",
-  "as_of_ts": "2026-02-01T18:08:06.357550+08:00",
-  "data_commit_sha": "73c781225a278a6b97961b2c43d14ec3fddae870",
+  "renderer_version": "v0.1.8",
+  "generated_at_utc": "2026-02-01T10:31:05.486183Z",
+  "as_of_ts": "2026-02-01T18:31:05.486199+08:00",
+  "data_commit_sha": "eb0fc83f66e9029fc51950d632a59bb77672bebe",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -185,10 +185,25 @@
     "loaded_items": 1,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260201T100806Z.json",
-    "backup_bytes": 1040,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260201T103105Z.json",
+    "backup_bytes": 998,
+    "backup_keep_n": 30,
+    "backup_prune": {
+      "prune_status": "OK",
+      "prune_reason": "within_keep_n:30",
+      "deleted": 0
+    },
+    "history_file_exists": true,
     "history_pre_items": 1,
-    "history_post_items": 1
+    "history_pre_unique_days": 1,
+    "history_post_items": 1,
+    "history_post_unique_days": 1,
+    "history_write_status": "OK",
+    "history_write_reason": "ok",
+    "history_reset": false,
+    "history_reset_reason": null,
+    "allow_reset": false,
+    "allow_shrink": false
   },
   "notes": [
     "Global: single source = market_cache/stats_latest.json",
@@ -196,6 +211,7 @@
     "Signals are deterministic; missing fields => NA + excluded reasons",
     "ret1_pct unit is percent (%)",
     "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
-    "v0.1.7: always backup history.json before write; report pre/post counts and backup status"
+    "v0.1.7: always backup history.json before write",
+    "v0.1.8: fail-closed history writes + unique-day shrink guard + backup retention"
   ]
 }
