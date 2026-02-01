@@ -1,9 +1,9 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.4`
-- as_of_ts (TPE): `2026-02-01T17:28:13.714809+08:00`
-- run_ts_utc: `2026-02-01T09:28:13.714796Z`
-- bottom_state (Global): **NONE**  (streak=7)
+- as_of_ts (TPE): `2026-02-01T17:39:54.004561+08:00`
+- run_ts_utc: `2026-02-01T09:39:54.004548Z`
+- bottom_state (Global): **NONE**  (streak=1)
 - market_cache_as_of_ts: `2026-02-01T05:39:45Z`
 - market_cache_generated_at_utc: `2026-02-01T05:39:45Z`
 
@@ -22,7 +22,7 @@
 - SP500.p252: `96.03174603174604`; equity_extreme(p252>=95): `1`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **TW_BOTTOM_WATCH**  (streak=2)
+- tw_state: **TW_BOTTOM_WATCH**  (streak=1)
 - UsedDate: `2026-01-30`; run_day_tag: `WEEKEND`; used_date_status: `OK_LATEST`
 - Lookback: `20/20`
 - margin_final_signal(TWSE): `NONE`; confidence: `DOWNGRADED`; unit: `億`
@@ -47,13 +47,7 @@
 ## Recent History (last 10 buckets)
 | tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |
 |---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|
-| 2026-01-25 | 2026-01-25T19:40:31.851190+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
-| 2026-01-26 | 2026-01-26T16:06:45.700719+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
-| 2026-01-27 | 2026-01-27T23:58:59.954073+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | NA | 0 | NA | NA |
-| 2026-01-29 | 2026-01-29T01:08:17.402179+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
-| 2026-01-30 | 2026-01-30T01:25:46.779800+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
-| 2026-01-31 | 2026-01-31T23:54:06.356750+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NA | NA |
-| 2026-02-01 | 2026-02-01T17:28:13.714809+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-02-01 | 2026-02-01T17:39:54.004561+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) |
