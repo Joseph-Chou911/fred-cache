@@ -1,8 +1,8 @@
 # Bottom Cache Dashboard (v0.1)
 
-- renderer_version: `v0.1.3`
-- as_of_ts (TPE): `2026-02-01T17:20:26.470442+08:00`
-- run_ts_utc: `2026-02-01T09:20:26.470422Z`
+- renderer_version: `v0.1.4`
+- as_of_ts (TPE): `2026-02-01T17:28:13.714809+08:00`
+- run_ts_utc: `2026-02-01T09:28:13.714796Z`
 - bottom_state (Global): **NONE**  (streak=7)
 - market_cache_as_of_ts: `2026-02-01T05:39:45Z`
 - market_cache_generated_at_utc: `2026-02-01T05:39:45Z`
@@ -28,7 +28,7 @@
 - margin_final_signal(TWSE): `NONE`; confidence: `DOWNGRADED`; unit: `億`
 - margin_balance(TWSE latest): `3838.9` 億
 - margin_chg(TWSE latest): `21.2` 億
-- tw_panic_hit: `DownDay=True + Stress={}; Miss={}`
+- tw_panic_hit: `DownDay=True + Stress={ConsecutiveBreak>=2}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1}`
 
 ### TW Triggers (0/1/NA)
 - TRIG_TW_PANIC: `1`
@@ -53,7 +53,7 @@
 | 2026-01-29 | 2026-01-29T01:08:17.402179+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
 | 2026-01-30 | 2026-01-30T01:25:46.779800+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
 | 2026-01-31 | 2026-01-31T23:54:06.356750+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NA | NA |
-| 2026-02-01 | 2026-02-01T17:20:26.470442+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-02-01 | 2026-02-01T17:28:13.714809+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) |

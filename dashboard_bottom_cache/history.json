@@ -164,9 +164,9 @@
       }
     },
     {
-      "run_ts_utc": "2026-02-01T09:20:26.470422Z",
-      "as_of_ts": "2026-02-01T17:20:26.470442+08:00",
-      "data_commit_sha": "251b851de61fa4cb7b00de8177f5b33e7a75bb3a",
+      "run_ts_utc": "2026-02-01T09:28:13.714796Z",
+      "as_of_ts": "2026-02-01T17:28:13.714809+08:00",
+      "data_commit_sha": "4012e6a55e9279f414720c4443454f3daaeb267c",
       "bottom_state_global": "NONE",
       "triggers_global": {
         "TRIG_PANIC": 0,
