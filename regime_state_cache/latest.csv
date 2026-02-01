@@ -1,14 +1,14 @@
 as_of_ts,series_id,data_date,value,source_url,notes
-2026-02-01T03:02:38.968735+08:00,NOMINAL_10Y,2026-01-30,4.26,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601,NA
-2026-02-01T03:02:38.968735+08:00,REAL_10Y,2026-01-30,1.9,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601,NA
-2026-02-01T03:02:38.968735+08:00,BE10Y_PROXY,2026-01-30,2.36,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601 + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601,NA
-2026-02-01T03:02:38.968735+08:00,VIX_PROXY,2026-01-30,17.44,https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv,NA
-2026-02-01T03:02:38.968735+08:00,HYG_CLOSE,2026-01-30,81.12,https://stooq.com/q/d/l/?s=hyg.us&d1=20251004&d2=20260201&i=d,NA
-2026-02-01T03:02:38.968735+08:00,IEF_CLOSE,2026-01-30,95.94,https://stooq.com/q/d/l/?s=ief.us&d1=20251004&d2=20260201&i=d,NA
-2026-02-01T03:02:38.968735+08:00,TIP_CLOSE,2026-01-30,110.48,https://stooq.com/q/d/l/?s=tip.us&d1=20251004&d2=20260201&i=d,NA
-2026-02-01T03:02:38.968735+08:00,HYG_IEF_RATIO,2026-01-30,0.8455284552845529,https://stooq.com/,NA
-2026-02-01T03:02:38.968735+08:00,TIP_IEF_RATIO,2026-01-30,1.1515530539920784,https://stooq.com/,NA
-2026-02-01T03:02:38.968735+08:00,OFR_FSI,2026-01-28,-2.404,https://www.financialresearch.gov/financial-stress-index/data/fsi.csv,NA
-2026-02-01T03:02:38.968735+08:00,REGIME_STATE,2026-02-01,NEUTRAL_MIXED,NA,NA
-2026-02-01T03:02:38.968735+08:00,REGIME_CONFIDENCE,2026-02-01,LOW,NA,NA
-2026-02-01T03:02:38.968735+08:00,REGIME_REASONS,2026-02-01,"[""panic=LOW(VIX=17.44)"", ""inflation_expect=MID(BE10Y=2.36)"", ""credit_dev_unavailable(history_lt_60(18))"", ""OFR_FSI=OK(-2.404)"", ""confidence_cap=LOW(credit_unavailable)""]",NA,NA
+2026-02-01T13:25:47.863198+08:00,NOMINAL_10Y,2026-01-30,4.26,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601,NA
+2026-02-01T13:25:47.863198+08:00,REAL_10Y,2026-01-30,1.9,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601,NA
+2026-02-01T13:25:47.863198+08:00,BE10Y_PROXY,2026-01-30,2.36,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=202601 + https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value_month=202601,NA
+2026-02-01T13:25:47.863198+08:00,VIX_PROXY,2026-01-30,17.44,https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv,NA
+2026-02-01T13:25:47.863198+08:00,HYG_CLOSE,2026-01-30,81.12,https://stooq.com/q/d/l/?s=hyg.us&d1=20251004&d2=20260201&i=d,NA
+2026-02-01T13:25:47.863198+08:00,IEF_CLOSE,2026-01-30,95.94,https://stooq.com/q/d/l/?s=ief.us&d1=20251004&d2=20260201&i=d,NA
+2026-02-01T13:25:47.863198+08:00,TIP_CLOSE,2026-01-30,110.48,https://stooq.com/q/d/l/?s=tip.us&d1=20251004&d2=20260201&i=d,NA
+2026-02-01T13:25:47.863198+08:00,HYG_IEF_RATIO,2026-01-30,0.8455284552845529,https://stooq.com/,NA
+2026-02-01T13:25:47.863198+08:00,TIP_IEF_RATIO,2026-01-30,1.1515530539920784,https://stooq.com/,NA
+2026-02-01T13:25:47.863198+08:00,OFR_FSI,2026-01-28,-2.404,https://www.financialresearch.gov/financial-stress-index/data/fsi.csv,NA
+2026-02-01T13:25:47.863198+08:00,REGIME_STATE,2026-02-01,NEUTRAL_MIXED,NA,NA
+2026-02-01T13:25:47.863198+08:00,REGIME_CONFIDENCE,2026-02-01,LOW,NA,NA
+2026-02-01T13:25:47.863198+08:00,REGIME_REASONS,2026-02-01,"[""panic=LOW(VIX=17.44)"", ""inflation_expect=MID(BE10Y=2.36)"", ""credit_dev_unavailable(history_lt_60(18))"", ""OFR_FSI=OK(-2.404)"", ""confidence_cap=LOW(credit_unavailable)""]",NA,NA
