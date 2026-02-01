@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-bottom_cache renderer (v0.1.9)
+bottom_cache renderer (v0.1.10)
 
 - Global bottom/reversal workflow from market_cache (single-source):
     * market_cache/stats_latest.json
@@ -40,6 +40,11 @@ Patch v0.1.9 (TW panic hardening):
   It must be paired with (VolumeAmplified OR VolAmplified OR NewLow_N>=1) to count as stress.
   This reduces false positives for TW_BOTTOM_WATCH.
 
+Patch v0.1.10 (auditability):
+- report.md prints roll25 raw fields (DownDay/VolumeAmplified/VolAmplified/NewLow_N/ConsecutiveBreak)
+  and the paired_basis used by v0.1.9 (VolumeAmplified OR VolAmplified OR NewLow_N>=1).
+- latest.json also includes stress_consec_pair_basis + rule string under tw_local_gate.signals.
+
 Note:
 - This script does NOT fetch external URLs directly. It only reads local JSON files produced by other workflows.
 """
@@ -54,7 +59,7 @@ from typing import Any, Dict, Optional, List, Tuple
 from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
-RENDERER_VERSION = "v0.1.9"
+RENDERER_VERSION = "v0.1.10"
 
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
@@ -94,6 +99,7 @@ TH_TW_NEWLOW_STRESS_MIN = 1         # NewLow_N >= 1 counts as stress
 
 # v0.1.9 change: ConsecutiveBreak must be paired with (volume or newlow) to count as stress
 TW_CONSEC_STRESS_REQUIRE_PAIR = True
+TW_CONSEC_PAIR_BASIS_RULE = "VolumeAmplified OR VolAmplified OR (NewLow_N>=1)"
 
 # --- TW margin flow thresholds (億) ---
 TW_MARGIN_WATCH_SUM5_YI = 100.0
@@ -811,17 +817,23 @@ def main() -> None:
 
     stress_newlow = None if sig_newlow_n is None else (sig_newlow_n >= TH_TW_NEWLOW_STRESS_MIN)
 
+    # v0.1.10: make paired basis explicit (for audit)
+    paired_basis: Optional[bool] = None
+    if stress_newlow is None or sig_volamp is None or sig_volamp2 is None:
+        paired_basis = None
+    else:
+        paired_basis = bool(sig_volamp or sig_volamp2 or stress_newlow)
+
     # v0.1.9: consecutive break is eligible, but may require pairing
     stress_consec_raw = None if sig_consec_n is None else (sig_consec_n >= TH_TW_CONSEC_BREAK_STRESS)
     stress_consec_paired: Optional[bool] = None
-    if stress_consec_raw is None or stress_newlow is None or sig_volamp is None or sig_volamp2 is None:
+    if stress_consec_raw is None or paired_basis is None:
         stress_consec_paired = None
     else:
         if not stress_consec_raw:
             stress_consec_paired = False
         else:
-            paired = bool(sig_volamp or sig_volamp2 or stress_newlow)
-            stress_consec_paired = paired if TW_CONSEC_STRESS_REQUIRE_PAIR else True
+            stress_consec_paired = paired_basis if TW_CONSEC_STRESS_REQUIRE_PAIR else True
 
     # TW margin (TWSE)
     tw_margin_unit = "億"
@@ -885,7 +897,6 @@ def main() -> None:
             excluded.append({"trigger": "TRIG_TW_PANIC", "reason": "missing_fields:roll25.signal.*"})
             trig_tw_panic = None
         else:
-            # v0.1.9: consecutive-break stress counts only if paired (when enabled)
             consec_counts = bool(stress_consec_paired)
             any_stress = bool(sig_volamp or sig_volamp2 or stress_newlow or consec_counts)
             trig_tw_panic = 1 if (sig_downday and any_stress) else 0
@@ -1008,6 +1019,8 @@ def main() -> None:
                 "stress_consecutive_break_raw": stress_consec_raw,
                 "stress_consecutive_break_paired": stress_consec_paired,
                 "stress_consec_pair_required": TW_CONSEC_STRESS_REQUIRE_PAIR,
+                "stress_consec_pair_basis": paired_basis,
+                "stress_consec_pair_basis_rule": TW_CONSEC_PAIR_BASIS_RULE,
             },
             "margin": {
                 "data_date": twse_data_date,
@@ -1057,6 +1070,7 @@ def main() -> None:
             "v0.1.7: always backup history.json before write",
             "v0.1.8: fail-closed history writes + unique-day shrink guard + backup retention",
             "v0.1.9: TW panic hardening (ConsecutiveBreak stress requires pairing)",
+            "v0.1.10: report prints roll25 raw fields + paired_basis",
         ],
     }
 
@@ -1188,6 +1202,7 @@ def main() -> None:
         "stress_newlow": stress_newlow,
         "stress_consec_raw": stress_consec_raw,
         "stress_consec_paired": stress_consec_paired,
+        "paired_basis": paired_basis,
     }
     if any(v is None for v in required.values()):
         missing = [k for k, v in required.items() if v is None]
@@ -1196,7 +1211,6 @@ def main() -> None:
         stress_hit: List[str] = []
         stress_miss: List[str] = []
 
-        # volume / newlow are direct stress
         if bool(sig_volamp):
             stress_hit.append("VolumeAmplified")
         else:
@@ -1212,12 +1226,10 @@ def main() -> None:
         else:
             stress_miss.append(f"NewLow_N>={TH_TW_NEWLOW_STRESS_MIN}")
 
-        # consecutive-break: show paired semantics
         if TW_CONSEC_STRESS_REQUIRE_PAIR:
             if bool(stress_consec_paired):
                 stress_hit.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}&paired")
             else:
-                # distinguish raw hit but unpaired
                 if bool(stress_consec_raw):
                     stress_miss.append(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}&paired(FAILED)")
                 else:
@@ -1287,6 +1299,21 @@ def main() -> None:
     md.append(f"- tw_state: **{tw_state}**  (streak={streak_tw})\n")
     md.append(f"- UsedDate: `{tw_used_date or 'NA'}`; run_day_tag: `{tw_run_day_tag or 'NA'}`; used_date_status: `{tw_used_date_status or 'NA'}`\n")
     md.append(f"- Lookback: `{_fmt_na(tw_lookback_actual)}/{_fmt_na(tw_lookback_target)}`\n")
+
+    # v0.1.10: roll25 raw + paired basis (auditability)
+    md.append(
+        "- roll25_raw: "
+        f"DownDay=`{_fmt_na(sig_downday)}`; "
+        f"VolumeAmplified=`{_fmt_na(sig_volamp)}`; "
+        f"VolAmplified=`{_fmt_na(sig_volamp2)}`; "
+        f"NewLow_N=`{_fmt_na(sig_newlow_n)}`; "
+        f"ConsecutiveBreak=`{_fmt_na(sig_consec_n)}`\n"
+    )
+    md.append(
+        f"- roll25_paired_basis: `{_fmt_na(paired_basis)}` "
+        f"(basis = {TW_CONSEC_PAIR_BASIS_RULE})\n"
+    )
+
     md.append(f"- margin_final_signal(TWSE): `{_fmt_na(tw_margin_signal)}`; confidence: `{margin_confidence}`; unit: `{tw_margin_unit}`\n")
     md.append(f"- margin_balance(TWSE latest): `{_safe_float_str(twse_latest_balance_yi, 1)}` {tw_margin_unit}\n")
     md.append(f"- margin_chg(TWSE latest): `{_safe_float_str(twse_latest_chg_yi, 1)}` {tw_margin_unit}\n")
