@@ -18,23 +18,26 @@ Principles:
 - TW leverage heat: flow-only signal is always computed if enough rows.
   Optional "level gate" is applied when there are enough balance points; otherwise downgrade (does not NA-out the signal).
 
-Patch v0.1.2:
-- report.md Recent History table: normalize None -> "NA" (fix legacy history rows)
-- Fix a critical formatting bug: DO NOT render legitimate signal "NONE" as "NA"
-  (previous _fmt_na used s.lower()=="none" which incorrectly mapped "NONE" -> "NA")
-- Normalize margin signal to canonical {"NONE","WATCH","ALERT"} or None
-  so TRIG_TW_LEVERAGE_HEAT cannot show 0 when margin signal is actually NA/None.
+Patch v0.1.3:
+- report.md adds TW panic hit explanation (which sub-condition triggered panic).
+- report.md Recent History table adds: margin_final_signal, margin_confidence
+- history.json items now store those two fields (older rows will show NA).
+- Keep v0.1.2 fixes:
+  * DO NOT render legitimate "NONE" as "NA"
+  * Canonicalize margin signal to {"NONE","WATCH","ALERT"} or None
 """
 
 from __future__ import annotations
 
 import json
 import os
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List, Tuple
 from zoneinfo import ZoneInfo
 
 TZ_TPE = ZoneInfo("Asia/Taipei")
+RENDERER_VERSION = "v0.1.3"
 
 # ---- config ----
 MARKET_STATS_PATH = "market_cache/stats_latest.json"
@@ -115,11 +118,17 @@ def _as_float(x: Any) -> Optional[float]:
         if x is None:
             return None
         if isinstance(x, (int, float)) and not isinstance(x, bool):
-            return float(x)
+            v = float(x)
+            if math.isnan(v) or math.isinf(v):
+                return None
+            return v
         s = str(x).strip()
         if s == "" or s.upper() == "NA":
             return None
-        return float(s)
+        v = float(s)
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
     except Exception:
         return None
 
@@ -133,11 +142,16 @@ def _as_int(x: Any) -> Optional[int]:
         if isinstance(x, int):
             return x
         if isinstance(x, float):
+            if math.isnan(x) or math.isinf(x):
+                return None
             return int(x)
         s = str(x).strip()
         if s == "" or s.upper() == "NA":
             return None
-        return int(float(s))
+        v = float(s)
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return int(v)
     except Exception:
         return None
 
@@ -148,7 +162,13 @@ def _as_bool(x: Any) -> Optional[bool]:
     if isinstance(x, bool):
         return x
     if isinstance(x, (int, float)):
-        return bool(x)
+        try:
+            v = float(x)
+            if math.isnan(v) or math.isinf(v):
+                return None
+            return bool(int(v))
+        except Exception:
+            return None
     s = str(x).strip().lower()
     if s in ("true", "1", "yes", "y"):
         return True
@@ -266,6 +286,54 @@ def _canon_margin_signal(x: Any) -> Optional[str]:
     return None
 
 
+def _tw_panic_hit_explain(
+    sig_downday: Optional[bool],
+    sig_volamp: Optional[bool],
+    sig_volamp2: Optional[bool],
+    stress_newlow: Optional[bool],
+    stress_consec: Optional[bool],
+) -> str:
+    """
+    Deterministic explanation string for TW panic trigger.
+
+    Output examples:
+    - "NA:missing_fields"
+    - "DownDay=False"
+    - "DownDay=True + Stress={ConsecutiveBreak>=2}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1}"
+    - "DownDay=True + Stress={VolumeAmplified,NewLow_N>=1}"
+    """
+    fields = [sig_downday, sig_volamp, sig_volamp2, stress_newlow, stress_consec]
+    if any(x is None for x in fields):
+        return "NA:missing_fields"
+
+    if sig_downday is False:
+        return "DownDay=False"
+
+    # DownDay=True
+    hits: List[str] = []
+    misses: List[str] = []
+
+    # stress component definitions (stable labels)
+    def _flag(name: str, val: bool) -> None:
+        if val:
+            hits.append(name)
+        else:
+            misses.append(name)
+
+    _flag("VolumeAmplified", bool(sig_volamp))
+    _flag("VolAmplified", bool(sig_volamp2))
+    _flag(f"NewLow_N>={TH_TW_NEWLOW_STRESS_MIN}", bool(stress_newlow))
+    _flag(f"ConsecutiveBreak>={TH_TW_CONSEC_BREAK_STRESS}", bool(stress_consec))
+
+    if not hits:
+        return "DownDay=True + Stress={} (no stress flags)"
+
+    return f"DownDay=True + Stress={{{{}}}}; Miss={{{{}}}}".format(
+        ",".join(hits),
+        ",".join(misses),
+    )
+
+
 # ---------------- TW helpers ----------------
 
 def _load_tw_roll25(excluded: List[Dict[str, str]]) -> Tuple[Dict[str, Any], bool]:
@@ -319,7 +387,7 @@ def _derive_margin_flow_signal(rows: List[Dict[str, Any]]) -> Tuple[Optional[str
         else:
             chgs.append(float(v))
 
-    if len(chgs) < TW_MARGIN_FLOW_MIN_POINTS or any(str(x) == "nan" for x in chgs):
+    if len(chgs) < TW_MARGIN_FLOW_MIN_POINTS or any(math.isnan(x) for x in chgs):
         return (
             None,
             {
@@ -459,7 +527,7 @@ def main() -> None:
                 "z": _as_float(w252.get("z")),
                 "p": p252,
             },
-            "series_signal": sig or "NA",
+            "series_signal": sig if sig is not None else "NA",
         }
 
     # ---- Global triggers ----
@@ -577,6 +645,8 @@ def main() -> None:
 
     stress_newlow = None if sig_newlow_n is None else (sig_newlow_n >= TH_TW_NEWLOW_STRESS_MIN)
     stress_consec = None if sig_consec_n is None else (sig_consec_n >= TH_TW_CONSEC_BREAK_STRESS)
+
+    tw_panic_hit = _tw_panic_hit_explain(sig_downday, sig_volamp, sig_volamp2, stress_newlow, stress_consec)
 
     # TW margin (TWSE)
     tw_margin_unit = "億"
@@ -703,6 +773,7 @@ def main() -> None:
     # ---- build latest.json ----
     latest_out = {
         "schema_version": "bottom_cache_v1_1",
+        "renderer_version": RENDERER_VERSION,
         "generated_at_utc": run_ts_utc,
         "as_of_ts": as_of_ts_tpe,
         "data_commit_sha": git_sha,
@@ -753,6 +824,7 @@ def main() -> None:
                 "stress_newlow": stress_newlow,
                 "stress_consecutive_break": stress_consec,
             },
+            "panic_hit": tw_panic_hit,
             "margin": {
                 "data_date": twse_data_date,
                 "unit": tw_margin_unit,
@@ -785,6 +857,7 @@ def main() -> None:
             "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
             "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
             "Patch v0.1.2: report formatting no longer maps legitimate 'NONE' -> 'NA'; margin signal is canonicalized.",
+            "Patch v0.1.3: report adds panic_hit explanation and history columns (margin_final_signal/confidence).",
         ],
     }
 
@@ -810,6 +883,9 @@ def main() -> None:
         "distances_global": latest_out["distances_global"],
         "tw_state": tw_state,
         "tw_triggers": latest_out["tw_local_gate"]["triggers"],
+        # NEW (v0.1.3): for recent history readability
+        "tw_margin_final_signal": tw_margin_signal,
+        "tw_margin_confidence": margin_confidence,
     }
 
     dk = _day_key_tpe_from_iso(as_of_ts_tpe)
@@ -845,6 +921,7 @@ def main() -> None:
     # ---- report.md ----
     md: List[str] = []
     md.append("# Bottom Cache Dashboard (v0.1)\n\n")
+    md.append(f"- renderer_version: `{RENDERER_VERSION}`\n")
     md.append(f"- as_of_ts (TPE): `{as_of_ts_tpe}`\n")
     md.append(f"- run_ts_utc: `{run_ts_utc}`\n")
     md.append(f"- bottom_state (Global): **{bottom_state}**  (streak={streak_global})\n")
@@ -871,7 +948,8 @@ def main() -> None:
     md.append(f"- Lookback: `{_fmt_na(tw_lookback_actual)}/{_fmt_na(tw_lookback_target)}`\n")
     md.append(f"- margin_final_signal(TWSE): `{_fmt_na(tw_margin_signal)}`; confidence: `{margin_confidence}`; unit: `{tw_margin_unit}`\n")
     md.append(f"- margin_balance(TWSE latest): `{_safe_float_str(twse_latest_balance_yi, 1)}` {tw_margin_unit}\n")
-    md.append(f"- margin_chg(TWSE latest): `{_safe_float_str(twse_latest_chg_yi, 1)}` {tw_margin_unit}\n\n")
+    md.append(f"- margin_chg(TWSE latest): `{_safe_float_str(twse_latest_chg_yi, 1)}` {tw_margin_unit}\n")
+    md.append(f"- tw_panic_hit: `{_fmt_na(tw_panic_hit)}`\n\n")
 
     md.append("### TW Triggers (0/1/NA)\n")
     md.append(f"- TRIG_TW_PANIC: `{_fmt_na(trig_tw_panic)}`\n")
@@ -897,8 +975,8 @@ def main() -> None:
     if not recent:
         md.append("- NA (history empty)\n")
     else:
-        md.append("| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev |\n")
-        md.append("|---|---|---|---:|---:|---:|---|---:|---:|---:|\n")
+        md.append("| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |\n")
+        md.append("|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|\n")
         for it in recent:
             asof = _as_str(it.get("as_of_ts")) or "NA"
             dk2 = _day_key_tpe_from_iso(asof)
@@ -915,7 +993,10 @@ def main() -> None:
             twh = _fmt_na(twtr.get("TRIG_TW_LEVERAGE_HEAT", None))
             twr = _fmt_na(twtr.get("TRIG_TW_REVERSAL", None))
 
-            md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {tws} | {twp} | {twh} | {twr} |\n")
+            mf = _fmt_na(it.get("tw_margin_final_signal"))
+            mc = _fmt_na(it.get("tw_margin_confidence"))
+
+            md.append(f"| {dk2} | {asof} | {st} | {p} | {v} | {r} | {tws} | {twp} | {twh} | {twr} | {mf} | {mc} |\n")
         md.append("\n")
 
     md.append("## Series Snapshot (Global)\n")
