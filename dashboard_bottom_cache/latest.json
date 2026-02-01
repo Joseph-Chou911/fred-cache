@@ -1,8 +1,9 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "generated_at_utc": "2026-02-01T07:50:02.557711Z",
-  "as_of_ts": "2026-02-01T15:50:02.557728+08:00",
-  "data_commit_sha": "73b57ca7a7d4f439bd877ae6f9d37ca5e82279f7",
+  "renderer_version": "v0.1.3",
+  "generated_at_utc": "2026-02-01T09:20:26.470422Z",
+  "as_of_ts": "2026-02-01T17:20:26.470442+08:00",
+  "data_commit_sha": "251b851de61fa4cb7b00de8177f5b33e7a75bb3a",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -50,6 +51,7 @@
       "stress_newlow": false,
       "stress_consecutive_break": true
     },
+    "panic_hit": "DownDay=True + Stress={}; Miss={}",
     "margin": {
       "data_date": "2026-01-30",
       "unit": "億",
@@ -185,6 +187,7 @@
     "ret1_pct unit is percent (%)",
     "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
     "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
-    "Patch v0.1.2: report formatting no longer maps legitimate 'NONE' -> 'NA'; margin signal is canonicalized."
+    "Patch v0.1.2: report formatting no longer maps legitimate 'NONE' -> 'NA'; margin signal is canonicalized.",
+    "Patch v0.1.3: report adds panic_hit explanation and history columns (margin_final_signal/confidence)."
   ]
 }

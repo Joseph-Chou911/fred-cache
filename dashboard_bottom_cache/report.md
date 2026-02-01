@@ -1,7 +1,8 @@
 # Bottom Cache Dashboard (v0.1)
 
-- as_of_ts (TPE): `2026-02-01T15:50:02.557728+08:00`
-- run_ts_utc: `2026-02-01T07:50:02.557711Z`
+- renderer_version: `v0.1.3`
+- as_of_ts (TPE): `2026-02-01T17:20:26.470442+08:00`
+- run_ts_utc: `2026-02-01T09:20:26.470422Z`
 - bottom_state (Global): **NONE**  (streak=7)
 - market_cache_as_of_ts: `2026-02-01T05:39:45Z`
 - market_cache_generated_at_utc: `2026-02-01T05:39:45Z`
@@ -27,6 +28,7 @@
 - margin_final_signal(TWSE): `NONE`; confidence: `DOWNGRADED`; unit: `億`
 - margin_balance(TWSE latest): `3838.9` 億
 - margin_chg(TWSE latest): `21.2` 億
+- tw_panic_hit: `DownDay=True + Stress={}; Miss={}`
 
 ### TW Triggers (0/1/NA)
 - TRIG_TW_PANIC: `1`
@@ -43,15 +45,15 @@
 - stress_flags: newlow=False, consecutive_break>=2=True
 
 ## Recent History (last 10 buckets)
-| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev |
-|---|---|---|---:|---:|---:|---|---:|---:|---:|
-| 2026-01-25 | 2026-01-25T19:40:31.851190+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 |
-| 2026-01-26 | 2026-01-26T16:06:45.700719+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 |
-| 2026-01-27 | 2026-01-27T23:58:59.954073+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | NA | 0 |
-| 2026-01-29 | 2026-01-29T01:08:17.402179+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 |
-| 2026-01-30 | 2026-01-30T01:25:46.779800+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 |
-| 2026-01-31 | 2026-01-31T23:54:06.356750+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 |
-| 2026-02-01 | 2026-02-01T15:50:02.557728+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 |
+| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |
+|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|
+| 2026-01-25 | 2026-01-25T19:40:31.851190+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
+| 2026-01-26 | 2026-01-26T16:06:45.700719+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
+| 2026-01-27 | 2026-01-27T23:58:59.954073+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | NA | 0 | NA | NA |
+| 2026-01-29 | 2026-01-29T01:08:17.402179+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
+| 2026-01-30 | 2026-01-30T01:25:46.779800+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | NA | NA |
+| 2026-01-31 | 2026-01-31T23:54:06.356750+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NA | NA |
+| 2026-02-01 | 2026-02-01T17:20:26.470442+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) |

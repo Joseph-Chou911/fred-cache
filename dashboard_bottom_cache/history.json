@@ -164,9 +164,9 @@
       }
     },
     {
-      "run_ts_utc": "2026-02-01T07:50:02.557711Z",
-      "as_of_ts": "2026-02-01T15:50:02.557728+08:00",
-      "data_commit_sha": "73b57ca7a7d4f439bd877ae6f9d37ca5e82279f7",
+      "run_ts_utc": "2026-02-01T09:20:26.470422Z",
+      "as_of_ts": "2026-02-01T17:20:26.470442+08:00",
+      "data_commit_sha": "251b851de61fa4cb7b00de8177f5b33e7a75bb3a",
       "bottom_state_global": "NONE",
       "triggers_global": {
         "TRIG_PANIC": 0,
@@ -188,7 +188,9 @@
         "TRIG_TW_PANIC": 1,
         "TRIG_TW_LEVERAGE_HEAT": 0,
         "TRIG_TW_REVERSAL": 0
-      }
+      },
+      "tw_margin_final_signal": "NONE",
+      "tw_margin_confidence": "DOWNGRADED"
     }
   ]
 }
