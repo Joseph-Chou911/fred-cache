@@ -1,9 +1,9 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "renderer_version": "v0.1.9",
-  "generated_at_utc": "2026-02-01T10:45:53.388202Z",
-  "as_of_ts": "2026-02-01T18:45:53.388215+08:00",
-  "data_commit_sha": "1304e8254ca68127091d6ae6c5b1cc79a7c2d958",
+  "renderer_version": "v0.1.10",
+  "generated_at_utc": "2026-02-01T11:15:37.916096Z",
+  "as_of_ts": "2026-02-01T19:15:37.916110+08:00",
+  "data_commit_sha": "a6c0928f5a72c1965259ca119beda192d5e0a6f7",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -51,7 +51,9 @@
       "stress_newlow": false,
       "stress_consecutive_break_raw": true,
       "stress_consecutive_break_paired": false,
-      "stress_consec_pair_required": true
+      "stress_consec_pair_required": true,
+      "stress_consec_pair_basis": false,
+      "stress_consec_pair_basis_rule": "VolumeAmplified OR VolAmplified OR (NewLow_N>=1)"
     },
     "margin": {
       "data_date": "2026-01-30",
@@ -187,8 +189,8 @@
     "loaded_items": 1,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260201T104553Z.json",
-    "backup_bytes": 998,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260201T111537Z.json",
+    "backup_bytes": 987,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -215,6 +217,7 @@
     "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
     "v0.1.7: always backup history.json before write",
     "v0.1.8: fail-closed history writes + unique-day shrink guard + backup retention",
-    "v0.1.9: TW panic hardening (ConsecutiveBreak stress requires pairing)"
+    "v0.1.9: TW panic hardening (ConsecutiveBreak stress requires pairing)",
+    "v0.1.10: report prints roll25 raw fields + paired_basis"
   ]
 }
