@@ -1,12 +1,14 @@
 # Bottom Cache Dashboard (v0.1)
 
-- renderer_version: `v0.1.6`
-- as_of_ts (TPE): `2026-02-01T17:56:54.083411+08:00`
-- run_ts_utc: `2026-02-01T09:56:54.083393Z`
+- renderer_version: `v0.1.7`
+- as_of_ts (TPE): `2026-02-01T18:08:06.357550+08:00`
+- run_ts_utc: `2026-02-01T10:08:06.357539Z`
 - bottom_state (Global): **NONE**  (streak=1)
 - market_cache_as_of_ts: `2026-02-01T05:39:45Z`
 - market_cache_generated_at_utc: `2026-02-01T05:39:45Z`
 - history_load_status: `OK`; reason: `dict.items`; loaded_items: `1`
+- history_pre_items: `1`; history_post_items: `1`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260201T100806Z.json`; bytes=`1040`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -41,7 +43,7 @@
 ## Recent History (last 10 buckets)
 | tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |
 |---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|
-| 2026-02-01 | 2026-02-01T17:56:54.083411+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-02-01 | 2026-02-01T18:08:06.357550+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`
