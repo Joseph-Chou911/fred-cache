@@ -1,9 +1,9 @@
 {
   "schema_version": "bottom_cache_v1_1",
-  "renderer_version": "v0.1.4",
-  "generated_at_utc": "2026-02-01T09:39:54.004548Z",
-  "as_of_ts": "2026-02-01T17:39:54.004561+08:00",
-  "data_commit_sha": "91c17fdc37d17877b3842f3edc0db923214e3c95",
+  "renderer_version": "v0.1.5",
+  "generated_at_utc": "2026-02-01T09:43:23.568406Z",
+  "as_of_ts": "2026-02-01T17:43:23.568417+08:00",
+  "data_commit_sha": "fb0fac7cc6700954aceb38e3a43144165b075cbe",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -51,7 +51,7 @@
       "stress_newlow": false,
       "stress_consecutive_break": true
     },
-    "panic_hit": "DownDay=True + Stress={ConsecutiveBreak>=2}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1}",
+    "tw_panic_hit": "DownDay=True + Stress={ConsecutiveBreak>=2}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1}",
     "margin": {
       "data_date": "2026-01-30",
       "unit": "億",
@@ -72,7 +72,8 @@
       "level_dbg": {
         "reason": "insufficient_level_points",
         "min_points": 60,
-        "have_points": 30
+        "have_points": 30,
+        "window_target": 252
       },
       "final_signal": "NONE",
       "confidence": "DOWNGRADED",
@@ -187,6 +188,7 @@
     "ret1_pct unit is percent (%)",
     "TW pct_change_to_nonnegative_gap is a true 'gap' (>=0)",
     "TW margin heat uses flow signal; optional level gate blocks only when enough data; otherwise downgrade",
-    "v0.1.4: fix tw_panic_hit formatter; now prints actual stress hits/misses."
+    "v0.1.5: report prints level-gate have_points/min_points and p (if available), plus compact flow audit line",
+    "v0.1.5: report recent history adds legacy_row flag (display-only) for rows missing margin columns"
   ]
 }

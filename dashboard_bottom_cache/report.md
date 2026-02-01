@@ -1,8 +1,8 @@
 # Bottom Cache Dashboard (v0.1)
 
-- renderer_version: `v0.1.4`
-- as_of_ts (TPE): `2026-02-01T17:39:54.004561+08:00`
-- run_ts_utc: `2026-02-01T09:39:54.004548Z`
+- renderer_version: `v0.1.5`
+- as_of_ts (TPE): `2026-02-01T17:43:23.568417+08:00`
+- run_ts_utc: `2026-02-01T09:43:23.568406Z`
 - bottom_state (Global): **NONE**  (streak=1)
 - market_cache_as_of_ts: `2026-02-01T05:39:45Z`
 - market_cache_generated_at_utc: `2026-02-01T05:39:45Z`
@@ -28,6 +28,8 @@
 - margin_final_signal(TWSE): `NONE`; confidence: `DOWNGRADED`; unit: `億`
 - margin_balance(TWSE latest): `3838.9` 億
 - margin_chg(TWSE latest): `21.2` 億
+- margin_flow_audit: signal=`NONE`; sum_last5=`78.2`; pos_days_last5=`4`
+- margin_level_gate_audit: gate=`NA`; points=`30/60`; p=`NA`; p_min=`95.0`
 - tw_panic_hit: `DownDay=True + Stress={ConsecutiveBreak>=2}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1}`
 
 ### TW Triggers (0/1/NA)
@@ -45,9 +47,9 @@
 - stress_flags: newlow=False, consecutive_break>=2=True
 
 ## Recent History (last 10 buckets)
-| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |
-|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|
-| 2026-02-01 | 2026-02-01T17:39:54.004561+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED |
+| tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf | legacy_row |
+|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|---:|
+| 2026-02-01 | 2026-02-01T17:43:23.568417+08:00 | NONE | 0 | 0 | 0 | TW_BOTTOM_WATCH | 1 | 0 | 0 | NONE | DOWNGRADED | 0 |
 
 ## Series Snapshot (Global)
 | series_id | risk_dir | series_signal | data_date | value | w60.z | w252.p | w60.ret1_pct(%) |
