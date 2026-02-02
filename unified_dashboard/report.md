@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-02T15:13:29Z
+- unified_generated_at_utc: 2026-02-02T15:58:50Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -21,7 +21,7 @@
 - mode: NORMAL_DCA
 
 **reasons**
-- trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, data_date=2026-01-30
+- trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, data_date=2026-02-02
 - fragility_parts: credit_fragile(BAMLH0A0HYM2=NONE)=false, rate_stress(DGS10=NONE)=false, tw_margin(NONE)=false, cross_divergence(DIVERGENCE)=true
 - vol_gate: market_cache.VIX only (signal=WATCH, dir=HIGH, ret1%60=3.317536, data_date=2026-01-30)
 
@@ -30,19 +30,19 @@
 - fx_confidence=OK (fx not used as primary trigger)
 
 ## market_cache (detailed)
-- as_of_ts: 2026-02-02T07:22:38Z
-- run_ts_utc: 2026-02-02T07:23:14.612915+00:00
+- as_of_ts: 2026-02-02T15:12:17Z
+- run_ts_utc: 2026-02-02T15:49:57.073937+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@2c29a6d
+- script_fingerprint: render_dashboard_py_signals_v8@5b36c04
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
 
 | series | signal | dir | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| VIX | WATCH | HIGH | JUMP | 17.440000 | 2026-01-30 | 0.010170 | 0.144392 | 73.333333 | 55.158730 | 0.211062 | 11.666667 | 3.317536 | abs(ret1%60)>=2 | JUMP_RET | WATCH | SAME | 3 | 4 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| SP500 | INFO | HIGH | LONG | 6939.030000 | 2026-01-30 | 0.010170 | 0.961222 | 83.333333 | 96.031746 | -0.324261 | -11.666667 | -0.430190 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| HYG_IEF_RATIO | NONE | LOW | NONE | 0.845528 | 2026-01-30 | 0.010170 | 1.588299 | 91.666667 | 79.761905 | 0.198455 | 5.000000 | 0.173679 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
-| OFR_FSI | NONE | HIGH | NONE | -2.404000 | 2026-01-28 | 0.010170 | -0.004855 | 61.666667 | 21.031746 | -0.045013 | -3.333333 | -0.881242 | NA | NA | NONE | SAME | 0 | 0 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| OFR_FSI | WATCH | HIGH | JUMP | -2.305000 | 2026-01-29 | 0.627798 | 0.289985 | 73.333333 | 30.555556 | 0.294840 | 11.666667 | 4.118136 | abs(ret1%60)>=2 | JUMP_RET | NONE | NONE→WATCH | 0 | 1 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| VIX | WATCH | HIGH | JUMP | 17.440000 | 2026-01-30 | 0.627798 | 0.144392 | 73.333333 | 55.158730 | 0.211062 | 11.666667 | 3.317536 | abs(ret1%60)>=2 | JUMP_RET | WATCH | SAME | 3 | 4 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
+| SP500 | INFO | HIGH | LONG | 6969.580000 | 2026-02-02 | 0.627798 | 1.223232 | 95.000000 | 98.809524 | 0.262009 | 11.666667 | 0.440263 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
+| HYG_IEF_RATIO | NONE | LOW | NONE | 0.844268 | 2026-02-02 | 0.627798 | 1.319015 | 85.000000 | 74.603175 | -0.269285 | -6.666667 | -0.149089 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
 
 ## fred_cache (ALERT+WATCH+INFO)
 - as_of_ts: 2026-02-02T21:23:05+08:00
@@ -176,7 +176,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-02-02, roll25_used_date=2026-01-30, match=false
 
-<!-- rendered_at_utc: 2026-02-02T15:13:29Z -->
+<!-- rendered_at_utc: 2026-02-02T15:58:50Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
