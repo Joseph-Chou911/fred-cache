@@ -1,8 +1,8 @@
 {
   "schema_version": "tw_pb_stats_latest_v1",
   "script_fingerprint": "update_tw_pb_sidecar_py@v1",
-  "generated_at_utc": "2026-02-01T18:53:34Z",
-  "generated_at_local": "2026-02-02T02:53:34.479993+08:00",
+  "generated_at_utc": "2026-02-02T03:18:20Z",
+  "generated_at_local": "2026-02-02T11:18:20.500905+08:00",
   "timezone": "Asia/Taipei",
   "data_date": "2026-01-30",
   "series_len_pbr": 3,
