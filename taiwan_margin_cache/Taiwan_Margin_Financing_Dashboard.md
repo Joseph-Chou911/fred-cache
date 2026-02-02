@@ -34,12 +34,12 @@
 - maint_path: taiwan_margin_cache/maint_ratio_latest.json
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED
-- data_date: 2026-01-30｜maint_ratio_pct: 183.996663
-- maint_ratio_1d_delta_pctpt: -1.893614｜maint_ratio_1d_pct_change: -1.018673
-- maint_ratio_trend_note: trend_from: today=183.996663(2026-01-30), prev=185.890277(2026-01-29)
-- totals: financing_amount_twd=383893252000, collateral_value_twd=706350772630
-- coverage: included_count=1242, missing_price_count=4
-- quality: fetch_status=OK, confidence=OK, dq_reason=
+- data_date: None｜maint_ratio_pct: None
+- maint_ratio_1d_delta_pctpt: NA｜maint_ratio_1d_pct_change: NA
+- maint_ratio_trend_note: maint_latest.maint_ratio_pct missing/non-numeric
+- totals: financing_amount_twd=None, collateral_value_twd=None
+- coverage: included_count=0, missing_price_count=None
+- quality: fetch_status=DOWNGRADED, confidence=DOWNGRADED, dq_reason=fetch_or_parse_failed
 
 ## 2.0.1) 大盤融資維持率（history；display-only）
 - maint_hist_path: taiwan_margin_cache/maint_ratio_history.json
@@ -64,7 +64,7 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-02T15:24:30.605096+08:00 (Asia/Taipei)
+- generated_at: 2026-02-02T18:03:04.202981+08:00 (Asia/Taipei)
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -121,7 +121,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
-- Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
+- Check-10 maint latest vs history[0] date（info）：⚠️（NOTE）（latest.data_date(NA) != hist[0].data_date(2026-01-30)）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-02T07:25:15Z_
+_generated_at_utc: 2026-02-02T11:44:11Z_
