@@ -1,6 +1,6 @@
 {
   "schema_version": "taiwan_margin_financing_history_v1",
-  "generated_at_utc": "2026-02-02T11:44:14Z",
+  "generated_at_utc": "2026-02-02T14:54:27Z",
   "items": [
     {
       "run_ts_utc": "2026-01-23T05:32:33Z",
@@ -649,6 +649,24 @@
       "data_date": "2026-01-30",
       "balance_yi": 1350.5,
       "chg_yi": 2.8
+    },
+    {
+      "run_ts_utc": "2026-02-02T14:54:27Z",
+      "market": "TWSE",
+      "source": "HiStock",
+      "source_url": "https://histock.tw/stock/three.aspx?m=mg",
+      "data_date": "2026-02-02",
+      "balance_yi": 3788.5,
+      "chg_yi": -50.4
+    },
+    {
+      "run_ts_utc": "2026-02-02T14:54:27Z",
+      "market": "TPEX",
+      "source": "HiStock",
+      "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
+      "data_date": "2026-02-02",
+      "balance_yi": 1332.6,
+      "chg_yi": -17.9
     }
   ]
 }
