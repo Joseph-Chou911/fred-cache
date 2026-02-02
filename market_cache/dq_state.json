@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-02-02T15:12:17Z",
-  "as_of_ts": "2026-02-02T15:12:17Z",
+  "generated_at_utc": "2026-02-02T23:04:03Z",
+  "as_of_ts": "2026-02-02T23:04:03Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "dq": "OK",
   "checks": [
@@ -95,16 +95,16 @@
       "series_id": "SP500",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 30.550000000000182,
-      "std60": 100.86546102757653,
+      "ret1_delta": 37.409999999999854,
+      "std60": 101.00903818677153,
       "threshold": "8*std60"
     },
     {
       "series_id": "HYG_IEF_RATIO",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": -0.0012605897400915778,
-      "std60": 0.005645337664085332,
+      "ret1_delta": 0.0007624080851034165,
+      "std60": 0.005695527748707969,
       "threshold": "8*std60"
     }
   ]
