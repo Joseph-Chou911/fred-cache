@@ -383,6 +383,30 @@
         "STLFSI4": "NONE",
         "VIXCLS": "NONE"
       }
+    },
+    {
+      "run_ts_utc": "2026-02-02T23:02:04.065205+00:00",
+      "day_key_local": "2026-02-03",
+      "module": "fred_cache",
+      "stats_as_of_ts": "2026-02-03T07:00:59+08:00",
+      "stats_generated_at_utc": "2026-02-02T23:01:01+00:00",
+      "data_commit_sha": "ed03758c45b0217c3a0e94bce35e3d02422ef66b",
+      "snapshot_id": "commit:ed03758c45b0217c3a0e94bce35e3d02422ef66b",
+      "series_signals": {
+        "DTWEXBGS": "ALERT",
+        "BAMLH0A0HYM2": "WATCH",
+        "NFCINONFINLEVERAGE": "INFO",
+        "SP500": "INFO",
+        "T10Y2Y": "INFO",
+        "T10Y3M": "INFO",
+        "DCOILWTICO": "NONE",
+        "DGS10": "NONE",
+        "DGS2": "NONE",
+        "DJIA": "NONE",
+        "NASDAQCOM": "NONE",
+        "STLFSI4": "NONE",
+        "VIXCLS": "NONE"
+      }
     }
   ]
 }
