@@ -99,6 +99,17 @@
         "DFII10": "NONE",
         "T10YIE": "WATCH"
       }
+    },
+    {
+      "run_ts_utc": "2026-02-02T17:04:04.057050+00:00",
+      "stats_as_of_ts": "2026-02-03T01:04:00+08:00",
+      "module": "inflation_realrate_cache",
+      "ruleset_id": "signals_v8",
+      "script_fingerprint": "render_dashboard_py_signals_v8@b5bd4cc",
+      "series_signals": {
+        "DFII10": "NONE",
+        "T10YIE": "WATCH"
+      }
     }
   ]
 }
