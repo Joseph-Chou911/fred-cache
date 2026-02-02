@@ -7,7 +7,8 @@
 - 一致性判定（Margin × Roll25）：MARKET_SHOCK_ONLY
   - rationale: roll25 heated but Margin not heated
   - resonance_policy: latest
-  - resonance_confidence: OK
+  - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
+  - resonance_confidence: DOWNGRADED
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 1) WATCH（升溫）
@@ -47,8 +48,8 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-01-30｜UsedDateStatus: OK_LATEST｜risk_level: 中(derived)｜risk_level_raw: NA｜tag: WEEKEND
-- summary: 今日為週末；UsedDate=2026-01-30：Mode=FULL；freshness_ok=True
+- UsedDate: 2026-01-30｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 中(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
+- summary: 今日資料未更新；UsedDate=2026-01-30：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 - numbers: Close=32063.75, PctChange=-1.452287%, TradeValue=941320964545, VolumeMultiplier=1.179184, AmplitudePct=1.692142%, VolMultiplier=1.179184
 - signals: DownDay=True, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=2, OhlcMissing=False
 - action: 維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。
@@ -57,14 +58,14 @@ Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?respo
 run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
 Mode=FULL | OHLC=OK | UsedDate=2026-01-30 | UsedDminus1=2026-01-29
-RunDayTag=WEEKEND | UsedDateStatus=OK_LATEST
-freshness_ok=True | freshness_age_days=2
+RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
+freshness_ok=True | freshness_age_days=3
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-01T17:41:23.318593+08:00 (Asia/Taipei)
-- resonance_confidence: OK
+- generated_at: 2026-02-02T15:24:30.605096+08:00 (Asia/Taipei)
+- resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -73,7 +74,8 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
 - 判定：MARKET_SHOCK_ONLY（roll25 heated but Margin not heated）
-- resonance_confidence: OK
+- resonance_confidence: DOWNGRADED
+- resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -115,11 +117,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-4 TPEX history rows>=21：✅（PASS）（rows=36）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（PASS）（OK）
-- Check-7 roll25 Lookback window（info）：✅（PASS）（LookbackNActual=20/20（OK））
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-01-30) == TWSE(2026-01-30)）
+- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-01T15:00:35Z_
+_generated_at_utc: 2026-02-02T07:25:15Z_

@@ -1,8 +1,8 @@
 {
   "schema_version": "tw_market_maint_ratio_latest_v1",
   "script_fingerprint": "fetch_twse_market_maint_ratio_py@v6_guard_short_table_grouping",
-  "generated_at_utc": "2026-02-01T15:00:37Z",
-  "generated_at_local": "2026-02-01T23:00:37.301916+08:00",
+  "generated_at_utc": "2026-02-02T07:25:17Z",
+  "generated_at_local": "2026-02-02T15:25:17.220849+08:00",
   "timezone": "Asia/Taipei",
   "source_urls": {
     "MI_MARGN": "https://www.twse.com.tw/exchangeReport/MI_MARGN",
