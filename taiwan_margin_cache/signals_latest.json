@@ -1,0 +1,236 @@
+{
+  "schema_version": "tw_margin_signals_latest_v1",
+  "module": "taiwan_margin_financing",
+  "generated_at_utc": "2026-02-03T01:49:38Z",
+  "generated_at_local": null,
+  "data_date": "2026-02-02",
+  "state": "擴張",
+  "signal": "ALERT",
+  "margin_quality": "OK",
+  "rationale": "20D expansion + 1D%<0 and 5D%<0 (possible deleveraging)",
+  "resonance": "RESONANCE",
+  "resonance_display": "RESONANCE",
+  "resonance_confidence": "DOWNGRADED",
+  "resonance_code": "ROLL25_STALE",
+  "resonance_note": "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）",
+  "upstream": {
+    "latest_json": {
+      "confidence": null,
+      "fetch_status": null,
+      "dq_reason": null,
+      "has_top_quality": false
+    }
+  },
+  "margin": {
+    "twse_meta_date": "2026-02-02",
+    "tpex_meta_date": "2026-02-02",
+    "twse": {
+      "latest_balance_yi": 3788.5,
+      "h1": {
+        "delta": -50.40000000000009,
+        "pct": -1.3128760842949827,
+        "base_date": "2026-01-30",
+        "latest": 3788.5,
+        "base": 3838.9
+      },
+      "h5": {
+        "delta": -27.300000000000182,
+        "pct": -0.715446302217102,
+        "base_date": "2026-01-26",
+        "latest": 3788.5,
+        "base": 3815.8
+      },
+      "h20": {
+        "delta": 279.0,
+        "pct": 7.949850406040746,
+        "base_date": "2026-01-05",
+        "latest": 3788.5,
+        "base": 3509.5
+      },
+      "source": {
+        "vendor": "HiStock",
+        "source_url": "https://histock.tw/stock/three.aspx?m=mg"
+      }
+    },
+    "tpex": {
+      "latest_balance_yi": 1332.6,
+      "h1": {
+        "delta": -17.90000000000009,
+        "pct": -1.3254350240651678,
+        "base_date": "2026-01-30",
+        "latest": 1332.6,
+        "base": 1350.5
+      },
+      "h5": {
+        "delta": 9.699999999999818,
+        "pct": 0.7332375840955339,
+        "base_date": "2026-01-26",
+        "latest": 1332.6,
+        "base": 1322.9
+      },
+      "h20": {
+        "delta": 129.79999999999995,
+        "pct": 10.791486531426669,
+        "base_date": "2026-01-05",
+        "latest": 1332.6,
+        "base": 1202.8
+      },
+      "source": {
+        "vendor": "HiStock",
+        "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
+      }
+    },
+    "total": {
+      "h1": {
+        "delta": -68.29999999999927,
+        "pct": -1.3161444482984406,
+        "base_date": "2026-01-30",
+        "latest": 5121.1,
+        "base": 5189.4,
+        "ok": true,
+        "reason": ""
+      },
+      "h5": {
+        "delta": -17.600000000000364,
+        "pct": -0.3424990756417063,
+        "base_date": "2026-01-26",
+        "latest": 5121.1,
+        "base": 5138.700000000001,
+        "ok": true,
+        "reason": ""
+      },
+      "h20": {
+        "delta": 408.8000000000002,
+        "pct": 8.675169237951746,
+        "base_date": "2026-01-05",
+        "latest": 5121.1,
+        "base": 4712.3,
+        "ok": true,
+        "reason": ""
+      }
+    },
+    "derived": {
+      "accel": -1.2476446331700992,
+      "spread20": 2.8416361253859224
+    }
+  },
+  "roll25": {
+    "path": "roll25_cache/latest_report.json",
+    "ok": true,
+    "error": null,
+    "used_date": "2026-02-02",
+    "used_date_status": "DATA_NOT_UPDATED",
+    "risk_level_display": "中(derived)（stale）",
+    "risk_level_raw": "NA",
+    "tag": "WEEKDAY",
+    "is_heated": true,
+    "lookback_note": null,
+    "strict_same_day": true,
+    "strict_not_stale": false,
+    "strict_roll_match": false
+  },
+  "maint_ratio": {
+    "policy": "PROXY_TREND_ONLY",
+    "confidence": "DOWNGRADED",
+    "path_latest": "taiwan_margin_cache/maint_ratio_latest.json",
+    "path_history": "taiwan_margin_cache/maint_ratio_history.json",
+    "ok_latest": true,
+    "ok_history": true,
+    "latest": {
+      "data_date": "2026-02-02",
+      "maint_ratio_pct": 178.267525,
+      "maint_ratio_1d_delta_pctpt": -5.729138000000006,
+      "maint_ratio_1d_pct_change": -3.113718426512988,
+      "trend_note": "trend_from: today=178.267525(2026-02-02), prev=183.996663(2026-01-30)",
+      "fetch_status": "OK",
+      "confidence": "OK",
+      "dq_reason": ""
+    },
+    "history": {
+      "rows": 5,
+      "head5": [
+        [
+          "2026-02-02",
+          178.267525
+        ],
+        [
+          "2026-01-30",
+          183.996663
+        ],
+        [
+          "2026-01-29",
+          185.890277
+        ],
+        [
+          "2026-01-28",
+          188.131701
+        ],
+        [
+          "2026-01-27",
+          185.449854
+        ]
+      ]
+    }
+  },
+  "checks": {
+    "margin": {
+      "c1_tw_ok": true,
+      "c1_tp_ok": true,
+      "c2_tw_ok": true,
+      "c2_tp_ok": true,
+      "c3_ok": true,
+      "c4_tw_ok": true,
+      "c4_tp_ok": true,
+      "c5_tw_ok": true,
+      "c5_tp_ok": true,
+      "margin_any_fail": false
+    },
+    "roll25": {
+      "check_6_status": "NOTE",
+      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-02) == TWSE(2026-02-02)",
+      "check_7_status": "NOTE",
+      "check_7_msg": "skipped: roll25 stale (DATA_NOT_UPDATED)"
+    },
+    "maint": {
+      "check_10_status": "PASS",
+      "check_10_msg": "OK",
+      "check_11_status": "PASS",
+      "check_11_msg": "OK"
+    }
+  },
+  "inputs": {
+    "latest_path": "taiwan_margin_cache/latest.json",
+    "history_path": "taiwan_margin_cache/history.json",
+    "out_md_path": "taiwan_margin_cache/Taiwan_Margin_Financing_Dashboard.md",
+    "signals_out_path": "taiwan_margin_cache/signals_latest.json",
+    "resonance_policy": "latest"
+  },
+  "snapshots": {
+    "twse_rows": {
+      "rows": 30,
+      "head_dates": [
+        "2026-02-02",
+        "2026-01-30",
+        "2026-01-29"
+      ],
+      "tail_dates": [
+        "2025-12-23",
+        "2025-12-22",
+        "2025-12-19"
+      ]
+    },
+    "tpex_rows": {
+      "rows": 30,
+      "head_dates": [
+        "2026-02-02",
+        "2026-01-30",
+        "2026-01-29"
+      ],
+      "tail_dates": [
+        "2025-12-23",
+        "2025-12-22",
+        "2025-12-19"
+      ]
+    }
+  }
+}
