@@ -3,56 +3,27 @@
 """
 Render unified_dashboard/latest.json into report.md
 
-Adds:
+Design (2026-02-03 decision):
+- Unified renderer is DISPLAY-ONLY. It does NOT compute Taiwan cross-module logic.
+- Taiwan cross-module / consistency / margin signal decisions are owned by the Taiwan dashboard pipeline.
+- Unified only PASS-THROUGH displays Taiwan signal summary fields that are already present in unified JSON.
+
+Kept:
 - (2) Positioning Matrix (report-only; deterministic; uses signals already present in unified JSON)
 - roll25_derived (realized vol / max drawdown)
 - fx_usdtwd section (BOT USD/TWD mid + deterministic signal)
-- cross_module (kept)
-- AUTO Module Status (core modules first, then any extra modules sorted)
+- AUTO Module Status
 - Optional module sections: inflation_realrate_cache / asset_proxy_cache (display-only; no guessing)
 
-This renderer does NOT recompute market/fred/margin/roll25/fx stats; it only formats fields already in unified JSON.
-If a field is missing => prints NA.
+Changed (IMPORTANT):
+- Removed reading taiwan_margin_cache/signals_latest.json in renderer (no external file IO).
+- Removed cross_module "calculation-like" rendering (chg_last5/sum_last5/etc) from renderer.
+- Added Taiwan signals summary as PASS-THROUGH:
+  - source: unified.modules.taiwan_margin_financing.cross_module (or NA if missing)
+  - margin_signal / consistency(resonance) / confidence / dq_reason / date_alignment (if present)
 
-2026-01-25 updates:
-- Fix roll25 tag semantics: separate run-day tag vs used-date status.
-- Display OhlcMissing even if signals lacks it, by inferring from ohlc_status when possible.
-- Align field names with unified JSON: roll25.core.used_date_status, roll25.core.tag_legacy
-- Prefer unified top-level run_day_tag for run-day context.
-- Cross_module unit fix: display margin change unit (e.g., 億) deterministically.
-- Render chg_last5 as JSON-like numeric list + unit once.
-
-2026-01-25 follow-up:
-- Positioning Matrix: SP500 and VIX use market_cache only (single source policy).
-- Positioning Matrix prints source_policy and includes data_date for SP500/VIX (audit-friendly).
-
-2026-01-26 updates (A+B):
-A) roll25_cache: add a deterministic note clarifying run_day_tag vs UsedDate semantics (report-only).
-B) FX: treat "momentum dict exists but all key fields are None" as momentum_unavailable (deterministic dq note).
-
-2026-01-26 follow-up (IMPORTANT):
-- roll25 heat split flags are now sourced deterministically from unified JSON fields created by builder:
-  priority:
-    1) modules.taiwan_margin_financing.cross_module.roll25_heated_market / roll25_data_quality_issue
-    2) modules.roll25_cache.latest_report.roll25_heated_market / roll25_data_quality_issue (if present)
-- DO NOT guess; if not found => NA.
-- run_day_tag fallback no longer uses roll25 tag_legacy (to avoid semantic contamination).
-
-2026-01-26 (this version):
-- Module Status is auto-rendered: core modules fixed order + any extra modules sorted.
-- Render optional sections for inflation_realrate_cache / asset_proxy_cache (display-only):
-  - If dashboard_latest.rows exists => render a table (best-effort; missing fields => NA)
-  - Else print status + deterministic note
-
-2026-02-03 update (A):
-- Positioning Matrix 台股判斷（tw_margin / cross_divergence）改讀 taiwan_margin_cache/signals_latest.json
-  - tw_margin_sig := signals_latest.json["signal"]
-  - cross_cons := signals_latest.json["resonance"]
-  - 不改動其他判斷邏輯（credit/rate/vix 等維持原本 unified JSON 來源與規則）
-
-2026-02-03 update (B):
-- 報告中的 cross_module 區塊也改以 signals_latest.json 為主來源（審計一致）
-  - 若 signals_latest.json 缺檔或關鍵欄位缺失，報告中會明確標記 fallback 到 unified cross_module
+Note:
+- If a field is missing => prints NA (no guessing).
 """
 
 from __future__ import annotations
@@ -61,7 +32,7 @@ import argparse
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 
 def _read_text(path: str) -> str:
@@ -151,49 +122,6 @@ def _infer_ohlc_missing(sigs: Any, r_latest: Any) -> Any:
     return None
 
 
-# ---- unit helpers (cross_module) ----
-
-def _get_twmargin_chg_unit_label(uni: Any) -> str:
-    label = _safe_get(
-        uni,
-        "modules",
-        "taiwan_margin_financing",
-        "latest",
-        "series",
-        "TWSE",
-        "chg_yi_unit",
-        "label",
-    )
-    if isinstance(label, str) and label.strip():
-        return label.strip()
-    return "NA"
-
-
-def _fmt_with_unit(x: Any, unit: str, nd: int = 3) -> str:
-    if x is None:
-        return "NA"
-    try:
-        v = float(x)
-    except Exception:
-        return "NA"
-    if not unit or unit == "NA":
-        return "NA"
-    return f"{v:.{nd}f} {unit}"
-
-
-def _fmt_num_list_json(xs: Any, nd: int = 1) -> Any:
-    if not isinstance(xs, list):
-        return None
-    out: List[float] = []
-    for it in xs:
-        try:
-            v = float(it)
-        except Exception:
-            return None
-        out.append(round(v, nd))
-    return json.dumps(out, ensure_ascii=False)
-
-
 # ---- positioning matrix helpers (report-only) ----
 
 def _find_row(rows: Any, series_name: str) -> Optional[Dict[str, Any]]:
@@ -227,7 +155,7 @@ def _fx_momentum_unavailable(mom: Any) -> bool:
     return True
 
 
-# ---- roll25 split helpers (deterministic; renderer-side) ----
+# ---- roll25 heat split helpers (display-only; no cross-module dependence) ----
 
 def _coerce_bool_or_none(x: Any) -> Optional[bool]:
     if isinstance(x, bool):
@@ -235,19 +163,26 @@ def _coerce_bool_or_none(x: Any) -> Optional[bool]:
     return None
 
 
-def _pick_roll25_heat_flags_from_unified(uni: Any) -> Dict[str, Optional[bool]]:
-    heated = _safe_get(uni, "modules", "taiwan_margin_financing", "cross_module", "roll25_heated_market")
-    dq = _safe_get(uni, "modules", "taiwan_margin_financing", "cross_module", "roll25_data_quality_issue")
-    h1 = _coerce_bool_or_none(heated)
-    d1 = _coerce_bool_or_none(dq)
+def _pick_roll25_heat_flags(roll25_mod: Any) -> Dict[str, Optional[bool]]:
+    """
+    Deterministic (display-only):
+    Priority within roll25_cache module only.
+    1) modules.roll25_cache.heat_split.{heated_market,dq_issue}
+    2) modules.roll25_cache.latest_report.{roll25_heated_market,roll25_data_quality_issue}
+    Else: NA
+    """
+    h = _safe_get(roll25_mod, "heat_split", "heated_market")
+    d = _safe_get(roll25_mod, "heat_split", "dq_issue")
+    h1 = _coerce_bool_or_none(h)
+    d1 = _coerce_bool_or_none(d)
     if h1 is not None or d1 is not None:
         return {"heated_market": h1, "dq_issue": d1}
 
-    heated2 = _safe_get(uni, "modules", "roll25_cache", "latest_report", "roll25_heated_market")
-    dq2 = _safe_get(uni, "modules", "roll25_cache", "latest_report", "roll25_data_quality_issue")
-    h2 = _coerce_bool_or_none(heated2)
-    d2 = _coerce_bool_or_none(dq2)
-    return {"heated_market": h2, "dq_issue": d2}
+    h2 = _safe_get(roll25_mod, "latest_report", "roll25_heated_market")
+    d2 = _safe_get(roll25_mod, "latest_report", "roll25_data_quality_issue")
+    h2c = _coerce_bool_or_none(h2)
+    d2c = _coerce_bool_or_none(d2)
+    return {"heated_market": h2c, "dq_issue": d2c}
 
 
 def _fmt_bool_or_na(x: Any) -> str:
@@ -260,7 +195,7 @@ def _fmt_bool_or_na(x: Any) -> str:
 
 def _render_generic_dashboard_section(lines: List[str], module_name: str, mod: Any) -> None:
     lines.append(f"## {module_name} (detailed)")
-    lines.append(f"- status: {_safe_get(mod,'status') or 'NA'}")
+    lines.append(f"- status: {_safe_get(mod, 'status') or 'NA'}")
 
     dash = _safe_get(mod, "dashboard_latest") or {}
     meta = _safe_get(dash, "meta") or {}
@@ -350,57 +285,26 @@ def _render_module_status(lines: List[str], modules: Dict[str, Any], unified_gen
     lines.append(f"- unified_generated_at_utc: {unified_generated_at_utc}\n")
 
 
-def _try_load_json_dict(path: str) -> Dict[str, Any]:
-    try:
-        obj = _load_json(path)
-        return obj if isinstance(obj, dict) else {}
-    except Exception:
-        return {}
+# ---- Taiwan signals pass-through (display-only) ----
+
+def _pick_taiwan_signal_summary(twm: Any) -> Dict[str, Any]:
+    """
+    Deterministic pass-through:
+    We only read whatever the builder already placed into unified JSON.
+    No external file IO, no recompute.
+    Expected container: modules.taiwan_margin_financing.cross_module (dict)
+    """
+    cross = _safe_get(twm, "cross_module")
+    if isinstance(cross, dict) and cross:
+        return cross
+    return {}
 
 
-def _has_any_key(d: Dict[str, Any], keys: List[str]) -> bool:
+def _get_any(d: Dict[str, Any], keys: List[str]) -> Any:
     for k in keys:
         if k in d and d.get(k) is not None:
-            return True
-    return False
-
-
-def _pick_cross_module_source(
-    tw_sig: Dict[str, Any],
-    cross_unified: Any,
-) -> Tuple[str, Dict[str, Any]]:
-    """
-    Deterministic source selection:
-    1) Use signals_latest.json if it exists and has at least one recognizable cross/margin key.
-    2) Else fallback to unified modules.taiwan_margin_financing.cross_module if present.
-    3) Else {} with source NA.
-    """
-    signals_keys = [
-        "signal", "margin_signal",
-        "resonance", "consistency",
-        "margin_rationale", "rationale",
-        "roll25_heated_market", "roll25_data_quality_issue",
-        "roll25_confidence",
-    ]
-    if isinstance(tw_sig, dict) and tw_sig and _has_any_key(tw_sig, signals_keys):
-        return ("signals_latest.json", tw_sig)
-
-    if isinstance(cross_unified, dict) and cross_unified:
-        return ("unified.modules.taiwan_margin_financing.cross_module (fallback)", cross_unified)
-
-    return ("NA", {})
-
-
-def _get_cross_field(cross: Dict[str, Any], candidates: List[str]) -> Any:
-    for k in candidates:
-        if k in cross and cross.get(k) is not None:
-            return cross.get(k)
+            return d.get(k)
     return None
-
-
-def _get_cross_rationale(cross: Dict[str, Any]) -> Dict[str, Any]:
-    mr = _get_cross_field(cross, ["margin_rationale", "rationale", "details"])
-    return mr if isinstance(mr, dict) else {}
 
 
 def main() -> int:
@@ -417,11 +321,12 @@ def main() -> int:
         default="unified_dashboard/report.md",
         help="Output markdown report path",
     )
+    # Backward compatibility: renderer no longer reads this file.
     ap.add_argument(
         "--tw-signals",
         dest="tw_signals_path",
         default="taiwan_margin_cache/signals_latest.json",
-        help="Taiwan margin signals_latest.json path (for Positioning Matrix + cross_module)",
+        help="DEPRECATED/IGNORED (renderer is unified-JSON-only).",
     )
 
     args = ap.parse_args()
@@ -442,16 +347,13 @@ def main() -> int:
     infl = modules.get("inflation_realrate_cache", {})
     apx = modules.get("asset_proxy_cache", {})
 
-    # load TW signals (used by Positioning Matrix + cross_module)
-    tw_sig = _try_load_json_dict(args.tw_signals_path)
-
     lines: List[str] = []
     lines.append("# Unified Risk Dashboard Report\n")
 
     _render_module_status(lines, modules, str(uni.get("generated_at_utc", "NA")))
 
     # ----------------------------
-    # (2) Positioning Matrix
+    # (2) Positioning Matrix (GLOBAL ONLY)
     # ----------------------------
     m_dash = _safe_get(market, "dashboard_latest") or {}
     m_rows = _safe_get(m_dash, "rows") or []
@@ -478,6 +380,7 @@ def main() -> int:
         and ("LONG_EXTREME" in spx_tag.upper())
     )
 
+    # Global fragility inputs (example: credit + rates)
     credit = _find_row(f_rows, "BAMLH0A0HYM2")
     dgs10 = _find_row(f_rows, "DGS10")
 
@@ -487,20 +390,8 @@ def main() -> int:
     credit_fragile = _truthy_signal(credit_sig, ["ALERT"])
     rate_stress = _truthy_signal(dgs10_sig, ["WATCH", "ALERT"])
 
-    # TW logic from signals_latest.json
-    tw_margin_sig = tw_sig.get("signal")
-    if tw_margin_sig is None:
-        tw_margin_sig = tw_sig.get("margin_signal")
-
-    tw_margin = _truthy_signal(tw_margin_sig, ["WATCH", "ALERT"])
-
-    cross_cons = tw_sig.get("resonance")
-    if cross_cons is None:
-        cross_cons = tw_sig.get("consistency")
-
-    cross_divergence = bool(isinstance(cross_cons, str) and cross_cons.upper() == "DIVERGENCE")
-
-    fragility_high = bool((credit_fragile or rate_stress) and (tw_margin or cross_divergence))
+    # IMPORTANT: Taiwan cross-module is NOT used in mode computation anymore.
+    fragility_high = bool(credit_fragile or rate_stress)
 
     vix_sig = vix_m.get("signal_level") if isinstance(vix_m, dict) else None
     vix_dir = vix_m.get("dir") if isinstance(vix_m, dict) else None
@@ -559,15 +450,11 @@ def main() -> int:
         lines.append("- trend_basis: market_cache.SP500: NA (missing row)")
 
     lines.append(
-        "- fragility_parts: "
+        "- fragility_parts (global-only): "
         f"credit_fragile(BAMLH0A0HYM2={credit_sig if credit_sig is not None else 'NA'})="
         f"{str(credit_fragile).lower()}, "
         f"rate_stress(DGS10={dgs10_sig if dgs10_sig is not None else 'NA'})="
-        f"{str(rate_stress).lower()}, "
-        f"tw_margin({tw_margin_sig if tw_margin_sig is not None else 'NA'})="
-        f"{str(tw_margin).lower()}, "
-        f"cross_divergence({cross_cons if cross_cons is not None else 'NA'})="
-        f"{str(cross_divergence).lower()}"
+        f"{str(rate_stress).lower()}"
     )
 
     if isinstance(vix_m, dict):
@@ -583,6 +470,31 @@ def main() -> int:
     lines.append("\n**dq_gates (no guessing; conservative defaults)**")
     lines.append(f"- roll25_derived_confidence={roll25_conf if roll25_conf is not None else 'NA'} (derived metrics not used for upgrade triggers)")
     lines.append(f"- fx_confidence={fx_conf if fx_conf is not None else 'NA'} (fx not used as primary trigger)\n")
+
+    # Taiwan signals pass-through (display-only; not used for mode)
+    tw_cross = _pick_taiwan_signal_summary(twm)
+    tw_margin_sig = _get_any(tw_cross, ["margin_signal", "signal"])
+    tw_cons = _get_any(tw_cross, ["consistency", "resonance"])
+    tw_conf = _get_any(tw_cross, ["margin_confidence", "confidence"])
+    tw_dq = _get_any(tw_cross, ["dq_reason", "dqReason", "data_quality_reason"])
+    da = _safe_get(tw_cross, "rationale", "date_alignment")
+    if not isinstance(da, dict):
+        da = _safe_get(tw_cross, "date_alignment")
+    lines.append("### taiwan_signals (pass-through; not used for mode)")
+    lines.append("- source: unified.modules.taiwan_margin_financing.cross_module")
+    lines.append(f"- margin_signal: {tw_margin_sig if tw_margin_sig is not None else 'NA'}")
+    lines.append(f"- consistency: {tw_cons if tw_cons is not None else 'NA'}")
+    lines.append(f"- confidence: {tw_conf if tw_conf is not None else 'NA'}")
+    lines.append(f"- dq_reason: {tw_dq if tw_dq is not None else 'NA'}")
+    if isinstance(da, dict) and da:
+        lines.append(
+            f"- date_alignment: twmargin_date={da.get('twmargin_date','NA')}, "
+            f"roll25_used_date={da.get('roll25_used_date','NA')}, "
+            f"match={str(da.get('used_date_match','NA')).lower()}"
+        )
+    else:
+        lines.append("- date_alignment: NA")
+    lines.append("")
 
     # ----------------------------
     # market_cache detailed
@@ -609,11 +521,12 @@ def main() -> int:
             tag = it.get("tag","NA")
             mclass = "NONE"
             if isinstance(tag, str):
-                if "LONG_EXTREME" in tag:
+                up = tag.upper()
+                if "LONG_EXTREME" in up:
                     mclass = "LONG"
-                if "EXTREME_Z" in tag:
+                if "EXTREME_Z" in up:
                     mclass = "LEVEL" if mclass == "NONE" else f"{mclass}+LEVEL"
-                if "JUMP" in tag:
+                if "JUMP" in up:
                     mclass = "JUMP" if mclass == "NONE" else f"{mclass}+JUMP"
             rws.append([
                 str(it.get("series","NA")),
@@ -672,11 +585,12 @@ def main() -> int:
             tag = it.get("tag","NA")
             fclass = "NONE"
             if isinstance(tag, str):
-                if "LONG_EXTREME" in tag:
+                up = tag.upper()
+                if "LONG_EXTREME" in up:
                     fclass = "LONG"
-                elif "EXTREME_Z" in tag:
+                elif "EXTREME_Z" in up:
                     fclass = "LEVEL"
-                elif "JUMP" in tag:
+                elif "JUMP" in up:
                     fclass = "JUMP"
             rws_f.append([
                 str(it.get("series","NA")),
@@ -715,7 +629,7 @@ def main() -> int:
 
     if not r_core and isinstance(r_latest, dict):
         nums = r_latest.get("numbers", {}) if isinstance(r_latest.get("numbers"), dict) else {}
-        sigs = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
+        sigs0 = r_latest.get("signal", {}) if isinstance(r_latest.get("signal"), dict) else {}
         r_core = {
             "UsedDate": nums.get("UsedDate") or r_latest.get("used_date"),
             "run_day_tag": r_latest.get("run_day_tag"),
@@ -730,7 +644,7 @@ def main() -> int:
             "amplitude_pct": nums.get("AmplitudePct"),
             "pct_change": nums.get("PctChange"),
             "close": nums.get("Close"),
-            "signals": sigs,
+            "signals": sigs0,
             "LookbackNTarget": nums.get("LookbackNTarget") or 20,
             "LookbackNActual": r_latest.get("lookback_n_actual") or nums.get("LookbackNActual"),
             "ohlc_status": r_latest.get("ohlc_status"),
@@ -765,7 +679,7 @@ def main() -> int:
         or "NA"
     )
 
-    heat_flags = _pick_roll25_heat_flags_from_unified(uni)
+    heat_flags = _pick_roll25_heat_flags(roll25)
     heated_market = heat_flags.get("heated_market")
     dq_issue = heat_flags.get("dq_issue")
 
@@ -841,7 +755,7 @@ def main() -> int:
     lines.append(f"- fx_confidence: {fx_der2.get('fx_confidence','NA')}")
     lines.append("")
 
-    # taiwan margin financing
+    # taiwan margin financing (core meta)
     tw_latest = _safe_get(twm, "latest") or {}
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
     lines.append(f"- status: {_safe_get(twm,'status') or 'NA'}")
@@ -849,80 +763,7 @@ def main() -> int:
     lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
 
-    # ----------------------------
-    # cross_module (NOW: prefer signals_latest.json)
-    # ----------------------------
-    cross_unified = _safe_get(twm, "cross_module") or {}
-    cross_source, cross = _pick_cross_module_source(tw_sig, cross_unified)
-
-    # render cross_module if we have either source (signals or fallback)
-    if isinstance(cross, dict) and (cross or isinstance(cross_unified, dict)):
-        chg_unit = _get_twmargin_chg_unit_label(uni)
-
-        lines.append("### cross_module (Margin × Roll25 consistency)")
-        lines.append(f"- cross_source: {cross_source}")
-
-        # margin signal
-        margin_signal = _get_cross_field(cross, ["margin_signal", "signal"])
-        margin_signal_source = _get_cross_field(cross, ["margin_signal_source", "signal_source"])
-        if margin_signal_source is None and margin_signal is not None and cross_source == "signals_latest.json":
-            margin_signal_source = "signals_latest.json"
-
-        lines.append(f"- margin_signal: {margin_signal if margin_signal is not None else 'NA'}")
-        lines.append(f"- margin_signal_source: {margin_signal_source if margin_signal_source is not None else 'NA'}")
-
-        mr = _get_cross_rationale(cross)
-        rule_version = mr.get("rule_version")
-        if rule_version is None:
-            rule_version = mr.get("version")
-
-        lines.append(f"- margin_rule_version: {rule_version if rule_version is not None else 'NA'}")
-        lines.append(f"- chg_unit: {chg_unit} (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)")
-
-        chg_last5 = mr.get("chg_last5", None)
-        chg_last5_json = _fmt_num_list_json(chg_last5, nd=1)
-
-        if chg_last5_json is not None and chg_unit != "NA":
-            lines.append(f"- chg_last5: {chg_last5_json} {chg_unit}")
-        else:
-            lines.append("- chg_last5: NA")
-
-        lines.append(f"- sum_last5: {_fmt_with_unit(mr.get('sum_last5'), chg_unit, nd=3)}")
-        lines.append(f"- pos_days_last5: {_fmt_int(mr.get('pos_days_last5'))}")
-        lines.append(f"- latest_chg: {_fmt_with_unit(mr.get('latest_chg'), chg_unit, nd=3)}")
-        lines.append(f"- margin_confidence: {mr.get('confidence','NA')}")
-
-        # roll25 explicit split fields
-        r25_h = _get_cross_field(cross, ["roll25_heated_market"])
-        r25_dq = _get_cross_field(cross, ["roll25_data_quality_issue"])
-        lines.append(f"- roll25_heated_market: {_fmt(r25_h,0)}")
-        lines.append(f"- roll25_data_quality_issue: {_fmt(r25_dq,0)}")
-
-        # legacy
-        lines.append(f"- roll25_heated (legacy): {_fmt(_get_cross_field(cross, ['roll25_heated']),0)}")
-        lines.append(f"- roll25_confidence: {_get_cross_field(cross, ['roll25_confidence']) or 'NA'}")
-
-        # consistency/resonance
-        consistency = _get_cross_field(cross, ["consistency", "resonance"])
-        lines.append(f"- consistency: {consistency if consistency is not None else 'NA'}")
-
-        # date_alignment: try both common placements
-        da = _safe_get(cross, "rationale", "date_alignment")
-        if not isinstance(da, dict):
-            da = _safe_get(cross, "date_alignment")
-        if isinstance(da, dict) and da:
-            lines.append(
-                f"- date_alignment: twmargin_date={da.get('twmargin_date','NA')}, "
-                f"roll25_used_date={da.get('roll25_used_date','NA')}, "
-                f"match={str(da.get('used_date_match','NA')).lower()}"
-            )
-
-        # renderer-side deterministic split ref (still shown for audit)
-        lines.append(
-            f"- roll25_split_ref: heated_market={_fmt_bool_or_na(heated_market)}, "
-            f"dq_issue={_fmt_bool_or_na(dq_issue)} (see roll25_cache section)"
-        )
-        lines.append("")
+    # (No cross_module calculation here; pass-through already shown in Positioning Matrix section.)
 
     # audit footer
     residue = _detect_root_report_residue(args.in_path, args.out_path)
