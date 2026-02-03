@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-03T02:43:55Z
+- unified_generated_at_utc: 2026-02-03T02:57:40Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -30,12 +30,12 @@
 - fx_confidence=OK (fx not used as primary trigger)
 
 ### taiwan_signals (pass-through; not used for mode)
-- source: unified.modules.taiwan_margin_financing.cross_module
-- margin_signal: NONE
-- consistency: DIVERGENCE
+- source: --tw-signals (taiwan_margin_cache/signals_latest.json)
+- margin_signal: ALERT
+- consistency: RESONANCE
 - confidence: NA
 - dq_reason: NA
-- date_alignment: twmargin_date=2026-02-02, roll25_used_date=2026-02-02, match=true
+- date_alignment: NA
 
 ## market_cache (detailed)
 - as_of_ts: 2026-02-02T23:04:03Z
@@ -118,8 +118,6 @@
 - used_date_selection_tag: WEEKDAY
 - tag (legacy): WEEKDAY
 - note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
-- heat_split.heated_market: NA
-- heat_split.dq_issue: NA
 - risk_level: NA
 - turnover_twd: 771419543919
 - turnover_unit: TWD
@@ -166,7 +164,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-03T01:49:38Z
 
-<!-- rendered_at_utc: 2026-02-03T02:43:55Z -->
+<!-- rendered_at_utc: 2026-02-03T02:57:40Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
