@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-03T03:45:46Z
+- unified_generated_at_utc: 2026-02-03T05:02:26Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -119,7 +119,7 @@
 - used_date_status: LATEST
 - used_date_selection_tag: WEEKDAY
 - tag (legacy): WEEKDAY
-- note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
+- note: run_day_tag is report-day context; UsedDate is the data date used for calculations. used_date_status is policy-normalized to LATEST (latest available; typically T-1). If upstream indicates DATA_NOT_UPDATED, staleness is tracked via taiwan_signals/resonance checks (e.g., strict_not_stale=false) and confidence may be downgraded.
 - risk_level: NA
 - turnover_twd: 771419543919
 - turnover_unit: TWD
@@ -166,7 +166,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-03T01:49:38Z
 
-<!-- rendered_at_utc: 2026-02-03T03:45:46Z -->
+<!-- rendered_at_utc: 2026-02-03T05:02:26Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
