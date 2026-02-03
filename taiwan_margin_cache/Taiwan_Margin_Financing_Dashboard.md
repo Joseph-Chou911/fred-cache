@@ -124,4 +124,4 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-02T23:25:30Z_
+_generated_at_utc: 2026-02-03T01:23:04Z_
