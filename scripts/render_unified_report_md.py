@@ -43,6 +43,12 @@ B) FX: treat "momentum dict exists but all key fields are None" as momentum_unav
 - Render optional sections for inflation_realrate_cache / asset_proxy_cache (display-only):
   - If dashboard_latest.rows exists => render a table (best-effort; missing fields => NA)
   - Else print status + deterministic note
+
+2026-02-03 update:
+- Positioning Matrix 台股判斷（tw_margin / cross_divergence）改讀 taiwan_margin_cache/signals_latest.json
+  - tw_margin_sig := signals_latest.json["signal"]
+  - cross_cons := signals_latest.json["resonance"]
+  - 不改動其他判斷邏輯（credit/rate/vix 等維持原本 unified JSON 來源與規則）
 """
 
 from __future__ import annotations
@@ -382,6 +388,18 @@ def _render_module_status(lines: List[str], modules: Dict[str, Any], unified_gen
     lines.append(f"- unified_generated_at_utc: {unified_generated_at_utc}\n")
 
 
+def _try_load_json_dict(path: str) -> Dict[str, Any]:
+    """
+    Deterministic + non-throwing:
+    - If file missing / parse fail / not dict => return {}.
+    """
+    try:
+        obj = _load_json(path)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -396,6 +414,15 @@ def main() -> int:
         default="unified_dashboard/report.md",
         help="Output markdown report path",
     )
+
+    # NEW (data-source only; does not change non-TW logic):
+    ap.add_argument(
+        "--tw-signals",
+        dest="tw_signals_path",
+        default="taiwan_margin_cache/signals_latest.json",
+        help="Taiwan margin signals_latest.json path (for Positioning Matrix TW logic)",
+    )
+
     args = ap.parse_args()
 
     uni = _load_json(args.in_path)
@@ -430,6 +457,7 @@ def main() -> int:
     f_dash = _safe_get(fred, "dashboard_latest") or {}
     f_rows = _safe_get(f_dash, "rows") or []
 
+    # keep original dict reads (no behavior change outside TW logic)
     tw_cross = _safe_get(twm, "cross_module") or {}
     roll25_der = _safe_get(roll25, "derived") or {}
     fx_der = _safe_get(fx, "derived") or {}
@@ -462,10 +490,18 @@ def main() -> int:
     credit_fragile = _truthy_signal(credit_sig, ["ALERT"])  # strict
     rate_stress = _truthy_signal(dgs10_sig, ["WATCH", "ALERT"])
 
-    tw_margin_sig = tw_cross.get("margin_signal") if isinstance(tw_cross, dict) else None
+    # ----------------------------
+    # TW logic SOURCE CHANGE ONLY:
+    #   Read taiwan_margin_cache/signals_latest.json for:
+    #     - tw_margin_sig (WATCH/ALERT)
+    #     - cross_cons (resonance label; DIVERGENCE => cross_divergence)
+    # ----------------------------
+    tw_sig = _try_load_json_dict(args.tw_signals_path)
+
+    tw_margin_sig = tw_sig.get("signal")  # e.g., "WATCH"/"ALERT"/"NONE"/"NA"
     tw_margin = _truthy_signal(tw_margin_sig, ["WATCH", "ALERT"])
 
-    cross_cons = tw_cross.get("consistency") if isinstance(tw_cross, dict) else None
+    cross_cons = tw_sig.get("resonance")  # e.g., "DIVERGENCE"/"RESONANCE"/"QUIET"/"NA"
     cross_divergence = bool(isinstance(cross_cons, str) and cross_cons.upper() == "DIVERGENCE")
 
     fragility_high = bool((credit_fragile or rate_stress) and (tw_margin or cross_divergence))
