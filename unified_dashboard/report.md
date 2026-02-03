@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-03T02:04:58Z
+- unified_generated_at_utc: 2026-02-03T02:13:38Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -159,24 +159,24 @@
 - generated_at_utc: 2026-02-03T01:49:38Z
 
 ### cross_module (Margin × Roll25 consistency)
-- margin_signal: NONE
-- margin_signal_source: DERIVED.rule_v1(TWSE_chg_yi_last5)
-- margin_rule_version: rule_v1
+- cross_source: signals_latest.json
+- margin_signal: ALERT
+- margin_signal_source: signals_latest.json
+- margin_rule_version: NA
 - chg_unit: 億 (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)
-- chg_last5: [-50.4, 21.2, -31.4, 21.9, 11.5] 億
-- sum_last5: -27.200 億
-- pos_days_last5: 3
-- latest_chg: -50.400 億
-- margin_confidence: OK
-- roll25_heated_market: true
-- roll25_data_quality_issue: false
-- roll25_heated (legacy): true
-- roll25_confidence: OK
+- chg_last5: NA
+- sum_last5: NA
+- pos_days_last5: NA
+- latest_chg: NA
+- margin_confidence: NA
+- roll25_heated_market: NA
+- roll25_data_quality_issue: NA
+- roll25_heated (legacy): NA
+- roll25_confidence: NA
+- consistency: RESONANCE
 - roll25_split_ref: heated_market=true, dq_issue=false (see roll25_cache section)
-- consistency: DIVERGENCE
-- date_alignment: twmargin_date=2026-02-02, roll25_used_date=2026-02-02, match=true
 
-<!-- rendered_at_utc: 2026-02-03T02:04:58Z -->
+<!-- rendered_at_utc: 2026-02-03T02:13:38Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
