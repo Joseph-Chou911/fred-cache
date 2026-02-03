@@ -22,6 +22,7 @@ If a field is missing => prints NA.
 - roll25_cache: remove heat_split.* lines from report
 - roll25_cache.used_date_status: display-normalize to LATEST (latest available; usually prior trading day)
 - taiwan_signals.date_alignment.used_date_status: display-normalize to LATEST (same policy)
+- roll25_cache.note: clarify policy-normalized LATEST vs staleness tracked elsewhere (e.g., DATA_NOT_UPDATED => confidence downgraded)
 """
 
 from __future__ import annotations
@@ -726,7 +727,14 @@ def main() -> int:
     lines.append(f"- used_date_status: {_normalize_used_date_status_for_display(used_date_status)}")
     lines.append(f"- used_date_selection_tag: {used_date_selection_tag}")
     lines.append(f"- tag (legacy): {legacy_tag}")
-    lines.append("- note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)")
+
+    # NOTE (updated): clarify policy-normalized LATEST vs staleness tracked elsewhere
+    lines.append(
+        "- note: run_day_tag is report-day context; UsedDate is the data date used for calculations. "
+        "used_date_status is policy-normalized to LATEST (latest available; typically T-1). "
+        "If upstream indicates DATA_NOT_UPDATED, staleness is tracked via taiwan_signals/resonance checks "
+        "(e.g., strict_not_stale=false) and confidence may be downgraded."
+    )
 
     lines.append(f"- risk_level: {r_core.get('risk_level','NA')}")
     lines.append(f"- turnover_twd: {_fmt(r_core.get('turnover_twd'),0)}")
