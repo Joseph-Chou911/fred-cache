@@ -33,12 +33,18 @@ Maint ratio trend metrics (added; display-only)
 - maint_ratio_1d_pct_change: (today - prev) / prev * 100 (%)
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED (always; proxy trend only, not absolute level)
+
+Added (NO LOGIC CHANGE):
+- Also emit a machine-readable signals_latest.json for unified dashboard ingestion.
+  Default output: taiwan_margin_financing/signals_latest.json
+  Use --signals-out to override.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -51,6 +57,14 @@ def now_utc_iso() -> str:
 def read_json(path: str) -> Any:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def write_json(path: str, obj: Any) -> None:
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
 def fmt_num(x: Optional[float], nd: int = 2) -> str:
@@ -494,15 +508,12 @@ def maint_derive_1d_trend(
     if not maint_hist_list:
         return None, None, "maint_hist missing/empty"
 
-    # helper to parse numeric
     def _num(x: Any) -> Optional[float]:
         return float(x) if isinstance(x, (int, float)) else None
 
-    # candidate prev
     prev: Optional[float] = None
     prev_date: Optional[str] = None
 
-    # strict-ish match: hist[0] is same date as latest -> prev should be hist[1]
     h0d = str(maint_hist_list[0].get("data_date") or "")
     if today_date is not None and h0d == str(today_date):
         if len(maint_hist_list) >= 2:
@@ -513,14 +524,11 @@ def maint_derive_1d_trend(
         else:
             return None, None, "maint_hist has <2 rows; cannot compute 1D trend"
     else:
-        # best-effort: treat hist[0] as prev if it's a different date
         prev = _num(maint_hist_list[0].get("maint_ratio_pct"))
         prev_date = str(maint_hist_list[0].get("data_date") or "NA")
         if prev is None:
             return None, None, "maint_hist[0].maint_ratio_pct missing/non-numeric"
-        # note: may not be true D-1 if history gap exists
-        # still acceptable as trend-only, but mark note
-        # (report will already label proxy & downgraded)
+
     delta = float(today) - float(prev)
     pct_change = (delta / float(prev) * 100.0) if float(prev) != 0.0 else None
 
@@ -538,6 +546,8 @@ def main() -> None:
     ap.add_argument("--maint", default="taiwan_margin_cache/maint_ratio_latest.json")
     ap.add_argument("--maint-hist", default="taiwan_margin_cache/maint_ratio_history.json")
     ap.add_argument("--resonance-policy", choices=["strict", "latest"], default="latest")
+    # Added: machine-readable output for unified dashboard (no logic change)
+    ap.add_argument("--signals-out", default="taiwan_margin_financing/signals_latest.json")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -722,7 +732,6 @@ def main() -> None:
     maint_hist_list: List[Dict[str, Any]] = maint_hist_items(maint_hist_obj) if maint_hist_ok and maint_hist_obj else []
     maint_head = maint_head5(maint_hist_list) if maint_hist_list else []
 
-    # Added trend metrics (display-only)
     maint_ratio_policy = "PROXY_TREND_ONLY"
     maint_ratio_confidence = "DOWNGRADED"  # fixed: proxy trend only, not absolute level
     maint_ratio_1d_delta_pctpt: Optional[float] = None
@@ -982,11 +991,164 @@ def main() -> None:
     md.append(line_check("Check-11 maint history head5 dates 嚴格遞減且無重複（info）", c11_status, c11_msg))
 
     md.append("")
-    md.append(f"_generated_at_utc: {latest.get('generated_at_utc', now_utc_iso())}_")
+    generated_at_utc = latest.get("generated_at_utc", None) if isinstance(latest, dict) else None
+    if not generated_at_utc:
+        generated_at_utc = now_utc_iso()
+    md.append(f"_generated_at_utc: {generated_at_utc}_")
     md.append("")
 
+    # write markdown (existing behavior)
+    out_parent = os.path.dirname(args.out)
+    if out_parent:
+        os.makedirs(out_parent, exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         f.write("\n".join(md))
+
+    # ---------- Added: emit signals_latest.json for unified dashboard (NO LOGIC CHANGE) ----------
+    # Provide both "summary keys" and detailed auditing fields.
+    roll_is_heated: Optional[bool] = None
+    if roll_ok and roll is not None:
+        roll_is_heated = roll25_is_heated(roll)
+
+    signals: Dict[str, Any] = {
+        "schema_version": "tw_margin_signals_latest_v1",
+        "module": "taiwan_margin_financing",
+        "generated_at_utc": generated_at_utc,
+        "generated_at_local": latest.get("generated_at_local", None) if isinstance(latest, dict) else None,
+        # compact summary keys (likely what unified dashboard wants)
+        "data_date": twse_meta_date,
+        "state": state_label,
+        "signal": margin_signal,
+        "margin_quality": margin_quality,
+        "rationale": rationale,
+        "resonance": resonance_label,
+        "resonance_display": resonance_na(resonance_label, resonance_code),
+        "resonance_confidence": resonance_confidence,
+        "resonance_code": resonance_code,
+        "resonance_note": resonance_note,
+        # upstream status (pass-through)
+        "upstream": {
+            "latest_json": {
+                "confidence": top_conf,
+                "fetch_status": top_fetch,
+                "dq_reason": top_dq,
+                "has_top_quality": has_top_quality,
+            }
+        },
+        # core computed numbers (for unified dashboard and auditing)
+        "margin": {
+            "twse_meta_date": twse_meta_date,
+            "tpex_meta_date": tpex_meta_date,
+            "twse": {
+                "latest_balance_yi": latest_balance_from_series(twse_s),
+                "h1": tw1,
+                "h5": tw5,
+                "h20": tw20,
+                "source": {"vendor": twse_src, "source_url": twse_url},
+            },
+            "tpex": {
+                "latest_balance_yi": latest_balance_from_series(tpex_s),
+                "h1": tp1,
+                "h5": tp5,
+                "h20": tp20,
+                "source": {"vendor": tpex_src, "source_url": tpex_url},
+            },
+            "total": {
+                "h1": tot1,
+                "h5": tot5,
+                "h20": tot20,
+            },
+            "derived": {
+                "accel": accel,
+                "spread20": spread20,
+            },
+        },
+        "roll25": {
+            "path": args.roll25,
+            "ok": roll_ok,
+            "error": roll_err,
+            "used_date": roll_used,
+            "used_date_status": roll_used_status,
+            "risk_level_display": roll_risk_level_disp,
+            "risk_level_raw": roll_risk_level_raw,
+            "tag": _get(roll, "tag", None) if (roll_ok and roll is not None) else None,
+            "is_heated": roll_is_heated,
+            "lookback_note": roll25_window_note,
+            "strict_same_day": strict_same_day,
+            "strict_not_stale": strict_not_stale,
+            "strict_roll_match": strict_roll_match,
+        },
+        "maint_ratio": {
+            "policy": maint_ratio_policy,
+            "confidence": maint_ratio_confidence,
+            "path_latest": args.maint,
+            "path_history": args.maint_hist,
+            "ok_latest": maint_ok,
+            "ok_history": maint_hist_ok,
+            "latest": {
+                "data_date": _get(maint_latest, "data_date", None) if maint_ok and maint_latest else None,
+                "maint_ratio_pct": _get(maint_latest, "maint_ratio_pct", None) if maint_ok and maint_latest else None,
+                "maint_ratio_1d_delta_pctpt": maint_ratio_1d_delta_pctpt,
+                "maint_ratio_1d_pct_change": maint_ratio_1d_pct_change,
+                "trend_note": maint_ratio_trend_note,
+                "fetch_status": _get(maint_latest, "fetch_status", None) if maint_ok and maint_latest else None,
+                "confidence": _get(maint_latest, "confidence", None) if maint_ok and maint_latest else None,
+                "dq_reason": _get(maint_latest, "dq_reason", None) if maint_ok and maint_latest else None,
+            },
+            "history": {
+                "rows": len(maint_hist_list),
+                "head5": maint_head,
+            },
+        },
+        "checks": {
+            "margin": {
+                "c1_tw_ok": c1_tw_ok,
+                "c1_tp_ok": c1_tp_ok,
+                "c2_tw_ok": c2_tw_ok,
+                "c2_tp_ok": c2_tp_ok,
+                "c3_ok": c3_ok,
+                "c4_tw_ok": c4_tw_ok,
+                "c4_tp_ok": c4_tp_ok,
+                "c5_tw_ok": c5_tw_ok,
+                "c5_tp_ok": c5_tp_ok,
+                "margin_any_fail": margin_any_fail,
+            },
+            "roll25": {
+                "check_6_status": c6_status,
+                "check_6_msg": c6_msg,
+                "check_7_status": c7_status,
+                "check_7_msg": c7_msg,
+            },
+            "maint": {
+                "check_10_status": c10_status,
+                "check_10_msg": c10_msg,
+                "check_11_status": c11_status,
+                "check_11_msg": c11_msg,
+            },
+        },
+        "inputs": {
+            "latest_path": args.latest,
+            "history_path": args.history,
+            "out_md_path": args.out,
+            "signals_out_path": args.signals_out,
+            "resonance_policy": resonance_policy,
+        },
+        # quick sanity snapshot to help detect page mixups without parsing markdown
+        "snapshots": {
+            "twse_rows": {
+                "rows": len(twse_rows),
+                "head_dates": twse_head_dates,
+                "tail_dates": twse_tail_dates,
+            },
+            "tpex_rows": {
+                "rows": len(tpex_rows),
+                "head_dates": tpex_head_dates,
+                "tail_dates": tpex_tail_dates,
+            },
+        },
+    }
+
+    write_json(args.signals_out, signals)
 
 
 if __name__ == "__main__":
