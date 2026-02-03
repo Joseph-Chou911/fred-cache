@@ -13,11 +13,15 @@ Adds:
   - Prefer --tw-signals only
   - If missing/unreadable/core fields missing -> NA + dq_note
   - NO silent fallback to unified.modules.taiwan_margin_financing.cross_module
-  - 2026-02-03 fix: map resonance_confidence/resonance_code and render alignment from margin/roll25 fields
-- roll25_cache: remove heat_split.* lines from report (already removed)
 
 This renderer does NOT recompute market/fred/margin/roll25/fx stats; it only formats fields already in unified JSON.
 If a field is missing => prints NA.
+
+2026-02-03 updates:
+- taiwan_signals: prefer --tw-signals; no fallback to unified cross_module; missing -> NA + dq_note
+- roll25_cache: remove heat_split.* lines from report
+- roll25_cache.used_date_status: display-normalize to LATEST (latest available; usually prior trading day)
+- taiwan_signals.date_alignment.used_date_status: display-normalize to LATEST (same policy)
 """
 
 from __future__ import annotations
@@ -116,6 +120,23 @@ def _infer_ohlc_missing(sigs: Any, r_latest: Any) -> Any:
     return None
 
 
+def _normalize_used_date_status_for_display(x: Any) -> str:
+    """
+    Display-only normalization:
+    - Roll25 / TWSE 這類 daily 資料在報表時點通常只能拿到「前一交易日」最新可得資料
+    - 報告上統一顯示 LATEST（= latest available）
+    - 不改寫原始 JSON，原始狀態仍可追溯
+    """
+    if x is None:
+        return "NA"
+    s = str(x).strip()
+    up = s.upper()
+    # 將常見狀態（包含 DATA_NOT_UPDATED / OK_LATEST）都視為「latest available」
+    if up in ["OK_LATEST", "DATA_NOT_UPDATED", "OK_LATEST_AVAILABLE", "LATEST_AVAILABLE", "LATEST"]:
+        return "LATEST"
+    return s
+
+
 # ---- positioning matrix helpers (report-only) ----
 
 def _find_row(rows: Any, series_name: str) -> Optional[Dict[str, Any]]:
@@ -153,25 +174,25 @@ def _fx_momentum_unavailable(mom: Any) -> bool:
 
 def _render_generic_dashboard_section(lines: List[str], module_name: str, mod: Any) -> None:
     lines.append(f"## {module_name} (detailed)")
-    lines.append(f"- status: {_safe_get(mod, 'status') or 'NA'}")
+    lines.append(f"- status: {_safe_get(mod,'status') or 'NA'}")
 
     dash = _safe_get(mod, "dashboard_latest") or {}
     meta = _safe_get(dash, "meta") or {}
     rows = _safe_get(dash, "rows") or []
 
     if isinstance(meta, dict) and meta:
-        lines.append(f"- as_of_ts: {meta.get('stats_as_of_ts', 'NA')}")
-        lines.append(f"- run_ts_utc: {meta.get('run_ts_utc', 'NA')}")
-        lines.append(f"- ruleset_id: {meta.get('ruleset_id', 'NA')}")
-        lines.append(f"- script_fingerprint: {meta.get('script_fingerprint', 'NA')}")
-        lines.append(f"- script_version: {meta.get('script_version', 'NA')}")
-        lines.append(f"- series_count: {meta.get('series_count', 'NA')}")
+        lines.append(f"- as_of_ts: {meta.get('stats_as_of_ts','NA')}")
+        lines.append(f"- run_ts_utc: {meta.get('run_ts_utc','NA')}")
+        lines.append(f"- ruleset_id: {meta.get('ruleset_id','NA')}")
+        lines.append(f"- script_fingerprint: {meta.get('script_fingerprint','NA')}")
+        lines.append(f"- script_version: {meta.get('script_version','NA')}")
+        lines.append(f"- series_count: {meta.get('series_count','NA')}")
 
     if isinstance(rows, list) and rows:
         hdr = [
-            "series", "signal", "dir", "class", "value", "data_date", "age_h",
-            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%60", "reason", "tag", "prev",
-            "delta", "streak_hist", "streak_wa", "source"
+            "series","signal","dir","class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
+            "delta","streak_hist","streak_wa","source"
         ]
         rws: List[List[str]] = []
         for it in rows:
@@ -188,26 +209,26 @@ def _render_generic_dashboard_section(lines: List[str], module_name: str, mod: A
                 elif "JUMP" in up:
                     cls = "JUMP"
             rws.append([
-                str(it.get("series", "NA")),
-                str(it.get("signal_level", "NA")),
-                str(it.get("dir", "NA")),
+                str(it.get("series","NA")),
+                str(it.get("signal_level","NA")),
+                str(it.get("dir","NA")),
                 cls,
-                _fmt(it.get("value"), 6),
-                str(it.get("data_date", "NA")),
-                _fmt(it.get("age_hours"), 6),
-                _fmt(it.get("z60"), 6),
-                _fmt(it.get("p60"), 6),
-                _fmt(it.get("p252"), 6),
-                _fmt(it.get("z_delta60"), 6),
-                _fmt(it.get("p_delta60"), 6),
-                _fmt(it.get("ret1_pct60"), 6),
-                str(it.get("reason", "NA")),
+                _fmt(it.get("value"),6),
+                str(it.get("data_date","NA")),
+                _fmt(it.get("age_hours"),6),
+                _fmt(it.get("z60"),6),
+                _fmt(it.get("p60"),6),
+                _fmt(it.get("p252"),6),
+                _fmt(it.get("z_delta60"),6),
+                _fmt(it.get("p_delta60"),6),
+                _fmt(it.get("ret1_pct60"),6),
+                str(it.get("reason","NA")),
                 str(tag),
-                str(it.get("prev_signal", "NA")),
-                str(it.get("delta_signal", "NA")),
+                str(it.get("prev_signal","NA")),
+                str(it.get("delta_signal","NA")),
                 _fmt_int(it.get("streak_hist")),
                 _fmt_int(it.get("streak_wa")),
-                str(it.get("source_url", "NA")),
+                str(it.get("source_url","NA")),
             ])
         lines.append("")
         lines.append(_md_table(hdr, rws))
@@ -245,22 +266,21 @@ def _render_module_status(lines: List[str], modules: Dict[str, Any], unified_gen
 
 # ---- taiwan_signals (pass-through) helpers ----
 
-def _load_json_dict_with_error(path: str) -> Tuple[Dict[str, Any], Optional[str]]:
+def _try_load_json_dict_with_note(path: str) -> Tuple[Dict[str, Any], Optional[str]]:
     """
-    Deterministic loader:
-    - ({}, "FILE_NOT_FOUND") if missing
-    - ({}, "READ_OR_PARSE_FAILED") if invalid json/read error
-    - ({}, "NOT_A_DICT") if json is not an object
-    - (dict, None) on success
+    Deterministic:
+    - Returns ({}, dq_note) on any failure.
+    - Returns (dict_obj, None) on success.
     """
-    if not os.path.isfile(path):
-        return {}, "FILE_NOT_FOUND"
     try:
         obj = _load_json(path)
+    except FileNotFoundError:
+        return {}, "TW_SIGNALS_FILE_NOT_FOUND"
     except Exception:
-        return {}, "READ_OR_PARSE_FAILED"
+        return {}, "TW_SIGNALS_READ_OR_PARSE_FAILED"
+
     if not isinstance(obj, dict):
-        return {}, "NOT_A_DICT"
+        return {}, "TW_SIGNALS_NOT_A_DICT"
     return obj, None
 
 
@@ -271,126 +291,82 @@ def _get_first_present(d: Dict[str, Any], keys: List[str]) -> Any:
     return None
 
 
-def _extract_date_alignment(d: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Backward compatible:
-    - Supports old layouts with date_alignment in root or under rationale (dict)
-    - If absent, returns None (caller may render from margin/roll25 pass-through fields)
-    """
-    da = d.get("date_alignment")
-    if isinstance(da, dict) and da:
-        return da
-    rat = d.get("rationale")
-    if isinstance(rat, dict):
-        da2 = rat.get("date_alignment")
-        if isinstance(da2, dict) and da2:
-            return da2
-    return None
+def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) -> None:
+    tw_sig, load_note = _try_load_json_dict_with_note(tw_signals_path)
 
+    # Core fields (required for "usable" summary)
+    margin_signal = _get_first_present(tw_sig, ["margin_signal", "signal"])
+    consistency = _get_first_present(tw_sig, ["consistency", "resonance"])
 
-def _render_taiwan_signals_pass_through(
-    lines: List[str],
-    tw_signals_path: str,
-) -> None:
-    """
-    Pass-through only:
-    - Prefer --tw-signals only
-    - Missing/unreadable -> NA + dq_note
-    - No cross-module fallback
-    - 2026-02-03 fix:
-        * margin_signal: from signal/margin_signal
-        * consistency: from resonance/consistency/resonance_display
-        * confidence: from resonance_confidence (preferred) else confidence/margin_confidence
-        * dq_reason: from resonance_code (preferred) else dq_reason
-        * date_alignment:
-            - if date_alignment dict exists: render it (pass-through)
-            - else render from margin.twse_meta_date + roll25.used_date + roll25.used_date_status + strict flags (pass-through; no equality computation)
-    """
-    tw_sig, err = _load_json_dict_with_error(tw_signals_path)
-
-    lines.append("### taiwan_signals (pass-through; not used for mode)")
-    lines.append(f"- source: --tw-signals ({tw_signals_path})")
-
-    if err is not None:
-        lines.append("- margin_signal: NA")
-        lines.append("- consistency: NA")
-        lines.append("- confidence: NA")
-        lines.append("- dq_reason: NA")
-        lines.append("- date_alignment: NA")
-        lines.append(f"- dq_note: TW_SIGNALS_{err}")
-        lines.append("")
-        return
-
-    # ---- schema mapping (pure pass-through) ----
-    margin_signal = _get_first_present(tw_sig, ["signal", "margin_signal"])
-    consistency = _get_first_present(tw_sig, ["resonance", "consistency", "resonance_display"])
-
-    # Prefer resonance_* mappings (current schema), then older names
+    # Prefer the resonance confidence / code if present (your schema)
     confidence = _get_first_present(tw_sig, ["resonance_confidence", "confidence", "margin_confidence"])
     dq_reason = _get_first_present(tw_sig, ["resonance_code", "dq_reason"])
 
-    da = _extract_date_alignment(tw_sig)
+    # Optional note (your schema: resonance_note)
+    note = _get_first_present(tw_sig, ["resonance_note", "note"])
 
-    # date alignment fallback fields (pass-through; no computation)
-    twm_date = _safe_get(tw_sig, "margin", "twse_meta_date") or tw_sig.get("data_date")
-    r25_date = _safe_get(tw_sig, "roll25", "used_date")
-    r25_status = _safe_get(tw_sig, "roll25", "used_date_status")
+    # Date alignment (best-effort, schema-aware)
+    # Your signals_latest.json contains:
+    # - data_date
+    # - margin.twse_meta_date / tpex_meta_date
+    # - roll25.used_date / used_date_status / strict flags
+    twmargin_date = _safe_get(tw_sig, "margin", "twse_meta_date") or _safe_get(tw_sig, "data_date")
+    roll25_used_date = _safe_get(tw_sig, "roll25", "used_date")
+    roll25_used_status = _safe_get(tw_sig, "roll25", "used_date_status")
     strict_same_day = _safe_get(tw_sig, "roll25", "strict_same_day")
     strict_not_stale = _safe_get(tw_sig, "roll25", "strict_not_stale")
     strict_roll_match = _safe_get(tw_sig, "roll25", "strict_roll_match")
 
-    # Missing-field reporting (explicit)
-    missing: List[str] = []
-    if margin_signal is None:
-        missing.append("signal")
-    if consistency is None:
-        missing.append("resonance")
-    if confidence is None:
-        missing.append("resonance_confidence")
-    if dq_reason is None:
-        missing.append("resonance_code")
+    dq_note: Optional[str] = None
 
-    # date alignment availability: either dict exists, or at least one fallback field exists
-    has_alignment = isinstance(da, dict) and bool(da)
-    if not has_alignment:
-        if (twm_date is None) and (r25_date is None) and (r25_status is None):
-            missing.append("alignment_fields")
+    if load_note is not None:
+        dq_note = load_note
+        margin_signal = None
+        consistency = None
+        confidence = None
+        dq_reason = None
+        note = None
+        twmargin_date = None
+        roll25_used_date = None
+        roll25_used_status = None
+        strict_same_day = None
+        strict_not_stale = None
+        strict_roll_match = None
+    else:
+        missing_core: List[str] = []
+        if margin_signal is None:
+            missing_core.append("margin_signal")
+        if consistency is None:
+            missing_core.append("consistency")
+        if missing_core:
+            dq_note = "TW_SIGNALS_MISSING_CORE_FIELDS:" + ",".join(missing_core)
 
-    dq_note = "NA" if not missing else ("TW_SIGNALS_MISSING_FIELDS:" + ",".join(missing))
-
+    lines.append("### taiwan_signals (pass-through; not used for mode)")
+    lines.append(f"- source: --tw-signals ({tw_signals_path})")
     lines.append(f"- margin_signal: {margin_signal if margin_signal is not None else 'NA'}")
     lines.append(f"- consistency: {consistency if consistency is not None else 'NA'}")
     lines.append(f"- confidence: {confidence if confidence is not None else 'NA'}")
     lines.append(f"- dq_reason: {dq_reason if dq_reason is not None else 'NA'}")
 
-    if isinstance(da, dict) and da:
-        # Pass-through render (no computation)
-        match_val = da.get("match", da.get("used_date_match", "NA"))
+    # Always print a deterministic date_alignment line (schema-aware)
+    if any(v is not None for v in [twmargin_date, roll25_used_date, roll25_used_status, strict_same_day, strict_not_stale, strict_roll_match]):
         lines.append(
-            f"- date_alignment: twmargin_date={da.get('twmargin_date','NA')}, "
-            f"roll25_used_date={da.get('roll25_used_date','NA')}, "
-            f"match={str(match_val).lower()}"
+            "- date_alignment: "
+            f"twmargin_date={twmargin_date if twmargin_date is not None else 'NA'}, "
+            f"roll25_used_date={roll25_used_date if roll25_used_date is not None else 'NA'}, "
+            f"used_date_status={_normalize_used_date_status_for_display(roll25_used_status)}, "
+            f"strict_same_day={str(strict_same_day).lower() if isinstance(strict_same_day, bool) else 'NA'}, "
+            f"strict_not_stale={str(strict_not_stale).lower() if isinstance(strict_not_stale, bool) else 'NA'}, "
+            f"strict_roll_match={str(strict_roll_match).lower() if isinstance(strict_roll_match, bool) else 'NA'}"
         )
     else:
-        # Pass-through render from signals structure (no computation)
-        if (twm_date is not None) or (r25_date is not None) or (r25_status is not None):
-            lines.append(
-                "- date_alignment: "
-                f"twmargin_date={twm_date if twm_date is not None else 'NA'}, "
-                f"roll25_used_date={r25_date if r25_date is not None else 'NA'}, "
-                f"used_date_status={r25_status if r25_status is not None else 'NA'}, "
-                f"strict_same_day={str(strict_same_day).lower() if isinstance(strict_same_day, bool) else 'NA'}, "
-                f"strict_not_stale={str(strict_not_stale).lower() if isinstance(strict_not_stale, bool) else 'NA'}, "
-                f"strict_roll_match={str(strict_roll_match).lower() if isinstance(strict_roll_match, bool) else 'NA'}"
-            )
-        else:
-            lines.append("- date_alignment: NA")
+        lines.append("- date_alignment: NA")
 
-    lines.append(f"- dq_note: {dq_note}")
+    # Keep dq_note line always present (so report is stable)
+    lines.append(f"- dq_note: {dq_note if dq_note is not None else 'NA'}")
 
-    note = tw_sig.get("resonance_note")
-    if isinstance(note, str) and note.strip():
-        lines.append(f"- note: {note.strip()}")
+    if note is not None:
+        lines.append(f"- note: {note}")
 
     lines.append("")
 
@@ -519,9 +495,9 @@ def main() -> int:
     lines.append("### Current Strategy Mode (deterministic; report-only)")
     lines.append("- strategy_version: strategy_mode_v1")
     lines.append(f"- source_policy: {source_policy}")
-    lines.append(f"- trend_on: {_fmt(trend_on, 0)}")
-    lines.append(f"- fragility_high: {_fmt(fragility_high, 0)}")
-    lines.append(f"- vol_runaway: {_fmt(vol_runaway, 0)}")
+    lines.append(f"- trend_on: {_fmt(trend_on,0)}")
+    lines.append(f"- fragility_high: {_fmt(fragility_high,0)}")
+    lines.append(f"- vol_runaway: {_fmt(vol_runaway,0)}")
     lines.append(f"- matrix_cell: {matrix_cell}")
     lines.append(f"- mode: {mode}\n")
 
@@ -546,21 +522,15 @@ def main() -> int:
         lines.append(
             f"- vol_gate: market_cache.VIX only (signal={vix_sig if vix_sig is not None else 'NA'}, "
             f"dir={vix_dir if vix_dir is not None else 'NA'}, "
-            f"ret1%60={_fmt(vix_ret1_val, 6) if vix_ret1_val is not None else 'NA'}, "
+            f"ret1%60={_fmt(vix_ret1_val,6) if vix_ret1_val is not None else 'NA'}, "
             f"data_date={vix_date if vix_date is not None else 'NA'})"
         )
     else:
         lines.append("- vol_gate: market_cache.VIX only: NA (missing row)")
 
     lines.append("\n**dq_gates (no guessing; conservative defaults)**")
-    lines.append(
-        f"- roll25_derived_confidence={roll25_conf if roll25_conf is not None else 'NA'} "
-        "(derived metrics not used for upgrade triggers)"
-    )
-    lines.append(
-        f"- fx_confidence={fx_conf if fx_conf is not None else 'NA'} "
-        "(fx not used as primary trigger)\n"
-    )
+    lines.append(f"- roll25_derived_confidence={roll25_conf if roll25_conf is not None else 'NA'} (derived metrics not used for upgrade triggers)")
+    lines.append(f"- fx_confidence={fx_conf if fx_conf is not None else 'NA'} (fx not used as primary trigger)\n")
 
     # taiwan signals pass-through (NO fallback)
     _render_taiwan_signals_pass_through(lines, args.tw_signals_path)
@@ -570,24 +540,24 @@ def main() -> int:
     # ----------------------------
     m_meta = _safe_get(m_dash, "meta") or {}
     lines.append("## market_cache (detailed)")
-    lines.append(f"- as_of_ts: {m_meta.get('stats_as_of_ts', 'NA')}")
-    lines.append(f"- run_ts_utc: {m_meta.get('run_ts_utc', 'NA')}")
-    lines.append(f"- ruleset_id: {m_meta.get('ruleset_id', 'NA')}")
-    lines.append(f"- script_fingerprint: {m_meta.get('script_fingerprint', 'NA')}")
-    lines.append(f"- script_version: {m_meta.get('script_version', 'NA')}")
-    lines.append(f"- series_count: {m_meta.get('series_count', 'NA')}\n")
+    lines.append(f"- as_of_ts: {m_meta.get('stats_as_of_ts','NA')}")
+    lines.append(f"- run_ts_utc: {m_meta.get('run_ts_utc','NA')}")
+    lines.append(f"- ruleset_id: {m_meta.get('ruleset_id','NA')}")
+    lines.append(f"- script_fingerprint: {m_meta.get('script_fingerprint','NA')}")
+    lines.append(f"- script_version: {m_meta.get('script_version','NA')}")
+    lines.append(f"- series_count: {m_meta.get('series_count','NA')}\n")
 
     if isinstance(m_rows, list) and m_rows:
         hdr = [
-            "series", "signal", "dir", "market_class", "value", "data_date", "age_h",
-            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%60", "reason", "tag", "prev",
-            "delta", "streak_hist", "streak_wa", "source"
+            "series","signal","dir","market_class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
+            "delta","streak_hist","streak_wa","source"
         ]
         rws: List[List[str]] = []
         for it in m_rows:
             if not isinstance(it, dict):
                 continue
-            tag = it.get("tag", "NA")
+            tag = it.get("tag","NA")
             mclass = "NONE"
             if isinstance(tag, str):
                 up = tag.upper()
@@ -598,26 +568,26 @@ def main() -> int:
                 if "JUMP" in up:
                     mclass = "JUMP" if mclass == "NONE" else f"{mclass}+JUMP"
             rws.append([
-                str(it.get("series", "NA")),
-                str(it.get("signal_level", "NA")),
-                str(it.get("dir", "NA")),
+                str(it.get("series","NA")),
+                str(it.get("signal_level","NA")),
+                str(it.get("dir","NA")),
                 mclass,
-                _fmt(it.get("value"), 6),
-                str(it.get("data_date", "NA")),
-                _fmt(it.get("age_hours"), 6),
-                _fmt(it.get("z60"), 6),
-                _fmt(it.get("p60"), 6),
-                _fmt(it.get("p252"), 6),
-                _fmt(it.get("z_delta60"), 6),
-                _fmt(it.get("p_delta60"), 6),
-                _fmt(it.get("ret1_pct60"), 6),
-                str(it.get("reason", "NA")),
+                _fmt(it.get("value"),6),
+                str(it.get("data_date","NA")),
+                _fmt(it.get("age_hours"),6),
+                _fmt(it.get("z60"),6),
+                _fmt(it.get("p60"),6),
+                _fmt(it.get("p252"),6),
+                _fmt(it.get("z_delta60"),6),
+                _fmt(it.get("p_delta60"),6),
+                _fmt(it.get("ret1_pct60"),6),
+                str(it.get("reason","NA")),
                 str(tag),
-                str(it.get("prev_signal", "NA")),
-                str(it.get("delta_signal", "NA")),
+                str(it.get("prev_signal","NA")),
+                str(it.get("delta_signal","NA")),
                 _fmt_int(it.get("streak_hist")),
                 _fmt_int(it.get("streak_wa")),
-                str(it.get("source_url", "NA")),
+                str(it.get("source_url","NA")),
             ])
         lines.append(_md_table(hdr, rws))
         lines.append("")
@@ -627,31 +597,31 @@ def main() -> int:
     # ----------------------------
     f_meta = _safe_get(f_dash, "meta") or {}
     lines.append("## fred_cache (ALERT+WATCH+INFO)")
-    lines.append(f"- as_of_ts: {f_meta.get('stats_as_of_ts', 'NA')}")
-    lines.append(f"- run_ts_utc: {f_meta.get('run_ts_utc', 'NA')}")
-    lines.append(f"- ruleset_id: {f_meta.get('ruleset_id', 'NA')}")
-    lines.append(f"- script_fingerprint: {f_meta.get('script_fingerprint', 'NA')}")
-    lines.append(f"- script_version: {f_meta.get('script_version', 'NA')}")
+    lines.append(f"- as_of_ts: {f_meta.get('stats_as_of_ts','NA')}")
+    lines.append(f"- run_ts_utc: {f_meta.get('run_ts_utc','NA')}")
+    lines.append(f"- ruleset_id: {f_meta.get('ruleset_id','NA')}")
+    lines.append(f"- script_fingerprint: {f_meta.get('script_fingerprint','NA')}")
+    lines.append(f"- script_version: {f_meta.get('script_version','NA')}")
     summ = f_meta.get("summary", {})
     if isinstance(summ, dict):
-        lines.append(f"- ALERT: {summ.get('ALERT', 'NA')}")
-        lines.append(f"- WATCH: {summ.get('WATCH', 'NA')}")
-        lines.append(f"- INFO: {summ.get('INFO', 'NA')}")
-        lines.append(f"- NONE: {summ.get('NONE', 'NA')}")
-        lines.append(f"- CHANGED: {summ.get('CHANGED', 'NA')}\n")
+        lines.append(f"- ALERT: {summ.get('ALERT','NA')}")
+        lines.append(f"- WATCH: {summ.get('WATCH','NA')}")
+        lines.append(f"- INFO: {summ.get('INFO','NA')}")
+        lines.append(f"- NONE: {summ.get('NONE','NA')}")
+        lines.append(f"- CHANGED: {summ.get('CHANGED','NA')}\n")
     else:
         lines.append("")
 
     if isinstance(f_rows, list) and f_rows:
         hdr = [
-            "series", "signal", "fred_dir", "fred_class", "value", "data_date", "age_h",
-            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%", "reason", "tag", "prev", "delta", "source"
+            "series","signal","fred_dir","fred_class","value","data_date","age_h",
+            "z60","p60","p252","zΔ60","pΔ60","ret1%","reason","tag","prev","delta","source"
         ]
         rws_f: List[List[str]] = []
         for it in f_rows:
             if not isinstance(it, dict):
                 continue
-            tag = it.get("tag", "NA")
+            tag = it.get("tag","NA")
             fclass = "NONE"
             if isinstance(tag, str):
                 up = tag.upper()
@@ -662,24 +632,24 @@ def main() -> int:
                 elif "JUMP" in up:
                     fclass = "JUMP"
             rws_f.append([
-                str(it.get("series", "NA")),
-                str(it.get("signal_level", "NA")),
-                str(it.get("fred_dir", "NA")),
+                str(it.get("series","NA")),
+                str(it.get("signal_level","NA")),
+                str(it.get("fred_dir","NA")),
                 fclass,
-                _fmt(it.get("value"), 6),
-                str(it.get("data_date", "NA")),
-                _fmt(it.get("age_hours"), 6),
-                _fmt(it.get("z60"), 6),
-                _fmt(it.get("p60"), 6),
-                _fmt(it.get("p252"), 6),
-                _fmt(it.get("z_delta_60"), 6),
-                _fmt(it.get("p_delta_60"), 6),
-                _fmt(it.get("ret1_pct"), 6),
-                str(it.get("reason", "NA")),
+                _fmt(it.get("value"),6),
+                str(it.get("data_date","NA")),
+                _fmt(it.get("age_hours"),6),
+                _fmt(it.get("z60"),6),
+                _fmt(it.get("p60"),6),
+                _fmt(it.get("p252"),6),
+                _fmt(it.get("z_delta_60"),6),
+                _fmt(it.get("p_delta_60"),6),
+                _fmt(it.get("ret1_pct"),6),
+                str(it.get("reason","NA")),
                 str(tag),
-                str(it.get("prev_signal", "NA")),
-                str(it.get("delta_signal", "NA")),
-                str(it.get("source_url", "NA")),
+                str(it.get("prev_signal","NA")),
+                str(it.get("delta_signal","NA")),
+                str(it.get("source_url","NA")),
             ])
         lines.append(_md_table(hdr, rws_f))
         lines.append("")
@@ -749,22 +719,23 @@ def main() -> int:
     )
 
     lines.append("## roll25_cache (TW turnover)")
-    lines.append(f"- status: {_safe_get(roll25, 'status') or 'NA'}")
-    lines.append(f"- UsedDate: {_fmt(r_core.get('UsedDate'), 0)}")
+    lines.append(f"- status: {_safe_get(roll25,'status') or 'NA'}")
+    lines.append(f"- UsedDate: {_fmt(r_core.get('UsedDate'),0)}")
     lines.append(f"- run_day_tag: {run_day_tag}")
-    lines.append(f"- used_date_status: {used_date_status}")
+    # display-only normalize to LATEST
+    lines.append(f"- used_date_status: {_normalize_used_date_status_for_display(used_date_status)}")
     lines.append(f"- used_date_selection_tag: {used_date_selection_tag}")
     lines.append(f"- tag (legacy): {legacy_tag}")
     lines.append("- note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)")
 
-    lines.append(f"- risk_level: {r_core.get('risk_level', 'NA')}")
-    lines.append(f"- turnover_twd: {_fmt(r_core.get('turnover_twd'), 0)}")
-    lines.append(f"- turnover_unit: {r_core.get('turnover_unit', 'NA')}")
-    lines.append(f"- volume_multiplier: {_fmt(r_core.get('volume_multiplier'), 3)}")
-    lines.append(f"- vol_multiplier: {_fmt(r_core.get('vol_multiplier'), 3)}")
-    lines.append(f"- amplitude_pct: {_fmt(r_core.get('amplitude_pct'), 3)}")
-    lines.append(f"- pct_change: {_fmt(r_core.get('pct_change'), 3)}")
-    lines.append(f"- close: {_fmt(r_core.get('close'), 2)}")
+    lines.append(f"- risk_level: {r_core.get('risk_level','NA')}")
+    lines.append(f"- turnover_twd: {_fmt(r_core.get('turnover_twd'),0)}")
+    lines.append(f"- turnover_unit: {r_core.get('turnover_unit','NA')}")
+    lines.append(f"- volume_multiplier: {_fmt(r_core.get('volume_multiplier'),3)}")
+    lines.append(f"- vol_multiplier: {_fmt(r_core.get('vol_multiplier'),3)}")
+    lines.append(f"- amplitude_pct: {_fmt(r_core.get('amplitude_pct'),3)}")
+    lines.append(f"- pct_change: {_fmt(r_core.get('pct_change'),3)}")
+    lines.append(f"- close: {_fmt(r_core.get('close'),2)}")
     lines.append(f"- LookbackNTarget: {_fmt_int(r_core.get('LookbackNTarget'))}")
     lines.append(f"- LookbackNActual: {_fmt_int(r_core.get('LookbackNActual'))}")
 
@@ -772,37 +743,37 @@ def main() -> int:
     ohlc_missing = _infer_ohlc_missing(sigs, r_latest)
 
     if isinstance(sigs, dict):
-        for k in ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]:
-            lines.append(f"- signals.{k}: {_fmt(sigs.get(k), 0)}")
-        lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing, 0)}")
+        for k in ["DownDay","VolumeAmplified","VolAmplified","NewLow_N","ConsecutiveBreak"]:
+            lines.append(f"- signals.{k}: {_fmt(sigs.get(k),0)}")
+        lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing,0)}")
     else:
-        lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing, 0)}")
+        lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing,0)}")
     lines.append("")
 
     # roll25 derived
     r_der = _safe_get(roll25, "derived") or {}
     lines.append("### roll25_derived (realized vol / drawdown)")
-    lines.append(f"- status: {r_der.get('status', 'NA')}")
+    lines.append(f"- status: {r_der.get('status','NA')}")
     params = r_der.get("params", {}) if isinstance(r_der.get("params"), dict) else {}
     lines.append(f"- vol_n: {_fmt_int(params.get('vol_n'))}")
-    lines.append(f"- realized_vol_N_annualized_pct: {_fmt(r_der.get('realized_vol_N_annualized_pct'), 6)}")
+    lines.append(f"- realized_vol_N_annualized_pct: {_fmt(r_der.get('realized_vol_N_annualized_pct'),6)}")
     lines.append(f"- realized_vol_points_used: {_fmt_int(r_der.get('realized_vol_points_used'))}")
     lines.append(f"- dd_n: {_fmt_int(params.get('dd_n'))}")
-    lines.append(f"- max_drawdown_N_pct: {_fmt(r_der.get('max_drawdown_N_pct'), 6)}")
+    lines.append(f"- max_drawdown_N_pct: {_fmt(r_der.get('max_drawdown_N_pct'),6)}")
     lines.append(f"- max_drawdown_points_used: {_fmt_int(r_der.get('max_drawdown_points_used'))}")
-    lines.append(f"- confidence: {r_der.get('confidence', 'NA')}")
+    lines.append(f"- confidence: {r_der.get('confidence','NA')}")
     lines.append("")
 
     # FX
     fx_der2 = _safe_get(fx, "derived") or {}
     lines.append("## FX (USD/TWD)")
-    lines.append(f"- status: {_safe_get(fx, 'status') or 'NA'}")
-    lines.append(f"- data_date: {fx_der2.get('data_date', 'NA')}")
-    lines.append(f"- source_url: {fx_der2.get('source_url', 'NA')}")
+    lines.append(f"- status: {_safe_get(fx,'status') or 'NA'}")
+    lines.append(f"- data_date: {fx_der2.get('data_date','NA')}")
+    lines.append(f"- source_url: {fx_der2.get('source_url','NA')}")
     usd = fx_der2.get("usd_twd", {}) if isinstance(fx_der2.get("usd_twd"), dict) else {}
-    lines.append(f"- spot_buy: {_fmt(usd.get('spot_buy'), 6)}")
-    lines.append(f"- spot_sell: {_fmt(usd.get('spot_sell'), 6)}")
-    lines.append(f"- mid: {_fmt(usd.get('mid'), 6)}")
+    lines.append(f"- spot_buy: {_fmt(usd.get('spot_buy'),6)}")
+    lines.append(f"- spot_sell: {_fmt(usd.get('spot_sell'),6)}")
+    lines.append(f"- mid: {_fmt(usd.get('mid'),6)}")
     mom = fx_der2.get("momentum", None)
 
     momentum_unavailable = _fx_momentum_unavailable(mom)
@@ -810,26 +781,20 @@ def main() -> int:
         lines.append("- momentum_unavailable: true (deterministic dq note)")
 
     mom_dict = mom if isinstance(mom, dict) else {}
-    lines.append(
-        f"- ret1_pct: {_fmt(mom_dict.get('ret1_pct'), 6)} "
-        f"(from {mom_dict.get('ret1_from', 'NA')} to {mom_dict.get('ret1_to', 'NA')})"
-    )
-    lines.append(
-        f"- chg_5d_pct: {_fmt(mom_dict.get('chg_5d_pct'), 6)} "
-        f"(from {mom_dict.get('chg_5d_from', 'NA')} to {mom_dict.get('chg_5d_to', 'NA')})"
-    )
-    lines.append(f"- dir: {fx_der2.get('dir', 'NA')}")
-    lines.append(f"- fx_signal: {fx_der2.get('fx_signal', 'NA')}")
-    lines.append(f"- fx_reason: {fx_der2.get('fx_reason', 'NA')}")
-    lines.append(f"- fx_confidence: {fx_der2.get('fx_confidence', 'NA')}")
+    lines.append(f"- ret1_pct: {_fmt(mom_dict.get('ret1_pct'),6)} (from {mom_dict.get('ret1_from','NA')} to {mom_dict.get('ret1_to','NA')})")
+    lines.append(f"- chg_5d_pct: {_fmt(mom_dict.get('chg_5d_pct'),6)} (from {mom_dict.get('chg_5d_from','NA')} to {mom_dict.get('chg_5d_to','NA')})")
+    lines.append(f"- dir: {fx_der2.get('dir','NA')}")
+    lines.append(f"- fx_signal: {fx_der2.get('fx_signal','NA')}")
+    lines.append(f"- fx_reason: {fx_der2.get('fx_reason','NA')}")
+    lines.append(f"- fx_confidence: {fx_der2.get('fx_confidence','NA')}")
     lines.append("")
 
     # taiwan margin financing (module header only; detailed decisions are in dedicated dashboard)
     tw_latest = _safe_get(twm, "latest") or {}
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
-    lines.append(f"- status: {_safe_get(twm, 'status') or 'NA'}")
-    lines.append(f"- schema_version: {tw_latest.get('schema_version', 'NA')}")
-    lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc', 'NA')}")
+    lines.append(f"- status: {_safe_get(twm,'status') or 'NA'}")
+    lines.append(f"- schema_version: {tw_latest.get('schema_version','NA')}")
+    lines.append(f"- generated_at_utc: {tw_latest.get('generated_at_utc','NA')}")
     lines.append("")
 
     # audit footer
