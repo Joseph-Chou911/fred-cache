@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-02T23:20:07Z
+- unified_generated_at_utc: 2026-02-03T02:04:58Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -22,7 +22,7 @@
 
 **reasons**
 - trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, data_date=2026-02-02
-- fragility_parts: credit_fragile(BAMLH0A0HYM2=WATCH)=false, rate_stress(DGS10=NONE)=false, tw_margin(NONE)=false, cross_divergence(DIVERGENCE)=true
+- fragility_parts: credit_fragile(BAMLH0A0HYM2=WATCH)=false, rate_stress(DGS10=NONE)=false, tw_margin(ALERT)=true, cross_divergence(RESONANCE)=false
 - vol_gate: market_cache.VIX only (signal=WATCH, dir=HIGH, ret1%60=3.317536, data_date=2026-01-30)
 
 **dq_gates (no guessing; conservative defaults)**
@@ -141,13 +141,13 @@
 
 ## FX (USD/TWD)
 - status: OK
-- data_date: 2026-02-02
+- data_date: 2026-02-03
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.515000
-- spot_sell: 31.665000
-- mid: 31.590000
-- ret1_pct: 0.413223 (from 2026-01-30 to 2026-02-02)
-- chg_5d_pct: 0.317561 (from 2026-01-26 to 2026-02-02)
+- spot_buy: 31.550000
+- spot_sell: 31.650000
+- mid: 31.600000
+- ret1_pct: 0.031656 (from 2026-02-02 to 2026-02-03)
+- chg_5d_pct: 0.540885 (from 2026-01-27 to 2026-02-03)
 - dir: TWD_WEAK
 - fx_signal: NONE
 - fx_reason: below thresholds
@@ -156,7 +156,7 @@
 ## taiwan_margin_financing (TWSE/TPEX)
 - status: OK
 - schema_version: taiwan_margin_financing_latest_v1
-- generated_at_utc: 2026-02-02T23:10:16Z
+- generated_at_utc: 2026-02-03T01:49:38Z
 
 ### cross_module (Margin × Roll25 consistency)
 - margin_signal: NONE
@@ -176,7 +176,7 @@
 - consistency: DIVERGENCE
 - date_alignment: twmargin_date=2026-02-02, roll25_used_date=2026-02-02, match=true
 
-<!-- rendered_at_utc: 2026-02-02T23:20:07Z -->
+<!-- rendered_at_utc: 2026-02-03T02:04:58Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
