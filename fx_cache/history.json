@@ -58,11 +58,11 @@
     },
     {
       "date": "2026-02-03",
-      "mid": 31.61,
-      "spot_buy": 31.56,
-      "spot_sell": 31.66,
+      "mid": 31.55,
+      "spot_buy": 31.475,
+      "spot_sell": 31.625,
       "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
-      "quote_time_local": "2026-02-03T12:53:00+08:00"
+      "quote_time_local": "2026-02-04T00:00:00+08:00"
     }
   ]
 }
