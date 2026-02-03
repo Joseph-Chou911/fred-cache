@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-03T02:13:38Z
+- unified_generated_at_utc: 2026-02-03T02:43:55Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -22,12 +22,20 @@
 
 **reasons**
 - trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, data_date=2026-02-02
-- fragility_parts: credit_fragile(BAMLH0A0HYM2=WATCH)=false, rate_stress(DGS10=NONE)=false, tw_margin(ALERT)=true, cross_divergence(RESONANCE)=false
+- fragility_parts (global-only): credit_fragile(BAMLH0A0HYM2=WATCH)=false, rate_stress(DGS10=NONE)=false
 - vol_gate: market_cache.VIX only (signal=WATCH, dir=HIGH, ret1%60=3.317536, data_date=2026-01-30)
 
 **dq_gates (no guessing; conservative defaults)**
 - roll25_derived_confidence=OK (derived metrics not used for upgrade triggers)
 - fx_confidence=OK (fx not used as primary trigger)
+
+### taiwan_signals (pass-through; not used for mode)
+- source: unified.modules.taiwan_margin_financing.cross_module
+- margin_signal: NONE
+- consistency: DIVERGENCE
+- confidence: NA
+- dq_reason: NA
+- date_alignment: twmargin_date=2026-02-02, roll25_used_date=2026-02-02, match=true
 
 ## market_cache (detailed)
 - as_of_ts: 2026-02-02T23:04:03Z
@@ -110,8 +118,8 @@
 - used_date_selection_tag: WEEKDAY
 - tag (legacy): WEEKDAY
 - note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
-- heat_split.heated_market: true
-- heat_split.dq_issue: false
+- heat_split.heated_market: NA
+- heat_split.dq_issue: NA
 - risk_level: NA
 - turnover_twd: 771419543919
 - turnover_unit: TWD
@@ -143,11 +151,11 @@
 - status: OK
 - data_date: 2026-02-03
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.550000
-- spot_sell: 31.650000
-- mid: 31.600000
-- ret1_pct: 0.031656 (from 2026-02-02 to 2026-02-03)
-- chg_5d_pct: 0.540885 (from 2026-01-27 to 2026-02-03)
+- spot_buy: 31.570000
+- spot_sell: 31.670000
+- mid: 31.620000
+- ret1_pct: 0.094967 (from 2026-02-02 to 2026-02-03)
+- chg_5d_pct: 0.604518 (from 2026-01-27 to 2026-02-03)
 - dir: TWD_WEAK
 - fx_signal: NONE
 - fx_reason: below thresholds
@@ -158,25 +166,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-03T01:49:38Z
 
-### cross_module (Margin × Roll25 consistency)
-- cross_source: signals_latest.json
-- margin_signal: ALERT
-- margin_signal_source: signals_latest.json
-- margin_rule_version: NA
-- chg_unit: 億 (from modules.taiwan_margin_financing.latest.series.TWSE.chg_yi_unit.label)
-- chg_last5: NA
-- sum_last5: NA
-- pos_days_last5: NA
-- latest_chg: NA
-- margin_confidence: NA
-- roll25_heated_market: NA
-- roll25_data_quality_issue: NA
-- roll25_heated (legacy): NA
-- roll25_confidence: NA
-- consistency: RESONANCE
-- roll25_split_ref: heated_market=true, dq_issue=false (see roll25_cache section)
-
-<!-- rendered_at_utc: 2026-02-03T02:13:38Z -->
+<!-- rendered_at_utc: 2026-02-03T02:43:55Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
