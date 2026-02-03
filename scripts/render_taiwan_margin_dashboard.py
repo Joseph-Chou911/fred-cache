@@ -36,7 +36,7 @@ Maint ratio trend metrics (added; display-only)
 
 Added (NO LOGIC CHANGE):
 - Also emit a machine-readable signals_latest.json for unified dashboard ingestion.
-  Default output: taiwan_margin_financing/signals_latest.json
+  Default output: taiwan_margin_cache/signals_latest.json
   Use --signals-out to override.
 """
 
@@ -547,7 +547,7 @@ def main() -> None:
     ap.add_argument("--maint-hist", default="taiwan_margin_cache/maint_ratio_history.json")
     ap.add_argument("--resonance-policy", choices=["strict", "latest"], default="latest")
     # Added: machine-readable output for unified dashboard (no logic change)
-    ap.add_argument("--signals-out", default="taiwan_margin_financing/signals_latest.json")
+    ap.add_argument("--signals-out", default="taiwan_margin_cache/signals_latest.json")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
