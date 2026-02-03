@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-03T03:16:03Z
+- unified_generated_at_utc: 2026-02-03T03:45:46Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -35,7 +35,7 @@
 - consistency: RESONANCE
 - confidence: DOWNGRADED
 - dq_reason: ROLL25_STALE
-- date_alignment: twmargin_date=2026-02-02, roll25_used_date=2026-02-02, used_date_status=DATA_NOT_UPDATED, strict_same_day=true, strict_not_stale=false, strict_roll_match=false
+- date_alignment: twmargin_date=2026-02-02, roll25_used_date=2026-02-02, used_date_status=LATEST, strict_same_day=true, strict_not_stale=false, strict_roll_match=false
 - dq_note: NA
 - note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
 
@@ -116,7 +116,7 @@
 - status: OK
 - UsedDate: 2026-02-02
 - run_day_tag: TRADING_DAY
-- used_date_status: OK_LATEST
+- used_date_status: LATEST
 - used_date_selection_tag: WEEKDAY
 - tag (legacy): WEEKDAY
 - note: run_day_tag is report-day context; UsedDate is the data date used for calculations (may lag on not-updated days)
@@ -151,11 +151,11 @@
 - status: OK
 - data_date: 2026-02-03
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.565000
-- spot_sell: 31.665000
-- mid: 31.615000
-- ret1_pct: 0.079139 (from 2026-02-02 to 2026-02-03)
-- chg_5d_pct: 0.588610 (from 2026-01-27 to 2026-02-03)
+- spot_buy: 31.560000
+- spot_sell: 31.660000
+- mid: 31.610000
+- ret1_pct: 0.063311 (from 2026-02-02 to 2026-02-03)
+- chg_5d_pct: 0.572701 (from 2026-01-27 to 2026-02-03)
 - dir: TWD_WEAK
 - fx_signal: NONE
 - fx_reason: below thresholds
@@ -166,7 +166,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-03T01:49:38Z
 
-<!-- rendered_at_utc: 2026-02-03T03:16:03Z -->
+<!-- rendered_at_utc: 2026-02-03T03:45:46Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
