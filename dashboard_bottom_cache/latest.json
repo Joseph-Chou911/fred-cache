@@ -1,9 +1,9 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-02-04T05:10:37.209032Z",
-  "as_of_ts": "2026-02-04T13:10:37.209054+08:00",
-  "data_commit_sha": "59cfb28d0101067494a0e52f86b2c0f36fe64d16",
+  "generated_at_utc": "2026-02-04T16:04:26.107007Z",
+  "as_of_ts": "2026-02-05T00:04:26.107023+08:00",
+  "data_commit_sha": "57743dd273a7b7e804dffa0ea2a933008fcdaf59",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -55,18 +55,18 @@
       "stress_consec_pair_required": true
     },
     "margin": {
-      "data_date": "2026-02-03",
+      "data_date": "2026-02-04",
       "unit": "億",
       "flow_signal": "NONE",
       "flow_dbg": {
         "chg_last5_yi": [
+          19.2,
           32.8,
           -50.4,
           21.2,
-          -31.4,
-          21.9
+          -31.4
         ],
-        "sum_last5_yi": -5.900000000000002,
+        "sum_last5_yi": -8.599999999999998,
         "pos_days_last5": 3,
         "rule": "WATCH(sum5>=100.0 & pos_days>=4); ALERT(sum5>=150.0 & pos_days>=4)"
       },
@@ -78,8 +78,8 @@
       },
       "final_signal": "NONE",
       "confidence": "DOWNGRADED",
-      "latest_balance_yi": 3821.3,
-      "latest_chg_yi": 32.8
+      "latest_balance_yi": 3840.5,
+      "latest_chg_yi": 19.2
     },
     "triggers": {
       "TRIG_TW_PANIC": 0,
@@ -188,8 +188,8 @@
     "loaded_items": 3,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260204T051037Z.json",
-    "backup_bytes": 2828,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260204T160426Z.json",
+    "backup_bytes": 2826,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -199,8 +199,8 @@
     "history_file_exists": true,
     "history_pre_items": 3,
     "history_pre_unique_days": 3,
-    "history_post_items": 3,
-    "history_post_unique_days": 3,
+    "history_post_items": 4,
+    "history_post_unique_days": 4,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,
