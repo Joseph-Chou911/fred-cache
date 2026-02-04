@@ -23,6 +23,12 @@ IMPORTANT (2026-01-xx fix):
   amplitude = (high - low) / abs(prev_close) * 100
   fallback only if prev_close unavailable: (high - low) / abs(close) * 100
 This aligns the definition with latest_report.json AmplitudePct (commonly based on prev close).
+
+ADD (2026-02-xx):
+- Volatility bands using sigma_win (default 60) of DAILY % returns (from close series; strict adjacency),
+  anchored to UsedDate, and scaled to horizon T by sqrt(T).
+- Output a table for T in {10,12,15} by default.
+- This is an approximation (iid + normal) and is labeled as such; if insufficient history => NA + DOWNGRADED.
 """
 
 from __future__ import annotations
@@ -141,6 +147,14 @@ def _z_score_pop(x: float, arr: List[float]) -> Optional[float]:
     if sd == 0:
         return 0.0
     return (x - mean) / sd
+
+
+def _std_pop(arr: List[float]) -> Optional[float]:
+    if len(arr) < 2:
+        return None
+    mean = sum(arr) / len(arr)
+    var = sum((v - mean) ** 2 for v in arr) / len(arr)
+    return math.sqrt(max(var, 0.0))
 
 
 def _percentile_tie_aware(x: float, arr: List[float]) -> Optional[float]:
@@ -307,6 +321,11 @@ def _series_amplitude_pct(rows_nf: List[Dict[str, Any]]) -> List[float]:
 
 
 def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
+    """
+    STRICT adjacency daily % return series derived from close series:
+      ret[i] = (close[i] - close[i+1]) / abs(close[i+1]) * 100
+    Last item is NA (no next older row).
+    """
     out: List[float] = []
     for i in range(len(close_nf) - 1):
         a = close_nf[i]
@@ -424,6 +443,141 @@ def _anchored_stats(
     return RowStats(v, z60, p60, z252, p252, zD60, pD60, r1, conf)
 
 
+# ---------------- Vol bands (sigma) computation ----------------
+
+@dataclass
+class VolBandRow:
+    T: int
+    sigma_win: int
+    sigma_daily_pct: Optional[float]
+    sigma_horizon_pct: Optional[float]
+    down_1s: Optional[float]
+    down_95_1tail: Optional[float]
+    down_2s: Optional[float]
+    up_1s: Optional[float]
+    up_95_1tail: Optional[float]
+    up_2s: Optional[float]
+    confidence: str
+    note: Optional[str]
+
+
+def _parse_int_list(csv: str) -> List[int]:
+    out: List[int] = []
+    for part in (csv or "").split(","):
+        p = part.strip()
+        if not p:
+            continue
+        try:
+            v = int(p)
+            if v > 0:
+                out.append(v)
+        except Exception:
+            continue
+    return out
+
+
+def _compute_vol_bands(
+    close_level: Optional[float],
+    pctchg_nf: List[float],
+    anchor_idx: int,
+    *,
+    sigma_win: int,
+    t_list: List[int],
+) -> List[VolBandRow]:
+    """
+    sigma_daily_pct: population std of last sigma_win DAILY % returns (STRICT adjacency),
+    anchored at UsedDate (pctchg_nf[anchor_idx:]).
+
+    horizon sigma: sigma_daily_pct * sqrt(T)
+
+    Levels:
+      S0 * (1 ± k * horizon_sigma%)
+    where k in {1.0, 1.645, 2.0}.
+
+    Returns NA + DOWNGRADED if insufficient history.
+    """
+    rows: List[VolBandRow] = []
+
+    if close_level is None or not (isinstance(close_level, (int, float)) and math.isfinite(float(close_level))):
+        for T in t_list:
+            rows.append(VolBandRow(
+                T=T, sigma_win=sigma_win,
+                sigma_daily_pct=None, sigma_horizon_pct=None,
+                down_1s=None, down_95_1tail=None, down_2s=None,
+                up_1s=None, up_95_1tail=None, up_2s=None,
+                confidence="DOWNGRADED",
+                note="close_level missing/non-finite"
+            ))
+        return rows
+
+    if anchor_idx < 0 or anchor_idx >= len(pctchg_nf):
+        for T in t_list:
+            rows.append(VolBandRow(
+                T=T, sigma_win=sigma_win,
+                sigma_daily_pct=None, sigma_horizon_pct=None,
+                down_1s=None, down_95_1tail=None, down_2s=None,
+                up_1s=None, up_95_1tail=None, up_2s=None,
+                confidence="DOWNGRADED",
+                note="anchor_idx out of range"
+            ))
+        return rows
+
+    tail = pctchg_nf[anchor_idx:]
+    w = _take_newest_finite(tail, sigma_win)
+
+    if w is None:
+        note = f"INSUFFICIENT_HISTORY:{len([v for v in tail if isinstance(v, (int, float)) and math.isfinite(float(v))])}/{sigma_win}"
+        for T in t_list:
+            rows.append(VolBandRow(
+                T=T, sigma_win=sigma_win,
+                sigma_daily_pct=None, sigma_horizon_pct=None,
+                down_1s=None, down_95_1tail=None, down_2s=None,
+                up_1s=None, up_95_1tail=None, up_2s=None,
+                confidence="DOWNGRADED",
+                note=note
+            ))
+        return rows
+
+    sigma_daily = _std_pop(w)
+    if sigma_daily is None or not math.isfinite(float(sigma_daily)):
+        for T in t_list:
+            rows.append(VolBandRow(
+                T=T, sigma_win=sigma_win,
+                sigma_daily_pct=None, sigma_horizon_pct=None,
+                down_1s=None, down_95_1tail=None, down_2s=None,
+                up_1s=None, up_95_1tail=None, up_2s=None,
+                confidence="DOWNGRADED",
+                note="sigma_daily std not computable"
+            ))
+        return rows
+
+    S0 = float(close_level)
+    k1 = 1.0
+    k95 = 1.645
+    k2 = 2.0
+
+    for T in t_list:
+        h = sigma_daily * math.sqrt(float(T))
+        # convert percent to decimal factor
+        h_dec = h / 100.0
+
+        rows.append(VolBandRow(
+            T=T, sigma_win=sigma_win,
+            sigma_daily_pct=float(sigma_daily),
+            sigma_horizon_pct=float(h),
+            down_1s=S0 * (1.0 - k1 * h_dec),
+            down_95_1tail=S0 * (1.0 - k95 * h_dec),
+            down_2s=S0 * (1.0 - k2 * h_dec),
+            up_1s=S0 * (1.0 + k1 * h_dec),
+            up_95_1tail=S0 * (1.0 + k95 * h_dec),
+            up_2s=S0 * (1.0 + k2 * h_dec),
+            confidence="OK",
+            note=None
+        ))
+
+    return rows
+
+
 # ---------------- markdown helpers ----------------
 
 def _md_table(rows: List[List[str]]) -> str:
@@ -444,6 +598,9 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--amp-mismatch-abs-threshold", type=float, default=float(os.getenv("AMP_MISMATCH_ABS_THRESHOLD", "0.01")))
     ap.add_argument("--close-pct-mismatch-abs-threshold", type=float, default=float(os.getenv("CLOSE_PCT_MISMATCH_ABS_THRESHOLD", "0.05")))
+    # ADD: sigma band params
+    ap.add_argument("--sigma-win", type=int, default=int(os.getenv("SIGMA_WIN", "60")))
+    ap.add_argument("--sigma-t", type=str, default=os.getenv("SIGMA_T_LIST", "10,12,15"))
     args = ap.parse_args()
 
     latest = _load_json(args.latest)
@@ -502,8 +659,10 @@ def main() -> int:
 
     # if anchor not found, fallback to 0 (but downgrade confidence via DQ note)
     dq_notes: List[str] = []
+    anchor_fallback_used = False
     if anchor_idx < 0:
         anchor_idx = 0
+        anchor_fallback_used = True
         dq_notes.append("UsedDate anchor not found in roll25.json after date-parse; fallback to newest row (index 0).")
 
     st_turnover = _anchored_stats(turnover_nf, anchor_idx, want_delta_and_ret1=True)
@@ -539,6 +698,32 @@ def main() -> int:
                 f"CLOSE pct mismatch: abs(latest_report.PctChange - computed_close_ret1%) = {diff:.6f} > {args.close_pct_mismatch_abs_threshold} "
                 f"(UsedDate={used_date})"
             )
+
+    # --- ADD: Volatility bands (sigma) ---
+    sigma_win = int(args.sigma_win) if int(args.sigma_win) > 1 else 60
+    t_list = _parse_int_list(args.sigma_t)
+    if not t_list:
+        t_list = [10, 12, 15]
+        dq_notes.append("sigma-t list invalid/empty; fallback to default [10,12,15].")
+
+    # close level for bands: prefer latest_report Close (anchored to UsedDate); fallback to computed roll25 close at anchor
+    close_level_for_bands: Optional[float] = None
+    if isinstance(close_latest, (int, float)) and math.isfinite(float(close_latest)):
+        close_level_for_bands = float(close_latest)
+    else:
+        close_level_for_bands = st_close.value
+
+    vb_rows = _compute_vol_bands(
+        close_level_for_bands,
+        pctchg_nf,
+        anchor_idx,
+        sigma_win=sigma_win,
+        t_list=t_list,
+    )
+
+    if anchor_fallback_used:
+        # Bands are still computed, but meaningfully less reliable.
+        dq_notes.append("VOL_BANDS note: UsedDate anchor fallback was used; bands are anchored to newest row, not intended UsedDate.")
 
     md: List[str] = []
     md.append("# Roll25 Cache Report (TWSE Turnover)")
@@ -611,6 +796,39 @@ def main() -> int:
 
     md.append(_md_table(table))
     md.append("")
+
+    # ---------------- ADD: volatility bands table ----------------
+    md.append("## 5.1) Volatility Bands (sigma; approximation)")
+    md.append(f"- sigma_win (daily % returns): `{sigma_win}` (population std; ddof=0)")
+    md.append(f"- T list (trading days): `{','.join(str(x) for x in t_list)}`")
+    md.append(f"- level anchor: `{_fmt(close_level_for_bands)}` (prefer latest_report.Close else roll25@UsedDate)")
+    md.append("")
+
+    vb_table: List[List[str]] = [
+        ["T", "sigma_daily_%", "sigma_T_%", "down_1σ", "down_95%(1-tail)", "down_2σ", "up_1σ", "up_95%(1-tail)", "up_2σ", "confidence", "note"]
+    ]
+    for r in vb_rows:
+        vb_table.append([
+            str(r.T),
+            _fmt(r.sigma_daily_pct),
+            _fmt(r.sigma_horizon_pct),
+            _fmt(r.down_1s),
+            _fmt(r.down_95_1tail),
+            _fmt(r.down_2s),
+            _fmt(r.up_1s),
+            _fmt(r.up_95_1tail),
+            _fmt(r.up_2s),
+            r.confidence,
+            r.note if isinstance(r.note, str) and r.note else "",
+        ])
+
+    md.append(_md_table(vb_table))
+    md.append("")
+    md.append("- Interpretation notes:")
+    md.append("  - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.")
+    md.append("  - Use as a rough yardstick for horizon-scaled move; do not treat as a trading signal by itself.")
+    md.append("")
+
     md.append("## 6) Audit Notes")
     md.append("- This report is computed from local files only (no external fetch).")
     md.append("- Date ordering uses parsed dates (not string sort).")
@@ -622,6 +840,7 @@ def main() -> int:
     md.append(f"- AMPLITUDE mismatch threshold: {args.amp_mismatch_abs_threshold} (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).")
     md.append(f"- CLOSE pct mismatch threshold: {args.close_pct_mismatch_abs_threshold} (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).")
     md.append("- PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.")
+    md.append(f"- VOL_BANDS: sigma computed from last {sigma_win} DAILY % returns anchored at UsedDate; horizon scaling uses sqrt(T).")
     if dq_notes:
         md.append("- DQ_NOTES:")
         for n in dq_notes:
