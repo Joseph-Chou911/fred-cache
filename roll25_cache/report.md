@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-04T23:05:41Z`
-- generated_at_local: `2026-02-05T07:05:41.105721+08:00`
+- generated_at_utc: `2026-02-04T23:58:36Z`
+- generated_at_local: `2026-02-05T07:58:36.128194+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-02-04`
 - UsedDateStatus: `DATA_NOT_UPDATED`
@@ -37,6 +37,21 @@
 | AMPLITUDE_PCT | 1.359575 | 0.366878 | 67.5 | 0.207798 | 73.214286 | NA | NA | NA | OK |
 | VOL_MULTIPLIER_20 | 0.890968 | -0.958192 | 19.166667 | -0.786966 | 18.452381 | NA | NA | NA | OK |
 
+## 5.1) Volatility Bands (sigma; approximation)
+- sigma_win (daily % returns): `60` (population std; ddof=0)
+- T list (trading days): `10,12,15`
+- level anchor: `32289.81` (prefer latest_report.Close else roll25@UsedDate)
+
+| T | sigma_daily_% | sigma_T_% | down_1σ | down_95%(1-tail) | down_2σ | up_1σ | up_95%(1-tail) | up_2σ | confidence | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 10 | 1.197262 | 3.786074 | 31067.29377 | 30278.770802 | 29844.777541 | 33512.32623 | 34300.849198 | 34734.842459 | OK |  |
+| 12 | 1.197262 | 4.147437 | 30950.610568 | 30086.826935 | 29611.411136 | 33629.009432 | 34492.793065 | 34968.208864 | OK |  |
+| 15 | 1.197262 | 4.636975 | 30792.539518 | 29826.800056 | 29295.269035 | 33787.080482 | 34752.819944 | 35284.350965 | OK |  |
+
+- Interpretation notes:
+  - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.
+  - Use as a rough yardstick for horizon-scaled move; do not treat as a trading signal by itself.
+
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
 - Date ordering uses parsed dates (not string sort).
@@ -48,6 +63,7 @@
 - AMPLITUDE mismatch threshold: 0.01 (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).
 - CLOSE pct mismatch threshold: 0.05 (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).
 - PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.
+- VOL_BANDS: sigma computed from last 60 DAILY % returns anchored at UsedDate; horizon scaling uses sqrt(T).
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
