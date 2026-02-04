@@ -48,23 +48,23 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-02-03｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 低(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
-- summary: 今日資料未更新；UsedDate=2026-02-03：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
-- numbers: Close=32195.36, PctChange=1.806632%, TradeValue=821574120123, VolumeMultiplier=1.027315, AmplitudePct=1.758694%, VolMultiplier=1.027315
+- UsedDate: 2026-02-04｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 低(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
+- summary: 今日資料未更新；UsedDate=2026-02-04：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
+- numbers: Close=32289.81, PctChange=0.293365%, TradeValue=704644032693, VolumeMultiplier=0.890968, AmplitudePct=1.359575%, VolMultiplier=0.890968
 - signals: DownDay=False, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=0, OhlcMissing=False
 - action: 維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。
 - caveats: Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
 run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
-Mode=FULL | OHLC=OK | UsedDate=2026-02-03 | UsedDminus1=2026-02-02
+Mode=FULL | OHLC=OK | UsedDate=2026-02-04 | UsedDminus1=2026-02-03
 RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
 freshness_ok=True | freshness_age_days=1
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-04T17:58:16.079406+08:00 (Asia/Taipei)
+- generated_at: 2026-02-05T07:05:41.017052+08:00 (Asia/Taipei)
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -117,11 +117,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-4 TPEX history rows>=21：✅（PASS）（rows=39）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-03) vs TWSE(2026-02-04)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-04) == TWSE(2026-02-04)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-04T15:09:37Z_
+_generated_at_utc: 2026-02-04T23:06:22Z_
