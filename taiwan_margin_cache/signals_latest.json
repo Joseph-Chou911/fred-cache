@@ -1,9 +1,9 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-03T23:03:35Z",
+  "generated_at_utc": "2026-02-04T15:09:37Z",
   "generated_at_local": null,
-  "data_date": "2026-02-03",
+  "data_date": "2026-02-04",
   "state": "擴張",
   "signal": "WATCH",
   "margin_quality": "OK",
@@ -22,30 +22,30 @@
     }
   },
   "margin": {
-    "twse_meta_date": "2026-02-03",
-    "tpex_meta_date": "2026-02-03",
+    "twse_meta_date": "2026-02-04",
+    "tpex_meta_date": "2026-02-04",
     "twse": {
-      "latest_balance_yi": 3821.3,
+      "latest_balance_yi": 3840.5,
       "h1": {
-        "delta": 32.80000000000018,
-        "pct": 0.8657780124059702,
-        "base_date": "2026-02-02",
-        "latest": 3821.3,
-        "base": 3788.5
+        "delta": 19.199999999999818,
+        "pct": 0.5024468112945808,
+        "base_date": "2026-02-03",
+        "latest": 3840.5,
+        "base": 3821.3
       },
       "h5": {
-        "delta": -6.0,
-        "pct": -0.15676847908447208,
-        "base_date": "2026-01-27",
-        "latest": 3821.3,
-        "base": 3827.3
+        "delta": -8.699999999999818,
+        "pct": -0.22602099137482642,
+        "base_date": "2026-01-28",
+        "latest": 3840.5,
+        "base": 3849.2
       },
       "h20": {
-        "delta": 275.8000000000002,
-        "pct": 7.778874629812443,
-        "base_date": "2026-01-06",
-        "latest": 3821.3,
-        "base": 3545.5
+        "delta": 269.9000000000001,
+        "pct": 7.558953677253126,
+        "base_date": "2026-01-07",
+        "latest": 3840.5,
+        "base": 3570.6
       },
       "source": {
         "vendor": "HiStock",
@@ -53,27 +53,27 @@
       }
     },
     "tpex": {
-      "latest_balance_yi": 1337.3,
+      "latest_balance_yi": 1351.0,
       "h1": {
-        "delta": 4.7000000000000455,
-        "pct": 0.3526939816899329,
-        "base_date": "2026-02-02",
-        "latest": 1337.3,
-        "base": 1332.6
+        "delta": 13.700000000000045,
+        "pct": 1.0244522545427388,
+        "base_date": "2026-02-03",
+        "latest": 1351.0,
+        "base": 1337.3
       },
       "h5": {
-        "delta": 2.7999999999999545,
-        "pct": 0.20981641064068599,
-        "base_date": "2026-01-27",
-        "latest": 1337.3,
-        "base": 1334.5
+        "delta": -7.7000000000000455,
+        "pct": -0.5667181865018065,
+        "base_date": "2026-01-28",
+        "latest": 1351.0,
+        "base": 1358.7
       },
       "h20": {
-        "delta": 121.70000000000005,
-        "pct": 10.011516946363939,
-        "base_date": "2026-01-06",
-        "latest": 1337.3,
-        "base": 1215.6
+        "delta": 135.5999999999999,
+        "pct": 11.156820799736703,
+        "base_date": "2026-01-07",
+        "latest": 1351.0,
+        "base": 1215.4
       },
       "source": {
         "vendor": "HiStock",
@@ -82,36 +82,36 @@
     },
     "total": {
       "h1": {
-        "delta": 37.5,
-        "pct": 0.7322645525375407,
-        "base_date": "2026-02-02",
-        "latest": 5158.6,
-        "base": 5121.1,
+        "delta": 32.899999999999636,
+        "pct": 0.6377699375799565,
+        "base_date": "2026-02-03",
+        "latest": 5191.5,
+        "base": 5158.6,
         "ok": true,
         "reason": ""
       },
       "h5": {
-        "delta": -3.199999999999818,
-        "pct": -0.06199387810453365,
-        "base_date": "2026-01-27",
-        "latest": 5158.6,
-        "base": 5161.8,
+        "delta": -16.399999999999636,
+        "pct": -0.31490620019584936,
+        "base_date": "2026-01-28",
+        "latest": 5191.5,
+        "base": 5207.9,
         "ok": true,
         "reason": ""
       },
       "h20": {
-        "delta": 397.5,
-        "pct": 8.348910965953245,
-        "base_date": "2026-01-06",
-        "latest": 5158.6,
-        "base": 4761.1,
+        "delta": 405.5,
+        "pct": 8.472628499791057,
+        "base_date": "2026-01-07",
+        "latest": 5191.5,
+        "base": 4786.0,
         "ok": true,
         "reason": ""
       }
     },
     "derived": {
-      "accel": 0.7446633281584475,
-      "spread20": 2.2326423165514955
+      "accel": 0.7007511776191263,
+      "spread20": 3.597867122483577
     }
   },
   "roll25": {
@@ -125,7 +125,7 @@
     "tag": "WEEKDAY",
     "is_heated": false,
     "lookback_note": null,
-    "strict_same_day": true,
+    "strict_same_day": false,
     "strict_not_stale": false,
     "strict_roll_match": false
   },
@@ -137,18 +137,22 @@
     "ok_latest": true,
     "ok_history": true,
     "latest": {
-      "data_date": "2026-02-03",
-      "maint_ratio_pct": 180.187892,
-      "maint_ratio_1d_delta_pctpt": 1.9203669999999988,
-      "maint_ratio_1d_pct_change": 1.0772388296746693,
-      "trend_note": "trend_from: today=180.187892(2026-02-03), prev=178.267525(2026-02-02)",
+      "data_date": "2026-02-04",
+      "maint_ratio_pct": 183.452676,
+      "maint_ratio_1d_delta_pctpt": 3.2647839999999917,
+      "maint_ratio_1d_pct_change": 1.811877570552849,
+      "trend_note": "trend_from: today=183.452676(2026-02-04), prev=180.187892(2026-02-03)",
       "fetch_status": "OK",
       "confidence": "OK",
       "dq_reason": ""
     },
     "history": {
-      "rows": 6,
+      "rows": 7,
       "head5": [
+        [
+          "2026-02-04",
+          183.452676
+        ],
         [
           "2026-02-03",
           180.187892
@@ -164,10 +168,6 @@
         [
           "2026-01-29",
           185.890277
-        ],
-        [
-          "2026-01-28",
-          188.131701
         ]
       ]
     }
@@ -187,7 +187,7 @@
     },
     "roll25": {
       "check_6_status": "NOTE",
-      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-03) == TWSE(2026-02-03)",
+      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-03) vs TWSE(2026-02-04)",
       "check_7_status": "NOTE",
       "check_7_msg": "skipped: roll25 stale (DATA_NOT_UPDATED)"
     },
@@ -209,27 +209,27 @@
     "twse_rows": {
       "rows": 30,
       "head_dates": [
+        "2026-02-04",
         "2026-02-03",
-        "2026-02-02",
-        "2026-01-30"
+        "2026-02-02"
       ],
       "tail_dates": [
+        "2025-12-26",
         "2025-12-24",
-        "2025-12-23",
-        "2025-12-22"
+        "2025-12-23"
       ]
     },
     "tpex_rows": {
       "rows": 30,
       "head_dates": [
+        "2026-02-04",
         "2026-02-03",
-        "2026-02-02",
-        "2026-01-30"
+        "2026-02-02"
       ],
       "tail_dates": [
+        "2025-12-26",
         "2025-12-24",
-        "2025-12-23",
-        "2025-12-22"
+        "2025-12-23"
       ]
     }
   }
