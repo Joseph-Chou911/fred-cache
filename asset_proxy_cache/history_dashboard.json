@@ -132,11 +132,11 @@
       }
     },
     {
-      "run_ts_utc": "2026-02-03T23:04:47.554642+00:00",
-      "stats_as_of_ts": "2026-02-04T07:04:44+08:00",
+      "run_ts_utc": "2026-02-04T03:10:29.671842+00:00",
+      "stats_as_of_ts": "2026-02-04T11:10:25+08:00",
       "module": "asset_proxy_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@0d3f054",
+      "script_fingerprint": "render_dashboard_py_signals_v8@515e483",
       "series_signals": {
         "GLD.US_CLOSE": "ALERT",
         "IAU.US_CLOSE": "ALERT",
