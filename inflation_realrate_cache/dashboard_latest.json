@@ -1,32 +1,32 @@
 {
   "meta": {
-    "run_ts_utc": "2026-02-04T09:02:11.084350+00:00",
+    "run_ts_utc": "2026-02-04T17:09:23.200346+00:00",
     "module": "inflation_realrate_cache",
     "ruleset_id": "signals_v8",
-    "script_fingerprint": "render_dashboard_py_signals_v8@891a904",
+    "script_fingerprint": "render_dashboard_py_signals_v8@6af3195",
     "stale_hours": 36.0,
     "stats_path": "inflation_realrate_cache/stats_latest.json",
-    "stats_generated_at_utc": "2026-02-04T09:02:10Z",
-    "stats_as_of_ts": "2026-02-04T17:02:07+08:00",
+    "stats_generated_at_utc": "2026-02-04T17:09:23Z",
+    "stats_as_of_ts": "2026-02-05T01:09:20+08:00",
     "script_version": "cycle_sidecars_stats_v1",
     "series_count": 2,
     "dash_history_path": "inflation_realrate_cache/history_dashboard.json",
     "streak_calc": "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); StreakWA includes today; StreakHist excludes today; ORDER_SAFE: if history already contains same-day key, it is excluded from baseline",
     "history_items_loaded": 11,
-    "history_excluded_same_day": 1
+    "history_excluded_same_day": 0
   },
   "rows": [
     {
       "module": "inflation_realrate_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@891a904",
+      "script_fingerprint": "render_dashboard_py_signals_v8@6af3195",
       "series": "DFII10",
       "value": 1.94,
       "data_date": "2026-02-02",
-      "as_of_ts": "2026-02-04T17:02:07+08:00",
+      "as_of_ts": "2026-02-05T01:09:20+08:00",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
       "dq": "OK",
-      "age_hours": 0.0011345416666666665,
+      "age_hours": 0.000888985,
       "z60": 1.289072044058497,
       "ret1_pct60": 2.1052631578947434,
       "z_delta60": 0.8698471913732371,
@@ -40,22 +40,22 @@
       "near": "NA",
       "dir": "MOVE",
       "dir_note": "MOVE_ONLY",
-      "prev_signal": "NONE",
-      "delta_signal": "NONE→ALERT",
-      "streak_hist": 0,
-      "streak_wa": 1
+      "prev_signal": "ALERT",
+      "delta_signal": "SAME",
+      "streak_hist": 1,
+      "streak_wa": 2
     },
     {
       "module": "inflation_realrate_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@891a904",
+      "script_fingerprint": "render_dashboard_py_signals_v8@6af3195",
       "series": "T10YIE",
       "value": 2.36,
       "data_date": "2026-02-03",
-      "as_of_ts": "2026-02-04T17:02:07+08:00",
+      "as_of_ts": "2026-02-05T01:09:20+08:00",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
       "dq": "OK",
-      "age_hours": 0.0011345416666666665,
+      "age_hours": 0.000888985,
       "z60": 2.2237660247529725,
       "ret1_pct60": 0.42553191489360653,
       "z_delta60": 0.1467258090100625,
@@ -71,8 +71,8 @@
       "dir_note": "MOVE_ONLY",
       "prev_signal": "WATCH",
       "delta_signal": "SAME",
-      "streak_hist": 7,
-      "streak_wa": 8
+      "streak_hist": 8,
+      "streak_wa": 9
     }
   ],
   "series_signals": {
