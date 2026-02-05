@@ -33,12 +33,13 @@ Adds:
 - main input validation: missing file / invalid JSON => exit 1 with stderr message
 - report: add strategy_params_version + mode_decision_path for transparency
 
-2026-02-05.3 updates (display-only; anti-misread; no new sources; no logic change):
-- market_cache table: add `risk_impulse` column (derived from dir + ret1%60)
-  - For dir=HIGH: ret1%60>0 => UP, ret1%60<0 => DOWN
-  - For dir=LOW : ret1%60>0 => DOWN, ret1%60<0 => UP
-  - If missing/unknown => NA
-- market_cache section: add a short reading note explaining JUMP vs LEVEL/LONG and risk_impulse meaning
+2026-02-05.3 updates (display-only hardening; NO logic changes):
+- positioning matrix:
+  - add note: trend_relaxed uses signal+p252 only; tag is informational
+- vol_gate_v2:
+  - add vol_runaway_failed_leg note when runaway not triggered (e.g., value < threshold)
+- roll25 section:
+  - echo roll25 strict_not_stale flag (from taiwan_signals) for quick visual alignment
 """
 
 from __future__ import annotations
@@ -188,7 +189,8 @@ def _find_row(rows: Any, series_name: str) -> Optional[Dict[str, Any]]:
 def _truthy_signal(x: Any, allowed: List[str]) -> bool:
     if not isinstance(x, str):
         return False
-    return x.upper() in [a.upper() for a in allowed]
+    up = x.upper()
+    return up in [a.upper() for a in allowed]
 
 
 # ---- FX helpers (dq) ----
@@ -205,37 +207,6 @@ def _fx_momentum_unavailable(mom: Any) -> bool:
         if k in mom and mom.get(k) is not None:
             return False
     return True
-
-
-# ---- display-only: anti-misread helper ----
-
-def _risk_impulse(dir_val: Any, ret1_pct60: Any) -> str:
-    """
-    Display-only helper to reduce human misread of `dir`.
-    - Interprets dir as "risk direction": which direction is riskier.
-    - Uses sign(ret1%60) to label risk impulse as UP / DOWN.
-    Rules:
-      dir=HIGH:
-        ret>0 => UP, ret<0 => DOWN
-      dir=LOW:
-        ret>0 => DOWN, ret<0 => UP
-    Unknown/missing => NA
-    """
-    if not isinstance(dir_val, str):
-        return "NA"
-    d = dir_val.strip().upper()
-    r = _to_float(ret1_pct60)
-    if r is None:
-        return "NA"
-    if r == 0:
-        return "FLAT"
-    sgn_pos = (r > 0)
-
-    if d == "HIGH":
-        return "UP" if sgn_pos else "DOWN"
-    if d == "LOW":
-        return "DOWN" if sgn_pos else "UP"
-    return "NA"
 
 
 # ---- generic module rendering (display-only) ----
@@ -258,9 +229,9 @@ def _render_generic_dashboard_section(lines: List[str], module_name: str, mod: A
 
     if isinstance(rows, list) and rows:
         hdr = [
-            "series","signal","dir","class","value","data_date","age_h",
-            "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
-            "delta","streak_hist","streak_wa","source"
+            "series", "signal", "dir", "class", "value", "data_date", "age_h",
+            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%60", "reason", "tag", "prev",
+            "delta", "streak_hist", "streak_wa", "source"
         ]
         rws: List[List[str]] = []
         for it in rows:
@@ -277,26 +248,26 @@ def _render_generic_dashboard_section(lines: List[str], module_name: str, mod: A
                 elif "JUMP" in up:
                     cls = "JUMP"
             rws.append([
-                str(it.get("series","NA")),
-                str(it.get("signal_level","NA")),
-                str(it.get("dir","NA")),
+                str(it.get("series", "NA")),
+                str(it.get("signal_level", "NA")),
+                str(it.get("dir", "NA")),
                 cls,
-                _fmt(it.get("value"),6),
-                str(it.get("data_date","NA")),
-                _fmt(it.get("age_hours"),6),
-                _fmt(it.get("z60"),6),
-                _fmt(it.get("p60"),6),
-                _fmt(it.get("p252"),6),
-                _fmt(it.get("z_delta60"),6),
-                _fmt(it.get("p_delta60"),6),
-                _fmt(it.get("ret1_pct60"),6),
-                str(it.get("reason","NA")),
+                _fmt(it.get("value"), 6),
+                str(it.get("data_date", "NA")),
+                _fmt(it.get("age_hours"), 6),
+                _fmt(it.get("z60"), 6),
+                _fmt(it.get("p60"), 6),
+                _fmt(it.get("p252"), 6),
+                _fmt(it.get("z_delta60"), 6),
+                _fmt(it.get("p_delta60"), 6),
+                _fmt(it.get("ret1_pct60"), 6),
+                str(it.get("reason", "NA")),
                 str(tag),
-                str(it.get("prev_signal","NA")),
-                str(it.get("delta_signal","NA")),
+                str(it.get("prev_signal", "NA")),
+                str(it.get("delta_signal", "NA")),
                 _fmt_int(it.get("streak_hist")),
                 _fmt_int(it.get("streak_wa")),
-                str(it.get("source_url","NA")),
+                str(it.get("source_url", "NA")),
             ])
         lines.append("")
         lines.append(_md_table(hdr, rws))
@@ -354,7 +325,11 @@ def _get_first_present(d: Dict[str, Any], keys: List[str]) -> Any:
     return None
 
 
-def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) -> None:
+def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) -> Dict[str, Any]:
+    """
+    Render taiwan_signals (pass-through only) and return a small subset
+    for display-only cross-section alignment (NO logic impact).
+    """
     tw_sig, load_note = _try_load_json_dict_with_note(tw_signals_path)
 
     margin_signal = _get_first_present(tw_sig, ["margin_signal", "signal"])
@@ -418,6 +393,12 @@ def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) 
     if note is not None:
         lines.append(f"- note: {note}")
     lines.append("")
+
+    return {
+        "roll25_strict_same_day": strict_same_day,
+        "roll25_strict_not_stale": strict_not_stale,
+        "roll25_strict_roll_match": strict_roll_match,
+    }
 
 
 def main() -> int:
@@ -519,6 +500,7 @@ def main() -> int:
     vix_value_val = _to_float(vix_m.get("value")) if isinstance(vix_m, dict) else None
     vix_date = vix_m.get("data_date") if isinstance(vix_m, dict) else None
 
+    # vol_gate_v2
     vol_runaway = bool(
         isinstance(vix_sig, str)
         and (
@@ -589,6 +571,8 @@ def main() -> int:
             f"p252_on_threshold={_fmt(TREND_P252_ON,1)}, "
             f"data_date={spx_date if spx_date is not None else 'NA'}"
         )
+        # display-only hardening: explicitly clarify that tag is informational for trend_relaxed
+        lines.append("- note: trend_relaxed uses (signal + p252) only; tag is informational (display-only).")
     else:
         lines.append("- trend_basis: market_cache.SP500: NA (missing row)")
 
@@ -610,6 +594,17 @@ def main() -> int:
             f"runaway_thresholds: ret1%60>={_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}, value>={_fmt(VIX_RUNAWAY_VALUE_MIN,1)}, "
             f"data_date={vix_date if vix_date is not None else 'NA'})"
         )
+        # display-only hardening: show which runaway leg failed (if any)
+        if not vol_runaway:
+            failed: List[str] = []
+            # note: alert case would have been runaway; so here we only list legs for WATCH case.
+            if isinstance(vix_sig, str) and vix_sig.upper() == "WATCH":
+                if vix_ret1_val is None or vix_ret1_val < VIX_RUNAWAY_RET1_60_MIN:
+                    failed.append(f"ret1%60<{_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}")
+                if vix_value_val is None or vix_value_val < VIX_RUNAWAY_VALUE_MIN:
+                    failed.append(f"value<{_fmt(VIX_RUNAWAY_VALUE_MIN,1)}")
+            if failed:
+                lines.append(f"- vol_runaway_failed_leg: {', '.join(failed)} (display-only)")
     else:
         lines.append("- vol_gate_v2: market_cache.VIX only: NA (missing row)")
 
@@ -618,7 +613,7 @@ def main() -> int:
     lines.append(f"- fx_confidence={fx_conf if fx_conf is not None else 'NA'} (fx not used as primary trigger)\n")
 
     # taiwan signals pass-through (NO fallback)
-    _render_taiwan_signals_pass_through(lines, args.tw_signals_path)
+    tw_flags = _render_taiwan_signals_pass_through(lines, args.tw_signals_path)
 
     # ----------------------------
     # market_cache detailed
@@ -631,20 +626,26 @@ def main() -> int:
     lines.append(f"- script_fingerprint: {m_meta.get('script_fingerprint','NA')}")
     lines.append(f"- script_version: {m_meta.get('script_version','NA')}")
     lines.append(f"- series_count: {m_meta.get('series_count','NA')}")
-    lines.append("- reading_note: JUMP tags indicate large recent change (delta/return), not necessarily high level; use p252/z60 for level context.")
-    lines.append("- reading_note: risk_impulse is display-only; combines dir (riskier direction) with sign(ret1%60) to reduce misread.\n")
+    # preserve existing reading notes if present (display-only)
+    rn1 = m_meta.get("reading_note")
+    if isinstance(rn1, str) and rn1.strip():
+        lines.append(f"- reading_note: {rn1.strip()}")
+    rn2 = m_meta.get("reading_note2") or m_meta.get("reading_note_2")
+    if isinstance(rn2, str) and rn2.strip():
+        lines.append(f"- reading_note: {rn2.strip()}")
+    lines.append("")
 
     if isinstance(m_rows, list) and m_rows:
         hdr = [
-            "series","signal","dir","risk_impulse","market_class","value","data_date","age_h",
-            "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
-            "delta","streak_hist","streak_wa","source"
+            "series", "signal", "dir", "risk_impulse", "market_class", "value", "data_date", "age_h",
+            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%60", "reason", "tag", "prev",
+            "delta", "streak_hist", "streak_wa", "source"
         ]
         rws: List[List[str]] = []
         for it in m_rows:
             if not isinstance(it, dict):
                 continue
-            tag = it.get("tag","NA")
+            tag = it.get("tag", "NA")
             mclass = "NONE"
             if isinstance(tag, str):
                 up = tag.upper()
@@ -655,28 +656,39 @@ def main() -> int:
                 if "JUMP" in up:
                     mclass = "JUMP" if mclass == "NONE" else f"{mclass}+JUMP"
 
+            # risk_impulse (display-only)
+            dir_v = it.get("dir")
+            ret_v = _to_float(it.get("ret1_pct60"))
+            risk_impulse = "NA"
+            if isinstance(dir_v, str) and ret_v is not None:
+                dv = dir_v.upper()
+                if dv == "HIGH":
+                    risk_impulse = "UP" if ret_v > 0 else ("DOWN" if ret_v < 0 else "FLAT")
+                elif dv == "LOW":
+                    risk_impulse = "DOWN" if ret_v > 0 else ("UP" if ret_v < 0 else "FLAT")
+
             rws.append([
-                str(it.get("series","NA")),
-                str(it.get("signal_level","NA")),
-                str(it.get("dir","NA")),
-                _risk_impulse(it.get("dir"), it.get("ret1_pct60")),
+                str(it.get("series", "NA")),
+                str(it.get("signal_level", "NA")),
+                str(it.get("dir", "NA")),
+                str(risk_impulse),
                 mclass,
-                _fmt(it.get("value"),6),
-                str(it.get("data_date","NA")),
-                _fmt(it.get("age_hours"),6),
-                _fmt(it.get("z60"),6),
-                _fmt(it.get("p60"),6),
-                _fmt(it.get("p252"),6),
-                _fmt(it.get("z_delta60"),6),
-                _fmt(it.get("p_delta60"),6),
-                _fmt(it.get("ret1_pct60"),6),
-                str(it.get("reason","NA")),
+                _fmt(it.get("value"), 6),
+                str(it.get("data_date", "NA")),
+                _fmt(it.get("age_hours"), 6),
+                _fmt(it.get("z60"), 6),
+                _fmt(it.get("p60"), 6),
+                _fmt(it.get("p252"), 6),
+                _fmt(it.get("z_delta60"), 6),
+                _fmt(it.get("p_delta60"), 6),
+                _fmt(it.get("ret1_pct60"), 6),
+                str(it.get("reason", "NA")),
                 str(tag),
-                str(it.get("prev_signal","NA")),
-                str(it.get("delta_signal","NA")),
+                str(it.get("prev_signal", "NA")),
+                str(it.get("delta_signal", "NA")),
                 _fmt_int(it.get("streak_hist")),
                 _fmt_int(it.get("streak_wa")),
-                str(it.get("source_url","NA")),
+                str(it.get("source_url", "NA")),
             ])
         lines.append(_md_table(hdr, rws))
         lines.append("")
@@ -703,14 +715,14 @@ def main() -> int:
 
     if isinstance(f_rows, list) and f_rows:
         hdr = [
-            "series","signal","fred_dir","fred_class","value","data_date","age_h",
-            "z60","p60","p252","zΔ60","pΔ60","ret1%","reason","tag","prev","delta","source"
+            "series", "signal", "fred_dir", "fred_class", "value", "data_date", "age_h",
+            "z60", "p60", "p252", "zΔ60", "pΔ60", "ret1%", "reason", "tag", "prev", "delta", "source"
         ]
         rws_f: List[List[str]] = []
         for it in f_rows:
             if not isinstance(it, dict):
                 continue
-            tag = it.get("tag","NA")
+            tag = it.get("tag", "NA")
             fclass = "NONE"
             if isinstance(tag, str):
                 up = tag.upper()
@@ -721,24 +733,24 @@ def main() -> int:
                 elif "JUMP" in up:
                     fclass = "JUMP"
             rws_f.append([
-                str(it.get("series","NA")),
-                str(it.get("signal_level","NA")),
-                str(it.get("fred_dir","NA")),
+                str(it.get("series", "NA")),
+                str(it.get("signal_level", "NA")),
+                str(it.get("fred_dir", "NA")),
                 fclass,
-                _fmt(it.get("value"),6),
-                str(it.get("data_date","NA")),
-                _fmt(it.get("age_hours"),6),
-                _fmt(it.get("z60"),6),
-                _fmt(it.get("p60"),6),
-                _fmt(it.get("p252"),6),
-                _fmt(it.get("z_delta_60"),6),
-                _fmt(it.get("p_delta_60"),6),
-                _fmt(it.get("ret1_pct"),6),
-                str(it.get("reason","NA")),
+                _fmt(it.get("value"), 6),
+                str(it.get("data_date", "NA")),
+                _fmt(it.get("age_hours"), 6),
+                _fmt(it.get("z60"), 6),
+                _fmt(it.get("p60"), 6),
+                _fmt(it.get("p252"), 6),
+                _fmt(it.get("z_delta_60"), 6),
+                _fmt(it.get("p_delta_60"), 6),
+                _fmt(it.get("ret1_pct"), 6),
+                str(it.get("reason", "NA")),
                 str(tag),
-                str(it.get("prev_signal","NA")),
-                str(it.get("delta_signal","NA")),
-                str(it.get("source_url","NA")),
+                str(it.get("prev_signal", "NA")),
+                str(it.get("delta_signal", "NA")),
+                str(it.get("source_url", "NA")),
             ])
         lines.append(_md_table(hdr, rws_f))
         lines.append("")
@@ -814,6 +826,12 @@ def main() -> int:
     lines.append(f"- used_date_status: {_normalize_used_date_status_for_display(used_date_status)}")
     lines.append(f"- used_date_selection_tag: {used_date_selection_tag}")
     lines.append(f"- tag (legacy): {legacy_tag}")
+
+    # display-only hardening: quick echo of strict flag from taiwan_signals
+    sn = tw_flags.get("roll25_strict_not_stale")
+    if isinstance(sn, bool):
+        lines.append(f"- roll25_strict_not_stale: {str(sn).lower()} (from taiwan_signals; display-only)")
+
     lines.append(
         "- note: UsedDate is the data date used for calculations. "
         "used_date_status is policy-normalized to LATEST for display only (typically T-1). "
@@ -835,7 +853,7 @@ def main() -> int:
     ohlc_missing = _infer_ohlc_missing(sigs, r_latest)
 
     if isinstance(sigs, dict):
-        for k in ["DownDay","VolumeAmplified","VolAmplified","NewLow_N","ConsecutiveBreak"]:
+        for k in ["DownDay", "VolumeAmplified", "VolAmplified", "NewLow_N", "ConsecutiveBreak"]:
             lines.append(f"- signals.{k}: {_fmt(sigs.get(k),0)}")
         lines.append(f"- signals.OhlcMissing: {_fmt(ohlc_missing,0)}")
     else:
