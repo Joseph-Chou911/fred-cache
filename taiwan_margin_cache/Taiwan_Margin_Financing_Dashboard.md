@@ -64,7 +64,7 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-05T09:29:15.289801+08:00 (Asia/Taipei)
+- generated_at: 2026-02-05T17:58:16.658270+08:00 (Asia/Taipei)
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -125,4 +125,4 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-05T02:28:59Z_
+_generated_at_utc: 2026-02-05T10:28:53Z_
