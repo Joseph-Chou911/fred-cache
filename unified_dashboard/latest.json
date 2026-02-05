@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-02-05T04:01:20Z",
+  "generated_at_utc": "2026-02-05T06:02:58Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -531,7 +531,7 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-02-05T10:51:14.852743+08:00",
+        "generated_at": "2026-02-05T14:01:34.213509+08:00",
         "timezone": "Asia/Taipei",
         "summary": "今日資料未更新；UsedDate=2026-02-04：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
         "numbers": {
@@ -2872,15 +2872,15 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-02-05T04:01:19Z",
+        "generated_at_utc": "2026-02-05T06:02:56Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-05",
-        "quote_time_local": "2026-02-05T11:59:00+08:00",
+        "quote_time_local": "2026-02-05T14:01:00+08:00",
         "usd_twd": {
-          "spot_buy": 31.585,
-          "spot_sell": 31.685,
-          "mid": 31.634999999999998
+          "spot_buy": 31.59,
+          "spot_sell": 31.69,
+          "mid": 31.64
         },
         "dq_reason": null,
         "raw": {
@@ -2906,7 +2906,7 @@
           "parse_dbg": {
             "format": "xrt_text_v4_dynamic_sanity",
             "reason": "ok",
-            "text_len": 2588,
+            "text_len": 2582,
             "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/05 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
             "text_has_usd": true,
             "text_has_zh_usd": true,
@@ -2915,13 +2915,13 @@
               80.0
             ],
             "usd_anchor": "zh:美金(USD)",
-            "usd_window": "別 幣別 現金匯率 即期匯率 遠期匯率 歷史匯率 歷史匯率 現金匯率 即期匯率 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 美金 (USD) 美金 (USD) 31.235 31.905 31.585 31.685 查詢 查詢 31.235 31.905 31.585 31.685 港幣 (HKD) 港幣 (HKD) 3.895 4.099 4.021 4.081 查詢 查詢 3.895 4.099 4.021 4.081 英鎊 (GBP) 英鎊 (GBP) 41.91 44.03 42.92 43.32 查詢 查詢 41.91 44.03 42.92 43.32 澳幣 (AUD) 澳幣 (AUD) 21.64 22.42 21.93 22.13 查詢 查詢 21.64 22.42 21.93 22.13 加拿大幣 (CAD) 加拿大幣 (CAD) 22.62 23.53 23.02 23.22 查詢 查詢 22.62 23.53 23.02 23.22 新加坡幣 (SGD) 新加坡幣 (SGD) 24.25 25.16 24.74 24.92 查詢 查詢 24.25 25.16 24.7",
+            "usd_window": "別 幣別 現金匯率 即期匯率 遠期匯率 歷史匯率 歷史匯率 現金匯率 即期匯率 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 美金 (USD) 美金 (USD) 31.24 31.91 31.59 31.69 查詢 查詢 31.24 31.91 31.59 31.69 港幣 (HKD) 港幣 (HKD) 3.896 4.1 4.022 4.082 查詢 查詢 3.896 4.1 4.022 4.082 英鎊 (GBP) 英鎊 (GBP) 41.9 44.02 42.91 43.31 查詢 查詢 41.9 44.02 42.91 43.31 澳幣 (AUD) 澳幣 (AUD) 21.66 22.44 21.95 22.15 查詢 查詢 21.66 22.44 21.95 22.15 加拿大幣 (CAD) 加拿大幣 (CAD) 22.63 23.54 23.03 23.23 查詢 查詢 22.63 23.54 23.03 23.23 新加坡幣 (SGD) 新加坡幣 (SGD) 24.25 25.16 24.74 24.92 查詢 查詢 24.25 25.16 24.74 24.92 瑞士法郎 (",
             "extracted": {
-              "cash_buy": 31.235,
-              "cash_sell": 31.905,
-              "spot_buy": 31.585,
-              "spot_sell": 31.685,
-              "mid": 31.634999999999998
+              "cash_buy": 31.24,
+              "cash_sell": 31.91,
+              "spot_buy": 31.59,
+              "spot_sell": 31.69,
+              "mid": 31.64
             },
             "sanity": {
               "mode": "fallback_wide",
@@ -2960,15 +2960,15 @@
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-05",
         "usd_twd": {
-          "spot_buy": 31.585,
-          "spot_sell": 31.685,
-          "mid": 31.634999999999998
+          "spot_buy": 31.59,
+          "spot_sell": 31.69,
+          "mid": 31.64
         },
         "momentum": {
-          "ret1_pct": 0.25352559023925936,
+          "ret1_pct": 0.26937093962922154,
           "ret1_from": "2026-02-04",
           "ret1_to": "2026-02-05",
-          "chg_5d_pct": 1.0702875399360936,
+          "chg_5d_pct": 1.0862619808306706,
           "chg_5d_from": "2026-01-29",
           "chg_5d_to": "2026-02-05",
           "points": 10
