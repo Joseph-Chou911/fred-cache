@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-05T06:01:34Z`
-- generated_at_local: `2026-02-05T14:01:34.315588+08:00`
+- generated_at_utc: `2026-02-05T06:31:50Z`
+- generated_at_local: `2026-02-05T14:31:50.278002+08:00`
 - report_date_local: `2026-02-05`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-04` (latest available)
@@ -89,6 +89,7 @@
 - roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).
 - Date ordering uses parsed dates (not string sort).
 - MM/DD dates (no year) are resolved by choosing year in {Y-1,Y,Y+1} closest to UsedDate (cross-year safe).
+- Rows missing date field are counted and sampled as '<NO_DATE_FIELD>' (audit visibility; no silent drop).
 - All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).
 - UsedDateStatus: `DATA_NOT_UPDATED` (kept for audit; not treated as daily alarm).
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
