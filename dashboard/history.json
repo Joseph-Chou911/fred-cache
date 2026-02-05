@@ -221,6 +221,19 @@
         "SP500": "WATCH",
         "HYG_IEF_RATIO": "NONE"
       }
+    },
+    {
+      "run_ts_utc": "2026-02-05T15:54:29.839970+00:00",
+      "stats_as_of_ts": "2026-02-05T11:27:29Z",
+      "module": "market_cache",
+      "ruleset_id": "signals_v8",
+      "script_fingerprint": "render_dashboard_py_signals_v8@ffc271b",
+      "series_signals": {
+        "OFR_FSI": "WATCH",
+        "VIX": "WATCH",
+        "SP500": "WATCH",
+        "HYG_IEF_RATIO": "NONE"
+      }
     }
   ]
 }
