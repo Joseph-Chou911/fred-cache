@@ -79,6 +79,12 @@ REPORTING (noise-control):
 5) TRUNCATION WARNING: detect series length mismatch before truncation; emit DQ note with per-series lens.
 6) 02/29 handling: if MM/DD=02/29 cannot be resolved within {Y-1,Y,Y+1}, emit explicit sample tag
    "MMDD_0229_NO_LEAP_IN_WINDOW" in sort diag.
+
+=== integrated audit micro-fixes (epsilon / regex) ===
+- EPSILON-based near-zero checks for denominators (ret1%, amplitude denominator, pct_change denominator, volmult avg).
+- _MMDD_RE accepts both MM/DD and MM-DD; 02/29 tag recognizes both separators.
+- BIG_NUMBER_ABS constant replaces magic number in _fmt threshold.
+- DQ mismatch messages include full context (latest/derived/UsedDate/anchor_idx).
 """
 
 from __future__ import annotations
@@ -96,6 +102,11 @@ try:
     from zoneinfo import ZoneInfo  # py3.9+
 except Exception:
     ZoneInfo = None  # type: ignore
+
+
+# ---------------- constants ----------------
+EPSILON = 1e-9
+BIG_NUMBER_ABS = 1e12  # keep existing behavior threshold explicit
 
 
 # ---------------- IO helpers ----------------
@@ -156,7 +167,7 @@ def _fmt(x: Any) -> str:
     if isinstance(x, float):
         if not math.isfinite(x):
             return "NA"
-        if abs(x) >= 1e12:
+        if abs(x) >= BIG_NUMBER_ABS:
             return f"{x:.0f}"
         return f"{x:.6f}".rstrip("0").rstrip(".")
     return str(x)
@@ -173,7 +184,8 @@ def _safe_get(d: Any, *keys: str) -> Any:
 
 # ---------------- Date parsing ----------------
 
-_MMDD_RE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*$")
+# PATCH: accept both MM/DD and MM-DD
+_MMDD_RE = re.compile(r"^\s*(\d{1,2})[/-](\d{1,2})\s*$")
 _YYYYMMDD_RE = re.compile(r"^\s*(\d{4})(\d{2})(\d{2})\s*$")
 
 
@@ -251,7 +263,7 @@ def _parse_date(
         except Exception:
             return None
 
-    # MM/DD (needs year)
+    # MM/DD or MM-DD (needs year)
     m = _MMDD_RE.match(t)
     if m and default_year is not None:
         mo, d = int(m.group(1)), int(m.group(2))
@@ -315,7 +327,8 @@ def _ret1_pct_strict(a: Optional[float], b: Optional[float]) -> Optional[float]:
         return None
     if not (math.isfinite(a) and math.isfinite(b)):
         return None
-    if b == 0:
+    # PATCH: epsilon guard
+    if abs(b) <= EPSILON:
         return None
     return (a - b) / abs(b) * 100.0
 
@@ -440,8 +453,9 @@ def _sort_rows_by_date_desc_keyed(
         d = _parse_date(raw, default_year=default_year, ref_date=ref)
         if d is None:
             parse_fail_count += 1
-            # Explicit 02/29 tag for audit (avoids silent "None" ambiguity)
-            rr = str(raw).strip()
+            # PATCH: normalize '-' to '/' for 02/29 variants
+            rr0 = str(raw).strip()
+            rr = rr0.replace("-", "/")
             if rr in ("2/29", "02/29"):
                 parse_fail_0229 += 1
                 if len(bad_samples) < 3:
@@ -497,11 +511,12 @@ def _derive_amplitude_pct_prevclose_first(r: Dict[str, Any]) -> Tuple[Optional[f
         if c is not None and chg is not None:
             prev = c - chg
 
-        if prev is not None and prev != 0 and math.isfinite(prev):
-            return ((h - l) / abs(prev) * 100.0), "prev_close"
+        # PATCH: epsilon guard on denominators
+        if prev is not None and math.isfinite(float(prev)) and abs(float(prev)) > EPSILON:
+            return ((h - l) / abs(float(prev)) * 100.0), "prev_close"
 
-        if c is not None and c != 0 and math.isfinite(c):
-            return ((h - l) / abs(c) * 100.0), "close"
+        if c is not None and math.isfinite(float(c)) and abs(float(c)) > EPSILON:
+            return ((h - l) / abs(float(c)) * 100.0), "close"
 
     if amp_field is not None:
         return amp_field, "amp_field"
@@ -535,7 +550,8 @@ def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
             continue
         a = float(a)
         b = float(b)
-        if not (math.isfinite(a) and math.isfinite(b)) or b == 0:
+        # PATCH: epsilon guard on denominator
+        if not (math.isfinite(a) and math.isfinite(b)) or abs(b) <= EPSILON:
             out.append(float("nan"))
             continue
         out.append((a - b) / abs(b) * 100.0)
@@ -588,7 +604,8 @@ def _series_vol_multiplier_20(
             na_insufficient += 1
             continue
         avg = sum(w) / len(w)
-        if avg == 0:
+        # PATCH: epsilon guard
+        if abs(avg) <= EPSILON:
             out.append(float("nan"))
             na_zero_avg += 1
             continue
@@ -692,7 +709,8 @@ def _anchored_daily_returns_pct_from_close(close_nf: List[float], anchor_idx: in
             continue
         a = float(a)
         b = float(b)
-        if not (math.isfinite(a) and math.isfinite(b)) or b == 0:
+        # keep original (b==0) guard style here; % returns are only used for sigma (already filtered)
+        if not (math.isfinite(a) and math.isfinite(b)) or abs(b) <= EPSILON:
             continue
         out.append((a - b) / abs(b) * 100.0)
     return out
@@ -1123,8 +1141,6 @@ def main() -> int:
     volmult_nf = volmult_nf_raw
 
     # --- PATCH: TRUNCATION WARNING (no silent truncation) ---
-    # Diagnose per-series lengths before truncation and record DQ note if mismatch is meaningful.
-    # This avoids the "min(len) silently discards longer series" blind spot.
     series_lens = {
         "turnover_nf": len(turnover_nf),
         "close_nf": len(close_nf),
@@ -1191,9 +1207,12 @@ def main() -> int:
                 denom_tag = "na"
                 if 0 <= anchor_idx < len(rows):
                     _amp_dbg, denom_tag = _derive_amplitude_pct_prevclose_first(rows[anchor_idx])
+                # PATCH: add full context
                 dq_notes.append(
-                    f"AMPLITUDE_PCT mismatch: abs(latest_report.AmplitudePct - roll25@UsedDate_derived) = {diff:.6f} > {args.amp_mismatch_abs_threshold} "
-                    f"(derived_denom={denom_tag})"
+                    "AMPLITUDE_PCT mismatch: "
+                    f"latest={float(amp_latest):.6f} derived@UsedDate={float(amp_used):.6f} "
+                    f"diff={diff:.6f} thr={args.amp_mismatch_abs_threshold} "
+                    f"UsedDate={as_of_data_date} anchor_idx={anchor_idx} derived_denom={denom_tag}"
                 )
 
     # --- DQ: close pct mismatch (latest pct_change vs computed ret1%) ---
@@ -1202,9 +1221,12 @@ def main() -> int:
         diff = abs(float(pct_change_latest) - float(st_close.ret1))
         if diff > float(args.close_pct_mismatch_abs_threshold):
             close_conf_override = "DOWNGRADED"
+            # PATCH: add full context
             dq_notes.append(
-                f"CLOSE pct mismatch: abs(latest_report.PctChange - computed_close_ret1%) = {diff:.6f} > {args.close_pct_mismatch_abs_threshold} "
-                f"(UsedDate={as_of_data_date})"
+                "CLOSE pct mismatch: "
+                f"latest_pct={float(pct_change_latest):.6f} computed_close_ret1%={float(st_close.ret1):.6f} "
+                f"diff={diff:.6f} thr={args.close_pct_mismatch_abs_threshold} "
+                f"UsedDate={as_of_data_date} anchor_idx={anchor_idx}"
             )
 
     # ---------------- Volatility Bands computation ----------------
@@ -1431,7 +1453,8 @@ def main() -> int:
     if isinstance(level_anchor, (int, float)) and isinstance(anchor_close, (int, float)):
         if math.isfinite(float(level_anchor)) and math.isfinite(float(anchor_close)):
             anchors_diff = abs(float(level_anchor) - float(anchor_close))
-            anchors_match = anchors_diff <= 1e-9
+            # PATCH: epsilon compare
+            anchors_match = anchors_diff <= EPSILON
 
     # (2) vol_mult_20 NA reason summary is printed in Audit Notes
     extra_audit_notes.append(
