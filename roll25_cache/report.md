@@ -1,13 +1,12 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-05T00:45:10Z`
-- generated_at_local: `2026-02-05T08:45:10.994520+08:00`
+- generated_at_utc: `2026-02-05T01:29:15Z`
+- generated_at_local: `2026-02-05T09:29:15.383609+08:00`
+- report_date_local: `2026-02-05`
 - timezone: `Asia/Taipei`
-- UsedDate: `2026-02-04`
-- UsedDateStatus: `DATA_NOT_UPDATED`
+- as_of_data_date: `2026-02-04` (latest available)
+- data_age_days: `1` (warn_if > 2)
 - RunDayTag: `WEEKDAY`
-- effective_data_date: `2026-02-04` (UsedDateStatus=DATA_NOT_UPDATED; daily endpoint not updated)
-- caution: bands and stats are anchored to UsedDate close; do NOT treat them as 'today' until UsedDateStatus becomes OK_LATEST
 - summary: 今日資料未更新；UsedDate=2026-02-04：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 
 ## 2) Key Numbers (from latest_report.json)
@@ -44,7 +43,7 @@
 - sigma_win_list_effective: `20,60` (includes sigma_base_win + 20 + 60 for audit stability)
 - sigma_base_win: `60` (BASE bands)
 - T list (trading days): `10,12,15`
-- level anchor: `32289.81` (prefer latest_report.Close else roll25@UsedDate)
+- level anchor: `32289.81` (prefer latest_report.Close else roll25@as_of_data_date)
 
 - sigma20_daily_%: `1.029479` (reason: `OK`)
 - sigma60_daily_%: `1.197262` (reason: `OK`)
@@ -88,9 +87,10 @@
 - This report is computed from local files only (no external fetch).
 - roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).
 - Date ordering uses parsed dates (not string sort).
-- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.
+- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).
+- UsedDateStatus: `DATA_NOT_UPDATED` (kept for audit; not treated as daily alarm).
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
-- ret1% is STRICT adjacency at UsedDate (UsedDate vs next older row); if missing => NA (no jumping).
+- ret1% is STRICT adjacency at as_of_data_date (UsedDate vs next older row); if missing => NA (no jumping).
 - zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).
 - AMPLITUDE derived policy: prefer prev_close (= close - change) as denominator when available; fallback to close.
 - AMPLITUDE mismatch threshold: 0.01 (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).
