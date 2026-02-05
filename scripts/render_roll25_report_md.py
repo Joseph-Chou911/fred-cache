@@ -4,7 +4,7 @@
 Render roll25_cache/latest_report.json + roll25_cache/roll25.json into roll25_cache/report.md
 
 Audit-grade alignment rules:
-- All displayed VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.
+- All displayed VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate (as-of trading date).
 - ret1% is STRICT adjacency: prev = next older row after UsedDate (no jumping).
 - zΔ60/pΔ60 are computed on DELTA series (today - prev) over last 60 deltas (anchored).
 - Date ordering uses parsed date (not string sort).
@@ -32,14 +32,13 @@ VOLATILITY BANDS (Approximation; audit-safe):
     primary: sigma_stress = max(sigma60, sigma20) * stress_mult
     fallback: if both unavailable, use max(available sigma in effective windows) * stress_mult (explicitly noted)
 
-Anti-misread guards (2026-02-xx):
-A) Summary adds explicit effective_data_date + caution when UsedDateStatus indicates stale daily endpoint.
-B) Adds a compact % table for each band (BASE/STRESS) that maps sigma_T_% to percentage moves:
-   - pct_1sigma = ±1.0*sigma_T_%
-   - pct_95%(1-tail) = ±1.645*sigma_T_%
-   - pct_95%(2-tail) = ±1.96*sigma_T_%
-   - pct_2sigma = ±2.0*sigma_T_%
-   (This is a display-only mapping, to prevent confusing "points" with "%".)
+REPORTING (noise-control):
+- Summary always shows:
+    * report_date_local (today)
+    * as_of_data_date (UsedDate; latest available)
+    * data_age_days = report_date_local - as_of_data_date (calendar days)
+  Only if data_age_days > stale_warn_days (default=2), show a warning (might be weekend/holiday).
+- UsedDateStatus is kept for audit, but moved to Audit Notes to avoid daily noise.
 """
 
 from __future__ import annotations
@@ -77,6 +76,10 @@ def _now_utc_z() -> str:
 
 def _now_local_iso() -> str:
     return datetime.now().astimezone().isoformat()
+
+
+def _today_local_date() -> date:
+    return datetime.now().astimezone().date()
 
 
 def _fmt(x: Any) -> str:
@@ -232,7 +235,6 @@ def _extract_rows_roll25_json(obj: Any) -> List[Dict[str, Any]]:
     if isinstance(obj, list):
         return [x for x in obj if isinstance(x, dict)]
     if isinstance(obj, dict):
-        # added: cache_roll25 (embedded points) + common variants
         for k in ("items", "rows", "data", "roll25", "cache_roll25", "cache_roll25_points", "points"):
             v = obj.get(k)
             if isinstance(v, list):
@@ -261,14 +263,12 @@ def _row_date_key(r: Dict[str, Any], default_year: Optional[int]) -> Optional[da
 
 def _sort_rows_by_date_desc(rows: List[Dict[str, Any]], used_date: Optional[date]) -> List[Dict[str, Any]]:
     default_year = used_date.year if used_date else datetime.now().year
-
     keyed: List[Tuple[date, Dict[str, Any]]] = []
     for r in rows:
         d = _row_date_key(r, default_year)
         if d is None:
             continue
         keyed.append((d, r))
-
     keyed.sort(key=lambda x: x[0], reverse=True)
     return [r for _, r in keyed]
 
@@ -288,18 +288,6 @@ def _series_close(rows_nf: List[Dict[str, Any]]) -> List[float]:
 
 
 def _derive_amplitude_pct_prevclose_first(r: Dict[str, Any]) -> Tuple[Optional[float], str]:
-    """
-    Derive amplitude% from a roll25 point row.
-
-    Policy:
-    1) If high/low exist:
-       - prefer prev_close denominator if change exists: prev_close = close - change
-       - else fallback to close denominator
-    2) If cannot derive, fall back to stored amplitude_pct/AmplitudePct if present.
-
-    Returns: (amplitude_pct, denom_tag)
-      denom_tag in {"prev_close", "close", "amp_field", "na"}
-    """
     amp_field = _get_float(r, "amplitude_pct", "AmplitudePct")
     h = _get_float(r, "high", "High")
     l = _get_float(r, "low", "Low")
@@ -407,7 +395,6 @@ def _anchored_stats(
     if v is None:
         conf = "DOWNGRADED"
 
-    # windows are taken from anchor forward (newer->older), i.e. series_nf[anchor_idx:]
     tail = series_nf[anchor_idx:]
 
     w60 = _take_newest_finite(tail, 60)
@@ -428,7 +415,6 @@ def _anchored_stats(
     r1 = None
 
     if want_delta_and_ret1:
-        # strict adjacency at anchor: prev is anchor_idx+1
         prev = None
         if anchor_idx + 1 < len(series_nf):
             pv = series_nf[anchor_idx + 1]
@@ -438,8 +424,7 @@ def _anchored_stats(
         if r1 is None:
             conf = "DOWNGRADED"
 
-        # delta series computed on tail (anchor..older)
-        deltas = _delta_series_nf(tail)  # deltas[0] corresponds to anchor - next
+        deltas = _delta_series_nf(tail)
         d_today = deltas[0] if deltas else None
         d60 = _take_newest_finite(deltas, 60)
 
@@ -455,16 +440,10 @@ def _anchored_stats(
 # ---------------- Volatility bands (anchored; approximation) ----------------
 
 def _anchored_daily_returns_pct_from_close(close_nf: List[float], anchor_idx: int) -> List[float]:
-    """
-    Build daily % returns series anchored at UsedDate:
-      ret[0] = (close[anchor] - close[anchor+1]) / abs(close[anchor+1]) * 100
-    Returns newest->older returns for the anchor tail.
-    """
     out: List[float] = []
     if anchor_idx < 0 or anchor_idx >= len(close_nf):
         return out
-
-    tail = close_nf[anchor_idx:]  # close at [anchor, older...]
+    tail = close_nf[anchor_idx:]
     for i in range(len(tail) - 1):
         a = tail[i]
         b = tail[i + 1]
@@ -478,10 +457,6 @@ def _anchored_daily_returns_pct_from_close(close_nf: List[float], anchor_idx: in
 
 
 def _compute_sigma_daily_pct(returns_pct: List[float], win: int) -> Tuple[Optional[float], str]:
-    """
-    sigma_daily_% = population std of last N daily % returns (anchored).
-    returns_pct is newest->older.
-    """
     w = _take_newest_finite(returns_pct, win)
     if w is None:
         return None, f"INSUFFICIENT_RETURNS:{len(returns_pct)}/{win}"
@@ -503,9 +478,6 @@ def _bands_table(
     confidence: str = "OK",
     note: str = "",
 ) -> Tuple[List[List[str]], Dict[str, Any]]:
-    """
-    Returns (md_table_rows, meta)
-    """
     rows: List[List[str]] = []
     rows.append([
         "T",
@@ -590,29 +562,15 @@ def _bands_table(
     return rows, meta
 
 
-# ---------------- Anti-misread: band % mapping (display-only) ----------------
-
-def _bands_pct_table(
+def _bands_pct_mapping_table(
     *,
     sigma_daily_pct: Optional[float],
     t_list: List[int],
     z_1tail_95: float = 1.645,
     z_2tail_95: float = 1.96,
-    label: str = "BASE",
     confidence: str = "OK",
     note: str = "",
 ) -> List[List[str]]:
-    """
-    Display-only mapping from sigma_T_% to percentage moves.
-    This helps prevent confusing "index points" with "%".
-
-    Rows:
-    - sigma_T_% (already horizon-scaled)
-    - pct_1sigma: ±1.0*sigma_T_%
-    - pct_95%(1-tail): ±1.645*sigma_T_%
-    - pct_95%(2-tail): ±1.96*sigma_T_%
-    - pct_2sigma: ±2.0*sigma_T_%
-    """
     rows: List[List[str]] = []
     rows.append([
         "T",
@@ -642,17 +600,16 @@ def _bands_pct_table(
         return rows
 
     s_daily = float(sigma_daily_pct)
+
     for T in t_list:
         if T <= 0:
             rows.append([str(T)] + ["NA"] * (len(rows[0]) - 1))
             continue
-
         sigma_T_pct = s_daily * math.sqrt(float(T))
-        pct_1 = 1.0 * sigma_T_pct
+        pct_1 = sigma_T_pct
         pct_95_1 = z_1tail_95 * sigma_T_pct
         pct_95_2 = z_2tail_95 * sigma_T_pct
         pct_2 = 2.0 * sigma_T_pct
-
         rows.append([
             str(T),
             _fmt(s_daily),
@@ -664,7 +621,6 @@ def _bands_pct_table(
             confidence,
             note,
         ])
-
     return rows
 
 
@@ -713,22 +669,6 @@ def _unique_sorted_ints(nums: List[int]) -> List[int]:
     return out
 
 
-def _useddate_staleness_notice(used_date: str, used_date_status: str) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Anti-misread guardrail:
-    - If UsedDateStatus indicates stale/not-updated data, emit explicit effective_data_date + caution.
-    Returns: (effective_data_date_line, caution_line) or (None, None)
-    """
-    if not isinstance(used_date_status, str):
-        return None, None
-    uds = used_date_status.strip().upper()
-    if uds in ("DATA_NOT_UPDATED", "STALE", "NOT_UPDATED", "DELAYED"):
-        eff = f"- effective_data_date: `{used_date}` (UsedDateStatus={used_date_status}; daily endpoint not updated)"
-        caution = "- caution: bands and stats are anchored to UsedDate close; do NOT treat them as 'today' until UsedDateStatus becomes OK_LATEST"
-        return eff, caution
-    return None, None
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
@@ -739,6 +679,11 @@ def main() -> int:
                     default=float(os.getenv("AMP_MISMATCH_ABS_THRESHOLD", "0.01")))
     ap.add_argument("--close-pct-mismatch-abs-threshold", type=float,
                     default=float(os.getenv("CLOSE_PCT_MISMATCH_ABS_THRESHOLD", "0.05")))
+
+    # Staleness warning threshold (calendar days)
+    ap.add_argument("--stale-warn-days", type=int,
+                    default=int(os.getenv("STALE_WARN_DAYS", "2")),
+                    help="Warn only if (report_date_local - as_of_data_date) > this value (calendar days). Default=2")
 
     # Vol bands controls
     ap.add_argument("--sigma-win-list", default=os.getenv("SIGMA_WIN_LIST", "20,60"),
@@ -757,6 +702,7 @@ def main() -> int:
 
     gen_utc = _now_utc_z()
     gen_local = _now_local_iso()
+    report_date_local = _today_local_date()
 
     tz = latest.get("timezone") if isinstance(latest, dict) and isinstance(latest.get("timezone"), str) else "NA"
     summary = _safe_get(latest, "summary")
@@ -766,9 +712,14 @@ def main() -> int:
     used_date_s = numbers.get("UsedDate") if isinstance(numbers.get("UsedDate"), str) else None
     used_date_dt = _parse_date(used_date_s) if used_date_s else None
 
-    used_date = used_date_s if used_date_s else "NA"
+    as_of_data_date = used_date_s if used_date_s else "NA"
     used_date_status = sig.get("UsedDateStatus") if isinstance(sig.get("UsedDateStatus"), str) else "NA"
     run_day_tag = sig.get("RunDayTag") if isinstance(sig.get("RunDayTag"), str) else "NA"
+
+    # calendar staleness (report_date_local - as_of_data_date)
+    data_age_days: Optional[int] = None
+    if used_date_dt is not None:
+        data_age_days = (report_date_local - used_date_dt).days
 
     turnover_latest = numbers.get("TradeValue")
     close_latest = numbers.get("Close")
@@ -822,6 +773,9 @@ def main() -> int:
     if not rows:
         dq_notes.append("No roll25 rows available (roll25.json empty AND latest_report.cache_roll25 missing/empty). Tables will be NA/downgraded.")
 
+    if used_date_dt is None:
+        dq_notes.append("UsedDate parse failed; data_age_days cannot be computed; report still renders with local files.")
+
     st_turnover = _anchored_stats(turnover_nf, anchor_idx, want_delta_and_ret1=True)
     st_close = _anchored_stats(close_nf, anchor_idx, want_delta_and_ret1=True)
 
@@ -853,7 +807,7 @@ def main() -> int:
             close_conf_override = "DOWNGRADED"
             dq_notes.append(
                 f"CLOSE pct mismatch: abs(latest_report.PctChange - computed_close_ret1%) = {diff:.6f} > {args.close_pct_mismatch_abs_threshold} "
-                f"(UsedDate={used_date})"
+                f"(UsedDate={as_of_data_date})"
             )
 
     # ---------------- Volatility Bands computation ----------------
@@ -862,17 +816,14 @@ def main() -> int:
     t_list = _parse_int_list(args.t_list, default=[10, 12, 15])
     stress_mult = float(args.stress_mult) if float(args.stress_mult) > 0 else 1.5
 
-    # ensure effective windows include base + 20 + 60 for audit stability
     sigma_win_list_eff = _unique_sorted_ints(sigma_win_list_in + [sigma_base_win, 20, 60])
 
-    # level anchor: prefer latest_report.Close else roll25@UsedDate derived
     level_anchor: Optional[float] = None
     if isinstance(close_latest, (int, float)) and math.isfinite(float(close_latest)):
         level_anchor = float(close_latest)
     elif isinstance(st_close.value, (int, float)) and math.isfinite(float(st_close.value)):
         level_anchor = float(st_close.value)
 
-    # compute returns anchored at UsedDate
     returns_pct = _anchored_daily_returns_pct_from_close(close_nf, anchor_idx)
 
     sigma_map: Dict[int, Optional[float]] = {}
@@ -906,18 +857,14 @@ def main() -> int:
         confidence=base_conf,
         note=base_note,
     )
-
-    base_pct_rows = _bands_pct_table(
+    base_pct_map_rows = _bands_pct_mapping_table(
         sigma_daily_pct=sigma_base,
         t_list=t_list,
-        label="BASE",
         confidence=base_conf,
         note=base_note,
     )
 
-    # stress sigma:
-    # primary: max(sigma60, sigma20) * stress_mult
-    # fallback: if both NA, use max available sigma in effective windows
+    # stress sigma: primary then fallback
     stress_conf = "OK"
     stress_note_parts: List[str] = []
     sigma_stress: Optional[float] = None
@@ -959,17 +906,15 @@ def main() -> int:
     stress_table_rows, _stress_meta = _bands_table(
         level=level_anchor if level_anchor is not None else float("nan"),
         sigma_daily_pct=sigma_stress,
-        sigma_win=9999,  # synthetic
+        sigma_win=9999,
         t_list=t_list,
         label="STRESS",
         confidence=stress_conf,
         note=stress_note,
     )
-
-    stress_pct_rows = _bands_pct_table(
+    stress_pct_map_rows = _bands_pct_mapping_table(
         sigma_daily_pct=sigma_stress,
         t_list=t_list,
-        label="STRESS",
         confidence=stress_conf,
         note=stress_note,
     )
@@ -980,20 +925,17 @@ def main() -> int:
     md.append("## 1) Summary")
     md.append(f"- generated_at_utc: `{gen_utc}`")
     md.append(f"- generated_at_local: `{gen_local}`")
+    md.append(f"- report_date_local: `{report_date_local.isoformat()}`")
     md.append(f"- timezone: `{tz}`")
-    md.append(f"- UsedDate: `{used_date}`")
-    md.append(f"- UsedDateStatus: `{used_date_status}`")
+    md.append(f"- as_of_data_date: `{as_of_data_date}` (latest available)")
+    md.append(f"- data_age_days: `{_fmt(data_age_days)}` (warn_if > {args.stale_warn_days})")
+
+    if data_age_days is not None and data_age_days > int(args.stale_warn_days):
+        md.append(f"- ⚠️ staleness_warning: as_of_data_date is {data_age_days} days behind report_date_local (可能跨週末/長假；請避免當作「今日盤後」解讀)")
+
     md.append(f"- RunDayTag: `{run_day_tag}`")
-
-    eff_line, caution_line = _useddate_staleness_notice(used_date, used_date_status)
-    if eff_line:
-        md.append(eff_line)
-    if caution_line:
-        md.append(caution_line)
-
     md.append(f"- summary: {summary if isinstance(summary, str) else 'NA'}")
     md.append("")
-
     md.append("## 2) Key Numbers (from latest_report.json)")
     md.append(f"- turnover_twd: `{_fmt(turnover_latest)}`")
     md.append(f"- close: `{_fmt(close_latest)}`")
@@ -1001,7 +943,6 @@ def main() -> int:
     md.append(f"- amplitude_pct: `{_fmt(amp_latest)}`")
     md.append(f"- volume_multiplier_20: `{_fmt(vol_mult_latest)}`")
     md.append("")
-
     md.append("## 3) Market Behavior Signals (from latest_report.json)")
     md.append(f"- DownDay: `{_fmt(sig.get('DownDay'))}`")
     md.append(f"- VolumeAmplified: `{_fmt(sig.get('VolumeAmplified'))}`")
@@ -1009,14 +950,12 @@ def main() -> int:
     md.append(f"- NewLow_N: `{_fmt(sig.get('NewLow_N'))}`")
     md.append(f"- ConsecutiveBreak: `{_fmt(sig.get('ConsecutiveBreak'))}`")
     md.append("")
-
     md.append("## 4) Data Quality Flags (from latest_report.json)")
     md.append(f"- OhlcMissing: `{_fmt(sig.get('OhlcMissing'))}`")
     md.append(f"- freshness_ok: `{_fmt(latest.get('freshness_ok'))}`")
     md.append(f"- ohlc_status: `{_fmt(latest.get('ohlc_status'))}`")
     md.append(f"- mode: `{_fmt(latest.get('mode'))}`")
     md.append("")
-
     md.append("## 5) Z/P Table (market_cache-like; computed from roll25 points)")
 
     table = [
@@ -1049,11 +988,21 @@ def main() -> int:
             conf,
         ]
 
-    table.append(_row("TURNOVER_TWD", st_turnover, value_override=turnover_latest if isinstance(turnover_latest, (int, float)) else None))
-    table.append(_row("CLOSE", st_close, value_override=close_latest if isinstance(close_latest, (int, float)) else None, force_conf=close_conf_override))
-    table.append(_row("PCT_CHANGE_CLOSE", st_pct, value_override=pct_change_latest if isinstance(pct_change_latest, (int, float)) else None, suppress_delta_ret=True))
-    table.append(_row("AMPLITUDE_PCT", st_amp, value_override=amp_latest if isinstance(amp_latest, (int, float)) else None, suppress_delta_ret=True, force_conf=amp_conf_override))
-    table.append(_row("VOL_MULTIPLIER_20", st_volm, value_override=vol_mult_latest if isinstance(vol_mult_latest, (int, float)) else None, suppress_delta_ret=True))
+    table.append(_row("TURNOVER_TWD", st_turnover,
+                      value_override=turnover_latest if isinstance(turnover_latest, (int, float)) else None))
+    table.append(_row("CLOSE", st_close,
+                      value_override=close_latest if isinstance(close_latest, (int, float)) else None,
+                      force_conf=close_conf_override))
+    table.append(_row("PCT_CHANGE_CLOSE", st_pct,
+                      value_override=pct_change_latest if isinstance(pct_change_latest, (int, float)) else None,
+                      suppress_delta_ret=True))
+    table.append(_row("AMPLITUDE_PCT", st_amp,
+                      value_override=amp_latest if isinstance(amp_latest, (int, float)) else None,
+                      suppress_delta_ret=True,
+                      force_conf=amp_conf_override))
+    table.append(_row("VOL_MULTIPLIER_20", st_volm,
+                      value_override=vol_mult_latest if isinstance(vol_mult_latest, (int, float)) else None,
+                      suppress_delta_ret=True))
 
     md.append(_md_table(table))
     md.append("")
@@ -1063,7 +1012,7 @@ def main() -> int:
     md.append(f"- sigma_win_list_effective: `{','.join(str(x) for x in sigma_win_list_eff)}` (includes sigma_base_win + 20 + 60 for audit stability)")
     md.append(f"- sigma_base_win: `{_fmt(float(sigma_base_win))}` (BASE bands)")
     md.append(f"- T list (trading days): `{','.join(str(x) for x in t_list)}`")
-    md.append(f"- level anchor: `{_fmt(level_anchor)}` (prefer latest_report.Close else roll25@UsedDate)")
+    md.append(f"- level anchor: `{_fmt(level_anchor)}` (prefer latest_report.Close else roll25@as_of_data_date)")
     md.append("")
     md.append(f"- sigma20_daily_%: `{_fmt(sigma20)}` (reason: `{sigma_reason.get(20, 'NA')}`)")
     md.append(f"- sigma60_daily_%: `{_fmt(sigma60)}` (reason: `{sigma_reason.get(60, 'NA')}`)")
@@ -1071,7 +1020,7 @@ def main() -> int:
     md.append(_md_table(base_table_rows))
     md.append("")
     md.append("### 5.1.a) Band % Mapping (display-only; prevents confusing points with %)")
-    md.append(_md_table(base_pct_rows))
+    md.append(_md_table(base_pct_map_rows))
     md.append("")
 
     md.append("## 5.2) Stress Bands (regime-shift guardrail; heuristic)")
@@ -1081,7 +1030,7 @@ def main() -> int:
     md.append(_md_table(stress_table_rows))
     md.append("")
     md.append("### 5.2.a) Stress Band % Mapping (display-only; prevents confusing points with %)")
-    md.append(_md_table(stress_pct_rows))
+    md.append(_md_table(stress_pct_map_rows))
     md.append("")
     md.append("- Interpretation notes:")
     md.append("  - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.")
@@ -1093,9 +1042,10 @@ def main() -> int:
     md.append("- This report is computed from local files only (no external fetch).")
     md.append("- roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).")
     md.append("- Date ordering uses parsed dates (not string sort).")
-    md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.")
+    md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).")
+    md.append(f"- UsedDateStatus: `{used_date_status}` (kept for audit; not treated as daily alarm).")
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
-    md.append("- ret1% is STRICT adjacency at UsedDate (UsedDate vs next older row); if missing => NA (no jumping).")
+    md.append("- ret1% is STRICT adjacency at as_of_data_date (UsedDate vs next older row); if missing => NA (no jumping).")
     md.append("- zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).")
     md.append("- AMPLITUDE derived policy: prefer prev_close (= close - change) as denominator when available; fallback to close.")
     md.append(f"- AMPLITUDE mismatch threshold: {args.amp_mismatch_abs_threshold} (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).")
@@ -1108,7 +1058,6 @@ def main() -> int:
         for n in dq_notes:
             md.append(f"  - {n}")
     md.append("")
-
     md.append("## 7) Caveats / Sources (from latest_report.json)")
     md.append("```")
     cav = latest.get("caveats")
