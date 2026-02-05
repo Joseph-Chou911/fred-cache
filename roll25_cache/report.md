@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-05T02:51:14Z`
-- generated_at_local: `2026-02-05T10:51:14.944291+08:00`
+- generated_at_utc: `2026-02-05T05:54:37Z`
+- generated_at_local: `2026-02-05T13:54:37.304872+08:00`
 - report_date_local: `2026-02-05`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-04` (latest available)
@@ -62,21 +62,21 @@
 | 15 | 1.197262 | 4.636975 | ±4.636975 | ±7.627824 | ±9.088471 | ±9.27395 | OK |  |
 
 ## 5.2) Stress Bands (regime-shift guardrail; heuristic)
-- sigma_stress_daily_%: `1.795893` (policy: max(sigma60,sigma20) * stress_mult; fallback if both NA)
+- sigma_stress_daily_%: `1.795893` (chosen_win=60; policy: primary=max(60,20) else fallback=max(effective) )
 - stress_mult: `1.5`
 
 | T | sigma_daily_% | sigma_T_% | down_1σ | down_95%(1-tail) | down_95%(2-tail) | down_2σ | up_1σ | up_95%(1-tail) | up_95%(2-tail) | up_2σ | confidence | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 1.795893 | 5.679112 | 30456.035656 | 29273.251203 | 28695.612285 | 28622.261311 | 34123.584344 | 35306.368797 | 35884.007715 | 35957.358689 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
-| 12 | 1.795893 | 6.221155 | 30281.010852 | 28985.335402 | 28352.563671 | 28272.211705 | 34298.609148 | 35594.284598 | 36227.056329 | 36307.408295 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
-| 15 | 1.795893 | 6.955463 | 30043.904276 | 28595.295085 | 27887.834782 | 27797.998553 | 34535.715724 | 35984.324915 | 36691.785218 | 36781.621447 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
+| 10 | 1.795893 | 5.679112 | 30456.035656 | 29273.251203 | 28695.612285 | 28622.261311 | 34123.584344 | 35306.368797 | 35884.007715 | 35957.358689 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 12 | 1.795893 | 6.221155 | 30281.010852 | 28985.335402 | 28352.563671 | 28272.211705 | 34298.609148 | 35594.284598 | 36227.056329 | 36307.408295 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 15 | 1.795893 | 6.955463 | 30043.904276 | 28595.295085 | 27887.834782 | 27797.998553 | 34535.715724 | 35984.324915 | 36691.785218 | 36781.621447 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
 
 ### 5.2.a) Stress Band % Mapping (display-only; prevents confusing points with %)
 | T | sigma_daily_% | sigma_T_% | pct_1σ | pct_95%(1-tail) | pct_95%(2-tail) | pct_2σ | confidence | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 1.795893 | 5.679112 | ±5.679112 | ±9.342139 | ±11.131059 | ±11.358223 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
-| 12 | 1.795893 | 6.221155 | ±6.221155 | ±10.2338 | ±12.193464 | ±12.44231 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
-| 15 | 1.795893 | 6.955463 | ±6.955463 | ±11.441736 | ±13.632707 | ±13.910926 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
+| 10 | 1.795893 | 5.679112 | ±5.679112 | ±9.342139 | ±11.131059 | ±11.358223 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 12 | 1.795893 | 6.221155 | ±6.221155 | ±10.2338 | ±12.193464 | ±12.44231 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 15 | 1.795893 | 6.955463 | ±6.955463 | ±11.441736 | ±13.632707 | ±13.910926 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
 
 - Interpretation notes:
   - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.
@@ -85,8 +85,10 @@
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
+- SERIES DIRECTION: all series are NEWEST-FIRST (index 0 = latest).
 - roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).
 - Date ordering uses parsed dates (not string sort).
+- MM/DD dates (no year) are resolved by choosing year in {Y-1,Y,Y+1} closest to UsedDate (cross-year safe).
 - All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).
 - UsedDateStatus: `DATA_NOT_UPDATED` (kept for audit; not treated as daily alarm).
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
