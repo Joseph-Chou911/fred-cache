@@ -8,12 +8,12 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-05T11:28:19Z
+- unified_generated_at_utc: 2026-02-05T12:08:07Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
 - strategy_version: strategy_mode_v1
-- strategy_params_version: 2026-02-05.2
+- strategy_params_version: 2026-02-05.3
 - source_policy: SP500,VIX => market_cache_only (fred_cache SP500/VIXCLS not used for mode)
 - trend_on: true
 - trend_strong: false
@@ -58,13 +58,15 @@
 - script_fingerprint: render_dashboard_py_signals_v8@8866958
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
+- reading_note: JUMP tags indicate large recent change (delta/return), not necessarily high level; use p252/z60 for level context.
+- reading_note: risk_impulse is display-only; combines dir (riskier direction) with sign(ret1%60) to reduce misread.
 
-| series | signal | dir | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| VIX | WATCH | HIGH | JUMP | 18.000000 | 2026-02-03 | 0.010374 | 0.382153 | 81.666667 | 60.317460 | 0.627616 | 35.000000 | 10.159119 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 5 | 6 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| OFR_FSI | WATCH | HIGH | JUMP | -2.326000 | 2026-02-02 | 0.010374 | 0.259891 | 71.666667 | 27.777778 | -0.196811 | -8.333333 | -3.148559 | abs(ret1%60)>=2 | JUMP_RET | WATCH | SAME | 2 | 3 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
-| SP500 | WATCH | HIGH | JUMP | 6882.720000 | 2026-02-04 | 0.010374 | 0.317049 | 56.666667 | 88.888889 | -0.369409 | -15.000000 | -0.507241 | abs(PΔ60)>=15 | JUMP_P | WATCH | SAME | 1 | 2 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| HYG_IEF_RATIO | NONE | LOW | NONE | 0.843838 | 2026-02-04 | 0.010374 | 1.139057 | 80.000000 | 73.015873 | -0.234424 | -5.000000 | -0.133949 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
+| series | signal | dir | risk_impulse | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| VIX | WATCH | HIGH | UP | JUMP | 18.000000 | 2026-02-03 | 0.010374 | 0.382153 | 81.666667 | 60.317460 | 0.627616 | 35.000000 | 10.159119 | abs(PΔ60)>=15;abs(ret1%60)>=2 | JUMP_P,JUMP_RET | WATCH | SAME | 5 | 6 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
+| OFR_FSI | WATCH | HIGH | DOWN | JUMP | -2.326000 | 2026-02-02 | 0.010374 | 0.259891 | 71.666667 | 27.777778 | -0.196811 | -8.333333 | -3.148559 | abs(ret1%60)>=2 | JUMP_RET | WATCH | SAME | 2 | 3 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| SP500 | WATCH | HIGH | DOWN | JUMP | 6882.720000 | 2026-02-04 | 0.010374 | 0.317049 | 56.666667 | 88.888889 | -0.369409 | -15.000000 | -0.507241 | abs(PΔ60)>=15 | JUMP_P | WATCH | SAME | 1 | 2 | https://stooq.com/q/d/l/?s=^spx&i=d |
+| HYG_IEF_RATIO | NONE | LOW | UP | NONE | 0.843838 | 2026-02-04 | 0.010374 | 1.139057 | 80.000000 | 73.015873 | -0.234424 | -5.000000 | -0.133949 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
 
 ## fred_cache (ALERT+WATCH+INFO)
 - as_of_ts: 2026-02-05T06:58:14+08:00
@@ -178,7 +180,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-05T10:28:53Z
 
-<!-- rendered_at_utc: 2026-02-05T11:28:19Z -->
+<!-- rendered_at_utc: 2026-02-05T12:08:07Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
