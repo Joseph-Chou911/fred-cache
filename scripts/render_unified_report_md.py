@@ -32,6 +32,13 @@ Adds:
 2026-02-05.2 updates (audit hardening):
 - main input validation: missing file / invalid JSON => exit 1 with stderr message
 - report: add strategy_params_version + mode_decision_path for transparency
+
+2026-02-05.3 updates (display-only; anti-misread; no new sources; no logic change):
+- market_cache table: add `risk_impulse` column (derived from dir + ret1%60)
+  - For dir=HIGH: ret1%60>0 => UP, ret1%60<0 => DOWN
+  - For dir=LOW : ret1%60>0 => DOWN, ret1%60<0 => UP
+  - If missing/unknown => NA
+- market_cache section: add a short reading note explaining JUMP vs LEVEL/LONG and risk_impulse meaning
 """
 
 from __future__ import annotations
@@ -47,7 +54,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # ----------------------------
 # Deterministic parameters (audit-friendly)
 # ----------------------------
-STRATEGY_PARAMS_VERSION: str = "2026-02-05.2"
+STRATEGY_PARAMS_VERSION: str = "2026-02-05.3"
 
 TREND_P252_ON: float = 80.0
 VIX_RUNAWAY_RET1_60_MIN: float = 5.0
@@ -198,6 +205,37 @@ def _fx_momentum_unavailable(mom: Any) -> bool:
         if k in mom and mom.get(k) is not None:
             return False
     return True
+
+
+# ---- display-only: anti-misread helper ----
+
+def _risk_impulse(dir_val: Any, ret1_pct60: Any) -> str:
+    """
+    Display-only helper to reduce human misread of `dir`.
+    - Interprets dir as "risk direction": which direction is riskier.
+    - Uses sign(ret1%60) to label risk impulse as UP / DOWN.
+    Rules:
+      dir=HIGH:
+        ret>0 => UP, ret<0 => DOWN
+      dir=LOW:
+        ret>0 => DOWN, ret<0 => UP
+    Unknown/missing => NA
+    """
+    if not isinstance(dir_val, str):
+        return "NA"
+    d = dir_val.strip().upper()
+    r = _to_float(ret1_pct60)
+    if r is None:
+        return "NA"
+    if r == 0:
+        return "FLAT"
+    sgn_pos = (r > 0)
+
+    if d == "HIGH":
+        return "UP" if sgn_pos else "DOWN"
+    if d == "LOW":
+        return "DOWN" if sgn_pos else "UP"
+    return "NA"
 
 
 # ---- generic module rendering (display-only) ----
@@ -592,11 +630,13 @@ def main() -> int:
     lines.append(f"- ruleset_id: {m_meta.get('ruleset_id','NA')}")
     lines.append(f"- script_fingerprint: {m_meta.get('script_fingerprint','NA')}")
     lines.append(f"- script_version: {m_meta.get('script_version','NA')}")
-    lines.append(f"- series_count: {m_meta.get('series_count','NA')}\n")
+    lines.append(f"- series_count: {m_meta.get('series_count','NA')}")
+    lines.append("- reading_note: JUMP tags indicate large recent change (delta/return), not necessarily high level; use p252/z60 for level context.")
+    lines.append("- reading_note: risk_impulse is display-only; combines dir (riskier direction) with sign(ret1%60) to reduce misread.\n")
 
     if isinstance(m_rows, list) and m_rows:
         hdr = [
-            "series","signal","dir","market_class","value","data_date","age_h",
+            "series","signal","dir","risk_impulse","market_class","value","data_date","age_h",
             "z60","p60","p252","zΔ60","pΔ60","ret1%60","reason","tag","prev",
             "delta","streak_hist","streak_wa","source"
         ]
@@ -614,10 +654,12 @@ def main() -> int:
                     mclass = "LEVEL" if mclass == "NONE" else f"{mclass}+LEVEL"
                 if "JUMP" in up:
                     mclass = "JUMP" if mclass == "NONE" else f"{mclass}+JUMP"
+
             rws.append([
                 str(it.get("series","NA")),
                 str(it.get("signal_level","NA")),
                 str(it.get("dir","NA")),
+                _risk_impulse(it.get("dir"), it.get("ret1_pct60")),
                 mclass,
                 _fmt(it.get("value"),6),
                 str(it.get("data_date","NA")),
