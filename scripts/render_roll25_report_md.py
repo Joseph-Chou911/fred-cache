@@ -56,7 +56,7 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -342,20 +342,34 @@ def _sort_rows_by_date_desc_keyed(
     """
     Returns keyed list (date, row) sorted by date desc (NEWEST-FIRST),
     plus diag for audit/debug.
+
+    Note (audit improvement):
+    - If a row has NO date field at all, we record "<NO_DATE_FIELD>" into bad_date_samples
+      (up to 3 samples) and count it, rather than silently skipping.
     """
     default_year = used_date.year if used_date else (ref_date.year if ref_date else datetime.now().year)
     ref = used_date or ref_date
 
     keyed: List[Tuple[date, Dict[str, Any]]] = []
     bad_samples: List[str] = []
+    no_date_field_count = 0
+    parse_fail_count = 0
 
     for r in rows:
         raw = _get_row_raw_date(r)
-        d = _parse_date(raw, default_year=default_year, ref_date=ref) if raw is not None else None
+        if raw is None:
+            no_date_field_count += 1
+            if len(bad_samples) < 3:
+                bad_samples.append("<NO_DATE_FIELD>")
+            continue
+
+        d = _parse_date(raw, default_year=default_year, ref_date=ref)
         if d is None:
-            if raw is not None and len(bad_samples) < 3:
+            parse_fail_count += 1
+            if len(bad_samples) < 3:
                 bad_samples.append(str(raw))
             continue
+
         keyed.append((d, r))
 
     keyed.sort(key=lambda x: x[0], reverse=True)
@@ -364,6 +378,8 @@ def _sort_rows_by_date_desc_keyed(
         "total_rows": len(rows),
         "kept_rows": len(keyed),
         "dropped_rows": len(rows) - len(keyed),
+        "no_date_field_count": no_date_field_count,
+        "parse_fail_count": parse_fail_count,
         "bad_date_samples": bad_samples,
         "default_year": default_year,
         "ref_date": ref.isoformat() if isinstance(ref, date) else "NA",
@@ -876,7 +892,8 @@ def main() -> int:
     if sort_diag.get("dropped_rows", 0) > 0:
         dq_notes.append(
             f"Date parse dropped rows: dropped={sort_diag.get('dropped_rows')} / total={sort_diag.get('total_rows')} "
-            f"(bad_samples={sort_diag.get('bad_date_samples')})"
+            f"(no_date_field_count={sort_diag.get('no_date_field_count')}, parse_fail_count={sort_diag.get('parse_fail_count')}, "
+            f"bad_samples={sort_diag.get('bad_date_samples')})"
         )
 
     # anchor index for UsedDate
@@ -1019,7 +1036,6 @@ def main() -> int:
     sigma_stress: Optional[float] = None
     stress_chosen_win: Optional[int] = None
 
-    # primary candidates: 60, 20 only
     cand_primary: List[Tuple[int, float]] = []
     if isinstance(sigma60, (int, float)) and math.isfinite(float(sigma60)):
         cand_primary.append((60, float(sigma60)))
@@ -1027,7 +1043,6 @@ def main() -> int:
         cand_primary.append((20, float(sigma20)))
 
     if cand_primary:
-        # choose max sigma (conservative)
         stress_chosen_win, best_sd = max(cand_primary, key=lambda x: x[1])
         sigma_stress = best_sd * stress_mult
         stress_note_parts.append("policy=primary:max(sigma60,sigma20)*mult")
@@ -1037,7 +1052,6 @@ def main() -> int:
         if sigma60 is None:
             stress_note_parts.append("sigma60 NA; used sigma20 only.")
     else:
-        # fallback among effective windows (explicit chosen window)
         best_w: Optional[int] = None
         best_sd2: Optional[float] = None
         for w in sigma_win_list_eff:
@@ -1224,6 +1238,7 @@ def main() -> int:
     md.append("- roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).")
     md.append("- Date ordering uses parsed dates (not string sort).")
     md.append("- MM/DD dates (no year) are resolved by choosing year in {Y-1,Y,Y+1} closest to UsedDate (cross-year safe).")
+    md.append("- Rows missing date field are counted and sampled as '<NO_DATE_FIELD>' (audit visibility; no silent drop).")
     md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).")
     md.append(f"- UsedDateStatus: `{used_date_status}` (kept for audit; not treated as daily alarm).")
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
