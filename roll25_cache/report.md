@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-05T06:31:50Z`
-- generated_at_local: `2026-02-05T14:31:50.278002+08:00`
+- generated_at_utc: `2026-02-05T08:37:40Z`
+- generated_at_local: `2026-02-05T16:37:40.695392+08:00`
 - report_date_local: `2026-02-05`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-04` (latest available)
@@ -43,7 +43,7 @@
 - sigma_win_list_effective: `20,60` (includes sigma_base_win + 20 + 60 for audit stability)
 - sigma_base_win: `60` (BASE bands)
 - T list (trading days): `10,12,15`
-- level anchor: `32289.81` (prefer latest_report.Close else roll25@as_of_data_date)
+- level anchor: `32289.81` (source: latest_report.Close)
 
 - sigma20_daily_%: `1.029479` (reason: `OK`)
 - sigma60_daily_%: `1.197262` (reason: `OK`)
@@ -83,6 +83,36 @@
   - 1-tail 95% uses z=1.645 (one-sided yardstick). 2-tail 95% uses z=1.96 (central 95% interval yardstick).
   - Stress bands are heuristic; they are meant to be conservative-ish, not statistically exact.
 
+## 5.3) Roll25 Dynamic Risk Check (Rule A; log-return bands)
+- Policy (fixed; audit-grade):
+  - ret1_log_pct = 100 * ln(Close_t / Close_{t-1})  (STRICT adjacency at UsedDate)
+  - sigma_log(win=60) computed from last 60 daily log returns anchored at UsedDate (ddof=0)
+  - sigma_target_pct = max(sigma_log, abs(ret1_log_pct))  (Rule A)
+  - Band(z) = AnchorClose * exp(- z * sigma_target_pct / 100)
+
+### 5.3.a) Parameter Setup
+- AnchorClose: `32289.81` (source: roll25@UsedDate.close)
+- PrevClose(strict): `32195.36`
+- ret1_log_pct(abs): `0.292936`
+- sigma_log_60_daily_%: `1.198231` (reason: `OK`)
+- sigma_target_daily_% (Rule A): `1.198231`
+- confidence: `OK`
+- notes: `anchor_source=roll25@UsedDate.close; vol_mult_source=latest_report.VolumeMultiplier`
+
+### 5.3.b) Risk Bands
+| band | z | formula | point | close_confirm_rule |
+| --- | --- | --- | --- | --- |
+| Band 1 (normal) | 1 | P*exp(-z*sigma) | 31905.212167 | Close >= 31905.212167 => PASS else NOTE/FAIL |
+| Band 2 (stress) | 2 | P*exp(-z*sigma) | 31525.195207 | Close <  31525.195207 => FAIL (do not catch knife) |
+
+### 5.3.c) Health Check (deterministic)
+| item | value | rule | status |
+| --- | --- | --- | --- |
+| Volume_Mult_20 | 0.890968 | <= 1.0 PASS; (1.0,1.3) NOTE; >= 1.3 FAIL | PASS |
+| Price Structure | 32289.81 | Close>=B1 PASS; B2<=Close<B1 NOTE; Close<B2 FAIL | PASS |
+| Self Risk | NO_MARGIN | no leverage / no pledge forced-sell risk | PASS |
+| Action | OPTIONAL_TINY_PROBE (全 PASS → 可考慮極小額試單；非必要) | any FAIL => CASH; all PASS => optional tiny probe; else observe | — |
+
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
 - SERIES DIRECTION: all series are NEWEST-FIRST (index 0 = latest).
@@ -93,7 +123,8 @@
 - All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).
 - UsedDateStatus: `DATA_NOT_UPDATED` (kept for audit; not treated as daily alarm).
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
-- ret1% is STRICT adjacency at as_of_data_date (UsedDate vs next older row); if missing => NA (no jumping).
+- ret1% (in Z/P table) is STRICT adjacency at as_of_data_date (simple %).
+- Dynamic Risk Check ret1 uses STRICT adjacency LOG return: 100*ln(Close_t/Close_{t-1}).
 - zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).
 - AMPLITUDE derived policy: prefer prev_close (= close - change) as denominator when available; fallback to close.
 - AMPLITUDE mismatch threshold: 0.01 (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).
@@ -101,6 +132,11 @@
 - PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.
 - VOL_BANDS: sigma computed from anchored DAILY % returns; horizon scaling uses sqrt(T).
 - Band % Mapping tables (5.1.a/5.2.a) are display-only: they map sigma_T_% to ±% moves; they do NOT alter signals.
+- VOL thresholds: pass_max=1 fail_min=1.3 (parameterized)
+- Anchor clarity: level_anchor=32289.81 (for bands) vs anchor_close=32289.81 (for risk check)
+  - anchors_match: `true` ; abs_diff: `0`
+- EXTRA_AUDIT_NOTES:
+  - VOL_MULT_20 window diag: win=20 min_points=15 len_turnover=282 computed=267 na_invalid_a=0 na_no_tail=1 na_insufficient_window=14 na_zero_avg=0
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
