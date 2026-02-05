@@ -8,6 +8,7 @@ Audit-grade alignment rules:
 - ret1% is STRICT adjacency: prev = next older row after UsedDate (no jumping).
 - zΔ60/pΔ60 are computed on DELTA series (today - prev) over last 60 deltas (anchored).
 - Date ordering uses parsed date (not string sort).
+- SERIES DIRECTION CONTRACT: all *_nf series are NEWEST-FIRST (index 0 = latest date).
 
 Stats:
 - z-score uses population std (ddof=0)
@@ -16,12 +17,17 @@ Stats:
 DQ checks:
 - AMPLITUDE mismatch: abs(latest - derived@UsedDate) > threshold => AMPLITUDE row DOWNGRADED + note
 - CLOSE pct mismatch: abs(ret1_close - latest_pct_change) > threshold => CLOSE row DOWNGRADED + note
+- Missing latest fields are explicitly noted (mismatch checks skipped rather than silently omitted).
 
 IMPORTANT (2026-01-xx fix):
 - AMPLITUDE_PCT derived from roll25.json now prefers prev_close denominator if possible:
   prev_close = close - change
   amplitude = (high - low) / abs(prev_close) * 100
   fallback only if prev_close unavailable: (high - low) / abs(close) * 100
+
+MM/DD (no year) handling (cross-year safe):
+- When a row date is MM/DD, we choose year among {default_year-1, default_year, default_year+1}
+  that is closest to a reference date (prefer UsedDate). This avoids cross-year mis-anchor.
 
 VOLATILITY BANDS (Approximation; audit-safe):
 - sigma_win_list computed from last N DAILY % returns anchored at UsedDate (population std; ddof=0).
@@ -30,11 +36,12 @@ VOLATILITY BANDS (Approximation; audit-safe):
 - 2-tail 95% uses z=1.96
 - stress sigma:
     primary: sigma_stress = max(sigma60, sigma20) * stress_mult
-    fallback: if both unavailable, use max(available sigma in effective windows) * stress_mult (explicitly noted)
+    fallback: if both unavailable, use max(available sigma in effective windows) * stress_mult
+              (explicitly noted with chosen window)
 
 REPORTING (noise-control):
 - Summary always shows:
-    * report_date_local (today)
+    * report_date_local (today, in tz if available)
     * as_of_data_date (UsedDate; latest available)
     * data_age_days = report_date_local - as_of_data_date (calendar days)
   Only if data_age_days > stale_warn_days (default=2), show a warning (might be weekend/holiday).
@@ -49,8 +56,13 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from zoneinfo import ZoneInfo  # py3.9+
+except Exception:
+    ZoneInfo = None  # type: ignore
 
 
 # ---------------- IO helpers ----------------
@@ -74,12 +86,31 @@ def _now_utc_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _now_local_iso() -> str:
-    return datetime.now().astimezone().isoformat()
+def _get_tzinfo(tz_name: Optional[str]):
+    if not tz_name or not isinstance(tz_name, str):
+        return None
+    if tz_name == "NA":
+        return None
+    if ZoneInfo is None:
+        return None
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return None
 
 
-def _today_local_date() -> date:
-    return datetime.now().astimezone().date()
+def _now_local_iso(tz_name: Optional[str]) -> str:
+    tzinfo = _get_tzinfo(tz_name)
+    if tzinfo is None:
+        return datetime.now().astimezone().isoformat()
+    return datetime.now(timezone.utc).astimezone(tzinfo).isoformat()
+
+
+def _today_local_date(tz_name: Optional[str]) -> date:
+    tzinfo = _get_tzinfo(tz_name)
+    if tzinfo is None:
+        return datetime.now().astimezone().date()
+    return datetime.now(timezone.utc).astimezone(tzinfo).date()
 
 
 def _fmt(x: Any) -> str:
@@ -112,7 +143,48 @@ def _safe_get(d: Any, *keys: str) -> Any:
 _MMDD_RE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*$")
 _YYYYMMDD_RE = re.compile(r"^\s*(\d{4})(\d{2})(\d{2})\s*$")
 
-def _parse_date(s: Any, *, default_year: Optional[int] = None) -> Optional[date]:
+
+def _choose_year_for_mmdd(
+    mo: int,
+    d: int,
+    *,
+    default_year: int,
+    ref_date: Optional[date],
+) -> Optional[date]:
+    """
+    Cross-year safe: pick year among {default_year-1, default_year, default_year+1}
+    that is closest to ref_date. If ref_date is None, use default_year.
+    """
+    cand_years = [default_year]
+    if ref_date is not None:
+        cand_years = [default_year - 1, default_year, default_year + 1]
+
+    best: Optional[date] = None
+    best_abs_days: Optional[int] = None
+
+    for y in cand_years:
+        try:
+            dd = date(y, mo, d)
+        except Exception:
+            continue
+
+        if ref_date is None:
+            return dd
+
+        abs_days = abs((dd - ref_date).days)
+        if best is None or best_abs_days is None or abs_days < best_abs_days:
+            best = dd
+            best_abs_days = abs_days
+
+    return best
+
+
+def _parse_date(
+    s: Any,
+    *,
+    default_year: Optional[int] = None,
+    ref_date: Optional[date] = None,
+) -> Optional[date]:
     if not isinstance(s, str):
         return None
     t = s.strip()
@@ -142,10 +214,7 @@ def _parse_date(s: Any, *, default_year: Optional[int] = None) -> Optional[date]
     m = _MMDD_RE.match(t)
     if m and default_year is not None:
         mo, d = int(m.group(1)), int(m.group(2))
-        try:
-            return date(default_year, mo, d)
-        except Exception:
-            return None
+        return _choose_year_for_mmdd(mo, d, default_year=default_year, ref_date=ref_date)
 
     return None
 
@@ -185,13 +254,15 @@ def _take_newest_finite(series_nf: List[float], n: int) -> Optional[List[float]]
 
 
 def _delta_series_nf(series_nf: List[float]) -> List[float]:
+    # NEWEST-FIRST contract: delta[today] = series_nf[0] - series_nf[1]
     out: List[float] = []
     for i in range(len(series_nf) - 1):
         a = series_nf[i]
         b = series_nf[i + 1]
         if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
             continue
-        a = float(a); b = float(b)
+        a = float(a)
+        b = float(b)
         if not (math.isfinite(a) and math.isfinite(b)):
             continue
         out.append(a - b)
@@ -252,28 +323,56 @@ def _get_float(r: Dict[str, Any], *keys: str) -> Optional[float]:
     return None
 
 
-def _row_date_key(r: Dict[str, Any], default_year: Optional[int]) -> Optional[date]:
+def _get_row_raw_date(r: Dict[str, Any]) -> Optional[str]:
     raw = r.get("date")
-    if not isinstance(raw, str):
-        raw = r.get("Date")
     if isinstance(raw, str):
-        return _parse_date(raw, default_year=default_year)
+        return raw
+    raw = r.get("Date")
+    if isinstance(raw, str):
+        return raw
     return None
 
 
-def _sort_rows_by_date_desc(rows: List[Dict[str, Any]], used_date: Optional[date]) -> List[Dict[str, Any]]:
-    default_year = used_date.year if used_date else datetime.now().year
+def _sort_rows_by_date_desc_keyed(
+    rows: List[Dict[str, Any]],
+    used_date: Optional[date],
+    *,
+    ref_date: Optional[date],
+) -> Tuple[List[Tuple[date, Dict[str, Any]]], Dict[str, Any]]:
+    """
+    Returns keyed list (date, row) sorted by date desc (NEWEST-FIRST),
+    plus diag for audit/debug.
+    """
+    default_year = used_date.year if used_date else (ref_date.year if ref_date else datetime.now().year)
+    ref = used_date or ref_date
+
     keyed: List[Tuple[date, Dict[str, Any]]] = []
+    bad_samples: List[str] = []
+
     for r in rows:
-        d = _row_date_key(r, default_year)
+        raw = _get_row_raw_date(r)
+        d = _parse_date(raw, default_year=default_year, ref_date=ref) if raw is not None else None
         if d is None:
+            if raw is not None and len(bad_samples) < 3:
+                bad_samples.append(str(raw))
             continue
         keyed.append((d, r))
+
     keyed.sort(key=lambda x: x[0], reverse=True)
-    return [r for _, r in keyed]
+
+    diag = {
+        "total_rows": len(rows),
+        "kept_rows": len(keyed),
+        "dropped_rows": len(rows) - len(keyed),
+        "bad_date_samples": bad_samples,
+        "default_year": default_year,
+        "ref_date": ref.isoformat() if isinstance(ref, date) else "NA",
+    }
+    return keyed, diag
 
 
 def _series_turnover(rows_nf: List[Dict[str, Any]]) -> List[float]:
+    # NEWEST-FIRST
     out: List[float] = []
     for r in rows_nf:
         out.append(_get_float(r, "turnover_twd", "trade_value", "TradeValue", "turnover", "Turnover") or float("nan"))
@@ -281,6 +380,7 @@ def _series_turnover(rows_nf: List[Dict[str, Any]]) -> List[float]:
 
 
 def _series_close(rows_nf: List[Dict[str, Any]]) -> List[float]:
+    # NEWEST-FIRST
     out: List[float] = []
     for r in rows_nf:
         out.append(_get_float(r, "close", "Close") or float("nan"))
@@ -312,6 +412,7 @@ def _derive_amplitude_pct_prevclose_first(r: Dict[str, Any]) -> Tuple[Optional[f
 
 
 def _series_amplitude_pct(rows_nf: List[Dict[str, Any]]) -> List[float]:
+    # NEWEST-FIRST
     out: List[float] = []
     for r in rows_nf:
         amp, _tag = _derive_amplitude_pct_prevclose_first(r)
@@ -323,6 +424,10 @@ def _series_amplitude_pct(rows_nf: List[Dict[str, Any]]) -> List[float]:
 
 
 def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
+    """
+    NEWEST-FIRST close series -> NEWEST-FIRST pct_change series.
+    For last element (oldest row) there is no next older; we append NA to keep alignment.
+    """
     out: List[float] = []
     for i in range(len(close_nf) - 1):
         a = close_nf[i]
@@ -330,7 +435,8 @@ def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
         if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
             out.append(float("nan"))
             continue
-        a = float(a); b = float(b)
+        a = float(a)
+        b = float(b)
         if not (math.isfinite(a) and math.isfinite(b)) or b == 0:
             out.append(float("nan"))
             continue
@@ -340,6 +446,11 @@ def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
 
 
 def _series_vol_multiplier_20(turnover_nf: List[float], min_points: int = 15, win: int = 20) -> List[float]:
+    """
+    NEWEST-FIRST contract:
+    vol_mult[i] = turnover[i] / avg(turnover[i+1 : i+win+1])  (i.e., vs older window)
+    This is NOT "future window" under the NEWEST-FIRST contract.
+    """
     out: List[float] = []
     for i in range(len(turnover_nf)):
         a = turnover_nf[i]
@@ -354,7 +465,7 @@ def _series_vol_multiplier_20(turnover_nf: List[float], min_points: int = 15, wi
             continue
 
         window = turnover_nf[start:end]
-        w = []
+        w: List[float] = []
         for v in window:
             if isinstance(v, (int, float)):
                 fv = float(v)
@@ -395,7 +506,7 @@ def _anchored_stats(
     if v is None:
         conf = "DOWNGRADED"
 
-    tail = series_nf[anchor_idx:]
+    tail = series_nf[anchor_idx:]  # NEWEST-FIRST tail anchored at UsedDate index
 
     w60 = _take_newest_finite(tail, 60)
     w252 = _take_newest_finite(tail, 252)
@@ -424,7 +535,7 @@ def _anchored_stats(
         if r1 is None:
             conf = "DOWNGRADED"
 
-        deltas = _delta_series_nf(tail)
+        deltas = _delta_series_nf(tail)  # NEWEST-FIRST deltas aligned to tail
         d_today = deltas[0] if deltas else None
         d60 = _take_newest_finite(deltas, 60)
 
@@ -440,6 +551,10 @@ def _anchored_stats(
 # ---------------- Volatility bands (anchored; approximation) ----------------
 
 def _anchored_daily_returns_pct_from_close(close_nf: List[float], anchor_idx: int) -> List[float]:
+    """
+    Returns NEWEST-FIRST daily % returns series anchored at anchor_idx:
+    out[0] corresponds to close[anchor_idx] vs close[anchor_idx+1]
+    """
     out: List[float] = []
     if anchor_idx < 0 or anchor_idx >= len(close_nf):
         return out
@@ -449,7 +564,8 @@ def _anchored_daily_returns_pct_from_close(close_nf: List[float], anchor_idx: in
         b = tail[i + 1]
         if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
             continue
-        a = float(a); b = float(b)
+        a = float(a)
+        b = float(b)
         if not (math.isfinite(a) and math.isfinite(b)) or b == 0:
             continue
         out.append((a - b) / abs(b) * 100.0)
@@ -700,11 +816,12 @@ def main() -> int:
     latest = _load_json(args.latest)
     roll25_hist = _load_json(args.roll25)
 
-    gen_utc = _now_utc_z()
-    gen_local = _now_local_iso()
-    report_date_local = _today_local_date()
-
     tz = latest.get("timezone") if isinstance(latest, dict) and isinstance(latest.get("timezone"), str) else "NA"
+
+    gen_utc = _now_utc_z()
+    gen_local = _now_local_iso(tz)
+    report_date_local = _today_local_date(tz)
+
     summary = _safe_get(latest, "summary")
     numbers = latest.get("numbers") if isinstance(latest.get("numbers"), dict) else {}
     sig = latest.get("signal") if isinstance(latest.get("signal"), dict) else {}
@@ -736,15 +853,31 @@ def main() -> int:
         if isinstance(alt, list):
             rows_raw = [x for x in alt if isinstance(x, dict)]
 
-    rows = _sort_rows_by_date_desc(rows_raw, used_date_dt)
+    # sort rows with MM/DD cross-year safe parsing
+    keyed, sort_diag = _sort_rows_by_date_desc_keyed(
+        rows_raw,
+        used_date_dt,
+        ref_date=report_date_local,
+    )
+    rows = [r for _, r in keyed]                  # NEWEST-FIRST
+    row_dates = [d for d, _ in keyed]             # NEWEST-FIRST
 
-    # build date index map (newest-first)
-    default_year = used_date_dt.year if used_date_dt else datetime.now().year
-    row_dates: List[date] = []
-    for r in rows:
-        d = _row_date_key(r, default_year)
-        if d is not None:
-            row_dates.append(d)
+    dq_notes: List[str] = []
+
+    # date ordering sanity (should be non-increasing)
+    bad_order = False
+    for i in range(len(row_dates) - 1):
+        if row_dates[i] < row_dates[i + 1]:
+            bad_order = True
+            break
+    if bad_order:
+        dq_notes.append("Row date order sanity failed: row_dates are not descending after parse/sort (unexpected).")
+
+    if sort_diag.get("dropped_rows", 0) > 0:
+        dq_notes.append(
+            f"Date parse dropped rows: dropped={sort_diag.get('dropped_rows')} / total={sort_diag.get('total_rows')} "
+            f"(bad_samples={sort_diag.get('bad_date_samples')})"
+        )
 
     # anchor index for UsedDate
     anchor_idx = -1
@@ -765,16 +898,32 @@ def main() -> int:
         turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf
     )
 
-    dq_notes: List[str] = []
     if anchor_idx < 0:
         anchor_idx = 0
-        dq_notes.append("UsedDate anchor not found in roll25 points after date-parse; fallback to newest row (index 0).")
+        dq_notes.append(
+            "UsedDate anchor not found in roll25 points after date-parse; fallback to newest row (index 0). "
+            f"(UsedDate_raw={as_of_data_date}, UsedDate_parsed={used_date_dt.isoformat() if used_date_dt else 'NA'}, "
+            f"rows_kept={len(rows)})"
+        )
+        if row_dates:
+            dq_notes.append(
+                f"Row date span (parsed): newest={row_dates[0].isoformat()} oldest={row_dates[-1].isoformat()}"
+            )
 
     if not rows:
-        dq_notes.append("No roll25 rows available (roll25.json empty AND latest_report.cache_roll25 missing/empty). Tables will be NA/downgraded.")
+        dq_notes.append(
+            "No roll25 rows available (roll25.json empty AND latest_report.cache_roll25 missing/empty). "
+            "Tables will be NA/downgraded."
+        )
 
     if used_date_dt is None:
         dq_notes.append("UsedDate parse failed; data_age_days cannot be computed; report still renders with local files.")
+
+    # Explicit missing latest fields notes (avoid silent skip)
+    if not isinstance(amp_latest, (int, float)):
+        dq_notes.append("latest_report.AmplitudePct missing/non-numeric; AMPLITUDE mismatch check skipped.")
+    if not isinstance(pct_change_latest, (int, float)):
+        dq_notes.append("latest_report.PctChange missing/non-numeric; CLOSE pct mismatch check skipped.")
 
     st_turnover = _anchored_stats(turnover_nf, anchor_idx, want_delta_and_ret1=True)
     st_close = _anchored_stats(close_nf, anchor_idx, want_delta_and_ret1=True)
@@ -864,33 +1013,46 @@ def main() -> int:
         note=base_note,
     )
 
-    # stress sigma: primary then fallback
+    # stress sigma: primary then fallback (with explicit chosen window)
     stress_conf = "OK"
     stress_note_parts: List[str] = []
     sigma_stress: Optional[float] = None
+    stress_chosen_win: Optional[int] = None
 
-    cand_primary: List[float] = []
+    # primary candidates: 60, 20 only
+    cand_primary: List[Tuple[int, float]] = []
     if isinstance(sigma60, (int, float)) and math.isfinite(float(sigma60)):
-        cand_primary.append(float(sigma60))
+        cand_primary.append((60, float(sigma60)))
     if isinstance(sigma20, (int, float)) and math.isfinite(float(sigma20)):
-        cand_primary.append(float(sigma20))
+        cand_primary.append((20, float(sigma20)))
 
     if cand_primary:
-        sigma_stress = max(cand_primary) * stress_mult
+        # choose max sigma (conservative)
+        stress_chosen_win, best_sd = max(cand_primary, key=lambda x: x[1])
+        sigma_stress = best_sd * stress_mult
         stress_note_parts.append("policy=primary:max(sigma60,sigma20)*mult")
+        stress_note_parts.append(f"chosen_win={stress_chosen_win}")
         if sigma20 is None:
             stress_note_parts.append("sigma20 NA; used sigma60 only.")
         if sigma60 is None:
             stress_note_parts.append("sigma60 NA; used sigma20 only.")
     else:
-        cand_fallback: List[float] = []
+        # fallback among effective windows (explicit chosen window)
+        best_w: Optional[int] = None
+        best_sd2: Optional[float] = None
         for w in sigma_win_list_eff:
             sd = sigma_map.get(w)
             if isinstance(sd, (int, float)) and math.isfinite(float(sd)):
-                cand_fallback.append(float(sd))
-        if cand_fallback:
-            sigma_stress = max(cand_fallback) * stress_mult
+                fsd = float(sd)
+                if best_sd2 is None or fsd > best_sd2:
+                    best_sd2 = fsd
+                    best_w = w
+
+        if best_sd2 is not None and best_w is not None:
+            sigma_stress = best_sd2 * stress_mult
+            stress_chosen_win = best_w
             stress_note_parts.append("policy=fallback:max(available_sigma_in_eff_windows)*mult (sigma20/sigma60 both NA)")
+            stress_note_parts.append(f"chosen_win={best_w}")
         else:
             sigma_stress = None
             stress_conf = "DOWNGRADED"
@@ -931,7 +1093,10 @@ def main() -> int:
     md.append(f"- data_age_days: `{_fmt(data_age_days)}` (warn_if > {args.stale_warn_days})")
 
     if data_age_days is not None and data_age_days > int(args.stale_warn_days):
-        md.append(f"- ⚠️ staleness_warning: as_of_data_date is {data_age_days} days behind report_date_local (可能跨週末/長假；請避免當作「今日盤後」解讀)")
+        md.append(
+            f"- ⚠️ staleness_warning: as_of_data_date is {data_age_days} days behind report_date_local "
+            f"(可能跨週末/長假；請避免當作「今日盤後」解讀)"
+        )
 
     md.append(f"- RunDayTag: `{run_day_tag}`")
     md.append(f"- summary: {summary if isinstance(summary, str) else 'NA'}")
@@ -988,21 +1153,36 @@ def main() -> int:
             conf,
         ]
 
-    table.append(_row("TURNOVER_TWD", st_turnover,
-                      value_override=turnover_latest if isinstance(turnover_latest, (int, float)) else None))
-    table.append(_row("CLOSE", st_close,
-                      value_override=close_latest if isinstance(close_latest, (int, float)) else None,
-                      force_conf=close_conf_override))
-    table.append(_row("PCT_CHANGE_CLOSE", st_pct,
-                      value_override=pct_change_latest if isinstance(pct_change_latest, (int, float)) else None,
-                      suppress_delta_ret=True))
-    table.append(_row("AMPLITUDE_PCT", st_amp,
-                      value_override=amp_latest if isinstance(amp_latest, (int, float)) else None,
-                      suppress_delta_ret=True,
-                      force_conf=amp_conf_override))
-    table.append(_row("VOL_MULTIPLIER_20", st_volm,
-                      value_override=vol_mult_latest if isinstance(vol_mult_latest, (int, float)) else None,
-                      suppress_delta_ret=True))
+    table.append(_row(
+        "TURNOVER_TWD",
+        st_turnover,
+        value_override=turnover_latest if isinstance(turnover_latest, (int, float)) else None
+    ))
+    table.append(_row(
+        "CLOSE",
+        st_close,
+        value_override=close_latest if isinstance(close_latest, (int, float)) else None,
+        force_conf=close_conf_override
+    ))
+    table.append(_row(
+        "PCT_CHANGE_CLOSE",
+        st_pct,
+        value_override=pct_change_latest if isinstance(pct_change_latest, (int, float)) else None,
+        suppress_delta_ret=True
+    ))
+    table.append(_row(
+        "AMPLITUDE_PCT",
+        st_amp,
+        value_override=amp_latest if isinstance(amp_latest, (int, float)) else None,
+        suppress_delta_ret=True,
+        force_conf=amp_conf_override
+    ))
+    table.append(_row(
+        "VOL_MULTIPLIER_20",
+        st_volm,
+        value_override=vol_mult_latest if isinstance(vol_mult_latest, (int, float)) else None,
+        suppress_delta_ret=True
+    ))
 
     md.append(_md_table(table))
     md.append("")
@@ -1024,7 +1204,7 @@ def main() -> int:
     md.append("")
 
     md.append("## 5.2) Stress Bands (regime-shift guardrail; heuristic)")
-    md.append(f"- sigma_stress_daily_%: `{_fmt(sigma_stress)}` (policy: max(sigma60,sigma20) * stress_mult; fallback if both NA)")
+    md.append(f"- sigma_stress_daily_%: `{_fmt(sigma_stress)}` (chosen_win={_fmt(stress_chosen_win)}; policy: primary=max(60,20) else fallback=max(effective) )")
     md.append(f"- stress_mult: `{_fmt(stress_mult)}`")
     md.append("")
     md.append(_md_table(stress_table_rows))
@@ -1040,8 +1220,10 @@ def main() -> int:
 
     md.append("## 6) Audit Notes")
     md.append("- This report is computed from local files only (no external fetch).")
+    md.append("- SERIES DIRECTION: all series are NEWEST-FIRST (index 0 = latest).")
     md.append("- roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).")
     md.append("- Date ordering uses parsed dates (not string sort).")
+    md.append("- MM/DD dates (no year) are resolved by choosing year in {Y-1,Y,Y+1} closest to UsedDate (cross-year safe).")
     md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).")
     md.append(f"- UsedDateStatus: `{used_date_status}` (kept for audit; not treated as daily alarm).")
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
