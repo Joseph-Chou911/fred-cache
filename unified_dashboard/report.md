@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-05T12:08:07Z
+- unified_generated_at_utc: 2026-02-05T12:20:43Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -34,8 +34,10 @@
 
 **reasons**
 - trend_basis: market_cache.SP500.signal=WATCH, tag=JUMP_P, p252=88.888889, p252_on_threshold=80.0, data_date=2026-02-04
+- note: trend_relaxed uses (signal + p252) only; tag is informational (display-only).
 - fragility_parts (global-only): credit_fragile(BAMLH0A0HYM2=NONE)=false, rate_stress(DGS10=NONE)=false
 - vol_gate_v2: market_cache.VIX only (signal=WATCH, dir=HIGH, value=18.000000, ret1%60=10.159119, runaway_thresholds: ret1%60>=5.0, value>=20.0, data_date=2026-02-03)
+- vol_runaway_failed_leg: value<20.0 (display-only)
 
 **dq_gates (no guessing; conservative defaults)**
 - roll25_derived_confidence=OK (derived metrics not used for upgrade triggers)
@@ -58,8 +60,6 @@
 - script_fingerprint: render_dashboard_py_signals_v8@8866958
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
-- reading_note: JUMP tags indicate large recent change (delta/return), not necessarily high level; use p252/z60 for level context.
-- reading_note: risk_impulse is display-only; combines dir (riskier direction) with sign(ret1%60) to reduce misread.
 
 | series | signal | dir | risk_impulse | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -133,6 +133,7 @@
 - used_date_status: LATEST
 - used_date_selection_tag: WEEKDAY
 - tag (legacy): WEEKDAY
+- roll25_strict_not_stale: false (from taiwan_signals; display-only)
 - note: UsedDate is the data date used for calculations. used_date_status is policy-normalized to LATEST for display only (typically T-1). Staleness/strictness should be tracked by dedicated checks (e.g., taiwan_signals strict flags).
 - risk_level: NA
 - turnover_twd: 704644032693
@@ -180,7 +181,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-05T10:28:53Z
 
-<!-- rendered_at_utc: 2026-02-05T12:08:07Z -->
+<!-- rendered_at_utc: 2026-02-05T12:20:43Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
