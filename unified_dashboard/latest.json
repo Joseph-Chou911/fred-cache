@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-02-05T06:02:58Z",
+  "generated_at_utc": "2026-02-05T11:26:30Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -531,7 +531,7 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-02-05T14:01:34.213509+08:00",
+        "generated_at": "2026-02-05T17:58:16.658270+08:00",
         "timezone": "Asia/Taipei",
         "summary": "今日資料未更新；UsedDate=2026-02-04：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
         "numbers": {
@@ -576,6 +576,14 @@
         "lookback_n_actual": 20,
         "lookback_oldest": "2026-01-08",
         "cache_tail": [
+          {
+            "date": "2026-02-05",
+            "close": 31801.27,
+            "change": -488.54,
+            "trade_value": 715168705076,
+            "high": 32241.64,
+            "low": 31769.08
+          },
           {
             "date": "2026-02-04",
             "close": 32289.81,
@@ -767,17 +775,17 @@
             "trade_value": 669781989470,
             "high": 29363.43,
             "low": 29007.75
-          },
-          {
-            "date": "2025-12-31",
-            "close": 28963.6,
-            "change": 256.47,
-            "trade_value": 548425314258,
-            "high": 29009.81,
-            "low": 28687.9
           }
         ],
         "cache_roll25": [
+          {
+            "date": "2026-02-05",
+            "close": 31801.27,
+            "change": -488.54,
+            "trade_value": 715168705076,
+            "high": 32241.64,
+            "low": 31769.08
+          },
           {
             "date": "2026-02-04",
             "close": 32289.81,
@@ -2369,24 +2377,16 @@
             "trade_value": 250003984052,
             "high": 19059.65,
             "low": 18793.43
-          },
-          {
-            "date": "2025-04-21",
-            "close": 19106.2,
-            "change": -288.83,
-            "trade_value": 213646250942,
-            "high": 19359.96,
-            "low": 19080.6
           }
         ]
       },
       "core": {
         "UsedDate": "2026-02-04",
         "run_day_tag": "TRADING_DAY",
-        "used_date_status": "OK_LATEST",
+        "used_date_status": "DATA_NOT_UPDATED",
         "used_date_status_dbg": {
           "used_date": "2026-02-04",
-          "latest_row_date": "2026-02-04",
+          "latest_row_date": "2026-02-05",
           "ohlc_status": "OK",
           "freshness_ok": true
         },
@@ -2419,7 +2419,7 @@
           "vol_n": 10,
           "dd_n": 10
         },
-        "realized_vol_N_annualized_pct": 18.972295697171667,
+        "realized_vol_N_annualized_pct": 19.613012568913735,
         "realized_vol_points_used": 10,
         "max_drawdown_N_pct": -3.5965018708187024,
         "max_drawdown_points_used": 10,
@@ -2438,7 +2438,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-02-05T02:28:59Z",
+        "generated_at_utc": "2026-02-05T10:28:53Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
@@ -2610,7 +2610,7 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-02-05T02:28:59Z",
+            "fetched_at_utc": "2026-02-05T10:28:53Z",
             "http_error": null,
             "rows_count": 30
           },
@@ -2784,7 +2784,7 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-02-05T02:29:00Z",
+            "fetched_at_utc": "2026-02-05T10:28:54Z",
             "http_error": null,
             "rows_count": 30
           }
@@ -2812,7 +2812,7 @@
           "twse_data_date": "2026-02-04"
         },
         "roll25_heated_market": false,
-        "roll25_data_quality_issue": false,
+        "roll25_data_quality_issue": true,
         "roll25_heated": false,
         "roll25_confidence": "OK",
         "consistency": "CONVERGENCE",
@@ -2835,10 +2835,10 @@
               "OhlcMissing": false,
               "ohlc_status": "OK",
               "freshness_ok": true,
-              "used_date_status": "OK_LATEST",
+              "used_date_status": "DATA_NOT_UPDATED",
               "used_date_status_dbg": {
                 "used_date": "2026-02-04",
-                "latest_row_date": "2026-02-04",
+                "latest_row_date": "2026-02-05",
                 "ohlc_status": "OK",
                 "freshness_ok": true
               }
@@ -2854,7 +2854,7 @@
               "OhlcMissing(signal)": false,
               "OHLCStatusMissing(field)": false,
               "FreshnessNotOK(field)": false,
-              "UsedDateStatusBad(derived)": false
+              "UsedDateStatusBad(derived)": true
             },
             "used_date": "2026-02-04"
           },
@@ -2872,15 +2872,15 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-02-05T06:02:56Z",
+        "generated_at_utc": "2026-02-05T11:26:30Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-05",
-        "quote_time_local": "2026-02-05T14:01:00+08:00",
+        "quote_time_local": "2026-02-05T19:23:00+08:00",
         "usd_twd": {
-          "spot_buy": 31.59,
-          "spot_sell": 31.69,
-          "mid": 31.64
+          "spot_buy": 31.575,
+          "spot_sell": 31.725,
+          "mid": 31.65
         },
         "dq_reason": null,
         "raw": {
@@ -2906,8 +2906,8 @@
           "parse_dbg": {
             "format": "xrt_text_v4_dynamic_sanity",
             "reason": "ok",
-            "text_len": 2582,
-            "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/05 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
+            "text_len": 2595,
+            "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/05 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
             "text_has_usd": true,
             "text_has_zh_usd": true,
             "sanity_range": [
@@ -2915,13 +2915,13 @@
               80.0
             ],
             "usd_anchor": "zh:美金(USD)",
-            "usd_window": "別 幣別 現金匯率 即期匯率 遠期匯率 歷史匯率 歷史匯率 現金匯率 即期匯率 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 美金 (USD) 美金 (USD) 31.24 31.91 31.59 31.69 查詢 查詢 31.24 31.91 31.59 31.69 港幣 (HKD) 港幣 (HKD) 3.896 4.1 4.022 4.082 查詢 查詢 3.896 4.1 4.022 4.082 英鎊 (GBP) 英鎊 (GBP) 41.9 44.02 42.91 43.31 查詢 查詢 41.9 44.02 42.91 43.31 澳幣 (AUD) 澳幣 (AUD) 21.66 22.44 21.95 22.15 查詢 查詢 21.66 22.44 21.95 22.15 加拿大幣 (CAD) 加拿大幣 (CAD) 22.63 23.54 23.03 23.23 查詢 查詢 22.63 23.54 23.03 23.23 新加坡幣 (SGD) 新加坡幣 (SGD) 24.25 25.16 24.74 24.92 查詢 查詢 24.25 25.16 24.74 24.92 瑞士法郎 (",
+            "usd_window": "別 幣別 現金匯率 即期匯率 遠期匯率 歷史匯率 歷史匯率 現金匯率 即期匯率 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 美金 (USD) 美金 (USD) 31.25 31.92 31.575 31.725 查詢 查詢 31.25 31.92 31.575 31.725 港幣 (HKD) 港幣 (HKD) 3.897 4.101 4.018 4.088 查詢 查詢 3.897 4.101 4.018 4.088 英鎊 (GBP) 英鎊 (GBP) 41.88 44 42.775 43.405 查詢 查詢 41.88 44 42.775 43.405 澳幣 (AUD) 澳幣 (AUD) 21.71 22.49 21.925 22.27 查詢 查詢 21.71 22.49 21.925 22.27 加拿大幣 (CAD) 加拿大幣 (CAD) 22.64 23.55 22.97 23.3 查詢 查詢 22.64 23.55 22.97 23.3 新加坡幣 (SGD) 新加坡幣 (SGD) 24.27 25.18 24.74 24.96 查詢 查詢 24.27 25.18 24.74 24.9",
             "extracted": {
-              "cash_buy": 31.24,
-              "cash_sell": 31.91,
-              "spot_buy": 31.59,
-              "spot_sell": 31.69,
-              "mid": 31.64
+              "cash_buy": 31.25,
+              "cash_sell": 31.92,
+              "spot_buy": 31.575,
+              "spot_sell": 31.725,
+              "mid": 31.65
             },
             "sanity": {
               "mode": "fallback_wide",
@@ -2942,7 +2942,7 @@
               "reason": "insufficient_history"
             }
           },
-          "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/05 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
+          "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/05 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
           "csv_head": null
         },
         "http": {
@@ -2960,15 +2960,15 @@
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-05",
         "usd_twd": {
-          "spot_buy": 31.59,
-          "spot_sell": 31.69,
-          "mid": 31.64
+          "spot_buy": 31.575,
+          "spot_sell": 31.725,
+          "mid": 31.65
         },
         "momentum": {
-          "ret1_pct": 0.26937093962922154,
+          "ret1_pct": 0.3010616384091233,
           "ret1_from": "2026-02-04",
           "ret1_to": "2026-02-05",
-          "chg_5d_pct": 1.0862619808306706,
+          "chg_5d_pct": 1.1182108626198015,
           "chg_5d_from": "2026-01-29",
           "chg_5d_to": "2026-02-05",
           "points": 10
@@ -2984,14 +2984,14 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-02-05T03:12:38.362277+00:00",
+          "run_ts_utc": "2026-02-05T09:04:24.498158+00:00",
           "module": "inflation_realrate_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+          "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
           "stale_hours": 36.0,
           "stats_path": "inflation_realrate_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-02-05T03:12:38Z",
-          "stats_as_of_ts": "2026-02-05T11:12:35+08:00",
+          "stats_generated_at_utc": "2026-02-05T09:04:24Z",
+          "stats_as_of_ts": "2026-02-05T17:04:20+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 2,
           "dash_history_path": "inflation_realrate_cache/history_dashboard.json",
@@ -3003,14 +3003,14 @@
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+            "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
             "series": "DFII10",
             "value": 1.92,
             "data_date": "2026-02-03",
-            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "as_of_ts": "2026-02-05T17:04:20+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0009339658333333334,
+            "age_hours": 0.0012494883333333334,
             "z60": 0.8147505643355691,
             "ret1_pct60": -1.0309278350515427,
             "z_delta60": -0.46503459465503305,
@@ -3032,14 +3032,14 @@
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+            "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
             "series": "T10YIE",
             "value": 2.35,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "as_of_ts": "2026-02-05T17:04:20+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0009339658333333334,
+            "age_hours": 0.0012494883333333334,
             "z60": 1.8932876525310216,
             "ret1_pct60": -0.4237288135593098,
             "z_delta60": -0.3322168203018796,
@@ -3069,14 +3069,14 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-02-05T03:12:38.410875+00:00",
+          "run_ts_utc": "2026-02-05T09:04:24.546536+00:00",
           "module": "asset_proxy_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+          "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
           "stale_hours": 36.0,
           "stats_path": "asset_proxy_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-02-05T03:12:38Z",
-          "stats_as_of_ts": "2026-02-05T11:12:35+08:00",
+          "stats_generated_at_utc": "2026-02-05T09:04:24Z",
+          "stats_as_of_ts": "2026-02-05T17:04:20+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 4,
           "dash_history_path": "asset_proxy_cache/history_dashboard.json",
@@ -3088,14 +3088,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+            "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
             "series": "IYR.US_CLOSE",
-            "value": 96.38,
+            "value": 96.36,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "as_of_ts": "2026-02-05T17:04:20+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0009474652777777778,
+            "age_hours": 0.0012629266666666667,
             "z60": 1.1813688721905777,
             "ret1_pct60": 1.452631578947372,
             "z_delta60": 1.2707612628734892,
@@ -3117,14 +3117,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+            "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
             "series": "VNQ.US_CLOSE",
             "value": 90.95,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "as_of_ts": "2026-02-05T17:04:20+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0009474652777777778,
+            "age_hours": 0.0012629266666666667,
             "z60": 1.2696852635961355,
             "ret1_pct60": 1.4500836586726074,
             "z_delta60": 1.3561636873272185,
@@ -3146,14 +3146,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+            "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
             "series": "GLD.US_CLOSE",
-            "value": 453.95,
+            "value": 453.97,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "as_of_ts": "2026-02-05T17:04:20+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0009474652777777778,
+            "age_hours": 0.0012629266666666667,
             "z60": 1.5199454197347968,
             "ret1_pct60": -0.08803785627821137,
             "z_delta60": -0.0570635029144011,
@@ -3175,14 +3175,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
+            "script_fingerprint": "render_dashboard_py_signals_v8@299a1be",
             "series": "IAU.US_CLOSE",
-            "value": 92.95,
+            "value": 92.92,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "as_of_ts": "2026-02-05T17:04:20+08:00",
             "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0009474652777777778,
+            "age_hours": 0.0012629266666666667,
             "z60": 1.514845271582346,
             "ret1_pct60": -0.1289352100569352,
             "z_delta60": -0.0628680012073104,
