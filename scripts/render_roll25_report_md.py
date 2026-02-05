@@ -22,15 +22,15 @@ IMPORTANT (2026-01-xx fix):
   prev_close = close - change
   amplitude = (high - low) / abs(prev_close) * 100
   fallback only if prev_close unavailable: (high - low) / abs(close) * 100
-This aligns the definition with latest_report.json AmplitudePct (commonly based on prev close).
 
 VOLATILITY BANDS (Approximation; audit-safe):
-- sigma_win_list (default: 20,60) computed from last N DAILY % returns anchored at UsedDate.
+- sigma_win_list computed from last N DAILY % returns anchored at UsedDate (population std; ddof=0).
 - horizon scaling uses sqrt(T) (T in trading days).
-- 1-tail 95% uses z=1.645 (VaR-like one-sided yardstick).
-- 2-tail 95% uses z=1.96 (central 95% interval yardstick).
-- stress sigma: sigma_stress = max(sigma60, sigma20) * stress_mult (default: 1.5; can set 2.0)
-  This is a heuristic to partially compensate for regime shift / fat tail underestimation.
+- 1-tail 95% uses z=1.645
+- 2-tail 95% uses z=1.96
+- stress sigma:
+    primary: sigma_stress = max(sigma60, sigma20) * stress_mult
+    fallback: if both unavailable, use max(available sigma in effective windows) * stress_mult (explicitly noted)
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ def _parse_date(s: Any, *, default_year: Optional[int] = None) -> Optional[date]
     # normalize separators
     t2 = t.replace(".", "-").replace("/", "-")
 
-    # YYYY-MM-DD
+    # YYYY-MM-DD (and common variants)
     for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S%z"):
         try:
             return datetime.strptime(t2, fmt).date()
@@ -223,7 +223,8 @@ def _extract_rows_roll25_json(obj: Any) -> List[Dict[str, Any]]:
     if isinstance(obj, list):
         return [x for x in obj if isinstance(x, dict)]
     if isinstance(obj, dict):
-        for k in ("items", "rows", "data", "roll25"):
+        # added: cache_roll25 (embedded points) + common variants
+        for k in ("items", "rows", "data", "roll25", "cache_roll25", "cache_roll25_points", "points"):
             v = obj.get(k)
             if isinstance(v, list):
                 return [x for x in v if isinstance(x, dict)]
@@ -242,6 +243,8 @@ def _get_float(r: Dict[str, Any], *keys: str) -> Optional[float]:
 
 def _row_date_key(r: Dict[str, Any], default_year: Optional[int]) -> Optional[date]:
     raw = r.get("date")
+    if not isinstance(raw, str):
+        raw = r.get("Date")
     if isinstance(raw, str):
         return _parse_date(raw, default_year=default_year)
     return None
@@ -264,7 +267,7 @@ def _sort_rows_by_date_desc(rows: List[Dict[str, Any]], used_date: Optional[date
 def _series_turnover(rows_nf: List[Dict[str, Any]]) -> List[float]:
     out: List[float] = []
     for r in rows_nf:
-        out.append(_get_float(r, "turnover_twd", "trade_value", "TradeValue", "turnover") or float("nan"))
+        out.append(_get_float(r, "turnover_twd", "trade_value", "TradeValue", "turnover", "Turnover") or float("nan"))
     return out
 
 
@@ -277,7 +280,7 @@ def _series_close(rows_nf: List[Dict[str, Any]]) -> List[float]:
 
 def _derive_amplitude_pct_prevclose_first(r: Dict[str, Any]) -> Tuple[Optional[float], str]:
     """
-    Derive amplitude% from a roll25.json row.
+    Derive amplitude% from a roll25 point row.
 
     Policy:
     1) If high/low exist:
@@ -520,7 +523,6 @@ def _bands_table(
     }
 
     if sigma_daily_pct is None or not math.isfinite(float(level)) or level <= 0:
-        # Still render T rows with NA so report stays deterministic/auditable.
         for T in t_list:
             rows.append([
                 str(T),
@@ -607,6 +609,23 @@ def _parse_int_list(s: str, *, default: List[int]) -> List[int]:
     return out if out else default
 
 
+def _unique_sorted_ints(nums: List[int]) -> List[int]:
+    s = set()
+    out: List[int] = []
+    for n in nums:
+        try:
+            nn = int(n)
+        except Exception:
+            continue
+        if nn <= 0:
+            continue
+        if nn not in s:
+            s.add(nn)
+            out.append(nn)
+    out.sort()
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
@@ -622,11 +641,11 @@ def main() -> int:
     ap.add_argument("--sigma-win-list", default=os.getenv("SIGMA_WIN_LIST", "20,60"),
                     help="comma list of return windows for sigma_daily (e.g., 20,60)")
     ap.add_argument("--sigma-base-win", type=int, default=int(os.getenv("SIGMA_BASE_WIN", "60")),
-                    help="base sigma window (must be in sigma-win-list ideally)")
+                    help="base sigma window (BASE bands); will be added to effective windows if missing")
     ap.add_argument("--t-list", default=os.getenv("VOL_BANDS_T_LIST", "10,12,15"),
                     help="comma list of trading days horizons (e.g., 10,12,15)")
     ap.add_argument("--stress-mult", type=float, default=float(os.getenv("STRESS_MULT", "1.5")),
-                    help="stress multiplier for sigma_stress = max(sigma60, sigma20)*mult (e.g., 1.5 or 2.0)")
+                    help="stress multiplier for sigma_stress (e.g., 1.5 or 2.0)")
 
     args = ap.parse_args()
 
@@ -654,7 +673,15 @@ def main() -> int:
     amp_latest = numbers.get("AmplitudePct")
     vol_mult_latest = numbers.get("VolumeMultiplier")
 
+    # --------- rows extraction with fallback ----------
     rows_raw = _extract_rows_roll25_json(roll25_hist)
+
+    # fallback: if roll25.json missing/empty, use latest_report.cache_roll25
+    if not rows_raw and isinstance(latest, dict):
+        alt = latest.get("cache_roll25")
+        if isinstance(alt, list):
+            rows_raw = [x for x in alt if isinstance(x, dict)]
+
     rows = _sort_rows_by_date_desc(rows_raw, used_date_dt)
 
     # build date index map (newest-first)
@@ -684,11 +711,13 @@ def main() -> int:
         turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf
     )
 
-    # if anchor not found, fallback to 0 (but downgrade confidence via DQ note)
     dq_notes: List[str] = []
     if anchor_idx < 0:
         anchor_idx = 0
-        dq_notes.append("UsedDate anchor not found in roll25.json after date-parse; fallback to newest row (index 0).")
+        dq_notes.append("UsedDate anchor not found in roll25 points after date-parse; fallback to newest row (index 0).")
+
+    if not rows:
+        dq_notes.append("No roll25 rows available (roll25.json empty AND latest_report.cache_roll25 missing/empty). Tables will be NA/downgraded.")
 
     st_turnover = _anchored_stats(turnover_nf, anchor_idx, want_delta_and_ret1=True)
     st_close = _anchored_stats(close_nf, anchor_idx, want_delta_and_ret1=True)
@@ -700,7 +729,7 @@ def main() -> int:
     # --- DQ: amplitude mismatch (latest vs derived@UsedDate) ---
     amp_conf_override: Optional[str] = None
     if isinstance(amp_latest, (int, float)) and math.isfinite(float(amp_latest)):
-        amp_used = st_amp.value  # derived from roll25.json at anchor
+        amp_used = st_amp.value
         if isinstance(amp_used, (int, float)) and math.isfinite(float(amp_used)):
             diff = abs(float(amp_latest) - float(amp_used))
             if diff > float(args.amp_mismatch_abs_threshold):
@@ -725,10 +754,13 @@ def main() -> int:
             )
 
     # ---------------- Volatility Bands computation ----------------
-    sigma_win_list = _parse_int_list(args.sigma_win_list, default=[20, 60])
+    sigma_win_list_in = _parse_int_list(args.sigma_win_list, default=[20, 60])
     sigma_base_win = int(args.sigma_base_win) if int(args.sigma_base_win) > 0 else 60
     t_list = _parse_int_list(args.t_list, default=[10, 12, 15])
     stress_mult = float(args.stress_mult) if float(args.stress_mult) > 0 else 1.5
+
+    # ensure effective windows include base + 20 + 60 for audit stability
+    sigma_win_list_eff = _unique_sorted_ints(sigma_win_list_in + [sigma_base_win, 20, 60])
 
     # level anchor: prefer latest_report.Close else roll25@UsedDate derived
     level_anchor: Optional[float] = None
@@ -742,9 +774,7 @@ def main() -> int:
 
     sigma_map: Dict[int, Optional[float]] = {}
     sigma_reason: Dict[int, str] = {}
-    for w in sigma_win_list:
-        if w <= 0:
-            continue
+    for w in sigma_win_list_eff:
         sd, reason = _compute_sigma_daily_pct(returns_pct, w)
         sigma_map[w] = sd
         sigma_reason[w] = reason
@@ -762,7 +792,6 @@ def main() -> int:
         base_conf = "DOWNGRADED"
         bands_notes.append(f"sigma_base (win={sigma_base_win}) unavailable: {sigma_reason.get(sigma_base_win, 'NA')}")
 
-    # base bands (as requested; usually sigma60)
     base_note = "; ".join(bands_notes).strip()
 
     base_table_rows, _base_meta = _bands_table(
@@ -775,30 +804,45 @@ def main() -> int:
         note=base_note,
     )
 
-    # stress sigma: max(sigma60, sigma20) * stress_mult
+    # stress sigma:
+    # primary: max(sigma60, sigma20) * stress_mult
+    # fallback: if both NA, use max available sigma in effective windows
     stress_conf = "OK"
     stress_note_parts: List[str] = []
-    sigma_candidates: List[float] = []
-    if isinstance(sigma60, (int, float)) and math.isfinite(float(sigma60)):
-        sigma_candidates.append(float(sigma60))
-    if isinstance(sigma20, (int, float)) and math.isfinite(float(sigma20)):
-        sigma_candidates.append(float(sigma20))
-
     sigma_stress: Optional[float] = None
-    if sigma_candidates:
-        sigma_stress = max(sigma_candidates) * stress_mult
+
+    cand_primary: List[float] = []
+    if isinstance(sigma60, (int, float)) and math.isfinite(float(sigma60)):
+        cand_primary.append(float(sigma60))
+    if isinstance(sigma20, (int, float)) and math.isfinite(float(sigma20)):
+        cand_primary.append(float(sigma20))
+
+    if cand_primary:
+        sigma_stress = max(cand_primary) * stress_mult
+        stress_note_parts.append("policy=primary:max(sigma60,sigma20)*mult")
         if sigma20 is None:
-            stress_note_parts.append("sigma20 unavailable; stress uses sigma60 only.")
+            stress_note_parts.append("sigma20 NA; used sigma60 only.")
+        if sigma60 is None:
+            stress_note_parts.append("sigma60 NA; used sigma20 only.")
     else:
-        sigma_stress = None
-        stress_conf = "DOWNGRADED"
-        stress_note_parts.append("sigma20/sigma60 both unavailable; cannot compute stress bands.")
+        cand_fallback: List[float] = []
+        for w in sigma_win_list_eff:
+            sd = sigma_map.get(w)
+            if isinstance(sd, (int, float)) and math.isfinite(float(sd)):
+                cand_fallback.append(float(sd))
+        if cand_fallback:
+            sigma_stress = max(cand_fallback) * stress_mult
+            stress_note_parts.append("policy=fallback:max(available_sigma_in_eff_windows)*mult (sigma20/sigma60 both NA)")
+        else:
+            sigma_stress = None
+            stress_conf = "DOWNGRADED"
+            stress_note_parts.append("sigma20/sigma60 NA and no other sigma available; cannot compute stress bands.")
 
     if level_anchor is None:
         stress_conf = "DOWNGRADED"
-        stress_note_parts.append("Level anchor unavailable.")
+        stress_note_parts.append("Level anchor NA.")
 
-    stress_note_parts.append(f"stress_mult={_fmt(stress_mult)}; sigma_stress=max(sigma60,sigma20)*mult")
+    stress_note_parts.append(f"stress_mult={_fmt(stress_mult)}")
     stress_note = " ".join(stress_note_parts).strip()
 
     stress_table_rows, _stress_meta = _bands_table(
@@ -843,7 +887,7 @@ def main() -> int:
     md.append(f"- ohlc_status: `{_fmt(latest.get('ohlc_status'))}`")
     md.append(f"- mode: `{_fmt(latest.get('mode'))}`")
     md.append("")
-    md.append("## 5) Z/P Table (market_cache-like; computed from roll25.json)")
+    md.append("## 5) Z/P Table (market_cache-like; computed from roll25 points)")
 
     table = [
         ["series", "value", "z60", "p60", "z252", "p252", "zΔ60", "pΔ60", "ret1%", "confidence"],
@@ -884,9 +928,9 @@ def main() -> int:
     md.append(_md_table(table))
     md.append("")
 
-    # 5.1 Base bands (two-tail columns included)
     md.append("## 5.1) Volatility Bands (sigma; approximation)")
-    md.append(f"- sigma_win_list (daily % returns): `{','.join(str(x) for x in sigma_win_list)}` (population std; ddof=0)")
+    md.append(f"- sigma_win_list_input: `{','.join(str(x) for x in sigma_win_list_in)}`")
+    md.append(f"- sigma_win_list_effective: `{','.join(str(x) for x in sigma_win_list_eff)}` (includes sigma_base_win + 20 + 60 for audit stability)")
     md.append(f"- sigma_base_win: `{_fmt(float(sigma_base_win))}` (BASE bands)")
     md.append(f"- T list (trading days): `{','.join(str(x) for x in t_list)}`")
     md.append(f"- level anchor: `{_fmt(level_anchor)}` (prefer latest_report.Close else roll25@UsedDate)")
@@ -897,9 +941,8 @@ def main() -> int:
     md.append(_md_table(base_table_rows))
     md.append("")
 
-    # 5.2 Stress bands (separate section; no changes to 5.1 table shape beyond extra columns)
     md.append("## 5.2) Stress Bands (regime-shift guardrail; heuristic)")
-    md.append(f"- sigma_stress_daily_%: `{_fmt(sigma_stress)}` (policy: max(sigma60,sigma20) * stress_mult)")
+    md.append(f"- sigma_stress_daily_%: `{_fmt(sigma_stress)}` (policy: max(sigma60,sigma20) * stress_mult; fallback if both NA)")
     md.append(f"- stress_mult: `{_fmt(stress_mult)}`")
     md.append("")
     md.append(_md_table(stress_table_rows))
@@ -912,6 +955,7 @@ def main() -> int:
 
     md.append("## 6) Audit Notes")
     md.append("- This report is computed from local files only (no external fetch).")
+    md.append("- roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).")
     md.append("- Date ordering uses parsed dates (not string sort).")
     md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.")
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
