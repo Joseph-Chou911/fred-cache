@@ -1,25 +1,25 @@
 {
   "schema_version": "tw_pb_stats_latest_v1",
   "script_fingerprint": "update_tw_pb_sidecar_py@v1",
-  "generated_at_utc": "2026-02-05T03:09:34Z",
-  "generated_at_local": "2026-02-05T11:09:34.675647+08:00",
+  "generated_at_utc": "2026-02-05T10:00:17Z",
+  "generated_at_local": "2026-02-05T18:00:17.022636+08:00",
   "timezone": "Asia/Taipei",
-  "data_date": "2026-02-04",
-  "series_len_pbr": 6,
+  "data_date": "2026-02-05",
+  "series_len_pbr": 7,
   "z60": null,
   "p60": null,
-  "na_reason_60": "INSUFFICIENT_HISTORY:6/60",
+  "na_reason_60": "INSUFFICIENT_HISTORY:7/60",
   "z252": null,
   "p252": null,
-  "na_reason_252": "INSUFFICIENT_HISTORY:6/252",
+  "na_reason_252": "INSUFFICIENT_HISTORY:7/252",
   "window_60": {
-    "n": 6,
+    "n": 7,
     "from": "2026-01-28",
-    "to": "2026-02-04"
+    "to": "2026-02-05"
   },
   "window_252": {
-    "n": 6,
+    "n": 7,
     "from": "2026-01-28",
-    "to": "2026-02-04"
+    "to": "2026-02-05"
   }
 }
