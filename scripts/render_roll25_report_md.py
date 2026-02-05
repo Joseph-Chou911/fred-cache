@@ -74,6 +74,11 @@ REPORTING (noise-control):
    - level_anchor (for volatility bands)
    - anchor_close (for dynamic risk check)
    and disclose whether they match.
+
+=== v2026-02-05 patch (audit fixes requested) ===
+5) TRUNCATION WARNING: detect series length mismatch before truncation; emit DQ note with per-series lens.
+6) 02/29 handling: if MM/DD=02/29 cannot be resolved within {Y-1,Y,Y+1}, emit explicit sample tag
+   "MMDD_0229_NO_LEAP_IN_WINDOW" in sort diag.
 """
 
 from __future__ import annotations
@@ -412,6 +417,8 @@ def _sort_rows_by_date_desc_keyed(
     Note (audit improvement):
     - If a row has NO date field at all, we record "<NO_DATE_FIELD>" into bad_date_samples
       (up to 3 samples) and count it, rather than silently skipping.
+    - If a row is MM/DD=02/29 and cannot be resolved within {Y-1,Y,Y+1}, we record
+      "MMDD_0229_NO_LEAP_IN_WINDOW" (up to 3 samples) for audit clarity.
     """
     default_year = used_date.year if used_date else (ref_date.year if ref_date else datetime.now().year)
     ref = used_date or ref_date
@@ -420,6 +427,7 @@ def _sort_rows_by_date_desc_keyed(
     bad_samples: List[str] = []
     no_date_field_count = 0
     parse_fail_count = 0
+    parse_fail_0229 = 0
 
     for r in rows:
         raw = _get_row_raw_date(r)
@@ -432,8 +440,15 @@ def _sort_rows_by_date_desc_keyed(
         d = _parse_date(raw, default_year=default_year, ref_date=ref)
         if d is None:
             parse_fail_count += 1
-            if len(bad_samples) < 3:
-                bad_samples.append(str(raw))
+            # Explicit 02/29 tag for audit (avoids silent "None" ambiguity)
+            rr = str(raw).strip()
+            if rr in ("2/29", "02/29"):
+                parse_fail_0229 += 1
+                if len(bad_samples) < 3:
+                    bad_samples.append("MMDD_0229_NO_LEAP_IN_WINDOW")
+            else:
+                if len(bad_samples) < 3:
+                    bad_samples.append(str(raw))
             continue
 
         keyed.append((d, r))
@@ -446,6 +461,7 @@ def _sort_rows_by_date_desc_keyed(
         "dropped_rows": len(rows) - len(keyed),
         "no_date_field_count": no_date_field_count,
         "parse_fail_count": parse_fail_count,
+        "parse_fail_0229": parse_fail_0229,
         "bad_date_samples": bad_samples,
         "default_year": default_year,
         "ref_date": ref.isoformat() if isinstance(ref, date) else "NA",
@@ -1070,7 +1086,7 @@ def main() -> int:
     row_dates = [d for d, _ in keyed]             # NEWEST-FIRST
 
     dq_notes: List[str] = []
-    extra_audit_notes: List[str] = []  # PATCH: for non-DQ but audit clarity
+    extra_audit_notes: List[str] = []  # for non-DQ but audit clarity
 
     # date ordering sanity (should be non-increasing)
     bad_order = False
@@ -1085,7 +1101,7 @@ def main() -> int:
         dq_notes.append(
             f"Date parse dropped rows: dropped={sort_diag.get('dropped_rows')} / total={sort_diag.get('total_rows')} "
             f"(no_date_field_count={sort_diag.get('no_date_field_count')}, parse_fail_count={sort_diag.get('parse_fail_count')}, "
-            f"bad_samples={sort_diag.get('bad_date_samples')})"
+            f"parse_fail_0229={sort_diag.get('parse_fail_0229')}, bad_samples={sort_diag.get('bad_date_samples')})"
         )
 
     # anchor index for UsedDate
@@ -1102,9 +1118,29 @@ def main() -> int:
 
     pctchg_nf = _series_pct_change_close_from_close(close_nf)
 
-    # PATCH: volmult now returns diag
+    # volmult returns diag
     volmult_nf_raw, volmult_diag = _series_vol_multiplier_20(turnover_nf, min_points=15, win=20)
     volmult_nf = volmult_nf_raw
+
+    # --- PATCH: TRUNCATION WARNING (no silent truncation) ---
+    # Diagnose per-series lengths before truncation and record DQ note if mismatch is meaningful.
+    # This avoids the "min(len) silently discards longer series" blind spot.
+    series_lens = {
+        "turnover_nf": len(turnover_nf),
+        "close_nf": len(close_nf),
+        "pctchg_nf": len(pctchg_nf),
+        "amp_nf": len(amp_nf),
+        "volmult_nf": len(volmult_nf),
+    }
+    min_len = min(series_lens.values()) if series_lens else 0
+    max_len = max(series_lens.values()) if series_lens else 0
+    if max_len > 0 and (max_len - min_len) > 0:
+        shortest = [k for k, v in series_lens.items() if v == min_len]
+        dq_notes.append(
+            "TRUNCATION_WARNING: series length mismatch; "
+            f"max={max_len} min={min_len} shortest={shortest} lens={series_lens}. "
+            f"All series will be truncated to {min_len}."
+        )
 
     turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf = _truncate_to_common_length(
         turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf
@@ -1373,7 +1409,7 @@ def main() -> int:
     else:
         risk_notes.append("vol_mult NA")
 
-    # PATCH: parameterized thresholds
+    # Parameterized thresholds
     vol_pass_max = float(args.vol_pass_max)
     vol_fail_min = float(args.vol_fail_min)
     if not (math.isfinite(vol_pass_max) and math.isfinite(vol_fail_min)) or vol_fail_min <= vol_pass_max:
@@ -1389,7 +1425,7 @@ def main() -> int:
     if price_status == "NA" or vol_status == "NA":
         risk_conf = "DOWNGRADED"
 
-    # PATCH: anchor mismatch disclosure (audit clarity)
+    # Anchor mismatch disclosure (audit clarity)
     anchors_match: Optional[bool] = None
     anchors_diff: Optional[float] = None
     if isinstance(level_anchor, (int, float)) and isinstance(anchor_close, (int, float)):
@@ -1397,6 +1433,7 @@ def main() -> int:
             anchors_diff = abs(float(level_anchor) - float(anchor_close))
             anchors_match = anchors_diff <= 1e-9
 
+    # (2) vol_mult_20 NA reason summary is printed in Audit Notes
     extra_audit_notes.append(
         f"VOL_MULT_20 window diag: win={volmult_diag.get('win')} min_points={volmult_diag.get('min_points')} "
         f"len_turnover={volmult_diag.get('len_turnover')} computed={volmult_diag.get('computed')} "
@@ -1584,6 +1621,7 @@ def main() -> int:
     md.append("- Date ordering uses parsed dates (not string sort).")
     md.append("- MM/DD dates (no year) are resolved by choosing year in {Y-1,Y,Y+1} closest to UsedDate (cross-year safe).")
     md.append("- Rows missing date field are counted and sampled as '<NO_DATE_FIELD>' (audit visibility; no silent drop).")
+    md.append("- If MM/DD=02/29 cannot be resolved within {Y-1,Y,Y+1}, it is recorded as 'MMDD_0229_NO_LEAP_IN_WINDOW' in sort diag samples.")
     md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).")
     md.append(f"- UsedDateStatus: `{used_date_status}` (kept for audit; not treated as daily alarm).")
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
