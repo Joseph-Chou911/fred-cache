@@ -31,6 +31,15 @@ VOLATILITY BANDS (Approximation; audit-safe):
 - stress sigma:
     primary: sigma_stress = max(sigma60, sigma20) * stress_mult
     fallback: if both unavailable, use max(available sigma in effective windows) * stress_mult (explicitly noted)
+
+Anti-misread guards (2026-02-xx):
+A) Summary adds explicit effective_data_date + caution when UsedDateStatus indicates stale daily endpoint.
+B) Adds a compact % table for each band (BASE/STRESS) that maps sigma_T_% to percentage moves:
+   - pct_1sigma = ±1.0*sigma_T_%
+   - pct_95%(1-tail) = ±1.645*sigma_T_%
+   - pct_95%(2-tail) = ±1.96*sigma_T_%
+   - pct_2sigma = ±2.0*sigma_T_%
+   (This is a display-only mapping, to prevent confusing "points" with "%".)
 """
 
 from __future__ import annotations
@@ -581,6 +590,84 @@ def _bands_table(
     return rows, meta
 
 
+# ---------------- Anti-misread: band % mapping (display-only) ----------------
+
+def _bands_pct_table(
+    *,
+    sigma_daily_pct: Optional[float],
+    t_list: List[int],
+    z_1tail_95: float = 1.645,
+    z_2tail_95: float = 1.96,
+    label: str = "BASE",
+    confidence: str = "OK",
+    note: str = "",
+) -> List[List[str]]:
+    """
+    Display-only mapping from sigma_T_% to percentage moves.
+    This helps prevent confusing "index points" with "%".
+
+    Rows:
+    - sigma_T_% (already horizon-scaled)
+    - pct_1sigma: ±1.0*sigma_T_%
+    - pct_95%(1-tail): ±1.645*sigma_T_%
+    - pct_95%(2-tail): ±1.96*sigma_T_%
+    - pct_2sigma: ±2.0*sigma_T_%
+    """
+    rows: List[List[str]] = []
+    rows.append([
+        "T",
+        "sigma_daily_%",
+        "sigma_T_%",
+        "pct_1σ",
+        "pct_95%(1-tail)",
+        "pct_95%(2-tail)",
+        "pct_2σ",
+        "confidence",
+        "note",
+    ])
+
+    if sigma_daily_pct is None or not math.isfinite(float(sigma_daily_pct)):
+        for T in t_list:
+            rows.append([
+                str(T),
+                _fmt(sigma_daily_pct),
+                "NA",
+                "NA",
+                "NA",
+                "NA",
+                "NA",
+                confidence if confidence else "DOWNGRADED",
+                note,
+            ])
+        return rows
+
+    s_daily = float(sigma_daily_pct)
+    for T in t_list:
+        if T <= 0:
+            rows.append([str(T)] + ["NA"] * (len(rows[0]) - 1))
+            continue
+
+        sigma_T_pct = s_daily * math.sqrt(float(T))
+        pct_1 = 1.0 * sigma_T_pct
+        pct_95_1 = z_1tail_95 * sigma_T_pct
+        pct_95_2 = z_2tail_95 * sigma_T_pct
+        pct_2 = 2.0 * sigma_T_pct
+
+        rows.append([
+            str(T),
+            _fmt(s_daily),
+            _fmt(sigma_T_pct),
+            f"±{_fmt(pct_1)}",
+            f"±{_fmt(pct_95_1)}",
+            f"±{_fmt(pct_95_2)}",
+            f"±{_fmt(pct_2)}",
+            confidence,
+            note,
+        ])
+
+    return rows
+
+
 # ---------------- markdown helpers ----------------
 
 def _md_table(rows: List[List[str]]) -> str:
@@ -624,6 +711,22 @@ def _unique_sorted_ints(nums: List[int]) -> List[int]:
             out.append(nn)
     out.sort()
     return out
+
+
+def _useddate_staleness_notice(used_date: str, used_date_status: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Anti-misread guardrail:
+    - If UsedDateStatus indicates stale/not-updated data, emit explicit effective_data_date + caution.
+    Returns: (effective_data_date_line, caution_line) or (None, None)
+    """
+    if not isinstance(used_date_status, str):
+        return None, None
+    uds = used_date_status.strip().upper()
+    if uds in ("DATA_NOT_UPDATED", "STALE", "NOT_UPDATED", "DELAYED"):
+        eff = f"- effective_data_date: `{used_date}` (UsedDateStatus={used_date_status}; daily endpoint not updated)"
+        caution = "- caution: bands and stats are anchored to UsedDate close; do NOT treat them as 'today' until UsedDateStatus becomes OK_LATEST"
+        return eff, caution
+    return None, None
 
 
 def main() -> int:
@@ -804,6 +907,14 @@ def main() -> int:
         note=base_note,
     )
 
+    base_pct_rows = _bands_pct_table(
+        sigma_daily_pct=sigma_base,
+        t_list=t_list,
+        label="BASE",
+        confidence=base_conf,
+        note=base_note,
+    )
+
     # stress sigma:
     # primary: max(sigma60, sigma20) * stress_mult
     # fallback: if both NA, use max available sigma in effective windows
@@ -855,6 +966,14 @@ def main() -> int:
         note=stress_note,
     )
 
+    stress_pct_rows = _bands_pct_table(
+        sigma_daily_pct=sigma_stress,
+        t_list=t_list,
+        label="STRESS",
+        confidence=stress_conf,
+        note=stress_note,
+    )
+
     # ---------------- markdown build ----------------
     md: List[str] = []
     md.append("# Roll25 Cache Report (TWSE Turnover)")
@@ -865,8 +984,16 @@ def main() -> int:
     md.append(f"- UsedDate: `{used_date}`")
     md.append(f"- UsedDateStatus: `{used_date_status}`")
     md.append(f"- RunDayTag: `{run_day_tag}`")
+
+    eff_line, caution_line = _useddate_staleness_notice(used_date, used_date_status)
+    if eff_line:
+        md.append(eff_line)
+    if caution_line:
+        md.append(caution_line)
+
     md.append(f"- summary: {summary if isinstance(summary, str) else 'NA'}")
     md.append("")
+
     md.append("## 2) Key Numbers (from latest_report.json)")
     md.append(f"- turnover_twd: `{_fmt(turnover_latest)}`")
     md.append(f"- close: `{_fmt(close_latest)}`")
@@ -874,6 +1001,7 @@ def main() -> int:
     md.append(f"- amplitude_pct: `{_fmt(amp_latest)}`")
     md.append(f"- volume_multiplier_20: `{_fmt(vol_mult_latest)}`")
     md.append("")
+
     md.append("## 3) Market Behavior Signals (from latest_report.json)")
     md.append(f"- DownDay: `{_fmt(sig.get('DownDay'))}`")
     md.append(f"- VolumeAmplified: `{_fmt(sig.get('VolumeAmplified'))}`")
@@ -881,12 +1009,14 @@ def main() -> int:
     md.append(f"- NewLow_N: `{_fmt(sig.get('NewLow_N'))}`")
     md.append(f"- ConsecutiveBreak: `{_fmt(sig.get('ConsecutiveBreak'))}`")
     md.append("")
+
     md.append("## 4) Data Quality Flags (from latest_report.json)")
     md.append(f"- OhlcMissing: `{_fmt(sig.get('OhlcMissing'))}`")
     md.append(f"- freshness_ok: `{_fmt(latest.get('freshness_ok'))}`")
     md.append(f"- ohlc_status: `{_fmt(latest.get('ohlc_status'))}`")
     md.append(f"- mode: `{_fmt(latest.get('mode'))}`")
     md.append("")
+
     md.append("## 5) Z/P Table (market_cache-like; computed from roll25 points)")
 
     table = [
@@ -940,12 +1070,18 @@ def main() -> int:
     md.append("")
     md.append(_md_table(base_table_rows))
     md.append("")
+    md.append("### 5.1.a) Band % Mapping (display-only; prevents confusing points with %)")
+    md.append(_md_table(base_pct_rows))
+    md.append("")
 
     md.append("## 5.2) Stress Bands (regime-shift guardrail; heuristic)")
     md.append(f"- sigma_stress_daily_%: `{_fmt(sigma_stress)}` (policy: max(sigma60,sigma20) * stress_mult; fallback if both NA)")
     md.append(f"- stress_mult: `{_fmt(stress_mult)}`")
     md.append("")
     md.append(_md_table(stress_table_rows))
+    md.append("")
+    md.append("### 5.2.a) Stress Band % Mapping (display-only; prevents confusing points with %)")
+    md.append(_md_table(stress_pct_rows))
     md.append("")
     md.append("- Interpretation notes:")
     md.append("  - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.")
@@ -966,11 +1102,13 @@ def main() -> int:
     md.append(f"- CLOSE pct mismatch threshold: {args.close_pct_mismatch_abs_threshold} (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).")
     md.append("- PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.")
     md.append("- VOL_BANDS: sigma computed from anchored DAILY % returns; horizon scaling uses sqrt(T).")
+    md.append("- Band % Mapping tables (5.1.a/5.2.a) are display-only: they map sigma_T_% to ±% moves; they do NOT alter signals.")
     if dq_notes:
         md.append("- DQ_NOTES:")
         for n in dq_notes:
             md.append(f"  - {n}")
     md.append("")
+
     md.append("## 7) Caveats / Sources (from latest_report.json)")
     md.append("```")
     cav = latest.get("caveats")
