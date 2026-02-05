@@ -1,7 +1,7 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-05T01:31:05Z",
+  "generated_at_utc": "2026-02-05T02:28:59Z",
   "generated_at_local": null,
   "data_date": "2026-02-04",
   "state": "擴張",
@@ -50,7 +50,9 @@
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg"
-      }
+      },
+      "rows_series": 39,
+      "rows_latest_table": 30
     },
     "tpex": {
       "latest_balance_yi": 1351.0,
@@ -78,7 +80,9 @@
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
-      }
+      },
+      "rows_series": 39,
+      "rows_latest_table": 30
     },
     "total": {
       "h1": {
@@ -208,6 +212,7 @@
   "snapshots": {
     "twse_rows": {
       "rows": 30,
+      "rows_series": 39,
       "head_dates": [
         "2026-02-04",
         "2026-02-03",
@@ -221,6 +226,7 @@
     },
     "tpex_rows": {
       "rows": 30,
+      "rows_series": 39,
       "head_dates": [
         "2026-02-04",
         "2026-02-03",

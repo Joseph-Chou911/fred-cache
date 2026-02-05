@@ -25,9 +25,9 @@
 
 ## 2) 資料
 - 上市(TWSE)：融資餘額 3840.50 億元｜資料日期 2026-02-04｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows=30｜head_dates=['2026-02-04', '2026-02-03', '2026-02-02']｜tail_dates=['2025-12-26', '2025-12-24', '2025-12-23']
+  - rows_latest_table=30｜rows_series=39｜head_dates=['2026-02-04', '2026-02-03', '2026-02-02']｜tail_dates=['2025-12-26', '2025-12-24', '2025-12-23']
 - 上櫃(TPEX)：融資餘額 1351.00 億元｜資料日期 2026-02-04｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows=30｜head_dates=['2026-02-04', '2026-02-03', '2026-02-02']｜tail_dates=['2025-12-26', '2025-12-24', '2025-12-23']
+  - rows_latest_table=30｜rows_series=39｜head_dates=['2026-02-04', '2026-02-03', '2026-02-02']｜tail_dates=['2025-12-26', '2025-12-24', '2025-12-23']
 - 合計：融資餘額 5191.50 億元｜資料日期 2026-02-04｜來源：TWSE=HiStock / TPEX=HiStock
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
@@ -100,7 +100,8 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 ## 5) 稽核備註
 - 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。
 - 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
-- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
+- rows_latest_table/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
+- rows_series 是計算輸入序列長度（由 history.json 彙整），用於 horizon 計算與 Check-4。
 - roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
 - roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
 - resonance_policy=latest：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。
@@ -113,8 +114,8 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（PASS）
-- Check-4 TWSE history rows>=21：✅（PASS）（rows=39）
-- Check-4 TPEX history rows>=21：✅（PASS）（rows=39）
+- Check-4 TWSE history rows>=21：✅（PASS）（rows_series=39）
+- Check-4 TPEX history rows>=21：✅（PASS）（rows_series=39）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-04) == TWSE(2026-02-04)）
@@ -124,4 +125,4 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-05T01:31:05Z_
+_generated_at_utc: 2026-02-05T02:28:59Z_
