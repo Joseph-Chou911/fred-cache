@@ -1,15 +1,15 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.10`
-- as_of_ts (TPE): `2026-02-05T00:04:26.107023+08:00`
-- run_ts_utc: `2026-02-04T16:04:26.107007Z`
-- bottom_state (Global): **NONE**  (streak=4)
-- market_cache_as_of_ts: `2026-02-04T03:17:44Z`
-- market_cache_generated_at_utc: `2026-02-04T03:17:44Z`
-- history_load_status: `OK`; reason: `dict.items`; loaded_items: `3`
-- history_pre_items: `3`; history_post_items: `4`; pre_unique_days: `3`; post_unique_days: `4`
+- as_of_ts (TPE): `2026-02-06T00:01:05.273634+08:00`
+- run_ts_utc: `2026-02-05T16:01:05.273621Z`
+- bottom_state (Global): **NONE**  (streak=5)
+- market_cache_as_of_ts: `2026-02-05T11:27:29Z`
+- market_cache_generated_at_utc: `2026-02-05T11:27:29Z`
+- history_load_status: `OK`; reason: `dict.items`; loaded_items: `4`
+- history_pre_items: `4`; history_post_items: `5`; pre_unique_days: `4`; post_unique_days: `5`
 - history_write: status=`OK`; reason=`ok`; allow_reset=`False`; allow_shrink=`False`
-- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260204T160426Z.json`; bytes=`2826`; keep_n=`30`; prune_deleted=`0`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260205T160105Z.json`; bytes=`3738`; keep_n=`30`; prune_deleted=`0`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -17,31 +17,34 @@
 - TRIG_REVERSAL = `0`  (panic & NOT systemic & VIX cooling & SP500 stable)
 
 ## Distance to Triggers - Global
-- VIX panic gap: `2.0000`
-- SP500 ret1% gap: `0.6596`
-- HYG veto gap(z): `3.3562`
-- OFR veto gap(z): `1.5433`
+- VIX panic gap: `1.3600`
+- SP500 ret1% gap: `0.9928`
+- HYG veto gap(z): `3.1826`
+- OFR veto gap(z): `1.7401`
 
 ## Context (Non-trigger) - Global
-- SP500.p252: `93.25396825396825`; equity_extreme(p252>=95): `0`
+- SP500.p252: `88.88888888888889`; equity_extreme(p252>=95): `0`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **NONE**  (streak=4)
-- UsedDate: `2026-02-03`; run_day_tag: `WEEKDAY`; used_date_status: `DATA_NOT_UPDATED`
+- tw_state: **NONE**  (streak=5)
+- UsedDate: `2026-02-04`; run_day_tag: `WEEKDAY`; used_date_status: `DATA_NOT_UPDATED`
 - Lookback: `20/20`
 - roll25_raw: DownDay=`False`; VolumeAmplified=`False`; VolAmplified=`False`; NewLow_N=`0`; ConsecutiveBreak=`0`
 - roll25_paired_basis: `False` (basis = VolumeAmplified OR VolAmplified OR (NewLow_N>=1))
-- margin_final_signal(TWSE): `NONE`; confidence: `DOWNGRADED`; unit: `億`
-- margin_balance(TWSE latest): `3840.5` 億
-- margin_chg(TWSE latest): `19.2` 億
-- margin_flow_audit: signal=`NONE`; sum_last5=`-8.6`; pos_days_last5=`3`
-- margin_level_gate_audit: gate=`NA`; points=`30/60`; p=`NA`; p_min=`95.0`
+- margin_final_signal(TWSE): `NA`; confidence: `OK`; unit: `NA`
+- margin_balance(TWSE latest): `NA` NA
+- margin_chg(TWSE latest): `NA` NA
+- margin_flow_audit: signal=`NA`; sum_last5=`NA`; pos_days_last5=`NA`
+- margin_level_gate_audit: gate=`NA`; points=`NA/NA`; p=`NA`; p_min=`95.0`
 - tw_panic_hit: `DownDay=False + Stress={}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1,ConsecutiveBreak>=2&paired}`
 
 ### TW Triggers (0/1/NA)
 - TRIG_TW_PANIC: `0`
-- TRIG_TW_LEVERAGE_HEAT: `0`
+- TRIG_TW_LEVERAGE_HEAT: `NA`
 - TRIG_TW_REVERSAL: `0`
+
+## Excluded / NA Reasons
+- TRIG_TW_LEVERAGE_HEAT: missing_fields:series.TWSE.rows
 
 ## Recent History (last 10 buckets)
 | tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |
@@ -50,6 +53,7 @@
 | 2026-02-02 | 2026-02-02T23:55:16.505649+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-04 | 2026-02-04T13:10:37.209054+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-05 | 2026-02-05T00:04:26.107023+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-02-06 | 2026-02-06T00:01:05.273634+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | NA | 0 | NA | OK |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`
