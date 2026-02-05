@@ -3,26 +3,35 @@
 """
 Render unified_dashboard/latest.json into report.md
 
+Pure renderer:
+- does NOT recompute stats; formats fields already in unified JSON.
+- missing field => prints NA.
+- deterministic thresholds for audit.
+
 Adds:
-- (2) Positioning Matrix (report-only; deterministic; uses signals already present in unified JSON)
+- (2) Positioning Matrix (report-only; deterministic)
 - roll25_derived (realized vol / max drawdown)
-- fx_usdtwd section (BOT USD/TWD mid + deterministic signal)
-- AUTO Module Status (core modules first, then any extra modules sorted)
-- Optional module sections: inflation_realrate_cache / asset_proxy_cache (display-only; no guessing)
-- taiwan_signals (pass-through; not used for mode)
-  - Prefer --tw-signals only
-  - If missing/unreadable/core fields missing -> NA + dq_note
-  - NO silent fallback to unified.modules.taiwan_margin_financing.cross_module
+- fx_usdtwd section
+- AUTO Module Status
+- Optional module sections: inflation_realrate_cache / asset_proxy_cache (display-only)
+- taiwan_signals (pass-through; not used for mode; NO fallback)
 
-This renderer does NOT recompute market/fred/margin/roll25/fx stats; it only formats fields already in unified JSON.
-If a field is missing => prints NA.
+2026-02-05 updates (minimal-change; deterministic; no new sources):
+- trend_on_v2:
+  - trend_strong = (SP500 INFO + LONG_EXTREME)
+  - trend_relaxed = (SP500 signal in {INFO,WATCH} AND p252>=80)
+  - if p252 missing => relaxed leg does NOT trigger (conservative)
+- vol_gate_v2:
+  - vol_runaway = (VIX ALERT) OR (VIX WATCH AND ret1%60>=5 AND VIX.value>=20)
+  - vol_watch = (VIX WATCH AND NOT vol_runaway)
+- mode:
+  - if vol_runaway => PAUSE_RISK_ON
+  - elif vol_watch  => DEFENSIVE_DCA (downshift; deterministic)
+  - else => original 4-quadrant logic
 
-2026-02-03 updates:
-- taiwan_signals: prefer --tw-signals; no fallback to unified cross_module; missing -> NA + dq_note
-- roll25_cache: remove heat_split.* lines from report
-- roll25_cache.used_date_status: display-normalize to LATEST (latest available; usually prior trading day)
-- taiwan_signals.date_alignment.used_date_status: display-normalize to LATEST (same policy)
-- roll25_cache.note: clarify policy-normalized LATEST vs staleness tracked elsewhere (e.g., DATA_NOT_UPDATED => confidence downgraded)
+2026-02-05.2 updates (audit hardening):
+- main input validation: missing file / invalid JSON => exit 1 with stderr message
+- report: add strategy_params_version + mode_decision_path for transparency
 """
 
 from __future__ import annotations
@@ -30,8 +39,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+
+# ----------------------------
+# Deterministic parameters (audit-friendly)
+# ----------------------------
+STRATEGY_PARAMS_VERSION: str = "2026-02-05.2"
+
+TREND_P252_ON: float = 80.0
+VIX_RUNAWAY_RET1_60_MIN: float = 5.0
+VIX_RUNAWAY_VALUE_MIN: float = 20.0
 
 
 def _read_text(path: str) -> str:
@@ -124,18 +144,27 @@ def _infer_ohlc_missing(sigs: Any, r_latest: Any) -> Any:
 def _normalize_used_date_status_for_display(x: Any) -> str:
     """
     Display-only normalization:
-    - Roll25 / TWSE 這類 daily 資料在報表時點通常只能拿到「前一交易日」最新可得資料
-    - 報告上統一顯示 LATEST（= latest available）
-    - 不改寫原始 JSON，原始狀態仍可追溯
+    - Daily data often uses T-1 (latest available) at report time.
+    - Normalize common statuses to "LATEST" for display only.
     """
     if x is None:
         return "NA"
     s = str(x).strip()
     up = s.upper()
-    # 將常見狀態（包含 DATA_NOT_UPDATED / OK_LATEST）都視為「latest available」
     if up in ["OK_LATEST", "DATA_NOT_UPDATED", "OK_LATEST_AVAILABLE", "LATEST_AVAILABLE", "LATEST"]:
         return "LATEST"
     return s
+
+
+def _to_float(x: Any) -> Optional[float]:
+    if x is None:
+        return None
+    if isinstance(x, (int, float)):
+        return float(x)
+    try:
+        return float(str(x))
+    except Exception:
+        return None
 
 
 # ---- positioning matrix helpers (report-only) ----
@@ -268,11 +297,6 @@ def _render_module_status(lines: List[str], modules: Dict[str, Any], unified_gen
 # ---- taiwan_signals (pass-through) helpers ----
 
 def _try_load_json_dict_with_note(path: str) -> Tuple[Dict[str, Any], Optional[str]]:
-    """
-    Deterministic:
-    - Returns ({}, dq_note) on any failure.
-    - Returns (dict_obj, None) on success.
-    """
     try:
         obj = _load_json(path)
     except FileNotFoundError:
@@ -295,22 +319,12 @@ def _get_first_present(d: Dict[str, Any], keys: List[str]) -> Any:
 def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) -> None:
     tw_sig, load_note = _try_load_json_dict_with_note(tw_signals_path)
 
-    # Core fields (required for "usable" summary)
     margin_signal = _get_first_present(tw_sig, ["margin_signal", "signal"])
     consistency = _get_first_present(tw_sig, ["consistency", "resonance"])
-
-    # Prefer the resonance confidence / code if present (your schema)
     confidence = _get_first_present(tw_sig, ["resonance_confidence", "confidence", "margin_confidence"])
     dq_reason = _get_first_present(tw_sig, ["resonance_code", "dq_reason"])
-
-    # Optional note (your schema: resonance_note)
     note = _get_first_present(tw_sig, ["resonance_note", "note"])
 
-    # Date alignment (best-effort, schema-aware)
-    # Your signals_latest.json contains:
-    # - data_date
-    # - margin.twse_meta_date / tpex_meta_date
-    # - roll25.used_date / used_date_status / strict flags
     twmargin_date = _safe_get(tw_sig, "margin", "twse_meta_date") or _safe_get(tw_sig, "data_date")
     roll25_used_date = _safe_get(tw_sig, "roll25", "used_date")
     roll25_used_status = _safe_get(tw_sig, "roll25", "used_date_status")
@@ -349,7 +363,6 @@ def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) 
     lines.append(f"- confidence: {confidence if confidence is not None else 'NA'}")
     lines.append(f"- dq_reason: {dq_reason if dq_reason is not None else 'NA'}")
 
-    # Always print a deterministic date_alignment line (schema-aware)
     if any(v is not None for v in [twmargin_date, roll25_used_date, roll25_used_status, strict_same_day, strict_not_stale, strict_roll_match]):
         lines.append(
             "- date_alignment: "
@@ -363,42 +376,43 @@ def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) 
     else:
         lines.append("- date_alignment: NA")
 
-    # Keep dq_note line always present (so report is stable)
     lines.append(f"- dq_note: {dq_note if dq_note is not None else 'NA'}")
-
     if note is not None:
         lines.append(f"- note: {note}")
-
     lines.append("")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--in",
-        dest="in_path",
-        default="unified_dashboard/latest.json",
-        help="Input unified dashboard JSON path",
-    )
-    ap.add_argument(
-        "--out",
-        dest="out_path",
-        default="unified_dashboard/report.md",
-        help="Output markdown report path",
-    )
-    ap.add_argument(
-        "--tw-signals",
-        dest="tw_signals_path",
-        default="taiwan_margin_cache/signals_latest.json",
-        help="Taiwan margin signals_latest.json path (pass-through only; no fallback)",
-    )
-
+    ap.add_argument("--in", dest="in_path", default="unified_dashboard/latest.json",
+                    help="Input unified dashboard JSON path")
+    ap.add_argument("--out", dest="out_path", default="unified_dashboard/report.md",
+                    help="Output markdown report path")
+    ap.add_argument("--tw-signals", dest="tw_signals_path", default="taiwan_margin_cache/signals_latest.json",
+                    help="Taiwan margin signals_latest.json path (pass-through only; no fallback)")
     args = ap.parse_args()
 
-    uni = _load_json(args.in_path)
+    # ---- input validation (hard fail; deterministic) ----
+    if not os.path.isfile(args.in_path):
+        print(f"ERROR: Input file not found: {args.in_path}", file=sys.stderr)
+        return 1
+
+    try:
+        uni = _load_json(args.in_path)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Invalid JSON in {args.in_path}: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"ERROR: Failed to read {args.in_path}: {e}", file=sys.stderr)
+        return 1
+
+    if not isinstance(uni, dict):
+        print(f"ERROR: unified JSON root is not an object: {args.in_path}", file=sys.stderr)
+        return 1
+
     rendered_at_utc = _now_utc_z()
 
-    modules = uni.get("modules", {}) if isinstance(uni, dict) else {}
+    modules = uni.get("modules", {})
     if not isinstance(modules, dict):
         modules = {}
 
@@ -417,7 +431,7 @@ def main() -> int:
     _render_module_status(lines, modules, str(uni.get("generated_at_utc", "NA")))
 
     # ----------------------------
-    # (2) Positioning Matrix (global-only for fragility)
+    # (2) Positioning Matrix
     # ----------------------------
     m_dash = _safe_get(market, "dashboard_latest") or {}
     m_rows = _safe_get(m_dash, "rows") or []
@@ -436,13 +450,20 @@ def main() -> int:
     spx_sig = spx_m.get("signal_level") if isinstance(spx_m, dict) else None
     spx_tag = spx_m.get("tag") if isinstance(spx_m, dict) else None
     spx_date = spx_m.get("data_date") if isinstance(spx_m, dict) else None
+    spx_p252_val = _to_float(spx_m.get("p252")) if isinstance(spx_m, dict) else None
 
-    trend_on = bool(
+    trend_strong = bool(
         isinstance(spx_sig, str)
         and spx_sig.upper() == "INFO"
         and isinstance(spx_tag, str)
         and ("LONG_EXTREME" in spx_tag.upper())
     )
+    trend_relaxed = bool(
+        isinstance(spx_sig, str)
+        and spx_sig.upper() in ["INFO", "WATCH"]
+        and (spx_p252_val is not None and spx_p252_val >= TREND_P252_ON)
+    )
+    trend_on = bool(trend_strong or trend_relaxed)
 
     credit = _find_row(f_rows, "BAMLH0A0HYM2")
     dgs10 = _find_row(f_rows, "DGS10")
@@ -450,36 +471,41 @@ def main() -> int:
     credit_sig = credit.get("signal_level") if isinstance(credit, dict) else None
     dgs10_sig = dgs10.get("signal_level") if isinstance(dgs10, dict) else None
 
-    # GLOBAL-ONLY fragility parts
     credit_fragile = _truthy_signal(credit_sig, ["ALERT"])
     rate_stress = _truthy_signal(dgs10_sig, ["WATCH", "ALERT"])
     fragility_high = bool(credit_fragile or rate_stress)
 
     vix_sig = vix_m.get("signal_level") if isinstance(vix_m, dict) else None
     vix_dir = vix_m.get("dir") if isinstance(vix_m, dict) else None
-    vix_ret1 = vix_m.get("ret1_pct60") if isinstance(vix_m, dict) else None
+    vix_ret1_val = _to_float(vix_m.get("ret1_pct60")) if isinstance(vix_m, dict) else None
+    vix_value_val = _to_float(vix_m.get("value")) if isinstance(vix_m, dict) else None
     vix_date = vix_m.get("data_date") if isinstance(vix_m, dict) else None
-
-    vix_ret1_val: Optional[float] = None
-    try:
-        if vix_ret1 is not None:
-            vix_ret1_val = float(vix_ret1)
-    except Exception:
-        vix_ret1_val = None
 
     vol_runaway = bool(
         isinstance(vix_sig, str)
         and (
             vix_sig.upper() == "ALERT"
-            or (vix_sig.upper() == "WATCH" and (vix_ret1_val is not None and vix_ret1_val >= 5.0))
+            or (
+                vix_sig.upper() == "WATCH"
+                and (vix_ret1_val is not None and vix_ret1_val >= VIX_RUNAWAY_RET1_60_MIN)
+                and (vix_value_val is not None and vix_value_val >= VIX_RUNAWAY_VALUE_MIN)
+            )
         )
     )
+    vol_watch = bool(isinstance(vix_sig, str) and vix_sig.upper() == "WATCH" and (not vol_runaway))
 
     matrix_cell = f"Trend={'ON' if trend_on else 'OFF'} / Fragility={'HIGH' if fragility_high else 'LOW'}"
 
+    # mode + decision path (audit transparency)
+    mode_decision_path: List[str] = []
     if vol_runaway:
         mode = "PAUSE_RISK_ON"
+        mode_decision_path.append("triggered: vol_runaway override")
+    elif vol_watch:
+        mode = "DEFENSIVE_DCA"
+        mode_decision_path.append("triggered: vol_watch downshift => DEFENSIVE_DCA")
     else:
+        mode_decision_path.append(f"4-quadrant: trend_on={str(trend_on).lower()}, fragility_high={str(fragility_high).lower()}")
         if trend_on and fragility_high:
             mode = "DEFENSIVE_DCA"
         elif trend_on and not fragility_high:
@@ -495,18 +521,35 @@ def main() -> int:
     lines.append("## (2) Positioning Matrix")
     lines.append("### Current Strategy Mode (deterministic; report-only)")
     lines.append("- strategy_version: strategy_mode_v1")
+    lines.append(f"- strategy_params_version: {STRATEGY_PARAMS_VERSION}")
     lines.append(f"- source_policy: {source_policy}")
     lines.append(f"- trend_on: {_fmt(trend_on,0)}")
+    lines.append(f"- trend_strong: {_fmt(trend_strong,0)}")
+    lines.append(f"- trend_relaxed: {_fmt(trend_relaxed,0)}")
     lines.append(f"- fragility_high: {_fmt(fragility_high,0)}")
+    lines.append(f"- vol_watch: {_fmt(vol_watch,0)}")
     lines.append(f"- vol_runaway: {_fmt(vol_runaway,0)}")
     lines.append(f"- matrix_cell: {matrix_cell}")
     lines.append(f"- mode: {mode}\n")
+
+    lines.append("**mode_decision_path**")
+    for s in mode_decision_path:
+        lines.append(f"- {s}")
+    lines.append("")
+
+    lines.append("**strategy_params (deterministic constants)**")
+    lines.append(f"- TREND_P252_ON: {_fmt(TREND_P252_ON,1)}")
+    lines.append(f"- VIX_RUNAWAY_RET1_60_MIN: {_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}")
+    lines.append(f"- VIX_RUNAWAY_VALUE_MIN: {_fmt(VIX_RUNAWAY_VALUE_MIN,1)}\n")
 
     lines.append("**reasons**")
     if isinstance(spx_m, dict):
         lines.append(
             f"- trend_basis: market_cache.SP500.signal={spx_sig if spx_sig is not None else 'NA'}, "
-            f"tag={spx_tag if spx_tag is not None else 'NA'}, data_date={spx_date if spx_date is not None else 'NA'}"
+            f"tag={spx_tag if spx_tag is not None else 'NA'}, "
+            f"p252={_fmt(spx_p252_val,6) if spx_p252_val is not None else 'NA'}, "
+            f"p252_on_threshold={_fmt(TREND_P252_ON,1)}, "
+            f"data_date={spx_date if spx_date is not None else 'NA'}"
         )
     else:
         lines.append("- trend_basis: market_cache.SP500: NA (missing row)")
@@ -521,13 +564,16 @@ def main() -> int:
 
     if isinstance(vix_m, dict):
         lines.append(
-            f"- vol_gate: market_cache.VIX only (signal={vix_sig if vix_sig is not None else 'NA'}, "
+            "- vol_gate_v2: market_cache.VIX only "
+            f"(signal={vix_sig if vix_sig is not None else 'NA'}, "
             f"dir={vix_dir if vix_dir is not None else 'NA'}, "
+            f"value={_fmt(vix_value_val,6) if vix_value_val is not None else 'NA'}, "
             f"ret1%60={_fmt(vix_ret1_val,6) if vix_ret1_val is not None else 'NA'}, "
+            f"runaway_thresholds: ret1%60>={_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}, value>={_fmt(VIX_RUNAWAY_VALUE_MIN,1)}, "
             f"data_date={vix_date if vix_date is not None else 'NA'})"
         )
     else:
-        lines.append("- vol_gate: market_cache.VIX only: NA (missing row)")
+        lines.append("- vol_gate_v2: market_cache.VIX only: NA (missing row)")
 
     lines.append("\n**dq_gates (no guessing; conservative defaults)**")
     lines.append(f"- roll25_derived_confidence={roll25_conf if roll25_conf is not None else 'NA'} (derived metrics not used for upgrade triggers)")
@@ -662,7 +708,7 @@ def main() -> int:
         _render_generic_dashboard_section(lines, "asset_proxy_cache", apx)
 
     # ----------------------------
-    # roll25_cache (core fields from latest report)
+    # roll25_cache (core fields)
     # ----------------------------
     r_latest = _safe_get(roll25, "latest_report") or {}
     r_core = _safe_get(roll25, "core") or {}
@@ -723,17 +769,13 @@ def main() -> int:
     lines.append(f"- status: {_safe_get(roll25,'status') or 'NA'}")
     lines.append(f"- UsedDate: {_fmt(r_core.get('UsedDate'),0)}")
     lines.append(f"- run_day_tag: {run_day_tag}")
-    # display-only normalize to LATEST
     lines.append(f"- used_date_status: {_normalize_used_date_status_for_display(used_date_status)}")
     lines.append(f"- used_date_selection_tag: {used_date_selection_tag}")
     lines.append(f"- tag (legacy): {legacy_tag}")
-
-    # NOTE (updated): clarify policy-normalized LATEST vs staleness tracked elsewhere
     lines.append(
-        "- note: run_day_tag is report-day context; UsedDate is the data date used for calculations. "
-        "used_date_status is policy-normalized to LATEST (latest available; typically T-1). "
-        "If upstream indicates DATA_NOT_UPDATED, staleness is tracked via taiwan_signals/resonance checks "
-        "(e.g., strict_not_stale=false) and confidence may be downgraded."
+        "- note: UsedDate is the data date used for calculations. "
+        "used_date_status is policy-normalized to LATEST for display only (typically T-1). "
+        "Staleness/strictness should be tracked by dedicated checks (e.g., taiwan_signals strict flags)."
     )
 
     lines.append(f"- risk_level: {r_core.get('risk_level','NA')}")
@@ -784,8 +826,7 @@ def main() -> int:
     lines.append(f"- mid: {_fmt(usd.get('mid'),6)}")
     mom = fx_der2.get("momentum", None)
 
-    momentum_unavailable = _fx_momentum_unavailable(mom)
-    if momentum_unavailable:
+    if _fx_momentum_unavailable(mom):
         lines.append("- momentum_unavailable: true (deterministic dq note)")
 
     mom_dict = mom if isinstance(mom, dict) else {}
@@ -797,7 +838,7 @@ def main() -> int:
     lines.append(f"- fx_confidence: {fx_der2.get('fx_confidence','NA')}")
     lines.append("")
 
-    # taiwan margin financing (module header only; detailed decisions are in dedicated dashboard)
+    # taiwan margin financing
     tw_latest = _safe_get(twm, "latest") or {}
     lines.append("## taiwan_margin_financing (TWSE/TPEX)")
     lines.append(f"- status: {_safe_get(twm,'status') or 'NA'}")
