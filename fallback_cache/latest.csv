@@ -1,14 +1,14 @@
 series_id,data_date,value,source_url,notes,as_of_ts,change_pct_1d
-__META__,2026-02-05,fallback_vA_official_no_key_lock+history_v1,NA,INFO:script_version,2026-02-05T07:59:09Z,
-VIXCLS,2026-02-04,18.64,https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv,WARN:fallback_cboe_vix,2026-02-05T07:59:09Z,
-DGS10,2026-02-04,4.29,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:fallback_treasury_csv,2026-02-05T07:59:09Z,
-DGS2,2026-02-04,3.57,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:fallback_treasury_csv,2026-02-05T07:59:09Z,
-UST3M,2026-02-04,3.69,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:fallback_treasury_csv,2026-02-05T07:59:09Z,
-T10Y2Y,2026-02-04,0.72,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:derived_from_treasury(10Y-2Y),2026-02-05T07:59:09Z,
-T10Y3M,2026-02-04,0.6,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:derived_from_treasury(10Y-3M),2026-02-05T07:59:09Z,
-NFCINONFINLEVERAGE,2026-01-30,-0.47784997352298,https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv,WARN:fallback_chicagofed_nfci(nonfinancial leverage),2026-02-05T07:59:09Z,
-BAMLH0A0HYM2,2026-02-03,2.85,https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2,WARN:fredgraph_no_key(BAMLH0A0HYM2),2026-02-05T07:59:09Z,
-SP500,2026-02-04,6882.72,https://stooq.com/q/d/l/?s=^spx&i=d,WARN:nonofficial_stooq(^spx);derived_1d_pct,2026-02-05T07:59:09Z,-0.507241
-NASDAQCOM,2026-02-04,22904.58,https://stooq.com/q/d/l/?s=^ndq&i=d,WARN:nonofficial_stooq(^ndq);derived_1d_pct,2026-02-05T07:59:09Z,-1.507663
-DJIA,2026-02-04,49501.3,https://stooq.com/q/d/l/?s=^dji&i=d,WARN:nonofficial_stooq(^dji);derived_1d_pct,2026-02-05T07:59:09Z,0.528645
-DCOILWTICO,2026-02-02,61.6,https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv,WARN:nonofficial_datahub_oil_prices(wti-daily),2026-02-05T07:59:09Z,
+__META__,2026-02-05,fallback_vA_official_no_key_lock+history_v1,NA,INFO:script_version,2026-02-05T15:05:46Z,
+VIXCLS,2026-02-04,18.64,https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv,WARN:fallback_cboe_vix,2026-02-05T15:05:46Z,
+DGS10,2026-02-04,4.29,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:fallback_treasury_csv,2026-02-05T15:05:46Z,
+DGS2,2026-02-04,3.57,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:fallback_treasury_csv,2026-02-05T15:05:46Z,
+UST3M,2026-02-04,3.69,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:fallback_treasury_csv,2026-02-05T15:05:46Z,
+T10Y2Y,2026-02-04,0.72,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:derived_from_treasury(10Y-2Y),2026-02-05T15:05:46Z,
+T10Y3M,2026-02-04,0.6,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202602?_format=csv&field_tdr_date_value_month=202602&page=&type=daily_treasury_yield_curve,WARN:derived_from_treasury(10Y-3M),2026-02-05T15:05:46Z,
+NFCINONFINLEVERAGE,2026-01-30,-0.47784997352298,https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv,WARN:fallback_chicagofed_nfci(nonfinancial leverage),2026-02-05T15:05:46Z,
+BAMLH0A0HYM2,2026-02-03,2.85,https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2,WARN:fredgraph_no_key(BAMLH0A0HYM2),2026-02-05T15:05:46Z,
+SP500,2026-02-05,6808.65,https://stooq.com/q/d/l/?s=^spx&i=d,WARN:nonofficial_stooq(^spx);derived_1d_pct,2026-02-05T15:05:46Z,-1.076173
+NASDAQCOM,2026-02-05,22577.447,https://stooq.com/q/d/l/?s=^ndq&i=d,WARN:nonofficial_stooq(^ndq);derived_1d_pct,2026-02-05T15:05:46Z,-1.428243
+DJIA,2026-02-05,49117.74,https://stooq.com/q/d/l/?s=^dji&i=d,WARN:nonofficial_stooq(^dji);derived_1d_pct,2026-02-05T15:05:46Z,-0.774848
+DCOILWTICO,2026-02-02,61.6,https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv,WARN:nonofficial_datahub_oil_prices(wti-daily),2026-02-05T15:05:46Z,
