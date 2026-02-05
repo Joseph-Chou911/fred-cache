@@ -39,6 +39,23 @@ VOLATILITY BANDS (Approximation; audit-safe):
     fallback: if both unavailable, use max(available sigma in effective windows) * stress_mult
               (explicitly noted with chosen window)
 
+ROLL25 DYNAMIC RISK CHECK (Audit-first; fixed schema; no guessing):
+- ret_1 is STRICT adjacency at UsedDate using LOG return:
+    ret1_log_pct = 100 * ln(close_today / close_prev)
+- sigma_log_pct computed from last N daily LOG returns anchored at UsedDate (population std; ddof=0).
+- sigma_target_pct uses Rule A (deterministic):
+    sigma_target_pct = max(sigma_log_pct, abs(ret1_log_pct))
+- Risk bands use log-return model:
+    Band(z) = AnchorClose * exp(- z * sigma_target_pct / 100)
+- Health check uses relative volume only:
+    Volume_Mult_20 PASS if <=1.0; NOTE if (1.0, 1.3); FAIL if >=1.3
+- Price structure:
+    PASS if Close >= Band1; NOTE if Band2 <= Close < Band1; FAIL if Close < Band2
+- Action matrix:
+    Any FAIL => CASH / WAIT
+    All PASS => Optional tiny probe (not required)
+    Otherwise => OBSERVE (no add)
+
 REPORTING (noise-control):
 - Summary always shows:
     * report_date_local (today, in tz if available)
@@ -46,6 +63,17 @@ REPORTING (noise-control):
     * data_age_days = report_date_local - as_of_data_date (calendar days)
   Only if data_age_days > stale_warn_days (default=2), show a warning (might be weekend/holiday).
 - UsedDateStatus is kept for audit, but moved to Audit Notes to avoid daily noise.
+
+=== v2026-02-05 patch (audit polish / robustness) ===
+1) _parse_date: accept non-string date inputs (int, float) by str() coercion.
+2) VOL_MULTIPLIER_20: record NA reason when insufficient window; print it in Audit Notes.
+3) Dynamic Risk Check volume thresholds parameterized:
+   - vol-pass-max (default 1.0)
+   - vol-fail-min (default 1.3)
+4) Anchor clarity: explicitly disclose BOTH anchors:
+   - level_anchor (for volatility bands)
+   - anchor_close (for dynamic risk check)
+   and disclose whether they match.
 """
 
 from __future__ import annotations
@@ -185,13 +213,21 @@ def _parse_date(
     default_year: Optional[int] = None,
     ref_date: Optional[date] = None,
 ) -> Optional[date]:
-    if not isinstance(s, str):
+    # PATCH: accept JSON int like 20260205 by coercing to string
+    if s is None:
         return None
-    t = s.strip()
+    try:
+        s2 = str(s)
+    except Exception:
+        return None
+
+    if not isinstance(s2, str):
+        return None
+    t = s2.strip()
     if not t:
         return None
 
-    # normalize separators
+    # normalize separators for ISO-like parsing
     t2 = t.replace(".", "-").replace("/", "-")
 
     # YYYY-MM-DD (and common variants)
@@ -279,6 +315,23 @@ def _ret1_pct_strict(a: Optional[float], b: Optional[float]) -> Optional[float]:
     return (a - b) / abs(b) * 100.0
 
 
+def _log_ret_pct_strict(a: Optional[float], b: Optional[float]) -> Optional[float]:
+    """
+    Strict adjacency log-return in percent:
+      100 * ln(a/b)
+    """
+    if a is None or b is None:
+        return None
+    if not (math.isfinite(a) and math.isfinite(b)):
+        return None
+    if a <= 0 or b <= 0:
+        return None
+    try:
+        return 100.0 * math.log(a / b)
+    except Exception:
+        return None
+
+
 def _std_pop(arr: List[float]) -> Optional[float]:
     if len(arr) < 2:
         return None
@@ -296,7 +349,7 @@ class RowStats:
     p252: Optional[float]
     zD60: Optional[float]   # print zΔ60
     pD60: Optional[float]   # print pΔ60
-    ret1: Optional[float]   # print ret1%
+    ret1: Optional[float]   # print ret1% (simple %)
     confidence: str         # OK / DOWNGRADED
 
 
@@ -330,6 +383,19 @@ def _get_row_raw_date(r: Dict[str, Any]) -> Optional[str]:
     raw = r.get("Date")
     if isinstance(raw, str):
         return raw
+    # PATCH: if date is int, convert to str for parsing
+    raw2 = r.get("date")
+    if isinstance(raw2, (int, float)):
+        try:
+            return str(int(raw2))
+        except Exception:
+            return str(raw2)
+    raw2 = r.get("Date")
+    if isinstance(raw2, (int, float)):
+        try:
+            return str(int(raw2))
+        except Exception:
+            return str(raw2)
     return None
 
 
@@ -461,23 +527,37 @@ def _series_pct_change_close_from_close(close_nf: List[float]) -> List[float]:
     return out
 
 
-def _series_vol_multiplier_20(turnover_nf: List[float], min_points: int = 15, win: int = 20) -> List[float]:
+def _series_vol_multiplier_20(
+    turnover_nf: List[float],
+    min_points: int = 15,
+    win: int = 20,
+) -> Tuple[List[float], Dict[str, Any]]:
     """
     NEWEST-FIRST contract:
     vol_mult[i] = turnover[i] / avg(turnover[i+1 : i+win+1])  (i.e., vs older window)
     This is NOT "future window" under the NEWEST-FIRST contract.
+
+    PATCH: also return audit diag describing NA causes and parameters.
     """
     out: List[float] = []
+    na_invalid_a = 0
+    na_no_tail = 0
+    na_insufficient = 0
+    na_zero_avg = 0
+    computed = 0
+
     for i in range(len(turnover_nf)):
         a = turnover_nf[i]
         if not (isinstance(a, (int, float)) and math.isfinite(float(a))):
             out.append(float("nan"))
+            na_invalid_a += 1
             continue
 
         start = i + 1
         end = i + win + 1
         if start >= len(turnover_nf):
             out.append(float("nan"))
+            na_no_tail += 1
             continue
 
         window = turnover_nf[start:end]
@@ -489,13 +569,27 @@ def _series_vol_multiplier_20(turnover_nf: List[float], min_points: int = 15, wi
                     w.append(fv)
         if len(w) < min_points:
             out.append(float("nan"))
+            na_insufficient += 1
             continue
         avg = sum(w) / len(w)
         if avg == 0:
             out.append(float("nan"))
+            na_zero_avg += 1
             continue
         out.append(float(a) / avg)
-    return out
+        computed += 1
+
+    diag = {
+        "win": win,
+        "min_points": min_points,
+        "len_turnover": len(turnover_nf),
+        "computed": computed,
+        "na_invalid_a": na_invalid_a,
+        "na_no_tail": na_no_tail,
+        "na_insufficient_window": na_insufficient,
+        "na_zero_avg": na_zero_avg,
+    }
+    return out, diag
 
 
 def _truncate_to_common_length(*series: List[float]) -> List[List[float]]:
@@ -585,6 +679,31 @@ def _anchored_daily_returns_pct_from_close(close_nf: List[float], anchor_idx: in
         if not (math.isfinite(a) and math.isfinite(b)) or b == 0:
             continue
         out.append((a - b) / abs(b) * 100.0)
+    return out
+
+
+def _anchored_daily_log_returns_pct_from_close(close_nf: List[float], anchor_idx: int) -> List[float]:
+    """
+    Returns NEWEST-FIRST daily log returns in percent anchored at anchor_idx:
+      out[0] = 100*ln(close[anchor]/close[anchor+1])
+    """
+    out: List[float] = []
+    if anchor_idx < 0 or anchor_idx >= len(close_nf):
+        return out
+    tail = close_nf[anchor_idx:]
+    for i in range(len(tail) - 1):
+        a = tail[i]
+        b = tail[i + 1]
+        if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
+            continue
+        a = float(a)
+        b = float(b)
+        if not (math.isfinite(a) and math.isfinite(b)) or a <= 0 or b <= 0:
+            continue
+        try:
+            out.append(100.0 * math.log(a / b))
+        except Exception:
+            continue
     return out
 
 
@@ -801,6 +920,62 @@ def _unique_sorted_ints(nums: List[int]) -> List[int]:
     return out
 
 
+# ---------------- Risk band helpers (Roll25 Dynamic Risk Check) ----------------
+
+def _risk_band(level: float, sigma_target_pct: float, z: float) -> Optional[float]:
+    """
+    Log-return risk band:
+      level * exp(- z * sigma_target_pct/100)
+    """
+    if not (isinstance(level, (int, float)) and math.isfinite(float(level))):
+        return None
+    if not (isinstance(sigma_target_pct, (int, float)) and math.isfinite(float(sigma_target_pct))):
+        return None
+    if float(level) <= 0:
+        return None
+    s = float(sigma_target_pct) / 100.0
+    try:
+        return float(level) * math.exp(- float(z) * s)
+    except Exception:
+        return None
+
+
+def _vol_mult_status(v: Optional[float], *, pass_max: float, fail_min: float) -> str:
+    if v is None or not (isinstance(v, (int, float)) and math.isfinite(float(v))):
+        return "NA"
+    x = float(v)
+    if x <= pass_max:
+        return "PASS"
+    if x < fail_min:
+        return "NOTE"
+    return "FAIL"
+
+
+def _price_band_status(close: Optional[float], band1: Optional[float], band2: Optional[float]) -> str:
+    if close is None or band1 is None or band2 is None:
+        return "NA"
+    if not (math.isfinite(float(close)) and math.isfinite(float(band1)) and math.isfinite(float(band2))):
+        return "NA"
+    c = float(close)
+    b1 = float(band1)
+    b2 = float(band2)
+    if c >= b1:
+        return "PASS"
+    if c >= b2:
+        return "NOTE"
+    return "FAIL"
+
+
+def _action_matrix(price_status: str, vol_status: str) -> str:
+    if price_status == "FAIL" or vol_status == "FAIL":
+        return "CASH / WAIT (任一 FAIL → 空手觀望)"
+    if price_status == "PASS" and vol_status == "PASS":
+        return "OPTIONAL_TINY_PROBE (全 PASS → 可考慮極小額試單；非必要)"
+    if price_status == "NA" or vol_status == "NA":
+        return "NA (inputs insufficient; keep defensive)"
+    return "OBSERVE (NOTE 狀態：觀察；不加碼)"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--latest", required=True)
@@ -827,6 +1002,20 @@ def main() -> int:
     ap.add_argument("--stress-mult", type=float, default=float(os.getenv("STRESS_MULT", "1.5")),
                     help="stress multiplier for sigma_stress (e.g., 1.5 or 2.0)")
 
+    # Dynamic risk check (bands) controls
+    ap.add_argument("--risk-band-z1", type=float, default=float(os.getenv("RISK_BAND_Z1", "1.0")),
+                    help="Z for Band1 (default 1.0)")
+    ap.add_argument("--risk-band-z2", type=float, default=float(os.getenv("RISK_BAND_Z2", "2.0")),
+                    help="Z for Band2 (default 2.0)")
+    ap.add_argument("--risk-sigma-win", type=int, default=int(os.getenv("RISK_SIGMA_WIN", "60")),
+                    help="sigma window for dynamic risk check (log returns), default 60")
+
+    # PATCH: volume multiplier thresholds parameterized (audit-friendly)
+    ap.add_argument("--vol-pass-max", type=float, default=float(os.getenv("VOL_PASS_MAX", "1.0")),
+                    help="Volume_Mult_20 PASS if <= this (default 1.0)")
+    ap.add_argument("--vol-fail-min", type=float, default=float(os.getenv("VOL_FAIL_MIN", "1.3")),
+                    help="Volume_Mult_20 FAIL if >= this (default 1.3); NOTE is (pass_max, fail_min)")
+
     args = ap.parse_args()
 
     latest = _load_json(args.latest)
@@ -842,7 +1031,9 @@ def main() -> int:
     numbers = latest.get("numbers") if isinstance(latest.get("numbers"), dict) else {}
     sig = latest.get("signal") if isinstance(latest.get("signal"), dict) else {}
 
-    used_date_s = numbers.get("UsedDate") if isinstance(numbers.get("UsedDate"), str) else None
+    # PATCH: UsedDate may become int in JSON -> allow int -> parse_date handles it now.
+    used_date_raw = numbers.get("UsedDate")
+    used_date_s = str(used_date_raw) if used_date_raw is not None else None
     used_date_dt = _parse_date(used_date_s) if used_date_s else None
 
     as_of_data_date = used_date_s if used_date_s else "NA"
@@ -879,6 +1070,7 @@ def main() -> int:
     row_dates = [d for d, _ in keyed]             # NEWEST-FIRST
 
     dq_notes: List[str] = []
+    extra_audit_notes: List[str] = []  # PATCH: for non-DQ but audit clarity
 
     # date ordering sanity (should be non-increasing)
     bad_order = False
@@ -909,7 +1101,10 @@ def main() -> int:
     amp_nf = _series_amplitude_pct(rows)
 
     pctchg_nf = _series_pct_change_close_from_close(close_nf)
-    volmult_nf = _series_vol_multiplier_20(turnover_nf, min_points=15, win=20)
+
+    # PATCH: volmult now returns diag
+    volmult_nf_raw, volmult_diag = _series_vol_multiplier_20(turnover_nf, min_points=15, win=20)
+    volmult_nf = volmult_nf_raw
 
     turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf = _truncate_to_common_length(
         turnover_nf, close_nf, pctchg_nf, amp_nf, volmult_nf
@@ -985,10 +1180,16 @@ def main() -> int:
     sigma_win_list_eff = _unique_sorted_ints(sigma_win_list_in + [sigma_base_win, 20, 60])
 
     level_anchor: Optional[float] = None
+    level_anchor_source = "NA"
     if isinstance(close_latest, (int, float)) and math.isfinite(float(close_latest)):
         level_anchor = float(close_latest)
+        level_anchor_source = "latest_report.Close"
     elif isinstance(st_close.value, (int, float)) and math.isfinite(float(st_close.value)):
         level_anchor = float(st_close.value)
+        level_anchor_source = "roll25@UsedDate.close (fallback)"
+    else:
+        level_anchor = None
+        level_anchor_source = "NA"
 
     returns_pct = _anchored_daily_returns_pct_from_close(close_nf, anchor_idx)
 
@@ -1093,6 +1294,114 @@ def main() -> int:
         t_list=t_list,
         confidence=stress_conf,
         note=stress_note,
+    )
+
+    # ---------------- Roll25 Dynamic Risk Check (Rule A; log-return) ----------------
+    risk_notes: List[str] = []
+    risk_conf = "OK"
+
+    # Anchor close (prefer roll25@UsedDate close for audit alignment)
+    anchor_close: Optional[float] = None
+    anchor_close_source = "NA"
+    if isinstance(st_close.value, (int, float)) and math.isfinite(float(st_close.value)):
+        anchor_close = float(st_close.value)
+        anchor_close_source = "roll25@UsedDate.close"
+        risk_notes.append("anchor_source=roll25@UsedDate.close")
+    elif isinstance(close_latest, (int, float)) and math.isfinite(float(close_latest)):
+        anchor_close = float(close_latest)
+        anchor_close_source = "latest_report.Close (fallback)"
+        risk_notes.append("anchor_source=latest_report.Close (fallback)")
+    else:
+        risk_conf = "DOWNGRADED"
+        anchor_close_source = "NA"
+        risk_notes.append("anchor_close NA")
+
+    # Strict adjacency log return at UsedDate
+    prev_close: Optional[float] = None
+    if 0 <= anchor_idx + 1 < len(close_nf):
+        pv = close_nf[anchor_idx + 1]
+        if isinstance(pv, (int, float)) and math.isfinite(float(pv)):
+            prev_close = float(pv)
+
+    ret1_log_pct = _log_ret_pct_strict(anchor_close, prev_close) if anchor_close is not None else None
+    if ret1_log_pct is None:
+        risk_conf = "DOWNGRADED"
+        risk_notes.append("ret1_log_pct NA (strict adjacency failed)")
+
+    # Sigma from log returns anchored at UsedDate
+    risk_sigma_win = int(args.risk_sigma_win) if int(args.risk_sigma_win) > 0 else 60
+    log_returns_pct = _anchored_daily_log_returns_pct_from_close(close_nf, anchor_idx)
+    sigma_log_pct, sigma_log_reason = _compute_sigma_daily_pct(log_returns_pct, risk_sigma_win)
+
+    if sigma_log_pct is None:
+        risk_conf = "DOWNGRADED"
+        risk_notes.append(f"sigma_log(win={risk_sigma_win}) NA: {sigma_log_reason}")
+
+    # Rule A: sigma_target = max(sigma_log, |ret1_log|)
+    sigma_target_pct: Optional[float] = None
+    if ret1_log_pct is not None and math.isfinite(float(ret1_log_pct)):
+        if sigma_log_pct is not None and math.isfinite(float(sigma_log_pct)):
+            sigma_target_pct = max(float(sigma_log_pct), abs(float(ret1_log_pct)))
+        else:
+            sigma_target_pct = abs(float(ret1_log_pct))
+            risk_notes.append("sigma_log NA; sigma_target uses |ret1_log| only (Rule A fallback).")
+    elif sigma_log_pct is not None and math.isfinite(float(sigma_log_pct)):
+        sigma_target_pct = float(sigma_log_pct)
+        risk_notes.append("ret1_log NA; sigma_target uses sigma_log only (defensive fallback).")
+        risk_conf = "DOWNGRADED"
+    else:
+        sigma_target_pct = None
+        risk_conf = "DOWNGRADED"
+
+    z1 = float(args.risk_band_z1)
+    z2 = float(args.risk_band_z2)
+
+    band1 = _risk_band(anchor_close, sigma_target_pct, z1) if (anchor_close is not None and sigma_target_pct is not None) else None
+    band2 = _risk_band(anchor_close, sigma_target_pct, z2) if (anchor_close is not None and sigma_target_pct is not None) else None
+
+    # Close for structure check: prefer anchor_close (as-of UsedDate)
+    close_for_check = anchor_close
+
+    # Volume_Mult_20 for check: prefer latest_report.VolumeMultiplier else roll25@UsedDate computed
+    vol_mult_for_check: Optional[float] = None
+    if isinstance(vol_mult_latest, (int, float)) and math.isfinite(float(vol_mult_latest)):
+        vol_mult_for_check = float(vol_mult_latest)
+        risk_notes.append("vol_mult_source=latest_report.VolumeMultiplier")
+    elif isinstance(st_volm.value, (int, float)) and math.isfinite(float(st_volm.value)):
+        vol_mult_for_check = float(st_volm.value)
+        risk_notes.append("vol_mult_source=roll25@UsedDate (computed fallback)")
+    else:
+        risk_notes.append("vol_mult NA")
+
+    # PATCH: parameterized thresholds
+    vol_pass_max = float(args.vol_pass_max)
+    vol_fail_min = float(args.vol_fail_min)
+    if not (math.isfinite(vol_pass_max) and math.isfinite(vol_fail_min)) or vol_fail_min <= vol_pass_max:
+        # hard safety fallback
+        vol_pass_max = 1.0
+        vol_fail_min = 1.3
+        dq_notes.append("VOL threshold params invalid; fallback to defaults pass_max=1.0 fail_min=1.3")
+
+    vol_status = _vol_mult_status(vol_mult_for_check, pass_max=vol_pass_max, fail_min=vol_fail_min)
+    price_status = _price_band_status(close_for_check, band1, band2)
+    action = _action_matrix(price_status, vol_status)
+
+    if price_status == "NA" or vol_status == "NA":
+        risk_conf = "DOWNGRADED"
+
+    # PATCH: anchor mismatch disclosure (audit clarity)
+    anchors_match: Optional[bool] = None
+    anchors_diff: Optional[float] = None
+    if isinstance(level_anchor, (int, float)) and isinstance(anchor_close, (int, float)):
+        if math.isfinite(float(level_anchor)) and math.isfinite(float(anchor_close)):
+            anchors_diff = abs(float(level_anchor) - float(anchor_close))
+            anchors_match = anchors_diff <= 1e-9
+
+    extra_audit_notes.append(
+        f"VOL_MULT_20 window diag: win={volmult_diag.get('win')} min_points={volmult_diag.get('min_points')} "
+        f"len_turnover={volmult_diag.get('len_turnover')} computed={volmult_diag.get('computed')} "
+        f"na_invalid_a={volmult_diag.get('na_invalid_a')} na_no_tail={volmult_diag.get('na_no_tail')} "
+        f"na_insufficient_window={volmult_diag.get('na_insufficient_window')} na_zero_avg={volmult_diag.get('na_zero_avg')}"
     )
 
     # ---------------- markdown build ----------------
@@ -1206,7 +1515,7 @@ def main() -> int:
     md.append(f"- sigma_win_list_effective: `{','.join(str(x) for x in sigma_win_list_eff)}` (includes sigma_base_win + 20 + 60 for audit stability)")
     md.append(f"- sigma_base_win: `{_fmt(float(sigma_base_win))}` (BASE bands)")
     md.append(f"- T list (trading days): `{','.join(str(x) for x in t_list)}`")
-    md.append(f"- level anchor: `{_fmt(level_anchor)}` (prefer latest_report.Close else roll25@as_of_data_date)")
+    md.append(f"- level anchor: `{_fmt(level_anchor)}` (source: {level_anchor_source})")
     md.append("")
     md.append(f"- sigma20_daily_%: `{_fmt(sigma20)}` (reason: `{sigma_reason.get(20, 'NA')}`)")
     md.append(f"- sigma60_daily_%: `{_fmt(sigma60)}` (reason: `{sigma_reason.get(60, 'NA')}`)")
@@ -1232,6 +1541,42 @@ def main() -> int:
     md.append("  - Stress bands are heuristic; they are meant to be conservative-ish, not statistically exact.")
     md.append("")
 
+    md.append("## 5.3) Roll25 Dynamic Risk Check (Rule A; log-return bands)")
+    md.append("- Policy (fixed; audit-grade):")
+    md.append("  - ret1_log_pct = 100 * ln(Close_t / Close_{t-1})  (STRICT adjacency at UsedDate)")
+    md.append(f"  - sigma_log(win={risk_sigma_win}) computed from last {risk_sigma_win} daily log returns anchored at UsedDate (ddof=0)")
+    md.append("  - sigma_target_pct = max(sigma_log, abs(ret1_log_pct))  (Rule A)")
+    md.append("  - Band(z) = AnchorClose * exp(- z * sigma_target_pct / 100)")
+    md.append("")
+    md.append("### 5.3.a) Parameter Setup")
+    md.append(f"- AnchorClose: `{_fmt(anchor_close)}` (source: {anchor_close_source})")
+    md.append(f"- PrevClose(strict): `{_fmt(prev_close)}`")
+    md.append(f"- ret1_log_pct(abs): `{_fmt(abs(ret1_log_pct) if isinstance(ret1_log_pct, (int, float)) else None)}`")
+    md.append(f"- sigma_log_{risk_sigma_win}_daily_%: `{_fmt(sigma_log_pct)}` (reason: `{sigma_log_reason}`)")
+    md.append(f"- sigma_target_daily_% (Rule A): `{_fmt(sigma_target_pct)}`")
+    md.append(f"- confidence: `{risk_conf}`")
+    if risk_notes:
+        md.append(f"- notes: `{'; '.join(risk_notes)}`")
+    md.append("")
+    md.append("### 5.3.b) Risk Bands")
+    rb_rows = [
+        ["band", "z", "formula", "point", "close_confirm_rule"],
+        [f"Band 1 (normal)", _fmt(z1), "P*exp(-z*sigma)", _fmt(band1), f"Close >= {_fmt(band1)} => PASS else NOTE/FAIL"],
+        [f"Band 2 (stress)", _fmt(z2), "P*exp(-z*sigma)", _fmt(band2), f"Close <  {_fmt(band2)} => FAIL (do not catch knife)"],
+    ]
+    md.append(_md_table(rb_rows))
+    md.append("")
+    md.append("### 5.3.c) Health Check (deterministic)")
+    hc_rows = [
+        ["item", "value", "rule", "status"],
+        ["Volume_Mult_20", _fmt(vol_mult_for_check), f"<= {vol_pass_max} PASS; ({vol_pass_max},{vol_fail_min}) NOTE; >= {vol_fail_min} FAIL", vol_status],
+        ["Price Structure", _fmt(close_for_check), "Close>=B1 PASS; B2<=Close<B1 NOTE; Close<B2 FAIL", price_status],
+        ["Self Risk", "NO_MARGIN", "no leverage / no pledge forced-sell risk", "PASS"],
+        ["Action", action, "any FAIL => CASH; all PASS => optional tiny probe; else observe", "—"],
+    ]
+    md.append(_md_table(hc_rows))
+    md.append("")
+
     md.append("## 6) Audit Notes")
     md.append("- This report is computed from local files only (no external fetch).")
     md.append("- SERIES DIRECTION: all series are NEWEST-FIRST (index 0 = latest).")
@@ -1242,7 +1587,8 @@ def main() -> int:
     md.append("- All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).")
     md.append(f"- UsedDateStatus: `{used_date_status}` (kept for audit; not treated as daily alarm).")
     md.append("- z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).")
-    md.append("- ret1% is STRICT adjacency at as_of_data_date (UsedDate vs next older row); if missing => NA (no jumping).")
+    md.append("- ret1% (in Z/P table) is STRICT adjacency at as_of_data_date (simple %).")
+    md.append("- Dynamic Risk Check ret1 uses STRICT adjacency LOG return: 100*ln(Close_t/Close_{t-1}).")
     md.append("- zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).")
     md.append("- AMPLITUDE derived policy: prefer prev_close (= close - change) as denominator when available; fallback to close.")
     md.append(f"- AMPLITUDE mismatch threshold: {args.amp_mismatch_abs_threshold} (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).")
@@ -1250,6 +1596,14 @@ def main() -> int:
     md.append("- PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.")
     md.append("- VOL_BANDS: sigma computed from anchored DAILY % returns; horizon scaling uses sqrt(T).")
     md.append("- Band % Mapping tables (5.1.a/5.2.a) are display-only: they map sigma_T_% to ±% moves; they do NOT alter signals.")
+    md.append(f"- VOL thresholds: pass_max={_fmt(vol_pass_max)} fail_min={_fmt(vol_fail_min)} (parameterized)")
+    md.append(f"- Anchor clarity: level_anchor={_fmt(level_anchor)} (for bands) vs anchor_close={_fmt(anchor_close)} (for risk check)")
+    if anchors_match is not None:
+        md.append(f"  - anchors_match: `{_fmt(anchors_match)}` ; abs_diff: `{_fmt(anchors_diff)}`")
+    if extra_audit_notes:
+        md.append("- EXTRA_AUDIT_NOTES:")
+        for n in extra_audit_notes:
+            md.append(f"  - {n}")
     if dq_notes:
         md.append("- DQ_NOTES:")
         for n in dq_notes:
