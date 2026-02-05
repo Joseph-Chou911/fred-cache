@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-02-05T01:32:57Z",
+  "generated_at_utc": "2026-02-05T04:01:20Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -531,7 +531,7 @@
     "roll25_cache": {
       "status": "OK",
       "latest_report": {
-        "generated_at": "2026-02-05T09:29:15.289801+08:00",
+        "generated_at": "2026-02-05T10:51:14.852743+08:00",
         "timezone": "Asia/Taipei",
         "summary": "今日資料未更新；UsedDate=2026-02-04：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
         "numbers": {
@@ -2438,7 +2438,7 @@
       "status": "OK",
       "latest": {
         "schema_version": "taiwan_margin_financing_latest_v1",
-        "generated_at_utc": "2026-02-05T01:31:05Z",
+        "generated_at_utc": "2026-02-05T02:28:59Z",
         "series": {
           "TWSE": {
             "source": "HiStock",
@@ -2610,7 +2610,7 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-02-05T01:31:06Z",
+            "fetched_at_utc": "2026-02-05T02:28:59Z",
             "http_error": null,
             "rows_count": 30
           },
@@ -2784,7 +2784,7 @@
               "raw": "億",
               "source": "colname:融資增加(億)"
             },
-            "fetched_at_utc": "2026-02-05T01:31:07Z",
+            "fetched_at_utc": "2026-02-05T02:29:00Z",
             "http_error": null,
             "rows_count": 30
           }
@@ -2872,15 +2872,15 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-02-05T01:32:56Z",
+        "generated_at_utc": "2026-02-05T04:01:19Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-05",
-        "quote_time_local": "2026-02-05T09:29:00+08:00",
+        "quote_time_local": "2026-02-05T11:59:00+08:00",
         "usd_twd": {
-          "spot_buy": 31.57,
-          "spot_sell": 31.67,
-          "mid": 31.62
+          "spot_buy": 31.585,
+          "spot_sell": 31.685,
+          "mid": 31.634999999999998
         },
         "dq_reason": null,
         "raw": {
@@ -2906,7 +2906,7 @@
           "parse_dbg": {
             "format": "xrt_text_v4_dynamic_sanity",
             "reason": "ok",
-            "text_len": 2578,
+            "text_len": 2588,
             "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/05 本行 營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏覽",
             "text_has_usd": true,
             "text_has_zh_usd": true,
@@ -2915,13 +2915,13 @@
               80.0
             ],
             "usd_anchor": "zh:美金(USD)",
-            "usd_window": "別 幣別 現金匯率 即期匯率 遠期匯率 歷史匯率 歷史匯率 現金匯率 即期匯率 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 美金 (USD) 美金 (USD) 31.22 31.89 31.57 31.67 查詢 查詢 31.22 31.89 31.57 31.67 港幣 (HKD) 港幣 (HKD) 3.892 4.096 4.018 4.078 查詢 查詢 3.892 4.096 4.018 4.078 英鎊 (GBP) 英鎊 (GBP) 41.95 44.07 42.96 43.36 查詢 查詢 41.95 44.07 42.96 43.36 澳幣 (AUD) 澳幣 (AUD) 21.73 22.51 22.02 22.22 查詢 查詢 21.73 22.51 22.02 22.22 加拿大幣 (CAD) 加拿大幣 (CAD) 22.64 23.55 23.04 23.24 查詢 查詢 22.64 23.55 23.04 23.24 新加坡幣 (SGD) 新加坡幣 (SGD) 24.26 25.17 24.75 24.93 查詢 查詢 24.26 25.17 24.75 24.93 ",
+            "usd_window": "別 幣別 現金匯率 即期匯率 遠期匯率 歷史匯率 歷史匯率 現金匯率 即期匯率 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 本行買入 本行賣出 美金 (USD) 美金 (USD) 31.235 31.905 31.585 31.685 查詢 查詢 31.235 31.905 31.585 31.685 港幣 (HKD) 港幣 (HKD) 3.895 4.099 4.021 4.081 查詢 查詢 3.895 4.099 4.021 4.081 英鎊 (GBP) 英鎊 (GBP) 41.91 44.03 42.92 43.32 查詢 查詢 41.91 44.03 42.92 43.32 澳幣 (AUD) 澳幣 (AUD) 21.64 22.42 21.93 22.13 查詢 查詢 21.64 22.42 21.93 22.13 加拿大幣 (CAD) 加拿大幣 (CAD) 22.62 23.53 23.02 23.22 查詢 查詢 22.62 23.53 23.02 23.22 新加坡幣 (SGD) 新加坡幣 (SGD) 24.25 25.16 24.74 24.92 查詢 查詢 24.25 25.16 24.7",
             "extracted": {
-              "cash_buy": 31.22,
-              "cash_sell": 31.89,
-              "spot_buy": 31.57,
-              "spot_sell": 31.67,
-              "mid": 31.62
+              "cash_buy": 31.235,
+              "cash_sell": 31.905,
+              "spot_buy": 31.585,
+              "spot_sell": 31.685,
+              "mid": 31.634999999999998
             },
             "sanity": {
               "mode": "fallback_wide",
@@ -2960,15 +2960,15 @@
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-05",
         "usd_twd": {
-          "spot_buy": 31.57,
-          "spot_sell": 31.67,
-          "mid": 31.62
+          "spot_buy": 31.585,
+          "spot_sell": 31.685,
+          "mid": 31.634999999999998
         },
         "momentum": {
-          "ret1_pct": 0.20598954206940667,
+          "ret1_pct": 0.25352559023925936,
           "ret1_from": "2026-02-04",
           "ret1_to": "2026-02-05",
-          "chg_5d_pct": 1.022364217252397,
+          "chg_5d_pct": 1.0702875399360936,
           "chg_5d_from": "2026-01-29",
           "chg_5d_to": "2026-02-05",
           "points": 10
@@ -2984,14 +2984,14 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-02-04T23:05:07.875563+00:00",
+          "run_ts_utc": "2026-02-05T03:12:38.362277+00:00",
           "module": "inflation_realrate_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+          "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
           "stale_hours": 36.0,
           "stats_path": "inflation_realrate_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-02-04T23:05:07Z",
-          "stats_as_of_ts": "2026-02-05T07:05:04+08:00",
+          "stats_generated_at_utc": "2026-02-05T03:12:38Z",
+          "stats_as_of_ts": "2026-02-05T11:12:35+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 2,
           "dash_history_path": "inflation_realrate_cache/history_dashboard.json",
@@ -3003,14 +3003,14 @@
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
             "series": "DFII10",
             "value": 1.92,
             "data_date": "2026-02-03",
-            "as_of_ts": "2026-02-05T07:05:04+08:00",
+            "as_of_ts": "2026-02-05T11:12:35+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0010765452777777777,
+            "age_hours": 0.0009339658333333334,
             "z60": 0.8147505643355691,
             "ret1_pct60": -1.0309278350515427,
             "z_delta60": -0.46503459465503305,
@@ -3032,14 +3032,14 @@
           {
             "module": "inflation_realrate_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
             "series": "T10YIE",
             "value": 2.35,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T07:05:04+08:00",
+            "as_of_ts": "2026-02-05T11:12:35+08:00",
             "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
             "dq": "OK",
-            "age_hours": 0.0010765452777777777,
+            "age_hours": 0.0009339658333333334,
             "z60": 1.8932876525310216,
             "ret1_pct60": -0.4237288135593098,
             "z_delta60": -0.3322168203018796,
@@ -3069,14 +3069,14 @@
       "status": "OK",
       "dashboard_latest": {
         "meta": {
-          "run_ts_utc": "2026-02-04T23:05:07.925309+00:00",
+          "run_ts_utc": "2026-02-05T03:12:38.410875+00:00",
           "module": "asset_proxy_cache",
           "ruleset_id": "signals_v8",
-          "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+          "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
           "stale_hours": 36.0,
           "stats_path": "asset_proxy_cache/stats_latest.json",
-          "stats_generated_at_utc": "2026-02-04T23:05:07Z",
-          "stats_as_of_ts": "2026-02-05T07:05:05+08:00",
+          "stats_generated_at_utc": "2026-02-05T03:12:38Z",
+          "stats_as_of_ts": "2026-02-05T11:12:35+08:00",
           "script_version": "cycle_sidecars_stats_v1",
           "series_count": 4,
           "dash_history_path": "asset_proxy_cache/history_dashboard.json",
@@ -3088,14 +3088,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
             "series": "IYR.US_CLOSE",
             "value": 96.38,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T07:05:05+08:00",
-            "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20260105&d2=20260204&i=d",
+            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0008125858333333333,
+            "age_hours": 0.0009474652777777778,
             "z60": 1.1813688721905777,
             "ret1_pct60": 1.452631578947372,
             "z_delta60": 1.2707612628734892,
@@ -3117,14 +3117,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
             "series": "VNQ.US_CLOSE",
             "value": 90.95,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T07:05:05+08:00",
-            "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20260105&d2=20260204&i=d",
+            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0008125858333333333,
+            "age_hours": 0.0009474652777777778,
             "z60": 1.2696852635961355,
             "ret1_pct60": 1.4500836586726074,
             "z_delta60": 1.3561636873272185,
@@ -3146,14 +3146,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
             "series": "GLD.US_CLOSE",
             "value": 453.95,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T07:05:05+08:00",
-            "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20260105&d2=20260204&i=d",
+            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0008125858333333333,
+            "age_hours": 0.0009474652777777778,
             "z60": 1.5199454197347968,
             "ret1_pct60": -0.08803785627821137,
             "z_delta60": -0.0570635029144011,
@@ -3175,14 +3175,14 @@
           {
             "module": "asset_proxy_cache",
             "ruleset_id": "signals_v8",
-            "script_fingerprint": "render_dashboard_py_signals_v8@ac8649a",
+            "script_fingerprint": "render_dashboard_py_signals_v8@6e25450",
             "series": "IAU.US_CLOSE",
             "value": 92.95,
             "data_date": "2026-02-04",
-            "as_of_ts": "2026-02-05T07:05:05+08:00",
-            "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20260105&d2=20260204&i=d",
+            "as_of_ts": "2026-02-05T11:12:35+08:00",
+            "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20260106&d2=20260205&i=d",
             "dq": "OK",
-            "age_hours": 0.0008125858333333333,
+            "age_hours": 0.0009474652777777778,
             "z60": 1.514845271582346,
             "ret1_pct60": -0.1289352100569352,
             "z_delta60": -0.0628680012073104,
