@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-05T00:08:35Z`
-- generated_at_local: `2026-02-05T08:08:35.931055+08:00`
+- generated_at_utc: `2026-02-05T00:15:12Z`
+- generated_at_local: `2026-02-05T08:15:12.224036+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-02-04`
 - UsedDateStatus: `DATA_NOT_UPDATED`
@@ -28,7 +28,7 @@
 - ohlc_status: `OK`
 - mode: `FULL`
 
-## 5) Z/P Table (market_cache-like; computed from roll25.json)
+## 5) Z/P Table (market_cache-like; computed from roll25 points)
 | series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | TURNOVER_TWD | 704644032693 | 0.499378 | 67.5 | 1.646912 | 91.865079 | -1.407865 | 7.5 | -14.232445 | OK |
@@ -38,7 +38,8 @@
 | VOL_MULTIPLIER_20 | 0.890968 | -0.958192 | 19.166667 | -0.786966 | 18.452381 | NA | NA | NA | OK |
 
 ## 5.1) Volatility Bands (sigma; approximation)
-- sigma_win_list (daily % returns): `20,60` (population std; ddof=0)
+- sigma_win_list_input: `20,60`
+- sigma_win_list_effective: `20,60` (includes sigma_base_win + 20 + 60 for audit stability)
 - sigma_base_win: `60` (BASE bands)
 - T list (trading days): `10,12,15`
 - level anchor: `32289.81` (prefer latest_report.Close else roll25@UsedDate)
@@ -53,14 +54,14 @@
 | 15 | 1.197262 | 4.636975 | 30792.539518 | 29826.800056 | 29355.159854 | 29295.269035 | 33787.080482 | 34752.819944 | 35224.460146 | 35284.350965 | OK |  |
 
 ## 5.2) Stress Bands (regime-shift guardrail; heuristic)
-- sigma_stress_daily_%: `1.795893` (policy: max(sigma60,sigma20) * stress_mult)
+- sigma_stress_daily_%: `1.795893` (policy: max(sigma60,sigma20) * stress_mult; fallback if both NA)
 - stress_mult: `1.5`
 
 | T | sigma_daily_% | sigma_T_% | down_1σ | down_95%(1-tail) | down_95%(2-tail) | down_2σ | up_1σ | up_95%(1-tail) | up_95%(2-tail) | up_2σ | confidence | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 1.795893 | 5.679112 | 30456.035656 | 29273.251203 | 28695.612285 | 28622.261311 | 34123.584344 | 35306.368797 | 35884.007715 | 35957.358689 | OK | stress_mult=1.5; sigma_stress=max(sigma60,sigma20)*mult |
-| 12 | 1.795893 | 6.221155 | 30281.010852 | 28985.335402 | 28352.563671 | 28272.211705 | 34298.609148 | 35594.284598 | 36227.056329 | 36307.408295 | OK | stress_mult=1.5; sigma_stress=max(sigma60,sigma20)*mult |
-| 15 | 1.795893 | 6.955463 | 30043.904276 | 28595.295085 | 27887.834782 | 27797.998553 | 34535.715724 | 35984.324915 | 36691.785218 | 36781.621447 | OK | stress_mult=1.5; sigma_stress=max(sigma60,sigma20)*mult |
+| 10 | 1.795893 | 5.679112 | 30456.035656 | 29273.251203 | 28695.612285 | 28622.261311 | 34123.584344 | 35306.368797 | 35884.007715 | 35957.358689 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
+| 12 | 1.795893 | 6.221155 | 30281.010852 | 28985.335402 | 28352.563671 | 28272.211705 | 34298.609148 | 35594.284598 | 36227.056329 | 36307.408295 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
+| 15 | 1.795893 | 6.955463 | 30043.904276 | 28595.295085 | 27887.834782 | 27797.998553 | 34535.715724 | 35984.324915 | 36691.785218 | 36781.621447 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
 
 - Interpretation notes:
   - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.
@@ -69,6 +70,7 @@
 
 ## 6) Audit Notes
 - This report is computed from local files only (no external fetch).
+- roll25 points are read from roll25.json; if empty, fallback to latest_report.cache_roll25 (still local).
 - Date ordering uses parsed dates (not string sort).
 - All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to UsedDate.
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
