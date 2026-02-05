@@ -1,15 +1,15 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-05T10:28:53Z",
+  "generated_at_utc": "2026-02-05T15:10:52Z",
   "generated_at_local": null,
-  "data_date": "2026-02-04",
-  "state": "擴張",
-  "signal": "WATCH",
-  "margin_quality": "OK",
-  "rationale": "20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)",
-  "resonance": "DIVERGENCE",
-  "resonance_display": "DIVERGENCE",
+  "data_date": null,
+  "state": "NA",
+  "signal": "NA",
+  "margin_quality": "PARTIAL",
+  "rationale": "insufficient total_20D% (NA)",
+  "resonance": "QUIET",
+  "resonance_display": "QUIET",
   "resonance_confidence": "DOWNGRADED",
   "resonance_code": "ROLL25_STALE",
   "resonance_note": "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）",
@@ -22,8 +22,8 @@
     }
   },
   "margin": {
-    "twse_meta_date": "2026-02-04",
-    "tpex_meta_date": "2026-02-04",
+    "twse_meta_date": null,
+    "tpex_meta_date": null,
     "twse": {
       "latest_balance_yi": 3840.5,
       "h1": {
@@ -52,7 +52,7 @@
         "source_url": "https://histock.tw/stock/three.aspx?m=mg"
       },
       "rows_series": 39,
-      "rows_latest_table": 30
+      "rows_latest_table": 0
     },
     "tpex": {
       "latest_balance_yi": 1351.0,
@@ -82,39 +82,39 @@
         "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
       },
       "rows_series": 39,
-      "rows_latest_table": 30
+      "rows_latest_table": 0
     },
     "total": {
       "h1": {
-        "delta": 32.899999999999636,
-        "pct": 0.6377699375799565,
-        "base_date": "2026-02-03",
-        "latest": 5191.5,
-        "base": 5158.6,
-        "ok": true,
-        "reason": ""
+        "delta": null,
+        "pct": null,
+        "base_date": null,
+        "latest": null,
+        "base": null,
+        "ok": false,
+        "reason": "latest date mismatch/NA"
       },
       "h5": {
-        "delta": -16.399999999999636,
-        "pct": -0.31490620019584936,
-        "base_date": "2026-01-28",
-        "latest": 5191.5,
-        "base": 5207.9,
-        "ok": true,
-        "reason": ""
+        "delta": null,
+        "pct": null,
+        "base_date": null,
+        "latest": null,
+        "base": null,
+        "ok": false,
+        "reason": "latest date mismatch/NA"
       },
       "h20": {
-        "delta": 405.5,
-        "pct": 8.472628499791057,
-        "base_date": "2026-01-07",
-        "latest": 5191.5,
-        "base": 4786.0,
-        "ok": true,
-        "reason": ""
+        "delta": null,
+        "pct": null,
+        "base_date": null,
+        "latest": null,
+        "base": null,
+        "ok": false,
+        "reason": "latest date mismatch/NA"
       }
     },
     "derived": {
-      "accel": 0.7007511776191263,
+      "accel": null,
       "spread20": 3.597867122483577
     }
   },
@@ -129,7 +129,7 @@
     "tag": "WEEKDAY",
     "is_heated": false,
     "lookback_note": null,
-    "strict_same_day": true,
+    "strict_same_day": false,
     "strict_not_stale": false,
     "strict_roll_match": false
   },
@@ -141,14 +141,14 @@
     "ok_latest": true,
     "ok_history": true,
     "latest": {
-      "data_date": "2026-02-04",
-      "maint_ratio_pct": 183.452676,
-      "maint_ratio_1d_delta_pctpt": 3.2647839999999917,
-      "maint_ratio_1d_pct_change": 1.811877570552849,
-      "trend_note": "trend_from: today=183.452676(2026-02-04), prev=180.187892(2026-02-03)",
-      "fetch_status": "OK",
-      "confidence": "OK",
-      "dq_reason": ""
+      "data_date": null,
+      "maint_ratio_pct": null,
+      "maint_ratio_1d_delta_pctpt": null,
+      "maint_ratio_1d_pct_change": null,
+      "trend_note": "maint_latest.maint_ratio_pct missing/non-numeric",
+      "fetch_status": "DOWNGRADED",
+      "confidence": "DOWNGRADED",
+      "dq_reason": "fetch_or_parse_failed"
     },
     "history": {
       "rows": 7,
@@ -178,26 +178,26 @@
   },
   "checks": {
     "margin": {
-      "c1_tw_ok": true,
-      "c1_tp_ok": true,
-      "c2_tw_ok": true,
-      "c2_tp_ok": true,
-      "c3_ok": true,
+      "c1_tw_ok": false,
+      "c1_tp_ok": false,
+      "c2_tw_ok": false,
+      "c2_tp_ok": false,
+      "c3_ok": false,
       "c4_tw_ok": true,
       "c4_tp_ok": true,
       "c5_tw_ok": true,
       "c5_tp_ok": true,
-      "margin_any_fail": false
+      "margin_any_fail": true
     },
     "roll25": {
       "check_6_status": "NOTE",
-      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-04) == TWSE(2026-02-04)",
+      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-04) vs TWSE(NA)",
       "check_7_status": "NOTE",
       "check_7_msg": "skipped: roll25 stale (DATA_NOT_UPDATED)"
     },
     "maint": {
-      "check_10_status": "PASS",
-      "check_10_msg": "OK",
+      "check_10_status": "NOTE",
+      "check_10_msg": "latest.data_date(NA) != hist[0].data_date(2026-02-04)",
       "check_11_status": "PASS",
       "check_11_msg": "OK"
     }
@@ -211,32 +211,16 @@
   },
   "snapshots": {
     "twse_rows": {
-      "rows": 30,
+      "rows": 0,
       "rows_series": 39,
-      "head_dates": [
-        "2026-02-04",
-        "2026-02-03",
-        "2026-02-02"
-      ],
-      "tail_dates": [
-        "2025-12-26",
-        "2025-12-24",
-        "2025-12-23"
-      ]
+      "head_dates": [],
+      "tail_dates": []
     },
     "tpex_rows": {
-      "rows": 30,
+      "rows": 0,
       "rows_series": 39,
-      "head_dates": [
-        "2026-02-04",
-        "2026-02-03",
-        "2026-02-02"
-      ],
-      "tail_dates": [
-        "2025-12-26",
-        "2025-12-24",
-        "2025-12-23"
-      ]
+      "head_dates": [],
+      "tail_dates": []
     }
   }
 }

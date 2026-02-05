@@ -1,11 +1,11 @@
 # Taiwan Margin Financing Dashboard
 
 ## 1) 結論
-- 狀態：擴張｜信號：WATCH｜資料品質：OK
-  - rationale: 20D expansion + (1D%>=0.8 OR Spread20>=3 OR Accel>=0.25)
+- 狀態：NA｜信號：NA｜資料品質：PARTIAL
+  - rationale: insufficient total_20D% (NA)
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
-- 一致性判定（Margin × Roll25）：DIVERGENCE
-  - rationale: Margin(WATCH/ALERT) but roll25 not heated
+- 一致性判定（Margin × Roll25）：QUIET
+  - rationale: no resonance rule triggered
   - resonance_policy: latest
   - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
   - resonance_confidence: DOWNGRADED
@@ -24,22 +24,22 @@
 - 行動：代表短線槓桿加速結束，回到『擴張但不加速』。
 
 ## 2) 資料
-- 上市(TWSE)：融資餘額 3840.50 億元｜資料日期 2026-02-04｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows_latest_table=30｜rows_series=39｜head_dates=['2026-02-04', '2026-02-03', '2026-02-02']｜tail_dates=['2025-12-26', '2025-12-24', '2025-12-23']
-- 上櫃(TPEX)：融資餘額 1351.00 億元｜資料日期 2026-02-04｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows_latest_table=30｜rows_series=39｜head_dates=['2026-02-04', '2026-02-03', '2026-02-02']｜tail_dates=['2025-12-26', '2025-12-24', '2025-12-23']
-- 合計：融資餘額 5191.50 億元｜資料日期 2026-02-04｜來源：TWSE=HiStock / TPEX=HiStock
+- 上市(TWSE)：融資餘額 3840.50 億元｜資料日期 NA｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+  - rows_latest_table=0｜rows_series=39｜head_dates=[]｜tail_dates=[]
+- 上櫃(TPEX)：融資餘額 1351.00 億元｜資料日期 NA｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+  - rows_latest_table=0｜rows_series=39｜head_dates=[]｜tail_dates=[]
+- 合計：NA（日期不一致或缺值，依規則不得合計）
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
 - maint_path: taiwan_margin_cache/maint_ratio_latest.json
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED
-- data_date: 2026-02-04｜maint_ratio_pct: 183.452676
-- maint_ratio_1d_delta_pctpt: 3.264784｜maint_ratio_1d_pct_change: 1.811878
-- maint_ratio_trend_note: trend_from: today=183.452676(2026-02-04), prev=180.187892(2026-02-03)
-- totals: financing_amount_twd=384045976000, collateral_value_twd=704542620700
-- coverage: included_count=1246, missing_price_count=4
-- quality: fetch_status=OK, confidence=OK, dq_reason=
+- data_date: None｜maint_ratio_pct: None
+- maint_ratio_1d_delta_pctpt: NA｜maint_ratio_1d_pct_change: NA
+- maint_ratio_trend_note: maint_latest.maint_ratio_pct missing/non-numeric
+- totals: financing_amount_twd=None, collateral_value_twd=None
+- coverage: included_count=0, missing_price_count=None
+- quality: fetch_status=DOWNGRADED, confidence=DOWNGRADED, dq_reason=fetch_or_parse_failed
 
 ## 2.0.1) 大盤融資維持率（history；display-only）
 - maint_hist_path: taiwan_margin_cache/maint_ratio_history.json
@@ -64,7 +64,7 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-05T17:58:16.658270+08:00 (Asia/Taipei)
+- generated_at: 2026-02-05T23:05:30.819930+08:00 (Asia/Taipei)
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -73,7 +73,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
   2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
-- 判定：DIVERGENCE（Margin(WATCH/ALERT) but roll25 not heated）
+- 判定：QUIET（no resonance rule triggered）
 - resonance_confidence: DOWNGRADED
 - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
 
@@ -89,12 +89,12 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - 20D：Δ=135.60 億元；Δ%=11.1568 %｜latest=1351.00｜base=1215.40（基期日=2026-01-07）
 
 ### 合計(上市+上櫃)
-- 1D：Δ=32.90 億元；Δ%=0.6378 %｜latest=5191.50｜base=5158.60（基期日=2026-02-03）
-- 5D：Δ=-16.40 億元；Δ%=-0.3149 %｜latest=5191.50｜base=5207.90（基期日=2026-01-28）
-- 20D：Δ=405.50 億元；Δ%=8.4726 %｜latest=5191.50｜base=4786.00（基期日=2026-01-07）
+- 1D：Δ=NA 億元；Δ%=NA %｜latest=NA｜base=NA（基期日=NA）
+- 5D：Δ=NA 億元；Δ%=NA %｜latest=NA｜base=NA（基期日=NA）
+- 20D：Δ=NA 億元；Δ%=NA %｜latest=NA｜base=NA（基期日=NA）
 
 ## 4) 提前示警輔助指標（不引入外部資料）
-- Accel = 1D% - (5D%/5)：0.7008
+- Accel = 1D% - (5D%/5)：NA
 - Spread20 = TPEX_20D% - TWSE_20D%：3.5979
 
 ## 5) 稽核備註
@@ -109,20 +109,20 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
 - Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）
-- Check-1 TWSE meta_date==series[0].date：✅（PASS）
-- Check-1 TPEX meta_date==series[0].date：✅（PASS）
-- Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
-- Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（PASS）
-- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（PASS）
+- Check-1 TWSE meta_date==series[0].date：❌（FAIL）
+- Check-1 TPEX meta_date==series[0].date：❌（FAIL）
+- Check-2 TWSE head5 dates 嚴格遞減且無重複：❌（FAIL）（head5 insufficient）
+- Check-2 TPEX head5 dates 嚴格遞減且無重複：❌（FAIL）（head5 insufficient）
+- Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：❌（FAIL）（insufficient rows for head5 comparison）
 - Check-4 TWSE history rows>=21：✅（PASS）（rows_series=39）
 - Check-4 TPEX history rows>=21：✅（PASS）（rows_series=39）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-04) == TWSE(2026-02-04)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-04) vs TWSE(NA)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
-- Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
+- Check-10 maint latest vs history[0] date（info）：⚠️（NOTE）（latest.data_date(NA) != hist[0].data_date(2026-02-04)）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-05T10:28:53Z_
+_generated_at_utc: 2026-02-05T15:10:52Z_
