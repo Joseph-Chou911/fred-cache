@@ -1,42 +1,354 @@
 {
   "schema_version": "taiwan_margin_financing_latest_v1",
-  "generated_at_utc": "2026-02-05T15:10:52Z",
+  "generated_at_utc": "2026-02-05T23:41:40Z",
   "series": {
     "TWSE": {
       "source": "HiStock",
       "source_url": "https://histock.tw/stock/three.aspx?m=mg",
-      "data_date": null,
-      "rows": [],
+      "data_date": "2026-02-05",
+      "rows": [
+        {
+          "date": "2026-02-05",
+          "balance_yi": 3829.2,
+          "chg_yi": -11.3
+        },
+        {
+          "date": "2026-02-04",
+          "balance_yi": 3840.5,
+          "chg_yi": 19.2
+        },
+        {
+          "date": "2026-02-03",
+          "balance_yi": 3821.3,
+          "chg_yi": 32.8
+        },
+        {
+          "date": "2026-02-02",
+          "balance_yi": 3788.5,
+          "chg_yi": -50.4
+        },
+        {
+          "date": "2026-01-30",
+          "balance_yi": 3838.9,
+          "chg_yi": 21.2
+        },
+        {
+          "date": "2026-01-29",
+          "balance_yi": 3817.8,
+          "chg_yi": -31.4
+        },
+        {
+          "date": "2026-01-28",
+          "balance_yi": 3849.2,
+          "chg_yi": 21.9
+        },
+        {
+          "date": "2026-01-27",
+          "balance_yi": 3827.3,
+          "chg_yi": 11.5
+        },
+        {
+          "date": "2026-01-26",
+          "balance_yi": 3815.8,
+          "chg_yi": 55.0
+        },
+        {
+          "date": "2026-01-23",
+          "balance_yi": 3760.8,
+          "chg_yi": 43.4
+        },
+        {
+          "date": "2026-01-22",
+          "balance_yi": 3717.3,
+          "chg_yi": 39.9
+        },
+        {
+          "date": "2026-01-21",
+          "balance_yi": 3677.5,
+          "chg_yi": -34.8
+        },
+        {
+          "date": "2026-01-20",
+          "balance_yi": 3712.3,
+          "chg_yi": 18.1
+        },
+        {
+          "date": "2026-01-19",
+          "balance_yi": 3694.2,
+          "chg_yi": 60.2
+        },
+        {
+          "date": "2026-01-16",
+          "balance_yi": 3633.9,
+          "chg_yi": 40.9
+        },
+        {
+          "date": "2026-01-15",
+          "balance_yi": 3593.0,
+          "chg_yi": 8.5
+        },
+        {
+          "date": "2026-01-14",
+          "balance_yi": 3584.5,
+          "chg_yi": 28.1
+        },
+        {
+          "date": "2026-01-13",
+          "balance_yi": 3556.4,
+          "chg_yi": -8.5
+        },
+        {
+          "date": "2026-01-12",
+          "balance_yi": 3564.9,
+          "chg_yi": 50.0
+        },
+        {
+          "date": "2026-01-09",
+          "balance_yi": 3514.9,
+          "chg_yi": -8.9
+        },
+        {
+          "date": "2026-01-08",
+          "balance_yi": 3523.9,
+          "chg_yi": -46.7
+        },
+        {
+          "date": "2026-01-07",
+          "balance_yi": 3570.6,
+          "chg_yi": 25.1
+        },
+        {
+          "date": "2026-01-06",
+          "balance_yi": 3545.5,
+          "chg_yi": 36.0
+        },
+        {
+          "date": "2026-01-05",
+          "balance_yi": 3509.5,
+          "chg_yi": 43.2
+        },
+        {
+          "date": "2026-01-02",
+          "balance_yi": 3466.3,
+          "chg_yi": 32.2
+        },
+        {
+          "date": "2025-12-31",
+          "balance_yi": 3434.1,
+          "chg_yi": 20.4
+        },
+        {
+          "date": "2025-12-30",
+          "balance_yi": 3413.7,
+          "chg_yi": 14.8
+        },
+        {
+          "date": "2025-12-29",
+          "balance_yi": 3398.9,
+          "chg_yi": -4.5
+        },
+        {
+          "date": "2025-12-26",
+          "balance_yi": 3403.4,
+          "chg_yi": 14.3
+        },
+        {
+          "date": "2025-12-24",
+          "balance_yi": 3389.0,
+          "chg_yi": 13.1
+        }
+      ],
       "notes": [
-        "HTTP 取得失敗：ReadTimeout: HTTPSConnectionPool(host='histock.tw', port=443): Read timed out. (read timeout=25)"
+        "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+        "候選表[0]原始日期樣本：02/05, 02/04, 02/03, 02/02, 01/30",
+        "候選表[0]解析rows=30",
+        "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+        "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
+        "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
       ],
       "chg_yi_unit": {
-        "code": "NA",
-        "label": "NA",
-        "raw": "NA",
-        "source": "NA"
+        "code": "UNIT_YI",
+        "label": "億",
+        "raw": "億",
+        "source": "colname:融資增加(億)"
       },
-      "fetched_at_utc": "2026-02-05T15:12:11Z",
-      "http_error": "HTTP 取得失敗：ReadTimeout: HTTPSConnectionPool(host='histock.tw', port=443): Read timed out. (read timeout=25)",
-      "rows_count": 0
+      "fetched_at_utc": "2026-02-05T23:41:41Z",
+      "http_error": null,
+      "rows_count": 30
     },
     "TPEX": {
       "source": "HiStock",
       "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-      "data_date": null,
-      "rows": [],
+      "data_date": "2026-02-05",
+      "rows": [
+        {
+          "date": "2026-02-05",
+          "balance_yi": 1341.1,
+          "chg_yi": -9.9
+        },
+        {
+          "date": "2026-02-04",
+          "balance_yi": 1351.0,
+          "chg_yi": 13.7
+        },
+        {
+          "date": "2026-02-03",
+          "balance_yi": 1337.3,
+          "chg_yi": 4.7
+        },
+        {
+          "date": "2026-02-02",
+          "balance_yi": 1332.6,
+          "chg_yi": -17.9
+        },
+        {
+          "date": "2026-01-30",
+          "balance_yi": 1350.5,
+          "chg_yi": 2.8
+        },
+        {
+          "date": "2026-01-29",
+          "balance_yi": 1347.7,
+          "chg_yi": -11.0
+        },
+        {
+          "date": "2026-01-28",
+          "balance_yi": 1358.7,
+          "chg_yi": 24.2
+        },
+        {
+          "date": "2026-01-27",
+          "balance_yi": 1334.5,
+          "chg_yi": 11.6
+        },
+        {
+          "date": "2026-01-26",
+          "balance_yi": 1322.9,
+          "chg_yi": 10.4
+        },
+        {
+          "date": "2026-01-23",
+          "balance_yi": 1312.5,
+          "chg_yi": 11.1
+        },
+        {
+          "date": "2026-01-22",
+          "balance_yi": 1301.4,
+          "chg_yi": 9.6
+        },
+        {
+          "date": "2026-01-21",
+          "balance_yi": 1291.8,
+          "chg_yi": -10.3
+        },
+        {
+          "date": "2026-01-20",
+          "balance_yi": 1302.0,
+          "chg_yi": 12.5
+        },
+        {
+          "date": "2026-01-19",
+          "balance_yi": 1289.5,
+          "chg_yi": -2.6
+        },
+        {
+          "date": "2026-01-16",
+          "balance_yi": 1292.1,
+          "chg_yi": 9.7
+        },
+        {
+          "date": "2026-01-15",
+          "balance_yi": 1282.3,
+          "chg_yi": 4.2
+        },
+        {
+          "date": "2026-01-14",
+          "balance_yi": 1278.1,
+          "chg_yi": 18.0
+        },
+        {
+          "date": "2026-01-13",
+          "balance_yi": 1260.2,
+          "chg_yi": 0.6
+        },
+        {
+          "date": "2026-01-12",
+          "balance_yi": 1259.6,
+          "chg_yi": 25.4
+        },
+        {
+          "date": "2026-01-09",
+          "balance_yi": 1234.2,
+          "chg_yi": 10.5
+        },
+        {
+          "date": "2026-01-08",
+          "balance_yi": 1223.7,
+          "chg_yi": 8.3
+        },
+        {
+          "date": "2026-01-07",
+          "balance_yi": 1215.4,
+          "chg_yi": -0.3
+        },
+        {
+          "date": "2026-01-06",
+          "balance_yi": 1215.6,
+          "chg_yi": 12.8
+        },
+        {
+          "date": "2026-01-05",
+          "balance_yi": 1202.8,
+          "chg_yi": 12.4
+        },
+        {
+          "date": "2026-01-02",
+          "balance_yi": 1190.4,
+          "chg_yi": 15.1
+        },
+        {
+          "date": "2025-12-31",
+          "balance_yi": 1175.2,
+          "chg_yi": 9.1
+        },
+        {
+          "date": "2025-12-30",
+          "balance_yi": 1166.1,
+          "chg_yi": 8.4
+        },
+        {
+          "date": "2025-12-29",
+          "balance_yi": 1157.7,
+          "chg_yi": 4.0
+        },
+        {
+          "date": "2025-12-26",
+          "balance_yi": 1153.7,
+          "chg_yi": 5.6
+        },
+        {
+          "date": "2025-12-24",
+          "balance_yi": 1148.1,
+          "chg_yi": 2.3
+        }
+      ],
       "notes": [
-        "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
+        "候選表[0]欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+        "候選表[0]原始日期樣本：02/05, 02/04, 02/03, 02/02, 01/30",
+        "候選表[0]解析rows=30",
+        "HiStock 最終採用欄位：日期 | 融資餘額(億) | 融資增加(億) | 融券餘額(張) | 融券增加(張) | 價格 | 比例 | 成交量(億)",
+        "unit.chg_yi from col='融資增加(億)': {'code': 'UNIT_YI', 'label': '億', 'raw': '億', 'source': 'colname:融資增加(億)'}",
+        "Scheme2：未強求 Yahoo/WantGoo（常見 JS/403），以 HiStock 為主。"
       ],
       "chg_yi_unit": {
-        "code": "NA",
-        "label": "NA",
-        "raw": "NA",
-        "source": "NA"
+        "code": "UNIT_YI",
+        "label": "億",
+        "raw": "億",
+        "source": "colname:融資增加(億)"
       },
-      "fetched_at_utc": "2026-02-05T15:13:23Z",
-      "http_error": "HTTP 取得失敗：HTTPError: 503 Server Error: Service Unavailable for url: https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
-      "rows_count": 0
+      "fetched_at_utc": "2026-02-05T23:41:42Z",
+      "http_error": null,
+      "rows_count": 30
     }
   }
 }

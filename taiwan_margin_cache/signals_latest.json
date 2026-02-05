@@ -1,15 +1,15 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-05T15:10:52Z",
+  "generated_at_utc": "2026-02-05T23:41:40Z",
   "generated_at_local": null,
-  "data_date": null,
-  "state": "NA",
-  "signal": "NA",
-  "margin_quality": "PARTIAL",
-  "rationale": "insufficient total_20D% (NA)",
-  "resonance": "QUIET",
-  "resonance_display": "QUIET",
+  "data_date": "2026-02-05",
+  "state": "擴張",
+  "signal": "INFO",
+  "margin_quality": "OK",
+  "rationale": "cool-down candidate: Accel<=0 and 1D%<0.3 (needs 2–3 consecutive confirmations)",
+  "resonance": "MARKET_SHOCK_ONLY",
+  "resonance_display": "MARKET_SHOCK_ONLY",
   "resonance_confidence": "DOWNGRADED",
   "resonance_code": "ROLL25_STALE",
   "resonance_note": "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）",
@@ -22,114 +22,114 @@
     }
   },
   "margin": {
-    "twse_meta_date": null,
-    "tpex_meta_date": null,
+    "twse_meta_date": "2026-02-05",
+    "tpex_meta_date": "2026-02-05",
     "twse": {
-      "latest_balance_yi": 3840.5,
+      "latest_balance_yi": 3829.2,
       "h1": {
-        "delta": 19.199999999999818,
-        "pct": 0.5024468112945808,
-        "base_date": "2026-02-03",
-        "latest": 3840.5,
-        "base": 3821.3
+        "delta": -11.300000000000182,
+        "pct": -0.2942325218070611,
+        "base_date": "2026-02-04",
+        "latest": 3829.2,
+        "base": 3840.5
       },
       "h5": {
-        "delta": -8.699999999999818,
-        "pct": -0.22602099137482642,
-        "base_date": "2026-01-28",
-        "latest": 3840.5,
-        "base": 3849.2
+        "delta": 11.399999999999636,
+        "pct": 0.29860128870028907,
+        "base_date": "2026-01-29",
+        "latest": 3829.2,
+        "base": 3817.8
       },
       "h20": {
-        "delta": 269.9000000000001,
-        "pct": 7.558953677253126,
-        "base_date": "2026-01-07",
-        "latest": 3840.5,
-        "base": 3570.6
+        "delta": 305.2999999999997,
+        "pct": 8.663696472658126,
+        "base_date": "2026-01-08",
+        "latest": 3829.2,
+        "base": 3523.9
       },
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg"
       },
-      "rows_series": 39,
-      "rows_latest_table": 0
+      "rows_series": 40,
+      "rows_latest_table": 30
     },
     "tpex": {
-      "latest_balance_yi": 1351.0,
+      "latest_balance_yi": 1341.1,
       "h1": {
-        "delta": 13.700000000000045,
-        "pct": 1.0244522545427388,
-        "base_date": "2026-02-03",
-        "latest": 1351.0,
-        "base": 1337.3
+        "delta": -9.900000000000091,
+        "pct": -0.7327905255366463,
+        "base_date": "2026-02-04",
+        "latest": 1341.1,
+        "base": 1351.0
       },
       "h5": {
-        "delta": -7.7000000000000455,
-        "pct": -0.5667181865018065,
-        "base_date": "2026-01-28",
-        "latest": 1351.0,
-        "base": 1358.7
+        "delta": -6.600000000000136,
+        "pct": -0.4897232321733424,
+        "base_date": "2026-01-29",
+        "latest": 1341.1,
+        "base": 1347.7
       },
       "h20": {
-        "delta": 135.5999999999999,
-        "pct": 11.156820799736703,
-        "base_date": "2026-01-07",
-        "latest": 1351.0,
-        "base": 1215.4
+        "delta": 117.39999999999986,
+        "pct": 9.593854702950058,
+        "base_date": "2026-01-08",
+        "latest": 1341.1,
+        "base": 1223.7
       },
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
       },
-      "rows_series": 39,
-      "rows_latest_table": 0
+      "rows_series": 40,
+      "rows_latest_table": 30
     },
     "total": {
       "h1": {
-        "delta": null,
-        "pct": null,
-        "base_date": null,
-        "latest": null,
-        "base": null,
-        "ok": false,
-        "reason": "latest date mismatch/NA"
+        "delta": -21.200000000000728,
+        "pct": -0.40835981893481127,
+        "base_date": "2026-02-04",
+        "latest": 5170.299999999999,
+        "base": 5191.5,
+        "ok": true,
+        "reason": ""
       },
       "h5": {
-        "delta": null,
-        "pct": null,
-        "base_date": null,
-        "latest": null,
-        "base": null,
-        "ok": false,
-        "reason": "latest date mismatch/NA"
+        "delta": 4.799999999999272,
+        "pct": 0.09292420869227126,
+        "base_date": "2026-01-29",
+        "latest": 5170.299999999999,
+        "base": 5165.5,
+        "ok": true,
+        "reason": ""
       },
       "h20": {
-        "delta": null,
-        "pct": null,
-        "base_date": null,
-        "latest": null,
-        "base": null,
-        "ok": false,
-        "reason": "latest date mismatch/NA"
+        "delta": 422.6999999999989,
+        "pct": 8.903445951638698,
+        "base_date": "2026-01-08",
+        "latest": 5170.299999999999,
+        "base": 4747.6,
+        "ok": true,
+        "reason": ""
       }
     },
     "derived": {
-      "accel": null,
-      "spread20": 3.597867122483577
+      "accel": -0.42694466067326553,
+      "spread20": 0.9301582302919318
     }
   },
   "roll25": {
     "path": "roll25_cache/latest_report.json",
     "ok": true,
     "error": null,
-    "used_date": "2026-02-04",
+    "used_date": "2026-02-05",
     "used_date_status": "DATA_NOT_UPDATED",
-    "risk_level_display": "低(derived)（stale）",
+    "risk_level_display": "中(derived)（stale）",
     "risk_level_raw": "NA",
     "tag": "WEEKDAY",
-    "is_heated": false,
+    "is_heated": true,
     "lookback_note": null,
-    "strict_same_day": false,
+    "strict_same_day": true,
     "strict_not_stale": false,
     "strict_roll_match": false
   },
@@ -141,18 +141,22 @@
     "ok_latest": true,
     "ok_history": true,
     "latest": {
-      "data_date": null,
-      "maint_ratio_pct": null,
-      "maint_ratio_1d_delta_pctpt": null,
-      "maint_ratio_1d_pct_change": null,
-      "trend_note": "maint_latest.maint_ratio_pct missing/non-numeric",
-      "fetch_status": "DOWNGRADED",
-      "confidence": "DOWNGRADED",
-      "dq_reason": "fetch_or_parse_failed"
+      "data_date": "2026-02-05",
+      "maint_ratio_pct": 178.028325,
+      "maint_ratio_1d_delta_pctpt": -5.4243510000000015,
+      "maint_ratio_1d_pct_change": -2.9568121426585248,
+      "trend_note": "trend_from: today=178.028325(2026-02-05), prev=183.452676(2026-02-04)",
+      "fetch_status": "OK",
+      "confidence": "OK",
+      "dq_reason": ""
     },
     "history": {
-      "rows": 7,
+      "rows": 8,
       "head5": [
+        [
+          "2026-02-05",
+          178.028325
+        ],
         [
           "2026-02-04",
           183.452676
@@ -168,36 +172,32 @@
         [
           "2026-01-30",
           183.996663
-        ],
-        [
-          "2026-01-29",
-          185.890277
         ]
       ]
     }
   },
   "checks": {
     "margin": {
-      "c1_tw_ok": false,
-      "c1_tp_ok": false,
-      "c2_tw_ok": false,
-      "c2_tp_ok": false,
-      "c3_ok": false,
+      "c1_tw_ok": true,
+      "c1_tp_ok": true,
+      "c2_tw_ok": true,
+      "c2_tp_ok": true,
+      "c3_ok": true,
       "c4_tw_ok": true,
       "c4_tp_ok": true,
       "c5_tw_ok": true,
       "c5_tp_ok": true,
-      "margin_any_fail": true
+      "margin_any_fail": false
     },
     "roll25": {
       "check_6_status": "NOTE",
-      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-04) vs TWSE(NA)",
+      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-05) == TWSE(2026-02-05)",
       "check_7_status": "NOTE",
       "check_7_msg": "skipped: roll25 stale (DATA_NOT_UPDATED)"
     },
     "maint": {
-      "check_10_status": "NOTE",
-      "check_10_msg": "latest.data_date(NA) != hist[0].data_date(2026-02-04)",
+      "check_10_status": "PASS",
+      "check_10_msg": "OK",
       "check_11_status": "PASS",
       "check_11_msg": "OK"
     }
@@ -211,16 +211,32 @@
   },
   "snapshots": {
     "twse_rows": {
-      "rows": 0,
-      "rows_series": 39,
-      "head_dates": [],
-      "tail_dates": []
+      "rows": 30,
+      "rows_series": 40,
+      "head_dates": [
+        "2026-02-05",
+        "2026-02-04",
+        "2026-02-03"
+      ],
+      "tail_dates": [
+        "2025-12-29",
+        "2025-12-26",
+        "2025-12-24"
+      ]
     },
     "tpex_rows": {
-      "rows": 0,
-      "rows_series": 39,
-      "head_dates": [],
-      "tail_dates": []
+      "rows": 30,
+      "rows_series": 40,
+      "head_dates": [
+        "2026-02-05",
+        "2026-02-04",
+        "2026-02-03"
+      ],
+      "tail_dates": [
+        "2025-12-29",
+        "2025-12-26",
+        "2025-12-24"
+      ]
     }
   }
 }
