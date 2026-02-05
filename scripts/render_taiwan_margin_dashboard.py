@@ -38,6 +38,11 @@ Added (NO LOGIC CHANGE):
 - Also emit a machine-readable signals_latest.json for unified dashboard ingestion.
   Default output: taiwan_margin_cache/signals_latest.json
   Use --signals-out to override.
+
+Row-count display fix (NO LOGIC CHANGE):
+- Avoid ambiguous "rows=" which mixed two different sources:
+  - rows_latest_table: from latest.json series.{market}.rows (page/table rows; often ~30)
+  - rows_series: from history.json derived balance series (calc input; often >30)
 """
 
 from __future__ import annotations
@@ -264,10 +269,15 @@ def extract_source(latest_obj: Dict[str, Any], market: str) -> Tuple[str, str]:
 
 
 # ----------------- check helpers -----------------
-def check_min_rows(series: List[Tuple[str, float]], min_rows: int) -> Tuple[bool, str]:
-    if len(series) < min_rows:
-        return False, f"rows<{min_rows} (rows={len(series)})"
-    return True, f"rows={len(series)}"
+def check_min_rows(series: List[Tuple[str, float]], min_rows: int, label: str = "rows_series") -> Tuple[bool, str]:
+    """
+    IMPORTANT: This check is for the derived calc-input series (from history.json),
+    NOT for latest.json table rows.
+    """
+    n = len(series)
+    if n < min_rows:
+        return False, f"{label}<{min_rows} ({label}={n})"
+    return True, f"{label}={n}"
 
 
 def check_base_date_in_series(series: List[Tuple[str, float]], base_date: Optional[str], tag: str) -> Tuple[bool, str]:
@@ -563,6 +573,12 @@ def main() -> None:
     twse_rows = extract_latest_rows(latest, "TWSE")
     tpex_rows = extract_latest_rows(latest, "TPEX")
 
+    # Row-count display fix: keep both sources explicitly named.
+    twse_rows_latest_table = len(twse_rows)
+    tpex_rows_latest_table = len(tpex_rows)
+    twse_rows_series = len(twse_s)
+    tpex_rows_series = len(tpex_s)
+
     twse_meta_date = extract_meta_date(latest, "TWSE")
     tpex_meta_date = extract_meta_date(latest, "TPEX")
 
@@ -612,8 +628,8 @@ def main() -> None:
     else:
         c3_ok, c3_msg = False, "insufficient rows for head5 comparison"
 
-    c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21)
-    c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21)
+    c4_tw_ok, c4_tw_msg = check_min_rows(twse_s, 21, label="rows_series")
+    c4_tp_ok, c4_tp_msg = check_min_rows(tpex_s, 21, label="rows_series")
 
     c5_tw_ok, c5_tw_msg = check_base_date_in_series(twse_s, tw20.get("base_date"), "TWSE_20D")
     c5_tp_ok, c5_tp_msg = check_base_date_in_series(tpex_s, tp20.get("base_date"), "TPEX_20D")
@@ -811,11 +827,15 @@ def main() -> None:
     md.append(
         f"- 上市(TWSE)：融資餘額 {fmt_num(latest_balance_from_series(twse_s),2)} 億元｜資料日期 {twse_meta_date or 'NA'}｜來源：{twse_src}（{twse_url}）"
     )
-    md.append(f"  - rows={len(twse_rows)}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}")
+    md.append(
+        f"  - rows_latest_table={twse_rows_latest_table}｜rows_series={twse_rows_series}｜head_dates={twse_head_dates}｜tail_dates={twse_tail_dates}"
+    )
     md.append(
         f"- 上櫃(TPEX)：融資餘額 {fmt_num(latest_balance_from_series(tpex_s),2)} 億元｜資料日期 {tpex_meta_date or 'NA'}｜來源：{tpex_src}（{tpex_url}）"
     )
-    md.append(f"  - rows={len(tpex_rows)}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}")
+    md.append(
+        f"  - rows_latest_table={tpex_rows_latest_table}｜rows_series={tpex_rows_series}｜head_dates={tpex_head_dates}｜tail_dates={tpex_tail_dates}"
+    )
 
     if (twse_meta_date is not None) and (twse_meta_date == tpex_meta_date) and \
        (latest_balance_from_series(twse_s) is not None) and (latest_balance_from_series(tpex_s) is not None):
@@ -963,7 +983,8 @@ def main() -> None:
     md.append("## 5) 稽核備註")
     md.append("- 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。")
     md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。")
-    md.append("- rows/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
+    md.append("- rows_latest_table/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
+    md.append("- rows_series 是計算輸入序列長度（由 history.json 彙整），用於 horizon 計算與 Check-4。")
     md.append("- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。")
     md.append("- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。")
     md.append(f"- resonance_policy={resonance_policy}：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。")
@@ -1045,6 +1066,8 @@ def main() -> None:
                 "h5": tw5,
                 "h20": tw20,
                 "source": {"vendor": twse_src, "source_url": twse_url},
+                "rows_series": twse_rows_series,
+                "rows_latest_table": twse_rows_latest_table,
             },
             "tpex": {
                 "latest_balance_yi": latest_balance_from_series(tpex_s),
@@ -1052,6 +1075,8 @@ def main() -> None:
                 "h5": tp5,
                 "h20": tp20,
                 "source": {"vendor": tpex_src, "source_url": tpex_url},
+                "rows_series": tpex_rows_series,
+                "rows_latest_table": tpex_rows_latest_table,
             },
             "total": {
                 "h1": tot1,
@@ -1136,12 +1161,16 @@ def main() -> None:
         # quick sanity snapshot to help detect page mixups without parsing markdown
         "snapshots": {
             "twse_rows": {
-                "rows": len(twse_rows),
+                # Backward-compatible: keep "rows" as latest table rows (what you previously emitted)
+                "rows": twse_rows_latest_table,
+                # New explicit metric:
+                "rows_series": twse_rows_series,
                 "head_dates": twse_head_dates,
                 "tail_dates": twse_tail_dates,
             },
             "tpex_rows": {
-                "rows": len(tpex_rows),
+                "rows": tpex_rows_latest_table,
+                "rows_series": tpex_rows_series,
                 "head_dates": tpex_head_dates,
                 "tail_dates": tpex_tail_dates,
             },
