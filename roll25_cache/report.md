@@ -1,11 +1,13 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-05T00:15:12Z`
-- generated_at_local: `2026-02-05T08:15:12.224036+08:00`
+- generated_at_utc: `2026-02-05T00:45:10Z`
+- generated_at_local: `2026-02-05T08:45:10.994520+08:00`
 - timezone: `Asia/Taipei`
 - UsedDate: `2026-02-04`
 - UsedDateStatus: `DATA_NOT_UPDATED`
 - RunDayTag: `WEEKDAY`
+- effective_data_date: `2026-02-04` (UsedDateStatus=DATA_NOT_UPDATED; daily endpoint not updated)
+- caution: bands and stats are anchored to UsedDate close; do NOT treat them as 'today' until UsedDateStatus becomes OK_LATEST
 - summary: 今日資料未更新；UsedDate=2026-02-04：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 
 ## 2) Key Numbers (from latest_report.json)
@@ -53,6 +55,13 @@
 | 12 | 1.197262 | 4.147437 | 30950.610568 | 30086.826935 | 29664.979114 | 29611.411136 | 33629.009432 | 34492.793065 | 34914.640886 | 34968.208864 | OK |  |
 | 15 | 1.197262 | 4.636975 | 30792.539518 | 29826.800056 | 29355.159854 | 29295.269035 | 33787.080482 | 34752.819944 | 35224.460146 | 35284.350965 | OK |  |
 
+### 5.1.a) Band % Mapping (display-only; prevents confusing points with %)
+| T | sigma_daily_% | sigma_T_% | pct_1σ | pct_95%(1-tail) | pct_95%(2-tail) | pct_2σ | confidence | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 10 | 1.197262 | 3.786074 | ±3.786074 | ±6.228092 | ±7.420706 | ±7.572149 | OK |  |
+| 12 | 1.197262 | 4.147437 | ±4.147437 | ±6.822533 | ±8.128976 | ±8.294873 | OK |  |
+| 15 | 1.197262 | 4.636975 | ±4.636975 | ±7.627824 | ±9.088471 | ±9.27395 | OK |  |
+
 ## 5.2) Stress Bands (regime-shift guardrail; heuristic)
 - sigma_stress_daily_%: `1.795893` (policy: max(sigma60,sigma20) * stress_mult; fallback if both NA)
 - stress_mult: `1.5`
@@ -62,6 +71,13 @@
 | 10 | 1.795893 | 5.679112 | 30456.035656 | 29273.251203 | 28695.612285 | 28622.261311 | 34123.584344 | 35306.368797 | 35884.007715 | 35957.358689 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
 | 12 | 1.795893 | 6.221155 | 30281.010852 | 28985.335402 | 28352.563671 | 28272.211705 | 34298.609148 | 35594.284598 | 36227.056329 | 36307.408295 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
 | 15 | 1.795893 | 6.955463 | 30043.904276 | 28595.295085 | 27887.834782 | 27797.998553 | 34535.715724 | 35984.324915 | 36691.785218 | 36781.621447 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
+
+### 5.2.a) Stress Band % Mapping (display-only; prevents confusing points with %)
+| T | sigma_daily_% | sigma_T_% | pct_1σ | pct_95%(1-tail) | pct_95%(2-tail) | pct_2σ | confidence | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 10 | 1.795893 | 5.679112 | ±5.679112 | ±9.342139 | ±11.131059 | ±11.358223 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
+| 12 | 1.795893 | 6.221155 | ±6.221155 | ±10.2338 | ±12.193464 | ±12.44231 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
+| 15 | 1.795893 | 6.955463 | ±6.955463 | ±11.441736 | ±13.632707 | ±13.910926 | OK | policy=primary:max(sigma60,sigma20)*mult stress_mult=1.5 |
 
 - Interpretation notes:
   - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.
@@ -81,6 +97,7 @@
 - CLOSE pct mismatch threshold: 0.05 (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).
 - PCT_CHANGE_CLOSE and VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60 to avoid double-counting / misleading ratios.
 - VOL_BANDS: sigma computed from anchored DAILY % returns; horizon scaling uses sqrt(T).
+- Band % Mapping tables (5.1.a/5.2.a) are display-only: they map sigma_T_% to ±% moves; they do NOT alter signals.
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
