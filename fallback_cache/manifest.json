@@ -1,13 +1,12 @@
 {
-  "generated_at_utc": "2026-02-06T15:01:56Z",
-  "as_of_ts": "2026-02-06T15:01:56Z",
+  "generated_at_utc": "2026-02-06T21:46:58Z",
+  "as_of_ts": "2026-02-06T21:46:58Z",
   "script_version": "fallback_vA_official_no_key_lock+history_v1",
-  "data_commit_sha": "7a8d871f1812bca7adb308da7a9707d0bc9c3dda",
+  "data_commit_sha": "f7f8c6e2b8fd0cb99d77cfff973c352920f738f8",
   "pinned": {
-    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/7a8d871f1812bca7adb308da7a9707d0bc9c3dda/fallback_cache/latest.json",
-    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/7a8d871f1812bca7adb308da7a9707d0bc9c3dda/fallback_cache/latest.csv",
-    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/7a8d871f1812bca7adb308da7a9707d0bc9c3dda/fallback_cache/history.json",
-    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/0ab17d918545a6659c2069d1048d00efab34c63b/fallback_cache/manifest.json"
-  },
-  "manifest_commit_sha_v1": "0ab17d918545a6659c2069d1048d00efab34c63b"
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/f7f8c6e2b8fd0cb99d77cfff973c352920f738f8/fallback_cache/latest.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/f7f8c6e2b8fd0cb99d77cfff973c352920f738f8/fallback_cache/latest.csv",
+    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/f7f8c6e2b8fd0cb99d77cfff973c352920f738f8/fallback_cache/history.json",
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/refs/heads/main/fallback_cache/manifest.json"
+  }
 }
