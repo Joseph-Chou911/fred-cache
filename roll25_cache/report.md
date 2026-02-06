@@ -1,27 +1,27 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-06T19:03:50Z`
-- generated_at_local: `2026-02-07T03:03:50.025427+08:00`
+- generated_at_utc: `2026-02-06T23:02:03Z`
+- generated_at_local: `2026-02-07T07:02:03.132002+08:00`
 - report_date_local: `2026-02-07`
 - timezone: `Asia/Taipei`
-- as_of_data_date: `2026-02-05` (latest available)
-- data_age_days: `2` (warn_if > 2)
+- as_of_data_date: `2026-02-06` (latest available)
+- data_age_days: `1` (warn_if > 2)
 - RunDayTag: `WEEKEND`
-- summary: 今日為週末；UsedDate=2026-02-05：Mode=FULL；freshness_ok=True
+- summary: 今日為週末；UsedDate=2026-02-06：Mode=FULL；freshness_ok=True
 
 ## 2) Key Numbers (from latest_report.json)
-- turnover_twd: `715168705076`
-- close: `31801.27`
-- pct_change: `-1.512985`
-- amplitude_pct: `1.463496`
-- volume_multiplier_20: `0.906804`
+- turnover_twd: `700313173141`
+- close: `31782.92`
+- pct_change: `-0.057702`
+- amplitude_pct: `2.133059`
+- volume_multiplier_20: `0.888196`
 
 ## 3) Market Behavior Signals (from latest_report.json)
 - DownDay: `true`
 - VolumeAmplified: `false`
 - VolAmplified: `false`
 - NewLow_N: `0`
-- ConsecutiveBreak: `1`
+- ConsecutiveBreak: `2`
 
 ## 4) Data Quality Flags (from latest_report.json)
 - OhlcMissing: `false`
@@ -32,51 +32,51 @@
 ## 5) Z/P Table (market_cache-like; computed from roll25 points)
 | series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TURNOVER_TWD | 715168705076 | 0.552977 | 67.5 | 1.702234 | 92.261905 | 0.098376 | 62.5 | 1.493615 | OK |
-| CLOSE | 31801.27 | 1.33172 | 85.833333 | 2.092021 | 96.626984 | -1.580723 | 7.5 | -1.512985 | OK |
-| PCT_CHANGE_CLOSE | -1.512985 | -1.43501 | 7.5 | -1.101926 | 6.547619 | NA | NA | NA | OK |
-| AMPLITUDE_PCT | 1.463496 | 0.60609 | 72.5 | 0.353104 | 80.753968 | NA | NA | NA | OK |
-| VOL_MULTIPLIER_20 | 0.906804 | -0.828085 | 25.833333 | -0.668425 | 24.404762 | NA | NA | NA | OK |
+| TURNOVER_TWD | 700313173141 | 0.442108 | 62.5 | 1.589529 | 90.674603 | -0.19945 | 47.5 | -2.077207 | OK |
+| CLOSE | 31782.92 | 1.275874 | 84.166667 | 2.059775 | 96.230159 | -0.234182 | 35.833333 | -0.057702 | OK |
+| PCT_CHANGE_CLOSE | -0.057702 | -0.229984 | 35.833333 | -0.133628 | 40.674603 | NA | NA | NA | OK |
+| AMPLITUDE_PCT | 2.133059 | 2.037467 | 97.5 | 1.286706 | 94.246032 | NA | NA | NA | OK |
+| VOL_MULTIPLIER_20 | 0.888196 | -0.889446 | 20.833333 | -0.743347 | 19.642857 | NA | NA | NA | OK |
 
 ## 5.1) Volatility Bands (sigma; approximation)
 - sigma_win_list_input: `20,60`
 - sigma_win_list_effective: `20,60` (includes sigma_base_win + 20 + 60 for audit stability)
 - sigma_base_win: `60` (BASE bands)
 - T list (trading days): `10,12,15`
-- level anchor: `31801.27` (source: latest_report.Close)
+- level anchor: `31782.92` (source: latest_report.Close)
 
-- sigma20_daily_%: `1.097921` (reason: `OK`)
-- sigma60_daily_%: `1.216487` (reason: `OK`)
+- sigma20_daily_%: `1.094758` (reason: `OK`)
+- sigma60_daily_%: `1.216175` (reason: `OK`)
 
 | T | sigma_daily_% | sigma_T_% | down_1σ | down_95%(1-tail) | down_95%(2-tail) | down_2σ | up_1σ | up_95%(1-tail) | up_95%(2-tail) | up_2σ | confidence | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 1.216487 | 3.846871 | 30577.916123 | 29788.852872 | 29403.496401 | 29354.562246 | 33024.623877 | 33813.687128 | 34199.043599 | 34247.977754 | OK |  |
-| 12 | 1.216487 | 4.214036 | 30461.152971 | 29596.777488 | 29174.640624 | 29121.035943 | 33141.387029 | 34005.762512 | 34427.899376 | 34481.504057 | OK |  |
-| 15 | 1.216487 | 4.711436 | 30302.973613 | 29336.572444 | 28864.609082 | 28804.677226 | 33299.566387 | 34265.967556 | 34737.930918 | 34797.862774 | OK |  |
+| 10 | 1.216175 | 3.845882 | 30560.586267 | 29772.181009 | 29387.145884 | 29338.252534 | 33005.253733 | 33793.658991 | 34178.694116 | 34227.587466 | OK |  |
+| 12 | 1.216175 | 4.212953 | 30443.920483 | 29580.265795 | 29158.480947 | 29104.920967 | 33121.919517 | 33985.574205 | 34407.359053 | 34460.919033 | OK |  |
+| 15 | 1.216175 | 4.710225 | 30285.87303 | 29320.277734 | 28848.707938 | 28788.826059 | 33279.96697 | 34245.562266 | 34717.132062 | 34777.013941 | OK |  |
 
 ### 5.1.a) Band % Mapping (display-only; prevents confusing points with %)
 | T | sigma_daily_% | sigma_T_% | pct_1σ | pct_95%(1-tail) | pct_95%(2-tail) | pct_2σ | confidence | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 1.216487 | 3.846871 | ±3.846871 | ±6.328103 | ±7.539867 | ±7.693742 | OK |  |
-| 12 | 1.216487 | 4.214036 | ±4.214036 | ±6.93209 | ±8.259511 | ±8.428072 | OK |  |
-| 15 | 1.216487 | 4.711436 | ±4.711436 | ±7.750312 | ±9.234414 | ±9.422871 | OK |  |
+| 10 | 1.216175 | 3.845882 | ±3.845882 | ±6.326477 | ±7.53793 | ±7.691765 | OK |  |
+| 12 | 1.216175 | 4.212953 | ±4.212953 | ±6.930308 | ±8.257388 | ±8.425906 | OK |  |
+| 15 | 1.216175 | 4.710225 | ±4.710225 | ±7.74832 | ±9.232041 | ±9.42045 | OK |  |
 
 ## 5.2) Stress Bands (regime-shift guardrail; heuristic)
-- sigma_stress_daily_%: `1.824731` (chosen_win=60; policy: primary=max(60,20) else fallback=max(effective) )
+- sigma_stress_daily_%: `1.824262` (chosen_win=60; policy: primary=max(60,20) else fallback=max(effective) )
 - stress_mult: `1.5`
 
 | T | sigma_daily_% | sigma_T_% | down_1σ | down_95%(1-tail) | down_95%(2-tail) | down_2σ | up_1σ | up_95%(1-tail) | up_95%(2-tail) | up_2σ | confidence | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 1.824731 | 5.770307 | 29966.239184 | 28782.644308 | 28204.609601 | 28131.208369 | 33636.300816 | 34819.895692 | 35397.930399 | 35471.331631 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
-| 12 | 1.824731 | 6.321054 | 29791.094457 | 28494.531232 | 27861.325936 | 27780.918914 | 33811.445543 | 35108.008768 | 35741.214064 | 35821.621086 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
-| 15 | 1.824731 | 7.067154 | 29553.82542 | 28104.223665 | 27396.278623 | 27306.380839 | 34048.71458 | 35498.316335 | 36206.261377 | 36296.159161 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 10 | 1.824262 | 5.768824 | 29949.419401 | 28766.811514 | 28189.258825 | 28115.918801 | 33616.420599 | 34799.028486 | 35376.581175 | 35449.921199 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 12 | 1.824262 | 6.31943 | 29774.420725 | 28478.938693 | 27846.261421 | 27765.92145 | 33791.419275 | 35086.901307 | 35719.578579 | 35799.91855 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 15 | 1.824262 | 7.065337 | 29537.349544 | 28088.9566 | 27381.601907 | 27291.779089 | 34028.490456 | 35476.8834 | 36184.238093 | 36274.060911 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
 
 ### 5.2.a) Stress Band % Mapping (display-only; prevents confusing points with %)
 | T | sigma_daily_% | sigma_T_% | pct_1σ | pct_95%(1-tail) | pct_95%(2-tail) | pct_2σ | confidence | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 1.824731 | 5.770307 | ±5.770307 | ±9.492155 | ±11.309801 | ±11.540613 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
-| 12 | 1.824731 | 6.321054 | ±6.321054 | ±10.398134 | ±12.389266 | ±12.642109 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
-| 15 | 1.824731 | 7.067154 | ±7.067154 | ±11.625468 | ±13.851621 | ±14.134307 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 10 | 1.824262 | 5.768824 | ±5.768824 | ±9.489715 | ±11.306894 | ±11.537647 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 12 | 1.824262 | 6.31943 | ±6.31943 | ±10.395462 | ±12.386082 | ±12.638859 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
+| 15 | 1.824262 | 7.065337 | ±7.065337 | ±11.62248 | ±13.848061 | ±14.130674 | OK | policy=primary:max(sigma60,sigma20)*mult chosen_win=60 stress_mult=1.5 |
 
 - Interpretation notes:
   - These bands assume iid + normal approximation of daily returns; this is NOT a guarantee and will understate tail risk in regime shifts.
@@ -91,25 +91,25 @@
   - Band(z) = AnchorClose * exp(- z * sigma_target_pct / 100)
 
 ### 5.3.a) Parameter Setup
-- AnchorClose: `31801.27` (source: roll25@UsedDate.close)
-- PrevClose(strict): `32289.81`
-- ret1_log_pct(abs): `1.524547`
-- sigma_log_60_daily_%: `1.21759` (reason: `OK`)
-- sigma_target_daily_% (Rule A): `1.524547`
+- AnchorClose: `31782.92` (source: roll25@UsedDate.close)
+- PrevClose(strict): `31801.27`
+- ret1_log_pct(abs): `0.057719`
+- sigma_log_60_daily_%: `1.217219` (reason: `OK`)
+- sigma_target_daily_% (Rule A): `1.217219`
 - confidence: `OK`
 - notes: `anchor_source=roll25@UsedDate.close; vol_mult_source=latest_report.VolumeMultiplier`
 
 ### 5.3.b) Risk Bands
 | band | z | formula | point | close_confirm_rule |
 | --- | --- | --- | --- | --- |
-| Band 1 (normal) | 1 | P*exp(-z*sigma) | 31320.121537 | Close >= 31320.121537 => PASS else NOTE/FAIL |
-| Band 2 (stress) | 2 | P*exp(-z*sigma) | 30846.252779 | Close <  30846.252779 => FAIL (do not catch knife) |
+| Band 1 (normal) | 1 | P*exp(-z*sigma) | 31398.397135 | Close >= 31398.397135 => PASS else NOTE/FAIL |
+| Band 2 (stress) | 2 | P*exp(-z*sigma) | 31018.526386 | Close <  31018.526386 => FAIL (do not catch knife) |
 
 ### 5.3.c) Health Check (deterministic)
 | item | value | rule | status |
 | --- | --- | --- | --- |
-| Volume_Mult_20 | 0.906804 | <= 1.0 PASS; (1.0,1.3) NOTE; >= 1.3 FAIL | PASS |
-| Price Structure | 31801.27 | Close>=B1 PASS; B2<=Close<B1 NOTE; Close<B2 FAIL | PASS |
+| Volume_Mult_20 | 0.888196 | <= 1.0 PASS; (1.0,1.3) NOTE; >= 1.3 FAIL | PASS |
+| Price Structure | 31782.92 | Close>=B1 PASS; B2<=Close<B1 NOTE; Close<B2 FAIL | PASS |
 | Self Risk | NO_MARGIN | no leverage / no pledge forced-sell risk | PASS |
 | Action | OPTIONAL_TINY_PROBE (全 PASS → 可考慮極小額試單；非必要) | any FAIL => CASH; all PASS => optional tiny probe; else observe | — |
 
@@ -134,10 +134,10 @@
 - VOL_BANDS: sigma computed from anchored DAILY % returns; horizon scaling uses sqrt(T).
 - Band % Mapping tables (5.1.a/5.2.a) are display-only: they map sigma_T_% to ±% moves; they do NOT alter signals.
 - VOL thresholds: pass_max=1 fail_min=1.3 (parameterized)
-- Anchor clarity: level_anchor=31801.27 (for bands) vs anchor_close=31801.27 (for risk check)
+- Anchor clarity: level_anchor=31782.92 (for bands) vs anchor_close=31782.92 (for risk check)
   - anchors_match: `true` ; abs_diff: `0`
 - EXTRA_AUDIT_NOTES:
-  - VOL_MULT_20 window diag: win=20 min_points=15 len_turnover=283 computed=268 na_invalid_a=0 na_no_tail=1 na_insufficient_window=14 na_zero_avg=0
+  - VOL_MULT_20 window diag: win=20 min_points=15 len_turnover=284 computed=269 na_invalid_a=0 na_no_tail=1 na_insufficient_window=14 na_zero_avg=0
 
 ## 7) Caveats / Sources (from latest_report.json)
 ```
@@ -145,9 +145,9 @@ Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; dai
 Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
 run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
-Mode=FULL | OHLC=OK | UsedDate=2026-02-05 | UsedDminus1=2026-02-04
+Mode=FULL | OHLC=OK | UsedDate=2026-02-06 | UsedDminus1=2026-02-05
 RunDayTag=WEEKEND | UsedDateStatus=OK_LATEST
-freshness_ok=True | freshness_age_days=2
+freshness_ok=True | freshness_age_days=1
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
