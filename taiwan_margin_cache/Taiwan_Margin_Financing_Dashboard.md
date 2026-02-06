@@ -1,17 +1,17 @@
 # Taiwan Margin Financing Dashboard
 
 ## 1) 結論
-- 狀態：擴張｜信號：INFO｜資料品質：OK
-  - rationale: cool-down candidate: Accel<=0 and 1D%<0.3 (needs 2–3 consecutive confirmations)
+- 狀態：中性｜信號：NONE｜資料品質：OK
+  - rationale: no rule triggered
 - threshold_policy: percentile｜calib_min_n=60
   - percentiles: expansion20=90.0, contraction20=10.0, watch1d=90.0, watchspread20=90.0, watchaccel=90.0
   - thresholds_used: expansion20=8.0000, contraction20=-8.0000, watch1d=0.8000, watchspread20=3.0000, watchaccel=0.2500
   - calibration_status:
-    - expansion20: status=FALLBACK_FIXED, sample_n=20, threshold=8.0, reason=insufficient samples (n=20 < calib_min_n=60)
-    - contraction20: status=FALLBACK_FIXED, sample_n=20, threshold=-8.0, reason=insufficient samples (n=20 < calib_min_n=60)
-    - watch1d: status=FALLBACK_FIXED, sample_n=39, threshold=0.8, reason=insufficient samples (n=39 < calib_min_n=60)
-    - watchspread20: status=FALLBACK_FIXED, sample_n=20, threshold=3.0, reason=insufficient samples (n=20 < calib_min_n=60)
-    - watchaccel: status=FALLBACK_FIXED, sample_n=35, threshold=0.25, reason=insufficient samples (n=35 < calib_min_n=60)
+    - expansion20: status=FALLBACK_FIXED, sample_n=21, threshold=8.0, reason=insufficient samples (n=21 < calib_min_n=60)
+    - contraction20: status=FALLBACK_FIXED, sample_n=21, threshold=-8.0, reason=insufficient samples (n=21 < calib_min_n=60)
+    - watch1d: status=FALLBACK_FIXED, sample_n=40, threshold=0.8, reason=insufficient samples (n=40 < calib_min_n=60)
+    - watchspread20: status=FALLBACK_FIXED, sample_n=21, threshold=3.0, reason=insufficient samples (n=21 < calib_min_n=60)
+    - watchaccel: status=FALLBACK_FIXED, sample_n=36, threshold=0.25, reason=insufficient samples (n=36 < calib_min_n=60)
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
 - 一致性判定（Margin × Roll25）：MARKET_SHOCK_ONLY
   - rationale: roll25 heated but Margin not heated
@@ -38,27 +38,27 @@
 - 行動：代表短線槓桿加速結束，回到『擴張但不加速』。
 
 ## 2) 資料
-- 上市(TWSE)：融資餘額 3829.20 億元｜資料日期 2026-02-05｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows_latest_table=30｜rows_series=40｜head_dates=['2026-02-05', '2026-02-04', '2026-02-03']｜tail_dates=['2025-12-29', '2025-12-26', '2025-12-24']
-- 上櫃(TPEX)：融資餘額 1341.10 億元｜資料日期 2026-02-05｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows_latest_table=30｜rows_series=40｜head_dates=['2026-02-05', '2026-02-04', '2026-02-03']｜tail_dates=['2025-12-29', '2025-12-26', '2025-12-24']
-- 合計：融資餘額 5170.30 億元｜資料日期 2026-02-05｜來源：TWSE=HiStock / TPEX=HiStock
+- 上市(TWSE)：融資餘額 3739.90 億元｜資料日期 2026-02-06｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+  - rows_latest_table=30｜rows_series=41｜head_dates=['2026-02-06', '2026-02-05', '2026-02-04']｜tail_dates=['2025-12-30', '2025-12-29', '2025-12-26']
+- 上櫃(TPEX)：融資餘額 1331.40 億元｜資料日期 2026-02-06｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+  - rows_latest_table=30｜rows_series=41｜head_dates=['2026-02-06', '2026-02-05', '2026-02-04']｜tail_dates=['2025-12-30', '2025-12-29', '2025-12-26']
+- 合計：融資餘額 5071.30 億元｜資料日期 2026-02-06｜來源：TWSE=HiStock / TPEX=HiStock
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
 - maint_path: taiwan_margin_cache/maint_ratio_latest.json
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED
-- data_date: 2026-02-05｜maint_ratio_pct: 178.028325
-- maint_ratio_1d_delta_pctpt: -5.424351｜maint_ratio_1d_pct_change: -2.956812
-- maint_ratio_trend_note: trend_from: today=178.028325(2026-02-05), prev=183.452676(2026-02-04)
-- totals: financing_amount_twd=382917747000, collateral_value_twd=681702052280
-- coverage: included_count=1247, missing_price_count=4
+- data_date: 2026-02-06｜maint_ratio_pct: 174.564662
+- maint_ratio_1d_delta_pctpt: -3.463663｜maint_ratio_1d_pct_change: -1.945568
+- maint_ratio_trend_note: trend_from: today=174.564662(2026-02-06), prev=178.028325(2026-02-05)
+- totals: financing_amount_twd=373990690000, collateral_value_twd=652855583540
+- coverage: included_count=1249, missing_price_count=2
 - quality: fetch_status=OK, confidence=OK, dq_reason=
 
 ## 2.0.1) 大盤融資維持率（history；display-only）
 - maint_hist_path: taiwan_margin_cache/maint_ratio_history.json
-- history_rows: 8
-- head5: [('2026-02-05', 178.028325), ('2026-02-04', 183.452676), ('2026-02-03', 180.187892), ('2026-02-02', 178.267525), ('2026-01-30', 183.996663)]
+- history_rows: 9
+- head5: [('2026-02-06', 174.564662), ('2026-02-05', 178.028325), ('2026-02-04', 183.452676), ('2026-02-03', 180.187892), ('2026-02-02', 178.267525)]
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
@@ -78,7 +78,7 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-06T10:51:17.098821+08:00 (Asia/Taipei)
+- generated_at: 2026-02-06T17:57:16.247370+08:00 (Asia/Taipei)
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -93,23 +93,23 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
-- 1D：Δ=-11.30 億元；Δ%=-0.2942 %｜latest=3829.20｜base=3840.50（基期日=2026-02-04）
-- 5D：Δ=11.40 億元；Δ%=0.2986 %｜latest=3829.20｜base=3817.80（基期日=2026-01-29）
-- 20D：Δ=305.30 億元；Δ%=8.6637 %｜latest=3829.20｜base=3523.90（基期日=2026-01-08）
+- 1D：Δ=-89.30 億元；Δ%=-2.3321 %｜latest=3739.90｜base=3829.20（基期日=2026-02-05）
+- 5D：Δ=-99.00 億元；Δ%=-2.5789 %｜latest=3739.90｜base=3838.90（基期日=2026-01-30）
+- 20D：Δ=225.00 億元；Δ%=6.4013 %｜latest=3739.90｜base=3514.90（基期日=2026-01-09）
 
 ### 上櫃(TPEX)
-- 1D：Δ=-9.90 億元；Δ%=-0.7328 %｜latest=1341.10｜base=1351.00（基期日=2026-02-04）
-- 5D：Δ=-6.60 億元；Δ%=-0.4897 %｜latest=1341.10｜base=1347.70（基期日=2026-01-29）
-- 20D：Δ=117.40 億元；Δ%=9.5939 %｜latest=1341.10｜base=1223.70（基期日=2026-01-08）
+- 1D：Δ=-9.70 億元；Δ%=-0.7233 %｜latest=1331.40｜base=1341.10（基期日=2026-02-05）
+- 5D：Δ=-19.10 億元；Δ%=-1.4143 %｜latest=1331.40｜base=1350.50（基期日=2026-01-30）
+- 20D：Δ=97.20 億元；Δ%=7.8755 %｜latest=1331.40｜base=1234.20（基期日=2026-01-09）
 
 ### 合計(上市+上櫃)
-- 1D：Δ=-21.20 億元；Δ%=-0.4084 %｜latest=5170.30｜base=5191.50（基期日=2026-02-04）
-- 5D：Δ=4.80 億元；Δ%=0.0929 %｜latest=5170.30｜base=5165.50（基期日=2026-01-29）
-- 20D：Δ=422.70 億元；Δ%=8.9034 %｜latest=5170.30｜base=4747.60（基期日=2026-01-08）
+- 1D：Δ=-99.00 億元；Δ%=-1.9148 %｜latest=5071.30｜base=5170.30（基期日=2026-02-05）
+- 5D：Δ=-118.10 億元；Δ%=-2.2758 %｜latest=5071.30｜base=5189.40（基期日=2026-01-30）
+- 20D：Δ=322.20 億元；Δ%=6.7844 %｜latest=5071.30｜base=4749.10（基期日=2026-01-09）
 
 ## 4) 提前示警輔助指標（不引入外部資料）
-- Accel = 1D% - (5D%/5)：-0.4269
-- Spread20 = TPEX_20D% - TWSE_20D%：0.9302
+- Accel = 1D% - (5D%/5)：-1.4596
+- Spread20 = TPEX_20D% - TWSE_20D%：1.4742
 
 ## 5) 稽核備註
 - 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。
@@ -128,15 +128,15 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（PASS）
-- Check-4 TWSE history rows>=21：✅（PASS）（rows_series=40）
-- Check-4 TPEX history rows>=21：✅（PASS）（rows_series=40）
+- Check-4 TWSE history rows>=21：✅（PASS）（rows_series=41）
+- Check-4 TPEX history rows>=21：✅（PASS）（rows_series=41）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-05) == TWSE(2026-02-05)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-05) vs TWSE(2026-02-06)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-06T08:11:19Z_
+_generated_at_utc: 2026-02-06T14:06:21Z_
