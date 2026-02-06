@@ -2,7 +2,7 @@
 
 ## 1) 結論
 - 狀態：擴張｜信號：INFO｜資料品質：OK
-  - rationale: cool-down candidate: Accel<=0 and 1D%<0.3 (needs 2–3 consecutive confirmations)
+  - rationale: cool-down candidate: Accel<=TH and 1D%<TH (needs 2–3 consecutive confirmations)
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
 - 一致性判定（Margin × Roll25）：MARKET_SHOCK_ONLY
   - rationale: roll25 heated but Margin not heated
@@ -10,18 +10,28 @@
   - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
   - resonance_confidence: DOWNGRADED
 
-## 1.1) 判定標準（本 dashboard 內建規則）
+## 1.1) 判定標準（本 dashboard 內建規則；顯示『實際採用門檻』）
+- threshold_policy: fixed
+- thresholds_used: exp20=8.0000, contr20=-8.0000, watch1d=0.8000, watch_spread20=3.0000, watch_accel=0.2500, cool_accel=0.0000, cool_1d=0.3000
+
 ### 1) WATCH（升溫）
-- 條件：20D% ≥ 8 且 (1D% ≥ 0.8 或 Spread20 ≥ 3 或 Accel ≥ 0.25)
+- 條件：20D% ≥ 8.0000 且 (1D% ≥ 0.8000 或 Spread20 ≥ 3.0000 或 Accel ≥ 0.2500)
 - 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。
 
 ### 2) ALERT（疑似去槓桿）
-- 條件：20D% ≥ 8 且 1D% < 0 且 5D% < 0
+- 條件：20D% ≥ 8.0000 且 1D% < 0 且 5D% < 0
 - 行動：優先看『是否出現連續負值』，因為可能開始踩踏。
 
 ### 3) 解除 WATCH（降溫）
-- 條件：20D% 仍高，但 Accel ≤ 0 且 1D% 回到 < 0.3（需連 2–3 次確認）
+- 條件：20D% 仍高（≥ 8.0000），但 Accel ≤ 0.0000 且 1D% < 0.3000（需連 2–3 次確認）
 - 行動：代表短線槓桿加速結束，回到『擴張但不加速』。
+
+## 1.2) 門檻校準（目標百分位 → 反推門檻值；資料不足則明確回退固定門檻）
+- threshold_policy: fixed
+- calib_min_n: 60
+- aligned_date_intersection_rows: 40 (2026-02-05 .. 2025-12-10)
+- targets (percentiles): {'pctl_expansion20': None, 'pctl_contraction20': None, 'pctl_watch1d': None, 'pctl_watchspread20': None, 'pctl_watchaccel': None, 'pctl_cool1d': None, 'pctl_coolaccel': None}
+- policy=fixed：不做校準（此段僅做紀錄）
 
 ## 2) 資料
 - 上市(TWSE)：融資餘額 3829.20 億元｜資料日期 2026-02-05｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
@@ -64,7 +74,7 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-06T07:22:45.630978+08:00 (Asia/Taipei)
+- generated_at: 2026-02-06T10:51:17.098821+08:00 (Asia/Taipei)
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -106,8 +116,9 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
 - resonance_policy=latest：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。
 - maint_ratio 為 proxy（display-only）：僅看趨勢與變化（Δ），不得用 proxy 絕對水位做門檻判斷。
+- threshold calibration：僅在 --threshold-policy percentile 時啟用；資料不足或未提供 target_pct 會明確回退 fixed。
 
-## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
+## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint/校準僅供對照）
 - Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）
 - Check-1 TWSE meta_date==series[0].date：✅（PASS）
 - Check-1 TPEX meta_date==series[0].date：✅（PASS）
@@ -124,5 +135,6 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
+- Check-12 threshold calibration applied（info）：⚠️（NOTE）（policy=fixed）
 
-_generated_at_utc: 2026-02-05T23:41:40Z_
+_generated_at_utc: 2026-02-06T06:39:16Z_
