@@ -1,7 +1,7 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-06T15:09:17Z",
+  "generated_at_utc": "2026-02-06T23:02:38Z",
   "generated_at_local": null,
   "data_date": "2026-02-06",
   "state": "中性",
@@ -10,9 +10,9 @@
   "rationale": "no rule triggered",
   "resonance": "MARKET_SHOCK_ONLY",
   "resonance_display": "MARKET_SHOCK_ONLY",
-  "resonance_confidence": "DOWNGRADED",
-  "resonance_code": "ROLL25_STALE",
-  "resonance_note": "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）",
+  "resonance_confidence": "OK",
+  "resonance_code": null,
+  "resonance_note": null,
   "thresholds": {
     "policy": "percentile",
     "calib_min_n": 60,
@@ -210,16 +210,16 @@
     "path": "roll25_cache/latest_report.json",
     "ok": true,
     "error": null,
-    "used_date": "2026-02-05",
-    "used_date_status": "DATA_NOT_UPDATED",
-    "risk_level_display": "中(derived)（stale）",
+    "used_date": "2026-02-06",
+    "used_date_status": "OK_LATEST",
+    "risk_level_display": "中(derived)",
     "risk_level_raw": "NA",
-    "tag": "WEEKDAY",
+    "tag": "WEEKEND",
     "is_heated": true,
     "lookback_note": null,
-    "strict_same_day": false,
-    "strict_not_stale": false,
-    "strict_roll_match": false
+    "strict_same_day": true,
+    "strict_not_stale": true,
+    "strict_roll_match": true
   },
   "maint_ratio": {
     "policy": "PROXY_TREND_ONLY",
@@ -278,10 +278,10 @@
       "margin_any_fail": false
     },
     "roll25": {
-      "check_6_status": "NOTE",
-      "check_6_msg": "roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-05) vs TWSE(2026-02-06)",
-      "check_7_status": "NOTE",
-      "check_7_msg": "skipped: roll25 stale (DATA_NOT_UPDATED)"
+      "check_6_status": "PASS",
+      "check_6_msg": "OK",
+      "check_7_status": "PASS",
+      "check_7_msg": "LookbackNActual=20/20（OK）"
     },
     "maint": {
       "check_10_status": "PASS",

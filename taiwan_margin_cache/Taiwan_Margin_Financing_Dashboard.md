@@ -16,8 +16,7 @@
 - 一致性判定（Margin × Roll25）：MARKET_SHOCK_ONLY
   - rationale: roll25 heated but Margin not heated
   - resonance_policy: latest
-  - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
-  - resonance_confidence: DOWNGRADED
+  - resonance_confidence: OK
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 0) 門檻來源
@@ -62,24 +61,24 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-02-05｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 中(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
-- summary: 今日資料未更新；UsedDate=2026-02-05：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
-- numbers: Close=31801.27, PctChange=-1.512985%, TradeValue=715168705076, VolumeMultiplier=0.906804, AmplitudePct=1.463496%, VolMultiplier=0.906804
-- signals: DownDay=True, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=1, OhlcMissing=False
+- UsedDate: 2026-02-06｜UsedDateStatus: OK_LATEST｜risk_level: 中(derived)｜risk_level_raw: NA｜tag: WEEKEND
+- summary: 今日為週末；UsedDate=2026-02-06：Mode=FULL；freshness_ok=True
+- numbers: Close=31782.92, PctChange=-0.057702%, TradeValue=700313173141, VolumeMultiplier=0.888196, AmplitudePct=2.133059%, VolMultiplier=0.888196
+- signals: DownDay=True, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=2, OhlcMissing=False
 - action: 維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。
 - caveats: Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
 Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
 run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
-Mode=FULL | OHLC=OK | UsedDate=2026-02-05 | UsedDminus1=2026-02-04
-RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
+Mode=FULL | OHLC=OK | UsedDate=2026-02-06 | UsedDminus1=2026-02-05
+RunDayTag=WEEKEND | UsedDateStatus=OK_LATEST
 freshness_ok=True | freshness_age_days=1
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-06T22:28:19.629220+08:00 (Asia/Taipei)
-- resonance_confidence: DOWNGRADED
+- generated_at: 2026-02-07T07:02:03.034732+08:00 (Asia/Taipei)
+- resonance_confidence: OK
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 規則（deterministic，不猜）：
@@ -88,8 +87,7 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
   3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
   4. 其餘 → QUIET
 - 判定：MARKET_SHOCK_ONLY（roll25 heated but Margin not heated）
-- resonance_confidence: DOWNGRADED
-- resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
+- resonance_confidence: OK
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
@@ -132,11 +130,11 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-4 TPEX history rows>=21：✅（PASS）（rows_series=41）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-05) vs TWSE(2026-02-06)）
-- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（PASS）（OK）
+- Check-7 roll25 Lookback window（info）：✅（PASS）（LookbackNActual=20/20（OK））
 - Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
 - Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 
-_generated_at_utc: 2026-02-06T15:09:17Z_
+_generated_at_utc: 2026-02-06T23:02:38Z_
