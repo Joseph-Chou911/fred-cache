@@ -23,22 +23,16 @@ Noise control
 - NA reasons for resonance are standardized: (原因：ROLL25_STALE / ROLL25_MISSING / ROLL25_MISMATCH / ROLL25_FIELDS_INSUFFICIENT)
 - Checks use fixed PASS/NOTE/FAIL semantics.
 
-Display tweak (requested)
+Display tweak
 - In 2.1, derived risk_level is shown as 低/中/高(derived) when raw is NA.
 - If UsedDateStatus=DATA_NOT_UPDATED, risk_level display gets “（stale）” suffix to avoid misread.
 - Use existing resonance_confidence naming consistently across sections.
 
-Maint ratio trend metrics (added; display-only)
+Maint ratio trend metrics (display-only)
 - maint_ratio_1d_delta_pctpt: today - prev (pct-pt)
 - maint_ratio_1d_pct_change: (today - prev) / prev * 100 (%)
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED (always; proxy trend only, not absolute level)
-
-Added: Threshold calibration (AUDIT-SAFE)
-- Support --threshold-policy {fixed,percentile}
-- When percentile policy enabled: derive thresholds from history.json distributions via target percentiles
-- If insufficient samples or percentile not provided -> fallback to fixed threshold (explicitly marked)
-- Calibration uses ONLY internal derived metrics (tot20_pct, tot1_pct, spread20, accel) from aligned TWSE/TPEX dates
 
 Added (NO LOGIC CHANGE):
 - Also emit a machine-readable signals_latest.json for unified dashboard ingestion.
@@ -49,6 +43,16 @@ Row-count display fix (NO LOGIC CHANGE):
 - Avoid ambiguous "rows=" which mixed two different sources:
   - rows_latest_table: from latest.json series.{market}.rows (page/table rows; often ~30)
   - rows_series: from history.json derived balance series (calc input; often >30)
+
+Threshold calibration (audit-safe; deterministic)
+- Support --threshold-policy {fixed,percentile}
+- percentile: derive thresholds from history.json distributions using target percentiles
+- calibration uses ONLY internal derived metrics (no external fetch):
+    - total_20d_pct series (for expansion/contraction thresholds)
+    - total_1d_pct series (for watch1d threshold)
+    - spread20 series (tpex_20d_pct - twse_20d_pct, strict base-date match per sample)
+    - accel series (total_1d_pct - total_5d_pct/5)
+- If insufficient samples (< calib_min_n) => fallback to fixed thresholds with explicit reason
 """
 
 from __future__ import annotations
@@ -58,7 +62,18 @@ import json
 import os
 import re
 from datetime import date, datetime, timezone
+from math import floor, ceil
 from typing import Any, Dict, List, Optional, Tuple
+
+
+# ----------------- fixed thresholds (baseline / fallback) -----------------
+FIXED_THRESHOLDS: Dict[str, float] = {
+    "expansion20": 8.0,        # tot20_pct >= 8 => expansion
+    "contraction20": -8.0,     # tot20_pct <= -8 => contraction
+    "watch1d": 0.8,            # tot1_pct >= 0.8
+    "watchspread20": 3.0,      # spread20 >= 3.0
+    "watchaccel": 0.25,        # accel >= 0.25
+}
 
 
 # ----------------- basic utils -----------------
@@ -169,112 +184,39 @@ def _norm_date_iso(x: Any) -> Optional[str]:
     return d.isoformat() if d else None
 
 
-# ----------------- percentile / quantile (audit-safe; deterministic) -----------------
-def _is_finite_number(x: Any) -> bool:
-    if not isinstance(x, (int, float)):
-        return False
-    xf = float(x)
-    # NaN check
-    return xf == xf
-
-
-def _quantile_linear(values_sorted: List[float], q: float) -> Optional[float]:
+# ----------------- percentile (deterministic) -----------------
+def percentile_value(values: List[float], p: float) -> Optional[float]:
     """
-    Deterministic linear-interpolated quantile.
-    q in [0, 1].
+    Deterministic percentile with linear interpolation (numpy-like):
+      idx = (p/100) * (n-1)
+      v = v[lo]*(1-frac) + v[hi]*frac
+
+    Returns None if values empty or p invalid.
     """
-    if not values_sorted:
+    if not values:
         return None
-    if q <= 0:
-        return float(values_sorted[0])
-    if q >= 1:
-        return float(values_sorted[-1])
+    if not isinstance(p, (int, float)):
+        return None
+    if p < 0.0 or p > 100.0:
+        return None
 
-    n = len(values_sorted)
-    pos = q * (n - 1)
-    lo = int(pos)
-    hi = lo + 1
-    if hi >= n:
-        return float(values_sorted[-1])
+    vals = sorted(float(x) for x in values)
+    n = len(vals)
+    if n == 1:
+        return vals[0]
 
-    frac = pos - lo
-    v0 = float(values_sorted[lo])
-    v1 = float(values_sorted[hi])
-    return v0 + (v1 - v0) * frac
+    if p <= 0.0:
+        return vals[0]
+    if p >= 100.0:
+        return vals[-1]
 
-
-def _dist_summary(values: List[float]) -> Dict[str, Any]:
-    vs = [float(v) for v in values if _is_finite_number(v)]
-    vs.sort()
-    if not vs:
-        return {"n": 0, "min": None, "p10": None, "p50": None, "p90": None, "max": None}
-    return {
-        "n": len(vs),
-        "min": float(vs[0]),
-        "p10": _quantile_linear(vs, 0.10),
-        "p50": _quantile_linear(vs, 0.50),
-        "p90": _quantile_linear(vs, 0.90),
-        "max": float(vs[-1]),
-    }
-
-
-def _calibrate_threshold(
-    *,
-    name: str,
-    values: List[float],
-    target_pct: Optional[float],
-    fixed_value: float,
-    min_n: int,
-) -> Tuple[float, Dict[str, Any]]:
-    """
-    Returns:
-      - used_threshold (float): derived if possible, else fixed_value
-      - meta: audit details
-    """
-    meta: Dict[str, Any] = {
-        "name": name,
-        "policy": "percentile",
-        "target_pct": target_pct,
-        "min_n": min_n,
-        "fixed_value": fixed_value,
-        "used_value": fixed_value,
-        "status": "FALLBACK_FIXED",
-        "reason": "",
-        "dist": _dist_summary(values),
-        "derived_value": None,
-    }
-
-    if target_pct is None:
-        meta["reason"] = "target_pct not provided"
-        return fixed_value, meta
-
-    try:
-        tp = float(target_pct)
-    except Exception:
-        meta["reason"] = f"target_pct not numeric ({target_pct})"
-        return fixed_value, meta
-
-    if not (0.0 <= tp <= 100.0):
-        meta["reason"] = f"target_pct out of range [0,100] ({tp})"
-        return fixed_value, meta
-
-    vals = [float(v) for v in values if _is_finite_number(v)]
-    vals.sort()
-    if len(vals) < int(min_n):
-        meta["reason"] = f"insufficient samples (n={len(vals)} < min_n={min_n})"
-        return fixed_value, meta
-
-    q = tp / 100.0
-    dv = _quantile_linear(vals, q)
-    if dv is None:
-        meta["reason"] = "quantile computation returned None"
-        return fixed_value, meta
-
-    meta["derived_value"] = float(dv)
-    meta["used_value"] = float(dv)
-    meta["status"] = "CALIBRATED"
-    meta["reason"] = "OK"
-    return float(dv), meta
+    idx = (p / 100.0) * (n - 1)
+    lo = int(floor(idx))
+    hi = int(ceil(idx))
+    if lo == hi:
+        return vals[lo]
+    frac = idx - lo
+    return vals[lo] * (1.0 - frac) + vals[hi] * frac
 
 
 # ----------------- margin series & calcs -----------------
@@ -292,7 +234,6 @@ def build_series_from_history(history_items: List[Dict[str, Any]], market: str) 
         if d_iso and isinstance(b, (int, float)):
             tmp[d_iso] = float(b)
 
-    # sort by parsed date (not string), newest-first
     pairs = list(tmp.items())
     pairs.sort(key=lambda x: _parse_date_any(x[0]) or date(1900, 1, 1), reverse=True)
     return pairs
@@ -389,151 +330,50 @@ def determine_signal(
     tot5_pct: Optional[float],
     accel: Optional[float],
     spread20: Optional[float],
-    th: Dict[str, float],
+    thresholds: Dict[str, float],
 ) -> Tuple[str, str, str]:
     """
-    th keys (all float):
-      - exp20, contr20
-      - watch1d, watch_spread20, watch_accel
-      - cool_accel, cool_1d
+    thresholds:
+      - expansion20
+      - contraction20
+      - watch1d
+      - watchspread20
+      - watchaccel
     """
-    exp20 = float(th["exp20"])
-    contr20 = float(th["contr20"])
-    watch1d = float(th["watch1d"])
-    watch_spread20 = float(th["watch_spread20"])
-    watch_accel = float(th["watch_accel"])
-    cool_accel = float(th["cool_accel"])
-    cool_1d = float(th["cool_1d"])
-
     if tot20_pct is None:
         return ("NA", "NA", "insufficient total_20D% (NA)")
 
-    state = "擴張" if tot20_pct >= exp20 else ("收縮" if tot20_pct <= contr20 else "中性")
+    thr_exp = thresholds["expansion20"]
+    thr_con = thresholds["contraction20"]
+    thr_w1 = thresholds["watch1d"]
+    thr_ws = thresholds["watchspread20"]
+    thr_wa = thresholds["watchaccel"]
 
-    if (tot20_pct >= exp20) and (tot1_pct is not None) and (tot5_pct is not None) and (tot1_pct < 0.0) and (tot5_pct < 0.0):
+    state = "擴張" if tot20_pct >= thr_exp else ("收縮" if tot20_pct <= thr_con else "中性")
+
+    # ALERT: suspected deleveraging inside high expansion regime
+    if (tot20_pct >= thr_exp) and (tot1_pct is not None) and (tot5_pct is not None) and (tot1_pct < 0.0) and (tot5_pct < 0.0):
         return (state, "ALERT", "20D expansion + 1D%<0 and 5D%<0 (possible deleveraging)")
 
+    # WATCH: heating candidates under high expansion regime
     watch = False
-    if tot20_pct >= exp20:
-        if (tot1_pct is not None and tot1_pct >= watch1d):
+    if tot20_pct >= thr_exp:
+        if (tot1_pct is not None and tot1_pct >= thr_w1):
             watch = True
-        if (spread20 is not None and spread20 >= watch_spread20):
+        if (spread20 is not None and spread20 >= thr_ws):
             watch = True
-        if (accel is not None and accel >= watch_accel):
+        if (accel is not None and accel >= thr_wa):
             watch = True
 
     if watch:
-        return (state, "WATCH", "20D expansion + (1D%>=TH OR Spread20>=TH OR Accel>=TH)")
+        return (state, "WATCH", "20D expansion + (1D%>=thr OR Spread20>=thr OR Accel>=thr)")
 
-    if (tot20_pct >= exp20) and (accel is not None) and (tot1_pct is not None):
-        if (accel <= cool_accel) and (tot1_pct < cool_1d):
-            return (state, "INFO", "cool-down candidate: Accel<=TH and 1D%<TH (needs 2–3 consecutive confirmations)")
+    # INFO: cool-down candidate (kept fixed: accel<=0 and 1D%<0.3)
+    if (tot20_pct >= thr_exp) and (accel is not None) and (tot1_pct is not None):
+        if (accel <= 0.0) and (tot1_pct < 0.3):
+            return (state, "INFO", "cool-down candidate: Accel<=0 and 1D%<0.3 (needs 2–3 consecutive confirmations)")
 
     return (state, "NONE", "no rule triggered")
-
-
-# ----------------- threshold calibration inputs from aligned series -----------------
-def _build_aligned_series(
-    twse_s: List[Tuple[str, float]],
-    tpex_s: List[Tuple[str, float]],
-) -> List[Tuple[str, float, float, float]]:
-    """
-    Align by date intersection to keep strict comparability.
-    Returns NEWEST-FIRST: [(date_iso, twse_balance, tpex_balance, total_balance), ...]
-    """
-    tw = {d: v for d, v in twse_s}
-    tp = {d: v for d, v in tpex_s}
-    common = sorted(set(tw.keys()) & set(tp.keys()), key=lambda x: _parse_date_any(x) or date(1900, 1, 1), reverse=True)
-    out: List[Tuple[str, float, float, float]] = []
-    for d in common:
-        tv = float(tw[d])
-        pv = float(tp[d])
-        out.append((d, tv, pv, tv + pv))
-    return out
-
-
-def _pct_change(latest: float, base: float) -> Optional[float]:
-    if base == 0:
-        return None
-    return (latest - base) / base * 100.0
-
-
-def _derive_metric_samples(
-    aligned: List[Tuple[str, float, float, float]],
-) -> Dict[str, Any]:
-    """
-    Build sample arrays for calibration using aligned series (date intersection).
-    Produces list of (asof_date, value) for each metric.
-    """
-    samples: Dict[str, List[Tuple[str, float]]] = {
-        "tot1_pct": [],
-        "tot5_pct": [],
-        "tot20_pct": [],
-        "accel": [],
-        "spread20": [],
-    }
-
-    n = len(aligned)
-    for i in range(n):
-        d_i, tw_i, tp_i, tot_i = aligned[i]
-
-        # tot1/tot5/tot20
-        tot1: Optional[float] = None
-        tot5: Optional[float] = None
-        tot20: Optional[float] = None
-
-        if i + 1 < n:
-            _, _, _, tot_b = aligned[i + 1]
-            tot1 = _pct_change(tot_i, tot_b)
-            if tot1 is not None:
-                samples["tot1_pct"].append((d_i, float(tot1)))
-
-        if i + 5 < n:
-            _, _, _, tot_b = aligned[i + 5]
-            tot5 = _pct_change(tot_i, tot_b)
-            if tot5 is not None:
-                samples["tot5_pct"].append((d_i, float(tot5)))
-
-        if i + 20 < n:
-            _, _, _, tot_b = aligned[i + 20]
-            tot20 = _pct_change(tot_i, tot_b)
-            if tot20 is not None:
-                samples["tot20_pct"].append((d_i, float(tot20)))
-
-            # spread20 requires twse_20 and tpex_20 at same offsets (aligned guarantees base-date alignment)
-            _, tw_b, tp_b, _ = aligned[i + 20]
-            tw20 = _pct_change(tw_i, tw_b)
-            tp20 = _pct_change(tp_i, tp_b)
-            if (tw20 is not None) and (tp20 is not None):
-                samples["spread20"].append((d_i, float(tp20 - tw20)))
-
-        # accel uses tot1 and tot5 when both exist for this i
-        if (tot1 is not None) and (tot5 is not None):
-            samples["accel"].append((d_i, float(tot1 - (tot5 / 5.0))))
-
-    def _pack(name: str) -> Dict[str, Any]:
-        arr = samples[name]
-        vals = [v for _, v in arr if _is_finite_number(v)]
-        newest = arr[0][0] if arr else None
-        oldest = arr[-1][0] if arr else None
-        return {
-            "n": len(vals),
-            "newest_date": newest,
-            "oldest_date": oldest,
-            "values": vals,  # for calibration use only (not for markdown dumping)
-            "dist": _dist_summary(vals),
-        }
-
-    return {
-        "aligned_rows": len(aligned),
-        "aligned_newest_date": aligned[0][0] if aligned else None,
-        "aligned_oldest_date": aligned[-1][0] if aligned else None,
-        "tot1_pct": _pack("tot1_pct"),
-        "tot5_pct": _pack("tot5_pct"),
-        "tot20_pct": _pack("tot20_pct"),
-        "accel": _pack("accel"),
-        "spread20": _pack("spread20"),
-    }
 
 
 # ----------------- latest.json extractors -----------------
@@ -612,7 +452,6 @@ def head5_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[str, Optional[float]]]
     out: List[Tuple[str, Optional[float]]] = []
     for r in rows[:5]:
         d_iso = _norm_date_iso(r.get("date"))
-        # tolerate alternative balance field names (still deterministic; no guessing)
         b_raw = r.get("balance_yi", None)
         if b_raw is None:
             b_raw = r.get("balance", None)
@@ -854,6 +693,216 @@ def maint_derive_1d_trend(
     return delta, pct_change, note
 
 
+# ----------------- threshold calibration (percentile policy) -----------------
+def _series_index_map(series: List[Tuple[str, float]]) -> Dict[str, int]:
+    return {d: i for i, (d, _) in enumerate(series)}
+
+
+def build_total_series(twse_s: List[Tuple[str, float]], tpex_s: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
+    """
+    Build NEWEST-FIRST total series on intersection dates:
+      total_balance_yi = twse_balance_yi + tpex_balance_yi
+    """
+    tw_map = {d: v for d, v in twse_s}
+    tp_map = {d: v for d, v in tpex_s}
+    common = [d for d in tw_map.keys() if d in tp_map]
+    common.sort(key=lambda x: _parse_date_any(x) or date(1900, 1, 1), reverse=True)
+    return [(d, float(tw_map[d] + tp_map[d])) for d in common]
+
+
+def horizon_pct_series_from_balance_series(series: List[Tuple[str, float]], n: int) -> List[float]:
+    """
+    For each index i where i+n exists, compute pct:
+      pct_i = (v_i - v_{i+n}) / v_{i+n} * 100
+    NEWEST-FIRST output order matches input order, but caller typically uses as distribution only.
+    """
+    out: List[float] = []
+    if len(series) < n + 1:
+        return out
+    for i in range(0, len(series) - n):
+        base = series[i + n][1]
+        if base == 0:
+            continue
+        pct = (series[i][1] - base) / base * 100.0
+        if isinstance(pct, (int, float)):
+            out.append(float(pct))
+    return out
+
+
+def spread20_series_strict_base_match(
+    twse_s: List[Tuple[str, float]],
+    tpex_s: List[Tuple[str, float]],
+    n: int = 20,
+) -> List[float]:
+    """
+    Compute spread20 per date with STRICT base-date match for the sample:
+      spread20(d) = tpex_20d_pct(d) - twse_20d_pct(d)
+    Only include sample if:
+      - date d exists in both series
+      - both have idx+n
+      - base_date_twse == base_date_tpex (strict)
+      - base values non-zero
+    """
+    out: List[float] = []
+    tw_idx = _series_index_map(twse_s)
+    tp_idx = _series_index_map(tpex_s)
+    common_dates = [d for d in tw_idx.keys() if d in tp_idx]
+    common_dates.sort(key=lambda x: _parse_date_any(x) or date(1900, 1, 1), reverse=True)
+
+    for d in common_dates:
+        i_tw = tw_idx[d]
+        i_tp = tp_idx[d]
+        if i_tw + n >= len(twse_s) or i_tp + n >= len(tpex_s):
+            continue
+        base_tw_d, base_tw_v = twse_s[i_tw + n]
+        base_tp_d, base_tp_v = tpex_s[i_tp + n]
+        if base_tw_d != base_tp_d:
+            continue
+        if base_tw_v == 0 or base_tp_v == 0:
+            continue
+        tw_pct = (twse_s[i_tw][1] - base_tw_v) / base_tw_v * 100.0
+        tp_pct = (tpex_s[i_tp][1] - base_tp_v) / base_tp_v * 100.0
+        out.append(float(tp_pct - tw_pct))
+    return out
+
+
+def accel_series_from_total(total_series: List[Tuple[str, float]]) -> List[float]:
+    """
+    accel(d) = total_1d_pct(d) - total_5d_pct(d)/5
+    Uses total_series built on intersection dates.
+    Need at least 6 rows for a sample.
+    """
+    out: List[float] = []
+    if len(total_series) < 6:
+        return out
+    # Precompute pct series on same indexing
+    # pct1 uses base at i+1 ; pct5 uses base at i+5
+    for i in range(0, len(total_series) - 5):
+        base1 = total_series[i + 1][1]
+        base5 = total_series[i + 5][1]
+        if base1 == 0 or base5 == 0:
+            continue
+        pct1 = (total_series[i][1] - base1) / base1 * 100.0
+        pct5 = (total_series[i][1] - base5) / base5 * 100.0
+        accel = float(pct1) - (float(pct5) / 5.0)
+        out.append(accel)
+    return out
+
+
+def calibrate_thresholds(
+    policy: str,
+    calib_min_n: int,
+    pctl_cfg: Dict[str, float],
+    twse_s: List[Tuple[str, float]],
+    tpex_s: List[Tuple[str, float]],
+) -> Tuple[Dict[str, float], Dict[str, Any]]:
+    """
+    Returns:
+      thresholds: dict of float thresholds (always filled; uses fallback if needed)
+      calib_info: audit info with per-threshold status, sample_n, reason, derived_value
+    """
+    thresholds = dict(FIXED_THRESHOLDS)
+    info: Dict[str, Any] = {
+        "policy": policy,
+        "calib_min_n": calib_min_n,
+        "pctl_cfg": pctl_cfg,
+        "fixed_fallback": dict(FIXED_THRESHOLDS),
+        "items": {},  # per threshold
+    }
+
+    if policy != "percentile":
+        # fixed policy: no calibration
+        info["mode"] = "fixed"
+        for k in ("expansion20", "contraction20", "watch1d", "watchspread20", "watchaccel"):
+            info["items"][k] = {
+                "status": "FIXED",
+                "sample_n": None,
+                "percentile": None,
+                "threshold": thresholds[k],
+                "reason": "threshold-policy=fixed",
+            }
+        return thresholds, info
+
+    # percentile policy: derive from history distributions
+    total_s = build_total_series(twse_s, tpex_s)
+
+    dist_tot20 = horizon_pct_series_from_balance_series(total_s, 20)
+    dist_tot1 = horizon_pct_series_from_balance_series(total_s, 1)
+    dist_spread20 = spread20_series_strict_base_match(twse_s, tpex_s, 20)
+    dist_accel = accel_series_from_total(total_s)
+
+    def _derive(name: str, dist: List[float], pctl: float) -> Tuple[float, Dict[str, Any]]:
+        # default fallback
+        fallback = FIXED_THRESHOLDS[name]
+        if not dist:
+            return fallback, {
+                "status": "FALLBACK_FIXED",
+                "sample_n": 0,
+                "percentile": pctl,
+                "threshold": fallback,
+                "reason": "distribution empty",
+            }
+        n = len(dist)
+        if n < calib_min_n:
+            return fallback, {
+                "status": "FALLBACK_FIXED",
+                "sample_n": n,
+                "percentile": pctl,
+                "threshold": fallback,
+                "reason": f"insufficient samples (n={n} < calib_min_n={calib_min_n})",
+            }
+        v = percentile_value(dist, pctl)
+        if v is None:
+            return fallback, {
+                "status": "FALLBACK_FIXED",
+                "sample_n": n,
+                "percentile": pctl,
+                "threshold": fallback,
+                "reason": "percentile computation failed/invalid p",
+            }
+        return float(v), {
+            "status": "CALIBRATED",
+            "sample_n": n,
+            "percentile": pctl,
+            "threshold": float(v),
+            "reason": "OK",
+        }
+
+    # expansion20 / contraction20 from total_20d_pct distribution
+    thr, it = _derive("expansion20", dist_tot20, float(pctl_cfg["expansion20"]))
+    thresholds["expansion20"] = thr
+    info["items"]["expansion20"] = it
+
+    thr, it = _derive("contraction20", dist_tot20, float(pctl_cfg["contraction20"]))
+    thresholds["contraction20"] = thr
+    info["items"]["contraction20"] = it
+
+    # watch1d from total_1d_pct distribution
+    thr, it = _derive("watch1d", dist_tot1, float(pctl_cfg["watch1d"]))
+    thresholds["watch1d"] = thr
+    info["items"]["watch1d"] = it
+
+    # watchspread20 from spread20 distribution
+    thr, it = _derive("watchspread20", dist_spread20, float(pctl_cfg["watchspread20"]))
+    thresholds["watchspread20"] = thr
+    info["items"]["watchspread20"] = it
+
+    # watchaccel from accel distribution
+    thr, it = _derive("watchaccel", dist_accel, float(pctl_cfg["watchaccel"]))
+    thresholds["watchaccel"] = thr
+    info["items"]["watchaccel"] = it
+
+    info["mode"] = "percentile"
+    info["distributions"] = {
+        "total_series_rows": len(total_s),
+        "dist_total_20d_pct_n": len(dist_tot20),
+        "dist_total_1d_pct_n": len(dist_tot1),
+        "dist_spread20_n": len(dist_spread20),
+        "dist_accel_n": len(dist_accel),
+    }
+    return thresholds, info
+
+
 # ----------------- main -----------------
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -865,23 +914,18 @@ def main() -> None:
     ap.add_argument("--maint-hist", default="taiwan_margin_cache/maint_ratio_history.json")
     ap.add_argument("--resonance-policy", choices=["strict", "latest"], default="latest")
 
-    # Added: machine-readable output for unified dashboard (no logic change)
-    ap.add_argument("--signals-out", default="taiwan_margin_cache/signals_latest.json")
-
-    # Added: threshold calibration (audit-safe; optional)
-    ap.add_argument("--threshold-policy", choices=["fixed", "percentile"], default="fixed")
+    # Threshold calibration args (DEFAULTS = your corrected values)
+    ap.add_argument("--threshold-policy", choices=["fixed", "percentile"], default="percentile")
     ap.add_argument("--calib-min-n", type=int, default=60)
 
-    ap.add_argument("--pctl-expansion20", type=float, default=None)    # tot20_pct >= TH
-    ap.add_argument("--pctl-contraction20", type=float, default=None)  # tot20_pct <= TH
+    ap.add_argument("--pctl-expansion20", type=float, default=90.0)
+    ap.add_argument("--pctl-contraction20", type=float, default=10.0)
+    ap.add_argument("--pctl-watch1d", type=float, default=90.0)
+    ap.add_argument("--pctl-watchspread20", type=float, default=90.0)
+    ap.add_argument("--pctl-watchaccel", type=float, default=90.0)
 
-    ap.add_argument("--pctl-watch1d", type=float, default=None)        # tot1_pct >= TH
-    ap.add_argument("--pctl-watchspread20", type=float, default=None)  # spread20 >= TH
-    ap.add_argument("--pctl-watchaccel", type=float, default=None)     # accel >= TH
-
-    ap.add_argument("--pctl-cool1d", type=float, default=None)         # tot1_pct < TH (cool-down)
-    ap.add_argument("--pctl-coolaccel", type=float, default=None)      # accel <= TH (cool-down)
-
+    # Added: machine-readable output for unified dashboard (no logic change)
+    ap.add_argument("--signals-out", default="taiwan_margin_cache/signals_latest.json")
     args = ap.parse_args()
 
     latest = read_json(args.latest)
@@ -930,6 +974,7 @@ def main() -> None:
     tpex_head_dates = _row_dates_iso(tpex_rows, 3)
     tpex_tail_dates = _row_dates_iso_tail(tpex_rows, 3)
 
+    # Compute current horizons (latest point only)
     tw1 = calc_horizon(twse_s, 1)
     tw5 = calc_horizon(twse_s, 5)
     tw20 = calc_horizon(twse_s, 20)
@@ -945,147 +990,30 @@ def main() -> None:
     accel = calc_accel(tot1.get("pct"), tot5.get("pct"))
     spread20 = calc_spread20(tp20.get("pct"), tw20.get("pct"))
 
-    # ---------- Thresholds (fixed defaults) ----------
-    fixed_th: Dict[str, float] = {
-        "exp20": 8.0,
-        "contr20": -8.0,
-        "watch1d": 0.8,
-        "watch_spread20": 3.0,
-        "watch_accel": 0.25,
-        "cool_accel": 0.0,
-        "cool_1d": 0.3,
+    # -------- threshold calibration (percentile / fixed) --------
+    pctl_cfg = {
+        "expansion20": float(args.pctl_expansion20),
+        "contraction20": float(args.pctl_contraction20),
+        "watch1d": float(args.pctl_watch1d),
+        "watchspread20": float(args.pctl_watchspread20),
+        "watchaccel": float(args.pctl_watchaccel),
     }
+    thresholds, calib_info = calibrate_thresholds(
+        policy=str(args.threshold_policy),
+        calib_min_n=int(args.calib_min_n),
+        pctl_cfg=pctl_cfg,
+        twse_s=twse_s,
+        tpex_s=tpex_s,
+    )
 
-    # ---------- Threshold calibration (optional; percentile -> threshold) ----------
-    threshold_policy = str(args.threshold_policy)
-    calib_min_n = int(args.calib_min_n) if int(args.calib_min_n) > 0 else 60
-
-    aligned = _build_aligned_series(twse_s, tpex_s)
-    calib_samples = _derive_metric_samples(aligned) if aligned else {
-        "aligned_rows": 0,
-        "aligned_newest_date": None,
-        "aligned_oldest_date": None,
-        "tot1_pct": {"n": 0, "newest_date": None, "oldest_date": None, "values": [], "dist": _dist_summary([])},
-        "tot5_pct": {"n": 0, "newest_date": None, "oldest_date": None, "values": [], "dist": _dist_summary([])},
-        "tot20_pct": {"n": 0, "newest_date": None, "oldest_date": None, "values": [], "dist": _dist_summary([])},
-        "accel": {"n": 0, "newest_date": None, "oldest_date": None, "values": [], "dist": _dist_summary([])},
-        "spread20": {"n": 0, "newest_date": None, "oldest_date": None, "values": [], "dist": _dist_summary([])},
-    }
-
-    calib_meta: Dict[str, Any] = {
-        "policy": threshold_policy,
-        "calib_min_n": calib_min_n,
-        "aligned_rows": calib_samples.get("aligned_rows"),
-        "aligned_newest_date": calib_samples.get("aligned_newest_date"),
-        "aligned_oldest_date": calib_samples.get("aligned_oldest_date"),
-        "targets": {
-            "pctl_expansion20": args.pctl_expansion20,
-            "pctl_contraction20": args.pctl_contraction20,
-            "pctl_watch1d": args.pctl_watch1d,
-            "pctl_watchspread20": args.pctl_watchspread20,
-            "pctl_watchaccel": args.pctl_watchaccel,
-            "pctl_cool1d": args.pctl_cool1d,
-            "pctl_coolaccel": args.pctl_coolaccel,
-        },
-        "per_threshold": {},
-        "samples": {
-            "tot20_pct": {k: calib_samples["tot20_pct"].get(k) for k in ("n", "newest_date", "oldest_date", "dist")},
-            "tot1_pct": {k: calib_samples["tot1_pct"].get(k) for k in ("n", "newest_date", "oldest_date", "dist")},
-            "spread20": {k: calib_samples["spread20"].get(k) for k in ("n", "newest_date", "oldest_date", "dist")},
-            "accel": {k: calib_samples["accel"].get(k) for k in ("n", "newest_date", "oldest_date", "dist")},
-        },
-    }
-
-    used_th = dict(fixed_th)
-    if threshold_policy == "percentile":
-        # tot20 expansion / contraction thresholds
-        v_tot20 = calib_samples["tot20_pct"].get("values", [])
-        used_th["exp20"], m1 = _calibrate_threshold(
-            name="exp20",
-            values=v_tot20,
-            target_pct=args.pctl_expansion20,
-            fixed_value=fixed_th["exp20"],
-            min_n=calib_min_n,
-        )
-        calib_meta["per_threshold"]["exp20"] = m1
-
-        used_th["contr20"], m2 = _calibrate_threshold(
-            name="contr20",
-            values=v_tot20,
-            target_pct=args.pctl_contraction20,
-            fixed_value=fixed_th["contr20"],
-            min_n=calib_min_n,
-        )
-        calib_meta["per_threshold"]["contr20"] = m2
-
-        # watch thresholds
-        used_th["watch1d"], m3 = _calibrate_threshold(
-            name="watch1d",
-            values=calib_samples["tot1_pct"].get("values", []),
-            target_pct=args.pctl_watch1d,
-            fixed_value=fixed_th["watch1d"],
-            min_n=calib_min_n,
-        )
-        calib_meta["per_threshold"]["watch1d"] = m3
-
-        used_th["watch_spread20"], m4 = _calibrate_threshold(
-            name="watch_spread20",
-            values=calib_samples["spread20"].get("values", []),
-            target_pct=args.pctl_watchspread20,
-            fixed_value=fixed_th["watch_spread20"],
-            min_n=calib_min_n,
-        )
-        calib_meta["per_threshold"]["watch_spread20"] = m4
-
-        used_th["watch_accel"], m5 = _calibrate_threshold(
-            name="watch_accel",
-            values=calib_samples["accel"].get("values", []),
-            target_pct=args.pctl_watchaccel,
-            fixed_value=fixed_th["watch_accel"],
-            min_n=calib_min_n,
-        )
-        calib_meta["per_threshold"]["watch_accel"] = m5
-
-        # cool-down thresholds (optional)
-        used_th["cool_1d"], m6 = _calibrate_threshold(
-            name="cool_1d",
-            values=calib_samples["tot1_pct"].get("values", []),
-            target_pct=args.pctl_cool1d,
-            fixed_value=fixed_th["cool_1d"],
-            min_n=calib_min_n,
-        )
-        calib_meta["per_threshold"]["cool_1d"] = m6
-
-        used_th["cool_accel"], m7 = _calibrate_threshold(
-            name="cool_accel",
-            values=calib_samples["accel"].get("values", []),
-            target_pct=args.pctl_coolaccel,
-            fixed_value=fixed_th["cool_accel"],
-            min_n=calib_min_n,
-        )
-        calib_meta["per_threshold"]["cool_accel"] = m7
-    else:
-        # fixed policy: explicitly record
-        calib_meta["per_threshold"] = {
-            k: {
-                "name": k,
-                "policy": "fixed",
-                "fixed_value": fixed_th[k],
-                "used_value": fixed_th[k],
-                "status": "FIXED_POLICY",
-                "reason": "policy=fixed",
-            }
-            for k in fixed_th.keys()
-        }
-
-    # ---------- Determine signal using used thresholds ----------
+    # Determine state/signal using calibrated thresholds
     state_label, margin_signal, rationale = determine_signal(
         tot20_pct=tot20.get("pct"),
         tot1_pct=tot1.get("pct"),
         tot5_pct=tot5.get("pct"),
         accel=accel,
         spread20=spread20,
-        th=used_th,
+        thresholds=thresholds,
     )
 
     # ---------- Margin data quality checks (these determine margin_quality) ----------
@@ -1269,6 +1197,37 @@ def main() -> None:
     md.append(f"- 狀態：{state_label}｜信號：{margin_signal}｜資料品質：{margin_quality}")
     md.append(f"  - rationale: {rationale}")
 
+    # threshold policy summary (audit)
+    md.append(f"- threshold_policy: {args.threshold_policy}｜calib_min_n={args.calib_min_n}")
+    md.append(
+        "  - percentiles: "
+        f"expansion20={args.pctl_expansion20}, "
+        f"contraction20={args.pctl_contraction20}, "
+        f"watch1d={args.pctl_watch1d}, "
+        f"watchspread20={args.pctl_watchspread20}, "
+        f"watchaccel={args.pctl_watchaccel}"
+    )
+    md.append(
+        "  - thresholds_used: "
+        f"expansion20={fmt_pct(thresholds['expansion20'],4)}, "
+        f"contraction20={fmt_pct(thresholds['contraction20'],4)}, "
+        f"watch1d={fmt_pct(thresholds['watch1d'],4)}, "
+        f"watchspread20={fmt_pct(thresholds['watchspread20'],4)}, "
+        f"watchaccel={fmt_pct(thresholds['watchaccel'],4)}"
+    )
+    # per-threshold calibration status (compact)
+    if isinstance(calib_info, dict) and isinstance(calib_info.get("items"), dict):
+        items_info = calib_info["items"]
+        md.append("  - calibration_status:")
+        for k in ("expansion20", "contraction20", "watch1d", "watchspread20", "watchaccel"):
+            it = items_info.get(k, {})
+            md.append(
+                f"    - {k}: status={it.get('status','NA')}, "
+                f"sample_n={it.get('sample_n','NA')}, "
+                f"threshold={it.get('threshold','NA')}, "
+                f"reason={it.get('reason','NA')}"
+            )
+
     if has_top_quality:
         md.append(f"- 上游資料狀態（latest.json）：confidence={top_conf or 'NA'}｜fetch_status={top_fetch or 'NA'}｜dq_reason={top_dq or 'NA'}")
     else:
@@ -1284,59 +1243,24 @@ def main() -> None:
         md.append(f"  - roll25_window_note: {roll25_window_note}")
     md.append("")
 
-    md.append("## 1.1) 判定標準（本 dashboard 內建規則；顯示『實際採用門檻』）")
-    md.append(f"- threshold_policy: {threshold_policy}")
-    md.append(
-        "- thresholds_used: "
-        f"exp20={fmt_num(used_th['exp20'],4)}, "
-        f"contr20={fmt_num(used_th['contr20'],4)}, "
-        f"watch1d={fmt_num(used_th['watch1d'],4)}, "
-        f"watch_spread20={fmt_num(used_th['watch_spread20'],4)}, "
-        f"watch_accel={fmt_num(used_th['watch_accel'],4)}, "
-        f"cool_accel={fmt_num(used_th['cool_accel'],4)}, "
-        f"cool_1d={fmt_num(used_th['cool_1d'],4)}"
-    )
+    md.append("## 1.1) 判定標準（本 dashboard 內建規則）")
+    md.append("### 0) 門檻來源")
+    md.append(f"- threshold_policy={args.threshold_policy}（percentile 若樣本不足會自動 fallback 到 fixed，並在上方 calibration_status 註明）")
+    md.append(f"- fixed_baseline: expansion20={FIXED_THRESHOLDS['expansion20']}, contraction20={FIXED_THRESHOLDS['contraction20']}, watch1d={FIXED_THRESHOLDS['watch1d']}, watchspread20={FIXED_THRESHOLDS['watchspread20']}, watchaccel={FIXED_THRESHOLDS['watchaccel']}")
+    md.append(f"- thresholds_used: expansion20={fmt_pct(thresholds['expansion20'],4)}, contraction20={fmt_pct(thresholds['contraction20'],4)}, watch1d={fmt_pct(thresholds['watch1d'],4)}, watchspread20={fmt_pct(thresholds['watchspread20'],4)}, watchaccel={fmt_pct(thresholds['watchaccel'],4)}")
     md.append("")
+
     md.append("### 1) WATCH（升溫）")
-    md.append(
-        f"- 條件：20D% ≥ {fmt_num(used_th['exp20'],4)} 且 "
-        f"(1D% ≥ {fmt_num(used_th['watch1d'],4)} 或 "
-        f"Spread20 ≥ {fmt_num(used_th['watch_spread20'],4)} 或 "
-        f"Accel ≥ {fmt_num(used_th['watch_accel'],4)})"
-    )
+    md.append("- 條件：20D% ≥ thr_expansion20 且 (1D% ≥ thr_watch1d 或 Spread20 ≥ thr_watchspread20 或 Accel ≥ thr_watchaccel)")
     md.append("- 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。")
     md.append("")
     md.append("### 2) ALERT（疑似去槓桿）")
-    md.append(f"- 條件：20D% ≥ {fmt_num(used_th['exp20'],4)} 且 1D% < 0 且 5D% < 0")
+    md.append("- 條件：20D% ≥ thr_expansion20 且 1D% < 0 且 5D% < 0")
     md.append("- 行動：優先看『是否出現連續負值』，因為可能開始踩踏。")
     md.append("")
     md.append("### 3) 解除 WATCH（降溫）")
-    md.append(
-        f"- 條件：20D% 仍高（≥ {fmt_num(used_th['exp20'],4)}），但 "
-        f"Accel ≤ {fmt_num(used_th['cool_accel'],4)} 且 1D% < {fmt_num(used_th['cool_1d'],4)}（需連 2–3 次確認）"
-    )
+    md.append("- 條件：20D% 仍高，但 Accel ≤ 0 且 1D% 回到 < 0.3（需連 2–3 次確認；此段仍採固定 0.3）")
     md.append("- 行動：代表短線槓桿加速結束，回到『擴張但不加速』。")
-    md.append("")
-
-    md.append("## 1.2) 門檻校準（目標百分位 → 反推門檻值；資料不足則明確回退固定門檻）")
-    md.append(f"- threshold_policy: {threshold_policy}")
-    md.append(f"- calib_min_n: {calib_min_n}")
-    md.append(
-        f"- aligned_date_intersection_rows: {calib_meta.get('aligned_rows','NA')} "
-        f"({calib_meta.get('aligned_newest_date','NA')} .. {calib_meta.get('aligned_oldest_date','NA')})"
-    )
-    md.append("- targets (percentiles): " + str(calib_meta.get("targets", {})))
-    if threshold_policy == "percentile":
-        # show per-threshold status succinctly
-        for k in ("exp20", "contr20", "watch1d", "watch_spread20", "watch_accel", "cool_accel", "cool_1d"):
-            m = calib_meta.get("per_threshold", {}).get(k, {})
-            md.append(
-                f"- {k}: status={m.get('status','NA')}｜target_pct={m.get('target_pct','NA')}｜"
-                f"used={fmt_num(m.get('used_value', None), 6)}｜fixed={fmt_num(m.get('fixed_value', None), 6)}｜"
-                f"n={_get(_get(m,'dist',{}),'n','NA')}｜reason={m.get('reason','NA')}"
-            )
-    else:
-        md.append("- policy=fixed：不做校準（此段僅做紀錄）")
     md.append("")
 
     md.append("## 2) 資料")
@@ -1505,10 +1429,9 @@ def main() -> None:
     md.append("- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。")
     md.append(f"- resonance_policy={resonance_policy}：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。")
     md.append("- maint_ratio 為 proxy（display-only）：僅看趨勢與變化（Δ），不得用 proxy 絕對水位做門檻判斷。")
-    md.append("- threshold calibration：僅在 --threshold-policy percentile 時啟用；資料不足或未提供 target_pct 會明確回退 fixed。")
     md.append("")
 
-    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint/校準僅供對照）")
+    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）")
     md.append(f"- Check-0 latest.json top-level quality：{mark_note('field may be absent; does not affect margin_quality')}")
     md.append(line_check("Check-1 TWSE meta_date==series[0].date", "PASS" if c1_tw_ok else "FAIL"))
     md.append(line_check("Check-1 TPEX meta_date==series[0].date", "PASS" if c1_tp_ok else "FAIL"))
@@ -1527,16 +1450,6 @@ def main() -> None:
     md.append(line_check("Check-9 maint_ratio history readable（info）", "PASS" if maint_hist_ok else "NOTE", "OK" if maint_hist_ok else (maint_hist_err or "maint_hist missing")))
     md.append(line_check("Check-10 maint latest vs history[0] date（info）", c10_status, c10_msg))
     md.append(line_check("Check-11 maint history head5 dates 嚴格遞減且無重複（info）", c11_status, c11_msg))
-
-    # Check-12: calibration (info-only)
-    if threshold_policy == "percentile":
-        # if ALL are fallback fixed, mark NOTE
-        statuses = [calib_meta.get("per_threshold", {}).get(k, {}).get("status") for k in ("exp20", "contr20", "watch1d", "watch_spread20", "watch_accel")]
-        any_calibrated = any(s == "CALIBRATED" for s in statuses if s)
-        md.append(line_check("Check-12 threshold calibration applied（info）", "PASS" if any_calibrated else "NOTE",
-                             "some thresholds calibrated" if any_calibrated else "no thresholds calibrated (all fallback fixed)"))
-    else:
-        md.append(line_check("Check-12 threshold calibration applied（info）", "NOTE", "policy=fixed"))
 
     md.append("")
     generated_at_utc = latest.get("generated_at_utc", None) if isinstance(latest, dict) else None
@@ -1562,7 +1475,6 @@ def main() -> None:
         "module": "taiwan_margin_financing",
         "generated_at_utc": generated_at_utc,
         "generated_at_local": latest.get("generated_at_local", None) if isinstance(latest, dict) else None,
-        # compact summary keys (likely what unified dashboard wants)
         "data_date": twse_meta_date,
         "state": state_label,
         "signal": margin_signal,
@@ -1573,7 +1485,20 @@ def main() -> None:
         "resonance_confidence": resonance_confidence,
         "resonance_code": resonance_code,
         "resonance_note": resonance_note,
-        # upstream status (pass-through)
+        "thresholds": {
+            "policy": args.threshold_policy,
+            "calib_min_n": args.calib_min_n,
+            "percentiles": {
+                "expansion20": args.pctl_expansion20,
+                "contraction20": args.pctl_contraction20,
+                "watch1d": args.pctl_watch1d,
+                "watchspread20": args.pctl_watchspread20,
+                "watchaccel": args.pctl_watchaccel,
+            },
+            "fixed_baseline": dict(FIXED_THRESHOLDS),
+            "used": dict(thresholds),
+            "calibration": calib_info,
+        },
         "upstream": {
             "latest_json": {
                 "confidence": top_conf,
@@ -1582,14 +1507,6 @@ def main() -> None:
                 "has_top_quality": has_top_quality,
             }
         },
-        # NEW: thresholds + calibration meta (audit-only; deterministic)
-        "thresholds": {
-            "policy": threshold_policy,
-            "fixed": fixed_th,
-            "used": used_th,
-            "calibration": calib_meta,
-        },
-        # core computed numbers (for unified dashboard and auditing)
         "margin": {
             "twse_meta_date": twse_meta_date,
             "tpex_meta_date": tpex_meta_date,
@@ -1683,24 +1600,21 @@ def main() -> None:
                 "check_11_status": c11_status,
                 "check_11_msg": c11_msg,
             },
-            "thresholds": {
-                "policy": threshold_policy,
-            },
         },
         "inputs": {
             "latest_path": args.latest,
             "history_path": args.history,
             "out_md_path": args.out,
             "signals_out_path": args.signals_out,
-            "resonance_policy": resonance_policy,
-            "threshold_policy": threshold_policy,
-            "calib_min_n": calib_min_n,
+            "resonance_policy": args.resonance_policy,
+            "threshold_policy": args.threshold_policy,
+            "calib_min_n": args.calib_min_n,
+            "pctl_cfg": pctl_cfg,
         },
-        # quick sanity snapshot to help detect page mixups without parsing markdown
         "snapshots": {
             "twse_rows": {
-                "rows": twse_rows_latest_table,      # backward-compatible: latest table rows
-                "rows_series": twse_rows_series,     # new explicit metric
+                "rows": twse_rows_latest_table,
+                "rows_series": twse_rows_series,
                 "head_dates": twse_head_dates,
                 "tail_dates": twse_tail_dates,
             },
