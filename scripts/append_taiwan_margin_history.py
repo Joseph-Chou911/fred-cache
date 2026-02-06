@@ -5,17 +5,15 @@ Append / seed taiwan_margin_cache/history.json from latest.json (audit-first, sa
 
 Key goals:
 - Date canonicalization: accept YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD => canonical YYYY-MM-DD.
-- NO GUESSING: if a date can't be safely parsed => treat as invalid and SKIP append/seed for that row.
-- Protect existing history.json: if latest is missing/invalid (e.g., fetch failed) => do NOT overwrite history.
+- STRICT NO GUESSING: if a date can't be safely parsed => invalid => skip for append/seed/dedup key.
+- Protect existing history.json: if latest is missing/invalid => do NOT overwrite history.
 - Dedup key uses canonical date: (market, canonical_data_date).
-- Keep max_items overall across markets (by (canonical_data_date, run_ts_utc)).
+- Keep max_items overall across markets.
 
-Behavior changes vs previous:
-1) We validate latest.json structure and require at least one market has an appendable row (date == data_date).
-   If not, we do not write history at all (to avoid wiping on fetch failures).
-2) We keep non-canonical items already in history, but:
-   - they are not used for dedup keys (since we can't safely compare dates),
-   - they are kept and recorded in audit.warnings so you can clean them later.
+Design notes:
+- Legacy items lacking data_date_canon are "upgraded" if (and only if) data_date is safely canonicalizable.
+- Non-canonical items are preserved (up to a cap) for audit/cleanup, but won't crowd out canonical latest items.
+- audit.warnings is bounded to avoid unbounded growth.
 """
 
 from __future__ import annotations
@@ -25,8 +23,15 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as _date
 from typing import Any, Dict, List, Optional, Tuple
+
+
+# ----------------- constants -----------------
+
+MAX_WARNINGS = 120  # keep last N warnings to avoid file bloat
+NONCANON_KEEP_CAP_MIN = 20
+NONCANON_KEEP_CAP_MAX = 120  # absolute cap on non-canonical items kept after trimming
 
 
 # ----------------- basics -----------------
@@ -45,7 +50,10 @@ def write_json_atomic(path: str, obj: Any) -> None:
     Atomic-ish write: write to temp then replace.
     Avoid partial writes that could corrupt history.json.
     """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    dirpath = os.path.dirname(path)
+    if dirpath:
+        os.makedirs(dirpath, exist_ok=True)
+
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
@@ -56,7 +64,20 @@ def eprint(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-# ----------------- date canonicalization (NO GUESSING) -----------------
+def cap_warnings(audit: Dict[str, Any]) -> None:
+    """
+    Bound warnings list size to avoid unbounded growth.
+    Keep most recent MAX_WARNINGS entries.
+    """
+    w = audit.get("warnings")
+    if not isinstance(w, list):
+        audit["warnings"] = []
+        return
+    if len(w) > MAX_WARNINGS:
+        audit["warnings"] = w[-MAX_WARNINGS:]
+
+
+# ----------------- date canonicalization (STRICT, NO GUESSING) -----------------
 
 _DATE_RE = re.compile(r"^\s*(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\s*$")
 
@@ -64,7 +85,8 @@ _DATE_RE = re.compile(r"^\s*(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\s*$")
 def canon_ymd(s: Any) -> Optional[str]:
     """
     Canonicalize YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD -> YYYY-MM-DD
-    If cannot safely parse -> None (NO GUESSING, NO MM/DD inference here).
+    STRICT: validate using datetime.date to catch leap years & invalid month-ends.
+    If cannot safely parse -> None (NO GUESSING, NO MM/DD inference).
     """
     if s is None:
         return None
@@ -72,21 +94,24 @@ def canon_ymd(s: Any) -> Optional[str]:
     m = _DATE_RE.match(ss)
     if not m:
         return None
-    y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    if not (1 <= mo <= 12 and 1 <= d <= 31):
+    try:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        _date(y, mo, d)  # strict validation (leap year, month-end)
+        return f"{y:04d}-{mo:02d}-{d:02d}"
+    except Exception:
         return None
-    return f"{y:04d}-{mo:02d}-{d:02d}"
 
 
 # ----------------- history load -----------------
 
 def load_or_empty_history(path: str) -> Dict[str, Any]:
+    run_ts = now_utc_iso()
     base = {
         "schema_version": "taiwan_margin_financing_history_v1",
-        "generated_at_utc": now_utc_iso(),
+        "generated_at_utc": run_ts,
         "items": [],
         "audit": {
-            "generated_at_utc": now_utc_iso(),
+            "generated_at_utc": run_ts,
             "warnings": [],
             "stats": {},
         },
@@ -104,7 +129,7 @@ def load_or_empty_history(path: str) -> Dict[str, Any]:
 
         # Ensure audit exists (do not destroy existing audit)
         if "audit" not in obj or not isinstance(obj.get("audit"), dict):
-            obj["audit"] = {"generated_at_utc": now_utc_iso(), "warnings": [], "stats": {}}
+            obj["audit"] = {"generated_at_utc": run_ts, "warnings": [], "stats": {}}
         if "warnings" not in obj["audit"] or not isinstance(obj["audit"].get("warnings"), list):
             obj["audit"]["warnings"] = []
         if "stats" not in obj["audit"] or not isinstance(obj["audit"].get("stats"), dict):
@@ -113,13 +138,13 @@ def load_or_empty_history(path: str) -> Dict[str, Any]:
         return obj
     except Exception as e:
         base["audit"]["warnings"].append(f"history load failed: {type(e).__name__}: {e}")
+        cap_warnings(base["audit"])
         return base
 
 
 # ----------------- item helpers -----------------
 
 def make_item(run_ts_utc: str, market: str, series_obj: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
-    # canonicalize date if possible; keep both raw & canonical for auditability
     raw_date = row.get("date")
     can_date = canon_ymd(raw_date)
     return {
@@ -127,7 +152,6 @@ def make_item(run_ts_utc: str, market: str, series_obj: Dict[str, Any], row: Dic
         "market": market,
         "source": series_obj.get("source"),
         "source_url": series_obj.get("source_url"),
-        # data_date is stored as canonical if possible; else raw (but we mark it)
         "data_date": can_date if can_date else (str(raw_date) if raw_date is not None else None),
         "data_date_canon": can_date if can_date else None,
         "balance_yi": row.get("balance_yi"),
@@ -137,8 +161,7 @@ def make_item(run_ts_utc: str, market: str, series_obj: Dict[str, Any], row: Dic
 
 def is_valid_item_for_dedup(it: Dict[str, Any]) -> bool:
     """
-    An item is "dedup-eligible" only if market is present and canonical date exists.
-    We do NOT guess canonical date.
+    Dedup-eligible only if market present and canonical date exists.
     """
     mkt = str(it.get("market") or "").strip()
     dd = it.get("data_date_canon")
@@ -172,31 +195,78 @@ def upsert(items: List[Dict[str, Any]], new_item: Dict[str, Any], audit: Dict[st
     items.append(new_item)
 
 
-def has_market(items: List[Dict[str, Any]], market: str) -> bool:
+def has_valid_market(items: List[Dict[str, Any]], market: str) -> bool:
+    """
+    Seed decision helper:
+    Consider a market as 'having data' if any item:
+      - matches market
+      - has data_date_canon OR data_date is safely canonicalizable (NO GUESSING)
+    This avoids seeding when only legacy-but-upgradable items exist.
+    """
     for it in items:
-        if isinstance(it, dict) and it.get("market") == market:
+        if not isinstance(it, dict):
+            continue
+        if it.get("market") != market:
+            continue
+        if it.get("data_date_canon"):
+            return True
+        if canon_ymd(it.get("data_date")):
             return True
     return False
 
 
-def find_row_by_date(rows: List[Dict[str, Any]], dd_canon: str) -> Optional[Dict[str, Any]]:
+def find_row_by_date(rows: List[Dict[str, Any]], dd_canon: str, audit: Dict[str, Any], market: str) -> Optional[Dict[str, Any]]:
     """
-    Find the row where canon(row.date) == dd_canon.
-    NO GUESSING: if row.date isn't canon-able, it won't match.
+    Find row(s) where canon(row.date) == dd_canon.
+    Warn if multiple matches; use the first deterministically.
     """
+    matches: List[Dict[str, Any]] = []
     for r in rows:
         if not isinstance(r, dict):
             continue
         if canon_ymd(r.get("date")) == dd_canon:
-            return r
-    return None
+            matches.append(r)
+
+    if not matches:
+        return None
+
+    if len(matches) > 1:
+        audit["warnings"].append(f"latest: {market} has multiple rows for data_date={dd_canon}; using first")
+
+    return matches[0]
+
+
+# ----------------- legacy upgrade (root-cause fix) -----------------
+
+def upgrade_legacy_items(items: List[Dict[str, Any]], audit: Dict[str, Any]) -> int:
+    """
+    Upgrade legacy items:
+    - If data_date_canon is missing BUT data_date is safely canonicalizable,
+      then set data_date_canon and normalize data_date to canonical.
+    NO GUESSING.
+    """
+    upgraded = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if it.get("data_date_canon"):
+            continue
+        can = canon_ymd(it.get("data_date"))
+        if can:
+            it["data_date_canon"] = can
+            it["data_date"] = can
+            upgraded += 1
+
+    if upgraded:
+        audit["warnings"].append(f"normalize: upgraded {upgraded} legacy items by canonicalizing data_date")
+    return upgraded
 
 
 def normalize_dedup_keep_latest(items: List[Dict[str, Any]], audit: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Enforce uniqueness for dedup-eligible items by (market, data_date_canon).
-    Keep item with max run_ts_utc.
-    Keep non-dedup-eligible items untouched, but record a warning count.
+    Keep item with max run_ts_utc (ISO8601 sortable).
+    Keep non-dedup-eligible items as passthrough, but record a warning count.
     """
     best: Dict[Tuple[str, str], Dict[str, Any]] = {}
     passthrough: List[Dict[str, Any]] = []
@@ -211,39 +281,100 @@ def normalize_dedup_keep_latest(items: List[Dict[str, Any]], audit: Dict[str, An
             passthrough.append(it)
             continue
 
-        if k not in best:
+        prev = best.get(k)
+        if prev is None:
             best[k] = it
         else:
-            prev = best[k]
             if str(it.get("run_ts_utc") or "") >= str(prev.get("run_ts_utc") or ""):
                 best[k] = it
 
     if noncanon_cnt:
         audit["warnings"].append(f"normalize: kept {noncanon_cnt} non-canonical-date items without dedup")
 
-    # Return combined: canonical deduped + passthrough (kept)
     return list(best.values()) + passthrough
 
 
-def sort_key(it: Dict[str, Any]) -> Tuple[str, str]:
+# ----------------- trimming policy (avoid accidental legacy wipe) -----------------
+
+def _noncanon_sort_key(it: Dict[str, Any]) -> Tuple[str, str, str]:
     """
-    Sort by canonical date then run_ts_utc. Non-canonical dates sort first (empty key).
-    We keep deterministic output while avoiding wrong ordering assumptions.
+    Deterministic ordering for non-canonical items:
+    sort by run_ts_utc, then market, then data_date (string).
+    """
+    run_ts = str(it.get("run_ts_utc") or "")
+    mkt = str(it.get("market") or "")
+    dd = str(it.get("data_date") or "")
+    return (run_ts, mkt, dd)
+
+
+def _canon_sort_key(it: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Canonical items can be ordered by (data_date_canon, run_ts_utc).
     """
     dd = str(it.get("data_date_canon") or "")
     run_ts = str(it.get("run_ts_utc") or "")
     return (dd, run_ts)
 
 
+def trim_items(items: List[Dict[str, Any]], max_items: int, audit: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Keep max_items overall, with controlled retention of non-canonical items:
+    - Keep up to noncanon_cap non-canonical items (latest by run_ts_utc), so legacy isn't silently wiped,
+      but also won't crowd out canonical latest data.
+    - Remaining capacity goes to canonical items (latest by date/run_ts).
+    """
+    canon: List[Dict[str, Any]] = []
+    noncanon: List[Dict[str, Any]] = []
+
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if it.get("data_date_canon"):
+            canon.append(it)
+        else:
+            noncanon.append(it)
+
+    # Determine cap for non-canonical retention
+    noncanon_cap = max(NONCANON_KEEP_CAP_MIN, min(NONCANON_KEEP_CAP_MAX, max_items // 4))
+    noncanon.sort(key=_noncanon_sort_key)
+    if len(noncanon) > noncanon_cap:
+        dropped = len(noncanon) - noncanon_cap
+        audit["warnings"].append(f"trim: dropped {dropped} non-canonical items (cap={noncanon_cap})")
+        noncanon = noncanon[-noncanon_cap:]
+
+    # Remaining capacity for canonical items
+    remain = max_items - len(noncanon)
+    if remain < 0:
+        # This should be rare due to cap, but handle defensively
+        audit["warnings"].append("trim: non-canonical items exceed max_items after cap; truncating further by run_ts_utc")
+        noncanon.sort(key=_noncanon_sort_key)
+        noncanon = noncanon[-max_items:]
+        return noncanon
+
+    canon.sort(key=_canon_sort_key)
+    if len(canon) > remain:
+        dropped = len(canon) - remain
+        audit["warnings"].append(f"trim: dropped {dropped} canonical items to fit max_items={max_items}")
+        canon = canon[-remain:]
+
+    # Final deterministic order: canonical first (time-ordered), then non-canonical (time-ordered)
+    out = canon + noncanon
+    return out
+
+
 # ----------------- latest validation -----------------
 
-def extract_appendable_row(latest: Dict[str, Any], market: str, audit: Dict[str, Any]) -> Optional[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
+def extract_appendable_row(
+    latest: Dict[str, Any],
+    market: str,
+    audit: Dict[str, Any],
+) -> Optional[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
     """
     Return (dd_canon, series_obj, row) if we can safely append for this market.
     Conditions:
     - series exists and is dict
     - data_date exists and is canon-able
-    - rows is list and contains a row whose canon(date)==dd_canon
+    - rows contains a row whose canon(date)==dd_canon (warn if multiple)
     - row has balance_yi not None
     """
     series_all = latest.get("series") or {}
@@ -267,7 +398,7 @@ def extract_appendable_row(latest: Dict[str, Any], market: str, audit: Dict[str,
         audit["warnings"].append(f"latest: {market} rows missing/empty")
         return None
 
-    row = find_row_by_date([r for r in rows if isinstance(r, dict)], dd_canon)
+    row = find_row_by_date([r for r in rows if isinstance(r, dict)], dd_canon, audit, market)
     if row is None:
         audit["warnings"].append(f"latest: {market} cannot find row matching data_date={dd_canon} (no guessing)")
         return None
@@ -311,8 +442,8 @@ def main() -> None:
             raise ValueError("latest is not a dict")
     except Exception as e:
         audit["warnings"].append(f"latest load failed: {type(e).__name__}: {e}")
+        cap_warnings(audit)
         eprint(f"[append_history] latest load failed -> keep history unchanged: {type(e).__name__}: {e}")
-        # Do not write history to avoid overwriting with empty.
         return
 
     # Determine if we have at least one market that is appendable.
@@ -323,19 +454,18 @@ def main() -> None:
             appendable[mkt] = got
 
     if not appendable:
-        # This is the critical "do not destroy history" protection.
-        # If fetch failed, latest often has empty rows/data_date None -> we skip writing.
         audit["warnings"].append("latest has no appendable markets; history NOT updated to avoid wipe")
+        cap_warnings(audit)
         eprint("[append_history] no appendable markets in latest -> history NOT updated (protect existing)")
         return
 
-    # Seed rule: only if history has NO items for a market.
-    # Seed uses latest.rows, but only rows with canon(date) + balance_yi.
+    # Seed rule: only if history has NO VALID (or safely-upgradable) items for a market.
     seed_added = 0
     seed_skipped_bad_date = 0
     for market in ("TWSE", "TPEX"):
-        if has_market(items, market):
+        if has_valid_market(items, market):
             continue
+
         series_all = latest.get("series") or {}
         s = series_all.get(market) if isinstance(series_all, dict) else None
         rows = (s or {}).get("rows") if isinstance(s, dict) else None
@@ -360,15 +490,20 @@ def main() -> None:
         upsert(items, make_item(run_ts, market, s, row), audit)
         append_added += 1
 
-    # Normalize duplicates defensively
+    # Upgrade legacy items so they can participate in dedup (NO GUESSING).
+    upgraded_legacy = upgrade_legacy_items(items, audit)
+
+    # Normalize duplicates
     before_n = len(items)
     items = normalize_dedup_keep_latest(items, audit)
     after_n = len(items)
 
-    # Keep only last max_items by (canonical_date, run_ts). Non-canon sort first; we keep tail.
-    items.sort(key=sort_key)
-    if len(items) > args.max_items:
-        items = items[-args.max_items :]
+    # Trim with controlled retention of non-canonical items
+    items_before_trim = len(items)
+    items = trim_items(items, args.max_items, audit)
+    items_after_trim = len(items)
+    if items_after_trim != items_before_trim:
+        audit["warnings"].append(f"trim: items {items_before_trim} -> {items_after_trim} (max_items={args.max_items})")
 
     # Update audit stats
     audit["generated_at_utc"] = run_ts
@@ -382,7 +517,10 @@ def main() -> None:
         "append_added": append_added,
         "appendable_markets": sorted(list(appendable.keys())),
         "max_items": args.max_items,
+        "legacy_upgraded": upgraded_legacy,
     }
+
+    cap_warnings(audit)
 
     out = {
         "schema_version": "taiwan_margin_financing_history_v1",
@@ -392,7 +530,10 @@ def main() -> None:
     }
 
     write_json_atomic(args.history, out)
-    eprint(f"[append_history] OK: seed_added={seed_added}, append_added={append_added}, final_items={len(items)}")
+    eprint(
+        "[append_history] OK: "
+        f"seed_added={seed_added}, append_added={append_added}, legacy_upgraded={upgraded_legacy}, final_items={len(items)}"
+    )
 
 
 if __name__ == "__main__":
