@@ -1,173 +1,112 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-06T06:39:16Z",
+  "generated_at_utc": "2026-02-06T06:55:14Z",
   "generated_at_local": null,
   "data_date": "2026-02-05",
   "state": "擴張",
   "signal": "INFO",
   "margin_quality": "OK",
-  "rationale": "cool-down candidate: Accel<=TH and 1D%<TH (needs 2–3 consecutive confirmations)",
+  "rationale": "cool-down candidate: Accel<=0 and 1D%<0.3 (needs 2–3 consecutive confirmations)",
   "resonance": "MARKET_SHOCK_ONLY",
   "resonance_display": "MARKET_SHOCK_ONLY",
   "resonance_confidence": "DOWNGRADED",
   "resonance_code": "ROLL25_STALE",
   "resonance_note": "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）",
+  "thresholds": {
+    "policy": "percentile",
+    "calib_min_n": 60,
+    "percentiles": {
+      "expansion20": 90.0,
+      "contraction20": 10.0,
+      "watch1d": 90.0,
+      "watchspread20": 90.0,
+      "watchaccel": 90.0
+    },
+    "fixed_baseline": {
+      "expansion20": 8.0,
+      "contraction20": -8.0,
+      "watch1d": 0.8,
+      "watchspread20": 3.0,
+      "watchaccel": 0.25
+    },
+    "used": {
+      "expansion20": 8.0,
+      "contraction20": -8.0,
+      "watch1d": 0.8,
+      "watchspread20": 3.0,
+      "watchaccel": 0.25
+    },
+    "calibration": {
+      "policy": "percentile",
+      "calib_min_n": 60,
+      "pctl_cfg": {
+        "expansion20": 90.0,
+        "contraction20": 10.0,
+        "watch1d": 90.0,
+        "watchspread20": 90.0,
+        "watchaccel": 90.0
+      },
+      "fixed_fallback": {
+        "expansion20": 8.0,
+        "contraction20": -8.0,
+        "watch1d": 0.8,
+        "watchspread20": 3.0,
+        "watchaccel": 0.25
+      },
+      "items": {
+        "expansion20": {
+          "status": "FALLBACK_FIXED",
+          "sample_n": 20,
+          "percentile": 90.0,
+          "threshold": 8.0,
+          "reason": "insufficient samples (n=20 < calib_min_n=60)"
+        },
+        "contraction20": {
+          "status": "FALLBACK_FIXED",
+          "sample_n": 20,
+          "percentile": 10.0,
+          "threshold": -8.0,
+          "reason": "insufficient samples (n=20 < calib_min_n=60)"
+        },
+        "watch1d": {
+          "status": "FALLBACK_FIXED",
+          "sample_n": 39,
+          "percentile": 90.0,
+          "threshold": 0.8,
+          "reason": "insufficient samples (n=39 < calib_min_n=60)"
+        },
+        "watchspread20": {
+          "status": "FALLBACK_FIXED",
+          "sample_n": 20,
+          "percentile": 90.0,
+          "threshold": 3.0,
+          "reason": "insufficient samples (n=20 < calib_min_n=60)"
+        },
+        "watchaccel": {
+          "status": "FALLBACK_FIXED",
+          "sample_n": 35,
+          "percentile": 90.0,
+          "threshold": 0.25,
+          "reason": "insufficient samples (n=35 < calib_min_n=60)"
+        }
+      },
+      "mode": "percentile",
+      "distributions": {
+        "total_series_rows": 40,
+        "dist_total_20d_pct_n": 20,
+        "dist_total_1d_pct_n": 39,
+        "dist_spread20_n": 20,
+        "dist_accel_n": 35
+      }
+    }
+  },
   "upstream": {
     "latest_json": {
       "confidence": null,
       "fetch_status": null,
       "dq_reason": null,
       "has_top_quality": false
-    }
-  },
-  "thresholds": {
-    "policy": "fixed",
-    "fixed": {
-      "exp20": 8.0,
-      "contr20": -8.0,
-      "watch1d": 0.8,
-      "watch_spread20": 3.0,
-      "watch_accel": 0.25,
-      "cool_accel": 0.0,
-      "cool_1d": 0.3
-    },
-    "used": {
-      "exp20": 8.0,
-      "contr20": -8.0,
-      "watch1d": 0.8,
-      "watch_spread20": 3.0,
-      "watch_accel": 0.25,
-      "cool_accel": 0.0,
-      "cool_1d": 0.3
-    },
-    "calibration": {
-      "policy": "fixed",
-      "calib_min_n": 60,
-      "aligned_rows": 40,
-      "aligned_newest_date": "2026-02-05",
-      "aligned_oldest_date": "2025-12-10",
-      "targets": {
-        "pctl_expansion20": null,
-        "pctl_contraction20": null,
-        "pctl_watch1d": null,
-        "pctl_watchspread20": null,
-        "pctl_watchaccel": null,
-        "pctl_cool1d": null,
-        "pctl_coolaccel": null
-      },
-      "per_threshold": {
-        "exp20": {
-          "name": "exp20",
-          "policy": "fixed",
-          "fixed_value": 8.0,
-          "used_value": 8.0,
-          "status": "FIXED_POLICY",
-          "reason": "policy=fixed"
-        },
-        "contr20": {
-          "name": "contr20",
-          "policy": "fixed",
-          "fixed_value": -8.0,
-          "used_value": -8.0,
-          "status": "FIXED_POLICY",
-          "reason": "policy=fixed"
-        },
-        "watch1d": {
-          "name": "watch1d",
-          "policy": "fixed",
-          "fixed_value": 0.8,
-          "used_value": 0.8,
-          "status": "FIXED_POLICY",
-          "reason": "policy=fixed"
-        },
-        "watch_spread20": {
-          "name": "watch_spread20",
-          "policy": "fixed",
-          "fixed_value": 3.0,
-          "used_value": 3.0,
-          "status": "FIXED_POLICY",
-          "reason": "policy=fixed"
-        },
-        "watch_accel": {
-          "name": "watch_accel",
-          "policy": "fixed",
-          "fixed_value": 0.25,
-          "used_value": 0.25,
-          "status": "FIXED_POLICY",
-          "reason": "policy=fixed"
-        },
-        "cool_accel": {
-          "name": "cool_accel",
-          "policy": "fixed",
-          "fixed_value": 0.0,
-          "used_value": 0.0,
-          "status": "FIXED_POLICY",
-          "reason": "policy=fixed"
-        },
-        "cool_1d": {
-          "name": "cool_1d",
-          "policy": "fixed",
-          "fixed_value": 0.3,
-          "used_value": 0.3,
-          "status": "FIXED_POLICY",
-          "reason": "policy=fixed"
-        }
-      },
-      "samples": {
-        "tot20_pct": {
-          "n": 20,
-          "newest_date": "2026-02-05",
-          "oldest_date": "2026-01-09",
-          "dist": {
-            "n": 20,
-            "min": 8.256399735576391,
-            "p10": 8.460256746407275,
-            "p50": 10.87219813579498,
-            "p90": 12.81443551636947,
-            "max": 13.714572688763713
-          }
-        },
-        "tot1_pct": {
-          "n": 39,
-          "newest_date": "2026-02-05",
-          "oldest_date": "2025-12-11",
-          "dist": {
-            "n": 39,
-            "min": -1.3161444482984406,
-            "p10": -0.8047016744555296,
-            "p50": 0.5363932645301631,
-            "p90": 1.1046120639138395,
-            "max": 1.5876692425933254
-          }
-        },
-        "spread20": {
-          "n": 20,
-          "newest_date": "2026-02-05",
-          "oldest_date": "2026-01-09",
-          "dist": {
-            "n": 20,
-            "min": 0.9301582302919318,
-            "p10": 2.516971116218052,
-            "p50": 3.678521129966279,
-            "p90": 5.532746104680134,
-            "max": 6.225359255479459
-          }
-        },
-        "accel": {
-          "n": 35,
-          "newest_date": "2026-02-05",
-          "oldest_date": "2025-12-17",
-          "dist": {
-            "n": 35,
-            "min": -1.4024312789231834,
-            "p10": -0.9405681867334816,
-            "p50": 0.09005128840461768,
-            "p90": 0.6542164652237986,
-            "max": 1.1114686611362883
-          }
-        }
-      }
     }
   },
   "margin": {
@@ -349,9 +288,6 @@
       "check_10_msg": "OK",
       "check_11_status": "PASS",
       "check_11_msg": "OK"
-    },
-    "thresholds": {
-      "policy": "fixed"
     }
   },
   "inputs": {
@@ -360,8 +296,15 @@
     "out_md_path": "taiwan_margin_cache/Taiwan_Margin_Financing_Dashboard.md",
     "signals_out_path": "taiwan_margin_cache/signals_latest.json",
     "resonance_policy": "latest",
-    "threshold_policy": "fixed",
-    "calib_min_n": 60
+    "threshold_policy": "percentile",
+    "calib_min_n": 60,
+    "pctl_cfg": {
+      "expansion20": 90.0,
+      "contraction20": 10.0,
+      "watch1d": 90.0,
+      "watchspread20": 90.0,
+      "watchaccel": 90.0
+    }
   },
   "snapshots": {
     "twse_rows": {
