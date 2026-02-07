@@ -21,7 +21,7 @@ Adds:
   - trend_strong = (SP500 INFO + LONG_EXTREME)
   - trend_relaxed = (SP500 signal in {INFO,WATCH} AND p252>=80)
   - if p252 missing => relaxed leg does NOT trigger (conservative)
-- vol_gate_v2:
+- vol_gate_v2 (original):
   - vol_runaway = (VIX ALERT) OR (VIX WATCH AND ret1%60>=5 AND VIX.value>=20)
   - vol_watch = (VIX WATCH AND NOT vol_runaway)
 - mode:
@@ -40,6 +40,12 @@ Adds:
   - add vol_runaway_failed_leg note when runaway not triggered (e.g., value < threshold)
 - roll25 section:
   - echo roll25 strict_not_stale flag (from taiwan_signals) for quick visual alignment
+
+2026-02-07.1 updates (logic fix; audit-closed):
+- vol_gate_v2:
+  - vol_runaway = (VIX signal in {ALERT,WATCH}) AND (ret1%60>=5) AND (VIX.value>=20)
+    * aligns with displayed runaway_thresholds; prevents false runaway when VIX ALERT is caused by cooling-down JUMP.
+  - add vol_runaway_branch + vol_runaway_failed_leg for BOTH ALERT and WATCH cases (display-only explainers).
 """
 
 from __future__ import annotations
@@ -55,7 +61,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # ----------------------------
 # Deterministic parameters (audit-friendly)
 # ----------------------------
-STRATEGY_PARAMS_VERSION: str = "2026-02-05.3"
+STRATEGY_PARAMS_VERSION: str = "2026-02-07.1"
 
 TREND_P252_ON: float = 80.0
 VIX_RUNAWAY_RET1_60_MIN: float = 5.0
@@ -500,19 +506,33 @@ def main() -> int:
     vix_value_val = _to_float(vix_m.get("value")) if isinstance(vix_m, dict) else None
     vix_date = vix_m.get("data_date") if isinstance(vix_m, dict) else None
 
-    # vol_gate_v2
-    vol_runaway = bool(
-        isinstance(vix_sig, str)
-        and (
-            vix_sig.upper() == "ALERT"
-            or (
-                vix_sig.upper() == "WATCH"
-                and (vix_ret1_val is not None and vix_ret1_val >= VIX_RUNAWAY_RET1_60_MIN)
-                and (vix_value_val is not None and vix_value_val >= VIX_RUNAWAY_VALUE_MIN)
-            )
-        )
-    )
-    vol_watch = bool(isinstance(vix_sig, str) and vix_sig.upper() == "WATCH" and (not vol_runaway))
+    # vol_gate_v2 (2026-02-07.1 fix):
+    # runaway is ONLY when thresholds are met; VIX signal must be WATCH/ALERT but not sufficient alone.
+    vix_sig_up = vix_sig.upper() if isinstance(vix_sig, str) else None
+    is_vix_watch_or_alert = bool(vix_sig_up in ("WATCH", "ALERT"))
+
+    leg_ret = bool(vix_ret1_val is not None and vix_ret1_val >= VIX_RUNAWAY_RET1_60_MIN)
+    leg_val = bool(vix_value_val is not None and vix_value_val >= VIX_RUNAWAY_VALUE_MIN)
+
+    vol_runaway = bool(is_vix_watch_or_alert and leg_ret and leg_val)
+
+    # keep original definition: vol_watch only when VIX is WATCH and not runaway
+    vol_watch = bool(vix_sig_up == "WATCH" and (not vol_runaway))
+
+    # audit explainers (display-only, no logic impact)
+    if not is_vix_watch_or_alert:
+        vol_runaway_branch = "NO_GATE (VIX signal not in {WATCH,ALERT})"
+    elif vol_runaway:
+        vol_runaway_branch = "THRESHOLDS_PASSED"
+    else:
+        vol_runaway_branch = "THRESHOLDS_FAILED"
+
+    vol_runaway_failed_leg: List[str] = []
+    if is_vix_watch_or_alert and (not vol_runaway):
+        if not leg_ret:
+            vol_runaway_failed_leg.append(f"ret1%60<{_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}")
+        if not leg_val:
+            vol_runaway_failed_leg.append(f"value<{_fmt(VIX_RUNAWAY_VALUE_MIN,1)}")
 
     matrix_cell = f"Trend={'ON' if trend_on else 'OFF'} / Fragility={'HIGH' if fragility_high else 'LOW'}"
 
@@ -520,7 +540,7 @@ def main() -> int:
     mode_decision_path: List[str] = []
     if vol_runaway:
         mode = "PAUSE_RISK_ON"
-        mode_decision_path.append("triggered: vol_runaway override")
+        mode_decision_path.append("triggered: vol_runaway override (thresholds passed)")
     elif vol_watch:
         mode = "DEFENSIVE_DCA"
         mode_decision_path.append("triggered: vol_watch downshift => DEFENSIVE_DCA")
@@ -571,7 +591,6 @@ def main() -> int:
             f"p252_on_threshold={_fmt(TREND_P252_ON,1)}, "
             f"data_date={spx_date if spx_date is not None else 'NA'}"
         )
-        # display-only hardening: explicitly clarify that tag is informational for trend_relaxed
         lines.append("- note: trend_relaxed uses (signal + p252) only; tag is informational (display-only).")
     else:
         lines.append("- trend_basis: market_cache.SP500: NA (missing row)")
@@ -594,17 +613,9 @@ def main() -> int:
             f"runaway_thresholds: ret1%60>={_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}, value>={_fmt(VIX_RUNAWAY_VALUE_MIN,1)}, "
             f"data_date={vix_date if vix_date is not None else 'NA'})"
         )
-        # display-only hardening: show which runaway leg failed (if any)
-        if not vol_runaway:
-            failed: List[str] = []
-            # note: alert case would have been runaway; so here we only list legs for WATCH case.
-            if isinstance(vix_sig, str) and vix_sig.upper() == "WATCH":
-                if vix_ret1_val is None or vix_ret1_val < VIX_RUNAWAY_RET1_60_MIN:
-                    failed.append(f"ret1%60<{_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}")
-                if vix_value_val is None or vix_value_val < VIX_RUNAWAY_VALUE_MIN:
-                    failed.append(f"value<{_fmt(VIX_RUNAWAY_VALUE_MIN,1)}")
-            if failed:
-                lines.append(f"- vol_runaway_failed_leg: {', '.join(failed)} (display-only)")
+        lines.append(f"- vol_runaway_branch: {vol_runaway_branch} (display-only)")
+        if vol_runaway_failed_leg:
+            lines.append(f"- vol_runaway_failed_leg: {', '.join(vol_runaway_failed_leg)} (display-only)")
     else:
         lines.append("- vol_gate_v2: market_cache.VIX only: NA (missing row)")
 
@@ -626,7 +637,6 @@ def main() -> int:
     lines.append(f"- script_fingerprint: {m_meta.get('script_fingerprint','NA')}")
     lines.append(f"- script_version: {m_meta.get('script_version','NA')}")
     lines.append(f"- series_count: {m_meta.get('series_count','NA')}")
-    # preserve existing reading notes if present (display-only)
     rn1 = m_meta.get("reading_note")
     if isinstance(rn1, str) and rn1.strip():
         lines.append(f"- reading_note: {rn1.strip()}")
@@ -656,7 +666,6 @@ def main() -> int:
                 if "JUMP" in up:
                     mclass = "JUMP" if mclass == "NONE" else f"{mclass}+JUMP"
 
-            # risk_impulse (display-only)
             dir_v = it.get("dir")
             ret_v = _to_float(it.get("ret1_pct60"))
             risk_impulse = "NA"
@@ -827,7 +836,6 @@ def main() -> int:
     lines.append(f"- used_date_selection_tag: {used_date_selection_tag}")
     lines.append(f"- tag (legacy): {legacy_tag}")
 
-    # display-only hardening: quick echo of strict flag from taiwan_signals
     sn = tw_flags.get("roll25_strict_not_stale")
     if isinstance(sn, bool):
         lines.append(f"- roll25_strict_not_stale: {str(sn).lower()} (from taiwan_signals; display-only)")
