@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-07T11:59:55Z
+- unified_generated_at_utc: 2026-02-07T12:25:14Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -20,12 +20,12 @@
 - trend_relaxed: false
 - fragility_high: true
 - vol_watch: false
-- vol_runaway: false
+- vol_runaway: true
 - matrix_cell: Trend=OFF / Fragility=HIGH
-- mode: RISK_OFF
+- mode: PAUSE_RISK_ON
 
 **mode_decision_path**
-- 4-quadrant: trend_on=false, fragility_high=true
+- triggered: vol_runaway override
 
 **strategy_params (deterministic constants)**
 - TREND_P252_ON: 80.0
@@ -37,8 +37,6 @@
 - note: trend_relaxed uses (signal + p252) only; tag is informational (display-only).
 - fragility_parts (global-only): credit_fragile(BAMLH0A0HYM2=WATCH)=false, rate_stress(DGS10=WATCH)=true
 - vol_gate_v2: market_cache.VIX only (signal=ALERT, dir=HIGH, value=17.760000, ret1%60=-18.419844, runaway_thresholds: ret1%60>=5.0, value>=20.0, data_date=2026-02-06)
-- vol_runaway_branch: THRESHOLDS_FAILED (display-only)
-- vol_runaway_failed_leg: ret1%60<5.0, value<20.0 (display-only)
 
 **dq_gates (no guessing; conservative defaults)**
 - roll25_derived_confidence=OK (derived metrics not used for upgrade triggers)
@@ -181,7 +179,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-07T10:59:11Z
 
-<!-- rendered_at_utc: 2026-02-07T11:59:56Z -->
+<!-- rendered_at_utc: 2026-02-07T12:25:14Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
