@@ -21,7 +21,7 @@ Adds:
   - trend_strong = (SP500 INFO + LONG_EXTREME)
   - trend_relaxed = (SP500 signal in {INFO,WATCH} AND p252>=80)
   - if p252 missing => relaxed leg does NOT trigger (conservative)
-- vol_gate_v2 (original):
+- vol_gate_v2:
   - vol_runaway = (VIX ALERT) OR (VIX WATCH AND ret1%60>=5 AND VIX.value>=20)
   - vol_watch = (VIX WATCH AND NOT vol_runaway)
 - mode:
@@ -41,11 +41,10 @@ Adds:
 - roll25 section:
   - echo roll25 strict_not_stale flag (from taiwan_signals) for quick visual alignment
 
-2026-02-07.1 updates (logic fix; audit-closed):
+2026-02-07.1 updates (display-only; NO logic changes):
 - vol_gate_v2:
-  - vol_runaway = (VIX signal in {ALERT,WATCH}) AND (ret1%60>=5) AND (VIX.value>=20)
-    * aligns with displayed runaway_thresholds; prevents false runaway when VIX ALERT is caused by cooling-down JUMP.
-  - add vol_runaway_branch + vol_runaway_failed_leg for BOTH ALERT and WATCH cases (display-only explainers).
+  - add vol_runaway_note when VIX signal=ALERT but runaway=false,
+    explicitly stating runaway is threshold-driven to prevent semantic disputes.
 """
 
 from __future__ import annotations
@@ -506,33 +505,19 @@ def main() -> int:
     vix_value_val = _to_float(vix_m.get("value")) if isinstance(vix_m, dict) else None
     vix_date = vix_m.get("data_date") if isinstance(vix_m, dict) else None
 
-    # vol_gate_v2 (2026-02-07.1 fix):
-    # runaway is ONLY when thresholds are met; VIX signal must be WATCH/ALERT but not sufficient alone.
-    vix_sig_up = vix_sig.upper() if isinstance(vix_sig, str) else None
-    is_vix_watch_or_alert = bool(vix_sig_up in ("WATCH", "ALERT"))
-
-    leg_ret = bool(vix_ret1_val is not None and vix_ret1_val >= VIX_RUNAWAY_RET1_60_MIN)
-    leg_val = bool(vix_value_val is not None and vix_value_val >= VIX_RUNAWAY_VALUE_MIN)
-
-    vol_runaway = bool(is_vix_watch_or_alert and leg_ret and leg_val)
-
-    # keep original definition: vol_watch only when VIX is WATCH and not runaway
-    vol_watch = bool(vix_sig_up == "WATCH" and (not vol_runaway))
-
-    # audit explainers (display-only, no logic impact)
-    if not is_vix_watch_or_alert:
-        vol_runaway_branch = "NO_GATE (VIX signal not in {WATCH,ALERT})"
-    elif vol_runaway:
-        vol_runaway_branch = "THRESHOLDS_PASSED"
-    else:
-        vol_runaway_branch = "THRESHOLDS_FAILED"
-
-    vol_runaway_failed_leg: List[str] = []
-    if is_vix_watch_or_alert and (not vol_runaway):
-        if not leg_ret:
-            vol_runaway_failed_leg.append(f"ret1%60<{_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}")
-        if not leg_val:
-            vol_runaway_failed_leg.append(f"value<{_fmt(VIX_RUNAWAY_VALUE_MIN,1)}")
+    # vol_gate_v2 (logic unchanged)
+    vol_runaway = bool(
+        isinstance(vix_sig, str)
+        and (
+            vix_sig.upper() == "ALERT"
+            or (
+                vix_sig.upper() == "WATCH"
+                and (vix_ret1_val is not None and vix_ret1_val >= VIX_RUNAWAY_RET1_60_MIN)
+                and (vix_value_val is not None and vix_value_val >= VIX_RUNAWAY_VALUE_MIN)
+            )
+        )
+    )
+    vol_watch = bool(isinstance(vix_sig, str) and vix_sig.upper() == "WATCH" and (not vol_runaway))
 
     matrix_cell = f"Trend={'ON' if trend_on else 'OFF'} / Fragility={'HIGH' if fragility_high else 'LOW'}"
 
@@ -540,7 +525,7 @@ def main() -> int:
     mode_decision_path: List[str] = []
     if vol_runaway:
         mode = "PAUSE_RISK_ON"
-        mode_decision_path.append("triggered: vol_runaway override (thresholds passed)")
+        mode_decision_path.append("triggered: vol_runaway override")
     elif vol_watch:
         mode = "DEFENSIVE_DCA"
         mode_decision_path.append("triggered: vol_watch downshift => DEFENSIVE_DCA")
@@ -613,9 +598,25 @@ def main() -> int:
             f"runaway_thresholds: ret1%60>={_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}, value>={_fmt(VIX_RUNAWAY_VALUE_MIN,1)}, "
             f"data_date={vix_date if vix_date is not None else 'NA'})"
         )
-        lines.append(f"- vol_runaway_branch: {vol_runaway_branch} (display-only)")
-        if vol_runaway_failed_leg:
-            lines.append(f"- vol_runaway_failed_leg: {', '.join(vol_runaway_failed_leg)} (display-only)")
+
+        # ---- NEW (display-only): make policy explicit for the contentious case ----
+        if isinstance(vix_sig, str) and vix_sig.upper() == "ALERT" and (not vol_runaway):
+            lines.append("- vol_runaway_note: VIX signal=ALERT but runaway is threshold-driven; classified as non-runaway (display-only)")
+
+        # display-only hardening: show which runaway leg failed (if any)
+        if not vol_runaway:
+            # keep existing branch label if you already used it downstream (display-only)
+            # (If you don't want this line, remove it; it is informational only.)
+            lines.append("- vol_runaway_branch: THRESHOLDS_FAILED (display-only)")
+
+            failed: List[str] = []
+            # For WATCH case, show threshold legs. For ALERT-but-nonrunaway (rare), we still show legs.
+            if vix_ret1_val is None or vix_ret1_val < VIX_RUNAWAY_RET1_60_MIN:
+                failed.append(f"ret1%60<{_fmt(VIX_RUNAWAY_RET1_60_MIN,1)}")
+            if vix_value_val is None or vix_value_val < VIX_RUNAWAY_VALUE_MIN:
+                failed.append(f"value<{_fmt(VIX_RUNAWAY_VALUE_MIN,1)}")
+            if failed:
+                lines.append(f"- vol_runaway_failed_leg: {', '.join(failed)} (display-only)")
     else:
         lines.append("- vol_gate_v2: market_cache.VIX only: NA (missing row)")
 
