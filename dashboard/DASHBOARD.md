@@ -1,11 +1,11 @@
 # Risk Dashboard (market_cache)
 
-- Summary: ALERT=3 / WATCH=0 / INFO=0 / NONE=1; CHANGED=4; WATCH_STREAK>=3=0
-- SCRIPT_FINGERPRINT: `render_dashboard_py_signals_v8@1981948`
+- Summary: ALERT=2 / WATCH=0 / INFO=0 / NONE=2; CHANGED=1; WATCH_STREAK>=3=0
+- SCRIPT_FINGERPRINT: `render_dashboard_py_signals_v8@501529c`
 - RULESET_ID: `signals_v8`
-- RUN_TS_UTC: `2026-02-06T15:54:32.323774+00:00`
-- STATS.generated_at_utc: `2026-02-06T03:18:01Z`
-- STATS.as_of_ts: `2026-02-06T03:18:01Z`
+- RUN_TS_UTC: `2026-02-07T11:15:55.780252+00:00`
+- STATS.generated_at_utc: `2026-02-07T11:02:36Z`
+- STATS.as_of_ts: `2026-02-07T11:02:36Z`
 - script_version: `market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400`
 - stale_hours: `36.0`
 - stats_path: `market_cache/stats_latest.json`
@@ -16,7 +16,7 @@
 
 | Signal | Tag | Near | Dir | DirNote | PrevSignal | DeltaSignal | StreakHist | StreakWA | Series | DQ | age_h | data_date | value | z60 | p60 | p252 | z252 | z_delta60 | p_delta60 | ret1_pct60 | Reason | Source | as_of_ts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| ALERT | JUMP_ZD,JUMP_RET | NA | HIGH | DIR_UNCERTAIN_ABS | WATCH | WATCH→ALERT | 7 | 8 | VIX | OK | 12.61 | 2026-02-05 | 21.77 | 1.7111 | 91.666667 | 82.539683 | 0.52628 | 1.097384 | 8.333333 | 16.791845 | abs(ZΔ60)>=0.75;abs(ret1%60)>=2 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | 2026-02-06T03:18:01Z |
-| ALERT | JUMP_ZD,JUMP_P | NA | HIGH | DIR_UNCERTAIN_ABS | WATCH | WATCH→ALERT | 3 | 4 | SP500 | OK | 12.61 | 2026-02-05 | 6798.4 | -0.54414 | 21.666667 | 78.968254 | 0.995861 | -0.861189 | -35 | -1.225097 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | https://stooq.com/q/d/l/?s=^spx&i=d | 2026-02-06T03:18:01Z |
-| ALERT | JUMP_ZD,JUMP_P | NA | LOW | DIR_UNCERTAIN_ABS | NONE | NONE→ALERT | 0 | 1 | HYG_IEF_RATIO | OK | 12.61 | 2026-02-05 | 0.838243 | 0.14998 | 60 | 46.428571 | 0.026053 | -1.032583 | -21.666667 | -0.693892 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | DERIVED | 2026-02-06T03:18:01Z |
-| NONE | NA | NA | HIGH | NA | WATCH | WATCH→NONE | 4 | 0 | OFR_FSI | OK | 12.61 | 2026-02-03 | -2.335 | 0.237588 | 71.666667 | 27.777778 | -0.623615 | -0.022302 | 0 | -0.38693 | NA | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv | 2026-02-06T03:18:01Z |
+| ALERT | JUMP_ZD,JUMP_RET | NEAR:PΔ60 | HIGH | DIR_UNCERTAIN_ABS | ALERT | SAME | 8 | 9 | VIX | OK | 0.22 | 2026-02-06 | 17.76 | 0.248988 | 76.666667 | 57.539683 | -0.231955 | -1.462112 | -15 | -18.419844 | abs(ZΔ60)>=0.75;abs(ret1%60)>=2 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | 2026-02-07T11:02:36Z |
+| ALERT | LONG_EXTREME,JUMP_ZD,JUMP_P | NEAR:ret1%60 | HIGH | RISK_BIAS_UP | ALERT | SAME | 4 | 5 | SP500 | OK | 0.22 | 2026-02-06 | 6932.3 | 0.789264 | 80 | 95.238095 | 1.255557 | 1.333404 | 58.333333 | 1.969581 | P252>=95;abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | https://stooq.com/q/d/l/?s=^spx&i=d | 2026-02-07T11:02:36Z |
+| NONE | NA | NA | LOW | NA | ALERT | ALERT→NONE | 1 | 0 | HYG_IEF_RATIO | OK | 0.22 | 2026-02-06 | 0.841157 | 0.639416 | 71.666667 | 58.730159 | 0.334138 | 0.489436 | 11.666667 | 0.347697 | NA | DERIVED | 2026-02-07T11:02:36Z |
+| NONE | NA | NA | HIGH | NA | NONE | SAME | 0 | 0 | OFR_FSI | OK | 0.22 | 2026-02-04 | -2.295 | 0.351643 | 76.666667 | 32.142857 | -0.578112 | 0.114055 | 5 | 1.713062 | NA | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv | 2026-02-07T11:02:36Z |
