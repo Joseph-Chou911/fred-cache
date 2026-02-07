@@ -1,7 +1,7 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-02-07T02:46:44Z",
-  "generated_at_local": "2026-02-07T10:46:44.467771+08:00",
+  "generated_at_utc": "2026-02-07T10:55:22Z",
+  "generated_at_local": "2026-02-07T18:55:22.106280+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-02-06",
   "run_day_tag": "WEEKEND",
@@ -13,6 +13,15 @@
   "backfill_months": 0,
   "backfill_limit": 252,
   "store_cap": 400,
+  "fetch": {
+    "fetch_plan": "monthly_fallback_current_month",
+    "cache_only_mode": false,
+    "cache_only_reason": "",
+    "notes": [
+      "openapi_skipped_weekend",
+      "monthly_fallback_used:yyyymm01=20260201"
+    ]
+  },
   "series": {
     "close": {
       "asof": "2026-02-06",

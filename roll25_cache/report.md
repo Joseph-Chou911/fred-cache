@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-07T02:46:44Z`
-- generated_at_local: `2026-02-07T10:46:44.566224+08:00`
+- generated_at_utc: `2026-02-07T10:55:22Z`
+- generated_at_local: `2026-02-07T18:55:22.204745+08:00`
 - report_date_local: `2026-02-07`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-06` (latest available)
@@ -152,4 +152,5 @@ dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
 ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
+GUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).
 ```
