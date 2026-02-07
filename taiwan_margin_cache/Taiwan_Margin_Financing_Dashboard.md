@@ -17,6 +17,9 @@
   - rationale: roll25 heated but Margin not heated
   - resonance_policy: latest
   - resonance_confidence: OK
+- OTC_guardrail（display-only; 不影響主信號）：PREWATCH｜stage=PREWATCH
+  - rationale: TPEX_20D% approaching expansion threshold (dilution risk for TOTAL-only signal)
+  - thresholds: thr_expansion20=8.0000, prewatch_gap=0.2000, prewatch_threshold=7.8000
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
 ### 0) 門檻來源
@@ -26,15 +29,17 @@
 
 ### 1) WATCH（升溫）
 - 條件：20D% ≥ thr_expansion20 且 (1D% ≥ thr_watch1d 或 Spread20 ≥ thr_watchspread20 或 Accel ≥ thr_watchaccel)
-- 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。
 
 ### 2) ALERT（疑似去槓桿）
 - 條件：20D% ≥ thr_expansion20 且 1D% < 0 且 5D% < 0
-- 行動：優先看『是否出現連續負值』，因為可能開始踩踏。
 
 ### 3) 解除 WATCH（降溫）
 - 條件：20D% 仍高，但 Accel ≤ 0 且 1D% 回到 < 0.3（需連 2–3 次確認；此段仍採固定 0.3）
-- 行動：代表短線槓桿加速結束，回到『擴張但不加速』。
+
+### 4) OTC Guardrail（display-only；不影響主信號）
+- PREWATCH：TPEX_20D% ≥ (thr_expansion20 - gap)；gap=0.2000
+- OTC_ALERT：TPEX_20D% ≥ thr_expansion20 且 TPEX_1D% < 0 且 TPEX_5D% < 0
+- 目的：避免僅看合計（TOTAL-only）時，OTC 端先升溫/轉弱被稀釋而晚報。
 
 ## 2) 資料
 - 上市(TWSE)：融資餘額 3739.90 億元｜資料日期 2026-02-06｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
@@ -50,77 +55,30 @@
 - data_date: 2026-02-06｜maint_ratio_pct: 174.564662
 - maint_ratio_1d_delta_pctpt: -3.463663｜maint_ratio_1d_pct_change: -1.945568
 - maint_ratio_trend_note: trend_from: today=174.564662(2026-02-06), prev=178.028325(2026-02-05)
-- totals: financing_amount_twd=373990690000, collateral_value_twd=652855583540
-- coverage: included_count=1249, missing_price_count=2
-- quality: fetch_status=OK, confidence=OK, dq_reason=
-
-## 2.0.1) 大盤融資維持率（history；display-only）
-- maint_hist_path: taiwan_margin_cache/maint_ratio_history.json
-- history_rows: 9
-- head5: [('2026-02-06', 174.564662), ('2026-02-05', 178.028325), ('2026-02-04', 183.452676), ('2026-02-03', 180.187892), ('2026-02-02', 178.267525)]
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
 - UsedDate: 2026-02-06｜UsedDateStatus: OK_LATEST｜risk_level: 中(derived)｜risk_level_raw: NA｜tag: WEEKEND
 - summary: 今日為週末；UsedDate=2026-02-06：Mode=FULL；freshness_ok=True
-- numbers: Close=31782.92, PctChange=-0.057702%, TradeValue=700313173141, VolumeMultiplier=0.888196, AmplitudePct=2.133059%, VolMultiplier=0.888196
-- signals: DownDay=True, VolumeAmplified=False, VolAmplified=False, NewLow_N=0, ConsecutiveBreak=2, OhlcMissing=False
-- action: 維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。
-- caveats: Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST
-Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}
-run_day_tag is weekday-only heuristic (not exchange calendar)
-BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
-Mode=FULL | OHLC=OK | UsedDate=2026-02-06 | UsedDminus1=2026-02-05
-RunDayTag=WEEKEND | UsedDateStatus=OK_LATEST
-freshness_ok=True | freshness_age_days=1
-dedupe_ok=True
-REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
-ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
-ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).
-- generated_at: 2026-02-07T07:02:03.034732+08:00 (Asia/Taipei)
 - resonance_confidence: OK
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
-- 規則（deterministic，不猜）：
-  1. 若 Margin∈{WATCH,ALERT} 且 roll25 heated（risk_level∈{中,高} 或 VolumeAmplified/VolAmplified/NewLow_N/ConsecutiveBreak 任一為 True）→ RESONANCE
-  2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）
-  3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）
-  4. 其餘 → QUIET
 - 判定：MARKET_SHOCK_ONLY（roll25 heated but Margin not heated）
 - resonance_confidence: OK
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
 - 1D：Δ=-89.30 億元；Δ%=-2.3321 %｜latest=3739.90｜base=3829.20（基期日=2026-02-05）
-- 5D：Δ=-99.00 億元；Δ%=-2.5789 %｜latest=3739.90｜base=3838.90（基期日=2026-01-30）
-- 20D：Δ=225.00 億元；Δ%=6.4013 %｜latest=3739.90｜base=3514.90（基期日=2026-01-09）
-
 ### 上櫃(TPEX)
 - 1D：Δ=-9.70 億元；Δ%=-0.7233 %｜latest=1331.40｜base=1341.10（基期日=2026-02-05）
-- 5D：Δ=-19.10 億元；Δ%=-1.4143 %｜latest=1331.40｜base=1350.50（基期日=2026-01-30）
-- 20D：Δ=97.20 億元；Δ%=7.8755 %｜latest=1331.40｜base=1234.20（基期日=2026-01-09）
 
-### 合計(上市+上櫃)
-- 1D：Δ=-99.00 億元；Δ%=-1.9148 %｜latest=5071.30｜base=5170.30（基期日=2026-02-05）
-- 5D：Δ=-118.10 億元；Δ%=-2.2758 %｜latest=5071.30｜base=5189.40（基期日=2026-01-30）
-- 20D：Δ=322.20 億元；Δ%=6.7844 %｜latest=5071.30｜base=4749.10（基期日=2026-01-09）
+## 3.1) OTC Guardrail（display-only；不影響主信號）
+- stage: PREWATCH｜label: PREWATCH
+- rationale: TPEX_20D% approaching expansion threshold (dilution risk for TOTAL-only signal)
+- inputs: TPEX_20D%=7.8755｜TPEX_1D%=-0.7233｜TPEX_5D%=-1.4143
+- thresholds: thr_expansion20=8.0000｜prewatch_threshold=7.8000
 
-## 4) 提前示警輔助指標（不引入外部資料）
-- Accel = 1D% - (5D%/5)：-1.4596
-- Spread20 = TPEX_20D% - TWSE_20D%：1.4742
-
-## 5) 稽核備註
-- 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。
-- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。
-- rows_latest_table/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。
-- rows_series 是計算輸入序列長度（由 history.json 彙整），用於 horizon 計算與 Check-4。
-- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。
-- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。
-- resonance_policy=latest：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。
-- maint_ratio 為 proxy（display-only）：僅看趨勢與變化（Δ），不得用 proxy 絕對水位做門檻判斷。
-
-## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）
-- Check-0 latest.json top-level quality：⚠️（NOTE）（field may be absent; does not affect margin_quality）
+## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint/guardrail 僅供對照）
 - Check-1 TWSE meta_date==series[0].date：✅（PASS）
 - Check-1 TPEX meta_date==series[0].date：✅（PASS）
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
@@ -132,9 +90,8 @@ ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest)
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
 - Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（PASS）（OK）
 - Check-7 roll25 Lookback window（info）：✅（PASS）（LookbackNActual=20/20（OK））
-- Check-8 maint_ratio latest readable（info）：✅（PASS）（OK）
-- Check-9 maint_ratio history readable（info）：✅（PASS）（OK）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
+- Check-12 OTC Guardrail（info-only）：⚠️（NOTE）（stage=PREWATCH, label=PREWATCH, prewatch_hit=True, otc_alert_hit=False）
 
-_generated_at_utc: 2026-02-06T23:35:01Z_
+_generated_at_utc: 2026-02-07T07:50:28Z_

@@ -1,7 +1,7 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-06T23:35:01Z",
+  "generated_at_utc": "2026-02-07T07:50:28Z",
   "generated_at_local": null,
   "data_date": "2026-02-06",
   "state": "中性",
@@ -99,14 +99,6 @@
         "dist_spread20_n": 21,
         "dist_accel_n": 36
       }
-    }
-  },
-  "upstream": {
-    "latest_json": {
-      "confidence": null,
-      "fetch_status": null,
-      "dq_reason": null,
-      "has_top_quality": false
     }
   },
   "margin": {
@@ -233,10 +225,7 @@
       "maint_ratio_pct": 174.564662,
       "maint_ratio_1d_delta_pctpt": -3.463662999999997,
       "maint_ratio_1d_pct_change": -1.9455684931035535,
-      "trend_note": "trend_from: today=174.564662(2026-02-06), prev=178.028325(2026-02-05)",
-      "fetch_status": "OK",
-      "confidence": "OK",
-      "dq_reason": ""
+      "trend_note": "trend_from: today=174.564662(2026-02-06), prev=178.028325(2026-02-05)"
     },
     "history": {
       "rows": 9,
@@ -264,30 +253,19 @@
       ]
     }
   },
-  "checks": {
-    "margin": {
-      "c1_tw_ok": true,
-      "c1_tp_ok": true,
-      "c2_tw_ok": true,
-      "c2_tp_ok": true,
-      "c3_ok": true,
-      "c4_tw_ok": true,
-      "c4_tp_ok": true,
-      "c5_tw_ok": true,
-      "c5_tp_ok": true,
-      "margin_any_fail": false
-    },
-    "roll25": {
-      "check_6_status": "PASS",
-      "check_6_msg": "OK",
-      "check_7_status": "PASS",
-      "check_7_msg": "LookbackNActual=20/20（OK）"
-    },
-    "maint": {
-      "check_10_status": "PASS",
-      "check_10_msg": "OK",
-      "check_11_status": "PASS",
-      "check_11_msg": "OK"
+  "otc_guardrail": {
+    "enabled": true,
+    "policy": "DISPLAY_ONLY",
+    "prewatch_gap": 0.2,
+    "thr_expansion20_used": 8.0,
+    "result": {
+      "prewatch_threshold": 7.8,
+      "prewatch_gap": 0.2,
+      "label": "PREWATCH",
+      "prewatch_stage": "PREWATCH",
+      "prewatch_hit": true,
+      "otc_alert_hit": false,
+      "rationale": "TPEX_20D% approaching expansion threshold (dilution risk for TOTAL-only signal)"
     }
   },
   "inputs": {
@@ -304,36 +282,12 @@
       "watch1d": 90.0,
       "watchspread20": 90.0,
       "watchaccel": 90.0
-    }
-  },
-  "snapshots": {
-    "twse_rows": {
-      "rows": 30,
-      "rows_series": 41,
-      "head_dates": [
-        "2026-02-06",
-        "2026-02-05",
-        "2026-02-04"
-      ],
-      "tail_dates": [
-        "2025-12-30",
-        "2025-12-29",
-        "2025-12-26"
-      ]
     },
-    "tpex_rows": {
-      "rows": 30,
-      "rows_series": 41,
-      "head_dates": [
-        "2026-02-06",
-        "2026-02-05",
-        "2026-02-04"
-      ],
-      "tail_dates": [
-        "2025-12-30",
-        "2025-12-29",
-        "2025-12-26"
-      ]
+    "otc_guardrail": {
+      "enabled": true,
+      "disable_flag": false,
+      "enable_flag": false,
+      "otc_prewatch_gap": 0.2
     }
   }
 }
