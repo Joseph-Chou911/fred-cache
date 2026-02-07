@@ -8,12 +8,12 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-07T12:25:14Z
+- unified_generated_at_utc: 2026-02-07T12:42:51Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
 - strategy_version: strategy_mode_v1
-- strategy_params_version: 2026-02-07.1
+- strategy_params_version: 2026-02-07.2
 - source_policy: SP500,VIX => market_cache_only (fred_cache SP500/VIXCLS not used for mode)
 - trend_on: false
 - trend_strong: false
@@ -36,7 +36,9 @@
 - trend_basis: market_cache.SP500.signal=ALERT, tag=LONG_EXTREME,JUMP_ZD,JUMP_P, p252=95.238095, p252_on_threshold=80.0, data_date=2026-02-06
 - note: trend_relaxed uses (signal + p252) only; tag is informational (display-only).
 - fragility_parts (global-only): credit_fragile(BAMLH0A0HYM2=WATCH)=false, rate_stress(DGS10=WATCH)=true
-- vol_gate_v2: market_cache.VIX only (signal=ALERT, dir=HIGH, value=17.760000, ret1%60=-18.419844, runaway_thresholds: ret1%60>=5.0, value>=20.0, data_date=2026-02-06)
+- vol_gate_v2: market_cache.VIX only (signal=ALERT, dir=HIGH, value=17.760000, ret1%60=-18.419844, runaway_policy: (signal=ALERT => runaway override) OR (signal=WATCH AND ret1%60>=5.0 AND value>=20.0), data_date=2026-02-06)
+- vol_runaway_branch: SIGNAL_ALERT_OVERRIDE (display-only)
+- vol_runaway_note: signal=ALERT triggers runaway by policy; thresholds shown for reference only (display-only)
 
 **dq_gates (no guessing; conservative defaults)**
 - roll25_derived_confidence=OK (derived metrics not used for upgrade triggers)
@@ -179,7 +181,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-07T10:59:11Z
 
-<!-- rendered_at_utc: 2026-02-07T12:25:14Z -->
+<!-- rendered_at_utc: 2026-02-07T12:42:51Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
