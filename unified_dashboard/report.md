@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-07T11:00:47Z
+- unified_generated_at_utc: 2026-02-07T11:04:18Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -179,7 +179,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-07T10:59:11Z
 
-<!-- rendered_at_utc: 2026-02-07T11:00:47Z -->
+<!-- rendered_at_utc: 2026-02-07T11:04:18Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
