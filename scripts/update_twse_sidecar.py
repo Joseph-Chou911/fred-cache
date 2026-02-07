@@ -35,6 +35,15 @@ Notes (output semantics):
 - Add cache_roll25 (newest->oldest) for unified builder compatibility.
   (Keeps existing cache_tail untouched; cache_roll25 is additive.)
 - All new fields are additive; existing keys/values are untouched.
+
+2026-02-07 GUARDRAIL UPDATE (additive / non-breaking intent):
+- Add HTTP retry/backoff (2s/4s/8s) for transient failures.
+- Add automatic fallback to www.twse.com.tw monthly endpoints for current month when OpenAPI is blocked/unavailable,
+  even when --backfill-months==0.
+- Add cache-preserving merge: if new row has None for a field, keep existing non-None value
+  (prevents losing historical OHLC when only one endpoint is degraded).
+- Add cache-only degrade path: if both OpenAPI and monthly fallback fail, keep last cache and still emit report/stats
+  anchored to cached latest date, with explicit downgrade notes (no guessing / no new data invented).
 """
 
 from __future__ import annotations
@@ -65,7 +74,7 @@ STORE_CAP = 400  # must be >= BACKFILL_LIMIT
 # NEW (additive): how many points to embed into latest_report.cache_roll25 for unified builder
 REPORT_CACHE_ROLL25_CAP = 200  # keep it bounded; must be >= max(vol_n+1, dd_n, etc.)
 
-UA = "twse-sidecar/2.0 (+github-actions)"
+UA = "twse-sidecar/2.1 (+github-actions)"
 
 
 # ----------------- helpers -----------------
@@ -106,13 +115,37 @@ def _today_tz(tz: ZoneInfo) -> date:
 def _is_weekend(d: date) -> bool:
     return d.weekday() >= 5
 
-def _http_get_json(url: str, timeout: int = 25) -> Any:
+def _http_get_json(url: str, timeout: int = 25, *, max_tries: int = 3) -> Any:
+    """
+    Guardrail: retry/backoff on transient network / gateway errors.
+    - Deterministic backoff: 2s, 4s, 8s
+    - Does NOT "guess" payload; on final failure it raises.
+    """
     if not isinstance(url, str) or not url.strip():
         raise ValueError("URL is missing/empty")
+
     headers = {"Accept": "application/json", "User-Agent": UA}
-    r = requests.get(url, headers=headers, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+    backoffs = [2, 4, 8]
+    last_err: Optional[BaseException] = None
+
+    for i in range(max_tries):
+        try:
+            r = requests.get(url, headers=headers, timeout=timeout)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            last_err = e
+            # retry only if we still have attempts
+            if i + 1 >= max_tries:
+                break
+            # deterministic backoff
+            try:
+                import time
+                time.sleep(backoffs[min(i, len(backoffs) - 1)])
+            except Exception:
+                pass
+
+    raise RuntimeError(f"HTTP GET failed after {max_tries} tries: {url} ; last_err={last_err}")
 
 def _safe_float(x: Any) -> Optional[float]:
     if x is None:
@@ -351,6 +384,22 @@ def _parse_twse_monthly_ohlc(payload: Any) -> List[OhlcRow]:
 
 # ----------------- cache logic -----------------
 
+def _merge_row_keep_existing_non_none(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Guardrail: prevent losing cached values when new fetch is degraded.
+    Rule: for each key in new, only overwrite if new[key] is not None.
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    if not isinstance(new, dict):
+        return out
+    for k, v in new.items():
+        if k == "date":
+            out["date"] = new.get("date")
+            continue
+        if v is not None:
+            out[k] = v
+    return out
+
 def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
     m: Dict[str, Dict[str, Any]] = {}
     for it in existing:
@@ -358,7 +407,11 @@ def _merge_roll(existing: List[Dict[str, Any]], new_items: List[Dict[str, Any]])
             m[str(it["date"])] = it
     for it in new_items:
         if isinstance(it, dict) and "date" in it:
-            m[str(it["date"])] = it
+            d = str(it["date"])
+            if d in m:
+                m[d] = _merge_row_keep_existing_non_none(m[d], it)
+            else:
+                m[d] = it
     merged = list(m.values())
     merged.sort(key=lambda x: str(x.get("date", "")), reverse=True)  # newest->oldest
     merged = merged[:STORE_CAP]
@@ -614,6 +667,9 @@ def _new_low_n(today_close: Optional[float], closes_desc: List[float], n: int, m
 def _vol_multiplier(today_tv: Optional[float], tv_desc: List[float], n: int, min_points: int) -> Optional[float]:
     """
     vol_multiplier = today_trade_value / avg(last n trade_values)
+    NOTE: current implementation uses 'last n' INCLUDING UsedDate's value if present,
+          to keep additive update non-breaking. If you want "prior n" exclude today,
+          change window to tv_desc[1:n+1] and re-calibrate thresholds.
     If insufficient points -> None.
     """
     if today_tv is None:
@@ -634,11 +690,54 @@ def _volume_amplified(mult: Optional[float], threshold: float) -> Optional[bool]
     return bool(mult >= threshold)
 
 
+# ----------------- fetch strategy (guardrail) -----------------
+
+def _fetch_month_current(schema: Dict[str, Any], today: date) -> Tuple[List[FmtRow], List[OhlcRow], List[str]]:
+    """
+    Fetch current month from www.twse.com.tw monthly endpoints.
+    Returns (fmt_rows, ohlc_rows, notes)
+    """
+    notes: List[str] = []
+    backfill = schema.get("backfill", {})
+    bf_fmt_tpl = backfill.get("fmtqik_url_tpl")
+    bf_ohlc_tpl = backfill.get("mi_5mins_hist_url_tpl")
+
+    if not isinstance(bf_fmt_tpl, str) or "{yyyymm01}" not in bf_fmt_tpl:
+        notes.append("monthly_fallback_fmtqik_tpl_missing")
+        return ([], [], notes)
+    if not isinstance(bf_ohlc_tpl, str) or "{yyyymm01}" not in bf_ohlc_tpl:
+        notes.append("monthly_fallback_mi_5mins_hist_tpl_missing")
+        return ([], [], notes)
+
+    yyyymm01 = _month_yyyymm01(date(today.year, today.month, 1))
+    try:
+        url = bf_fmt_tpl.format(yyyymm01=yyyymm01)
+        p = _http_get_json(url)
+        fmt_rows = _parse_twse_monthly_fmtqik(p)
+    except Exception as e:
+        notes.append(f"monthly_fallback_fmtqik_failed:{e}")
+        fmt_rows = []
+
+    try:
+        url = bf_ohlc_tpl.format(yyyymm01=yyyymm01)
+        p = _http_get_json(url)
+        ohlc_rows = _parse_twse_monthly_ohlc(p)
+    except Exception as e:
+        notes.append(f"monthly_fallback_ohlc_failed:{e}")
+        ohlc_rows = []
+
+    if fmt_rows:
+        notes.append(f"monthly_fallback_used:yyyymm01={yyyymm01}")
+    return (fmt_rows, ohlc_rows, notes)
+
+
 # ----------------- main -----------------
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--backfill-months", type=int, default=0, help="Fetch last N months from www.twse.com.tw monthly endpoints")
+    ap.add_argument("--prefer-monthly", action="store_true",
+                    help="Guardrail: skip OpenAPI and use monthly endpoints first (useful when OpenAPI is blocked)")
     args = ap.parse_args()
 
     try:
@@ -664,34 +763,61 @@ def main() -> None:
     daily_fmt_url = daily.get("fmtqik_url")
     daily_ohlc_url = daily.get("mi_5mins_hist_url")
 
+    # Diagnostics (additive)
+    fetch_notes: List[str] = []
+    fetch_plan = "openapi_primary"
+    if args.prefer_monthly:
+        fetch_plan = "monthly_primary(--prefer-monthly)"
+
     if not isinstance(daily_fmt_url, str) or not daily_fmt_url.strip():
-        print("[FATAL] schema.daily.fmtqik_url missing/empty")
-        sys.exit(1)
+        fetch_notes.append("daily_fmtqik_url_missing")
     if not isinstance(daily_ohlc_url, str) or not daily_ohlc_url.strip():
-        print("[WARN] schema.daily.mi_5mins_hist_url missing/empty -> OHLC will be downgraded")
+        fetch_notes.append("daily_mi_5mins_hist_url_missing")
 
     daily_ok = True
-    try:
-        fmt_raw = _http_get_json(daily_fmt_url)
-        daily_fmt_rows = _parse_fmtqik_rows(fmt_raw, schema)
-        if not daily_fmt_rows:
-            daily_ok = False
-            print("[WARN] daily FMTQIK parsed 0 rows.")
-    except Exception as e:
-        daily_ok = False
-        print(f"[WARN] daily FMTQIK fetch/parse failed: {e}")
 
-    try:
-        if isinstance(daily_ohlc_url, str) and daily_ohlc_url.strip():
+    if (not args.prefer_monthly) and (not _is_weekend(today)) and isinstance(daily_fmt_url, str) and daily_fmt_url.strip():
+        try:
+            fmt_raw = _http_get_json(daily_fmt_url)
+            daily_fmt_rows = _parse_fmtqik_rows(fmt_raw, schema)
+            if not daily_fmt_rows:
+                daily_ok = False
+                fetch_notes.append("openapi_fmtqik_parsed_0_rows")
+        except Exception as e:
+            daily_ok = False
+            fetch_notes.append(f"openapi_fmtqik_failed:{e}")
+    else:
+        daily_ok = False
+        if args.prefer_monthly:
+            fetch_notes.append("openapi_skipped_prefer_monthly")
+        elif _is_weekend(today):
+            fetch_notes.append("openapi_skipped_weekend")
+        else:
+            fetch_notes.append("openapi_skipped_missing_url")
+
+    if (not args.prefer_monthly) and isinstance(daily_ohlc_url, str) and daily_ohlc_url.strip():
+        try:
             ohlc_raw = _http_get_json(daily_ohlc_url)
             daily_ohlc_rows = _parse_ohlc_rows(ohlc_raw, schema)
-        else:
+        except Exception as e:
+            fetch_notes.append(f"openapi_ohlc_failed(downgrade):{e}")
             daily_ohlc_rows = []
-    except Exception as e:
-        print(f"[WARN] daily MI_5MINS_HIST fetch/parse failed (downgrade): {e}")
+    else:
         daily_ohlc_rows = []
+        if args.prefer_monthly:
+            fetch_notes.append("openapi_ohlc_skipped_prefer_monthly")
 
-    # ---- 2) BACKFILL fetch (monthly) ----
+    # ---- 1b) Monthly fallback for current month (guardrail) ----
+    month_fmt_rows: List[FmtRow] = []
+    month_ohlc_rows: List[OhlcRow] = []
+    month_notes: List[str] = []
+
+    if not daily_fmt_rows:
+        fetch_plan = "monthly_fallback_current_month"
+        month_fmt_rows, month_ohlc_rows, month_notes = _fetch_month_current(schema, today)
+        fetch_notes.extend(month_notes)
+
+    # ---- 2) BACKFILL fetch (monthly historical) ----
     backfill_fmt_rows: List[FmtRow] = []
     backfill_ohlc_rows: List[OhlcRow] = []
 
@@ -723,16 +849,45 @@ def main() -> None:
             except Exception as e:
                 print(f"[WARN] backfill MI_5MINS_HIST month={yyyymm01} failed: {e}")
 
-    # ---- 3) Merge daily + backfill rows ----
-    fmt_rows = (daily_fmt_rows or []) + (backfill_fmt_rows or [])
-    ohlc_rows = (daily_ohlc_rows or []) + (backfill_ohlc_rows or [])
+    # ---- 3) Merge rows (OpenAPI/month-fallback/backfill) ----
+    fmt_rows = (daily_fmt_rows or []) + (month_fmt_rows or []) + (backfill_fmt_rows or [])
+    ohlc_rows = (daily_ohlc_rows or []) + (month_ohlc_rows or []) + (backfill_ohlc_rows or [])
+
+    cache_only_mode = False
+    cache_only_reason = ""
 
     if not fmt_rows:
-        print("[FATAL] no usable FMTQIK rows from daily/backfill after parsing.")
-        sys.exit(1)
+        # Guardrail: allow cache-only degrade (no guessing, no new data)
+        if existing_roll:
+            cache_only_mode = True
+            cache_only_reason = "no_fmt_rows_from_openapi_or_monthly; using_existing_cache_only"
+            fetch_notes.append(cache_only_reason)
+        else:
+            print("[FATAL] no usable FMTQIK rows from openapi/monthly/backfill and no existing cache.")
+            sys.exit(1)
 
-    fmt_by_date: Dict[str, FmtRow] = {r.date: r for r in fmt_rows}
-    ohlc_by_date: Dict[str, OhlcRow] = {r.date: r for r in ohlc_rows}
+    if cache_only_mode:
+        # build fmt_by_date & ohlc_by_date from cache (best-effort)
+        fmt_by_date = {}
+        ohlc_by_date = {}
+        for r in existing_roll:
+            if not isinstance(r, dict):
+                continue
+            d = str(r.get("date", "")).strip()
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", d):
+                continue
+            # note: cache already stores unified row; reuse
+            tv = _safe_int(r.get("trade_value"))
+            close = _safe_float(r.get("close"))
+            chg = _safe_float(r.get("change"))
+            fmt_by_date[d] = FmtRow(d, tv, close, chg)
+            high = _safe_float(r.get("high"))
+            low = _safe_float(r.get("low"))
+            oclose = _safe_float(r.get("close"))
+            ohlc_by_date[d] = OhlcRow(d, high, low, oclose)
+    else:
+        fmt_by_date = {r.date: r for r in fmt_rows}
+        ohlc_by_date = {r.date: r for r in ohlc_rows}
 
     fmt_dates_asc = sorted(fmt_by_date.keys())
     used_date, run_day_tag, used_date_status = _pick_used_date(today, fmt_dates_asc)
@@ -802,6 +957,10 @@ def main() -> None:
         prefix = "今日資料未更新；"
         extra_note = "；daily endpoint has not published today's row yet"
 
+    if cache_only_mode:
+        prefix = "資料來源降級(僅使用既有快取)；" + prefix
+        extra_note += "；cache-only degrade (no new fetch)"
+
     summary = f"{prefix}UsedDate={used_date}：Mode={mode}；freshness_ok={freshness_ok}{extra_note}"
 
     # -------- ADDITIVE derived signals for unified (do not change existing values) --------
@@ -839,16 +998,19 @@ def main() -> None:
     }
 
     # NEW (additive): cache_roll25 for unified builder
-    # Requirements:
-    # - Must be list of dicts
-    # - Newest->oldest
-    # - Must include "date" and "close" (and ideally other fields)
     cache_roll25 = merged_roll[: max(LOOKBACK_TARGET + 5, min(REPORT_CACHE_ROLL25_CAP, len(merged_roll)))]
 
     latest_report = {
         "generated_at": _now_tz(tz).isoformat(),
         "timezone": str(tz),
         "summary": summary,
+
+        # GUARDRAIL DIAGNOSTICS (additive)
+        "fetch": {
+            "fetch_plan": fetch_plan,
+            "notes": fetch_notes[:50],  # keep bounded
+        },
+
         "numbers": {
             "UsedDate": used_date,
             "Close": None if today_close is None else round(float(today_close), 2),
@@ -889,6 +1051,7 @@ def main() -> None:
             f"NewLow_N: {NEWLOW_N} if close<=min(close_last{NEWLOW_N}) (min_points={NEWLOW_MIN_POINTS}) else 0; "
             f"ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.",
             "ADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).",
+            "GUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).",
         ]),
         "run_day_tag": run_day_tag,
         "used_date_status": used_date_status,
@@ -912,7 +1075,7 @@ def main() -> None:
     # stats
     series_close = _series_value_desc(m_all, "close")
     series_tv = _series_value_desc(m_all, "trade_value")
-    series_ret = _series_pct_change_desc(m_all)
+    series_ret2 = _series_pct_change_desc(m_all)
     series_amp = _series_amplitude_pct_desc(m_all)
 
     stats = {
@@ -935,6 +1098,14 @@ def main() -> None:
         "backfill_limit": BACKFILL_LIMIT,
         "store_cap": STORE_CAP,
 
+        # GUARDRAIL DIAGNOSTICS (additive)
+        "fetch": {
+            "fetch_plan": fetch_plan,
+            "cache_only_mode": cache_only_mode,
+            "cache_only_reason": cache_only_reason,
+            "notes": fetch_notes[:50],
+        },
+
         "series": {
             "close": {
                 "asof": used_date,
@@ -950,10 +1121,10 @@ def main() -> None:
             },
             "pct_change": {
                 "asof": used_date,
-                "win60": _calc_stats_for_series(series_ret, used_date, 60),
-                "win252": _calc_stats_for_series(series_ret, used_date, 252),
+                "win60": _calc_stats_for_series(series_ret2, used_date, 60),
+                "win252": _calc_stats_for_series(series_ret2, used_date, 252),
                 "window_note": {
-                    "n_total_available": len(series_ret),
+                    "n_total_available": len(series_ret2),
                     "note": "pct_change needs D-1 close; with backfill_limit=252, max pct_change points are typically <=251."
                 }
             },
@@ -1001,10 +1172,11 @@ def main() -> None:
     print(f"  UsedDate={used_date} Mode={mode} freshness_ok={freshness_ok} age_days={freshness_age_days}")
     print(f"  run_day_tag={run_day_tag} used_date_status={used_date_status}")
     print(f"  roll_records={len(merged_roll)} dedupe_ok={dedupe_ok}")
-    print(f"  close_n={len(series_close)} tv_n={len(series_tv)} ret_n={len(series_ret)} amp_n={len(series_amp)}")
+    print(f"  close_n={len(series_close)} tv_n={len(series_tv)} ret_n={len(series_ret2)} amp_n={len(series_amp)}")
     print(f"  ADDITIVE: vol_multiplier_20={None if vol_mult_20 is None else round(float(vol_mult_20), 6)} "
           f"VolumeAmplified={volume_ampl} NewLow_N={new_low_n} ConsecutiveBreak={cons_down}")
     print(f"  ADDITIVE: latest_report.cache_roll25 points={len(cache_roll25)} (newest->oldest)")
+    print(f"  GUARDRAIL: fetch_plan={fetch_plan} cache_only_mode={cache_only_mode}")
     print(f"  wrote: {ROLL_PATH}, {REPORT_PATH}, {STATS_PATH}")
 
 
