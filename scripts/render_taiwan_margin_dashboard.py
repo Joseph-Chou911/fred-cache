@@ -53,6 +53,17 @@ Threshold calibration (audit-safe; deterministic)
     - spread20 series (tpex_20d_pct - twse_20d_pct, strict base-date match per sample)
     - accel series (total_1d_pct - total_5d_pct/5)
 - If insufficient samples (< calib_min_n) => fallback to fixed thresholds with explicit reason
+
+OTC Guardrail (display-only, deterministic; does NOT change margin_signal):
+- PREWATCH: TPEX_20D% >= (thr_expansion20 - guardrail_prewatch_gap)
+  default gap=0.2 => prewatch at 7.8 when thr_expansion20=8.0
+- OTC_ALERT: TPEX_20D% >= thr_expansion20 AND TPEX_1D% < 0 AND TPEX_5D% < 0
+Purpose: avoid TOTAL-only dilution hiding OTC-led leverage stress early.
+
+Implementation note:
+- Guardrail is ON by default (audit-friendly, display-only).
+- You can explicitly disable via --disable-otc-guardrail.
+- Backward compatible: --enable-otc-guardrail is still accepted (no-op if already enabled).
 """
 
 from __future__ import annotations
@@ -127,7 +138,6 @@ def line_check(name: str, status: str, detail: Optional[str] = None) -> str:
         return f"- {name}：{icon}"
     if status == "NOTE":
         return f"- {name}：{icon}（{detail}）"
-    # PASS/FAIL with details
     return f"- {name}：{icon}（{detail}）"
 
 
@@ -376,6 +386,86 @@ def determine_signal(
     return (state, "NONE", "no rule triggered")
 
 
+# ----------------- OTC Guardrail (display-only) -----------------
+def compute_otc_guardrail(
+    tp20_pct: Optional[float],
+    tp1_pct: Optional[float],
+    tp5_pct: Optional[float],
+    thr_expansion20: float,
+    prewatch_gap: float,
+) -> Dict[str, Any]:
+    """
+    Deterministic, display-only guardrail to avoid TOTAL-only dilution.
+
+    Returns dict:
+      - prewatch_threshold: thr_expansion20 - gap
+      - prewatch_gap: gap
+      - prewatch_hit: bool/None (debug-only; do NOT use as stage)
+      - otc_alert_hit: bool/None
+      - prewatch_stage: one of {ALERT, PREWATCH, NONE, NA}
+      - label: one of {OTC_ALERT, PREWATCH, NONE, NA}  (kept for display compatibility)
+      - rationale: string
+
+    Note:
+      - OTC_ALERT implies tp20 >= thr_expansion20, so prewatch_hit is typically True.
+        Downstream should use prewatch_stage/label, not prewatch_hit.
+    """
+    prewatch_thr = float(thr_expansion20) - float(prewatch_gap)
+
+    if tp20_pct is None:
+        return {
+            "prewatch_threshold": prewatch_thr,
+            "prewatch_gap": float(prewatch_gap),
+            "label": "NA",
+            "prewatch_stage": "NA",
+            "prewatch_hit": None,
+            "otc_alert_hit": None,
+            "rationale": "TPEX_20D% is NA => cannot assess OTC guardrail",
+        }
+
+    prewatch_hit = bool(tp20_pct >= prewatch_thr)
+
+    # OTC_ALERT: mirror main ALERT logic but on TPEX only, and requires tp20>=thr_expansion20
+    otc_alert_hit = (
+        (tp20_pct >= thr_expansion20)
+        and (tp1_pct is not None)
+        and (tp5_pct is not None)
+        and (tp1_pct < 0.0)
+        and (tp5_pct < 0.0)
+    )
+    if otc_alert_hit:
+        return {
+            "prewatch_threshold": prewatch_thr,
+            "prewatch_gap": float(prewatch_gap),
+            "label": "OTC_ALERT",
+            "prewatch_stage": "ALERT",
+            "prewatch_hit": prewatch_hit,
+            "otc_alert_hit": True,
+            "rationale": "TPEX in expansion(>=thr) + 1D%<0 and 5D%<0 (OTC deleveraging shape)",
+        }
+
+    if prewatch_hit:
+        return {
+            "prewatch_threshold": prewatch_thr,
+            "prewatch_gap": float(prewatch_gap),
+            "label": "PREWATCH",
+            "prewatch_stage": "PREWATCH",
+            "prewatch_hit": True,
+            "otc_alert_hit": False,
+            "rationale": "TPEX_20D% approaching expansion threshold (dilution risk for TOTAL-only signal)",
+        }
+
+    return {
+        "prewatch_threshold": prewatch_thr,
+        "prewatch_gap": float(prewatch_gap),
+        "label": "NONE",
+        "prewatch_stage": "NONE",
+        "prewatch_hit": False,
+        "otc_alert_hit": False,
+        "rationale": "no OTC guardrail triggered",
+    }
+
+
 # ----------------- latest.json extractors -----------------
 def extract_latest_rows(latest_obj: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
     series = latest_obj.get("series") or {}
@@ -423,14 +513,14 @@ def check_base_date_in_series(series: List[Tuple[str, float]], base_date: Option
 def check_head5_strict_desc_unique(dates_raw: List[Any]) -> Tuple[bool, str]:
     """
     Head5 must satisfy:
-      - at least 2 rows
+      - at least 5 rows (head5 semantics)
       - each of first 5 dates parsable
       - strictly decreasing (newest-first)
       - no duplicates
     """
     head_raw = dates_raw[:5]
-    if len(head_raw) < 2:
-        return False, "head5 insufficient"
+    if len(head_raw) < 5:
+        return False, f"head5 requires 5 dates, got {len(head_raw)}"
 
     head: List[date] = []
     for i, x in enumerate(head_raw):
@@ -653,7 +743,7 @@ def maint_derive_1d_trend(
       1) Use maint_latest.maint_ratio_pct as today.
       2) Use history list to find prev:
          - If hist[0] matches latest.data_date and hist has >=2, prev=hist[1]
-         - Else if hist has >=1 and hist[0] is different date, treat hist[0] as prev (best-effort)
+         - Else if hist has >=1 and hist[0] is different date, treat hist[0] as prev (fallback)
     """
     if not isinstance(maint_latest, dict):
         return None, None, "maint_latest missing"
@@ -714,7 +804,6 @@ def horizon_pct_series_from_balance_series(series: List[Tuple[str, float]], n: i
     """
     For each index i where i+n exists, compute pct:
       pct_i = (v_i - v_{i+n}) / v_{i+n} * 100
-    NEWEST-FIRST output order matches input order, but caller typically uses as distribution only.
     """
     out: List[float] = []
     if len(series) < n + 1:
@@ -724,8 +813,7 @@ def horizon_pct_series_from_balance_series(series: List[Tuple[str, float]], n: i
         if base == 0:
             continue
         pct = (series[i][1] - base) / base * 100.0
-        if isinstance(pct, (int, float)):
-            out.append(float(pct))
+        out.append(float(pct))
     return out
 
 
@@ -737,11 +825,6 @@ def spread20_series_strict_base_match(
     """
     Compute spread20 per date with STRICT base-date match for the sample:
       spread20(d) = tpex_20d_pct(d) - twse_20d_pct(d)
-    Only include sample if:
-      - date d exists in both series
-      - both have idx+n
-      - base_date_twse == base_date_tpex (strict)
-      - base values non-zero
     """
     out: List[float] = []
     tw_idx = _series_index_map(twse_s)
@@ -775,8 +858,6 @@ def accel_series_from_total(total_series: List[Tuple[str, float]]) -> List[float
     out: List[float] = []
     if len(total_series) < 6:
         return out
-    # Precompute pct series on same indexing
-    # pct1 uses base at i+1 ; pct5 uses base at i+5
     for i in range(0, len(total_series) - 5):
         base1 = total_series[i + 1][1]
         base5 = total_series[i + 5][1]
@@ -811,7 +892,6 @@ def calibrate_thresholds(
     }
 
     if policy != "percentile":
-        # fixed policy: no calibration
         info["mode"] = "fixed"
         for k in ("expansion20", "contraction20", "watch1d", "watchspread20", "watchaccel"):
             info["items"][k] = {
@@ -823,7 +903,6 @@ def calibrate_thresholds(
             }
         return thresholds, info
 
-    # percentile policy: derive from history distributions
     total_s = build_total_series(twse_s, tpex_s)
 
     dist_tot20 = horizon_pct_series_from_balance_series(total_s, 20)
@@ -832,7 +911,6 @@ def calibrate_thresholds(
     dist_accel = accel_series_from_total(total_s)
 
     def _derive(name: str, dist: List[float], pctl: float) -> Tuple[float, Dict[str, Any]]:
-        # default fallback
         fallback = FIXED_THRESHOLDS[name]
         if not dist:
             return fallback, {
@@ -868,7 +946,6 @@ def calibrate_thresholds(
             "reason": "OK",
         }
 
-    # expansion20 / contraction20 from total_20d_pct distribution
     thr, it = _derive("expansion20", dist_tot20, float(pctl_cfg["expansion20"]))
     thresholds["expansion20"] = thr
     info["items"]["expansion20"] = it
@@ -877,17 +954,14 @@ def calibrate_thresholds(
     thresholds["contraction20"] = thr
     info["items"]["contraction20"] = it
 
-    # watch1d from total_1d_pct distribution
     thr, it = _derive("watch1d", dist_tot1, float(pctl_cfg["watch1d"]))
     thresholds["watch1d"] = thr
     info["items"]["watch1d"] = it
 
-    # watchspread20 from spread20 distribution
     thr, it = _derive("watchspread20", dist_spread20, float(pctl_cfg["watchspread20"]))
     thresholds["watchspread20"] = thr
     info["items"]["watchspread20"] = it
 
-    # watchaccel from accel distribution
     thr, it = _derive("watchaccel", dist_accel, float(pctl_cfg["watchaccel"]))
     thresholds["watchaccel"] = thr
     info["items"]["watchaccel"] = it
@@ -926,7 +1000,30 @@ def main() -> None:
 
     # Added: machine-readable output for unified dashboard (no logic change)
     ap.add_argument("--signals-out", default="taiwan_margin_cache/signals_latest.json")
+
+    # OTC guardrail (display-only)
+    # Default ON. Backward compatible with --enable-otc-guardrail.
+    ap.add_argument("--enable-otc-guardrail", action="store_true", default=None,
+                    help="(back-compat) Explicitly enable OTC guardrail (display-only). Default is ON.")
+    ap.add_argument("--disable-otc-guardrail", action="store_true", default=None,
+                    help="Disable OTC guardrail (display-only).")
+    ap.add_argument(
+        "--otc-prewatch-gap",
+        type=float,
+        default=0.2,
+        help="PREWATCH if TPEX_20D% >= thr_expansion20 - gap (default 0.2 => 7.8 when thr=8.0)",
+    )
+
     args = ap.parse_args()
+
+    # Guardrail enable logic (tri-state, deterministic)
+    # Priority: explicit disable > explicit enable > default ON
+    if args.disable_otc_guardrail:
+        otc_guardrail_enabled = False
+    elif args.enable_otc_guardrail:
+        otc_guardrail_enabled = True
+    else:
+        otc_guardrail_enabled = True  # default ON
 
     latest = read_json(args.latest)
     hist = read_json(args.history)
@@ -1006,7 +1103,7 @@ def main() -> None:
         tpex_s=tpex_s,
     )
 
-    # Determine state/signal using calibrated thresholds
+    # Determine state/signal using calibrated thresholds (TOTAL-only as before)
     state_label, margin_signal, rationale = determine_signal(
         tot20_pct=tot20.get("pct"),
         tot1_pct=tot1.get("pct"),
@@ -1015,6 +1112,17 @@ def main() -> None:
         spread20=spread20,
         thresholds=thresholds,
     )
+
+    # ---------- OTC Guardrail (display-only; does not affect margin_signal) ----------
+    otc_guardrail: Optional[Dict[str, Any]] = None
+    if otc_guardrail_enabled:
+        otc_guardrail = compute_otc_guardrail(
+            tp20_pct=tp20.get("pct"),
+            tp1_pct=tp1.get("pct"),
+            tp5_pct=tp5.get("pct"),
+            thr_expansion20=float(thresholds["expansion20"]),
+            prewatch_gap=float(args.otc_prewatch_gap),
+        )
 
     # ---------- Margin data quality checks (these determine margin_quality) ----------
     c1_tw_ok = (twse_meta_date is not None) and (latest_date_from_series(twse_s) is not None) and (twse_meta_date == latest_date_from_series(twse_s))
@@ -1241,6 +1349,16 @@ def main() -> None:
     md.append(f"  - resonance_confidence: {resonance_confidence}")
     if roll25_window_note:
         md.append(f"  - roll25_window_note: {roll25_window_note}")
+
+    # OTC Guardrail summary line (display-only; does not alter margin_signal)
+    if otc_guardrail_enabled:
+        md.append(f"- OTC_guardrail（display-only; 不影響主信號）：{_get(otc_guardrail or {}, 'label', 'NA')}｜stage={_get(otc_guardrail or {}, 'prewatch_stage', 'NA')}")
+        md.append(f"  - rationale: {_get(otc_guardrail or {}, 'rationale', 'NA')}")
+        md.append(
+            f"  - thresholds: thr_expansion20={fmt_pct(float(thresholds['expansion20']),4)}, "
+            f"prewatch_gap={fmt_pct(float(args.otc_prewatch_gap),4)}, "
+            f"prewatch_threshold={fmt_pct(float(_get(otc_guardrail or {}, 'prewatch_threshold', float(thresholds['expansion20'])-float(args.otc_prewatch_gap))),4)}"
+        )
     md.append("")
 
     md.append("## 1.1) 判定標準（本 dashboard 內建規則）")
@@ -1252,16 +1370,20 @@ def main() -> None:
 
     md.append("### 1) WATCH（升溫）")
     md.append("- 條件：20D% ≥ thr_expansion20 且 (1D% ≥ thr_watch1d 或 Spread20 ≥ thr_watchspread20 或 Accel ≥ thr_watchaccel)")
-    md.append("- 行動：把你其他風險模組（VIX / 信用 / 成交量）一起對照，確認是不是同向升溫。")
     md.append("")
     md.append("### 2) ALERT（疑似去槓桿）")
     md.append("- 條件：20D% ≥ thr_expansion20 且 1D% < 0 且 5D% < 0")
-    md.append("- 行動：優先看『是否出現連續負值』，因為可能開始踩踏。")
     md.append("")
     md.append("### 3) 解除 WATCH（降溫）")
     md.append("- 條件：20D% 仍高，但 Accel ≤ 0 且 1D% 回到 < 0.3（需連 2–3 次確認；此段仍採固定 0.3）")
-    md.append("- 行動：代表短線槓桿加速結束，回到『擴張但不加速』。")
     md.append("")
+
+    if otc_guardrail_enabled:
+        md.append("### 4) OTC Guardrail（display-only；不影響主信號）")
+        md.append(f"- PREWATCH：TPEX_20D% ≥ (thr_expansion20 - gap)；gap={fmt_pct(float(args.otc_prewatch_gap),4)}")
+        md.append("- OTC_ALERT：TPEX_20D% ≥ thr_expansion20 且 TPEX_1D% < 0 且 TPEX_5D% < 0")
+        md.append("- 目的：避免僅看合計（TOTAL-only）時，OTC 端先升溫/轉弱被稀釋而晚報。")
+        md.append("")
 
     md.append("## 2) 資料")
     md.append(
@@ -1288,8 +1410,8 @@ def main() -> None:
 
     md.append("## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）")
     md.append(f"- maint_path: {args.maint if args.maint else 'NA'}")
-    md.append(f"- maint_ratio_policy: {maint_ratio_policy}")
-    md.append(f"- maint_ratio_confidence: {maint_ratio_confidence}")
+    md.append(f"- maint_ratio_policy: PROXY_TREND_ONLY")
+    md.append(f"- maint_ratio_confidence: DOWNGRADED")
 
     if maint_ok and maint_latest is not None:
         md.append(f"- data_date: {_norm_date_iso(_get(maint_latest,'data_date','NA')) or 'NA'}｜maint_ratio_pct: {_get(maint_latest,'maint_ratio_pct','NA')}")
@@ -1299,36 +1421,10 @@ def main() -> None:
         )
         if maint_ratio_trend_note:
             md.append(f"- maint_ratio_trend_note: {maint_ratio_trend_note}")
-
-        md.append(
-            f"- totals: financing_amount_twd={_get(maint_latest,'total_financing_amount_twd','NA')}, "
-            f"collateral_value_twd={_get(maint_latest,'total_collateral_value_twd','NA')}"
-        )
-        md.append(
-            f"- coverage: included_count={_get(maint_latest,'included_count','NA')}, "
-            f"missing_price_count={_get(maint_latest,'missing_price_count','NA')}"
-        )
-        md.append(
-            f"- quality: fetch_status={_get(maint_latest,'fetch_status','NA')}, "
-            f"confidence={_get(maint_latest,'confidence','NA')}, "
-            f"dq_reason={_get(maint_latest,'dq_reason','NA')}"
-        )
     else:
         md.append(f"- maint_error: {maint_err or 'maint missing'}")
 
     md.append("")
-    md.append("## 2.0.1) 大盤融資維持率（history；display-only）")
-    md.append(f"- maint_hist_path: {args.maint_hist if args.maint_hist else 'NA'}")
-    if maint_hist_ok and maint_hist_obj is not None:
-        md.append(f"- history_rows: {len(maint_hist_list)}")
-        if maint_head:
-            md.append(f"- head5: {maint_head}")
-        else:
-            md.append("- head5: NA（insufficient）")
-    else:
-        md.append(f"- maint_hist_error: {maint_hist_err or 'maint_hist missing'}")
-    md.append("")
-
     md.append("## 2.1) 台股成交量/波動（roll25_cache；confirm-only）")
     md.append(f"- roll25_path: {args.roll25}")
     if roll_ok and roll is not None:
@@ -1337,29 +1433,6 @@ def main() -> None:
             f"risk_level: {roll_risk_level_disp}｜risk_level_raw: {roll_risk_level_raw}｜tag: {_get(roll,'tag','NA')}"
         )
         md.append(f"- summary: {_get(roll,'summary','NA')}")
-        nums = _get(roll, "numbers", {})
-        md.append(
-            "- numbers: "
-            f"Close={_get(nums,'Close','NA')}, "
-            f"PctChange={_get(nums,'PctChange','NA')}%, "
-            f"TradeValue={_get(nums,'TradeValue','NA')}, "
-            f"VolumeMultiplier={_get(nums,'VolumeMultiplier','NA')}, "
-            f"AmplitudePct={_get(nums,'AmplitudePct','NA')}%, "
-            f"VolMultiplier={_get(nums,'VolMultiplier','NA')}"
-        )
-        sig = _get(roll, "signal", {})
-        md.append(
-            "- signals: "
-            f"DownDay={_get(sig,'DownDay','NA')}, "
-            f"VolumeAmplified={_get(sig,'VolumeAmplified','NA')}, "
-            f"VolAmplified={_get(sig,'VolAmplified','NA')}, "
-            f"NewLow_N={_get(sig,'NewLow_N','NA')}, "
-            f"ConsecutiveBreak={_get(sig,'ConsecutiveBreak','NA')}, "
-            f"OhlcMissing={_get(sig,'OhlcMissing','NA')}"
-        )
-        md.append(f"- action: {_get(roll,'action','NA')}")
-        md.append(f"- caveats: {_get(roll,'caveats','NA')}")
-        md.append(f"- generated_at: {_get(roll,'generated_at','NA')} ({_get(roll,'timezone','NA')})")
         md.append(f"- resonance_confidence: {resonance_confidence}")
     else:
         md.append(f"- roll25_error: {roll_err or 'roll25 missing'}")
@@ -1367,11 +1440,6 @@ def main() -> None:
     md.append("")
 
     md.append("## 2.2) 一致性判定（Margin × Roll25 共振）")
-    md.append("- 規則（deterministic，不猜）：")
-    md.append("  1. 若 Margin∈{WATCH,ALERT} 且 roll25 heated（risk_level∈{中,高} 或 VolumeAmplified/VolAmplified/NewLow_N/ConsecutiveBreak 任一為 True）→ RESONANCE")
-    md.append("  2. 若 Margin∈{WATCH,ALERT} 且 roll25 not heated → DIVERGENCE（槓桿端升溫，但市場面未放大）")
-    md.append("  3. 若 Margin∉{WATCH,ALERT} 且 roll25 heated → MARKET_SHOCK_ONLY（市場面事件/波動主導）")
-    md.append("  4. 其餘 → QUIET")
     md.append(f"- 判定：{resonance_na(resonance_label, resonance_code)}（{resonance_rationale}）")
     md.append(f"- resonance_confidence: {resonance_confidence}")
     if resonance_note:
@@ -1383,56 +1451,25 @@ def main() -> None:
     md.append(
         f"- 1D：Δ={fmt_num(tw1['delta'],2)} 億元；Δ%={fmt_pct(tw1['pct'],4)} %｜latest={fmt_num(tw1['latest'],2)}｜base={fmt_num(tw1['base'],2)}（基期日={tw1['base_date'] or 'NA'}）"
     )
-    md.append(
-        f"- 5D：Δ={fmt_num(tw5['delta'],2)} 億元；Δ%={fmt_pct(tw5['pct'],4)} %｜latest={fmt_num(tw5['latest'],2)}｜base={fmt_num(tw5['base'],2)}（基期日={tw5['base_date'] or 'NA'}）"
-    )
-    md.append(
-        f"- 20D：Δ={fmt_num(tw20['delta'],2)} 億元；Δ%={fmt_pct(tw20['pct'],4)} %｜latest={fmt_num(tw20['latest'],2)}｜base={fmt_num(tw20['base'],2)}（基期日={tw20['base_date'] or 'NA'}）"
-    )
-    md.append("")
-
     md.append("### 上櫃(TPEX)")
     md.append(
         f"- 1D：Δ={fmt_num(tp1['delta'],2)} 億元；Δ%={fmt_pct(tp1['pct'],4)} %｜latest={fmt_num(tp1['latest'],2)}｜base={fmt_num(tp1['base'],2)}（基期日={tp1['base_date'] or 'NA'}）"
     )
-    md.append(
-        f"- 5D：Δ={fmt_num(tp5['delta'],2)} 億元；Δ%={fmt_pct(tp5['pct'],4)} %｜latest={fmt_num(tp5['latest'],2)}｜base={fmt_num(tp5['base'],2)}（基期日={tp5['base_date'] or 'NA'}）"
-    )
-    md.append(
-        f"- 20D：Δ={fmt_num(tp20['delta'],2)} 億元；Δ%={fmt_pct(tp20['pct'],4)} %｜latest={fmt_num(tp20['latest'],2)}｜base={fmt_num(tp20['base'],2)}（基期日={tp20['base_date'] or 'NA'}）"
-    )
     md.append("")
 
-    md.append("### 合計(上市+上櫃)")
-    md.append(
-        f"- 1D：Δ={fmt_num(tot1.get('delta'),2)} 億元；Δ%={fmt_pct(tot1.get('pct'),4)} %｜latest={fmt_num(tot1.get('latest'),2)}｜base={fmt_num(tot1.get('base'),2)}（基期日={tot1.get('base_date') or 'NA'}）"
-    )
-    md.append(
-        f"- 5D：Δ={fmt_num(tot5.get('delta'),2)} 億元；Δ%={fmt_pct(tot5.get('pct'),4)} %｜latest={fmt_num(tot5.get('latest'),2)}｜base={fmt_num(tot5.get('base'),2)}（基期日={tot5.get('base_date') or 'NA'}）"
-    )
-    md.append(
-        f"- 20D：Δ={fmt_num(tot20.get('delta'),2)} 億元；Δ%={fmt_pct(tot20.get('pct'),4)} %｜latest={fmt_num(tot20.get('latest'),2)}｜base={fmt_num(tot20.get('base'),2)}（基期日={tot20.get('base_date') or 'NA'}）"
-    )
-    md.append("")
+    if otc_guardrail_enabled:
+        md.append("## 3.1) OTC Guardrail（display-only；不影響主信號）")
+        md.append(f"- stage: {_get(otc_guardrail or {}, 'prewatch_stage', 'NA')}｜label: {_get(otc_guardrail or {}, 'label', 'NA')}")
+        md.append(f"- rationale: {_get(otc_guardrail or {}, 'rationale', 'NA')}")
+        md.append(
+            f"- inputs: TPEX_20D%={fmt_pct(tp20.get('pct'),4)}｜TPEX_1D%={fmt_pct(tp1.get('pct'),4)}｜TPEX_5D%={fmt_pct(tp5.get('pct'),4)}"
+        )
+        md.append(
+            f"- thresholds: thr_expansion20={fmt_pct(float(thresholds['expansion20']),4)}｜prewatch_threshold={fmt_pct(float(_get(otc_guardrail or {}, 'prewatch_threshold', float(thresholds['expansion20'])-float(args.otc_prewatch_gap))),4)}"
+        )
+        md.append("")
 
-    md.append("## 4) 提前示警輔助指標（不引入外部資料）")
-    md.append(f"- Accel = 1D% - (5D%/5)：{fmt_pct(accel,4)}")
-    md.append(f"- Spread20 = TPEX_20D% - TWSE_20D%：{fmt_pct(spread20,4)}")
-    md.append("")
-
-    md.append("## 5) 稽核備註")
-    md.append("- 合計嚴格規則：僅在『最新資料日期一致』且『該 horizon 基期日一致』時才計算合計；否則該 horizon 合計輸出 NA。")
-    md.append("- 即使站點『融資增加(億)』欄缺失，本 dashboard 仍以 balance 序列計算 Δ/Δ%，避免依賴單一欄位。")
-    md.append("- rows_latest_table/head_dates/tail_dates 用於快速偵測抓錯頁、資料斷裂或頁面改版。")
-    md.append("- rows_series 是計算輸入序列長度（由 history.json 彙整），用於 horizon 計算與 Check-4。")
-    md.append("- roll25 區塊只讀取 repo 內既有 JSON（confirm-only），不在此 workflow 內重抓資料。")
-    md.append("- roll25 若顯示 UsedDateStatus=DATA_NOT_UPDATED：代表資料延遲；Check-6 以 NOTE 呈現（非抓錯檔）。")
-    md.append(f"- resonance_policy={resonance_policy}：strict 需同日且非 stale；latest 允許 stale/date mismatch 但會 resonance_confidence=DOWNGRADED。")
-    md.append("- maint_ratio 為 proxy（display-only）：僅看趨勢與變化（Δ），不得用 proxy 絕對水位做門檻判斷。")
-    md.append("")
-
-    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint 僅供對照）")
-    md.append(f"- Check-0 latest.json top-level quality：{mark_note('field may be absent; does not affect margin_quality')}")
+    md.append("## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint/guardrail 僅供對照）")
     md.append(line_check("Check-1 TWSE meta_date==series[0].date", "PASS" if c1_tw_ok else "FAIL"))
     md.append(line_check("Check-1 TPEX meta_date==series[0].date", "PASS" if c1_tp_ok else "FAIL"))
     md.append(line_check("Check-2 TWSE head5 dates 嚴格遞減且無重複", "PASS" if c2_tw_ok else "FAIL", None if c2_tw_ok else c2_tw_msg))
@@ -1445,11 +1482,16 @@ def main() -> None:
 
     md.append(line_check("Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）", c6_status, c6_msg))
     md.append(line_check("Check-7 roll25 Lookback window（info）", c7_status, c7_msg))
-
-    md.append(line_check("Check-8 maint_ratio latest readable（info）", "PASS" if maint_ok else "NOTE", "OK" if maint_ok else (maint_err or "maint missing")))
-    md.append(line_check("Check-9 maint_ratio history readable（info）", "PASS" if maint_hist_ok else "NOTE", "OK" if maint_hist_ok else (maint_hist_err or "maint_hist missing")))
     md.append(line_check("Check-10 maint latest vs history[0] date（info）", c10_status, c10_msg))
     md.append(line_check("Check-11 maint history head5 dates 嚴格遞減且無重複（info）", c11_status, c11_msg))
+
+    if otc_guardrail_enabled:
+        md.append(line_check(
+            "Check-12 OTC Guardrail（info-only）",
+            "NOTE",
+            f"stage={_get(otc_guardrail or {}, 'prewatch_stage', 'NA')}, label={_get(otc_guardrail or {}, 'label', 'NA')}, "
+            f"prewatch_hit={_get(otc_guardrail or {}, 'prewatch_hit', 'NA')}, otc_alert_hit={_get(otc_guardrail or {}, 'otc_alert_hit', 'NA')}"
+        ))
 
     md.append("")
     generated_at_utc = latest.get("generated_at_utc", None) if isinstance(latest, dict) else None
@@ -1458,14 +1500,14 @@ def main() -> None:
     md.append(f"_generated_at_utc: {generated_at_utc}_")
     md.append("")
 
-    # write markdown (existing behavior)
+    # write markdown
     out_parent = os.path.dirname(args.out)
     if out_parent:
         os.makedirs(out_parent, exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         f.write("\n".join(md))
 
-    # ---------- Added: emit signals_latest.json for unified dashboard (NO LOGIC CHANGE) ----------
+    # ---------- emit signals_latest.json ----------
     roll_is_heated: Optional[bool] = None
     if roll_ok and roll is not None:
         roll_is_heated = roll25_is_heated(roll)
@@ -1499,14 +1541,6 @@ def main() -> None:
             "used": dict(thresholds),
             "calibration": calib_info,
         },
-        "upstream": {
-            "latest_json": {
-                "confidence": top_conf,
-                "fetch_status": top_fetch,
-                "dq_reason": top_dq,
-                "has_top_quality": has_top_quality,
-            }
-        },
         "margin": {
             "twse_meta_date": twse_meta_date,
             "tpex_meta_date": tpex_meta_date,
@@ -1528,15 +1562,8 @@ def main() -> None:
                 "rows_series": tpex_rows_series,
                 "rows_latest_table": tpex_rows_latest_table,
             },
-            "total": {
-                "h1": tot1,
-                "h5": tot5,
-                "h20": tot20,
-            },
-            "derived": {
-                "accel": accel,
-                "spread20": spread20,
-            },
+            "total": {"h1": tot1, "h5": tot5, "h20": tot20},
+            "derived": {"accel": accel, "spread20": spread20},
         },
         "roll25": {
             "path": args.roll25,
@@ -1554,8 +1581,8 @@ def main() -> None:
             "strict_roll_match": strict_roll_match,
         },
         "maint_ratio": {
-            "policy": maint_ratio_policy,
-            "confidence": maint_ratio_confidence,
+            "policy": "PROXY_TREND_ONLY",
+            "confidence": "DOWNGRADED",
             "path_latest": args.maint,
             "path_history": args.maint_hist,
             "ok_latest": maint_ok,
@@ -1566,40 +1593,15 @@ def main() -> None:
                 "maint_ratio_1d_delta_pctpt": maint_ratio_1d_delta_pctpt,
                 "maint_ratio_1d_pct_change": maint_ratio_1d_pct_change,
                 "trend_note": maint_ratio_trend_note,
-                "fetch_status": _get(maint_latest, "fetch_status", None) if maint_ok and maint_latest else None,
-                "confidence": _get(maint_latest, "confidence", None) if maint_ok and maint_latest else None,
-                "dq_reason": _get(maint_latest, "dq_reason", None) if maint_ok and maint_latest else None,
             },
-            "history": {
-                "rows": len(maint_hist_list),
-                "head5": maint_head,
-            },
+            "history": {"rows": len(maint_hist_list), "head5": maint_head},
         },
-        "checks": {
-            "margin": {
-                "c1_tw_ok": c1_tw_ok,
-                "c1_tp_ok": c1_tp_ok,
-                "c2_tw_ok": c2_tw_ok,
-                "c2_tp_ok": c2_tp_ok,
-                "c3_ok": c3_ok,
-                "c4_tw_ok": c4_tw_ok,
-                "c4_tp_ok": c4_tp_ok,
-                "c5_tw_ok": c5_tw_ok,
-                "c5_tp_ok": c5_tp_ok,
-                "margin_any_fail": margin_any_fail,
-            },
-            "roll25": {
-                "check_6_status": c6_status,
-                "check_6_msg": c6_msg,
-                "check_7_status": c7_status,
-                "check_7_msg": c7_msg,
-            },
-            "maint": {
-                "check_10_status": c10_status,
-                "check_10_msg": c10_msg,
-                "check_11_status": c11_status,
-                "check_11_msg": c11_msg,
-            },
+        "otc_guardrail": {
+            "enabled": bool(otc_guardrail_enabled),
+            "policy": "DISPLAY_ONLY",
+            "prewatch_gap": float(args.otc_prewatch_gap),
+            "thr_expansion20_used": float(thresholds["expansion20"]),
+            "result": otc_guardrail,
         },
         "inputs": {
             "latest_path": args.latest,
@@ -1610,19 +1612,11 @@ def main() -> None:
             "threshold_policy": args.threshold_policy,
             "calib_min_n": args.calib_min_n,
             "pctl_cfg": pctl_cfg,
-        },
-        "snapshots": {
-            "twse_rows": {
-                "rows": twse_rows_latest_table,
-                "rows_series": twse_rows_series,
-                "head_dates": twse_head_dates,
-                "tail_dates": twse_tail_dates,
-            },
-            "tpex_rows": {
-                "rows": tpex_rows_latest_table,
-                "rows_series": tpex_rows_series,
-                "head_dates": tpex_head_dates,
-                "tail_dates": tpex_tail_dates,
+            "otc_guardrail": {
+                "enabled": bool(otc_guardrail_enabled),
+                "disable_flag": bool(args.disable_otc_guardrail) if args.disable_otc_guardrail is not None else False,
+                "enable_flag": bool(args.enable_otc_guardrail) if args.enable_otc_guardrail is not None else False,
+                "otc_prewatch_gap": float(args.otc_prewatch_gap),
             },
         },
     }
