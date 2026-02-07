@@ -249,11 +249,11 @@
       }
     },
     {
-      "run_ts_utc": "2026-02-07T11:15:55.780252+00:00",
+      "run_ts_utc": "2026-02-07T15:37:19.903701+00:00",
       "stats_as_of_ts": "2026-02-07T11:02:36Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@501529c",
+      "script_fingerprint": "render_dashboard_py_signals_v8@f9d54a4",
       "series_signals": {
         "OFR_FSI": "NONE",
         "VIX": "ALERT",
