@@ -1,10 +1,10 @@
 {
   "schema_version": "fx_usdtwd_latest_v1",
-  "generated_at_utc": "2026-02-07T15:49:22Z",
+  "generated_at_utc": "2026-02-08T15:50:05Z",
   "source": "BOT",
   "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
   "data_date": "2026-02-06",
-  "quote_time_local": "2026-02-07T09:25:00+08:00",
+  "quote_time_local": "2026-02-08T09:25:00+08:00",
   "usd_twd": {
     "spot_buy": 31.605,
     "spot_sell": 31.755,
