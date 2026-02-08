@@ -1,14 +1,14 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-02-07T15:45:18.271198Z",
-  "as_of_ts": "2026-02-07T23:45:18.271208+08:00",
-  "data_commit_sha": "c92dbe9fac9e8100dee6b7fdce0c54fff6210f3e",
+  "generated_at_utc": "2026-02-08T15:45:40.300599Z",
+  "as_of_ts": "2026-02-08T23:45:40.300617+08:00",
+  "data_commit_sha": "c1ac11e47f89e6b0fa2fdd11566583ff0a18eea7",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-02-07T11:02:36Z",
-    "market_cache_as_of_ts": "2026-02-07T11:02:36Z",
+    "market_cache_generated_at_utc": "2026-02-08T03:45:37Z",
+    "market_cache_as_of_ts": "2026-02-08T03:45:37Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -99,7 +99,7 @@
       "latest": {
         "data_date": "2026-02-06",
         "value": 17.76,
-        "as_of_ts": "2026-02-07T11:02:36Z",
+        "as_of_ts": "2026-02-08T03:45:37Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
@@ -121,7 +121,7 @@
       "latest": {
         "data_date": "2026-02-06",
         "value": 6932.3,
-        "as_of_ts": "2026-02-07T11:02:36Z",
+        "as_of_ts": "2026-02-08T03:45:37Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
@@ -143,7 +143,7 @@
       "latest": {
         "data_date": "2026-02-06",
         "value": 0.8411574893306965,
-        "as_of_ts": "2026-02-07T11:02:36Z",
+        "as_of_ts": "2026-02-08T03:45:37Z",
         "source_url": "DERIVED"
       },
       "w60": {
@@ -165,7 +165,7 @@
       "latest": {
         "data_date": "2026-02-04",
         "value": -2.295,
-        "as_of_ts": "2026-02-07T11:02:36Z",
+        "as_of_ts": "2026-02-08T03:45:37Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
@@ -188,8 +188,8 @@
     "loaded_items": 6,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260207T154518Z.json",
-    "backup_bytes": 5593,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260208T154540Z.json",
+    "backup_bytes": 5584,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -199,8 +199,8 @@
     "history_file_exists": true,
     "history_pre_items": 6,
     "history_pre_unique_days": 6,
-    "history_post_items": 6,
-    "history_post_unique_days": 6,
+    "history_post_items": 7,
+    "history_post_unique_days": 7,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,

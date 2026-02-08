@@ -1,15 +1,15 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.10`
-- as_of_ts (TPE): `2026-02-07T23:45:18.271208+08:00`
-- run_ts_utc: `2026-02-07T15:45:18.271198Z`
-- bottom_state (Global): **NONE**  (streak=6)
-- market_cache_as_of_ts: `2026-02-07T11:02:36Z`
-- market_cache_generated_at_utc: `2026-02-07T11:02:36Z`
+- as_of_ts (TPE): `2026-02-08T23:45:40.300617+08:00`
+- run_ts_utc: `2026-02-08T15:45:40.300599Z`
+- bottom_state (Global): **NONE**  (streak=7)
+- market_cache_as_of_ts: `2026-02-08T03:45:37Z`
+- market_cache_generated_at_utc: `2026-02-08T03:45:37Z`
 - history_load_status: `OK`; reason: `dict.items`; loaded_items: `6`
-- history_pre_items: `6`; history_post_items: `6`; pre_unique_days: `6`; post_unique_days: `6`
+- history_pre_items: `6`; history_post_items: `7`; pre_unique_days: `6`; post_unique_days: `7`
 - history_write: status=`OK`; reason=`ok`; allow_reset=`False`; allow_shrink=`False`
-- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260207T154518Z.json`; bytes=`5593`; keep_n=`30`; prune_deleted=`0`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260208T154540Z.json`; bytes=`5584`; keep_n=`30`; prune_deleted=`0`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -26,7 +26,7 @@
 - SP500.p252: `95.23809523809523`; equity_extreme(p252>=95): `1`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **NONE**  (streak=6)
+- tw_state: **NONE**  (streak=7)
 - UsedDate: `2026-02-06`; run_day_tag: `WEEKEND`; used_date_status: `OK_LATEST`
 - Lookback: `20/20`
 - roll25_raw: DownDay=`True`; VolumeAmplified=`False`; VolAmplified=`False`; NewLow_N=`0`; ConsecutiveBreak=`2`
@@ -52,6 +52,7 @@
 | 2026-02-05 | 2026-02-05T00:04:26.107023+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-06 | 2026-02-06T00:01:05.273634+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | NA | 0 | NA | OK |
 | 2026-02-07 | 2026-02-07T23:45:18.271208+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-02-08 | 2026-02-08T23:45:40.300617+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`
