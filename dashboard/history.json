@@ -275,15 +275,15 @@
       }
     },
     {
-      "run_ts_utc": "2026-02-09T16:09:43.329461+00:00",
-      "stats_as_of_ts": "2026-02-09T07:32:08Z",
+      "run_ts_utc": "2026-02-09T23:57:32.981154+00:00",
+      "stats_as_of_ts": "2026-02-09T23:49:25Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@d04e164",
+      "script_fingerprint": "render_dashboard_py_signals_v8@f39387b",
       "series_signals": {
-        "OFR_FSI": "NONE",
+        "OFR_FSI": "ALERT",
         "VIX": "ALERT",
-        "SP500": "ALERT",
+        "SP500": "INFO",
         "HYG_IEF_RATIO": "NONE"
       }
     }
