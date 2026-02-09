@@ -1,14 +1,14 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-02-08T15:45:40.300599Z",
-  "as_of_ts": "2026-02-08T23:45:40.300617+08:00",
-  "data_commit_sha": "c1ac11e47f89e6b0fa2fdd11566583ff0a18eea7",
+  "generated_at_utc": "2026-02-09T16:28:43.416278Z",
+  "as_of_ts": "2026-02-10T00:28:43.416297+08:00",
+  "data_commit_sha": "1e544ce1262108edb9572f29823707c165631378",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-02-08T03:45:37Z",
-    "market_cache_as_of_ts": "2026-02-08T03:45:37Z",
+    "market_cache_generated_at_utc": "2026-02-09T07:32:08Z",
+    "market_cache_as_of_ts": "2026-02-09T07:32:08Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -34,8 +34,8 @@
   "tw_local_gate": {
     "tw_state": "NONE",
     "UsedDate": "2026-02-06",
-    "run_day_tag": "WEEKEND",
-    "used_date_status": "OK_LATEST",
+    "run_day_tag": "WEEKDAY",
+    "used_date_status": "DATA_NOT_UPDATED",
     "lookback_n_actual": 20,
     "lookback_n_target": 20,
     "pct_change": -0.057702,
@@ -55,19 +55,19 @@
       "stress_consec_pair_required": true
     },
     "margin": {
-      "data_date": "2026-02-06",
+      "data_date": "2026-02-09",
       "unit": "億",
       "flow_signal": "NONE",
       "flow_dbg": {
         "chg_last5_yi": [
+          14.8,
           -89.3,
           -11.3,
           19.2,
-          32.8,
-          -50.4
+          32.8
         ],
-        "sum_last5_yi": -99.0,
-        "pos_days_last5": 2,
+        "sum_last5_yi": -33.8,
+        "pos_days_last5": 3,
         "rule": "WATCH(sum5>=100.0 & pos_days>=4); ALERT(sum5>=150.0 & pos_days>=4)"
       },
       "level_gate": null,
@@ -78,8 +78,8 @@
       },
       "final_signal": "NONE",
       "confidence": "DOWNGRADED",
-      "latest_balance_yi": 3739.9,
-      "latest_chg_yi": -89.3
+      "latest_balance_yi": 3754.7,
+      "latest_chg_yi": 14.8
     },
     "triggers": {
       "TRIG_TW_PANIC": 0,
@@ -99,7 +99,7 @@
       "latest": {
         "data_date": "2026-02-06",
         "value": 17.76,
-        "as_of_ts": "2026-02-08T03:45:37Z",
+        "as_of_ts": "2026-02-09T07:32:08Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
@@ -121,7 +121,7 @@
       "latest": {
         "data_date": "2026-02-06",
         "value": 6932.3,
-        "as_of_ts": "2026-02-08T03:45:37Z",
+        "as_of_ts": "2026-02-09T07:32:08Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
@@ -143,7 +143,7 @@
       "latest": {
         "data_date": "2026-02-06",
         "value": 0.8411574893306965,
-        "as_of_ts": "2026-02-08T03:45:37Z",
+        "as_of_ts": "2026-02-09T07:32:08Z",
         "source_url": "DERIVED"
       },
       "w60": {
@@ -165,7 +165,7 @@
       "latest": {
         "data_date": "2026-02-04",
         "value": -2.295,
-        "as_of_ts": "2026-02-08T03:45:37Z",
+        "as_of_ts": "2026-02-09T07:32:08Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
@@ -185,11 +185,11 @@
   "history_audit": {
     "history_load_status": "OK",
     "history_load_reason": "dict.items",
-    "loaded_items": 6,
+    "loaded_items": 7,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260208T154540Z.json",
-    "backup_bytes": 5584,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260209T162843Z.json",
+    "backup_bytes": 6511,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -197,10 +197,10 @@
       "deleted": 0
     },
     "history_file_exists": true,
-    "history_pre_items": 6,
-    "history_pre_unique_days": 6,
-    "history_post_items": 7,
-    "history_post_unique_days": 7,
+    "history_pre_items": 7,
+    "history_pre_unique_days": 7,
+    "history_post_items": 8,
+    "history_post_unique_days": 8,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,
