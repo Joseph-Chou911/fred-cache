@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-02-09T07:32:08Z",
-  "as_of_ts": "2026-02-09T07:32:08Z",
+  "generated_at_utc": "2026-02-09T23:49:25Z",
+  "as_of_ts": "2026-02-09T23:49:25Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "dq": "OK",
   "checks": [
@@ -31,20 +31,20 @@
       "series_id": "HYG_IEF_RATIO",
       "check": "aligned_points",
       "status": "OK",
-      "n": 4737
+      "n": 4738
     },
     {
       "series_id": "HYG_IEF_RATIO",
       "check": "ratio_latest_date_present_in_hyg_and_ief",
       "status": "OK",
-      "latest_date": "2026-02-06"
+      "latest_date": "2026-02-09"
     },
     {
       "series_id": "OFR_FSI",
       "check": "staleness_days",
       "status": "OK",
-      "staleness_days": 5,
-      "latest_date": "2026-02-04",
+      "staleness_days": 4,
+      "latest_date": "2026-02-05",
       "threshold_warn_days": 7,
       "threshold_err_days": 14
     },
@@ -61,8 +61,8 @@
       "series_id": "SP500",
       "check": "staleness_days",
       "status": "OK",
-      "staleness_days": 3,
-      "latest_date": "2026-02-06",
+      "staleness_days": 0,
+      "latest_date": "2026-02-09",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
     },
@@ -70,8 +70,8 @@
       "series_id": "HYG_IEF_RATIO",
       "check": "staleness_days",
       "status": "OK",
-      "staleness_days": 3,
-      "latest_date": "2026-02-06",
+      "staleness_days": 0,
+      "latest_date": "2026-02-09",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
     },
@@ -79,8 +79,8 @@
       "series_id": "OFR_FSI",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 0.040000000000000036,
-      "std60": 0.3435300472059662,
+      "ret1_delta": 0.363,
+      "std60": 0.3484178143168534,
       "threshold": "8*std60"
     },
     {
@@ -95,16 +95,16 @@
       "series_id": "SP500",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 133.90000000000055,
-      "std60": 99.37237128934115,
+      "ret1_delta": 32.51999999999953,
+      "std60": 100.37568002744601,
       "threshold": "8*std60"
     },
     {
       "series_id": "HYG_IEF_RATIO",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 0.0029145414801706737,
-      "std60": 0.005732622926233554,
+      "ret1_delta": 0.0008820528129039884,
+      "std60": 0.005732152352312989,
       "threshold": "8*std60"
     }
   ]
