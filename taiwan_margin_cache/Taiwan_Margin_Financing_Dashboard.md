@@ -7,19 +7,19 @@
   - percentiles: expansion20=90.0, contraction20=10.0, watch1d=90.0, watchspread20=90.0, watchaccel=90.0
   - thresholds_used: expansion20=8.0000, contraction20=-8.0000, watch1d=0.8000, watchspread20=3.0000, watchaccel=0.2500
   - calibration_status:
-    - expansion20: status=FALLBACK_FIXED, sample_n=21, threshold=8.0, reason=insufficient samples (n=21 < calib_min_n=60)
-    - contraction20: status=FALLBACK_FIXED, sample_n=21, threshold=-8.0, reason=insufficient samples (n=21 < calib_min_n=60)
-    - watch1d: status=FALLBACK_FIXED, sample_n=40, threshold=0.8, reason=insufficient samples (n=40 < calib_min_n=60)
-    - watchspread20: status=FALLBACK_FIXED, sample_n=21, threshold=3.0, reason=insufficient samples (n=21 < calib_min_n=60)
-    - watchaccel: status=FALLBACK_FIXED, sample_n=36, threshold=0.25, reason=insufficient samples (n=36 < calib_min_n=60)
+    - expansion20: status=FALLBACK_FIXED, sample_n=22, threshold=8.0, reason=insufficient samples (n=22 < calib_min_n=60)
+    - contraction20: status=FALLBACK_FIXED, sample_n=22, threshold=-8.0, reason=insufficient samples (n=22 < calib_min_n=60)
+    - watch1d: status=FALLBACK_FIXED, sample_n=41, threshold=0.8, reason=insufficient samples (n=41 < calib_min_n=60)
+    - watchspread20: status=FALLBACK_FIXED, sample_n=22, threshold=3.0, reason=insufficient samples (n=22 < calib_min_n=60)
+    - watchaccel: status=FALLBACK_FIXED, sample_n=37, threshold=0.25, reason=insufficient samples (n=37 < calib_min_n=60)
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
 - 一致性判定（Margin × Roll25）：MARKET_SHOCK_ONLY
   - rationale: roll25 heated but Margin not heated
   - resonance_policy: latest
   - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
   - resonance_confidence: DOWNGRADED
-- OTC_guardrail（display-only; 不影響主信號）：PREWATCH｜stage=PREWATCH
-  - rationale: TPEX_20D% approaching expansion threshold (dilution risk for TOTAL-only signal)
+- OTC_guardrail（display-only; 不影響主信號）：NONE｜stage=NONE
+  - rationale: no OTC guardrail triggered
   - thresholds: thr_expansion20=8.0000, prewatch_gap=0.2000, prewatch_threshold=7.8000
 
 ## 1.1) 判定標準（本 dashboard 內建規則）
@@ -43,19 +43,19 @@
 - 目的：避免僅看合計（TOTAL-only）時，OTC 端先升溫/轉弱被稀釋而晚報。
 
 ## 2) 資料
-- 上市(TWSE)：融資餘額 3739.90 億元｜資料日期 2026-02-06｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows_latest_table=30｜rows_series=41｜head_dates=['2026-02-06', '2026-02-05', '2026-02-04']｜tail_dates=['2025-12-30', '2025-12-29', '2025-12-26']
-- 上櫃(TPEX)：融資餘額 1331.40 億元｜資料日期 2026-02-06｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows_latest_table=30｜rows_series=41｜head_dates=['2026-02-06', '2026-02-05', '2026-02-04']｜tail_dates=['2025-12-30', '2025-12-29', '2025-12-26']
-- 合計：融資餘額 5071.30 億元｜資料日期 2026-02-06｜來源：TWSE=HiStock / TPEX=HiStock
+- 上市(TWSE)：融資餘額 3754.70 億元｜資料日期 2026-02-09｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+  - rows_latest_table=30｜rows_series=42｜head_dates=['2026-02-09', '2026-02-06', '2026-02-05']｜tail_dates=['2025-12-31', '2025-12-30', '2025-12-29']
+- 上櫃(TPEX)：融資餘額 1328.90 億元｜資料日期 2026-02-09｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+  - rows_latest_table=30｜rows_series=42｜head_dates=['2026-02-09', '2026-02-06', '2026-02-05']｜tail_dates=['2025-12-31', '2025-12-30', '2025-12-29']
+- 合計：融資餘額 5083.60 億元｜資料日期 2026-02-09｜來源：TWSE=HiStock / TPEX=HiStock
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
 - maint_path: taiwan_margin_cache/maint_ratio_latest.json
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED
-- data_date: 2026-02-06｜maint_ratio_pct: 174.564662
-- maint_ratio_1d_delta_pctpt: -3.463663｜maint_ratio_1d_pct_change: -1.945568
-- maint_ratio_trend_note: trend_from: today=174.564662(2026-02-06), prev=178.028325(2026-02-05)
+- data_date: 2026-02-09｜maint_ratio_pct: 178.169562
+- maint_ratio_1d_delta_pctpt: 3.604900｜maint_ratio_1d_pct_change: 2.065080
+- maint_ratio_trend_note: trend_from: today=178.169562(2026-02-09), prev=174.564662(2026-02-06)
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
@@ -70,14 +70,14 @@
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
-- 1D：Δ=-89.30 億元；Δ%=-2.3321 %｜latest=3739.90｜base=3829.20（基期日=2026-02-05）
+- 1D：Δ=14.80 億元；Δ%=0.3957 %｜latest=3754.70｜base=3739.90（基期日=2026-02-06）
 ### 上櫃(TPEX)
-- 1D：Δ=-9.70 億元；Δ%=-0.7233 %｜latest=1331.40｜base=1341.10（基期日=2026-02-05）
+- 1D：Δ=-2.50 億元；Δ%=-0.1878 %｜latest=1328.90｜base=1331.40（基期日=2026-02-06）
 
 ## 3.1) OTC Guardrail（display-only；不影響主信號）
-- stage: PREWATCH｜label: PREWATCH
-- rationale: TPEX_20D% approaching expansion threshold (dilution risk for TOTAL-only signal)
-- inputs: TPEX_20D%=7.8755｜TPEX_1D%=-0.7233｜TPEX_5D%=-1.4143
+- stage: NONE｜label: NONE
+- rationale: no OTC guardrail triggered
+- inputs: TPEX_20D%=5.5017｜TPEX_1D%=-0.1878｜TPEX_5D%=-0.2777
 - thresholds: thr_expansion20=8.0000｜prewatch_threshold=7.8000
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint/guardrail 僅供對照）
@@ -86,14 +86,14 @@
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（PASS）
-- Check-4 TWSE history rows>=21：✅（PASS）（rows_series=41）
-- Check-4 TPEX history rows>=21：✅（PASS）（rows_series=41）
+- Check-4 TWSE history rows>=21：✅（PASS）（rows_series=42）
+- Check-4 TPEX history rows>=21：✅（PASS）（rows_series=42）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-06) == TWSE(2026-02-06)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-06) vs TWSE(2026-02-09)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
-- Check-12 OTC Guardrail（info-only）：⚠️（NOTE）（stage=PREWATCH, label=PREWATCH, prewatch_hit=True, otc_alert_hit=False）
+- Check-12 OTC Guardrail（info-only）：⚠️（NOTE）（stage=NONE, label=NONE, prewatch_hit=False, otc_alert_hit=False）
 
-_generated_at_utc: 2026-02-09T08:24:18Z_
+_generated_at_utc: 2026-02-09T15:31:13Z_
