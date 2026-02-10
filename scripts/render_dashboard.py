@@ -63,17 +63,23 @@ DEFAULT_RULESET_ID = "signals_v8"
 DEFAULT_SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8"
 
 # -------------------------
-# Output / audit clarity knobs
+# Output-only metric definitions (NO algorithm change)
 # -------------------------
-# Only affects MARKDOWN table header display names (NOT JSON keys, NOT calculations)
-RENAME_DELTA_COLS_FOR_MD = True  # set False if you want to keep original headers
+# These are display notes only, meant to reduce misinterpretation.
+METRIC_DEFS_LINE = (
+    "ZΔ60 = z60(today) - z60(yesterday); "
+    "PΔ60 = p60(today) - p60(yesterday) (units: percentile points); "
+    "ret1% (1D) = (today - prev)/abs(prev) * 100"
+)
 
-# Explicit metric definitions to avoid misinterpretation (display only)
-DELTA_DEFINITION_LINES = [
-    "ZΔ60 = z60(today) - z60(yesterday)",
-    "PΔ60 = p60(today) - p60(yesterday)  (units: percentile points)",
-    "ret1% = (today - prev)/abs(prev) * 100",
-]
+# Display-only column name overrides (NO algorithm change):
+# - We keep reading the same underlying fields:
+#   z_delta60 -> w60.z_delta
+#   p_delta60 -> w60.p_delta
+#   ret1_pct60 -> w60.ret1_pct (which is 1-day % change by definition in update_market_cache.py)
+DISPLAY_COL_ZDELTA = "z_poschg60"
+DISPLAY_COL_PDELTA = "p_poschg60"
+DISPLAY_COL_RET1PCT = "ret1_pct1d_absPrev"
 
 # -------------------------
 # Direction map (minimal extension)
@@ -498,17 +504,12 @@ def write_outputs(
         "INFO if only long-extreme and no jump and abs(Z60)<2`"
     )
 
-    # ✅ Added: definition lines to prevent misinterpretation (display-only)
-    # Keep these OUTSIDE the backticks so readers don't confuse formula with rule text.
-    lines.append("- metric_defs: " + "; ".join(DELTA_DEFINITION_LINES))
+    # Added: explicit metric definitions (display-only)
+    lines.append(f"- metric_defs: {METRIC_DEFS_LINE}")
 
-    # ✅ Existing: explicit diagnostics-only note for extra columns
+    # Diagnostics-only note for extra columns
     lines.append("- diag_cols: p60 (w60 percentile), z252 (w252 z-score); diagnostics only, NOT used in rules/sorting")
     lines.append("")
-
-    # Table header display names (optional rename for clarity)
-    z_delta_header = "z_poschg60" if RENAME_DELTA_COLS_FOR_MD else "z_delta60"
-    p_delta_header = "p_poschg60" if RENAME_DELTA_COLS_FOR_MD else "p_delta60"
 
     header = [
         "Signal", "Tag", "Near",
@@ -518,7 +519,7 @@ def write_outputs(
         "Series", "DQ", "age_h",
         "data_date", "value",
         "z60", "p60", "p252", "z252",
-        z_delta_header, p_delta_header, "ret1_pct60",
+        DISPLAY_COL_ZDELTA, DISPLAY_COL_PDELTA, DISPLAY_COL_RET1PCT,
         "Reason", "Source", "as_of_ts"
     ]
     lines.append("| " + " | ".join(header) + " |")
@@ -544,7 +545,6 @@ def write_outputs(
             md_escape_cell(fmt(r.get("p60"), nd=6)),
             md_escape_cell(fmt(r.get("p252"), nd=6)),
             md_escape_cell(fmt(r.get("z252"), nd=6)),
-            # Internal keys remain z_delta60 / p_delta60 to avoid breaking anything
             md_escape_cell(fmt(r.get("z_delta60"), nd=6)),
             md_escape_cell(fmt(r.get("p_delta60"), nd=6)),
             md_escape_cell(fmt(r.get("ret1_pct60"), nd=6)),
@@ -635,12 +635,6 @@ def main() -> None:
         ),
         "history_items_loaded": len(history_all),
         "history_excluded_same_day": excluded_count,
-        # Extra audit clarity: mirror the definitions in JSON meta as well (display only)
-        "metric_defs": DELTA_DEFINITION_LINES,
-        "md_table_headers": {
-            "z_delta60_display": "z_poschg60" if RENAME_DELTA_COLS_FOR_MD else "z_delta60",
-            "p_delta60_display": "p_poschg60" if RENAME_DELTA_COLS_FOR_MD else "p_delta60",
-        },
     }
 
     series = stats.get("series", {})
