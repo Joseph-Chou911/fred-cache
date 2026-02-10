@@ -8,7 +8,7 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-10T00:02:45Z
+- unified_generated_at_utc: 2026-02-10T04:53:16Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -19,13 +19,13 @@
 - trend_strong: true
 - trend_relaxed: true
 - fragility_high: false
-- vol_watch: false
-- vol_runaway: true
+- vol_watch: true
+- vol_runaway: false
 - matrix_cell: Trend=ON / Fragility=LOW
-- mode: PAUSE_RISK_ON
+- mode: DEFENSIVE_DCA
 
 **mode_decision_path**
-- triggered: vol_runaway override
+- triggered: vol_watch downshift => DEFENSIVE_DCA
 
 **strategy_params (deterministic constants)**
 - TREND_P252_ON: 80.0
@@ -36,9 +36,9 @@
 - trend_basis: market_cache.SP500.signal=INFO, tag=LONG_EXTREME, p252=97.619048, p252_on_threshold=80.0, data_date=2026-02-09
 - note: trend_relaxed uses (signal + p252) only; tag is informational (display-only).
 - fragility_parts (global-only): credit_fragile(BAMLH0A0HYM2=WATCH)=false, rate_stress(DGS10=NONE)=false
-- vol_gate_v2: market_cache.VIX only (signal=ALERT, dir=HIGH, value=17.760000, ret1%60=-18.419844, runaway_policy: (signal=ALERT => runaway override) OR (signal=WATCH AND ret1%60>=5.0 AND value>=20.0), data_date=2026-02-06)
-- vol_runaway_branch: SIGNAL_ALERT_OVERRIDE (display-only)
-- vol_runaway_note: signal=ALERT triggers runaway by policy; thresholds shown for reference only (display-only)
+- vol_gate_v2: market_cache.VIX only (signal=WATCH, dir=HIGH, value=17.360000, ret1%60=-2.252252, runaway_policy: (signal=ALERT => runaway override) OR (signal=WATCH AND ret1%60>=5.0 AND value>=20.0), data_date=2026-02-09)
+- vol_runaway_branch: THRESHOLDS_FAILED (display-only)
+- vol_runaway_failed_leg: ret1%60<5.0, value<20.0 (display-only)
 
 **dq_gates (no guessing; conservative defaults)**
 - roll25_derived_confidence=OK (derived metrics not used for upgrade triggers)
@@ -55,19 +55,19 @@
 - note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
 
 ## market_cache (detailed)
-- as_of_ts: 2026-02-09T23:49:25Z
-- run_ts_utc: 2026-02-09T23:57:32.981154+00:00
+- as_of_ts: 2026-02-10T04:42:44Z
+- run_ts_utc: 2026-02-10T04:51:52.713870+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@f39387b
+- script_fingerprint: render_dashboard_py_signals_v8@c0269b8
 - script_version: market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400
 - series_count: 4
 
 | series | signal | dir | risk_impulse | market_class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| OFR_FSI | ALERT | HIGH | UP | JUMP | -1.932000 | 2026-02-05 | 0.135550 | 1.373638 | 88.333333 | 53.968254 | 1.021995 | 11.666667 | 15.816993 | abs(ZΔ60)>=0.75;abs(ret1%60)>=2 | JUMP_ZD,JUMP_RET | NONE | NONE→ALERT | 0 | 1 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
-| VIX | ALERT | HIGH | DOWN | JUMP | 17.760000 | 2026-02-06 | 0.135550 | 0.248988 | 76.666667 | 57.539683 | -1.462112 | -15.000000 | -18.419844 | abs(ZΔ60)>=0.75;abs(ret1%60)>=2 | JUMP_ZD,JUMP_RET | ALERT | SAME | 10 | 11 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
-| SP500 | INFO | HIGH | UP | LONG | 6964.820000 | 2026-02-09 | 0.135550 | 1.085729 | 90.000000 | 97.619048 | 0.296466 | 10.000000 | 0.469108 | P252>=95 | LONG_EXTREME | ALERT | ALERT→INFO | 6 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
-| HYG_IEF_RATIO | NONE | LOW | DOWN | NONE | 0.842040 | 2026-02-09 | 0.135550 | 0.767233 | 76.666667 | 66.269841 | 0.127816 | 5.000000 | 0.104862 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
+| OFR_FSI | ALERT | HIGH | UP | JUMP | -1.932000 | 2026-02-05 | 0.152421 | 1.373638 | 88.333333 | 53.968254 | 1.021995 | 11.666667 | 15.816993 | abs(ZΔ60)>=0.75;abs(ret1%60)>=2 | JUMP_ZD,JUMP_RET | ALERT | SAME | 1 | 2 | https://www.financialresearch.gov/financial-stress-index/data/fsi.csv |
+| VIX | WATCH | HIGH | DOWN | JUMP | 17.360000 | 2026-02-09 | 0.152421 | 0.120514 | 73.333333 | 52.380952 | -0.128473 | -3.333333 | -2.252252 | abs(ret1%60)>=2 | JUMP_RET | ALERT | ALERT→WATCH | 11 | 12 | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv |
+| SP500 | INFO | HIGH | UP | LONG | 6964.820000 | 2026-02-09 | 0.152421 | 1.085729 | 90.000000 | 97.619048 | 0.296466 | 10.000000 | 0.469108 | P252>=95 | LONG_EXTREME | INFO | SAME | 0 | 0 | https://stooq.com/q/d/l/?s=^spx&i=d |
+| HYG_IEF_RATIO | NONE | LOW | DOWN | NONE | 0.842127 | 2026-02-09 | 0.152421 | 0.782111 | 76.666667 | 67.460317 | 0.142694 | 5.000000 | 0.115280 | NA | NA | NONE | SAME | 0 | 0 | DERIVED |
 
 ## fred_cache (ALERT+WATCH+INFO)
 - as_of_ts: 2026-02-10T07:50:23+08:00
@@ -99,33 +99,33 @@
 
 ## inflation_realrate_cache (detailed)
 - status: OK
-- as_of_ts: 2026-02-10T08:01:42+08:00
-- run_ts_utc: 2026-02-10T00:01:46.525931+00:00
+- as_of_ts: 2026-02-10T11:31:06+08:00
+- run_ts_utc: 2026-02-10T03:31:11.018376+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@42f9616
+- script_fingerprint: render_dashboard_py_signals_v8@e00029c
 - script_version: cycle_sidecars_stats_v1
 - series_count: 2
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DFII10 | NONE | MOVE | NONE | 1.880000 | 2026-02-06 | 0.001257 | -0.165420 | 41.666667 | 37.301587 | -0.227506 | -4.096045 | -0.529101 | NA | NA | ALERT | ALERT→NONE | 3 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
-| T10YIE | NONE | MOVE | NONE | 2.350000 | 2026-02-09 | 0.001257 | 1.726968 | 95.000000 | 69.841270 | 0.179874 | 5.169492 | 0.427350 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| DFII10 | NONE | MOVE | NONE | 1.880000 | 2026-02-06 | 0.001394 | -0.165420 | 41.666667 | 37.301587 | -0.227506 | -4.096045 | -0.529101 | NA | NA | ALERT | ALERT→NONE | 3 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| T10YIE | NONE | MOVE | NONE | 2.350000 | 2026-02-09 | 0.001394 | 1.726968 | 95.000000 | 69.841270 | 0.179874 | 5.169492 | 0.427350 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
 
 ## asset_proxy_cache (detailed)
 - status: OK
-- as_of_ts: 2026-02-10T08:01:43+08:00
-- run_ts_utc: 2026-02-10T00:01:46.572575+00:00
+- as_of_ts: 2026-02-10T11:31:07+08:00
+- run_ts_utc: 2026-02-10T03:31:11.065573+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@42f9616
+- script_fingerprint: render_dashboard_py_signals_v8@e00029c
 - script_version: cycle_sidecars_stats_v1
 - series_count: 4
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| VNQ.US_CLOSE | ALERT | MOVE | LONG | 92.640000 | 2026-02-09 | 0.000992 | 2.679018 | 100.000000 | 95.634921 | 0.188442 | 1.694915 | 0.422764 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 3 | 4 | https://stooq.com/q/d/l/?s=vnq.us&d1=20260111&d2=20260210&i=d |
-| IYR.US_CLOSE | WATCH | MOVE | LONG | 98.060000 | 2026-02-09 | 0.000992 | 2.462859 | 98.333333 | 97.222222 | 0.208433 | 0.028249 | 0.419867 | abs(Z60)>=2;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | ALERT→WATCH | 3 | 4 | https://stooq.com/q/d/l/?s=iyr.us&d1=20260111&d2=20260210&i=d |
-| GLD.US_CLOSE | WATCH | MOVE | LONG | 467.030000 | 2026-02-09 | 0.000992 | 1.775285 | 95.000000 | 98.809524 | 0.313762 | 3.474576 | 2.540289 | P252>=95;abs(ret1%60)>=2 | LONG_EXTREME,JUMP_RET | WATCH | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=gld.us&d1=20260111&d2=20260210&i=d |
-| IAU.US_CLOSE | WATCH | MOVE | LONG | 95.630000 | 2026-02-09 | 0.000992 | 1.770749 | 95.000000 | 98.809524 | 0.315468 | 3.474576 | 2.552279 | P252>=95;abs(ret1%60)>=2 | LONG_EXTREME,JUMP_RET | WATCH | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=iau.us&d1=20260111&d2=20260210&i=d |
+| VNQ.US_CLOSE | ALERT | MOVE | LONG | 92.640000 | 2026-02-09 | 0.001129 | 2.679018 | 100.000000 | 95.634921 | 0.188442 | 1.694915 | 0.422764 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 3 | 4 | https://stooq.com/q/d/l/?s=vnq.us&d1=20260111&d2=20260210&i=d |
+| IYR.US_CLOSE | WATCH | MOVE | LONG | 98.060000 | 2026-02-09 | 0.001129 | 2.462859 | 98.333333 | 97.222222 | 0.208433 | 0.028249 | 0.419867 | abs(Z60)>=2;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | ALERT→WATCH | 3 | 4 | https://stooq.com/q/d/l/?s=iyr.us&d1=20260111&d2=20260210&i=d |
+| GLD.US_CLOSE | WATCH | MOVE | LONG | 467.030000 | 2026-02-09 | 0.001129 | 1.775285 | 95.000000 | 98.809524 | 0.313762 | 3.474576 | 2.540289 | P252>=95;abs(ret1%60)>=2 | LONG_EXTREME,JUMP_RET | WATCH | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=gld.us&d1=20260111&d2=20260210&i=d |
+| IAU.US_CLOSE | WATCH | MOVE | LONG | 95.630000 | 2026-02-09 | 0.001129 | 1.770749 | 95.000000 | 98.809524 | 0.315468 | 3.474576 | 2.552279 | P252>=95;abs(ret1%60)>=2 | LONG_EXTREME,JUMP_RET | WATCH | SAME | 4 | 5 | https://stooq.com/q/d/l/?s=iau.us&d1=20260111&d2=20260210&i=d |
 
 ## roll25_cache (TW turnover)
 - status: OK
@@ -165,14 +165,14 @@
 
 ## FX (USD/TWD)
 - status: OK
-- data_date: 2026-02-09
+- data_date: 2026-02-10
 - source_url: https://rate.bot.com.tw/xrt?Lang=zh-TW
-- spot_buy: 31.450000
-- spot_sell: 31.600000
-- mid: 31.525000
-- ret1_pct: -0.489268 (from 2026-02-06 to 2026-02-09)
-- chg_5d_pct: -0.205761 (from 2026-02-02 to 2026-02-09)
-- dir: TWD_STRONG
+- spot_buy: 31.515000
+- spot_sell: 31.615000
+- mid: 31.565000
+- ret1_pct: 0.126883 (from 2026-02-09 to 2026-02-10)
+- chg_5d_pct: 0.047544 (from 2026-02-03 to 2026-02-10)
+- dir: TWD_WEAK
 - fx_signal: NONE
 - fx_reason: below thresholds
 - fx_confidence: OK
@@ -182,7 +182,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-09T23:36:05Z
 
-<!-- rendered_at_utc: 2026-02-10T00:02:45Z -->
+<!-- rendered_at_utc: 2026-02-10T04:53:16Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->

@@ -95,6 +95,14 @@
       "spot_sell": 31.6,
       "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
       "quote_time_local": "2026-02-10T07:51:00+08:00"
+    },
+    {
+      "date": "2026-02-10",
+      "mid": 31.564999999999998,
+      "spot_buy": 31.515,
+      "spot_sell": 31.615,
+      "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
+      "quote_time_local": "2026-02-10T12:51:00+08:00"
     }
   ]
 }
