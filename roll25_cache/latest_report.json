@@ -1,19 +1,19 @@
 {
-  "generated_at": "2026-02-11T03:21:25.884851+08:00",
+  "generated_at": "2026-02-11T06:24:37.628284+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日資料未更新；UsedDate=2026-02-09：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
+  "summary": "今日資料未更新；UsedDate=2026-02-10：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
   "fetch": {
     "fetch_plan": "openapi_primary",
     "notes": []
   },
   "numbers": {
-    "UsedDate": "2026-02-09",
-    "Close": 32404.62,
-    "PctChange": 1.956082,
-    "TradeValue": 653957736705,
-    "AmplitudePct": 2.233401,
-    "VolMultiplier": 0.827958,
-    "VolumeMultiplier": 0.827958,
+    "UsedDate": "2026-02-10",
+    "Close": 33072.97,
+    "PctChange": 2.062515,
+    "TradeValue": 678490714672,
+    "AmplitudePct": 1.954228,
+    "VolMultiplier": 0.86288,
+    "VolumeMultiplier": 0.86288,
     "LookbackNTarget": 20,
     "LookbackNActual": 20
   },
@@ -28,26 +28,34 @@
     "ConsecutiveBreak": 0,
     "LookbackNTarget": 20,
     "LookbackNActual": 20,
-    "VolMultiplier": 0.827958,
-    "VolumeMultiplier": 0.827958,
+    "VolMultiplier": 0.86288,
+    "VolumeMultiplier": 0.86288,
     "VolWin": 20,
     "VolThreshold": 1.5,
     "NewLowWin": 60
   },
   "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-02-09 | UsedDminus1=2026-02-06\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=2\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).\nGUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).",
+  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-02-10 | UsedDminus1=2026-02-09\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).\nGUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).",
   "run_day_tag": "WEEKDAY",
   "used_date_status": "DATA_NOT_UPDATED",
   "tag": "WEEKDAY",
   "freshness_ok": true,
-  "freshness_age_days": 2,
+  "freshness_age_days": 1,
   "mode": "FULL",
   "ohlc_status": "OK",
-  "used_date": "2026-02-09",
-  "used_dminus1": "2026-02-06",
+  "used_date": "2026-02-10",
+  "used_dminus1": "2026-02-09",
   "lookback_n_actual": 20,
-  "lookback_oldest": "2026-01-13",
+  "lookback_oldest": "2026-01-14",
   "cache_tail": [
+    {
+      "date": "2026-02-10",
+      "close": 33072.97,
+      "change": 668.35,
+      "trade_value": 678490714672,
+      "high": 33072.97,
+      "low": 32439.71
+    },
     {
       "date": "2026-02-09",
       "close": 32404.62,
@@ -239,17 +247,17 @@
       "trade_value": 881736707216,
       "high": 30570.26,
       "low": 30306.16
-    },
-    {
-      "date": "2026-01-06",
-      "close": 30576.3,
-      "change": 471.26,
-      "trade_value": 763236739665,
-      "high": 30576.3,
-      "low": 29933.65
     }
   ],
   "cache_roll25": [
+    {
+      "date": "2026-02-10",
+      "close": 33072.97,
+      "change": 668.35,
+      "trade_value": 678490714672,
+      "high": 33072.97,
+      "low": 32439.71
+    },
     {
       "date": "2026-02-09",
       "close": 32404.62,
@@ -1841,14 +1849,6 @@
       "trade_value": 298510240543,
       "high": 20012.27,
       "low": 19861.24
-    },
-    {
-      "date": "2025-04-24",
-      "close": 19478.81,
-      "change": -160.33,
-      "trade_value": 248994902573,
-      "high": 19752.59,
-      "low": 19433.37
     }
   ]
 }
