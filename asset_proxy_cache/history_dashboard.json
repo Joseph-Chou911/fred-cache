@@ -223,16 +223,16 @@
       }
     },
     {
-      "run_ts_utc": "2026-02-10T17:19:17.202757+00:00",
-      "stats_as_of_ts": "2026-02-11T01:19:14+08:00",
+      "run_ts_utc": "2026-02-11T03:27:45.921343+00:00",
+      "stats_as_of_ts": "2026-02-11T11:27:42+08:00",
       "module": "asset_proxy_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@6de492d",
+      "script_fingerprint": "render_dashboard_py_signals_v8@705f412",
       "series_signals": {
-        "GLD.US_CLOSE": "WATCH",
-        "IAU.US_CLOSE": "WATCH",
+        "GLD.US_CLOSE": "INFO",
+        "IAU.US_CLOSE": "INFO",
         "VNQ.US_CLOSE": "ALERT",
-        "IYR.US_CLOSE": "WATCH"
+        "IYR.US_CLOSE": "ALERT"
       }
     }
   ]
