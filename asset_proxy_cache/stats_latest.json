@@ -1,13 +1,13 @@
 {
   "schema_version": "stats_latest_v1",
-  "generated_at_utc": "2026-02-13T03:24:29Z",
-  "as_of_ts": "2026-02-13T11:24:26+08:00",
+  "generated_at_utc": "2026-02-13T09:04:29Z",
+  "as_of_ts": "2026-02-13T17:04:26+08:00",
   "script_version": "cycle_sidecars_stats_v1",
   "series_count": 4,
   "series": {
     "GLD.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-02-13T11:24:26+08:00",
+        "as_of_ts": "2026-02-13T17:04:26+08:00",
         "data_date": "2026-02-12",
         "value": 451.39,
         "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20260114&d2=20260213&i=d",
@@ -34,9 +34,9 @@
     },
     "IAU.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-02-13T11:24:26+08:00",
+        "as_of_ts": "2026-02-13T17:04:26+08:00",
         "data_date": "2026-02-12",
-        "value": 92.49,
+        "value": 92.48,
         "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20260114&d2=20260213&i=d",
         "notes": "NA",
         "data_lag_days": 1
@@ -61,9 +61,9 @@
     },
     "VNQ.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-02-13T11:24:26+08:00",
+        "as_of_ts": "2026-02-13T17:04:26+08:00",
         "data_date": "2026-02-12",
-        "value": 93.28,
+        "value": 93.25,
         "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20260114&d2=20260213&i=d",
         "notes": "NA",
         "data_lag_days": 1
@@ -88,9 +88,9 @@
     },
     "IYR.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-02-13T11:24:26+08:00",
+        "as_of_ts": "2026-02-13T17:04:26+08:00",
         "data_date": "2026-02-12",
-        "value": 98.855,
+        "value": 98.87,
         "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20260114&d2=20260213&i=d",
         "notes": "NA",
         "data_lag_days": 1
