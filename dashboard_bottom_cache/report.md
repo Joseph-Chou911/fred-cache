@@ -1,33 +1,33 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.10`
-- as_of_ts (TPE): `2026-02-14T00:03:52.438512+08:00`
-- run_ts_utc: `2026-02-13T16:03:52.438494Z`
-- bottom_state (Global): **BOTTOM_WATCH**  (streak=1)
-- market_cache_as_of_ts: `2026-02-13T03:32:32Z`
-- market_cache_generated_at_utc: `2026-02-13T03:32:32Z`
-- history_load_status: `OK`; reason: `dict.items`; loaded_items: `11`
-- history_pre_items: `11`; history_post_items: `12`; pre_unique_days: `11`; post_unique_days: `12`
+- as_of_ts (TPE): `2026-02-14T23:45:30.664108+08:00`
+- run_ts_utc: `2026-02-14T15:45:30.664092Z`
+- bottom_state (Global): **BOTTOM_CANDIDATE**  (streak=1)
+- market_cache_as_of_ts: `2026-02-14T03:15:57Z`
+- market_cache_generated_at_utc: `2026-02-14T03:15:57Z`
+- history_load_status: `OK`; reason: `dict.items`; loaded_items: `12`
+- history_pre_items: `12`; history_post_items: `12`; pre_unique_days: `12`; post_unique_days: `12`
 - history_write: status=`OK`; reason=`ok`; allow_reset=`False`; allow_shrink=`False`
-- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260213T160352Z.json`; bytes=`10219`; keep_n=`30`; prune_deleted=`0`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260214T154530Z.json`; bytes=`11158`; keep_n=`30`; prune_deleted=`0`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `1`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
 - TRIG_SYSTEMIC_VETO = `0`  (systemic veto via HYG_IEF_RATIO / OFR_FSI)
-- TRIG_REVERSAL = `0`  (panic & NOT systemic & VIX cooling & SP500 stable)
+- TRIG_REVERSAL = `1`  (panic & NOT systemic & VIX cooling & SP500 stable)
 
 ## Distance to Triggers - Global
-- VIX panic gap: `-0.8200`
-- SP500 ret1% gap: `-0.0661`
-- HYG veto gap(z): `1.3362`
-- OFR veto gap(z): `1.5360`
+- VIX panic gap: `-0.6000`
+- SP500 ret1% gap: `1.5499`
+- HYG veto gap(z): `0.8365`
+- OFR veto gap(z): `1.5381`
 
 ## Context (Non-trigger) - Global
-- SP500.p252: `80.55555555555556`; equity_extreme(p252>=95): `0`
+- SP500.p252: `80.95238095238095`; equity_extreme(p252>=95): `0`
 
 ## TW Local Gate (roll25 + margin)
 - tw_state: **NONE**  (streak=12)
-- UsedDate: `2026-02-11`; run_day_tag: `WEEKDAY`; used_date_status: `DATA_NOT_UPDATED`
+- UsedDate: `2026-02-11`; run_day_tag: `WEEKEND`; used_date_status: `OK_LATEST`
 - Lookback: `20/20`
 - roll25_raw: DownDay=`False`; VolumeAmplified=`False`; VolAmplified=`False`; NewLow_N=`0`; ConsecutiveBreak=`0`
 - roll25_paired_basis: `False` (basis = VolumeAmplified OR VolAmplified OR (NewLow_N>=1))
@@ -55,7 +55,7 @@
 | 2026-02-11 | 2026-02-11T00:34:43.635609+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-12 | 2026-02-12T00:33:27.680001+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-13 | 2026-02-13T00:13:17.087851+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
-| 2026-02-14 | 2026-02-14T00:03:52.438512+08:00 | BOTTOM_WATCH | 1 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-02-14 | 2026-02-14T23:45:30.664108+08:00 | BOTTOM_CANDIDATE | 1 | 0 | 1 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`

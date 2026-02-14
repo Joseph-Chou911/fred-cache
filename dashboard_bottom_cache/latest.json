@@ -1,41 +1,41 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-02-13T16:03:52.438494Z",
-  "as_of_ts": "2026-02-14T00:03:52.438512+08:00",
-  "data_commit_sha": "e2ffa514798f77b53c7cd9c3ee8c750a71300100",
+  "generated_at_utc": "2026-02-14T15:45:30.664092Z",
+  "as_of_ts": "2026-02-14T23:45:30.664108+08:00",
+  "data_commit_sha": "81b0d38efe39bb7f66466eed5495937e8c2ae5e6",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-02-13T03:32:32Z",
-    "market_cache_as_of_ts": "2026-02-13T03:32:32Z",
+    "market_cache_generated_at_utc": "2026-02-14T03:15:57Z",
+    "market_cache_as_of_ts": "2026-02-14T03:15:57Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
     "tw_roll25_report_path": "roll25_cache/latest_report.json",
     "tw_margin_path": "taiwan_margin_cache/latest.json"
   },
-  "bottom_state_global": "BOTTOM_WATCH",
+  "bottom_state_global": "BOTTOM_CANDIDATE",
   "triggers_global": {
     "TRIG_PANIC": 1,
     "TRIG_SYSTEMIC_VETO": 0,
-    "TRIG_REVERSAL": 0
+    "TRIG_REVERSAL": 1
   },
   "context_global": {
     "context_equity_extreme_sp500_p252_ge_95": 0,
-    "sp500_p252": 80.55555555555556
+    "sp500_p252": 80.95238095238095
   },
   "distances_global": {
-    "vix_panic_gap": -0.8200000000000003,
-    "sp500_ret1_panic_gap": -0.06609478972033345,
-    "hyg_veto_gap_z": 1.3362126434547363,
-    "ofr_veto_gap_z": 1.5360245111732602
+    "vix_panic_gap": -0.6000000000000014,
+    "sp500_ret1_panic_gap": 1.549906626312059,
+    "hyg_veto_gap_z": 0.8365264872256422,
+    "ofr_veto_gap_z": 1.5380596507524271
   },
   "tw_local_gate": {
     "tw_state": "NONE",
     "UsedDate": "2026-02-11",
-    "run_day_tag": "WEEKDAY",
-    "used_date_status": "DATA_NOT_UPDATED",
+    "run_day_tag": "WEEKEND",
+    "used_date_status": "OK_LATEST",
     "lookback_n_actual": 20,
     "lookback_n_target": 20,
     "pct_change": 1.610802,
@@ -97,21 +97,21 @@
       "series_id": "VIX",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-02-12",
-        "value": 20.82,
-        "as_of_ts": "2026-02-13T03:32:32Z",
+        "data_date": "2026-02-13",
+        "value": 20.6,
+        "as_of_ts": "2026-02-14T03:15:57Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
-        "z": 1.613530113139371,
+        "z": 1.618928811464301,
         "p": 93.33333333333333,
-        "ret1_pct": 17.960339943342788,
-        "z_delta": 1.3332500554792421,
-        "p_delta": 15.0
+        "ret1_pct": -1.056676272814596,
+        "z_delta": 0.005398698324930118,
+        "p_delta": 0.0
       },
       "w252": {
-        "z": 0.33745581626149157,
-        "p": 78.57142857142857
+        "z": 0.2939899763011563,
+        "p": 76.19047619047619
       },
       "series_signal": "NONE"
     },
@@ -119,21 +119,21 @@
       "series_id": "SP500",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-02-12",
-        "value": 6832.76,
-        "as_of_ts": "2026-02-13T03:32:32Z",
+        "data_date": "2026-02-13",
+        "value": 6836.17,
+        "as_of_ts": "2026-02-14T03:15:57Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
-        "z": -0.2992999884330351,
-        "p": 30.0,
-        "ret1_pct": -1.5660947897203334,
-        "z_delta": -1.1039457750667183,
-        "p_delta": -50.0
+        "z": -0.3017657572416548,
+        "p": 31.666666666666664,
+        "ret1_pct": 0.04990662631205918,
+        "z_delta": -0.0024657688086196505,
+        "p_delta": 1.6666666666666643
       },
       "w252": {
-        "z": 1.018037711601442,
-        "p": 80.55555555555556
+        "z": 1.0171149580104253,
+        "p": 80.95238095238095
       },
       "series_signal": "NONE"
     },
@@ -141,21 +141,21 @@
       "series_id": "HYG_IEF_RATIO",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-02-12",
-        "value": 0.8342627013630731,
-        "as_of_ts": "2026-02-13T03:32:32Z",
+        "data_date": "2026-02-13",
+        "value": 0.8315762406788377,
+        "as_of_ts": "2026-02-14T03:15:57Z",
         "source_url": "DERIVED"
       },
       "w60": {
-        "z": -0.6637873565452637,
-        "p": 21.666666666666668,
-        "ret1_pct": -0.6687586549769216,
-        "z_delta": -1.0158090664766584,
-        "p_delta": -43.33333333333333
+        "z": -1.1634735127743578,
+        "p": 15.0,
+        "ret1_pct": -0.3323092153337722,
+        "z_delta": -0.514821710720915,
+        "p_delta": -6.666666666666668
       },
       "w252": {
-        "z": -0.3666733843694927,
-        "p": 28.968253968253972
+        "z": -0.646952559147015,
+        "p": 21.428571428571427
       },
       "series_signal": "NONE"
     },
@@ -163,21 +163,21 @@
       "series_id": "OFR_FSI",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-02-10",
-        "value": -2.28,
-        "as_of_ts": "2026-02-13T03:32:32Z",
+        "data_date": "2026-02-11",
+        "value": -2.305,
+        "as_of_ts": "2026-02-14T03:15:57Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
-        "z": 0.4639754888267398,
-        "p": 81.66666666666667,
-        "ret1_pct": -1.3333333333333246,
-        "z_delta": -0.023826364295338687,
-        "p_delta": -1.6666666666666714
+        "z": 0.461940349247573,
+        "p": 76.66666666666667,
+        "ret1_pct": -1.096491228070191,
+        "z_delta": -0.0020351395791667892,
+        "p_delta": -5.0
       },
       "w252": {
-        "z": -0.560256127429094,
-        "p": 33.730158730158735
+        "z": -0.5858961481850673,
+        "p": 31.746031746031743
       },
       "series_signal": "NONE"
     }
@@ -185,11 +185,11 @@
   "history_audit": {
     "history_load_status": "OK",
     "history_load_reason": "dict.items",
-    "loaded_items": 11,
+    "loaded_items": 12,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260213T160352Z.json",
-    "backup_bytes": 10219,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260214T154530Z.json",
+    "backup_bytes": 11158,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -197,8 +197,8 @@
       "deleted": 0
     },
     "history_file_exists": true,
-    "history_pre_items": 11,
-    "history_pre_unique_days": 11,
+    "history_pre_items": 12,
+    "history_pre_unique_days": 12,
     "history_post_items": 12,
     "history_post_unique_days": 12,
     "history_write_status": "OK",
