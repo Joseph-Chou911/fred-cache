@@ -1,14 +1,14 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-15T09:43:02Z`
-- generated_at_local: `2026-02-15T17:43:02.910843+08:00`
-- report_date_local: `2026-02-15`
+- generated_at_utc: `2026-02-15T18:52:34Z`
+- generated_at_local: `2026-02-16T02:52:34.767688+08:00`
+- report_date_local: `2026-02-16`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-11` (latest available)
-- data_age_days: `4` (warn_if > 2)
-- ⚠️ staleness_warning: as_of_data_date is 4 days behind report_date_local (可能跨週末/長假；請避免當作「今日盤後」解讀)
-- RunDayTag: `WEEKEND`
-- summary: 今日為週末；UsedDate=2026-02-11：Mode=FULL；freshness_ok=True
+- data_age_days: `5` (warn_if > 2)
+- ⚠️ staleness_warning: as_of_data_date is 5 days behind report_date_local (可能跨週末/長假；請避免當作「今日盤後」解讀)
+- RunDayTag: `WEEKDAY`
+- summary: 今日資料未更新；UsedDate=2026-02-11：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 
 ## 2) Key Numbers (from latest_report.json)
 - turnover_twd: `699292298413`
@@ -123,7 +123,7 @@
 - Rows missing date field are counted and sampled as '<NO_DATE_FIELD>' (audit visibility; no silent drop).
 - If MM/DD=02/29 cannot be resolved within {Y-1,Y,Y+1}, it is recorded as 'MMDD_0229_NO_LEAP_IN_WINDOW' in sort diag samples.
 - All VALUE/ret1%/zΔ60/pΔ60 are ANCHORED to as_of_data_date (UsedDate).
-- UsedDateStatus: `OK_LATEST` (kept for audit; not treated as daily alarm).
+- UsedDateStatus: `DATA_NOT_UPDATED` (kept for audit; not treated as daily alarm).
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
 - ret1% (in Z/P table) is STRICT adjacency at as_of_data_date (simple %).
 - Dynamic Risk Check ret1 uses STRICT adjacency LOG return: 100*ln(Close_t/Close_{t-1}).
@@ -147,8 +147,8 @@ Sources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?respo
 run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
 Mode=FULL | OHLC=OK | UsedDate=2026-02-11 | UsedDminus1=2026-02-10
-RunDayTag=WEEKEND | UsedDateStatus=OK_LATEST
-freshness_ok=True | freshness_age_days=4
+RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
+freshness_ok=True | freshness_age_days=5
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
