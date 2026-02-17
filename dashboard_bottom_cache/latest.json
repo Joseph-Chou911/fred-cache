@@ -1,14 +1,14 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-02-16T16:00:15.943536Z",
-  "as_of_ts": "2026-02-17T00:00:15.943555+08:00",
-  "data_commit_sha": "368920e18b489db2655a09ca7dfb7b596d82c9f5",
+  "generated_at_utc": "2026-02-17T16:12:59.926106Z",
+  "as_of_ts": "2026-02-18T00:12:59.926117+08:00",
+  "data_commit_sha": "e4d9a3d05095b98827040d28dcd08708e921e922",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-02-16T03:31:51Z",
-    "market_cache_as_of_ts": "2026-02-16T03:31:51Z",
+    "market_cache_generated_at_utc": "2026-02-17T08:06:20Z",
+    "market_cache_as_of_ts": "2026-02-17T08:06:20Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -29,7 +29,7 @@
     "vix_panic_gap": -0.6000000000000014,
     "sp500_ret1_panic_gap": 1.549906626312059,
     "hyg_veto_gap_z": 0.8589152132462341,
-    "ofr_veto_gap_z": 1.5380596507524271
+    "ofr_veto_gap_z": 0.9043717821302635
   },
   "tw_local_gate": {
     "tw_state": "NONE",
@@ -99,7 +99,7 @@
       "latest": {
         "data_date": "2026-02-13",
         "value": 20.6,
-        "as_of_ts": "2026-02-16T03:31:51Z",
+        "as_of_ts": "2026-02-17T08:06:20Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
@@ -121,7 +121,7 @@
       "latest": {
         "data_date": "2026-02-13",
         "value": 6836.17,
-        "as_of_ts": "2026-02-16T03:31:51Z",
+        "as_of_ts": "2026-02-17T08:06:20Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
@@ -143,7 +143,7 @@
       "latest": {
         "data_date": "2026-02-13",
         "value": 0.8317045571443267,
-        "as_of_ts": "2026-02-16T03:31:51Z",
+        "as_of_ts": "2026-02-17T08:06:20Z",
         "source_url": "DERIVED"
       },
       "w60": {
@@ -163,21 +163,21 @@
       "series_id": "OFR_FSI",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-02-11",
-        "value": -2.305,
-        "as_of_ts": "2026-02-16T03:31:51Z",
+        "data_date": "2026-02-12",
+        "value": -2.138,
+        "as_of_ts": "2026-02-17T08:06:20Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
-        "z": 0.461940349247573,
-        "p": 76.66666666666667,
-        "ret1_pct": -1.096491228070191,
-        "z_delta": -0.0020351395791667892,
-        "p_delta": -5.0
+        "z": 1.0956282178697365,
+        "p": 90.0,
+        "ret1_pct": 7.245119305856844,
+        "z_delta": 0.6336878686221635,
+        "p_delta": 13.333333333333329
       },
       "w252": {
-        "z": -0.5858961481850673,
-        "p": 31.746031746031743
+        "z": -0.39752651554893587,
+        "p": 44.84126984126984
       },
       "series_signal": "NONE"
     }
@@ -185,11 +185,11 @@
   "history_audit": {
     "history_load_status": "OK",
     "history_load_reason": "dict.items",
-    "loaded_items": 13,
+    "loaded_items": 14,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260216T160015Z.json",
-    "backup_bytes": 12099,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260217T161259Z.json",
+    "backup_bytes": 13039,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -197,10 +197,10 @@
       "deleted": 0
     },
     "history_file_exists": true,
-    "history_pre_items": 13,
-    "history_pre_unique_days": 13,
-    "history_post_items": 14,
-    "history_post_unique_days": 14,
+    "history_pre_items": 14,
+    "history_pre_unique_days": 14,
+    "history_post_items": 15,
+    "history_post_unique_days": 15,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,
