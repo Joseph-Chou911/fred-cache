@@ -1,6 +1,6 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-18T08:23:08Z`
+- report_generated_at_utc: `2026-02-18T09:05:46Z`
 
 ## 15秒摘要
 
@@ -10,7 +10,7 @@
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T08:23:07Z`
+- snippet.generated_at_utc: `2026-02-18T09:05:46Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NEAR_LOWER_BAND (MONITOR)`**
@@ -52,12 +52,13 @@
 | mean | -0.054391 |
 | min | -0.249947 |
 | max | 0.000000 |
+| gate | `{'field': 'z', 'op': '<=', 'value': -1.5}` |
 | condition | `{'field': 'z', 'op': '<=', 'value': -1.5}` |
 
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T08:23:08Z`
+- snippet.generated_at_utc: `2026-02-18T09:05:46Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
@@ -92,7 +93,7 @@
 |---|---:|
 | metric | `forward_max_runup` |
 | metric_interpretation | `>=0; larger means further spike continuation risk` |
-| z_thresh |  |
+| z_thresh | `NA` |
 | horizon_days | 20 |
 | cooldown_bars | 20 |
 | sample_size | 78 |
@@ -102,6 +103,7 @@
 | mean | 0.205903 |
 | min | 0.000000 |
 | max | 1.739651 |
+| gate | `{'field': 'position_in_band', 'op': '>=', 'value': 0.8}` |
 | condition | `{'field': 'position_in_band', 'op': '>=', 'value': 0.8}` |
 
 #### A) Low-Vol / Complacency (z <= threshold)
@@ -122,6 +124,7 @@
 | mean | 0.247371 |
 | min | 0.033597 |
 | max | 0.766071 |
+| gate | `{'field': 'z', 'op': '<=', 'value': -2.0}` |
 | condition | `{'field': 'z', 'op': '<=', 'value': -2.0}` |
 
 #### B) High-Vol / Stress (z >= threshold)
@@ -142,6 +145,7 @@
 | mean | 0.212930 |
 | min | 0.000000 |
 | max | 1.580728 |
+| gate | `{'field': 'z', 'op': '>=', 'value': 2.0}` |
 | condition | `{'field': 'z', 'op': '>=', 'value': 2.0}` |
 
 
