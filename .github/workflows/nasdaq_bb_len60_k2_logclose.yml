@@ -34,6 +34,8 @@ jobs:
           pip install --upgrade pip
           pip install pandas numpy requests
 
+      # 建議先留著：確定 runner 找得到 scripts/ 下的檔案
+      # 等你確認穩了再刪掉這個 step
       - name: Debug list files
         run: |
           pwd
@@ -59,6 +61,8 @@ jobs:
             --cooldown 20 \
             --quiet
 
+      # ✅ 這段就是你剛剛引用我說「yml只負責流程」的具體落地：
+      # report 由獨立腳本產生，且只寫入 nasdaq_bb_cache/report.md
       - name: Build report.md (cache only)
         run: |
           python scripts/build_nasdaq_bb_report.py \
@@ -67,6 +71,7 @@ jobs:
 
       - name: Commit outputs (only if changed)
         run: |
+          # 只看 nasdaq_bb_cache 的變更；避免誤把其他檔案一起 commit
           if [ -n "$(git status --porcelain nasdaq_bb_cache)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
