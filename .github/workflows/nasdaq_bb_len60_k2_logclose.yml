@@ -1,23 +1,30 @@
-name: nasdaq-bb-qqq-len60-k2-logclose
+name: TW0050 BB60 + forwardMDD
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
   schedule:
-    # 22:40 Asia/Taipei = 14:40 UTC
-    - cron: "40 14 * * *"
+    # 06:40 UTC ~= 14:40 Asia/Taipei, Mon-Fri
+    - cron: "40 6 * * 1-5"
 
 permissions:
   contents: write
 
 concurrency:
-  group: nasdaq-bb-qqq-len60-k2-logclose
+  group: tw0050-bb
   cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: .
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    env:
+      TZ: Asia/Taipei
+      PYTHONUNBUFFERED: "1"
+      OUTPUT_DIR: tw0050_bb_artifacts
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,59 +33,43 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
 
       - name: Install deps
         run: |
-          python -V
-          pip install --upgrade pip
-          pip install pandas numpy requests
+          python -m pip install --upgrade pip
+          pip install pandas numpy yfinance tzdata
 
-      # 建議先保留：確認 runner 找得到 scripts/ 下的檔案
-      # 等你確認穩了再刪掉
-      - name: Debug list files
+      - name: Prepare output directory
         run: |
-          pwd
-          echo "---- repo root ----"
-          ls -la
-          echo "---- scripts/ ----"
-          ls -la scripts || true
-          echo "---- git files (nasdaq) ----"
-          git ls-files | grep -i nasdaq || true
+          mkdir -p "${OUTPUT_DIR}"
 
-      - name: Run Nasdaq BB monitor (QQQ + optional VXN)
+      - name: Generate stats (all outputs under OUTPUT_DIR)
         run: |
-          mkdir -p nasdaq_bb_cache
-          python scripts/nasdaq_bb_len60_k2_logclose.py \
-            --price_ticker "qqq.us" \
-            --out_dir "nasdaq_bb_cache" \
-            --vxn_enable \
-            --vxn_source cboe_first \
-            --vxn_code VXN \
-            --vxn_fred_series VXNCLS \
-            --bb_len 60 \
-            --bb_k 2.0 \
-            --z_thresh -1.5 \
-            --z_thresh_low -2.0 \
-            --z_thresh_high 2.0 \
+          python scripts/tw0050_bb_len60_k2_forwardmdd.py \
+            --symbol 0050.TW \
+            --window 60 \
+            --k 2 \
             --horizon 20 \
-            --cooldown 20 \
-            --quiet
+            --z_threshold -1.5 \
+            --cache_dir "${OUTPUT_DIR}" \
+            --use_adj_close
 
-      - name: Build report.md (cache only)
+      - name: Build report (report also under OUTPUT_DIR)
         run: |
-          python scripts/build_nasdaq_bb_report.py \
-            --cache_dir "nasdaq_bb_cache"
+          python scripts/build_tw0050_bb_report.py \
+            --cache_dir "${OUTPUT_DIR}" \
+            --output "${OUTPUT_DIR}/report_tw0050_bb.md"
 
-      - name: Commit outputs (only if changed)
+      - name: Commit & push if changed
         run: |
-          # 只提交 nasdaq_bb_cache 的變更，避免誤 commit 其他檔案
-          if [ -n "$(git status --porcelain nasdaq_bb_cache)" ]; then
+          set -e
+          git status --porcelain
+          if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add nasdaq_bb_cache
-            git commit -m "update: nasdaq BB(60,2) QQQ/VXN cache + report"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A "${OUTPUT_DIR}"
+            git commit -m "Update TW0050 BB60 forwardMDD artifacts (auto)"
             git push
           else
-            echo "No changes to commit."
+            echo "No changes."
           fi
