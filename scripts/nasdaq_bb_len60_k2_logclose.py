@@ -7,13 +7,15 @@ Audit-first Nasdaq risk monitor using Bollinger Bands (BB).
 - PRICE: QQQ from Stooq
 - VOL:   VXN from Cboe (best-effort) with fallback to FRED
 
-Key points:
+Enhancements:
+- VOL action_output now also uses position_in_band >= 0.80 to trigger WATCH (Suggestion 1B),
+  guarded by a minimum bandwidth_pct to avoid narrow-band false positives.
+
+Notes:
 - PRICE conditional stat: forward_mdd (<= 0 by construction)
-- VOL conditional stat(s):
+- VOL conditional stats:
     (A) low-vol regime (z <= z_thresh_low):  forward_max_runup (>= 0)
     (B) high-vol regime (z >= z_thresh_high): forward_max_runup (>= 0)
-
-This is a monitoring utility, NOT a trading signal generator.
 """
 
 from __future__ import annotations
@@ -45,7 +47,7 @@ def _ensure_dir(path: str) -> None:
 
 def _http_get(url: str, timeout: int = 30, max_retries: int = 3, backoff_s: float = 1.5) -> bytes:
     last_err = None
-    headers = {"User-Agent": "risk-dashboard-bb-script/3.0"}
+    headers = {"User-Agent": "risk-dashboard-bb-script/3.1"}
     for i in range(max_retries):
         try:
             r = requests.get(url, timeout=timeout, headers=headers)
@@ -78,19 +80,16 @@ def _pick_date_col(df: pd.DataFrame) -> str:
 
 
 def _pick_value_col(df: pd.DataFrame) -> str:
-    # common exact names
     for name in ("close", "closing", "value", "close value", "vix close", "vxn close", "close "):
         for c in df.columns:
             if str(c).strip().lower() == name:
                 return c
 
-    # close-like
     close_like = [c for c in df.columns if "close" in str(c).strip().lower()]
     if close_like:
         close_like.sort(key=lambda x: len(str(x)))
         return close_like[0]
 
-    # fallback numeric
     numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     if numeric_cols:
         return numeric_cols[-1]
@@ -128,10 +127,6 @@ def _safe_float(x, default=None):
 # ---------------------------
 
 def fetch_stooq_daily(ticker: str) -> Tuple[pd.DataFrame, Dict]:
-    """
-    Stooq daily CSV endpoint:
-      https://stooq.com/q/d/l/?s=qqq.us&i=d
-    """
     sym = urllib.parse.quote_plus(ticker.lower())
     url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
     content = _http_get(url)
@@ -154,10 +149,6 @@ def fetch_stooq_daily(ticker: str) -> Tuple[pd.DataFrame, Dict]:
 
 
 def fetch_fred_daily(series_id: str) -> Tuple[pd.DataFrame, Dict]:
-    """
-    FRED CSV endpoint (no API key required for this download format):
-      https://fred.stlouisfed.org/graph/fredgraph.csv?id=VXNCLS
-    """
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
     content = _http_get(url)
     raw = _read_csv_bytes(content)
@@ -185,11 +176,6 @@ def fetch_fred_daily(series_id: str) -> Tuple[pd.DataFrame, Dict]:
 
 
 def fetch_cboe_daily_prices(index_code: str) -> Tuple[pd.DataFrame, Dict]:
-    """
-    Cboe daily prices endpoint (best-effort):
-      https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
-    We try the same pattern for VXN (VXN_History.csv). It may 404 depending on Cboe product coverage.
-    """
     url = f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{index_code.upper()}_History.csv"
     content = _http_get(url)
     raw = _read_csv_bytes(content)
@@ -220,7 +206,7 @@ class BBParams:
     length: int = 60
     k: float = 2.0
     use_log: bool = True
-    ddof: int = 0  # 0=population std, 1=sample std
+    ddof: int = 0
 
 
 def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
@@ -255,11 +241,9 @@ def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
         out["upper_price"] = out["upper_x"]
         out["lower_price"] = out["lower_x"]
 
-    # z can blow up if sd=0; keep inf as-is, later safe-cast will handle
     out["z"] = (out["x"] - out["ma"]) / out["sd"]
     out["bandwidth_pct"] = (out["upper_price"] - out["lower_price"]) / out["mid_price"]
 
-    # consecutive closes <= lower band (walking lower band)
     close = out["close"].to_numpy(dtype=float)
     lower = out["lower_price"].to_numpy(dtype=float)
     upper = out["upper_price"].to_numpy(dtype=float)
@@ -289,10 +273,6 @@ def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
 # ---------------------------
 
 def forward_mdd(close_window: np.ndarray) -> float:
-    """
-    Forward MDD (<=0): min(close[t:t+H]) / close[t] - 1
-    Includes day t => cannot be positive.
-    """
     if close_window.size < 1:
         return np.nan
     c0 = close_window[0]
@@ -301,10 +281,6 @@ def forward_mdd(close_window: np.ndarray) -> float:
 
 
 def forward_max_runup(close_window: np.ndarray) -> float:
-    """
-    Forward max run-up (>=0): max(close[t:t+H]) / close[t] - 1
-    Includes day t => cannot be negative.
-    """
     if close_window.size < 1:
         return np.nan
     c0 = close_window[0]
@@ -380,8 +356,7 @@ def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: i
     vals: List[float] = []
     for i in trig_pos:
         j = min(i + horizon, len(close) - 1)
-        window = close[i: j + 1]
-        vals.append(forward_mdd(window))
+        vals.append(forward_mdd(close[i: j + 1]))
 
     return _summarize(
         values=vals,
@@ -402,8 +377,7 @@ def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: in
     vals: List[float] = []
     for i in trig_pos:
         j = min(i + horizon, len(close) - 1)
-        window = close[i: j + 1]
-        vals.append(forward_max_runup(window))
+        vals.append(forward_max_runup(close[i: j + 1]))
 
     return _summarize(
         values=vals,
@@ -424,8 +398,7 @@ def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: in
     vals: List[float] = []
     for i in trig_pos:
         j = min(i + horizon, len(close) - 1)
-        window = close[i: j + 1]
-        vals.append(forward_max_runup(window))
+        vals.append(forward_max_runup(close[i: j + 1]))
 
     return _summarize(
         values=vals,
@@ -450,7 +423,6 @@ def _latest_derived(latest: pd.Series) -> Dict:
     walk_l = int(_safe_float(latest.get("walk_lower_count"), 0) or 0)
     walk_u = int(_safe_float(latest.get("walk_upper_count"), 0) or 0)
 
-    # distances: percentage of current close
     dist_lower = None
     dist_upper = None
     pos_in_band = None
@@ -507,26 +479,50 @@ def decide_action_price(latest: pd.Series, bw_delta_pct: Optional[float]) -> str
     return "NORMAL_RANGE"
 
 
-def decide_action_vol(latest: pd.Series, bw_delta_pct: Optional[float]) -> str:
+def _position_in_band_from_row(latest: pd.Series) -> Optional[float]:
+    close = _safe_float(latest.get("close"))
+    lower = _safe_float(latest.get("lower_price"))
+    upper = _safe_float(latest.get("upper_price"))
+    if close is None or lower is None or upper is None:
+        return None
+    if upper <= lower:
+        return None
+    pos = (close - lower) / (upper - lower)
+    return float(np.clip(pos, 0.0, 1.0))
+
+
+def decide_action_vol(
+    latest: pd.Series,
+    bw_delta_pct: Optional[float],
+    pos_watch_threshold: float = 0.80,         # Suggestion 1(B)
+    min_bandwidth_pct: float = 0.05,           # guard: avoid ultra-narrow band false positives
+) -> str:
     z = _safe_float(latest.get("z"))
+    bw = _safe_float(latest.get("bandwidth_pct"))
+    pos = _position_in_band_from_row(latest)
+
     walk_upper = int(_safe_float(latest.get("walk_upper_count"), 0) or 0)
 
     if z is None:
         return "INSUFFICIENT_DATA"
 
-    # "walking upper band" => stress persists
     if walk_upper >= 3:
         return "STRESS_LOCKOUT_WALKING_UPPER_BAND (RISK_HIGH)"
 
-    # if vol is already at upper tail AND bandwidth expanding -> avoid "mean reversion" temptation
     if bw_delta_pct is not None and bw_delta_pct >= 10.0 and z >= 2.0:
         return "STRESS_VOL_EXPANSION (RISK_HIGH)"
 
-    # two-sided labels (so you get A & B)
     if z >= 3.0:
         return "EXTREME_VOL_SPIKE_ZONE (RISK_HIGH)"
     if z >= 2.0:
         return "UPPER_BAND_TOUCH (STRESS)"
+
+    # --- Suggestion 1(B): position-based WATCH ---
+    # If price sits high within band (>=0.80), trigger WATCH even if z < 1.5,
+    # but only when band is not trivially narrow.
+    if pos is not None and pos >= pos_watch_threshold and (bw is None or bw >= min_bandwidth_pct):
+        return "NEAR_UPPER_BAND (WATCH)"
+
     if z >= 1.5:
         return "NEAR_UPPER_BAND (WATCH)"
 
@@ -619,9 +615,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no_log", action="store_true")
     p.add_argument("--ddof", type=int, choices=[0, 1], default=0)
 
-    # PRICE trigger threshold
     p.add_argument("--z_thresh", type=float, default=-2.0, help="PRICE trigger: z <= z_thresh")
-    # VOL two-sided thresholds (A & B)
     p.add_argument("--z_thresh_low", type=float, default=-2.0, help="VOL(A) trigger: z <= z_thresh_low")
     p.add_argument("--z_thresh_high", type=float, default=2.0, help="VOL(B) trigger: z >= z_thresh_high")
 
@@ -641,9 +635,7 @@ def main() -> int:
 
     _ensure_dir(args.out_dir)
 
-    # -----------------------
     # PRICE: QQQ
-    # -----------------------
     price_df, price_meta = fetch_stooq_daily(args.price_ticker)
     price_bb = compute_bollinger(price_df, params)
 
@@ -674,9 +666,7 @@ def main() -> int:
         print("=== PRICE SNIPPET (QQQ) ===")
         print(json.dumps(price_snippet, ensure_ascii=False, indent=2))
 
-    # -----------------------
     # VOL: VXN (optional)
-    # -----------------------
     if args.vxn_enable:
         vxn_df = None
         vxn_meta = None
@@ -699,7 +689,6 @@ def main() -> int:
         if vxn_df is None or vxn_meta is None or selected_source is None:
             raise RuntimeError("Failed to fetch VXN from all sources:\n" + "\n".join(attempt_errors))
 
-        # stamp fallback info into meta
         vxn_meta2 = {
             "attempt_errors": attempt_errors,
             "selected_source": selected_source,
@@ -709,14 +698,12 @@ def main() -> int:
 
         vxn_bb = compute_bollinger(vxn_df, params)
 
-        # A: low-vol -> future spike risk
         vxn_hist_low = conditional_stats_runup_le(
             vxn_bb,
             z_thresh=args.z_thresh_low,
             horizon=args.horizon,
             cooldown=args.cooldown,
         )
-        # B: high-vol -> further spike continuation risk
         vxn_hist_high = conditional_stats_runup_ge(
             vxn_bb,
             z_thresh=args.z_thresh_high,
