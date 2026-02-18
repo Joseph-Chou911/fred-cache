@@ -1,6 +1,6 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-18T09:05:46Z`
+- report_generated_at_utc: `2026-02-18T13:35:56Z`
 
 ## 15秒摘要
 
@@ -10,7 +10,7 @@
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T09:05:46Z`
+- snippet.generated_at_utc: `2026-02-18T13:35:55Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NEAR_LOWER_BAND (MONITOR)`**
@@ -58,7 +58,7 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T09:05:46Z`
+- snippet.generated_at_utc: `2026-02-18T13:35:55Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
