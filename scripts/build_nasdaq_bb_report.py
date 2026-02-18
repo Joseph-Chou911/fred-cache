@@ -10,9 +10,14 @@ Reads:
 Writes:
 - nasdaq_bb_cache/report.md
 
-Changes:
-- Render snippet['trigger_reason'] if present (audit-friendly).
-- Historical tables will show p10 automatically because it's now in the dict.
+Fix (minimal):
+- Avoid double-wrapping backticks in markdown tables.
+  Previously some values were pre-formatted as `...` strings and then wrapped again,
+  producing ``...`` in the report.
+
+Keeps:
+- Render snippet['trigger_reason'] if present.
+- Historical tables show p10/p50/p90/etc automatically (dump dict fields).
 """
 
 from __future__ import annotations
@@ -94,11 +99,30 @@ def _fmt_pct(x: Any, nd: int = 2) -> str:
         return ""
 
 
+def _md_code(s: Any) -> str:
+    """
+    Wrap value in markdown inline code backticks, but DO NOT double-wrap
+    if it is already wrapped as `...`.
+    """
+    if s is None:
+        return ""
+    if isinstance(s, str) and s.startswith("`") and s.endswith("`"):
+        return s
+    return f"`{s}`"
+
+
 def _table_kv(d: Dict[str, Any]) -> str:
+    """
+    Render a dict as a 2-col markdown table.
+
+    Key fix:
+    - If a value is already a backticked string (e.g. `601.3000`), keep it as-is
+      rather than wrapping again, avoiding ``601.3000``.
+    """
     lines = ["| field | value |", "|---|---:|"]
     for k, v in d.items():
         if isinstance(v, bool):
-            s = f"`{v}`"
+            s = _md_code(v)
         elif isinstance(v, int):
             s = f"{v}"
         elif isinstance(v, float):
@@ -106,7 +130,11 @@ def _table_kv(d: Dict[str, Any]) -> str:
         elif v is None:
             s = ""
         else:
-            s = f"`{v}`"
+            # string or other objects
+            if isinstance(v, str) and v.startswith("`") and v.endswith("`"):
+                s = v  # already formatted
+            else:
+                s = _md_code(v)
         lines.append(f"| {k} | {s} |")
     return "\n".join(lines)
 
@@ -123,19 +151,22 @@ def _render_price_section(price: Dict[str, Any]) -> str:
     n = hist.get("sample_size")
     conf_level, conf_reason = _confidence(n, stale_flag)
 
+    # NOTE: we pre-format numeric fields as `...` strings for consistent look,
+    # and rely on _table_kv to NOT double-wrap them.
     latest_view = {
-        "date": latest.get("date"),
-        "close": f"`{_fmt_float(latest.get('close'), 4)}`",
-        "bb_mid": f"`{_fmt_float(latest.get('bb_mid'), 4)}`",
-        "bb_lower": f"`{_fmt_float(latest.get('bb_lower'), 4)}`",
-        "bb_upper": f"`{_fmt_float(latest.get('bb_upper'), 4)}`",
-        "z": f"`{_fmt_float(latest.get('z'), 4)}`",
+        "date": _md_code(latest.get("date")),
+        "close": _md_code(_fmt_float(latest.get("close"), 4)),
+        "bb_mid": _md_code(_fmt_float(latest.get("bb_mid"), 4)),
+        "bb_lower": _md_code(_fmt_float(latest.get("bb_lower"), 4)),
+        "bb_upper": _md_code(_fmt_float(latest.get("bb_upper"), 4)),
+        "z": _md_code(_fmt_float(latest.get("z"), 4)),
         "trigger_z_le_-2": latest.get("trigger_z_le_-2"),
-        "distance_to_lower_pct": f"`{_fmt_pct(latest.get('distance_to_lower_pct'), 3)}`",
-        "distance_to_upper_pct": f"`{_fmt_pct(latest.get('distance_to_upper_pct'), 3)}`",
-        "position_in_band": f"`{_fmt_float(latest.get('position_in_band'), 3)}`",
-        "bandwidth_pct": f"`{_fmt_pct((latest.get('bandwidth_pct') or 0) * 100.0, 2)}`",
-        "bandwidth_delta_pct": f"`{_fmt_pct(latest.get('bandwidth_delta_pct'), 2)}`",
+        "distance_to_lower_pct": _md_code(_fmt_pct(latest.get("distance_to_lower_pct"), 3)),
+        "distance_to_upper_pct": _md_code(_fmt_pct(latest.get("distance_to_upper_pct"), 3)),
+        "position_in_band": _md_code(_fmt_float(latest.get("position_in_band"), 3)),
+        # bandwidth_pct stored in snippet as ratio, convert to %
+        "bandwidth_pct": _md_code(_fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2)),
+        "bandwidth_delta_pct": _md_code(_fmt_pct(latest.get("bandwidth_delta_pct"), 2)),
         "walk_lower_count": latest.get("walk_lower_count"),
     }
 
@@ -171,19 +202,19 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
     stale_flag = _staleness_flag(stale_days)
 
     latest_view = {
-        "date": latest.get("date"),
-        "close": f"`{_fmt_float(latest.get('close'), 4)}`",
-        "bb_mid": f"`{_fmt_float(latest.get('bb_mid'), 4)}`",
-        "bb_lower": f"`{_fmt_float(latest.get('bb_lower'), 4)}`",
-        "bb_upper": f"`{_fmt_float(latest.get('bb_upper'), 4)}`",
-        "z": f"`{_fmt_float(latest.get('z'), 4)}`",
+        "date": _md_code(latest.get("date")),
+        "close": _md_code(_fmt_float(latest.get("close"), 4)),
+        "bb_mid": _md_code(_fmt_float(latest.get("bb_mid"), 4)),
+        "bb_lower": _md_code(_fmt_float(latest.get("bb_lower"), 4)),
+        "bb_upper": _md_code(_fmt_float(latest.get("bb_upper"), 4)),
+        "z": _md_code(_fmt_float(latest.get("z"), 4)),
         "trigger_z_le_-2 (A_lowvol)": latest.get("trigger_z_le_-2"),
         "trigger_z_ge_2 (B_highvol)": latest.get("trigger_z_ge_2"),
-        "distance_to_lower_pct": f"`{_fmt_pct(latest.get('distance_to_lower_pct'), 3)}`",
-        "distance_to_upper_pct": f"`{_fmt_pct(latest.get('distance_to_upper_pct'), 3)}`",
-        "position_in_band": f"`{_fmt_float(latest.get('position_in_band'), 3)}`",
-        "bandwidth_pct": f"`{_fmt_pct((latest.get('bandwidth_pct') or 0) * 100.0, 2)}`",
-        "bandwidth_delta_pct": f"`{_fmt_pct(latest.get('bandwidth_delta_pct'), 2)}`",
+        "distance_to_lower_pct": _md_code(_fmt_pct(latest.get("distance_to_lower_pct"), 3)),
+        "distance_to_upper_pct": _md_code(_fmt_pct(latest.get("distance_to_upper_pct"), 3)),
+        "position_in_band": _md_code(_fmt_float(latest.get("position_in_band"), 3)),
+        "bandwidth_pct": _md_code(_fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2)),
+        "bandwidth_delta_pct": _md_code(_fmt_pct(latest.get("bandwidth_delta_pct"), 2)),
         "walk_upper_count": latest.get("walk_upper_count"),
     }
 
