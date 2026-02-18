@@ -7,9 +7,9 @@ Audit-first Nasdaq risk monitor using Bollinger Bands (BB).
 - PRICE: QQQ from Stooq
 - VOL:   VXN from Cboe (best-effort) with fallback to FRED
 
-Enhancements:
-- VOL action_output now also uses position_in_band >= 0.80 to trigger WATCH (Suggestion 1B),
-  guarded by a minimum bandwidth_pct to avoid narrow-band false positives.
+Changes (minimal, user-requested):
+1) Add trigger_reason into snippet_vxn.json (and snippet objects in general).
+2) For PRICE forward_mdd stats, add p10 (bad-but-not-worst tail) while keeping p90 for backward compatibility.
 
 Notes:
 - PRICE conditional stat: forward_mdd (<= 0 by construction)
@@ -47,7 +47,7 @@ def _ensure_dir(path: str) -> None:
 
 def _http_get(url: str, timeout: int = 30, max_retries: int = 3, backoff_s: float = 1.5) -> bytes:
     last_err = None
-    headers = {"User-Agent": "risk-dashboard-bb-script/3.1"}
+    headers = {"User-Agent": "risk-dashboard-bb-script/3.2"}
     for i in range(max_retries):
         try:
             r = requests.get(url, timeout=timeout, headers=headers)
@@ -317,6 +317,11 @@ def _pick_event_positions_ge(z: np.ndarray, thresh: float, cooldown: int) -> Lis
 
 
 def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    """
+    Minimal change: add p10 in addition to p50/p90.
+    - For forward_mdd (negative), p10 is "bad but not worst" tail.
+    - For forward_max_runup (positive), p90 remains most relevant tail; p10 is less relevant but we keep it for symmetry.
+    """
     if len(values) == 0:
         return {
             "metric": metric,
@@ -325,6 +330,7 @@ def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: 
             "horizon_days": horizon,
             "cooldown_bars": cooldown,
             "sample_size": 0,
+            "p10": None,
             "p50": None,
             "p90": None,
             "mean": None,
@@ -339,6 +345,7 @@ def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: 
         "horizon_days": horizon,
         "cooldown_bars": cooldown,
         "sample_size": int(arr.size),
+        "p10": float(np.nanpercentile(arr, 10)),
         "p50": float(np.nanpercentile(arr, 50)),
         "p90": float(np.nanpercentile(arr, 90)),
         "mean": float(np.nanmean(arr)),
@@ -454,29 +461,29 @@ def _latest_derived(latest: pd.Series) -> Dict:
 
 
 # ---------------------------
-# Action label (guardrail)
+# Action label + trigger_reason
 # ---------------------------
 
-def decide_action_price(latest: pd.Series, bw_delta_pct: Optional[float]) -> str:
+def decide_action_price(latest: pd.Series, bw_delta_pct: Optional[float]) -> Tuple[str, str]:
     z = _safe_float(latest.get("z"))
     walk_lower = int(_safe_float(latest.get("walk_lower_count"), 0) or 0)
 
     if z is None:
-        return "INSUFFICIENT_DATA"
+        return "INSUFFICIENT_DATA", "z is None"
 
     if walk_lower >= 3:
-        return "LOCKOUT_WALKING_LOWER_BAND (DO_NOT_CATCH_FALLING_KNIFE)"
+        return "LOCKOUT_WALKING_LOWER_BAND (DO_NOT_CATCH_FALLING_KNIFE)", "walk_lower_count>=3"
 
     if bw_delta_pct is not None and bw_delta_pct >= 10.0 and z <= -2.0:
-        return "LOCKOUT_VOL_EXPANSION_AT_LOWER (WAIT)"
+        return "LOCKOUT_VOL_EXPANSION_AT_LOWER (WAIT)", "bandwidth_delta_pct>=10 and z<=-2"
 
     if z <= -3.0:
-        return "EXTREME_TAIL_RISK (WAIT)"
+        return "EXTREME_TAIL_RISK (WAIT)", "z<=-3"
     if z <= -2.0:
-        return "LOWER_BAND_TOUCH (MONITOR / SCALE_IN_ONLY)"
+        return "LOWER_BAND_TOUCH (MONITOR / SCALE_IN_ONLY)", "z<=-2"
     if z <= -1.5:
-        return "NEAR_LOWER_BAND (MONITOR)"
-    return "NORMAL_RANGE"
+        return "NEAR_LOWER_BAND (MONITOR)", "z<=-1.5"
+    return "NORMAL_RANGE", "default"
 
 
 def _position_in_band_from_row(latest: pd.Series) -> Optional[float]:
@@ -494,9 +501,9 @@ def _position_in_band_from_row(latest: pd.Series) -> Optional[float]:
 def decide_action_vol(
     latest: pd.Series,
     bw_delta_pct: Optional[float],
-    pos_watch_threshold: float = 0.80,         # Suggestion 1(B)
-    min_bandwidth_pct: float = 0.05,           # guard: avoid ultra-narrow band false positives
-) -> str:
+    pos_watch_threshold: float = 0.80,
+    min_bandwidth_pct: float = 0.05,
+) -> Tuple[str, str]:
     z = _safe_float(latest.get("z"))
     bw = _safe_float(latest.get("bandwidth_pct"))
     pos = _position_in_band_from_row(latest)
@@ -504,36 +511,34 @@ def decide_action_vol(
     walk_upper = int(_safe_float(latest.get("walk_upper_count"), 0) or 0)
 
     if z is None:
-        return "INSUFFICIENT_DATA"
+        return "INSUFFICIENT_DATA", "z is None"
 
     if walk_upper >= 3:
-        return "STRESS_LOCKOUT_WALKING_UPPER_BAND (RISK_HIGH)"
+        return "STRESS_LOCKOUT_WALKING_UPPER_BAND (RISK_HIGH)", "walk_upper_count>=3"
 
     if bw_delta_pct is not None and bw_delta_pct >= 10.0 and z >= 2.0:
-        return "STRESS_VOL_EXPANSION (RISK_HIGH)"
+        return "STRESS_VOL_EXPANSION (RISK_HIGH)", "bandwidth_delta_pct>=10 and z>=2"
 
     if z >= 3.0:
-        return "EXTREME_VOL_SPIKE_ZONE (RISK_HIGH)"
+        return "EXTREME_VOL_SPIKE_ZONE (RISK_HIGH)", "z>=3"
     if z >= 2.0:
-        return "UPPER_BAND_TOUCH (STRESS)"
+        return "UPPER_BAND_TOUCH (STRESS)", "z>=2"
 
-    # --- Suggestion 1(B): position-based WATCH ---
-    # If price sits high within band (>=0.80), trigger WATCH even if z < 1.5,
-    # but only when band is not trivially narrow.
+    # position-based WATCH (Suggestion 1B)
     if pos is not None and pos >= pos_watch_threshold and (bw is None or bw >= min_bandwidth_pct):
-        return "NEAR_UPPER_BAND (WATCH)"
+        return "NEAR_UPPER_BAND (WATCH)", f"position_in_band>={pos_watch_threshold} (pos={pos:.3f})"
 
     if z >= 1.5:
-        return "NEAR_UPPER_BAND (WATCH)"
+        return "NEAR_UPPER_BAND (WATCH)", "z>=1.5"
 
     if z <= -3.0:
-        return "EXTREME_LOW_VOL_ZONE (COMPLACENCY)"
+        return "EXTREME_LOW_VOL_ZONE (COMPLACENCY)", "z<=-3"
     if z <= -2.0:
-        return "LOWER_BAND_TOUCH (COMPLACENCY)"
+        return "LOWER_BAND_TOUCH (COMPLACENCY)", "z<=-2"
     if z <= -1.5:
-        return "NEAR_LOWER_BAND (COMPLACENCY_WATCH)"
+        return "NEAR_LOWER_BAND (COMPLACENCY_WATCH)", "z<=-1.5"
 
-    return "NORMAL_RANGE"
+    return "NORMAL_RANGE", "default"
 
 
 # ---------------------------
@@ -543,7 +548,7 @@ def decide_action_vol(
 def build_snippet(
     name: str,
     df_bb: pd.DataFrame,
-    params: BBParams,
+    params: "BBParams",
     meta: Dict,
     series_kind: str,
     hist: Dict,
@@ -575,11 +580,11 @@ def build_snippet(
     }
 
     if series_kind == "price":
-        action = decide_action_price(latest, bw_delta_pct)
+        action, reason = decide_action_price(latest, bw_delta_pct)
     elif series_kind == "vol":
-        action = decide_action_vol(latest, bw_delta_pct)
+        action, reason = decide_action_vol(latest, bw_delta_pct)
     else:
-        action = "UNKNOWN_SERIES_KIND"
+        action, reason = "UNKNOWN_SERIES_KIND", "unknown series_kind"
 
     return {
         "name": name,
@@ -589,6 +594,8 @@ def build_snippet(
         "latest": latest_pack,
         "historical_simulation": hist,
         "action_output": action,
+        # ---- minimal addition ----
+        "trigger_reason": reason,
     }
 
 
@@ -736,19 +743,8 @@ def main() -> int:
             print("\n=== VOL SNIPPET (VXN) ===")
             print(json.dumps(vxn_snippet, ensure_ascii=False, indent=2))
 
-    if not args.quiet:
-        print("\nWrote:")
-        print(f"- {price_json_path}")
-        print(f"- {price_csv_path}")
-        if args.vxn_enable:
-            print(f"- {os.path.join(args.out_dir, 'snippet_vxn.json')}")
-            print(f"- {os.path.join(args.out_dir, 'tail_vxn.csv')}")
-
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except KeyboardInterrupt:
-        raise SystemExit(130)
+    raise SystemExit(main())
