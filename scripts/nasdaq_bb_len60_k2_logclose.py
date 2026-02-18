@@ -1,334 +1,373 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 """
 nasdaq_bb_len60_k2_logclose.py
 
-Audit-first Nasdaq risk monitor using Bollinger Bands (BB).
-- PRICE: QQQ from Stooq
-- VOL:   VXN from Cboe (best-effort) with fallback to FRED
+Outputs:
+- nasdaq_bb_cache/snippet_price_qqq.json
+- nasdaq_bb_cache/snippet_vxn.json
 
-Changes (minimal, user-requested):
-1) Add trigger_reason into snippet_vxn.json (and snippet objects in general).
-2) For PRICE forward_mdd stats, add p10 (bad-but-not-worst tail) while keeping p90 for backward compatibility.
+Key addition (Suggestion #2):
+- snippet_vxn.json includes:
+    - active_regime: "A_lowvol" | "B_highvol" | "NONE"
+    - tail_B_applicable: bool   (True only when active_regime == "B_highvol")
 
 Notes:
-- PRICE conditional stat: forward_mdd (<= 0 by construction)
-- VOL conditional stats:
-    (A) low-vol regime (z <= z_thresh_low):  forward_max_runup (>= 0)
-    (B) high-vol regime (z >= z_thresh_high): forward_max_runup (>= 0)
+- BB computed on log(close) if --use_log, then bands are exponentiated back to price space.
+- z is computed in transformed space (log space when use_log=True).
+- QQQ source: stooq
+- VXN source: cboe_first or fred_first, with fallback
 """
 
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
+import math
 import os
 import time
-import urllib.parse
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 import pandas as pd
 import requests
 
 
-# ---------------------------
+# ----------------------------
 # Utilities
-# ---------------------------
+# ----------------------------
 
-def _utc_now_iso() -> str:
+def utc_now_iso() -> str:
     return pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _ensure_dir(path: str) -> None:
+def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def _http_get(url: str, timeout: int = 30, max_retries: int = 3, backoff_s: float = 1.5) -> bytes:
-    last_err = None
-    headers = {"User-Agent": "risk-dashboard-bb-script/3.2"}
-    for i in range(max_retries):
-        try:
-            r = requests.get(url, timeout=timeout, headers=headers)
-            if r.status_code != 200:
-                raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
-            return r.content
-        except Exception as e:
-            last_err = e
-            if i < max_retries - 1:
-                time.sleep(backoff_s * (i + 1))
-    raise RuntimeError(f"GET failed after {max_retries} retries: {url}\nLast error: {last_err}")
-
-
-def _read_csv_bytes(content: bytes) -> pd.DataFrame:
-    from io import BytesIO
-    try:
-        return pd.read_csv(BytesIO(content))
-    except UnicodeDecodeError:
-        return pd.read_csv(BytesIO(content), encoding="latin-1")
-
-
-def _pick_date_col(df: pd.DataFrame) -> str:
-    candidates = [c for c in df.columns if str(c).strip().lower() in ("date", "trade date", "timestamp", "observation_date", "date ")]
-    if candidates:
-        return candidates[0]
-    for c in df.columns:
-        if "date" in str(c).strip().lower():
-            return c
-    raise ValueError(f"Cannot find a date column in columns={list(df.columns)[:10]}...")
-
-
-def _pick_value_col(df: pd.DataFrame) -> str:
-    for name in ("close", "closing", "value", "close value", "vix close", "vxn close", "close "):
-        for c in df.columns:
-            if str(c).strip().lower() == name:
-                return c
-
-    close_like = [c for c in df.columns if "close" in str(c).strip().lower()]
-    if close_like:
-        close_like.sort(key=lambda x: len(str(x)))
-        return close_like[0]
-
-    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-    if numeric_cols:
-        return numeric_cols[-1]
-
-    raise ValueError(f"Cannot find a close/value column in columns={list(df.columns)[:10]}...")
-
-
-def _coerce_series_df(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
-    out = df.copy()
-    out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
-    out = out.dropna(subset=[date_col]).sort_values(date_col).set_index(date_col)
-
-    out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
-    out = out.dropna(subset=[value_col])
-
-    out = out[~out.index.duplicated(keep="last")]
-    out = out.rename(columns={value_col: "close"})
-    return out[["close"]]
-
-
-def _safe_float(x, default=None):
+def safe_float(x: Any) -> Optional[float]:
     try:
         if x is None:
-            return default
+            return None
         v = float(x)
-        if np.isnan(v) or np.isinf(v):
-            return default
+        if pd.isna(v):
+            return None
         return v
     except Exception:
-        return default
+        return None
 
 
-# ---------------------------
-# Data sources
-# ---------------------------
+def quantile_safe(s: pd.Series, q: float) -> Optional[float]:
+    if s is None or len(s) == 0:
+        return None
+    try:
+        return float(s.quantile(q))
+    except Exception:
+        return None
 
-def fetch_stooq_daily(ticker: str) -> Tuple[pd.DataFrame, Dict]:
-    sym = urllib.parse.quote_plus(ticker.lower())
-    url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
-    content = _http_get(url)
-    raw = _read_csv_bytes(content)
 
-    date_col = _pick_date_col(raw)
-    value_col = _pick_value_col(raw)
-    df = _coerce_series_df(raw, date_col=date_col, value_col=value_col)
+# ----------------------------
+# Fetchers
+# ----------------------------
 
+@dataclass
+class FetchResult:
+    ok: bool
+    df: Optional[pd.DataFrame]
+    meta: Dict[str, Any]
+    errors: List[str]
+
+
+def fetch_csv(url: str, timeout: int = 20, retries: int = 3, backoff_sec: float = 1.5) -> Tuple[Optional[str], List[str]]:
+    errors: List[str] = []
+    for i in range(retries):
+        try:
+            r = requests.get(url, timeout=timeout)
+            if r.status_code != 200:
+                errors.append(f"http_status={r.status_code}")
+                time.sleep(backoff_sec * (i + 1))
+                continue
+            return r.text, errors
+        except Exception as e:
+            errors.append(f"exception={type(e).__name__}:{e}")
+            time.sleep(backoff_sec * (i + 1))
+    return None, errors
+
+
+def parse_stooq_daily(csv_text: str) -> pd.DataFrame:
+    # columns: Date, Open, High, Low, Close, Volume
+    df = pd.read_csv(pd.io.common.StringIO(csv_text))
+    # stooq uses "Date"
+    df.rename(columns={"Date": "date", "Close": "close"}, inplace=True)
+    df["date"] = pd.to_datetime(df["date"])
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df.dropna(subset=["date", "close"]).sort_values("date")
+    df["date"] = df["date"].dt.date.astype(str)
+    return df[["date", "close"]].reset_index(drop=True)
+
+
+def parse_fred(csv_text: str, series_id: str) -> pd.DataFrame:
+    df = pd.read_csv(pd.io.common.StringIO(csv_text))
+    # columns: observation_date, <series_id>
+    date_col = "observation_date"
+    val_col = series_id
+    df.rename(columns={date_col: "date", val_col: "close"}, inplace=True)
+    df["date"] = pd.to_datetime(df["date"])
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df.dropna(subset=["date", "close"]).sort_values("date")
+    df["date"] = df["date"].dt.date.astype(str)
+    return df[["date", "close"]].reset_index(drop=True)
+
+
+def parse_cboe_vxn(csv_text: str) -> pd.DataFrame:
+    # CBOE VXN history format (commonly):
+    # Date, Open, High, Low, Close
+    df = pd.read_csv(pd.io.common.StringIO(csv_text))
+    # be tolerant to column name variants
+    col_map = {}
+    for c in df.columns:
+        cl = c.strip().lower()
+        if cl in ("date",):
+            col_map[c] = "date"
+        if cl in ("close", "closing", "close value"):
+            col_map[c] = "close"
+    df.rename(columns=col_map, inplace=True)
+
+    if "date" not in df.columns or "close" not in df.columns:
+        raise ValueError(f"Unexpected CBOE columns: {list(df.columns)}")
+
+    df["date"] = pd.to_datetime(df["date"])
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df.dropna(subset=["date", "close"]).sort_values("date")
+    df["date"] = df["date"].dt.date.astype(str)
+    return df[["date", "close"]].reset_index(drop=True)
+
+
+def fetch_qqq_stooq(url: str, timeout: int, retries: int) -> FetchResult:
+    txt, errs = fetch_csv(url, timeout=timeout, retries=retries)
     meta = {
         "source": "stooq",
         "url": url,
-        "date_col": date_col,
-        "value_col": value_col,
-        "rows": int(df.shape[0]),
-        "min_date": str(df.index.min().date()),
-        "max_date": str(df.index.max().date()),
+        "date_col": "date",
+        "value_col": "close",
     }
-    return df, meta
+    if txt is None:
+        return FetchResult(False, None, meta, errs)
+    try:
+        df = parse_stooq_daily(txt)
+        meta.update({
+            "rows": int(len(df)),
+            "min_date": df["date"].iloc[0] if len(df) else None,
+            "max_date": df["date"].iloc[-1] if len(df) else None,
+        })
+        return FetchResult(True, df, meta, errs)
+    except Exception as e:
+        errs.append(f"parse_error={type(e).__name__}:{e}")
+        return FetchResult(False, None, meta, errs)
 
 
-def fetch_fred_daily(series_id: str) -> Tuple[pd.DataFrame, Dict]:
-    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-    content = _http_get(url)
-    raw = _read_csv_bytes(content)
+def fetch_vxn_cboe(url: str, timeout: int, retries: int) -> FetchResult:
+    txt, errs = fetch_csv(url, timeout=timeout, retries=retries)
+    meta = {
+        "source": "cboe",
+        "url": url,
+        "date_col": "date",
+        "value_col": "close",
+    }
+    if txt is None:
+        return FetchResult(False, None, meta, errs)
+    try:
+        df = parse_cboe_vxn(txt)
+        meta.update({
+            "rows": int(len(df)),
+            "min_date": df["date"].iloc[0] if len(df) else None,
+            "max_date": df["date"].iloc[-1] if len(df) else None,
+        })
+        return FetchResult(True, df, meta, errs)
+    except Exception as e:
+        errs.append(f"parse_error={type(e).__name__}:{e}")
+        return FetchResult(False, None, meta, errs)
 
-    date_col = "DATE" if "DATE" in raw.columns else _pick_date_col(raw)
-    if series_id in raw.columns:
-        value_col = series_id
-    else:
-        value_col = _pick_value_col(raw)
 
-    df = raw[[date_col, value_col]].copy()
-    df = _coerce_series_df(df, date_col=date_col, value_col=value_col)
-
+def fetch_vxn_fred(series_id: str, url: str, timeout: int, retries: int) -> FetchResult:
+    txt, errs = fetch_csv(url, timeout=timeout, retries=retries)
     meta = {
         "source": "fred",
         "url": url,
         "series_id": series_id,
-        "date_col": date_col,
-        "value_col": value_col,
-        "rows": int(df.shape[0]),
-        "min_date": str(df.index.min().date()),
-        "max_date": str(df.index.max().date()),
+        "date_col": "observation_date",
+        "value_col": series_id,
     }
-    return df, meta
+    if txt is None:
+        return FetchResult(False, None, meta, errs)
+    try:
+        df = parse_fred(txt, series_id=series_id)
+        meta.update({
+            "rows": int(len(df)),
+            "min_date": df["date"].iloc[0] if len(df) else None,
+            "max_date": df["date"].iloc[-1] if len(df) else None,
+        })
+        return FetchResult(True, df, meta, errs)
+    except Exception as e:
+        errs.append(f"parse_error={type(e).__name__}:{e}")
+        return FetchResult(False, None, meta, errs)
 
 
-def fetch_cboe_daily_prices(index_code: str) -> Tuple[pd.DataFrame, Dict]:
-    url = f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{index_code.upper()}_History.csv"
-    content = _http_get(url)
-    raw = _read_csv_bytes(content)
+# ----------------------------
+# Bollinger + Metrics
+# ----------------------------
 
-    date_col = _pick_date_col(raw)
-    value_col = _pick_value_col(raw)
-    df = _coerce_series_df(raw, date_col=date_col, value_col=value_col)
+def compute_bb(
+    df: pd.DataFrame,
+    length: int,
+    k: float,
+    use_log: bool,
+    ddof: int,
+) -> pd.DataFrame:
+    """
+    Input df columns: date (str), close (float)
+    Output adds:
+      x, mid_x, std_x, lower_x, upper_x
+      bb_mid, bb_lower, bb_upper  (price-space if use_log else same)
+      z
+      bandwidth_pct (ratio)
+      bandwidth_delta_pct (percent units)
+      position_in_band
+      distance_to_lower_pct (percent units)
+      distance_to_upper_pct (percent units)
+    """
+    out = df.copy()
+    out["close"] = pd.to_numeric(out["close"], errors="coerce")
+    out = out.dropna(subset=["close"]).reset_index(drop=True)
 
-    meta = {
-        "source": "cboe",
-        "url": url,
-        "index_code": index_code.upper(),
-        "date_col": date_col,
-        "value_col": value_col,
-        "rows": int(df.shape[0]),
-        "min_date": str(df.index.min().date()),
-        "max_date": str(df.index.max().date()),
-    }
-    return df, meta
-
-
-# ---------------------------
-# Bollinger calculations
-# ---------------------------
-
-@dataclasses.dataclass(frozen=True)
-class BBParams:
-    length: int = 60
-    k: float = 2.0
-    use_log: bool = True
-    ddof: int = 0
-
-
-def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
-    if "close" not in df.columns:
-        raise ValueError("df must have a 'close' column")
-
-    out = df.copy().sort_index()
-
-    if params.use_log:
-        if (out["close"] <= 0).any():
-            raise ValueError("Found non-positive close while use_log=True")
-        out["x"] = np.log(out["close"].astype(float))
+    if use_log:
+        out["x"] = out["close"].apply(lambda v: math.log(v) if v > 0 else float("nan"))
     else:
-        out["x"] = out["close"].astype(float)
+        out["x"] = out["close"]
 
-    w = int(params.length)
-    if w < 2:
-        raise ValueError("length must be >= 2")
+    out["mid_x"] = out["x"].rolling(length, min_periods=length).mean()
+    out["std_x"] = out["x"].rolling(length, min_periods=length).std(ddof=ddof)
+    out["lower_x"] = out["mid_x"] - k * out["std_x"]
+    out["upper_x"] = out["mid_x"] + k * out["std_x"]
 
-    out["ma"] = out["x"].rolling(window=w, min_periods=w).mean()
-    out["sd"] = out["x"].rolling(window=w, min_periods=w).std(ddof=int(params.ddof))
-
-    out["upper_x"] = out["ma"] + params.k * out["sd"]
-    out["lower_x"] = out["ma"] - params.k * out["sd"]
-
-    if params.use_log:
-        out["mid_price"] = np.exp(out["ma"])
-        out["upper_price"] = np.exp(out["upper_x"])
-        out["lower_price"] = np.exp(out["lower_x"])
+    if use_log:
+        out["bb_mid"] = out["mid_x"].apply(lambda v: math.exp(v) if pd.notna(v) else float("nan"))
+        out["bb_lower"] = out["lower_x"].apply(lambda v: math.exp(v) if pd.notna(v) else float("nan"))
+        out["bb_upper"] = out["upper_x"].apply(lambda v: math.exp(v) if pd.notna(v) else float("nan"))
     else:
-        out["mid_price"] = out["ma"]
-        out["upper_price"] = out["upper_x"]
-        out["lower_price"] = out["lower_x"]
+        out["bb_mid"] = out["mid_x"]
+        out["bb_lower"] = out["lower_x"]
+        out["bb_upper"] = out["upper_x"]
 
-    out["z"] = (out["x"] - out["ma"]) / out["sd"]
-    out["bandwidth_pct"] = (out["upper_price"] - out["lower_price"]) / out["mid_price"]
+    out["z"] = (out["x"] - out["mid_x"]) / out["std_x"]
 
-    close = out["close"].to_numpy(dtype=float)
-    lower = out["lower_price"].to_numpy(dtype=float)
-    upper = out["upper_price"].to_numpy(dtype=float)
+    # bandwidth ratio in price-space
+    out["bandwidth_pct"] = (out["bb_upper"] - out["bb_lower"]) / out["bb_mid"]
 
-    walk_lower = np.zeros(len(out), dtype=int)
-    walk_upper = np.zeros(len(out), dtype=int)
+    # bandwidth delta pct (percent units)
+    out["bandwidth_delta_pct"] = (out["bandwidth_pct"] / out["bandwidth_pct"].shift(1) - 1.0) * 100.0
 
-    for i in range(len(out)):
-        if np.isfinite(lower[i]) and np.isfinite(close[i]) and close[i] <= lower[i]:
-            walk_lower[i] = (walk_lower[i - 1] + 1) if i > 0 else 1
-        else:
-            walk_lower[i] = 0
+    # distance to bands (percent units)
+    out["distance_to_lower_pct"] = (out["close"] - out["bb_lower"]) / out["close"] * 100.0
+    out["distance_to_upper_pct"] = (out["bb_upper"] - out["close"]) / out["close"] * 100.0
 
-        if np.isfinite(upper[i]) and np.isfinite(close[i]) and close[i] >= upper[i]:
-            walk_upper[i] = (walk_upper[i - 1] + 1) if i > 0 else 1
-        else:
-            walk_upper[i] = 0
-
-    out["walk_lower_count"] = walk_lower
-    out["walk_upper_count"] = walk_upper
+    # position in band [0..1]
+    denom = (out["bb_upper"] - out["bb_lower"])
+    out["position_in_band"] = (out["close"] - out["bb_lower"]) / denom.replace(0, float("nan"))
 
     return out
 
 
-# ---------------------------
-# Forward metrics
-# ---------------------------
+def walk_count(series_x: pd.Series, band_x: pd.Series, direction: str) -> int:
+    """
+    Count consecutive days at the end where:
+    - direction=="lower": x <= lower_x
+    - direction=="upper": x >= upper_x
+    """
+    if len(series_x) == 0:
+        return 0
+    cnt = 0
+    for x, b in zip(series_x[::-1], band_x[::-1]):
+        if pd.isna(x) or pd.isna(b):
+            break
+        if direction == "lower":
+            if x <= b:
+                cnt += 1
+            else:
+                break
+        else:
+            if x >= b:
+                cnt += 1
+            else:
+                break
+    return cnt
 
-def forward_mdd(close_window: np.ndarray) -> float:
-    if close_window.size < 1:
-        return np.nan
-    c0 = close_window[0]
-    m = np.min(close_window)
-    return float(m / c0 - 1.0)
 
-
-def forward_max_runup(close_window: np.ndarray) -> float:
-    if close_window.size < 1:
-        return np.nan
-    c0 = close_window[0]
-    m = np.max(close_window)
-    return float(m / c0 - 1.0)
-
-
-def _pick_event_positions_le(z: np.ndarray, thresh: float, cooldown: int) -> List[int]:
-    pos = []
+def events_with_cooldown(mask: pd.Series, cooldown: int) -> List[int]:
+    """
+    Given boolean mask aligned to df index, pick indices with cooldown to avoid clustering.
+    """
+    idxs: List[int] = []
     i = 0
-    n = len(z)
-    cd = max(1, int(cooldown))
+    n = len(mask)
     while i < n:
-        if np.isfinite(z[i]) and z[i] <= thresh:
-            pos.append(i)
-            i += cd
+        if bool(mask.iloc[i]):
+            idxs.append(i)
+            i += cooldown  # skip forward cooldown bars
         else:
             i += 1
-    return pos
+    return idxs
 
 
-def _pick_event_positions_ge(z: np.ndarray, thresh: float, cooldown: int) -> List[int]:
-    pos = []
-    i = 0
-    n = len(z)
-    cd = max(1, int(cooldown))
-    while i < n:
-        if np.isfinite(z[i]) and z[i] >= thresh:
-            pos.append(i)
-            i += cd
-        else:
-            i += 1
-    return pos
-
-
-def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+def forward_mdd(close: pd.Series, start_idx: int, horizon: int) -> Optional[float]:
     """
-    Minimal change: add p10 in addition to p50/p90.
-    - For forward_mdd (negative), p10 is "bad but not worst" tail.
-    - For forward_max_runup (positive), p90 remains most relevant tail; p10 is less relevant but we keep it for symmetry.
+    Forward max drawdown over horizon:
+      min(close[t+1 .. t+h]) / close[t] - 1
+    <= 0
     """
-    if len(values) == 0:
+    if start_idx >= len(close):
+        return None
+    entry = safe_float(close.iloc[start_idx])
+    if entry is None or entry <= 0:
+        return None
+    end = min(len(close) - 1, start_idx + horizon)
+    if end <= start_idx:
+        return None
+    fwd = close.iloc[start_idx + 1 : end + 1]
+    fwd = pd.to_numeric(fwd, errors="coerce").dropna()
+    if len(fwd) == 0:
+        return None
+    m = float(fwd.min())
+    return m / entry - 1.0
+
+
+def forward_max_runup(close: pd.Series, start_idx: int, horizon: int) -> Optional[float]:
+    """
+    Forward max runup over horizon:
+      max(close[t+1 .. t+h]) / close[t] - 1
+    >= 0 (or 0)
+    """
+    if start_idx >= len(close):
+        return None
+    entry = safe_float(close.iloc[start_idx])
+    if entry is None or entry <= 0:
+        return None
+    end = min(len(close) - 1, start_idx + horizon)
+    if end <= start_idx:
+        return None
+    fwd = close.iloc[start_idx + 1 : end + 1]
+    fwd = pd.to_numeric(fwd, errors="coerce").dropna()
+    if len(fwd) == 0:
+        return None
+    m = float(fwd.max())
+    return m / entry - 1.0
+
+
+def summarize_series(vals: List[Optional[float]], want_p10: bool = True) -> Dict[str, Any]:
+    s = pd.Series([v for v in vals if v is not None], dtype="float64")
+    if len(s) == 0:
         return {
-            "metric": metric,
-            "metric_interpretation": interpretation,
-            "z_thresh": z_thresh,
-            "horizon_days": horizon,
-            "cooldown_bars": cooldown,
             "sample_size": 0,
             "p10": None,
             "p50": None,
@@ -337,412 +376,351 @@ def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: 
             "min": None,
             "max": None,
         }
-    arr = np.array(values, dtype=float)
     return {
-        "metric": metric,
-        "metric_interpretation": interpretation,
-        "z_thresh": z_thresh,
-        "horizon_days": horizon,
-        "cooldown_bars": cooldown,
-        "sample_size": int(arr.size),
-        "p10": float(np.nanpercentile(arr, 10)),
-        "p50": float(np.nanpercentile(arr, 50)),
-        "p90": float(np.nanpercentile(arr, 90)),
-        "mean": float(np.nanmean(arr)),
-        "min": float(np.nanmin(arr)),
-        "max": float(np.nanmax(arr)),
+        "sample_size": int(len(s)),
+        "p10": quantile_safe(s, 0.10) if want_p10 else None,
+        "p50": quantile_safe(s, 0.50),
+        "p90": quantile_safe(s, 0.90),
+        "mean": float(s.mean()),
+        "min": float(s.min()),
+        "max": float(s.max()),
     }
 
 
-def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
-    df = df_bb.dropna(subset=["z", "close"]).copy()
-    close = df["close"].to_numpy(dtype=float)
-    z = df["z"].to_numpy(dtype=float)
+# ----------------------------
+# Snippet builders
+# ----------------------------
 
-    trig_pos = _pick_event_positions_le(z=z, thresh=z_thresh, cooldown=cooldown)
-    vals: List[float] = []
-    for i in trig_pos:
-        j = min(i + horizon, len(close) - 1)
-        vals.append(forward_mdd(close[i: j + 1]))
+def build_price_snippet(
+    df: pd.DataFrame,
+    meta: Dict[str, Any],
+    length: int,
+    k: float,
+    use_log: bool,
+    ddof: int,
+    z_thresh: float,
+    horizon_days: int,
+    cooldown_bars: int,
+) -> Dict[str, Any]:
+    dfb = compute_bb(df, length=length, k=k, use_log=use_log, ddof=ddof)
+    dfb = dfb.dropna(subset=["bb_mid", "bb_lower", "bb_upper", "z"]).reset_index(drop=True)
 
-    return _summarize(
-        values=vals,
-        metric="forward_mdd",
-        interpretation="<=0; closer to 0 is less pain; more negative is deeper drawdown",
-        z_thresh=z_thresh,
-        horizon=horizon,
-        cooldown=cooldown,
-    )
+    if len(dfb) == 0:
+        raise ValueError("Not enough data after BB computation.")
 
+    last = dfb.iloc[-1]
 
-def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
-    df = df_bb.dropna(subset=["z", "close"]).copy()
-    close = df["close"].to_numpy(dtype=float)
-    z = df["z"].to_numpy(dtype=float)
+    # triggers
+    z = float(last["z"])
+    trigger_z_le_neg2 = bool(z <= z_thresh)
 
-    trig_pos = _pick_event_positions_le(z=z, thresh=z_thresh, cooldown=cooldown)
-    vals: List[float] = []
-    for i in trig_pos:
-        j = min(i + horizon, len(close) - 1)
-        vals.append(forward_max_runup(close[i: j + 1]))
-
-    return _summarize(
-        values=vals,
-        metric="forward_max_runup",
-        interpretation=">=0; larger means bigger spike risk",
-        z_thresh=z_thresh,
-        horizon=horizon,
-        cooldown=cooldown,
-    )
-
-
-def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
-    df = df_bb.dropna(subset=["z", "close"]).copy()
-    close = df["close"].to_numpy(dtype=float)
-    z = df["z"].to_numpy(dtype=float)
-
-    trig_pos = _pick_event_positions_ge(z=z, thresh=z_thresh, cooldown=cooldown)
-    vals: List[float] = []
-    for i in trig_pos:
-        j = min(i + horizon, len(close) - 1)
-        vals.append(forward_max_runup(close[i: j + 1]))
-
-    return _summarize(
-        values=vals,
-        metric="forward_max_runup",
-        interpretation=">=0; larger means further spike continuation risk",
-        z_thresh=z_thresh,
-        horizon=horizon,
-        cooldown=cooldown,
-    )
-
-
-# ---------------------------
-# Latest derived fields
-# ---------------------------
-
-def _latest_derived(latest: pd.Series) -> Dict:
-    close = _safe_float(latest.get("close"))
-    lower = _safe_float(latest.get("lower_price"))
-    upper = _safe_float(latest.get("upper_price"))
-    z = _safe_float(latest.get("z"))
-    bw = _safe_float(latest.get("bandwidth_pct"))
-    walk_l = int(_safe_float(latest.get("walk_lower_count"), 0) or 0)
-    walk_u = int(_safe_float(latest.get("walk_upper_count"), 0) or 0)
-
-    dist_lower = None
-    dist_upper = None
-    pos_in_band = None
-
-    if close is not None and close > 0 and lower is not None:
-        dist_lower = float((close - lower) / close * 100.0)
-    if close is not None and close > 0 and upper is not None:
-        dist_upper = float((upper - close) / close * 100.0)
-
-    if lower is not None and upper is not None and close is not None and upper > lower:
-        pos_in_band = float((close - lower) / (upper - lower))
-        pos_in_band = float(np.clip(pos_in_band, 0.0, 1.0))
-
-    return {
-        "close": close,
-        "bb_mid": _safe_float(latest.get("mid_price")),
-        "bb_lower": lower,
-        "bb_upper": upper,
-        "z": z,
-        "trigger_z_le_-2": (z is not None and z <= -2.0),
-        "trigger_z_ge_2": (z is not None and z >= 2.0),
-        "distance_to_lower_pct": dist_lower,
-        "distance_to_upper_pct": dist_upper,
-        "position_in_band": pos_in_band,
-        "bandwidth_pct": bw,
-        "walk_lower_count": walk_l,
-        "walk_upper_count": walk_u,
-    }
-
-
-# ---------------------------
-# Action label + trigger_reason
-# ---------------------------
-
-def decide_action_price(latest: pd.Series, bw_delta_pct: Optional[float]) -> Tuple[str, str]:
-    z = _safe_float(latest.get("z"))
-    walk_lower = int(_safe_float(latest.get("walk_lower_count"), 0) or 0)
-
-    if z is None:
-        return "INSUFFICIENT_DATA", "z is None"
-
-    if walk_lower >= 3:
-        return "LOCKOUT_WALKING_LOWER_BAND (DO_NOT_CATCH_FALLING_KNIFE)", "walk_lower_count>=3"
-
-    if bw_delta_pct is not None and bw_delta_pct >= 10.0 and z <= -2.0:
-        return "LOCKOUT_VOL_EXPANSION_AT_LOWER (WAIT)", "bandwidth_delta_pct>=10 and z<=-2"
-
-    if z <= -3.0:
-        return "EXTREME_TAIL_RISK (WAIT)", "z<=-3"
+    # action_output (keep your existing behavior)
     if z <= -2.0:
-        return "LOWER_BAND_TOUCH (MONITOR / SCALE_IN_ONLY)", "z<=-2"
-    if z <= -1.5:
-        return "NEAR_LOWER_BAND (MONITOR)", "z<=-1.5"
-    return "NORMAL_RANGE", "default"
-
-
-def _position_in_band_from_row(latest: pd.Series) -> Optional[float]:
-    close = _safe_float(latest.get("close"))
-    lower = _safe_float(latest.get("lower_price"))
-    upper = _safe_float(latest.get("upper_price"))
-    if close is None or lower is None or upper is None:
-        return None
-    if upper <= lower:
-        return None
-    pos = (close - lower) / (upper - lower)
-    return float(np.clip(pos, 0.0, 1.0))
-
-
-def decide_action_vol(
-    latest: pd.Series,
-    bw_delta_pct: Optional[float],
-    pos_watch_threshold: float = 0.80,
-    min_bandwidth_pct: float = 0.05,
-) -> Tuple[str, str]:
-    z = _safe_float(latest.get("z"))
-    bw = _safe_float(latest.get("bandwidth_pct"))
-    pos = _position_in_band_from_row(latest)
-
-    walk_upper = int(_safe_float(latest.get("walk_upper_count"), 0) or 0)
-
-    if z is None:
-        return "INSUFFICIENT_DATA", "z is None"
-
-    if walk_upper >= 3:
-        return "STRESS_LOCKOUT_WALKING_UPPER_BAND (RISK_HIGH)", "walk_upper_count>=3"
-
-    if bw_delta_pct is not None and bw_delta_pct >= 10.0 and z >= 2.0:
-        return "STRESS_VOL_EXPANSION (RISK_HIGH)", "bandwidth_delta_pct>=10 and z>=2"
-
-    if z >= 3.0:
-        return "EXTREME_VOL_SPIKE_ZONE (RISK_HIGH)", "z>=3"
-    if z >= 2.0:
-        return "UPPER_BAND_TOUCH (STRESS)", "z>=2"
-
-    # position-based WATCH (Suggestion 1B)
-    if pos is not None and pos >= pos_watch_threshold and (bw is None or bw >= min_bandwidth_pct):
-        return "NEAR_UPPER_BAND (WATCH)", f"position_in_band>={pos_watch_threshold} (pos={pos:.3f})"
-
-    if z >= 1.5:
-        return "NEAR_UPPER_BAND (WATCH)", "z>=1.5"
-
-    if z <= -3.0:
-        return "EXTREME_LOW_VOL_ZONE (COMPLACENCY)", "z<=-3"
-    if z <= -2.0:
-        return "LOWER_BAND_TOUCH (COMPLACENCY)", "z<=-2"
-    if z <= -1.5:
-        return "NEAR_LOWER_BAND (COMPLACENCY_WATCH)", "z<=-1.5"
-
-    return "NORMAL_RANGE", "default"
-
-
-# ---------------------------
-# Build snippet JSON
-# ---------------------------
-
-def build_snippet(
-    name: str,
-    df_bb: pd.DataFrame,
-    params: "BBParams",
-    meta: Dict,
-    series_kind: str,
-    hist: Dict,
-) -> Dict:
-    df = df_bb.dropna(subset=["ma", "sd", "upper_price", "lower_price", "z"]).copy()
-    if df.empty:
-        return {
-            "name": name,
-            "status": "INSUFFICIENT_DATA",
-            "meta": meta,
-            "params": dataclasses.asdict(params),
-            "generated_at_utc": _utc_now_iso(),
-        }
-
-    latest = df.iloc[-1]
-    prev = df.iloc[-2] if len(df) >= 2 else None
-
-    bw_delta_pct = None
-    if prev is not None:
-        prev_bw = _safe_float(prev.get("bandwidth_pct"))
-        cur_bw = _safe_float(latest.get("bandwidth_pct"))
-        if prev_bw is not None and cur_bw is not None and prev_bw != 0:
-            bw_delta_pct = float((cur_bw / prev_bw - 1.0) * 100.0)
-
-    latest_pack = {
-        "date": str(latest.name.date()),
-        **_latest_derived(latest),
-        "bandwidth_delta_pct": bw_delta_pct,
-    }
-
-    if series_kind == "price":
-        action, reason = decide_action_price(latest, bw_delta_pct)
-    elif series_kind == "vol":
-        action, reason = decide_action_vol(latest, bw_delta_pct)
+        action_output = "TOUCH_LOWER_BAND (TRIGGER)"
+        trigger_reason = "z<=-2"
+    elif z <= -1.5:
+        action_output = "NEAR_LOWER_BAND (MONITOR)"
+        trigger_reason = "z<=-1.5"
     else:
-        action, reason = "UNKNOWN_SERIES_KIND", "unknown series_kind"
+        action_output = "NORMAL_RANGE"
+        trigger_reason = ""
 
-    return {
-        "name": name,
-        "generated_at_utc": _utc_now_iso(),
-        "meta": meta,
-        "params": dataclasses.asdict(params),
-        "latest": latest_pack,
-        "historical_simulation": hist,
-        "action_output": action,
-        # ---- minimal addition ----
-        "trigger_reason": reason,
+    # walk lower count in transformed space
+    wl = walk_count(dfb["x"], dfb["lower_x"], direction="lower")
+
+    # historical simulation conditional on z <= z_thresh
+    mask = dfb["z"] <= z_thresh
+    event_idxs = events_with_cooldown(mask, cooldown=cooldown_bars)
+    mdds = [forward_mdd(dfb["close"], i, horizon=horizon_days) for i in event_idxs]
+    hist = {
+        "metric": "forward_mdd",
+        "metric_interpretation": "<=0; closer to 0 is less pain; more negative is deeper drawdown",
+        "z_thresh": float(z_thresh),
+        "horizon_days": int(horizon_days),
+        "cooldown_bars": int(cooldown_bars),
+        **summarize_series(mdds, want_p10=True),
     }
 
+    snippet = {
+        "name": f"QQQ_BB(len={length},k={k},log={use_log})",
+        "generated_at_utc": utc_now_iso(),
+        "meta": {
+            "attempt_errors": meta.get("attempt_errors", []),
+            **meta,
+        },
+        "params": {
+            "length": int(length),
+            "k": float(k),
+            "use_log": bool(use_log),
+            "ddof": int(ddof),
+        },
+        "latest": {
+            "date": str(last["date"]),
+            "close": float(last["close"]),
+            "bb_mid": float(last["bb_mid"]),
+            "bb_lower": float(last["bb_lower"]),
+            "bb_upper": float(last["bb_upper"]),
+            "z": float(last["z"]),
+            "trigger_z_le_-2": bool(trigger_z_le_neg2),
+            "distance_to_lower_pct": float(last["distance_to_lower_pct"]),
+            "distance_to_upper_pct": float(last["distance_to_upper_pct"]),
+            "position_in_band": float(last["position_in_band"]),
+            "bandwidth_pct": float(last["bandwidth_pct"]),
+            "bandwidth_delta_pct": float(last["bandwidth_delta_pct"]),
+            "walk_lower_count": int(wl),
+        },
+        "historical_simulation": hist,
+        "action_output": action_output,
+        "trigger_reason": trigger_reason,
+    }
+    return snippet
 
-# ---------------------------
-# CLI / Main
-# ---------------------------
+
+def build_vxn_snippet(
+    df: pd.DataFrame,
+    meta: Dict[str, Any],
+    length: int,
+    k: float,
+    use_log: bool,
+    ddof: int,
+    z_low: float,
+    z_high: float,
+    horizon_days: int,
+    cooldown_bars: int,
+) -> Dict[str, Any]:
+    dfb = compute_bb(df, length=length, k=k, use_log=use_log, ddof=ddof)
+    dfb = dfb.dropna(subset=["bb_mid", "bb_lower", "bb_upper", "z"]).reset_index(drop=True)
+
+    if len(dfb) == 0:
+        raise ValueError("Not enough data after BB computation.")
+
+    last = dfb.iloc[-1]
+    z = float(last["z"])
+
+    trigger_low = bool(z <= z_low)
+    trigger_high = bool(z >= z_high)
+
+    # --- Suggestion #2 additions ---
+    if trigger_low:
+        active_regime = "A_lowvol"
+        tail_B_applicable = False
+    elif trigger_high:
+        active_regime = "B_highvol"
+        tail_B_applicable = True
+    else:
+        active_regime = "NONE"
+        tail_B_applicable = False
+    # -----------------------------
+
+    # action_output (keep your existing behavior: near upper by position_in_band)
+    pos = safe_float(last["position_in_band"])
+    if pos is not None and pos >= 0.8:
+        action_output = "NEAR_UPPER_BAND (WATCH)"
+        trigger_reason = f"position_in_band>=0.8 (pos={pos:.3f})"
+    elif pos is not None and pos <= 0.2:
+        action_output = "NEAR_LOWER_BAND (MONITOR)"
+        trigger_reason = f"position_in_band<=0.2 (pos={pos:.3f})"
+    else:
+        action_output = "NORMAL_RANGE"
+        trigger_reason = ""
+
+    wu = walk_count(dfb["x"], dfb["upper_x"], direction="upper")
+
+    # historical simulation A/B (separately)
+    mask_a = dfb["z"] <= z_low
+    idx_a = events_with_cooldown(mask_a, cooldown=cooldown_bars)
+    runups_a = [forward_max_runup(dfb["close"], i, horizon=horizon_days) for i in idx_a]
+
+    mask_b = dfb["z"] >= z_high
+    idx_b = events_with_cooldown(mask_b, cooldown=cooldown_bars)
+    runups_b = [forward_max_runup(dfb["close"], i, horizon=horizon_days) for i in idx_b]
+
+    hist_a = {
+        "metric": "forward_max_runup",
+        "metric_interpretation": ">=0; larger means bigger spike risk",
+        "z_thresh": float(z_low),
+        "horizon_days": int(horizon_days),
+        "cooldown_bars": int(cooldown_bars),
+        **summarize_series(runups_a, want_p10=True),
+    }
+
+    hist_b = {
+        "metric": "forward_max_runup",
+        "metric_interpretation": ">=0; larger means further spike continuation risk",
+        "z_thresh": float(z_high),
+        "horizon_days": int(horizon_days),
+        "cooldown_bars": int(cooldown_bars),
+        **summarize_series(runups_b, want_p10=True),
+    }
+
+    snippet = {
+        "name": f"VXN_BB(len={length},k={k},log={use_log})",
+        "generated_at_utc": utc_now_iso(),
+        "meta": {
+            "attempt_errors": meta.get("attempt_errors", []),
+            **meta,
+        },
+        "params": {
+            "length": int(length),
+            "k": float(k),
+            "use_log": bool(use_log),
+            "ddof": int(ddof),
+        },
+        # --- Suggestion #2 fields (for audit) ---
+        "active_regime": active_regime,
+        "tail_B_applicable": bool(tail_B_applicable),
+        # ----------------------------------------
+        "latest": {
+            "date": str(last["date"]),
+            "close": float(last["close"]),
+            "bb_mid": float(last["bb_mid"]),
+            "bb_lower": float(last["bb_lower"]),
+            "bb_upper": float(last["bb_upper"]),
+            "z": float(last["z"]),
+            "trigger_z_le_-2": bool(trigger_low),
+            "trigger_z_ge_2": bool(trigger_high),
+            "distance_to_lower_pct": float(last["distance_to_lower_pct"]),
+            "distance_to_upper_pct": float(last["distance_to_upper_pct"]),
+            "position_in_band": float(last["position_in_band"]),
+            "bandwidth_pct": float(last["bandwidth_pct"]),
+            "bandwidth_delta_pct": float(last["bandwidth_delta_pct"]),
+            "walk_upper_count": int(wu),
+        },
+        "historical_simulation": {
+            "A_lowvol": hist_a,
+            "B_highvol": hist_b,
+        },
+        "action_output": action_output,
+        "trigger_reason": trigger_reason,
+    }
+    return snippet
+
+
+# ----------------------------
+# Main
+# ----------------------------
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Nasdaq BB(60,2) monitor (logclose): QQQ + optional VXN (Cboe/FRED)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="Compute BB(60,2) (logclose) for QQQ and VXN and write snippets into cache dir.",
     )
-
-    p.add_argument("--price_ticker", default="qqq.us", help="Stooq ticker for price series (default: qqq.us)")
-
-    p.add_argument("--vxn_enable", action="store_true")
-    p.add_argument("--vxn_source", choices=["cboe_first", "fred_first"], default="fred_first")
-    p.add_argument("--vxn_code", default="VXN", help="Cboe index code for CSV attempt (default: VXN)")
-    p.add_argument("--vxn_fred_series", default="VXNCLS", help="FRED series id (default: VXNCLS)")
-
-    p.add_argument("--bb_len", type=int, default=60)
-    p.add_argument("--bb_k", type=float, default=2.0)
+    p.add_argument("--cache_dir", default="nasdaq_bb_cache")
+    p.add_argument("--length", type=int, default=60)
+    p.add_argument("--k", type=float, default=2.0)
     p.add_argument("--use_log", action="store_true", default=True)
-    p.add_argument("--no_log", action="store_true")
-    p.add_argument("--ddof", type=int, choices=[0, 1], default=0)
+    p.add_argument("--ddof", type=int, default=0)
 
-    p.add_argument("--z_thresh", type=float, default=-2.0, help="PRICE trigger: z <= z_thresh")
-    p.add_argument("--z_thresh_low", type=float, default=-2.0, help="VOL(A) trigger: z <= z_thresh_low")
-    p.add_argument("--z_thresh_high", type=float, default=2.0, help="VOL(B) trigger: z >= z_thresh_high")
+    p.add_argument("--horizon_days", type=int, default=20)
+    p.add_argument("--cooldown_bars", type=int, default=20)
 
-    p.add_argument("--horizon", type=int, default=20)
-    p.add_argument("--cooldown", type=int, default=20)
+    p.add_argument("--qqq_url", default="https://stooq.com/q/d/l/?s=qqq.us&i=d")
 
-    p.add_argument("--out_dir", default="nasdaq_bb_cache")
-    p.add_argument("--quiet", action="store_true")
+    p.add_argument(
+        "--vxn_source",
+        choices=["cboe_first", "fred_first"],
+        default="cboe_first",
+        help="VXN data source preference with fallback.",
+    )
+    p.add_argument("--vxn_cboe_url", default="https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv")
+    p.add_argument("--vxn_fred_series", default="VXNCLS")
+    p.add_argument("--vxn_fred_url", default="https://fred.stlouisfed.org/graph/fredgraph.csv?id=VXNCLS")
+
+    p.add_argument("--timeout", type=int, default=20)
+    p.add_argument("--retries", type=int, default=3)
+
+    # thresholds
+    p.add_argument("--qqq_z_thresh", type=float, default=-2.0)
+    p.add_argument("--vxn_z_low", type=float, default=-2.0)
+    p.add_argument("--vxn_z_high", type=float, default=2.0)
 
     return p.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    use_log = bool(args.use_log) and (not bool(args.no_log))
-    params = BBParams(length=args.bb_len, k=args.bb_k, use_log=use_log, ddof=args.ddof)
+    ensure_dir(args.cache_dir)
 
-    _ensure_dir(args.out_dir)
+    # ---- Fetch QQQ ----
+    qqq_meta = {"attempt_errors": []}
+    qqq_res = fetch_qqq_stooq(args.qqq_url, timeout=args.timeout, retries=args.retries)
+    qqq_meta.update(qqq_res.meta)
+    if not qqq_res.ok or qqq_res.df is None:
+        qqq_meta["attempt_errors"].extend(qqq_res.errors)
+        raise RuntimeError(f"QQQ fetch failed: {qqq_meta.get('attempt_errors')}")
 
-    # PRICE: QQQ
-    price_df, price_meta = fetch_stooq_daily(args.price_ticker)
-    price_bb = compute_bollinger(price_df, params)
-
-    price_hist = conditional_stats_price_mdd(
-        price_bb,
-        z_thresh=args.z_thresh,
-        horizon=args.horizon,
-        cooldown=args.cooldown,
+    qqq_snip = build_price_snippet(
+        qqq_res.df,
+        meta=qqq_meta,
+        length=args.length,
+        k=args.k,
+        use_log=args.use_log,
+        ddof=args.ddof,
+        z_thresh=args.qqq_z_thresh,
+        horizon_days=args.horizon_days,
+        cooldown_bars=args.cooldown_bars,
     )
 
-    price_snippet = build_snippet(
-        name=f"QQQ_BB(len={params.length},k={params.k},log={params.use_log})",
-        df_bb=price_bb,
-        params=params,
-        meta=price_meta,
-        series_kind="price",
-        hist=price_hist,
+    # ---- Fetch VXN (preferred + fallback) ----
+    vxn_attempt_errors: List[str] = []
+    selected_source = None
+    fallback_used = False
+    vxn_df: Optional[pd.DataFrame] = None
+    vxn_meta: Dict[str, Any] = {"attempt_errors": vxn_attempt_errors}
+
+    def try_cboe() -> Tuple[bool, Optional[pd.DataFrame], Dict[str, Any], List[str]]:
+        r = fetch_vxn_cboe(args.vxn_cboe_url, timeout=args.timeout, retries=args.retries)
+        return r.ok, r.df, r.meta, r.errors
+
+    def try_fred() -> Tuple[bool, Optional[pd.DataFrame], Dict[str, Any], List[str]]:
+        r = fetch_vxn_fred(args.vxn_fred_series, args.vxn_fred_url, timeout=args.timeout, retries=args.retries)
+        return r.ok, r.df, r.meta, r.errors
+
+    order = ["cboe", "fred"] if args.vxn_source == "cboe_first" else ["fred", "cboe"]
+    first = True
+    for src in order:
+        ok, df, meta, errs = (try_cboe() if src == "cboe" else try_fred())
+        vxn_attempt_errors.extend(errs)
+        if ok and df is not None:
+            vxn_df = df
+            vxn_meta.update(meta)
+            selected_source = meta.get("source", src)
+            if not first:
+                fallback_used = True
+            break
+        first = False
+
+    if vxn_df is None:
+        raise RuntimeError(f"VXN fetch failed: {vxn_attempt_errors}")
+
+    vxn_meta["selected_source"] = selected_source
+    vxn_meta["fallback_used"] = bool(fallback_used)
+
+    vxn_snip = build_vxn_snippet(
+        vxn_df,
+        meta=vxn_meta,
+        length=args.length,
+        k=args.k,
+        use_log=args.use_log,
+        ddof=args.ddof,
+        z_low=args.vxn_z_low,
+        z_high=args.vxn_z_high,
+        horizon_days=args.horizon_days,
+        cooldown_bars=args.cooldown_bars,
     )
 
-    price_json_path = os.path.join(args.out_dir, "snippet_price_qqq.json")
-    with open(price_json_path, "w", encoding="utf-8") as f:
-        json.dump(price_snippet, f, ensure_ascii=False, indent=2)
+    # ---- Write snippets ----
+    out_price = os.path.join(args.cache_dir, "snippet_price_qqq.json")
+    out_vxn = os.path.join(args.cache_dir, "snippet_vxn.json")
 
-    price_csv_path = os.path.join(args.out_dir, "tail_price_qqq.csv")
-    price_bb.tail(200).to_csv(price_csv_path, index=True)
+    with open(out_price, "w", encoding="utf-8") as f:
+        json.dump(qqq_snip, f, ensure_ascii=False, indent=2)
 
-    if not args.quiet:
-        print("=== PRICE SNIPPET (QQQ) ===")
-        print(json.dumps(price_snippet, ensure_ascii=False, indent=2))
+    with open(out_vxn, "w", encoding="utf-8") as f:
+        json.dump(vxn_snip, f, ensure_ascii=False, indent=2)
 
-    # VOL: VXN (optional)
-    if args.vxn_enable:
-        vxn_df = None
-        vxn_meta = None
-        attempt_errors: List[str] = []
-
-        order = ["cboe", "fred"] if args.vxn_source == "cboe_first" else ["fred", "cboe"]
-        selected_source = None
-
-        for src in order:
-            try:
-                if src == "cboe":
-                    vxn_df, vxn_meta = fetch_cboe_daily_prices(args.vxn_code)
-                else:
-                    vxn_df, vxn_meta = fetch_fred_daily(args.vxn_fred_series)
-                selected_source = src
-                break
-            except Exception as e:
-                attempt_errors.append(f"{src}: {e}")
-
-        if vxn_df is None or vxn_meta is None or selected_source is None:
-            raise RuntimeError("Failed to fetch VXN from all sources:\n" + "\n".join(attempt_errors))
-
-        vxn_meta2 = {
-            "attempt_errors": attempt_errors,
-            "selected_source": selected_source,
-            "fallback_used": (selected_source != order[0]),
-            **vxn_meta,
-        }
-
-        vxn_bb = compute_bollinger(vxn_df, params)
-
-        vxn_hist_low = conditional_stats_runup_le(
-            vxn_bb,
-            z_thresh=args.z_thresh_low,
-            horizon=args.horizon,
-            cooldown=args.cooldown,
-        )
-        vxn_hist_high = conditional_stats_runup_ge(
-            vxn_bb,
-            z_thresh=args.z_thresh_high,
-            horizon=args.horizon,
-            cooldown=args.cooldown,
-        )
-
-        vxn_hist = {
-            "A_lowvol": vxn_hist_low,
-            "B_highvol": vxn_hist_high,
-        }
-
-        vxn_snippet = build_snippet(
-            name=f"VXN_BB(len={params.length},k={params.k},log={params.use_log})",
-            df_bb=vxn_bb,
-            params=params,
-            meta=vxn_meta2,
-            series_kind="vol",
-            hist=vxn_hist,
-        )
-
-        vxn_json_path = os.path.join(args.out_dir, "snippet_vxn.json")
-        with open(vxn_json_path, "w", encoding="utf-8") as f:
-            json.dump(vxn_snippet, f, ensure_ascii=False, indent=2)
-
-        vxn_csv_path = os.path.join(args.out_dir, "tail_vxn.csv")
-        vxn_bb.tail(200).to_csv(vxn_csv_path, index=True)
-
-        if not args.quiet:
-            print("\n=== VOL SNIPPET (VXN) ===")
-            print(json.dumps(vxn_snippet, ensure_ascii=False, indent=2))
-
+    print(f"Wrote: {out_price}")
+    print(f"Wrote: {out_vxn}")
     return 0
 
 
