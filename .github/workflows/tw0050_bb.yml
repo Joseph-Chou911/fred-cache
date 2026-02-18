@@ -13,12 +13,18 @@ concurrency:
   group: tw0050-bb
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+    working-directory: .
+
 jobs:
   run:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Taipei
       PYTHONUNBUFFERED: "1"
+      OUTPUT_DIR: tw0050_bb_artifacts
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,22 +39,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas numpy yfinance tzdata
 
-      - name: Generate stats
+      - name: Prepare output directory
         run: |
-          python tw0050_bb_len60_k2_forwardmdd.py \
+          mkdir -p "${OUTPUT_DIR}"
+
+      - name: Generate stats (all outputs under OUTPUT_DIR)
+        run: |
+          python scripts/tw0050_bb_len60_k2_forwardmdd.py \
             --symbol 0050.TW \
             --window 60 \
             --k 2 \
             --horizon 20 \
             --z_threshold -1.5 \
-            --cache_dir tw0050_bb_cache \
+            --cache_dir "${OUTPUT_DIR}" \
             --use_adj_close
 
-      - name: Build report
+      - name: Build report (report also under OUTPUT_DIR)
         run: |
-          python build_tw0050_bb_report.py \
-            --cache_dir tw0050_bb_cache \
-            --output report_tw0050_bb.md
+          python scripts/build_tw0050_bb_report.py \
+            --cache_dir "${OUTPUT_DIR}" \
+            --output "${OUTPUT_DIR}/report_tw0050_bb.md"
 
       - name: Commit & push if changed
         run: |
@@ -57,8 +67,8 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add tw0050_bb_cache/stats_latest.json tw0050_bb_cache/history_lite.json tw0050_bb_cache/prices.csv report_tw0050_bb.md
-            git commit -m "Update TW0050 BB60 forwardMDD report (auto)"
+            git add -A "${OUTPUT_DIR}"
+            git commit -m "Update TW0050 BB60 forwardMDD artifacts (auto)"
             git push
           else
             echo "No changes."
