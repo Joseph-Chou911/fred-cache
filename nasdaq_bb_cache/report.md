@@ -1,10 +1,10 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-18T07:26:16Z`
+- report_generated_at_utc: `2026-02-18T07:28:30Z`
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T07:26:15Z`
+- snippet.generated_at_utc: `2026-02-18T07:28:30Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NEAR_LOWER_BAND (MONITOR)`**
@@ -29,6 +29,8 @@
 
 ### Historical simulation (conditional)
 
+- confidence: **`MED`** (sample_size=65 (30-79))
+
 | field | value |
 |---|---:|
 | metric | `forward_mdd` |
@@ -46,11 +48,11 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T07:26:16Z`
+- snippet.generated_at_utc: `2026-02-18T07:28:30Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
-- action_output: **`NORMAL_RANGE`**
+- action_output: **`NEAR_UPPER_BAND (WATCH)`**
 
 ### Latest
 
@@ -74,6 +76,8 @@
 
 #### A) Low-Vol / Complacency (z <= threshold)
 
+- confidence: **`LOW`** (sample_size=29 (<30))
+
 | field | value |
 |---|---:|
 | metric | `forward_max_runup` |
@@ -89,6 +93,8 @@
 | max | 0.766071 |
 
 #### B) High-Vol / Stress (z >= threshold)
+
+- confidence: **`MED`** (sample_size=54 (30-79))
 
 | field | value |
 |---|---:|
@@ -110,3 +116,4 @@ Notes:
 - `staleness_days` = snippet 的 `generated_at_utc` 日期 − `meta.max_date`；週末/假期可能放大此值。
 - PRICE 的 `forward_mdd` 應永遠 `<= 0`（0 代表未回撤）。
 - VOL 的 `forward_max_runup` 應永遠 `>= 0`（數值越大代表波動「再爆衝」風險越大）。
+- `confidence` 規則：若 `staleness_flag!=OK` 則直接降為 LOW；否則依 sample_size：<30=LOW，30-79=MED，>=80=HIGH。
