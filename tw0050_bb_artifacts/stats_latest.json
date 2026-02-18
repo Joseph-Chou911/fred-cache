@@ -13,7 +13,7 @@
         "event_date": "2014-01-02",
         "event_index": 1238,
         "implied_factor": 4.0,
-        "raw_ratio": 0.2493611227151145,
+        "raw_ratio": 0.24936114820596897,
         "tolerance": 0.06
       }
     ],
@@ -23,34 +23,55 @@
   "forward_mdd": {
     "all_days": {
       "conf": "HIGH",
-      "min": -0.2557003366113709,
+      "min": -0.25570040972109265,
       "n": 4172,
-      "p10": -0.06860149288060907,
-      "p50": -0.018120521780428278
+      "p10": -0.06860165596970363,
+      "p50": -0.018120539943702774
     },
-    "cond_on_z_le_threshold": {
-      "conf": "HIGH",
-      "min": -0.22673430807028105,
-      "n": 394,
-      "p10": -0.10921770998062919,
-      "p50": -0.025418866713040722,
-      "z_threshold": -1.5
+    "conditional": {
+      "cheap_side": {
+        "condition": "z <= -1.5",
+        "conf": "HIGH",
+        "min": -0.22673422915937014,
+        "n": 394,
+        "p10": -0.10921763525715977,
+        "p50": -0.02541878223345012,
+        "z_threshold": -1.5
+      },
+      "hot_side": {
+        "condition": "z >= 1.5",
+        "conf": "HIGH",
+        "min": -0.21301510714946115,
+        "n": 1075,
+        "p10": -0.05554795804569499,
+        "p50": -0.014492765481987191,
+        "z_threshold": 1.5
+      },
+      "hot_side_extreme": {
+        "condition": "z >= 2.0",
+        "conf": "HIGH",
+        "min": -0.21301510714946115,
+        "n": 406,
+        "p10": -0.050243916823556,
+        "p50": -0.012328027577150458,
+        "z_threshold": 2.0
+      }
     },
     "definition": "min(0, min_{i=1..H} (price[t+i]/price[t]-1)), H=horizon trading days"
   },
   "latest": {
     "date": "2026-02-11",
-    "dist_to_lower_pct": 27.598632850235035,
-    "dist_to_upper_pct": -0.3694244284679084,
-    "lower": 55.89385323010418,
-    "pos": 1.0135672114571126,
+    "dist_to_lower_pct": 27.598632850235425,
+    "dist_to_upper_pct": -0.3694244284675034,
+    "lower": 55.89385323010387,
+    "pos": 1.0135672114570975,
     "price": 77.19999694824219,
     "sma": 66.40432726542154,
     "state": "ABOVE_UPPER_BAND",
     "state_reason": "z>=2.0",
-    "std": 5.255237017658682,
-    "upper": 76.9148013007389,
-    "z": 2.05426884582845
+    "std": 5.255237017658837,
+    "upper": 76.91480130073921,
+    "z": 2.054268845828389
   },
   "meta": {
     "as_of_date": "2026-02-11",
@@ -60,16 +81,18 @@
     "k": 2.0,
     "module": "tw0050_bb",
     "price_basis": "Adj Close",
-    "run_ts_utc": "2026-02-18T17:02:01Z",
-    "script_fingerprint": "86fb3d8029c3",
+    "run_ts_utc": "2026-02-18T17:23:03Z",
+    "script_fingerprint": "8fca2fa5370f",
     "split_factors": "4",
     "split_tol": 0.06,
     "symbol": "0050.TW",
     "timezone_local": "Asia/Taipei",
     "window": 60,
-    "z_threshold": -1.5
+    "z_threshold_cheap": -1.5,
+    "z_threshold_hot": 1.5,
+    "z_threshold_hot2": 2.0
   },
   "repro": {
-    "command": "python /home/runner/work/fred-cache/fred-cache/scripts/tw0050_bb_len60_k2_forwardmdd.py --symbol 0050.TW --window 60 --k 2.0 --horizon 20 --z_threshold -1.5 --cache_dir tw0050_bb_artifacts --use_adj_close  --split_factors 4 --split_tol 0.06"
+    "command": "python /home/runner/work/fred-cache/fred-cache/scripts/tw0050_bb_len60_k2_forwardmdd.py --symbol 0050.TW --window 60 --k 2.0 --horizon 20 --cache_dir tw0050_bb_artifacts --use_adj_close  --split_factors 4 --split_tol 0.06  --z_threshold -1.5 --z_hot 1.5 --z_hot2 2.0"
   }
 }
