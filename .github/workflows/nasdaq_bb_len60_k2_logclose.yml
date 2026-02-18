@@ -1,4 +1,4 @@
-name: nasdaq-bb-len60-k2-logclose
+name: nasdaq-bb-qqq-len60-k2-logclose
 
 on:
   workflow_dispatch: {}
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: nasdaq-bb-len60-k2-logclose
+  group: nasdaq-bb-qqq-len60-k2-logclose
   cancel-in-progress: true
 
 jobs:
@@ -34,24 +34,30 @@ jobs:
           pip install --upgrade pip
           pip install pandas numpy requests
 
-      # （可選，但我建議保留一陣子）避免再發生「找不到檔」卻看不出原因
+      # 建議先保留一段時間，方便定位路徑/檔名問題
       - name: Debug list files
         run: |
           pwd
+          echo "---- repo root ----"
           ls -la
-          echo "----"
+          echo "---- scripts/ ----"
           ls -la scripts || true
-          echo "----"
+          echo "---- git files (nasdaq) ----"
           git ls-files | grep -i nasdaq || true
 
-      - name: Run Nasdaq BB monitor (NDX + optional VXN)
+      - name: Run Nasdaq BB monitor (QQQ + optional VXN)
         run: |
           mkdir -p nasdaq_bb_cache
           python scripts/nasdaq_bb_len60_k2_logclose.py \
-            --price_ticker "^ndx" \
+            --price_ticker "qqq.us" \
             --out_dir "nasdaq_bb_cache" \
             --vxn_enable \
             --vxn_source fred \
+            --bb_len 60 \
+            --bb_k 2.0 \
+            --z_thresh -2.0 \
+            --horizon 20 \
+            --cooldown 20 \
             --quiet
 
       - name: Commit outputs (only if changed)
@@ -60,7 +66,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add nasdaq_bb_cache
-            git commit -m "update: nasdaq BB(60,2) logclose cache"
+            git commit -m "update: nasdaq BB(60,2) QQQ logclose cache"
             git push
           else
             echo "No changes to commit."
