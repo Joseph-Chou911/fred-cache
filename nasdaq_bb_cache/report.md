@@ -1,16 +1,16 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-18T08:15:40Z`
+- report_generated_at_utc: `2026-02-18T08:23:08Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-02-17 close=601.3000) → **NEAR_LOWER_BAND (MONITOR)** (reason=z<=-1.5); dist_to_lower=0.781%; dist_to_upper=5.927%; 20D forward_mdd: p50=-2.38%, p10=-12.43%, min=-25.34% (conf=MED)
+- **QQQ** (2026-02-17 close=601.3000) → **NEAR_LOWER_BAND (MONITOR)** (reason=z<=-1.5); dist_to_lower=0.781%; dist_to_upper=5.927%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
 - **VXN** (2026-02-17 close=25.9800) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.815)); z=1.4057; pos=0.815; bwΔ=-3.80%; Pos-WATCH (C) p90 runup=58.1% (n=78) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T08:15:39Z`
+- snippet.generated_at_utc: `2026-02-18T08:23:07Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NEAR_LOWER_BAND (MONITOR)`**
@@ -36,28 +36,28 @@
 
 ### Historical simulation (conditional)
 
-- confidence: **`MED`** (sample_size=65 (30-79))
+- confidence: **`HIGH`** (sample_size=87 (>=80))
 
 | field | value |
 |---|---:|
 | metric | `forward_mdd` |
 | metric_interpretation | `<=0; closer to 0 is less pain; more negative is deeper drawdown` |
-| z_thresh | -2.000000 |
+| z_thresh | -1.500000 |
 | horizon_days | 20 |
 | cooldown_bars | 20 |
-| sample_size | 65 |
-| p10 | -0.124331 |
-| p50 | -0.023772 |
+| sample_size | 87 |
+| p10 | -0.144813 |
+| p50 | -0.032842 |
 | p90 | 0.000000 |
-| mean | -0.049430 |
-| min | -0.253377 |
+| mean | -0.054391 |
+| min | -0.249947 |
 | max | 0.000000 |
-| condition | `{'field': 'z', 'op': '<=', 'value': -2.0}` |
+| condition | `{'field': 'z', 'op': '<=', 'value': -1.5}` |
 
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-18T08:15:40Z`
+- snippet.generated_at_utc: `2026-02-18T08:23:08Z`
 - data_as_of (meta.max_date): `2026-02-17`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
