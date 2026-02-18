@@ -20,8 +20,12 @@ NEW (2026-01-26):
   - asset_proxy_cache/dashboard_latest.json
 
 NEW (2026-02-18):
-- Optional merge-in (display-only; NO impact to unified logic):
-  - nasdaq_bb_cache/latest.json  (for report.md display-only lines)
+- Optional merge-in nasdaq_bb_cache (display-only; NO impact to unified logic):
+  - Reads from a directory (default: nasdaq_bb_cache/)
+  - Supports the files you currently generate:
+    - snippet_price_qqq.us.json / snippet_price_qqq.json
+    - snippet_vxn.json
+    - snippet_price_^ndx.json (optional)
 
 NO external fetch here. Pure merge + deterministic calculations.
 
@@ -33,7 +37,7 @@ Inputs:
 - fx_cache/latest.json (+ fx_cache/history.json)
 - [optional] inflation_realrate_cache/dashboard_latest.json
 - [optional] asset_proxy_cache/dashboard_latest.json
-- [optional] nasdaq_bb_cache/latest.json
+- [optional] nasdaq_bb_cache/ (dir)
 
 Output:
 - unified_dashboard/latest.json (or any path you pass)
@@ -56,8 +60,7 @@ def _read_text(path: str) -> str:
 
 
 def _write_text(path: str, text: str) -> None:
-    # NOTE: guard for paths without directory (e.g., "latest.json")
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
 
@@ -81,6 +84,30 @@ def _safe_get(d: Any, *keys: str) -> Any:
             return None
         cur = cur.get(k)
     return cur
+
+
+def _to_float(x: Any) -> Optional[float]:
+    """
+    Conservative float parser:
+    - int/float => float
+    - str => parse first number; supports optional '%' suffix
+    - otherwise => None
+    """
+    if isinstance(x, (int, float)):
+        return float(x)
+    if isinstance(x, str):
+        s = x.strip()
+        if not s or s.upper() == "NA" or s.upper() == "N/A":
+            return None
+        # keep only a leading numeric token, allow - and .
+        m = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+        if not m:
+            return None
+        try:
+            return float(m.group(0))
+        except Exception:
+            return None
+    return None
 
 
 # ---------- Roll25 derived metrics ----------
@@ -116,7 +143,7 @@ def _realized_vol_annualized_pct(closes_newest_first: List[float], n: int) -> Tu
         return None, len(rets)
 
     mean = sum(rets) / len(rets)
-    var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)
+    var = sum((xx - mean) ** 2 for xx in rets) / (len(rets) - 1)
     vol_daily = math.sqrt(max(var, 0.0))
     vol_ann = vol_daily * math.sqrt(252.0)
     return vol_ann * 100.0, len(rets)
@@ -337,7 +364,7 @@ def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str,
     last5 = chgs[:5]
     points = len(last5)
     sum_last5 = sum(last5) if points > 0 else 0.0
-    pos_days = sum(1 for x in last5 if x > 0)
+    pos_days = sum(1 for xx in last5 if xx > 0)
     latest_chg = last5[0] if points >= 1 else None
 
     signal = "NA"
@@ -519,40 +546,197 @@ def _load_optional(path: str) -> Tuple[str, Any]:
         return f"ERROR: {type(e).__name__}", None
 
 
-def _normalize_nasdaq_bb_series(bb_obj: Any) -> Optional[Dict[str, Any]]:
+def _listdir_safe(path: str) -> List[str]:
+    try:
+        return sorted(os.listdir(path))
+    except Exception:
+        return []
+
+
+def _pick_existing(base_dir: str, candidates: List[str]) -> Optional[str]:
+    for fn in candidates:
+        p = os.path.join(base_dir, fn)
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def _extract_symbol_block(obj: Any, kind: str) -> Dict[str, Any]:
     """
-    Try to produce:
-      {"QQQ": {...}, "VXN": {...}}
-    from a variety of possible schemas.
-    Return None if not possible.
+    Extract a minimal, stable set of keys from a nasdaq_bb_cache snippet JSON.
+
+    Downstream compatibility note:
+    - For price-like series (QQQ / NDX): we populate "close".
+    - For VIX-like series (VXN): we populate "value".
+    - We also keep "close_or_value" as a debug convenience.
     """
-    if not isinstance(bb_obj, dict):
-        return None
+    empty = {
+        "data_date": "NA",
+        "close": "NA",
+        "value": "NA",
+        "close_or_value": "NA",
+        "signal": "NA",
+        "z": "NA",
+        "position_in_band": "NA",
+        "dist_to_lower": "NA",
+        "dist_to_upper": "NA",
+        "kind": kind,
+    }
 
-    # Preferred schema
-    series = bb_obj.get("series")
-    if isinstance(series, dict):
-        out: Dict[str, Any] = {}
-        if isinstance(series.get("QQQ"), dict):
-            out["QQQ"] = series["QQQ"]
-        if isinstance(series.get("VXN"), dict):
-            out["VXN"] = series["VXN"]
-        return out or None
+    if not isinstance(obj, dict):
+        return empty
 
-    # Fallbacks: root keys
-    out = {}
-    if isinstance(bb_obj.get("QQQ"), dict):
-        out["QQQ"] = bb_obj["QQQ"]
-    if isinstance(bb_obj.get("VXN"), dict):
-        out["VXN"] = bb_obj["VXN"]
+    # data_date / as_of_date
+    data_date = (
+        _safe_get(obj, "meta", "data_date")
+        or obj.get("data_date")
+        or _safe_get(obj, "meta", "as_of_date")
+        or obj.get("as_of_date")
+        or obj.get("date")
+    )
+    if not isinstance(data_date, str) or not data_date:
+        data_date = "NA"
 
-    # Fallbacks: lowercase
-    if isinstance(bb_obj.get("qqq"), dict):
-        out["QQQ"] = bb_obj["qqq"]
-    if isinstance(bb_obj.get("vxn"), dict):
-        out["VXN"] = bb_obj["vxn"]
+    # close/value (raw)
+    raw_cv = (
+        obj.get("close")
+        or obj.get("value")
+        or _safe_get(obj, "numbers", "close")
+        or _safe_get(obj, "numbers", "value")
+        or _safe_get(obj, "price", "close")
+        or _safe_get(obj, "price", "value")
+        or _safe_get(obj, "last", "close")
+        or _safe_get(obj, "last", "value")
+    )
 
-    return out or None
+    # signal/tag/state
+    signal = (
+        obj.get("signal")
+        or obj.get("tag")
+        or _safe_get(obj, "signal", "state")
+        or _safe_get(obj, "signal", "tag")
+        or _safe_get(obj, "bb", "signal")
+    )
+    if not isinstance(signal, str) or not signal:
+        signal = "NA"
+
+    # z-score / position / distances
+    z = (
+        obj.get("z")
+        or _safe_get(obj, "numbers", "z")
+        or _safe_get(obj, "bb", "z")
+        or _safe_get(obj, "bb", "zscore")
+    )
+    pos = (
+        obj.get("position_in_band")
+        or _safe_get(obj, "numbers", "position_in_band")
+        or _safe_get(obj, "bb", "position_in_band")
+    )
+    dlow = (
+        obj.get("dist_to_lower")
+        or _safe_get(obj, "numbers", "dist_to_lower")
+        or _safe_get(obj, "bb", "dist_to_lower")
+    )
+    dup = (
+        obj.get("dist_to_upper")
+        or _safe_get(obj, "numbers", "dist_to_upper")
+        or _safe_get(obj, "bb", "dist_to_upper")
+    )
+
+    # normalize numbers when possible (keep original if not parseable)
+    cv = _to_float(raw_cv)
+    zf = _to_float(z)
+    pf = _to_float(pos)
+    lf = _to_float(dlow)
+    uf = _to_float(dup)
+
+    close_val: Any = "NA"
+    value_val: Any = "NA"
+    if kind.upper() == "VXN":
+        value_val = cv if cv is not None else ("NA" if raw_cv is None else raw_cv)
+    else:
+        close_val = cv if cv is not None else ("NA" if raw_cv is None else raw_cv)
+
+    return {
+        "data_date": data_date,
+        "close": close_val,
+        "value": value_val,
+        "close_or_value": cv if cv is not None else ("NA" if raw_cv is None else raw_cv),
+        "signal": signal,
+        "z": zf if zf is not None else ("NA" if z is None else z),
+        "position_in_band": pf if pf is not None else ("NA" if pos is None else pos),
+        "dist_to_lower": lf if lf is not None else ("NA" if dlow is None else dlow),
+        "dist_to_upper": uf if uf is not None else ("NA" if dup is None else dup),
+        "kind": kind,
+    }
+
+
+
+def _load_nasdaq_bb_cache_dir(base_dir: str) -> Tuple[str, Any]:
+    """
+    Optional input (DIR):
+    - If dir missing => status=MISSING
+    - If snippets missing => status=MISSING_SNIPPETS
+    - If some snippets load => status=OK
+    - If JSON invalid => status=ERROR:<...> (only if all fail)
+    """
+    note = "display-only; not used for positioning/mode/cross_module"
+    if not os.path.isdir(base_dir):
+        return "MISSING", {
+            "note": note,
+            "dir": base_dir,
+            "files_found": [],
+            "files_used": {"QQQ": "NA", "VXN": "NA", "NDX": "NA"},
+            "QQQ": _extract_symbol_block(None, "QQQ"),
+            "VXN": _extract_symbol_block(None, "VXN"),
+            "NDX": _extract_symbol_block(None, "NDX"),
+        }
+
+    files = _listdir_safe(base_dir)
+
+    qqq_path = _pick_existing(base_dir, ["snippet_price_qqq.us.json", "snippet_price_qqq.json"])
+    vxn_path = _pick_existing(base_dir, ["snippet_vxn.json"])
+    ndx_path = _pick_existing(base_dir, ["snippet_price_^ndx.json", "snippet_price_%5Endx.json", "snippet_price_ndx.json"])
+
+    def _load_one(path: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        if not path:
+            return None, None
+        try:
+            obj = _load_json(path)
+            return obj if isinstance(obj, dict) else {"raw": obj}, None
+        except Exception as e:
+            return None, f"{type(e).__name__}: {e}"
+
+    qqq_obj, qqq_err = _load_one(qqq_path)
+    vxn_obj, vxn_err = _load_one(vxn_path)
+    ndx_obj, ndx_err = _load_one(ndx_path)
+
+    ok_any = (qqq_obj is not None) or (vxn_obj is not None) or (ndx_obj is not None)
+    if not ok_any:
+        # if any error exists, surface one (but keep a stable shape)
+        err = qqq_err or vxn_err or ndx_err
+        status = f"ERROR: {err}" if err else "MISSING_SNIPPETS"
+        return status, {
+            "note": note,
+            "dir": base_dir,
+            "files_found": files,
+            "files_used": {"QQQ": qqq_path or "NA", "VXN": vxn_path or "NA", "NDX": ndx_path or "NA"},
+            "errors": {"QQQ": qqq_err or "NA", "VXN": vxn_err or "NA", "NDX": ndx_err or "NA"},
+            "QQQ": _extract_symbol_block(None, "QQQ"),
+            "VXN": _extract_symbol_block(None, "VXN"),
+            "NDX": _extract_symbol_block(None, "NDX"),
+        }
+
+    return "OK", {
+        "note": note,
+        "dir": base_dir,
+        "files_found": files,
+        "files_used": {"QQQ": qqq_path or "NA", "VXN": vxn_path or "NA", "NDX": ndx_path or "NA"},
+        "errors": {"QQQ": qqq_err or "NA", "VXN": vxn_err or "NA", "NDX": ndx_err or "NA"},
+        "QQQ": _extract_symbol_block(qqq_obj, "QQQ"),
+        "VXN": _extract_symbol_block(vxn_obj, "VXN"),
+        "NDX": _extract_symbol_block(ndx_obj, "NDX"),
+    }
 
 
 def main() -> int:
@@ -568,8 +752,8 @@ def main() -> int:
     ap.add_argument("--inflation-in", default="inflation_realrate_cache/dashboard_latest.json")
     ap.add_argument("--assetproxy-in", default="asset_proxy_cache/dashboard_latest.json")
 
-    # ✅ NEW: nasdaq bb cache (display-only; do not affect calculations)
-    ap.add_argument("--nasdaq-bb-in", default="nasdaq_bb_cache/latest.json")
+    # ✅ NEW optional dir (display-only; do not affect calculations)
+    ap.add_argument("--nasdaqbb-dir", default="nasdaq_bb_cache")
 
     ap.add_argument("--out", default="unified_dashboard/latest.json")
     ap.add_argument("--roll25-vol-n", type=int, default=int(os.getenv("ROLL25_VOL_N", "10")))
@@ -594,7 +778,9 @@ def main() -> int:
     # ✅ optional loads (never break unified)
     infl_status, infl_obj = _load_optional(args.inflation_in)
     ap_status, ap_obj = _load_optional(args.assetproxy_in)
-    bb_status, bb_obj = _load_optional(args.nasdaq_bb_in)
+
+    # ✅ optional nasdaq bb dir load (never break unified)
+    nbb_status, nbb_obj = _load_nasdaq_bb_cache_dir(args.nasdaqbb_dir)
 
     # roll25 derived
     roll25_derived: Dict[str, Any] = {"status": "NA"}
@@ -657,9 +843,7 @@ def main() -> int:
             "volume_multiplier": nums.get("VolumeMultiplier"),
             "vol_multiplier": nums.get("VolMultiplier"),
             "LookbackNTarget": _extract_lookback_target_from_roll25_report(roll_obj),
-            "LookbackNActual": roll_obj.get("lookback_n_actual")
-            if isinstance(roll_obj.get("lookback_n_actual"), int)
-            else None,
+            "LookbackNActual": roll_obj.get("lookback_n_actual") if isinstance(roll_obj.get("lookback_n_actual"), int) else None,
             "signals": {
                 "DownDay": sigs.get("DownDay"),
                 "VolumeAmplified": sigs.get("VolumeAmplified"),
@@ -742,9 +926,11 @@ def main() -> int:
             "roll25_in": args.roll25_in,
             "fx_in": args.fx_in,
             "fx_history": args.fx_history,
+            # ✅ optional
             "inflation_in": args.inflation_in,
             "assetproxy_in": args.assetproxy_in,
-            "nasdaq_bb_in": args.nasdaq_bb_in,
+            # ✅ NEW optional
+            "nasdaqbb_dir": args.nasdaqbb_dir,
         },
         "modules": {
             "market_cache": {
@@ -784,10 +970,9 @@ def main() -> int:
 
             # ✅ NEW optional module (display-only)
             "nasdaq_bb_cache": {
-                "status": "OK" if bb_status == "OK" else bb_status,
+                "status": "OK" if nbb_status == "OK" else nbb_status,
                 "note": "display-only; not used for positioning/mode/cross_module",
-                "series": _normalize_nasdaq_bb_series(bb_obj) if bb_status == "OK" else None,
-                "raw": bb_obj if bb_status == "OK" else None,
+                "dashboard_latest": nbb_obj if nbb_status == "OK" else nbb_obj,
             },
         },
         "audit_notes": [
