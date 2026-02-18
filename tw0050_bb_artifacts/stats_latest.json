@@ -10,12 +10,12 @@
     "fetch_ok": true,
     "gap_audit": {
       "factor_change_count": 1,
-      "gap_count": 51,
+      "gap_count": 20,
       "jump_count": 2,
       "n": 4192,
       "params": {
+        "adj_factor_change_tol": 0.1,
         "adj_stable_thr": 0.05,
-        "factor_change_tol": 0.1,
         "gap_busdays_warn": 2,
         "raw_jump_thr": 0.2,
         "ret_jump_adj": 0.2,
@@ -30,11 +30,6 @@
         "to": "2009-02-02"
       },
       {
-        "from": "2009-05-27",
-        "missing_busdays": 2,
-        "to": "2009-06-01"
-      },
-      {
         "from": "2010-02-10",
         "missing_busdays": 7,
         "to": "2010-02-22"
@@ -45,24 +40,9 @@
         "to": "2011-02-08"
       },
       {
-        "from": "2011-04-01",
-        "missing_busdays": 2,
-        "to": "2011-04-06"
-      },
-      {
         "from": "2012-01-18",
         "missing_busdays": 7,
         "to": "2012-01-30"
-      },
-      {
-        "from": "2012-02-24",
-        "missing_busdays": 2,
-        "to": "2012-02-29"
-      },
-      {
-        "from": "2012-12-28",
-        "missing_busdays": 2,
-        "to": "2013-01-02"
       },
       {
         "from": "2013-02-06",
@@ -70,24 +50,9 @@
         "to": "2013-02-18"
       },
       {
-        "from": "2013-04-03",
-        "missing_busdays": 2,
-        "to": "2013-04-08"
-      },
-      {
-        "from": "2013-09-18",
-        "missing_busdays": 2,
-        "to": "2013-09-23"
-      },
-      {
         "from": "2014-01-27",
         "missing_busdays": 6,
         "to": "2014-02-05"
-      },
-      {
-        "from": "2014-12-31",
-        "missing_busdays": 2,
-        "to": "2015-01-05"
       },
       {
         "from": "2015-02-13",
@@ -95,54 +60,14 @@
         "to": "2015-02-24"
       },
       {
-        "from": "2015-04-02",
-        "missing_busdays": 2,
-        "to": "2015-04-07"
-      },
-      {
         "from": "2016-02-03",
         "missing_busdays": 7,
         "to": "2016-02-15"
       },
       {
-        "from": "2016-04-01",
-        "missing_busdays": 2,
-        "to": "2016-04-06"
-      },
-      {
-        "from": "2016-06-08",
-        "missing_busdays": 2,
-        "to": "2016-06-13"
-      },
-      {
-        "from": "2016-09-14",
-        "missing_busdays": 2,
-        "to": "2016-09-19"
-      },
-      {
         "from": "2017-01-24",
         "missing_busdays": 6,
         "to": "2017-02-02"
-      },
-      {
-        "from": "2017-02-24",
-        "missing_busdays": 2,
-        "to": "2017-03-01"
-      },
-      {
-        "from": "2017-03-31",
-        "missing_busdays": 2,
-        "to": "2017-04-05"
-      },
-      {
-        "from": "2017-05-26",
-        "missing_busdays": 2,
-        "to": "2017-05-31"
-      },
-      {
-        "from": "2017-10-06",
-        "missing_busdays": 2,
-        "to": "2017-10-11"
       },
       {
         "from": "2018-02-12",
@@ -155,49 +80,14 @@
         "to": "2018-04-09"
       },
       {
-        "from": "2018-12-28",
-        "missing_busdays": 2,
-        "to": "2019-01-02"
-      },
-      {
         "from": "2019-01-30",
         "missing_busdays": 7,
         "to": "2019-02-11"
       },
       {
-        "from": "2019-02-27",
-        "missing_busdays": 2,
-        "to": "2019-03-04"
-      },
-      {
-        "from": "2019-04-03",
-        "missing_busdays": 2,
-        "to": "2019-04-08"
-      },
-      {
-        "from": "2019-10-09",
-        "missing_busdays": 2,
-        "to": "2019-10-14"
-      },
-      {
         "from": "2020-01-20",
         "missing_busdays": 7,
         "to": "2020-01-30"
-      },
-      {
-        "from": "2020-04-01",
-        "missing_busdays": 2,
-        "to": "2020-04-06"
-      },
-      {
-        "from": "2020-06-24",
-        "missing_busdays": 2,
-        "to": "2020-06-29"
-      },
-      {
-        "from": "2020-09-30",
-        "missing_busdays": 2,
-        "to": "2020-10-05"
       },
       {
         "from": "2021-02-05",
@@ -210,19 +100,9 @@
         "to": "2021-04-07"
       },
       {
-        "from": "2021-09-17",
-        "missing_busdays": 2,
-        "to": "2021-09-22"
-      },
-      {
         "from": "2022-01-26",
         "missing_busdays": 7,
         "to": "2022-02-07"
-      },
-      {
-        "from": "2022-04-01",
-        "missing_busdays": 2,
-        "to": "2022-04-06"
       },
       {
         "from": "2023-01-17",
@@ -230,44 +110,14 @@
         "to": "2023-01-30"
       },
       {
-        "from": "2023-02-24",
-        "missing_busdays": 2,
-        "to": "2023-03-01"
-      },
-      {
         "from": "2023-03-31",
         "missing_busdays": 3,
         "to": "2023-04-06"
       },
       {
-        "from": "2023-06-21",
-        "missing_busdays": 2,
-        "to": "2023-06-26"
-      },
-      {
-        "from": "2023-10-06",
-        "missing_busdays": 2,
-        "to": "2023-10-11"
-      },
-      {
         "from": "2024-02-05",
         "missing_busdays": 7,
         "to": "2024-02-15"
-      },
-      {
-        "from": "2024-04-03",
-        "missing_busdays": 2,
-        "to": "2024-04-08"
-      },
-      {
-        "from": "2024-07-23",
-        "missing_busdays": 2,
-        "to": "2024-07-26"
-      },
-      {
-        "from": "2024-10-01",
-        "missing_busdays": 2,
-        "to": "2024-10-04"
       },
       {
         "from": "2025-01-22",
@@ -280,24 +130,24 @@
       {
         "date": "2014-01-02",
         "kind": "RET_JUMP_RAW",
-        "price_adj": 9.329200744628906,
-        "price_raw": 9.329200744628906,
-        "ret_adj": -0.0025554074366822555,
-        "ret_raw": -0.7506388518591706
+        "price_adj": 9.329201698303223,
+        "price_raw": 9.329201698303223,
+        "ret_adj": -0.002555407176124125,
+        "ret_raw": -0.750638851794031
       },
       {
         "date": "2014-01-02",
         "kind": "RAW_JUMP_ADJ_STABLE",
-        "price_adj": 9.329200744628906,
-        "price_raw": 9.329200744628906,
-        "ret_adj": -0.0025554074366822555,
-        "ret_raw": -0.7506388518591706
+        "price_adj": 9.329201698303223,
+        "price_raw": 9.329201698303223,
+        "ret_adj": -0.002555407176124125,
+        "ret_raw": -0.750638851794031
       }
     ],
     "notes": [
-      "Split heal applied: detected_events=1 factors=[4.0] tol=0.06",
+      "Split events detected=1, healed=1 (factors=[4.0], tol=0.06)",
       "Gap audit uses weekday heuristic only (market holidays not modeled).",
-      "GAP_WARNING: missing business days detected (count=51)",
+      "GAP_WARNING: missing business days detected (count=20)",
       "JUMP_WARNING: return jumps detected (count=2)",
       "FACTOR_WARNING: raw/adj factor changes detected (count=1)"
     ],
@@ -308,8 +158,9 @@
         "direction": "SPLIT",
         "event_date": "2014-01-02",
         "event_index": 1238,
+        "healed": true,
         "implied_factor": 4.0,
-        "raw_ratio": 0.24936114814082944,
+        "raw_ratio": 0.24936114820596897,
         "tolerance": 0.06
       }
     ],
@@ -319,10 +170,10 @@
   "forward_mdd": {
     "all_days": {
       "conf": "HIGH",
-      "min": -0.2557002143885291,
+      "min": -0.25570028749827,
       "n": 4172,
-      "p10": -0.06860125448545758,
-      "p50": -0.018120381651287598
+      "p10": -0.06860132227254549,
+      "p50": -0.018120473463583364
     },
     "conditional": {
       "cheap_side": {
@@ -330,26 +181,26 @@
         "conf": "HIGH",
         "min": -0.2267341781349217,
         "n": 394,
-        "p10": -0.10921770081887905,
-        "p50": -0.02541911596015939,
+        "p10": -0.1092173927632214,
+        "p50": -0.025418877691726627,
         "z_threshold": -1.5
       },
       "hot_side": {
         "condition": "z >= 1.5",
         "conf": "HIGH",
-        "min": -0.21301510714946115,
+        "min": -0.2130150904662006,
         "n": 1075,
-        "p10": -0.05554811475478429,
-        "p50": -0.014492765481987191,
+        "p10": -0.05554812491132224,
+        "p50": -0.014492866281765382,
         "z_threshold": 1.5
       },
       "hot_side_extreme": {
         "condition": "z >= 2.0",
         "conf": "HIGH",
-        "min": -0.21301510714946115,
+        "min": -0.2130150904662006,
         "n": 406,
-        "p10": -0.05024381775445158,
-        "p50": -0.012328236768873624,
+        "p10": -0.05024361198112637,
+        "p50": -0.012328319746717609,
         "z_threshold": 2.0
       }
     },
@@ -357,17 +208,17 @@
   },
   "latest": {
     "date": "2026-02-11",
-    "dist_to_lower_pct": 27.59863285023712,
-    "dist_to_upper_pct": -0.3694244284658099,
-    "lower": 55.893853230102565,
-    "pos": 1.0135672114570335,
+    "dist_to_lower_pct": 27.598632850234,
+    "dist_to_upper_pct": -0.3694244284689392,
+    "lower": 55.89385323010497,
+    "pos": 1.0135672114571517,
     "price": 77.19999694824219,
     "sma": 66.40432726542154,
     "state": "ABOVE_UPPER_BAND",
     "state_reason": "z>=2.0",
-    "std": 5.255237017659488,
-    "upper": 76.91480130074052,
-    "z": 2.0542688458281346
+    "std": 5.255237017658284,
+    "upper": 76.9148013007381,
+    "z": 2.0542688458286054
   },
   "meta": {
     "adj_factor_change_tol": 0.1,
@@ -378,13 +229,15 @@
     "gap_busdays_warn": 2,
     "horizon": 20,
     "k": 2.0,
+    "known_split_dates": "",
     "module": "tw0050_bb",
     "price_basis": "Adj Close",
     "raw_jump_thr": 0.2,
     "ret_jump_adj": 0.2,
     "ret_jump_raw": 0.2,
-    "run_ts_utc": "2026-02-18T22:50:12Z",
-    "script_fingerprint": "8f55bf2a2ad9",
+    "run_ts_utc": "2026-02-18T23:17:54Z",
+    "script_fingerprint": "d76b9c9518d5",
+    "split_date_window": 1,
     "split_factors": "4",
     "split_tol": 0.06,
     "symbol": "0050.TW",
@@ -395,6 +248,6 @@
     "z_threshold_hot2": 2.0
   },
   "repro": {
-    "command": "python /home/runner/work/fred-cache/fred-cache/scripts/tw0050_bb_len60_k2_forwardmdd.py --symbol 0050.TW --window 60 --k 2.0 --horizon 20 --cache_dir tw0050_bb_artifacts --use_adj_close  --split_factors 4 --split_tol 0.06  --z_threshold -1.5 --z_hot 1.5 --z_hot2 2.0 --gap_busdays_warn 2 --ret_jump_raw 0.2 --ret_jump_adj 0.2 --raw_jump_thr 0.2 --adj_stable_thr 0.05 --adj_factor_change_tol 0.1"
+    "command": "python /home/runner/work/fred-cache/fred-cache/scripts/tw0050_bb_len60_k2_forwardmdd.py --symbol 0050.TW --window 60 --k 2.0 --horizon 20 --cache_dir tw0050_bb_artifacts --use_adj_close --split_factors 4 --split_tol 0.06 --z_threshold -1.5 --z_hot 1.5 --z_hot2 2.0 --gap_busdays_warn 2 --ret_jump_raw 0.2 --ret_jump_adj 0.2 --raw_jump_thr 0.2 --adj_stable_thr 0.05 --adj_factor_change_tol 0.1"
   }
 }
