@@ -8,7 +8,8 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- unified_generated_at_utc: 2026-02-18T02:45:06Z
+- nasdaq_bb_cache: MISSING
+- unified_generated_at_utc: 2026-02-18T11:38:28Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -99,33 +100,47 @@
 
 ## inflation_realrate_cache (detailed)
 - status: OK
-- as_of_ts: 2026-02-18T08:48:32+08:00
-- run_ts_utc: 2026-02-18T00:48:38.242953+00:00
+- as_of_ts: 2026-02-18T17:06:03+08:00
+- run_ts_utc: 2026-02-18T09:06:10.707325+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@9b13e15
+- script_fingerprint: render_dashboard_py_signals_v8@dfa40de
 - script_version: cycle_sidecars_stats_v1
 - series_count: 2
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DFII10 | ALERT | MOVE | LEVEL | 1.770000 | 2026-02-13 | 0.001734 | -2.563199 | 3.333333 | 11.111111 | -0.516517 | -3.446328 | -1.666667 | abs(Z60)>=2;abs(Z60)>=2.5 | EXTREME_Z | ALERT | SAME | 6 | 7 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
-| T10YIE | NONE | MOVE | NONE | 2.260000 | 2026-02-17 | 0.001734 | -0.421044 | 51.666667 | 19.444444 | -0.225981 | -7.655367 | -0.440529 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| DFII10 | ALERT | MOVE | LEVEL | 1.770000 | 2026-02-13 | 0.002141 | -2.563199 | 3.333333 | 11.111111 | -0.516517 | -3.446328 | -1.666667 | abs(Z60)>=2;abs(Z60)>=2.5 | EXTREME_Z | ALERT | SAME | 6 | 7 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| T10YIE | NONE | MOVE | NONE | 2.260000 | 2026-02-17 | 0.002141 | -0.421044 | 51.666667 | 19.444444 | -0.225981 | -7.655367 | -0.440529 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
 
 ## asset_proxy_cache (detailed)
 - status: OK
-- as_of_ts: 2026-02-18T08:48:34+08:00
-- run_ts_utc: 2026-02-18T00:48:38.297922+00:00
+- as_of_ts: 2026-02-18T17:06:07+08:00
+- run_ts_utc: 2026-02-18T09:06:10.770306+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@9b13e15
+- script_fingerprint: render_dashboard_py_signals_v8@dfa40de
 - script_version: cycle_sidecars_stats_v1
 - series_count: 4
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| IYR.US_CLOSE | ALERT | MOVE | LONG | 101.210000 | 2026-02-17 | 0.001194 | 3.278250 | 100.000000 | 100.000000 | 0.249383 | 0.000000 | 0.977751 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 11 | 12 | https://stooq.com/q/d/l/?s=iyr.us&d1=20260119&d2=20260218&i=d |
-| VNQ.US_CLOSE | ALERT | MOVE | LONG | 95.500000 | 2026-02-17 | 0.001194 | 3.332594 | 100.000000 | 100.000000 | 0.232802 | 0.000000 | 0.962047 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 11 | 12 | https://stooq.com/q/d/l/?s=vnq.us&d1=20260119&d2=20260218&i=d |
-| GLD.US_CLOSE | WATCH | MOVE | JUMP | 448.230000 | 2026-02-17 | 0.001194 | 0.935359 | 76.666667 | 94.444444 | -0.465746 | -13.163842 | -3.108450 | abs(ret1%1d)>=2 | JUMP_RET | WATCH | SAME | 5 | 6 | https://stooq.com/q/d/l/?s=gld.us&d1=20260119&d2=20260218&i=d |
-| IAU.US_CLOSE | WATCH | MOVE | JUMP | 91.820000 | 2026-02-17 | 0.001194 | 0.937521 | 76.666667 | 94.444444 | -0.463092 | -13.163842 | -3.092348 | abs(ret1%1d)>=2 | JUMP_RET | WATCH | SAME | 5 | 6 | https://stooq.com/q/d/l/?s=iau.us&d1=20260119&d2=20260218&i=d |
+| IYR.US_CLOSE | ALERT | MOVE | LONG | 101.210000 | 2026-02-17 | 0.001047 | 3.278250 | 100.000000 | 100.000000 | 0.249383 | 0.000000 | 0.977751 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 11 | 12 | https://stooq.com/q/d/l/?s=iyr.us&d1=20260119&d2=20260218&i=d |
+| VNQ.US_CLOSE | ALERT | MOVE | LONG | 95.490000 | 2026-02-17 | 0.001047 | 3.332594 | 100.000000 | 100.000000 | 0.232802 | 0.000000 | 0.962047 | abs(Z60)>=2;abs(Z60)>=2.5;P252>=95 | EXTREME_Z,LONG_EXTREME | ALERT | SAME | 11 | 12 | https://stooq.com/q/d/l/?s=vnq.us&d1=20260119&d2=20260218&i=d |
+| GLD.US_CLOSE | WATCH | MOVE | JUMP | 448.200000 | 2026-02-17 | 0.001047 | 0.935359 | 76.666667 | 94.444444 | -0.465746 | -13.163842 | -3.108450 | abs(ret1%1d)>=2 | JUMP_RET | WATCH | SAME | 5 | 6 | https://stooq.com/q/d/l/?s=gld.us&d1=20260119&d2=20260218&i=d |
+| IAU.US_CLOSE | WATCH | MOVE | JUMP | 91.820000 | 2026-02-17 | 0.001047 | 0.937521 | 76.666667 | 94.444444 | -0.463092 | -13.163842 | -3.092348 | abs(ret1%1d)>=2 | JUMP_RET | WATCH | SAME | 5 | 6 | https://stooq.com/q/d/l/?s=iau.us&d1=20260119&d2=20260218&i=d |
+
+## nasdaq_bb_cache (display-only)
+- status: MISSING
+- note: display-only; not used for positioning/mode/cross_module
+- QQQ.data_date: NA
+- QQQ.close: NA
+- QQQ.signal: NA
+- QQQ.z: NA
+- QQQ.position_in_band: NA
+- QQQ.dist_to_lower: NA
+- QQQ.dist_to_upper: NA
+- VXN.data_date: NA
+- VXN.value: NA
+- VXN.signal: NA (position_in_band=NA)
 
 ## roll25_cache (TW turnover)
 - status: OK
@@ -182,7 +197,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-17T15:13:33Z
 
-<!-- rendered_at_utc: 2026-02-18T02:45:06Z -->
+<!-- rendered_at_utc: 2026-02-18T11:38:29Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
