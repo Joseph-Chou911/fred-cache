@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-02-18T00:44:22Z",
-  "as_of_ts": "2026-02-18T00:44:22Z",
+  "generated_at_utc": "2026-02-18T03:28:47Z",
+  "as_of_ts": "2026-02-18T03:28:47Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "lite_keep_n": 400,
   "series": {
@@ -1608,10 +1608,6 @@
     ],
     "VIX": [
       {
-        "date": "2024-07-30",
-        "value": 17.69
-      },
-      {
         "date": "2024-07-31",
         "value": 16.36
       },
@@ -3206,6 +3202,10 @@
       {
         "date": "2026-02-16",
         "value": 21.2
+      },
+      {
+        "date": "2026-02-17",
+        "value": 20.29
       }
     ],
     "SP500": [
