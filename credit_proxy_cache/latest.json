@@ -5,30 +5,30 @@
     "value": "credit_proxy_cache_v1.1",
     "source_url": "NA",
     "notes": "INFO:script_version",
-    "as_of_ts": "2026-02-18T01:15:14+08:00"
+    "as_of_ts": "2026-02-18T08:49:02+08:00"
   },
   {
     "series_id": "HYG_CLOSE",
-    "data_date": "2026-02-13",
-    "value": 80.85,
+    "data_date": "2026-02-17",
+    "value": 80.8,
     "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20251021&d2=20260218&i=d",
     "notes": "close_price_common_date",
-    "as_of_ts": "2026-02-18T01:15:14+08:00"
+    "as_of_ts": "2026-02-18T08:49:02+08:00"
   },
   {
     "series_id": "IEF_CLOSE",
-    "data_date": "2026-02-13",
-    "value": 97.21,
+    "data_date": "2026-02-17",
+    "value": 97.2,
     "source_url": "https://stooq.com/q/d/l/?s=ief.us&d1=20251021&d2=20260218&i=d",
     "notes": "close_price_common_date",
-    "as_of_ts": "2026-02-18T01:15:14+08:00"
+    "as_of_ts": "2026-02-18T08:49:02+08:00"
   },
   {
     "series_id": "HYG_IEF_RATIO",
-    "data_date": "2026-02-13",
-    "value": 0.8317045571443267,
+    "data_date": "2026-02-17",
+    "value": 0.831275720164609,
     "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20251021&d2=20260218&i=d | https://stooq.com/q/d/l/?s=ief.us&d1=20251021&d2=20260218&i=d",
-    "notes": "ratio=HYG_CLOSE/IEF_CLOSE; hyg_close=80.85; ief_close=97.21",
-    "as_of_ts": "2026-02-18T01:15:14+08:00"
+    "notes": "ratio=HYG_CLOSE/IEF_CLOSE; hyg_close=80.8; ief_close=97.2",
+    "as_of_ts": "2026-02-18T08:49:02+08:00"
   }
 ]
