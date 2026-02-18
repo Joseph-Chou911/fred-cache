@@ -1,14 +1,14 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-18T10:01:04Z`
-- generated_at_local: `2026-02-18T18:01:04.839188+08:00`
-- report_date_local: `2026-02-18`
+- generated_at_utc: `2026-02-18T19:09:59Z`
+- generated_at_local: `2026-02-19T03:09:59.013314+08:00`
+- report_date_local: `2026-02-19`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-11` (latest available)
-- data_age_days: `7` (warn_if > 2)
-- ⚠️ staleness_warning: as_of_data_date is 7 days behind report_date_local (可能跨週末/長假；請避免當作「今日盤後」解讀)
+- data_age_days: `8` (warn_if > 2)
+- ⚠️ staleness_warning: as_of_data_date is 8 days behind report_date_local (可能跨週末/長假；請避免當作「今日盤後」解讀)
 - RunDayTag: `WEEKDAY`
-- summary: 今日資料未更新；UsedDate=2026-02-11：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
+- summary: 今日資料未更新；UsedDate=2026-02-11：Mode=FULL；freshness_ok=False；daily endpoint has not published today's row yet
 
 ## 2) Key Numbers (from latest_report.json)
 - turnover_twd: `699292298413`
@@ -26,7 +26,7 @@
 
 ## 4) Data Quality Flags (from latest_report.json)
 - OhlcMissing: `false`
-- freshness_ok: `true`
+- freshness_ok: `false`
 - ohlc_status: `OK`
 - mode: `FULL`
 
@@ -148,7 +148,7 @@ run_day_tag is weekday-only heuristic (not exchange calendar)
 BackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20
 Mode=FULL | OHLC=OK | UsedDate=2026-02-11 | UsedDminus1=2026-02-10
 RunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED
-freshness_ok=True | freshness_age_days=7
+freshness_ok=False | freshness_age_days=8
 dedupe_ok=True
 REPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)
 ADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.
