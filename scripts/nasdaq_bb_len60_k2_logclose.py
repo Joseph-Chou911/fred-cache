@@ -15,6 +15,11 @@ Key audit fixes:
    C_poswatch: position_in_band >= 0.8  -> forward_max_runup (>=0)
 4) Keep trigger_reason in snippet objects.
 
+Additional cleanup (this patch):
+- For non-z-based conditions (e.g., position_in_band), do NOT leave z_thresh blank.
+  We keep z_thresh but set it to "NA" (string) to avoid confusing empty fields in report tables.
+- Add a generic "gate" field that always describes the condition in structured form.
+
 Notes:
 - PRICE conditional stat: forward_mdd (<= 0 by construction)
 - VOL conditional stats:
@@ -31,7 +36,7 @@ import json
 import os
 import time
 import urllib.parse
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -52,7 +57,7 @@ def _ensure_dir(path: str) -> None:
 
 def _http_get(url: str, timeout: int = 30, max_retries: int = 3, backoff_s: float = 1.5) -> bytes:
     last_err = None
-    headers = {"User-Agent": "risk-dashboard-bb-script/3.3"}
+    headers = {"User-Agent": "risk-dashboard-bb-script/3.4"}
     for i in range(max_retries):
         try:
             r = requests.get(url, timeout=timeout, headers=headers)
@@ -344,6 +349,9 @@ def _pick_event_positions_pos_ge(pos_arr: np.ndarray, thresh: float, cooldown: i
     return pos
 
 
+GateValue = Union[float, int, str, None]
+
+
 def _summarize(
     values: List[float],
     metric: str,
@@ -351,22 +359,36 @@ def _summarize(
     z_thresh: Optional[float],
     horizon: int,
     cooldown: int,
-    condition: Optional[Dict] = None,
-) -> Dict:
+    condition: Optional[Dict[str, Any]] = None,
+    gate: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     Summarize conditional forward metrics.
 
+    Audit rules:
+    - Always emit `gate` as the primary structured condition descriptor.
+    - Keep `condition` for backward compatibility (it can be identical to gate).
+    - For non-z-based gates, set z_thresh to "NA" (string) instead of leaving it blank.
+
+    NOTE:
     - forward_mdd (negative): p10 is "bad but not worst" tail.
     - forward_max_runup (positive): p90 is "spike continuation" tail.
-
-    `z_thresh` may be None for non-z-based conditions (e.g., position_in_band).
-    `condition` is an optional structured gate descriptor for audit.
     """
+    # Determine a clean z_thresh field for output tables
+    if gate is not None:
+        gate_field = str(gate.get("field", "")).strip().lower()
+        if gate_field and gate_field != "z":
+            z_thresh_out: GateValue = "NA"
+        else:
+            z_thresh_out = z_thresh
+    else:
+        z_thresh_out = z_thresh
+
     if len(values) == 0:
-        out = {
+        out: Dict[str, Any] = {
             "metric": metric,
             "metric_interpretation": interpretation,
-            "z_thresh": z_thresh,
+            "z_thresh": z_thresh_out,
             "horizon_days": horizon,
             "cooldown_bars": cooldown,
             "sample_size": 0,
@@ -377,6 +399,8 @@ def _summarize(
             "min": None,
             "max": None,
         }
+        if gate is not None:
+            out["gate"] = gate
         if condition is not None:
             out["condition"] = condition
         return out
@@ -385,7 +409,7 @@ def _summarize(
     out = {
         "metric": metric,
         "metric_interpretation": interpretation,
-        "z_thresh": z_thresh,
+        "z_thresh": z_thresh_out,
         "horizon_days": horizon,
         "cooldown_bars": cooldown,
         "sample_size": int(arr.size),
@@ -396,12 +420,14 @@ def _summarize(
         "min": float(np.nanmin(arr)),
         "max": float(np.nanmax(arr)),
     }
+    if gate is not None:
+        out["gate"] = gate
     if condition is not None:
         out["condition"] = condition
     return out
 
 
-def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict[str, Any]:
     df = df_bb.dropna(subset=["z", "close"]).copy()
     close = df["close"].to_numpy(dtype=float)
     z = df["z"].to_numpy(dtype=float)
@@ -412,6 +438,7 @@ def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: i
         j = min(i + horizon, len(close) - 1)
         vals.append(forward_mdd(close[i: j + 1]))
 
+    gate = {"field": "z", "op": "<=", "value": float(z_thresh)}
     return _summarize(
         values=vals,
         metric="forward_mdd",
@@ -419,11 +446,12 @@ def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: i
         z_thresh=z_thresh,
         horizon=horizon,
         cooldown=cooldown,
-        condition={"field": "z", "op": "<=", "value": float(z_thresh)},
+        gate=gate,
+        condition=gate,  # backward compatible
     )
 
 
-def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict[str, Any]:
     df = df_bb.dropna(subset=["z", "close"]).copy()
     close = df["close"].to_numpy(dtype=float)
     z = df["z"].to_numpy(dtype=float)
@@ -434,6 +462,7 @@ def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: in
         j = min(i + horizon, len(close) - 1)
         vals.append(forward_max_runup(close[i: j + 1]))
 
+    gate = {"field": "z", "op": "<=", "value": float(z_thresh)}
     return _summarize(
         values=vals,
         metric="forward_max_runup",
@@ -441,11 +470,12 @@ def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: in
         z_thresh=z_thresh,
         horizon=horizon,
         cooldown=cooldown,
-        condition={"field": "z", "op": "<=", "value": float(z_thresh)},
+        gate=gate,
+        condition=gate,
     )
 
 
-def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict[str, Any]:
     df = df_bb.dropna(subset=["z", "close"]).copy()
     close = df["close"].to_numpy(dtype=float)
     z = df["z"].to_numpy(dtype=float)
@@ -456,6 +486,7 @@ def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: in
         j = min(i + horizon, len(close) - 1)
         vals.append(forward_max_runup(close[i: j + 1]))
 
+    gate = {"field": "z", "op": ">=", "value": float(z_thresh)}
     return _summarize(
         values=vals,
         metric="forward_max_runup",
@@ -463,11 +494,12 @@ def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: in
         z_thresh=z_thresh,
         horizon=horizon,
         cooldown=cooldown,
-        condition={"field": "z", "op": ">=", "value": float(z_thresh)},
+        gate=gate,
+        condition=gate,
     )
 
 
-def conditional_stats_runup_pos_ge(df_bb: pd.DataFrame, pos_thresh: float, horizon: int, cooldown: int) -> Dict:
+def conditional_stats_runup_pos_ge(df_bb: pd.DataFrame, pos_thresh: float, horizon: int, cooldown: int) -> Dict[str, Any]:
     df = df_bb.dropna(subset=["position_in_band", "close"]).copy()
     close = df["close"].to_numpy(dtype=float)
     pos = df["position_in_band"].to_numpy(dtype=float)
@@ -478,14 +510,16 @@ def conditional_stats_runup_pos_ge(df_bb: pd.DataFrame, pos_thresh: float, horiz
         j = min(i + horizon, len(close) - 1)
         vals.append(forward_max_runup(close[i: j + 1]))
 
+    gate = {"field": "position_in_band", "op": ">=", "value": float(pos_thresh)}
     return _summarize(
         values=vals,
         metric="forward_max_runup",
         interpretation=">=0; larger means further spike continuation risk",
-        z_thresh=None,
+        z_thresh=None,  # will be rendered as "NA" due to gate.field != "z"
         horizon=horizon,
         cooldown=cooldown,
-        condition={"field": "position_in_band", "op": ">=", "value": float(pos_thresh)},
+        gate=gate,
+        condition=gate,  # backward compatible
     )
 
 
@@ -493,7 +527,7 @@ def conditional_stats_runup_pos_ge(df_bb: pd.DataFrame, pos_thresh: float, horiz
 # Latest derived fields
 # ---------------------------
 
-def _latest_derived(latest: pd.Series) -> Dict:
+def _latest_derived(latest: pd.Series) -> Dict[str, Any]:
     close = _safe_float(latest.get("close"))
     lower = _safe_float(latest.get("lower_price"))
     upper = _safe_float(latest.get("upper_price"))
@@ -621,10 +655,10 @@ def build_snippet(
     name: str,
     df_bb: pd.DataFrame,
     params: "BBParams",
-    meta: Dict,
+    meta: Dict[str, Any],
     series_kind: str,
-    hist: Dict,
-) -> Dict:
+    hist: Dict[str, Any],
+) -> Dict[str, Any]:
     df = df_bb.dropna(subset=["ma", "sd", "upper_price", "lower_price", "z"]).copy()
     if df.empty:
         return {
