@@ -51,6 +51,8 @@ jobs:
             --k 2 \
             --horizon 20 \
             --z_threshold -1.5 \
+            --z_hot 1.5 \
+            --z_hot2 2.0 \
             --cache_dir "${OUTPUT_DIR}" \
             --use_adj_close \
             --split_factors 4 \
