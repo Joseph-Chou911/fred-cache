@@ -7,15 +7,20 @@ Audit-first Nasdaq risk monitor using Bollinger Bands (BB).
 - PRICE: QQQ from Stooq
 - VOL:   VXN from Cboe (best-effort) with fallback to FRED
 
-Changes (minimal, user-requested):
-1) Add trigger_reason into snippet_vxn.json (and snippet objects in general).
-2) For PRICE forward_mdd stats, add p10 (bad-but-not-worst tail) while keeping p90 for backward compatibility.
+Key audit fixes:
+1) Align PRICE historical simulation gate with action tier (default gate now -1.5), while keeping
+   old --z_thresh as an alias for backward compatibility.
+2) Add full-series position_in_band to df_bb so VOL can compute a pos-based conditional simulation.
+3) Add VOL conditional simulation bucket:
+   C_poswatch: position_in_band >= 0.8  -> forward_max_runup (>=0)
+4) Keep trigger_reason in snippet objects.
 
 Notes:
 - PRICE conditional stat: forward_mdd (<= 0 by construction)
 - VOL conditional stats:
     (A) low-vol regime (z <= z_thresh_low):  forward_max_runup (>= 0)
     (B) high-vol regime (z >= z_thresh_high): forward_max_runup (>= 0)
+    (C) pos-watch (pos >= pos_watch_threshold): forward_max_runup (>= 0)
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ def _ensure_dir(path: str) -> None:
 
 def _http_get(url: str, timeout: int = 30, max_retries: int = 3, backoff_s: float = 1.5) -> bytes:
     last_err = None
-    headers = {"User-Agent": "risk-dashboard-bb-script/3.2"}
+    headers = {"User-Agent": "risk-dashboard-bb-script/3.3"}
     for i in range(max_retries):
         try:
             r = requests.get(url, timeout=timeout, headers=headers)
@@ -241,7 +246,10 @@ def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
         out["upper_price"] = out["upper_x"]
         out["lower_price"] = out["lower_x"]
 
+    # z-score
     out["z"] = (out["x"] - out["ma"]) / out["sd"]
+    out.loc[~np.isfinite(out["z"]), "z"] = np.nan
+
     out["bandwidth_pct"] = (out["upper_price"] - out["lower_price"]) / out["mid_price"]
 
     close = out["close"].to_numpy(dtype=float)
@@ -264,6 +272,12 @@ def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
 
     out["walk_lower_count"] = walk_lower
     out["walk_upper_count"] = walk_upper
+
+    # Full-series position_in_band (needed for conditional sims and audit consistency)
+    denom = (out["upper_price"] - out["lower_price"]).astype(float)
+    pos = (out["close"].astype(float) - out["lower_price"].astype(float)) / denom
+    pos = pos.where(denom > 0, np.nan)
+    out["position_in_band"] = pos.clip(0.0, 1.0)
 
     return out
 
@@ -316,14 +330,40 @@ def _pick_event_positions_ge(z: np.ndarray, thresh: float, cooldown: int) -> Lis
     return pos
 
 
-def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+def _pick_event_positions_pos_ge(pos_arr: np.ndarray, thresh: float, cooldown: int) -> List[int]:
+    pos = []
+    i = 0
+    n = len(pos_arr)
+    cd = max(1, int(cooldown))
+    while i < n:
+        if np.isfinite(pos_arr[i]) and pos_arr[i] >= thresh:
+            pos.append(i)
+            i += cd
+        else:
+            i += 1
+    return pos
+
+
+def _summarize(
+    values: List[float],
+    metric: str,
+    interpretation: str,
+    z_thresh: Optional[float],
+    horizon: int,
+    cooldown: int,
+    condition: Optional[Dict] = None,
+) -> Dict:
     """
-    Minimal change: add p10 in addition to p50/p90.
-    - For forward_mdd (negative), p10 is "bad but not worst" tail.
-    - For forward_max_runup (positive), p90 remains most relevant tail; p10 is less relevant but we keep it for symmetry.
+    Summarize conditional forward metrics.
+
+    - forward_mdd (negative): p10 is "bad but not worst" tail.
+    - forward_max_runup (positive): p90 is "spike continuation" tail.
+
+    `z_thresh` may be None for non-z-based conditions (e.g., position_in_band).
+    `condition` is an optional structured gate descriptor for audit.
     """
     if len(values) == 0:
-        return {
+        out = {
             "metric": metric,
             "metric_interpretation": interpretation,
             "z_thresh": z_thresh,
@@ -337,8 +377,12 @@ def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: 
             "min": None,
             "max": None,
         }
+        if condition is not None:
+            out["condition"] = condition
+        return out
+
     arr = np.array(values, dtype=float)
-    return {
+    out = {
         "metric": metric,
         "metric_interpretation": interpretation,
         "z_thresh": z_thresh,
@@ -352,6 +396,9 @@ def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: 
         "min": float(np.nanmin(arr)),
         "max": float(np.nanmax(arr)),
     }
+    if condition is not None:
+        out["condition"] = condition
+    return out
 
 
 def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
@@ -372,6 +419,7 @@ def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: i
         z_thresh=z_thresh,
         horizon=horizon,
         cooldown=cooldown,
+        condition={"field": "z", "op": "<=", "value": float(z_thresh)},
     )
 
 
@@ -393,6 +441,7 @@ def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: in
         z_thresh=z_thresh,
         horizon=horizon,
         cooldown=cooldown,
+        condition={"field": "z", "op": "<=", "value": float(z_thresh)},
     )
 
 
@@ -414,6 +463,29 @@ def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: in
         z_thresh=z_thresh,
         horizon=horizon,
         cooldown=cooldown,
+        condition={"field": "z", "op": ">=", "value": float(z_thresh)},
+    )
+
+
+def conditional_stats_runup_pos_ge(df_bb: pd.DataFrame, pos_thresh: float, horizon: int, cooldown: int) -> Dict:
+    df = df_bb.dropna(subset=["position_in_band", "close"]).copy()
+    close = df["close"].to_numpy(dtype=float)
+    pos = df["position_in_band"].to_numpy(dtype=float)
+
+    trig_pos = _pick_event_positions_pos_ge(pos_arr=pos, thresh=pos_thresh, cooldown=cooldown)
+    vals: List[float] = []
+    for i in trig_pos:
+        j = min(i + horizon, len(close) - 1)
+        vals.append(forward_max_runup(close[i: j + 1]))
+
+    return _summarize(
+        values=vals,
+        metric="forward_max_runup",
+        interpretation=">=0; larger means further spike continuation risk",
+        z_thresh=None,
+        horizon=horizon,
+        cooldown=cooldown,
+        condition={"field": "position_in_band", "op": ">=", "value": float(pos_thresh)},
     )
 
 
@@ -524,7 +596,7 @@ def decide_action_vol(
     if z >= 2.0:
         return "UPPER_BAND_TOUCH (STRESS)", "z>=2"
 
-    # position-based WATCH (Suggestion 1B)
+    # position-based WATCH (primary)
     if pos is not None and pos >= pos_watch_threshold and (bw is None or bw >= min_bandwidth_pct):
         return "NEAR_UPPER_BAND (WATCH)", f"position_in_band>={pos_watch_threshold} (pos={pos:.3f})"
 
@@ -594,7 +666,6 @@ def build_snippet(
         "latest": latest_pack,
         "historical_simulation": hist,
         "action_output": action,
-        # ---- minimal addition ----
         "trigger_reason": reason,
     }
 
@@ -622,14 +693,23 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no_log", action="store_true")
     p.add_argument("--ddof", type=int, choices=[0, 1], default=0)
 
-    p.add_argument("--z_thresh", type=float, default=-2.0, help="PRICE trigger: z <= z_thresh")
-    p.add_argument("--z_thresh_low", type=float, default=-2.0, help="VOL(A) trigger: z <= z_thresh_low")
-    p.add_argument("--z_thresh_high", type=float, default=2.0, help="VOL(B) trigger: z >= z_thresh_high")
+    # Simulation gates (audit: do NOT confuse with action tiers which are fixed in decide_action_*)
+    p.add_argument(
+        "--price_sim_z_thresh", "--z_thresh",
+        dest="price_sim_z_thresh",
+        type=float,
+        default=-1.5,
+        help="PRICE simulation gate for conditional stats (z <= gate). Alias: --z_thresh (backward compatible).",
+    )
+    p.add_argument("--z_thresh_low", type=float, default=-2.0, help="VOL(A) simulation gate: z <= z_thresh_low")
+    p.add_argument("--z_thresh_high", type=float, default=2.0, help="VOL(B) simulation gate: z >= z_thresh_high")
+    p.add_argument("--pos_watch_threshold", type=float, default=0.80, help="VOL(C) simulation gate: pos >= threshold")
 
     p.add_argument("--horizon", type=int, default=20)
     p.add_argument("--cooldown", type=int, default=20)
 
-    p.add_argument("--out_dir", default="nasdaq_bb_cache")
+    # Output dir (compat: accept --cache_dir as alias)
+    p.add_argument("--out_dir", "--cache_dir", dest="out_dir", default="nasdaq_bb_cache")
     p.add_argument("--quiet", action="store_true")
 
     return p.parse_args()
@@ -648,7 +728,7 @@ def main() -> int:
 
     price_hist = conditional_stats_price_mdd(
         price_bb,
-        z_thresh=args.z_thresh,
+        z_thresh=float(args.price_sim_z_thresh),
         horizon=args.horizon,
         cooldown=args.cooldown,
     )
@@ -705,6 +785,12 @@ def main() -> int:
 
         vxn_bb = compute_bollinger(vxn_df, params)
 
+        vxn_hist_poswatch = conditional_stats_runup_pos_ge(
+            vxn_bb,
+            pos_thresh=float(args.pos_watch_threshold),
+            horizon=args.horizon,
+            cooldown=args.cooldown,
+        )
         vxn_hist_low = conditional_stats_runup_le(
             vxn_bb,
             z_thresh=args.z_thresh_low,
@@ -719,6 +805,7 @@ def main() -> int:
         )
 
         vxn_hist = {
+            "C_poswatch": vxn_hist_poswatch,
             "A_lowvol": vxn_hist_low,
             "B_highvol": vxn_hist_high,
         }
