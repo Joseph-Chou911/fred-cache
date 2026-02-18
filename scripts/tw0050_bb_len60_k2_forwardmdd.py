@@ -19,6 +19,10 @@ Key robustness:
    - detect jumps near factor=4 or 1/4 (configurable tolerance)
    - adjust earlier history to make series continuous
    - record split events into dq notes for auditability
+3) Forward MDD conditional stats are direction-complete:
+   - z <= -1.5 (fear/cheap side)
+   - z >= +1.5 (hot side)
+   - z >= +2.0 (extreme hot side)
 """
 
 from __future__ import annotations
@@ -89,7 +93,7 @@ def _to_1d_series(x, index, name: str) -> pd.Series:
         else:
             s = s.reindex(index)
     else:
-        arr = np.asarray(x).reshape(-1)  # crucial: (n,1) -> (n,)
+        arr = np.asarray(x).reshape(-1)  # (n,1) -> (n,)
         s = pd.Series(arr, index=index, name=name)
 
     s = pd.to_numeric(s, errors="coerce")
@@ -201,7 +205,6 @@ def bb_state_from_z(z: Optional[float]) -> Tuple[str, str]:
 
 
 def _is_close_ratio(r: float, target: float, tol: float) -> bool:
-    # relative tolerance around target
     if not np.isfinite(r) or r <= 0:
         return False
     return abs(r / target - 1.0) <= tol
@@ -218,7 +221,7 @@ def detect_and_heal_splits(
     If r is close to 1/f or f for any f in factors, treat as split event and "heal" series:
       - if r ~= 1/f  (price drops to 1/f), interpret as split (f:1): adjust earlier history DOWN by 1/f
       - if r ~= f    (price jumps by f), interpret as reverse-split (1:f): adjust earlier history UP by f
-    We apply adjustments cumulatively in time order to keep final series continuous.
+    Apply cumulatively in time order.
 
     Returns:
       price_adj, events
@@ -233,32 +236,27 @@ def detect_and_heal_splits(
     if n < 3:
         return s, []
 
-    # Work on a copy for adjustment
     adj = vals.copy()
     events: List[Dict[str, Any]] = []
 
-    # cumulative multiplier applied to "earlier history"
-    # We implement healing by applying factor to slice [0:t] when split detected at t.
     for t in range(1, n):
         p_prev = adj[t - 1]
-        p_now_raw = adj[t]
-        if not (np.isfinite(p_prev) and np.isfinite(p_now_raw)) or p_prev <= 0:
+        p_now = adj[t]
+        if not (np.isfinite(p_prev) and np.isfinite(p_now)) or p_prev <= 0:
             continue
 
-        r = p_now_raw / p_prev
+        r = p_now / p_prev
 
         matched = None
         direction = None
         implied = None
 
         for f in factors:
-            # split f:1 => price becomes ~1/f; ratio r ~= 1/f
             if _is_close_ratio(r, 1.0 / f, tol):
                 matched = f
                 direction = "SPLIT"
                 implied = f
                 break
-            # reverse split => price becomes ~f; ratio r ~= f
             if _is_close_ratio(r, f, tol):
                 matched = f
                 direction = "REVERSE_SPLIT"
@@ -268,15 +266,11 @@ def detect_and_heal_splits(
         if matched is None:
             continue
 
-        # Apply healing:
-        # - SPLIT (f:1): earlier prices should be divided by f to match post-split scale.
-        # - REVERSE_SPLIT (1:f): earlier prices should be multiplied by f.
         if direction == "SPLIT":
-            factor_apply = 1.0 / float(implied)  # scale earlier down
+            factor_apply = 1.0 / float(implied)
         else:
-            factor_apply = float(implied)        # scale earlier up
+            factor_apply = float(implied)
 
-        # Adjust earlier history including t-1 (but not t)
         adj[:t] = adj[:t] * factor_apply
 
         events.append(
@@ -296,6 +290,21 @@ def detect_and_heal_splits(
     return price_adj, events
 
 
+def compute_mdd_stats(arr: np.ndarray) -> Dict[str, Any]:
+    arr = np.asarray(arr, dtype=float)
+    fin = arr[np.isfinite(arr)]
+    n = int(fin.size)
+    if n == 0:
+        return {"n": 0, "p50": None, "p10": None, "min": None, "conf": "NA"}
+    return {
+        "n": n,
+        "p50": float(np.percentile(fin, 50)),
+        "p10": float(np.percentile(fin, 10)),
+        "min": float(np.min(fin)),
+        "conf": conf_from_n(n),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="TW0050 BB(60,2) + forward_mdd(20D) generator"
@@ -306,7 +315,7 @@ def main() -> int:
     ap.add_argument("--window", type=int, default=60, help="BB window length (default: 60)")
     ap.add_argument("--k", type=float, default=2.0, help="BB k (default: 2.0)")
     ap.add_argument("--horizon", type=int, default=20, help="Forward MDD horizon in trading days (default: 20)")
-    ap.add_argument("--z_threshold", type=float, default=-1.5, help="Condition for forward_mdd stats (default: -1.5)")
+    ap.add_argument("--z_threshold", type=float, default=-1.5, help="Legacy threshold for cheap-side conditional stats (default: -1.5)")
     ap.add_argument("--cache_dir", default="tw0050_bb_cache", help="Output cache dir")
     ap.add_argument("--history_limit", type=int, default=400, help="Rows to keep in history_lite.json (default: 400)")
     ap.add_argument("--tz", default=DEFAULT_TZ, help=f"Local timezone for age calculation (default: {DEFAULT_TZ})")
@@ -337,6 +346,10 @@ def main() -> int:
         action="store_true",
         help="Disable split detection/healing (not recommended for 0050).",
     )
+
+    # NEW: hot-side conditional thresholds
+    ap.add_argument("--z_hot", type=float, default=1.5, help="Hot-side threshold (default: 1.5)")
+    ap.add_argument("--z_hot2", type=float, default=2.0, help="Extreme hot-side threshold (default: 2.0)")
 
     args = ap.parse_args()
 
@@ -422,7 +435,7 @@ def main() -> int:
         else:
             dq["notes"].append(f"Split heal enabled but no events detected (factors={factors}, tol={args.split_tol})")
 
-    # Persist raw/adj prices for audit (in one CSV)
+    # Persist raw/adj prices for audit
     prices_out = pd.DataFrame(
         {
             "Date": pd.to_datetime(prices_df.index).date.astype(str),
@@ -433,7 +446,7 @@ def main() -> int:
     prices_out.to_csv(cache_dir / "prices.csv", index=False)
 
     # ----- Compute indicators on price_adj -----
-    price = _to_1d_series(price_adj, prices_df.index, "price")  # alias used below
+    price = _to_1d_series(price_adj, prices_df.index, "price")
     if args.use_logclose:
         base = np.log(price)
         bb_base_label = "log(price_adj)"
@@ -462,7 +475,6 @@ def main() -> int:
     band_w = upper - lower
     pos = (base - lower) / band_w
 
-    # distance in adjusted price space
     if args.use_logclose:
         lower_px = np.exp(lower)
         upper_px = np.exp(upper)
@@ -472,7 +484,6 @@ def main() -> int:
         dist_to_lower = (price - lower) / price
         dist_to_upper = (upper - price) / price
 
-    # forward mdd uses adjusted price
     price_np = np.asarray(price.to_numpy()).astype(float).reshape(-1)
     fwd_mdd = calc_forward_mdd(price_np, horizon)
 
@@ -538,34 +549,36 @@ def main() -> int:
     z_last = None if not np.isfinite(last_row["z"]) else float(last_row["z"])
     state, state_reason = bb_state_from_z(z_last)
 
-    # ----- forward_mdd stats -----
+    # ----- forward_mdd stats (direction-complete) -----
     mdd_all = out_df["forward_mdd"].to_numpy()
-    mask_cond = (
-        np.isfinite(out_df["forward_mdd"].to_numpy())
-        & np.isfinite(out_df["z"].to_numpy())
-        & (out_df["z"].to_numpy() <= float(args.z_threshold))
-    )
-    mdd_cond = out_df.loc[mask_cond, "forward_mdd"].to_numpy()
+    z_arr = out_df["z"].to_numpy()
 
-    stats_all = {
-        "n": int(np.isfinite(mdd_all).sum()),
-        "p50": percentile_safe(mdd_all, 50),
-        "p10": percentile_safe(mdd_all, 10),
-        "min": None if mdd_all[np.isfinite(mdd_all)].size == 0 else float(np.min(mdd_all[np.isfinite(mdd_all)])),
-        "conf": conf_from_n(int(np.isfinite(mdd_all).sum())),
-    }
-    stats_cond = {
-        "z_threshold": float(args.z_threshold),
-        "n": int(np.isfinite(mdd_cond).sum()),
-        "p50": percentile_safe(mdd_cond, 50),
-        "p10": percentile_safe(mdd_cond, 10),
-        "min": None if mdd_cond[np.isfinite(mdd_cond)].size == 0 else float(np.min(mdd_cond[np.isfinite(mdd_cond)])),
-        "conf": conf_from_n(int(np.isfinite(mdd_cond).sum())),
-    }
+    stats_all = compute_mdd_stats(mdd_all)
+
+    # Cheap-side (legacy)
+    z_cheap = float(args.z_threshold)
+    mask_cheap = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr <= z_cheap)
+    stats_cheap = compute_mdd_stats(out_df.loc[mask_cheap, "forward_mdd"].to_numpy())
+    stats_cheap["condition"] = f"z <= {z_cheap}"
+    stats_cheap["z_threshold"] = z_cheap
+
+    # Hot-side
+    z_hot = float(args.z_hot)
+    mask_hot = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr >= z_hot)
+    stats_hot = compute_mdd_stats(out_df.loc[mask_hot, "forward_mdd"].to_numpy())
+    stats_hot["condition"] = f"z >= {z_hot}"
+    stats_hot["z_threshold"] = z_hot
+
+    # Extreme hot-side
+    z_hot2 = float(args.z_hot2)
+    mask_hot2 = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr >= z_hot2)
+    stats_hot2 = compute_mdd_stats(out_df.loc[mask_hot2, "forward_mdd"].to_numpy())
+    stats_hot2["condition"] = f"z >= {z_hot2}"
+    stats_hot2["z_threshold"] = z_hot2
 
     stats_latest = {
         "meta": {
-            "run_ts_utc": run_ts_utc,
+            "run_ts_utc": utc_now_iso(),
             "module": "tw0050_bb",
             "symbol": args.symbol,
             "data_source": data_source,
@@ -574,12 +587,14 @@ def main() -> int:
             "window": int(args.window),
             "k": float(args.k),
             "horizon": int(args.horizon),
-            "z_threshold": float(args.z_threshold),
             "script_fingerprint": script_fp,
             "timezone_local": args.tz,
             "as_of_date": str(last_dt),
             "split_factors": str(args.split_factors),
             "split_tol": float(args.split_tol),
+            "z_threshold_cheap": float(args.z_threshold),
+            "z_threshold_hot": float(args.z_hot),
+            "z_threshold_hot2": float(args.z_hot2),
         },
         "dq": dq,
         "latest": {
@@ -599,7 +614,11 @@ def main() -> int:
         "forward_mdd": {
             "definition": "min(0, min_{i=1..H} (price[t+i]/price[t]-1)), H=horizon trading days",
             "all_days": stats_all,
-            "cond_on_z_le_threshold": stats_cond,
+            "conditional": {
+                "cheap_side": stats_cheap,
+                "hot_side": stats_hot,
+                "hot_side_extreme": stats_hot2,
+            },
         },
         "repro": {
             "command": " ".join(
@@ -610,19 +629,21 @@ def main() -> int:
                     f"--window {int(args.window)}",
                     f"--k {float(args.k)}",
                     f"--horizon {int(args.horizon)}",
-                    f"--z_threshold {float(args.z_threshold)}",
-                    f"--cache_dir {str(cache_dir)}",
+                    f"--cache_dir {str(Path(args.cache_dir))}",
                     "--use_close" if args.use_close else "--use_adj_close",
                     "--use_logclose" if args.use_logclose else "",
                     f"--split_factors {args.split_factors}",
                     f"--split_tol {float(args.split_tol)}",
                     "--disable_split_heal" if args.disable_split_heal else "",
+                    f"--z_threshold {float(args.z_threshold)}",
+                    f"--z_hot {float(args.z_hot)}",
+                    f"--z_hot2 {float(args.z_hot2)}",
                 ]
             ).strip()
         },
     }
 
-    write_json(cache_dir / "stats_latest.json", stats_latest)
+    write_json(Path(args.cache_dir) / "stats_latest.json", stats_latest)
     return 0
 
 
