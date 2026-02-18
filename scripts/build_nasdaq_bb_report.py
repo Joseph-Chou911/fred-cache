@@ -1,291 +1,246 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
 build_nasdaq_bb_report.py
 
-Build a readable Markdown report from:
-- nasdaq_bb_cache/snippet_price_qqq.us.json
-- nasdaq_bb_cache/snippet_vxn.json
+Reads:
+- nasdaq_bb_cache/snippet_price_qqq.json
+- nasdaq_bb_cache/snippet_vxn.json (optional)
 
-Output:
-- nasdaq_bb_cache/report.md  (ONLY)
+Writes:
+- nasdaq_bb_cache/report.md
 
-Enhancements:
-- QQQ: add trigger flag (z<=-2), distance_to_lower_pct, position_in_band (0..1)
-- VXN: staleness_flag based on staleness_days
-- Show attempt_errors (if present) to audit fallback behavior (e.g., CBOE -> FRED).
+This script only renders; the workflow (yml) should only orchestrate.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
-from datetime import datetime, timezone
+import os
+from typing import Any, Dict, Optional
+
+import pandas as pd
 
 
-# ---------------------------
-# Formatting helpers
-# ---------------------------
-
-def parse_iso_utc(s: str):
-    # expects "YYYY-MM-DDTHH:MM:SSZ"
-    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+def _read_json(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def fmt_num(x, digits=4):
-    if x is None:
-        return "NA"
+def _utc_now_iso() -> str:
+    return pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _staleness_days(snippet_generated_at_utc: str, data_max_date: str) -> Optional[int]:
     try:
-        return f"{float(x):.{digits}f}"
-    except Exception:
-        return "NA"
-
-
-def fmt_pct_frac(x, digits=2):
-    # x is fraction, e.g. 0.123 => 12.3%
-    if x is None:
-        return "NA"
-    try:
-        return f"{float(x) * 100:.{digits}f}%"
-    except Exception:
-        return "NA"
-
-
-def fmt_pct_point(x, digits=2):
-    # x already in percent points, e.g. +12.3 => +12.3%
-    if x is None:
-        return "NA"
-    try:
-        return f"{float(x):+.{digits}f}%"
-    except Exception:
-        return "NA"
-
-
-def load_json(p: Path):
-    if not p.exists():
-        return None
-    return json.loads(p.read_text(encoding="utf-8"))
-
-
-def staleness_days(max_date_str: str, gen_ts_utc: datetime):
-    try:
-        d = datetime.strptime(max_date_str, "%Y-%m-%d").date()
+        g = pd.to_datetime(snippet_generated_at_utc, utc=True).date()
+        d = pd.to_datetime(data_max_date).date()
+        return int((g - d).days)
     except Exception:
         return None
-    return (gen_ts_utc.date() - d).days
 
 
-def staleness_flag(days: int | None) -> str:
-    """
-    Practical flags:
-    - None => NA
-    - 0..2 => OK
-    - 3..4 => WARN
-    - >=5  => HIGH
-    """
+def _staleness_flag(days: Optional[int], warn_gt: int = 2) -> str:
     if days is None:
-        return "NA"
-    if days <= 2:
-        return "OK"
-    if days <= 4:
-        return "WARN"
-    return "HIGH"
+        return "UNKNOWN"
+    return "HIGH" if days > warn_gt else "OK"
 
 
-def safe_float(x):
+def _fmt_float(x: Any, nd: int = 4) -> str:
+    if x is None:
+        return ""
     try:
-        return float(x)
+        v = float(x)
+        if pd.isna(v):
+            return ""
+        return f"{v:.{nd}f}"
     except Exception:
-        return None
+        return ""
 
 
-# ---------------------------
-# Derived metrics for QQQ
-# ---------------------------
-
-def distance_to_lower_pct(close: float | None, lower: float | None) -> float | None:
-    """
-    (close - lower) / lower
-    """
-    if close is None or lower is None:
-        return None
-    if lower == 0:
-        return None
-    return (close - lower) / lower
+def _fmt_pct(x: Any, nd: int = 2) -> str:
+    if x is None:
+        return ""
+    try:
+        v = float(x)
+        if pd.isna(v):
+            return ""
+        return f"{v:.{nd}f}%"
+    except Exception:
+        return ""
 
 
-def position_in_band(close: float | None, lower: float | None, upper: float | None) -> float | None:
-    """
-    (close - lower) / (upper - lower), clipped to [0, 1] if data is sane
-    """
-    if close is None or lower is None or upper is None:
-        return None
-    denom = (upper - lower)
-    if denom == 0:
-        return None
-    val = (close - lower) / denom
-    # Don't over-polish: keep as-is if NaN
-    if val != val:
-        return None
-    # Clip for readability (but only if finite)
-    if val < 0:
-        return 0.0
-    if val > 1:
-        return 1.0
-    return val
+def _table_kv(d: Dict[str, Any]) -> str:
+    lines = ["| field | value |", "|---|---:|"]
+    for k, v in d.items():
+        if isinstance(v, bool):
+            s = f"`{v}`"
+        elif isinstance(v, (int,)):
+            s = f"{v}"
+        elif isinstance(v, float):
+            s = _fmt_float(v, 6)
+        elif v is None:
+            s = ""
+        else:
+            s = f"`{v}`"
+        lines.append(f"| {k} | {s} |")
+    return "\n".join(lines)
 
 
-def add_attempt_errors_block(lines, attempt_errors):
-    if not attempt_errors:
-        return
-    # Render as a collapsible HTML block; GitHub supports <details> in Markdown.
-    lines.append("<details>")
-    lines.append("<summary>Data source fallback log (attempt_errors)</summary>")
-    lines.append("")
-    for e in attempt_errors:
-        lines.append(f"- {e}")
-    lines.append("")
-    lines.append("</details>")
-    lines.append("")
+def _render_price_section(price: Dict[str, Any]) -> str:
+    meta = price.get("meta", {})
+    latest = price.get("latest", {})
+    gen = price.get("generated_at_utc", "")
+    max_date = meta.get("max_date", "")
+    stale_days = _staleness_days(gen, max_date)
+    stale_flag = _staleness_flag(stale_days)
+
+    # human-friendly subset
+    latest_view = {
+        "date": latest.get("date"),
+        "close": _fmt_float(latest.get("close"), 4),
+        "bb_mid": _fmt_float(latest.get("bb_mid"), 4),
+        "bb_lower": _fmt_float(latest.get("bb_lower"), 4),
+        "bb_upper": _fmt_float(latest.get("bb_upper"), 4),
+        "z": _fmt_float(latest.get("z"), 4),
+        "trigger_z_le_-2": latest.get("trigger_z_le_-2"),
+        "distance_to_lower_pct": _fmt_pct(latest.get("distance_to_lower_pct"), 3),
+        "distance_to_upper_pct": _fmt_pct(latest.get("distance_to_upper_pct"), 3),
+        "position_in_band": _fmt_float(latest.get("position_in_band"), 3),
+        "bandwidth_pct": _fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2),
+        "bandwidth_delta_pct": _fmt_pct(latest.get("bandwidth_delta_pct"), 2),
+        "walk_lower_count": latest.get("walk_lower_count"),
+    }
+
+    out = []
+    out.append("## QQQ (PRICE) — BB(60,2) logclose\n")
+    out.append(f"- snippet.generated_at_utc: `{gen}`")
+    out.append(
+        f"- data_as_of (meta.max_date): `{max_date}`  | staleness_days: `{stale_days}`  | staleness_flag: **`{stale_flag}`**"
+    )
+    out.append(f"- source: `{meta.get('source','')}`  | url: `{meta.get('url','')}`")
+    out.append(f"- action_output: **`{price.get('action_output','')}`**\n")
+    out.append("### Latest\n")
+    out.append(_table_kv(latest_view))
+    out.append("\n### Historical simulation (conditional)\n")
+    out.append(_table_kv(price.get("historical_simulation", {})))
+    out.append("")
+    return "\n".join(out)
 
 
-# ---------------------------
-# Section writer
-# ---------------------------
+def _render_vxn_section(vxn: Dict[str, Any]) -> str:
+    meta = vxn.get("meta", {})
+    latest = vxn.get("latest", {})
+    gen = vxn.get("generated_at_utc", "")
+    max_date = meta.get("max_date", "")
+    stale_days = _staleness_days(gen, max_date)
+    stale_flag = _staleness_flag(stale_days)
 
-def write_section(lines, title: str, obj: dict, section_kind: str):
-    """
-    section_kind: "price" or "vol"
-    """
-    lines.append(f"## {title}")
-    lines.append("")
+    # A & B triggers
+    latest_view = {
+        "date": latest.get("date"),
+        "close": _fmt_float(latest.get("close"), 4),
+        "bb_mid": _fmt_float(latest.get("bb_mid"), 4),
+        "bb_lower": _fmt_float(latest.get("bb_lower"), 4),
+        "bb_upper": _fmt_float(latest.get("bb_upper"), 4),
+        "z": _fmt_float(latest.get("z"), 4),
+        "trigger_z_le_-2 (A_lowvol)": latest.get("trigger_z_le_-2"),
+        "trigger_z_ge_2 (B_highvol)": latest.get("trigger_z_ge_2"),
+        "distance_to_lower_pct": _fmt_pct(latest.get("distance_to_lower_pct"), 3),
+        "distance_to_upper_pct": _fmt_pct(latest.get("distance_to_upper_pct"), 3),
+        "position_in_band": _fmt_float(latest.get("position_in_band"), 3),
+        "bandwidth_pct": _fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2),
+        "bandwidth_delta_pct": _fmt_pct(latest.get("bandwidth_delta_pct"), 2),
+        "walk_upper_count": latest.get("walk_upper_count"),
+    }
 
-    if obj is None:
-        lines.append("> NA (snippet not found)")
-        lines.append("")
-        return
+    out = []
+    out.append("## VXN (VOL) — BB(60,2) logclose\n")
+    out.append(f"- snippet.generated_at_utc: `{gen}`")
+    out.append(
+        f"- data_as_of (meta.max_date): `{max_date}`  | staleness_days: `{stale_days}`  | staleness_flag: **`{stale_flag}`**"
+    )
+    out.append(f"- source: `{meta.get('source','')}`  | url: `{meta.get('url','')}`")
+    if "selected_source" in meta:
+        out.append(f"- selected_source: `{meta.get('selected_source')}` | fallback_used: `{meta.get('fallback_used')}`")
+    out.append(f"- action_output: **`{vxn.get('action_output','')}`**\n")
 
-    gen = obj.get("generated_at_utc")
-    gen_ts = parse_iso_utc(gen) if gen else datetime.now(timezone.utc)
+    out.append("### Latest\n")
+    out.append(_table_kv(latest_view))
 
-    meta = obj.get("meta", {}) or {}
-    latest = obj.get("latest", {}) or {}
-    hist = obj.get("historical_simulation", {}) or {}
-    action = obj.get("action_output", "NA")
+    if stale_flag == "HIGH":
+        out.append("\n> ⚠️ VXN data is stale (lag > 2 days). Treat VOL-based interpretation as lower confidence.\n")
 
-    max_date = meta.get("max_date", "NA")
-    lag = staleness_days(max_date, gen_ts) if max_date != "NA" else None
-    lag_flag = staleness_flag(lag)
+    hist = vxn.get("historical_simulation", {})
+    out.append("### Historical simulation (conditional)\n")
 
-    lines.append(f"- snippet.generated_at_utc: `{gen}`")
-    lines.append(f"- data_as_of (meta.max_date): `{max_date}`  | staleness_days: `{lag if lag is not None else 'NA'}`  | staleness_flag: **`{lag_flag}`**")
-    if meta.get("source") or meta.get("url"):
-        lines.append(f"- source: `{meta.get('source','NA')}`  | url: `{meta.get('url','NA')}`")
-    lines.append(f"- action_output: **`{action}`**")
-    lines.append("")
+    # Expect A_lowvol and B_highvol, but degrade gracefully
+    if isinstance(hist, dict) and ("A_lowvol" in hist or "B_highvol" in hist):
+        if "A_lowvol" in hist:
+            out.append("#### A) Low-Vol / Complacency (z <= threshold)\n")
+            out.append(_table_kv(hist["A_lowvol"]))
+            out.append("")
+        if "B_highvol" in hist:
+            out.append("#### B) High-Vol / Stress (z >= threshold)\n")
+            out.append(_table_kv(hist["B_highvol"]))
+            out.append("")
+    else:
+        out.append(_table_kv(hist))
+        out.append("")
 
-    # If there were fallback attempts, show them
-    add_attempt_errors_block(lines, meta.get("attempt_errors"))
-
-    # Latest derived metrics
-    close = safe_float(latest.get("close"))
-    lower = safe_float(latest.get("bb_lower"))
-    upper = safe_float(latest.get("bb_upper"))
-    z = safe_float(latest.get("z"))
-
-    trig = None
-    if z is not None:
-        trig = (z <= -2.0)
-
-    dist_lower = distance_to_lower_pct(close, lower)
-    pos_band = position_in_band(close, lower, upper)
-
-    # Latest table
-    lines.append("### Latest")
-    lines.append("")
-    lines.append("| field | value |")
-    lines.append("|---|---:|")
-    lines.append(f"| date | `{latest.get('date','NA')}` |")
-    lines.append(f"| close | {fmt_num(close, 4)} |")
-    lines.append(f"| bb_mid | {fmt_num(latest.get('bb_mid'), 4)} |")
-    lines.append(f"| bb_lower | {fmt_num(lower, 4)} |")
-    lines.append(f"| bb_upper | {fmt_num(upper, 4)} |")
-    lines.append(f"| z | {fmt_num(z, 4)} |")
-    lines.append(f"| trigger_z_le_-2 | `{trig if trig is not None else 'NA'}` |")
-
-    # Derived fields (only meaningful for price, but harmless for vol too)
-    lines.append(f"| distance_to_lower_pct | {fmt_pct_frac(dist_lower, 3)} |")
-    lines.append(f"| position_in_band | {fmt_num(pos_band, 3)} |")
-
-    lines.append(f"| bandwidth_pct | {fmt_pct_frac(latest.get('bandwidth_pct'), 2)} |")
-    lines.append(f"| bandwidth_delta_pct | {fmt_pct_point(latest.get('bandwidth_delta_pct'), 2)} |")
-    lines.append(f"| walk_count | {latest.get('walk_count','NA')} |")
-    lines.append("")
-
-    # Extra caution note for VOL staleness
-    if section_kind == "vol" and lag is not None and lag > 2:
-        lines.append("> ⚠️ VXN data is stale (lag > 2 days). Treat VOL-based interpretation as lower confidence.")
-        lines.append("")
-
-    # Historical simulation
-    lines.append("### Historical simulation (conditional)")
-    lines.append("")
-    lines.append("| field | value |")
-    lines.append("|---|---:|")
-    lines.append(f"| metric | `{hist.get('metric','NA')}` |")
-    lines.append(f"| metric_interpretation | `{hist.get('metric_interpretation','NA')}` |")
-    lines.append(f"| z_thresh | {hist.get('z_thresh','NA')} |")
-    lines.append(f"| horizon_days | {hist.get('horizon_days','NA')} |")
-    lines.append(f"| cooldown_bars | {hist.get('cooldown_bars','NA')} |")
-    lines.append(f"| sample_size | {hist.get('sample_size','NA')} |")
-    lines.append(f"| p50 | {fmt_num(hist.get('p50'), 6)} |")
-    lines.append(f"| p90 | {fmt_num(hist.get('p90'), 6)} |")
-    lines.append(f"| mean | {fmt_num(hist.get('mean'), 6)} |")
-    lines.append(f"| min | {fmt_num(hist.get('min'), 6)} |")
-    lines.append(f"| max | {fmt_num(hist.get('max'), 6)} |")
-    lines.append("")
+    return "\n".join(out)
 
 
-# ---------------------------
-# Main
-# ---------------------------
+def build_report(cache_dir: str) -> str:
+    price_path = os.path.join(cache_dir, "snippet_price_qqq.json")
+    vxn_path = os.path.join(cache_dir, "snippet_vxn.json")
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--in_dir", default="nasdaq_bb_cache")
-    ap.add_argument("--out", default="nasdaq_bb_cache/report.md")
-    ap.add_argument("--price_snippet", default="snippet_price_qqq.us.json")
-    ap.add_argument("--vxn_snippet", default="snippet_vxn.json")
-    args = ap.parse_args()
+    if not os.path.exists(price_path):
+        raise FileNotFoundError(f"Missing: {price_path}")
 
-    in_dir = Path(args.in_dir)
-    out_path = Path(args.out)
-
-    price = load_json(in_dir / args.price_snippet)
-    vxn = load_json(in_dir / args.vxn_snippet)
-
-    now_utc = datetime.now(timezone.utc)
+    price = _read_json(price_path)
+    vxn = _read_json(vxn_path) if os.path.exists(vxn_path) else None
 
     lines = []
-    lines.append("# Nasdaq BB Monitor Report (QQQ + VXN)")
-    lines.append("")
-    lines.append(f"- report_generated_at_utc: `{now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}`")
+    lines.append("# Nasdaq BB Monitor Report (QQQ + VXN)\n")
+    lines.append(f"- report_generated_at_utc: `{_utc_now_iso()}`\n")
+
+    lines.append(_render_price_section(price))
+
+    if vxn is not None:
+        lines.append("")
+        lines.append(_render_vxn_section(vxn))
+
+    lines.append("\n---\nNotes:")
+    lines.append("- `staleness_days` = snippet 的 `generated_at_utc` 日期 − `meta.max_date`；週末/假期可能放大此值。")
+    lines.append("- PRICE 的 `forward_mdd` 應永遠 `<= 0`（0 代表未回撤）。")
+    lines.append("- VOL 的 `forward_max_runup` 應永遠 `>= 0`（數值越大代表波動「再爆衝」風險越大）。")
     lines.append("")
 
-    write_section(lines, "QQQ (PRICE) — BB(60,2) logclose", price, section_kind="price")
-    write_section(lines, "VXN (VOL) — BB(60,2) logclose", vxn, section_kind="vol")
+    return "\n".join(lines)
 
-    lines.append("---")
-    lines.append("Notes:")
-    lines.append("- `staleness_days` 以 snippet 的 `generated_at_utc` 日期減 `meta.max_date` 計算；週末/假期可能放大此值。")
-    lines.append("- PRICE 的 `historical_simulation.metric=forward_mdd` 應永遠 `<= 0`（0 代表未回撤）。")
-    lines.append("- VXN 的 `historical_simulation.metric=forward_max_runup` 應永遠 `>= 0`（數值越大代表波動爆衝風險越大）。")
-    lines.append("")
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(lines), encoding="utf-8")
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Build nasdaq_bb_cache/report.md from snippet JSON",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    p.add_argument("--cache_dir", default="nasdaq_bb_cache")
+    return p.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    md = build_report(args.cache_dir)
+
+    out_path = os.path.join(args.cache_dir, "report.md")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(md)
+
     print(f"Wrote: {out_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
