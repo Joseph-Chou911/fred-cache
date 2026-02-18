@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-nasdaq_bb_len60_k2_logclose.py
+nasdaq_bb_len60_k2_logclose.py (v2)
 
-Goal
------
-1) Fetch Nasdaq proxy price series (default: ^NDX) and compute Bollinger Bands (len=60, k=2)
-   on log(close) by default (audit-friendly, stable across price scales).
-2) Optionally fetch Cboe Nasdaq-100 Volatility Index (VXN) history (via Cboe endpoint if available,
-   otherwise via FRED as a reliable fallback) and compute the same BB diagnostics.
-3) Produce an "action snippet" JSON + a small CSV for quick inspection.
-4) Compute conditional forward drawdown statistics after "touch lower band" triggers.
+Audit-first Nasdaq risk monitor using Bollinger Bands.
+Default target: QQQ (Nasdaq-100 ETF) from Stooq.
 
-This is a risk-monitoring utility, NOT a prediction engine.
+Key fixes vs v1:
+- PRICE forward "MDD" is defined to be <= 0 by construction:
+    MDD_H = min(close[t:t+H]) / close[t] - 1    (includes day t)
+- VOL index (VXN) uses the more relevant upside "max run-up" (>= 0):
+    RUNUP_H = max(close[t:t+H]) / close[t] - 1  (includes day t)
+- Event de-dup via cooldown bars to reduce overlapping samples contamination.
+- historical_simulation explicitly reports which metric is used.
+
+This is a risk-monitoring utility, NOT a trading signal generator.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ import json
 import os
 import time
 import urllib.parse
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -44,7 +46,7 @@ def _ensure_dir(path: str) -> None:
 
 def _http_get(url: str, timeout: int = 30, max_retries: int = 3, backoff_s: float = 1.5) -> bytes:
     last_err = None
-    headers = {"User-Agent": "risk-dashboard-bb-script/1.0"}
+    headers = {"User-Agent": "risk-dashboard-bb-script/2.0"}
     for i in range(max_retries):
         try:
             r = requests.get(url, timeout=timeout, headers=headers)
@@ -68,7 +70,7 @@ def _read_csv_bytes(content: bytes) -> pd.DataFrame:
 
 
 def _pick_date_col(df: pd.DataFrame) -> str:
-    candidates = [c for c in df.columns if str(c).strip().lower() in ("date", "trade date", "timestamp")]
+    candidates = [c for c in df.columns if str(c).strip().lower() in ("date", "trade date", "timestamp", "observation_date", "date ")]
     if candidates:
         return candidates[0]
     for c in df.columns:
@@ -77,8 +79,8 @@ def _pick_date_col(df: pd.DataFrame) -> str:
     raise ValueError(f"Cannot find a date column in columns={list(df.columns)[:10]}...")
 
 
-def _pick_close_col(df: pd.DataFrame) -> str:
-    for name in ("close", "closing", "close value", "vix close", "vxn close", "close*"):
+def _pick_value_col(df: pd.DataFrame) -> str:
+    for name in ("close", "closing", "value", "close value", "vix close", "vxn close"):
         for c in df.columns:
             if str(c).strip().lower() == name:
                 return c
@@ -88,27 +90,23 @@ def _pick_close_col(df: pd.DataFrame) -> str:
         close_like.sort(key=lambda x: len(str(x)))
         return close_like[0]
 
-    if "Close" in df.columns:
-        return "Close"
-
     numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     if numeric_cols:
         return numeric_cols[-1]
-    raise ValueError(f"Cannot find a close column in columns={list(df.columns)[:10]}...")
+
+    raise ValueError(f"Cannot find a close/value column in columns={list(df.columns)[:10]}...")
 
 
-def _coerce_ohlc_df(df: pd.DataFrame, date_col: str, close_col: str) -> pd.DataFrame:
+def _coerce_series_df(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
     out = df.copy()
     out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
-    out = out.dropna(subset=[date_col])
-    out = out.sort_values(date_col)
-    out = out.set_index(date_col)
+    out = out.dropna(subset=[date_col]).sort_values(date_col).set_index(date_col)
 
-    out[close_col] = pd.to_numeric(out[close_col], errors="coerce")
-    out = out.dropna(subset=[close_col])
+    out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
+    out = out.dropna(subset=[value_col])
 
     out = out[~out.index.duplicated(keep="last")]
-    out = out.rename(columns={close_col: "close"})
+    out = out.rename(columns={value_col: "close"})
     return out[["close"]]
 
 
@@ -119,21 +117,22 @@ def _coerce_ohlc_df(df: pd.DataFrame, date_col: str, close_col: str) -> pd.DataF
 def fetch_stooq_daily(ticker: str) -> Tuple[pd.DataFrame, Dict]:
     """
     Stooq daily CSV endpoint:
-      https://stooq.com/q/d/l/?s=%5Endx&i=d
+      https://stooq.com/q/d/l/?s=qqq.us&i=d
     """
     sym = urllib.parse.quote_plus(ticker.lower())
     url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
     content = _http_get(url)
     raw = _read_csv_bytes(content)
+
     date_col = _pick_date_col(raw)
-    close_col = _pick_close_col(raw)
-    df = _coerce_ohlc_df(raw, date_col=date_col, close_col=close_col)
+    value_col = _pick_value_col(raw)
+    df = _coerce_series_df(raw, date_col=date_col, value_col=value_col)
 
     meta = {
         "source": "stooq",
         "url": url,
         "date_col": date_col,
-        "close_col": close_col,
+        "value_col": value_col,
         "rows": int(df.shape[0]),
         "min_date": str(df.index.min().date()),
         "max_date": str(df.index.max().date()),
@@ -154,16 +153,11 @@ def fetch_fred_daily(series_id: str) -> Tuple[pd.DataFrame, Dict]:
 
     if series_id in raw.columns:
         value_col = series_id
-    elif "VALUE" in raw.columns:
-        value_col = "VALUE"
     else:
-        value_col = _pick_close_col(raw)
+        value_col = _pick_value_col(raw)
 
     df = raw[[date_col, value_col]].copy()
-    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
-    df = df.dropna(subset=[date_col, value_col]).sort_values(date_col).set_index(date_col)
-    df = df.rename(columns={value_col: "close"})
+    df = _coerce_series_df(df, date_col=date_col, value_col=value_col)
 
     meta = {
         "source": "fred",
@@ -180,26 +174,23 @@ def fetch_fred_daily(series_id: str) -> Tuple[pd.DataFrame, Dict]:
 
 def fetch_cboe_daily_prices(index_code: str) -> Tuple[pd.DataFrame, Dict]:
     """
-    Cboe daily prices endpoint used by multiple indices (e.g., VIX_History.csv):
+    Cboe daily prices endpoint (best-effort; may 403/429 in CI):
       https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
-
-    NOTE:
-      - Some environments may receive 403/429; this function is best-effort.
-      - If you get blocked, use FRED fallback which still cites Cboe as the source in series notes.
     """
     url = f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{index_code.upper()}_History.csv"
     content = _http_get(url)
     raw = _read_csv_bytes(content)
+
     date_col = _pick_date_col(raw)
-    close_col = _pick_close_col(raw)
-    df = _coerce_ohlc_df(raw, date_col=date_col, close_col=close_col)
+    value_col = _pick_value_col(raw)
+    df = _coerce_series_df(raw, date_col=date_col, value_col=value_col)
 
     meta = {
         "source": "cboe",
         "url": url,
         "index_code": index_code.upper(),
         "date_col": date_col,
-        "close_col": close_col,
+        "value_col": value_col,
         "rows": int(df.shape[0]),
         "min_date": str(df.index.min().date()),
         "max_date": str(df.index.max().date()),
@@ -208,7 +199,7 @@ def fetch_cboe_daily_prices(index_code: str) -> Tuple[pd.DataFrame, Dict]:
 
 
 # ---------------------------
-# BB calculations
+# Bollinger calculations
 # ---------------------------
 
 @dataclasses.dataclass(frozen=True)
@@ -254,6 +245,7 @@ def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
     out["z"] = (out["x"] - out["ma"]) / out["sd"]
     out["bandwidth_pct"] = (out["upper_price"] - out["lower_price"]) / out["mid_price"]
 
+    # consecutive closes <= lower band
     walk = np.zeros(len(out), dtype=int)
     close = out["close"].to_numpy()
     lower = out["lower_price"].to_numpy()
@@ -267,57 +259,133 @@ def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
     return out
 
 
-def forward_max_drawdown(close: np.ndarray) -> float:
-    if close.size < 2:
+# ---------------------------
+# Forward risk metrics
+# ---------------------------
+
+def forward_mdd(close_window: np.ndarray) -> float:
+    """
+    Forward MDD (<=0): min(close[t:t+H]) / close[t] - 1
+    Includes day t in the window -> cannot be positive.
+    """
+    if close_window.size < 1:
         return np.nan
-    c0 = close[0]
-    m = np.min(close[1:])
+    c0 = close_window[0]
+    m = np.min(close_window)
     return float(m / c0 - 1.0)
 
 
-def conditional_pain_stats(df_bb: pd.DataFrame, z_thresh: float = -2.0, horizon: int = 20) -> Dict:
-    df = df_bb.dropna(subset=["z", "close"]).copy()
-    triggers = df[df["z"] <= z_thresh].copy()
-    idx = df.index.to_list()
-    close = df["close"].to_numpy()
+def forward_max_runup(close_window: np.ndarray) -> float:
+    """
+    Forward max run-up (>=0): max(close[t:t+H]) / close[t] - 1
+    Includes day t in the window -> cannot be negative.
+    """
+    if close_window.size < 1:
+        return np.nan
+    c0 = close_window[0]
+    m = np.max(close_window)
+    return float(m / c0 - 1.0)
 
-    pos_map = {d: i for i, d in enumerate(idx)}
-    dd_list = []
-    for d in triggers.index:
-        i = pos_map.get(d)
-        if i is None:
-            continue
-        j = min(i + horizon, len(close) - 1)
-        window = close[i : j + 1]
-        if window.size >= 2:
-            dd_list.append(forward_max_drawdown(window))
 
-    if len(dd_list) == 0:
+def _pick_event_positions(z: np.ndarray, thresh: float, cooldown: int) -> List[int]:
+    """
+    Pick trigger positions where z <= thresh, with cooldown to reduce overlap.
+    """
+    pos = []
+    i = 0
+    n = len(z)
+    cd = max(1, int(cooldown))
+    while i < n:
+        if np.isfinite(z[i]) and z[i] <= thresh:
+            pos.append(i)
+            i += cd
+        else:
+            i += 1
+    return pos
+
+
+def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    if len(values) == 0:
         return {
+            "metric": metric,
+            "metric_interpretation": interpretation,
             "z_thresh": z_thresh,
             "horizon_days": horizon,
+            "cooldown_bars": cooldown,
             "sample_size": 0,
-            "p50_maxdd": None,
-            "p90_maxdd": None,
-            "mean_maxdd": None,
+            "p50": None,
+            "p90": None,
+            "mean": None,
+            "min": None,
+            "max": None,
         }
-
-    arr = np.array(dd_list, dtype=float)
+    arr = np.array(values, dtype=float)
     return {
+        "metric": metric,
+        "metric_interpretation": interpretation,
         "z_thresh": z_thresh,
         "horizon_days": horizon,
+        "cooldown_bars": cooldown,
         "sample_size": int(arr.size),
-        "p50_maxdd": float(np.nanpercentile(arr, 50)),
-        "p90_maxdd": float(np.nanpercentile(arr, 90)),
-        "mean_maxdd": float(np.nanmean(arr)),
-        "min_maxdd": float(np.nanmin(arr)),
-        "max_maxdd": float(np.nanmax(arr)),
+        "p50": float(np.nanpercentile(arr, 50)),
+        "p90": float(np.nanpercentile(arr, 90)),
+        "mean": float(np.nanmean(arr)),
+        "min": float(np.nanmin(arr)),
+        "max": float(np.nanmax(arr)),
     }
 
 
+def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    df = df_bb.dropna(subset=["z", "close"]).copy()
+    close = df["close"].to_numpy(dtype=float)
+    z = df["z"].to_numpy(dtype=float)
+
+    trig_pos = _pick_event_positions(z=z, thresh=z_thresh, cooldown=cooldown)
+    vals: List[float] = []
+    for i in trig_pos:
+        j = min(i + horizon, len(close) - 1)
+        window = close[i : j + 1]
+        vals.append(forward_mdd(window))
+
+    return _summarize(
+        values=vals,
+        metric="forward_mdd",
+        interpretation="<=0; closer to 0 is less pain; more negative is deeper drawdown",
+        z_thresh=z_thresh,
+        horizon=horizon,
+        cooldown=cooldown,
+    )
+
+
+def conditional_stats_vol_runup(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    df = df_bb.dropna(subset=["z", "close"]).copy()
+    close = df["close"].to_numpy(dtype=float)
+    z = df["z"].to_numpy(dtype=float)
+
+    trig_pos = _pick_event_positions(z=z, thresh=z_thresh, cooldown=cooldown)
+    vals: List[float] = []
+    for i in trig_pos:
+        j = min(i + horizon, len(close) - 1)
+        window = close[i : j + 1]
+        vals.append(forward_max_runup(window))
+
+    return _summarize(
+        values=vals,
+        metric="forward_max_runup",
+        interpretation=">=0; larger means bigger vol spike risk",
+        z_thresh=z_thresh,
+        horizon=horizon,
+        cooldown=cooldown,
+    )
+
+
+# ---------------------------
+# Action label (guardrail)
+# ---------------------------
+
 def decide_action(latest: pd.Series, bw_delta_pct: Optional[float]) -> str:
     z = latest.get("z", np.nan)
-    walk = latest.get("walk_count", 0)
+    walk = int(latest.get("walk_count", 0))
     if not np.isfinite(z):
         return "INSUFFICIENT_DATA"
 
@@ -336,7 +404,7 @@ def decide_action(latest: pd.Series, bw_delta_pct: Optional[float]) -> str:
     return "NORMAL_RANGE"
 
 
-def build_snippet(name: str, df_bb: pd.DataFrame, pain: Dict, params: BBParams, meta: Dict) -> Dict:
+def build_snippet(name: str, df_bb: pd.DataFrame, hist: Dict, params: BBParams, meta: Dict) -> Dict:
     df = df_bb.dropna(subset=["ma", "sd", "upper_price", "lower_price", "z"]).copy()
     if df.empty:
         return {
@@ -370,40 +438,41 @@ def build_snippet(name: str, df_bb: pd.DataFrame, pain: Dict, params: BBParams, 
             "bandwidth_delta_pct": bw_delta_pct,
             "walk_count": int(latest["walk_count"]),
         },
-        "historical_simulation": pain,
+        "historical_simulation": hist,
         "action_output": decide_action(latest, bw_delta_pct),
     }
 
 
 # ---------------------------
-# Main
+# CLI / Main
 # ---------------------------
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Nasdaq BB(60,2) monitor (logclose) + optional Cboe/FRED VXN fetch",
+        description="Nasdaq BB(60,2) monitor (logclose) + optional VXN (Cboe/FRED)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    p.add_argument("--price_source", choices=["stooq"], default="stooq", help="Price data source")
-    p.add_argument("--price_ticker", default="^ndx", help="Ticker for price series (Nasdaq proxy)")
+    p.add_argument("--price_source", choices=["stooq"], default="stooq")
+    p.add_argument("--price_ticker", default="qqq.us", help="Stooq ticker for price series (default: qqq.us)")
 
-    p.add_argument("--vxn_enable", action="store_true", help="Also fetch VXN (Nasdaq-100 implied vol) series")
-    p.add_argument("--vxn_source", choices=["cboe", "fred"], default="cboe", help="VXN data source preference")
-    p.add_argument("--vxn_code", default="VXN", help="Cboe index code (for cboe daily_prices endpoint)")
-    p.add_argument("--vxn_fred_series", default="VXNCLS", help="FRED series id for VXN close")
+    p.add_argument("--vxn_enable", action="store_true")
+    p.add_argument("--vxn_source", choices=["cboe", "fred"], default="fred")
+    p.add_argument("--vxn_code", default="VXN")
+    p.add_argument("--vxn_fred_series", default="VXNCLS")
 
-    p.add_argument("--bb_len", type=int, default=60, help="Bollinger length")
-    p.add_argument("--bb_k", type=float, default=2.0, help="Bollinger k (std multiplier)")
-    p.add_argument("--use_log", action="store_true", default=True, help="Compute bands in log space")
-    p.add_argument("--no_log", action="store_true", help="Disable log space; compute bands on raw close")
-    p.add_argument("--ddof", type=int, choices=[0, 1], default=0, help="Std ddof (0=population, 1=sample)")
+    p.add_argument("--bb_len", type=int, default=60)
+    p.add_argument("--bb_k", type=float, default=2.0)
+    p.add_argument("--use_log", action="store_true", default=True)
+    p.add_argument("--no_log", action="store_true")
+    p.add_argument("--ddof", type=int, choices=[0, 1], default=0)
 
-    p.add_argument("--z_thresh", type=float, default=-2.0, help="Trigger threshold in z space")
-    p.add_argument("--horizon", type=int, default=20, help="Forward horizon (trading days) for max drawdown")
+    p.add_argument("--z_thresh", type=float, default=-2.0, help="Trigger threshold: z <= z_thresh")
+    p.add_argument("--horizon", type=int, default=20)
+    p.add_argument("--cooldown", type=int, default=20)
 
-    p.add_argument("--out_dir", default="out_bb", help="Output directory")
-    p.add_argument("--quiet", action="store_true", help="Less console output")
+    p.add_argument("--out_dir", default="out_bb")
+    p.add_argument("--quiet", action="store_true")
 
     return p.parse_args()
 
@@ -415,14 +484,14 @@ def main() -> int:
 
     _ensure_dir(args.out_dir)
 
+    # PRICE: QQQ by default
     price_df, price_meta = fetch_stooq_daily(args.price_ticker)
     price_bb = compute_bollinger(price_df, params)
-    price_pain = conditional_pain_stats(price_bb, z_thresh=args.z_thresh, horizon=args.horizon)
-
+    price_hist = conditional_stats_price_mdd(price_bb, z_thresh=args.z_thresh, horizon=args.horizon, cooldown=args.cooldown)
     price_snippet = build_snippet(
         name=f"PRICE_{args.price_ticker.upper()}_BB(len={params.length},k={params.k},log={params.use_log})",
         df_bb=price_bb,
-        pain=price_pain,
+        hist=price_hist,
         params=params,
         meta=price_meta,
     )
@@ -438,10 +507,11 @@ def main() -> int:
         print("=== PRICE SNIPPET ===")
         print(json.dumps(price_snippet, ensure_ascii=False, indent=2))
 
+    # Optional: VXN
     if args.vxn_enable:
         vxn_df = None
         vxn_meta = None
-        errors = []
+        errors: List[str] = []
 
         sources = ["cboe", "fred"] if args.vxn_source == "cboe" else ["fred", "cboe"]
         for src in sources:
@@ -458,11 +528,11 @@ def main() -> int:
             raise RuntimeError("Failed to fetch VXN from all sources:\n" + "\n".join(errors))
 
         vxn_bb = compute_bollinger(vxn_df, params)
-        vxn_pain = conditional_pain_stats(vxn_bb, z_thresh=args.z_thresh, horizon=args.horizon)
+        vxn_hist = conditional_stats_vol_runup(vxn_bb, z_thresh=args.z_thresh, horizon=args.horizon, cooldown=args.cooldown)
         vxn_snippet = build_snippet(
             name=f"VXN_BB(len={params.length},k={params.k},log={params.use_log})",
             df_bb=vxn_bb,
-            pain=vxn_pain,
+            hist=vxn_hist,
             params=params,
             meta={"attempt_errors": errors, **(vxn_meta or {})},
         )
