@@ -1,0 +1,41 @@
+{
+  "name": "PRICE_^NDX_BB(len=60,k=2.0,log=True)",
+  "generated_at_utc": "2026-02-18T04:03:53Z",
+  "meta": {
+    "source": "stooq",
+    "url": "https://stooq.com/q/d/l/?s=%5Endx&i=d",
+    "date_col": "Date",
+    "close_col": "Close",
+    "rows": 10173,
+    "min_date": "1985-10-01",
+    "max_date": "2026-02-17"
+  },
+  "params": {
+    "length": 60,
+    "k": 2.0,
+    "use_log": true,
+    "ddof": 0
+  },
+  "latest": {
+    "date": "2026-02-17",
+    "close": 24701.6,
+    "bb_mid": 25332.31686624665,
+    "bb_lower": 24511.420320654583,
+    "bb_upper": 26180.70554121145,
+    "z": -1.5307555471420062,
+    "bandwidth_pct": 0.06589548162414866,
+    "bandwidth_delta_pct": -1.4162585277540551,
+    "walk_count": 0
+  },
+  "historical_simulation": {
+    "z_thresh": -2.0,
+    "horizon_days": 20,
+    "sample_size": 507,
+    "p50_maxdd": -0.03946153472323466,
+    "p90_maxdd": 0.008131337979777655,
+    "mean_maxdd": -0.0557012584143677,
+    "min_maxdd": -0.29930710895302515,
+    "max_maxdd": 0.07339379620455744
+  },
+  "action_output": "NEAR_LOWER_BAND (MONITOR)"
+}
