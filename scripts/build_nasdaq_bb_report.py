@@ -10,14 +10,11 @@ Reads:
 Writes:
 - nasdaq_bb_cache/report.md
 
-Fix (minimal):
-- Avoid double-wrapping backticks in markdown tables.
-  Previously some values were pre-formatted as `...` strings and then wrapped again,
-  producing ``...`` in the report.
-
-Keeps:
-- Render snippet['trigger_reason'] if present.
-- Historical tables show p10/p50/p90/etc automatically (dump dict fields).
+Features:
+- Markdown report with sections for QQQ (PRICE) and VXN (VOL)
+- Staleness flag + confidence label
+- Avoid double-wrapping backticks (fixes ``601.3000`` issue)
+- NEW: add a 15-second executive summary at the top, using existing snippet fields only
 """
 
 from __future__ import annotations
@@ -88,6 +85,7 @@ def _fmt_float(x: Any, nd: int = 4) -> str:
 
 
 def _fmt_pct(x: Any, nd: int = 2) -> str:
+    """Format a number as percent string WITHOUT multiplying (expects already in % units)."""
     if x is None:
         return ""
     try:
@@ -95,6 +93,19 @@ def _fmt_pct(x: Any, nd: int = 2) -> str:
         if pd.isna(v):
             return ""
         return f"{v:.{nd}f}%"
+    except Exception:
+        return ""
+
+
+def _fmt_ratio_to_pct(r: Any, nd: int = 2) -> str:
+    """Format ratio (0.0654) to percent string (6.54%)."""
+    if r is None:
+        return ""
+    try:
+        v = float(r)
+        if pd.isna(v):
+            return ""
+        return f"{v * 100.0:.{nd}f}%"
     except Exception:
         return ""
 
@@ -130,18 +141,120 @@ def _table_kv(d: Dict[str, Any]) -> str:
         elif v is None:
             s = ""
         else:
-            # string or other objects
             if isinstance(v, str) and v.startswith("`") and v.endswith("`"):
-                s = v  # already formatted
+                s = v
             else:
                 s = _md_code(v)
         lines.append(f"| {k} | {s} |")
     return "\n".join(lines)
 
 
+def _safe_get(d: Dict[str, Any], path: Tuple[str, ...], default=None):
+    cur: Any = d
+    for k in path:
+        if not isinstance(cur, dict) or k not in cur:
+            return default
+        cur = cur[k]
+    return cur
+
+
+def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> str:
+    """
+    Build a compact, 15-second summary using existing snippet fields only.
+    Must not raise even if fields are missing.
+    """
+    # --- PRICE summary ---
+    p_latest = price.get("latest", {}) or {}
+    p_hist = price.get("historical_simulation", {}) or {}
+    p_action = price.get("action_output", "")
+    p_reason = price.get("trigger_reason", "")
+    p_close = _fmt_float(p_latest.get("close"), 4)
+    p_date = p_latest.get("date", "")
+    p_dist_lo = _fmt_pct(p_latest.get("distance_to_lower_pct"), 3)
+    p_dist_hi = _fmt_pct(p_latest.get("distance_to_upper_pct"), 3)
+    p_p50 = p_hist.get("p50")
+    p_p10 = p_hist.get("p10")
+    p_min = p_hist.get("min")
+
+    # p50/p10/min are in ratio (negative), print as percent with sign
+    def _dd_to_pct(x) -> str:
+        if x is None:
+            return ""
+        try:
+            v = float(x) * 100.0
+            return f"{v:.2f}%"
+        except Exception:
+            return ""
+
+    dd_p50 = _dd_to_pct(p_p50)
+    dd_p10 = _dd_to_pct(p_p10)
+    dd_min = _dd_to_pct(p_min)
+
+    price_line = (
+        f"- **QQQ** ({p_date} close={p_close}) → **{p_action}**"
+        + (f" (reason={p_reason})" if p_reason else "")
+        + (f"; dist_to_lower={p_dist_lo}" if p_dist_lo else "")
+        + (f"; dist_to_upper={p_dist_hi}" if p_dist_hi else "")
+        + (
+            f"; 20D forward_mdd: p50={dd_p50}, p10={dd_p10}, min={dd_min}"
+            if (dd_p50 or dd_p10 or dd_min)
+            else ""
+        )
+    )
+
+    # --- VXN summary (optional) ---
+    if not vxn:
+        vxn_line = "- **VXN**: (missing) — VOL context not available."
+        return "## 15秒摘要\n\n" + price_line + "\n" + vxn_line + "\n"
+
+    v_latest = vxn.get("latest", {}) or {}
+    v_hist = vxn.get("historical_simulation", {}) or {}
+    v_action = vxn.get("action_output", "")
+    v_reason = vxn.get("trigger_reason", "")
+    v_close = _fmt_float(v_latest.get("close"), 4)
+    v_date = v_latest.get("date", "")
+    v_z = _fmt_float(v_latest.get("z"), 4)
+    v_pos = _fmt_float(v_latest.get("position_in_band"), 3)
+    v_bw_d = _fmt_pct(v_latest.get("bandwidth_delta_pct"), 2)
+
+    # Prefer B_highvol p90 if present (tail continuation risk)
+    b = v_hist.get("B_highvol") if isinstance(v_hist, dict) else None
+    b_p90 = None
+    b_n = None
+    if isinstance(b, dict):
+        b_p90 = b.get("p90")
+        b_n = b.get("sample_size")
+
+    def _ru_to_pct(x) -> str:
+        if x is None:
+            return ""
+        try:
+            v = float(x) * 100.0
+            return f"{v:.1f}%"
+        except Exception:
+            return ""
+
+    ru_b_p90 = _ru_to_pct(b_p90)
+
+    vxn_line = (
+        f"- **VXN** ({v_date} close={v_close}) → **{v_action}**"
+        + (f" (reason={v_reason})" if v_reason else "")
+        + (f"; z={v_z}" if v_z else "")
+        + (f"; pos={v_pos}" if v_pos else "")
+        + (f"; bwΔ={v_bw_d}" if v_bw_d else "")
+        + (
+            f"; High-Vol tail (B) p90 runup={ru_b_p90} (n={b_n})"
+            if ru_b_p90
+            else ""
+        )
+    )
+
+    return "## 15秒摘要\n\n" + price_line + "\n" + vxn_line + "\n"
+
+
 def _render_price_section(price: Dict[str, Any]) -> str:
     meta = price.get("meta", {})
-    latest = price.get("latest", {})
+    latest = price.get("latest", {}) or {}
     gen = price.get("generated_at_utc", "")
     max_date = meta.get("max_date", "")
     stale_days = _staleness_days(gen, max_date)
@@ -151,8 +264,6 @@ def _render_price_section(price: Dict[str, Any]) -> str:
     n = hist.get("sample_size")
     conf_level, conf_reason = _confidence(n, stale_flag)
 
-    # NOTE: we pre-format numeric fields as `...` strings for consistent look,
-    # and rely on _table_kv to NOT double-wrap them.
     latest_view = {
         "date": _md_code(latest.get("date")),
         "close": _md_code(_fmt_float(latest.get("close"), 4)),
@@ -164,8 +275,7 @@ def _render_price_section(price: Dict[str, Any]) -> str:
         "distance_to_lower_pct": _md_code(_fmt_pct(latest.get("distance_to_lower_pct"), 3)),
         "distance_to_upper_pct": _md_code(_fmt_pct(latest.get("distance_to_upper_pct"), 3)),
         "position_in_band": _md_code(_fmt_float(latest.get("position_in_band"), 3)),
-        # bandwidth_pct stored in snippet as ratio, convert to %
-        "bandwidth_pct": _md_code(_fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2)),
+        "bandwidth_pct": _md_code(_fmt_ratio_to_pct(latest.get("bandwidth_pct"), 2)),
         "bandwidth_delta_pct": _md_code(_fmt_pct(latest.get("bandwidth_delta_pct"), 2)),
         "walk_lower_count": latest.get("walk_lower_count"),
     }
@@ -195,7 +305,7 @@ def _render_price_section(price: Dict[str, Any]) -> str:
 
 def _render_vxn_section(vxn: Dict[str, Any]) -> str:
     meta = vxn.get("meta", {})
-    latest = vxn.get("latest", {})
+    latest = vxn.get("latest", {}) or {}
     gen = vxn.get("generated_at_utc", "")
     max_date = meta.get("max_date", "")
     stale_days = _staleness_days(gen, max_date)
@@ -213,7 +323,7 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
         "distance_to_lower_pct": _md_code(_fmt_pct(latest.get("distance_to_lower_pct"), 3)),
         "distance_to_upper_pct": _md_code(_fmt_pct(latest.get("distance_to_upper_pct"), 3)),
         "position_in_band": _md_code(_fmt_float(latest.get("position_in_band"), 3)),
-        "bandwidth_pct": _md_code(_fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2)),
+        "bandwidth_pct": _md_code(_fmt_ratio_to_pct(latest.get("bandwidth_pct"), 2)),
         "bandwidth_delta_pct": _md_code(_fmt_pct(latest.get("bandwidth_delta_pct"), 2)),
         "walk_upper_count": latest.get("walk_upper_count"),
     }
@@ -279,6 +389,10 @@ def build_report(cache_dir: str) -> str:
     lines = []
     lines.append("# Nasdaq BB Monitor Report (QQQ + VXN)\n")
     lines.append(f"- report_generated_at_utc: `{_utc_now_iso()}`\n")
+
+    # NEW: 15-second executive summary
+    lines.append(_build_15s_summary(price, vxn))
+    lines.append("")
 
     lines.append(_render_price_section(price))
 
