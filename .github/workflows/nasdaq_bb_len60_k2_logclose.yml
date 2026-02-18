@@ -34,10 +34,20 @@ jobs:
           pip install --upgrade pip
           pip install pandas numpy requests
 
+      # （可選，但我建議保留一陣子）避免再發生「找不到檔」卻看不出原因
+      - name: Debug list files
+        run: |
+          pwd
+          ls -la
+          echo "----"
+          ls -la scripts || true
+          echo "----"
+          git ls-files | grep -i nasdaq || true
+
       - name: Run Nasdaq BB monitor (NDX + optional VXN)
         run: |
           mkdir -p nasdaq_bb_cache
-          python nasdaq_bb_len60_k2_logclose.py \
+          python scripts/nasdaq_bb_len60_k2_logclose.py \
             --price_ticker "^ndx" \
             --out_dir "nasdaq_bb_cache" \
             --vxn_enable \
@@ -46,7 +56,6 @@ jobs:
 
       - name: Commit outputs (only if changed)
         run: |
-          git status --porcelain
           if [ -n "$(git status --porcelain nasdaq_bb_cache)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
