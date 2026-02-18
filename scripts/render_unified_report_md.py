@@ -16,6 +16,11 @@ Adds:
 - Optional module sections: inflation_realrate_cache / asset_proxy_cache (display-only)
 - taiwan_signals (pass-through; not used for mode; NO fallback)
 
+NEW (2026-02-18):
+- Optional module section: nasdaq_bb_cache (display-only; NO impact to unified logic)
+  - fixed 12 lines with richer fields
+  - NA-safe; never used in positioning/mode computations
+
 2026-02-07.2 updates (display-only; NO logic changes):
 - vol_gate_v2 reasons:
   - explicitly document policy branches:
@@ -157,6 +162,21 @@ def _to_float(x: Any) -> Optional[float]:
         return None
 
 
+def _pick_first(obj: Any, candidate_paths: List[Tuple[str, ...]]) -> Any:
+    """
+    NA-safe value picker:
+    - Try each candidate path (tuple of keys) on dict-like objects
+    - Return first non-None value; else None
+    """
+    if not isinstance(obj, dict):
+        return None
+    for path in candidate_paths:
+        v = _safe_get(obj, *path) if len(path) > 1 else obj.get(path[0])
+        if v is not None:
+            return v
+    return None
+
+
 # ---- positioning matrix helpers (report-only) ----
 
 def _find_row(rows: Any, series_name: str) -> Optional[Dict[str, Any]]:
@@ -257,6 +277,71 @@ def _render_generic_dashboard_section(lines: List[str], module_name: str, mod: A
     else:
         lines.append("- note: dashboard_latest.rows missing/empty; nothing to render (deterministic).")
         lines.append("")
+
+
+def _render_nasdaq_bb_cache_display_only_12(lines: List[str], modules: Dict[str, Any]) -> None:
+    """
+    Display-only overlay. Fixed 12 lines (more fields) under this section.
+    Must NOT affect positioning matrix / mode logic.
+    """
+    mod = modules.get("nasdaq_bb_cache")
+    lines.append("## nasdaq_bb_cache (display-only)")
+    if not isinstance(mod, dict):
+        # still emit 12 lines deterministically
+        for s in [
+            "- status: NA",
+            "- note: NA",
+            "- QQQ.data_date: NA",
+            "- QQQ.close: NA",
+            "- QQQ.signal: NA",
+            "- QQQ.z: NA",
+            "- QQQ.position_in_band: NA",
+            "- QQQ.dist_to_lower: NA",
+            "- QQQ.dist_to_upper: NA",
+            "- VXN.data_date: NA",
+            "- VXN.value: NA",
+            "- VXN.signal: NA (position_in_band=NA)",
+        ]:
+            lines.append(s)
+        lines.append("")
+        return
+
+    status = _safe_get(mod, "status") or "NA"
+    note = _safe_get(mod, "note") or _safe_get(mod, "notes") or "display-only; not used for positioning/mode"
+
+    series = _safe_get(mod, "series") or {}
+    qqq = series.get("QQQ") if isinstance(series, dict) else None
+    vxn = series.get("VXN") if isinstance(series, dict) else None
+
+    # QQQ fields (try multiple schema candidates)
+    qqq_date = _pick_first(qqq, [("data_date",), ("date",), ("as_of_date",), ("as_of",)])
+    qqq_close = _pick_first(qqq, [("close",), ("value",), ("price",), ("last",), ("px",)])
+    qqq_signal = _pick_first(qqq, [("signal",), ("signal_level",), ("state",), ("bb_signal",), ("status",)])
+    qqq_z = _pick_first(qqq, [("z",), ("zscore",), ("z60",), ("z20",), ("bb_z",)])
+    qqq_pos = _pick_first(qqq, [("position_in_band",), ("band_position",), ("pos_in_band",), ("bb_pos",)])
+    qqq_dlow = _pick_first(qqq, [("dist_to_lower_pct",), ("dist_to_lower",), ("dist_lower",), ("bb_dist_to_lower",)])
+    qqq_dup = _pick_first(qqq, [("dist_to_upper_pct",), ("dist_to_upper",), ("dist_upper",), ("bb_dist_to_upper",)])
+
+    # VXN fields
+    vxn_date = _pick_first(vxn, [("data_date",), ("date",), ("as_of_date",), ("as_of",)])
+    vxn_value = _pick_first(vxn, [("close",), ("value",), ("level",), ("last",)])
+    vxn_signal = _pick_first(vxn, [("signal",), ("signal_level",), ("state",), ("bb_signal",), ("status",)])
+    vxn_pos = _pick_first(vxn, [("position_in_band",), ("band_position",), ("pos_in_band",), ("bb_pos",)])
+
+    # Emit fixed 12 lines
+    lines.append(f"- status: {status}")
+    lines.append(f"- note: {note}")
+    lines.append(f"- QQQ.data_date: {qqq_date if qqq_date is not None else 'NA'}")
+    lines.append(f"- QQQ.close: {_fmt(qqq_close, 6) if isinstance(qqq_close, (int, float)) else (str(qqq_close) if qqq_close is not None else 'NA')}")
+    lines.append(f"- QQQ.signal: {qqq_signal if qqq_signal is not None else 'NA'}")
+    lines.append(f"- QQQ.z: {_fmt(qqq_z, 6) if isinstance(qqq_z, (int, float)) else (str(qqq_z) if qqq_z is not None else 'NA')}")
+    lines.append(f"- QQQ.position_in_band: {_fmt(qqq_pos, 6) if isinstance(qqq_pos, (int, float)) else (str(qqq_pos) if qqq_pos is not None else 'NA')}")
+    lines.append(f"- QQQ.dist_to_lower: {_fmt(qqq_dlow, 6) if isinstance(qqq_dlow, (int, float)) else (str(qqq_dlow) if qqq_dlow is not None else 'NA')}")
+    lines.append(f"- QQQ.dist_to_upper: {_fmt(qqq_dup, 6) if isinstance(qqq_dup, (int, float)) else (str(qqq_dup) if qqq_dup is not None else 'NA')}")
+    lines.append(f"- VXN.data_date: {vxn_date if vxn_date is not None else 'NA'}")
+    lines.append(f"- VXN.value: {_fmt(vxn_value, 6) if isinstance(vxn_value, (int, float)) else (str(vxn_value) if vxn_value is not None else 'NA')}")
+    lines.append(f"- VXN.signal: {vxn_signal if vxn_signal is not None else 'NA'} (position_in_band={_fmt(vxn_pos, 6) if isinstance(vxn_pos, (int, float)) else (str(vxn_pos) if vxn_pos is not None else 'NA')})")
+    lines.append("")
 
 
 def _render_module_status(lines: List[str], modules: Dict[str, Any], unified_generated_at_utc: str) -> None:
@@ -743,11 +828,15 @@ def main() -> int:
         lines.append(_md_table(hdr, rws_f))
         lines.append("")
 
-    # optional modules
+    # optional modules (existing)
     if "inflation_realrate_cache" in modules:
         _render_generic_dashboard_section(lines, "inflation_realrate_cache", infl)
     if "asset_proxy_cache" in modules:
         _render_generic_dashboard_section(lines, "asset_proxy_cache", apx)
+
+    # ✅ NEW optional module overlay (display-only; fixed 12 lines)
+    if "nasdaq_bb_cache" in modules:
+        _render_nasdaq_bb_cache_display_only_12(lines, modules)
 
     # ----------------------------
     # roll25_cache (core fields)
