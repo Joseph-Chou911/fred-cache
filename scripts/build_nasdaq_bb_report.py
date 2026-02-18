@@ -10,9 +10,9 @@ Reads:
 Writes:
 - nasdaq_bb_cache/report.md
 
-Enhancement (Suggestion 2):
-- Add confidence (HIGH/MED/LOW) for each historical simulation block,
-  based on sample_size and staleness_flag.
+Changes:
+- Render snippet['trigger_reason'] if present (audit-friendly).
+- Historical tables will show p10 automatically because it's now in the dict.
 """
 
 from __future__ import annotations
@@ -50,16 +50,6 @@ def _staleness_flag(days: Optional[int], warn_gt: int = 2) -> str:
 
 
 def _confidence(sample_size: Optional[int], staleness_flag: str) -> Tuple[str, str]:
-    """
-    Confidence rule:
-    - If staleness_flag != OK => LOW (hard downgrade)
-    - Else by sample_size:
-        >= 80 => HIGH
-        30-79 => MED
-        < 30  => LOW
-        0/None => UNKNOWN
-    Returns: (level, reason)
-    """
     if staleness_flag != "OK":
         return "LOW", f"staleness_flag={staleness_flag}"
 
@@ -112,7 +102,7 @@ def _table_kv(d: Dict[str, Any]) -> str:
         elif isinstance(v, int):
             s = f"{v}"
         elif isinstance(v, float):
-            s = _fmt_float(v, 6)
+            s = f"{v:.6f}"
         elif v is None:
             s = ""
         else:
@@ -135,17 +125,17 @@ def _render_price_section(price: Dict[str, Any]) -> str:
 
     latest_view = {
         "date": latest.get("date"),
-        "close": _fmt_float(latest.get("close"), 4),
-        "bb_mid": _fmt_float(latest.get("bb_mid"), 4),
-        "bb_lower": _fmt_float(latest.get("bb_lower"), 4),
-        "bb_upper": _fmt_float(latest.get("bb_upper"), 4),
-        "z": _fmt_float(latest.get("z"), 4),
+        "close": f"`{_fmt_float(latest.get('close'), 4)}`",
+        "bb_mid": f"`{_fmt_float(latest.get('bb_mid'), 4)}`",
+        "bb_lower": f"`{_fmt_float(latest.get('bb_lower'), 4)}`",
+        "bb_upper": f"`{_fmt_float(latest.get('bb_upper'), 4)}`",
+        "z": f"`{_fmt_float(latest.get('z'), 4)}`",
         "trigger_z_le_-2": latest.get("trigger_z_le_-2"),
-        "distance_to_lower_pct": _fmt_pct(latest.get("distance_to_lower_pct"), 3),
-        "distance_to_upper_pct": _fmt_pct(latest.get("distance_to_upper_pct"), 3),
-        "position_in_band": _fmt_float(latest.get("position_in_band"), 3),
-        "bandwidth_pct": _fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2),
-        "bandwidth_delta_pct": _fmt_pct(latest.get("bandwidth_delta_pct"), 2),
+        "distance_to_lower_pct": f"`{_fmt_pct(latest.get('distance_to_lower_pct'), 3)}`",
+        "distance_to_upper_pct": f"`{_fmt_pct(latest.get('distance_to_upper_pct'), 3)}`",
+        "position_in_band": f"`{_fmt_float(latest.get('position_in_band'), 3)}`",
+        "bandwidth_pct": f"`{_fmt_pct((latest.get('bandwidth_pct') or 0) * 100.0, 2)}`",
+        "bandwidth_delta_pct": f"`{_fmt_pct(latest.get('bandwidth_delta_pct'), 2)}`",
         "walk_lower_count": latest.get("walk_lower_count"),
     }
 
@@ -156,7 +146,11 @@ def _render_price_section(price: Dict[str, Any]) -> str:
         f"- data_as_of (meta.max_date): `{max_date}`  | staleness_days: `{stale_days}`  | staleness_flag: **`{stale_flag}`**"
     )
     out.append(f"- source: `{meta.get('source','')}`  | url: `{meta.get('url','')}`")
-    out.append(f"- action_output: **`{price.get('action_output','')}`**\n")
+    out.append(f"- action_output: **`{price.get('action_output','')}`**")
+    if "trigger_reason" in price:
+        out.append(f"- trigger_reason: `{price.get('trigger_reason')}`\n")
+    else:
+        out.append("")
 
     out.append("### Latest\n")
     out.append(_table_kv(latest_view))
@@ -178,18 +172,18 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
 
     latest_view = {
         "date": latest.get("date"),
-        "close": _fmt_float(latest.get("close"), 4),
-        "bb_mid": _fmt_float(latest.get("bb_mid"), 4),
-        "bb_lower": _fmt_float(latest.get("bb_lower"), 4),
-        "bb_upper": _fmt_float(latest.get("bb_upper"), 4),
-        "z": _fmt_float(latest.get("z"), 4),
+        "close": f"`{_fmt_float(latest.get('close'), 4)}`",
+        "bb_mid": f"`{_fmt_float(latest.get('bb_mid'), 4)}`",
+        "bb_lower": f"`{_fmt_float(latest.get('bb_lower'), 4)}`",
+        "bb_upper": f"`{_fmt_float(latest.get('bb_upper'), 4)}`",
+        "z": f"`{_fmt_float(latest.get('z'), 4)}`",
         "trigger_z_le_-2 (A_lowvol)": latest.get("trigger_z_le_-2"),
         "trigger_z_ge_2 (B_highvol)": latest.get("trigger_z_ge_2"),
-        "distance_to_lower_pct": _fmt_pct(latest.get("distance_to_lower_pct"), 3),
-        "distance_to_upper_pct": _fmt_pct(latest.get("distance_to_upper_pct"), 3),
-        "position_in_band": _fmt_float(latest.get("position_in_band"), 3),
-        "bandwidth_pct": _fmt_pct((latest.get("bandwidth_pct") or 0) * 100.0, 2),
-        "bandwidth_delta_pct": _fmt_pct(latest.get("bandwidth_delta_pct"), 2),
+        "distance_to_lower_pct": f"`{_fmt_pct(latest.get('distance_to_lower_pct'), 3)}`",
+        "distance_to_upper_pct": f"`{_fmt_pct(latest.get('distance_to_upper_pct'), 3)}`",
+        "position_in_band": f"`{_fmt_float(latest.get('position_in_band'), 3)}`",
+        "bandwidth_pct": f"`{_fmt_pct((latest.get('bandwidth_pct') or 0) * 100.0, 2)}`",
+        "bandwidth_delta_pct": f"`{_fmt_pct(latest.get('bandwidth_delta_pct'), 2)}`",
         "walk_upper_count": latest.get("walk_upper_count"),
     }
 
@@ -202,13 +196,14 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
     out.append(f"- source: `{meta.get('source','')}`  | url: `{meta.get('url','')}`")
     if "selected_source" in meta:
         out.append(f"- selected_source: `{meta.get('selected_source')}` | fallback_used: `{meta.get('fallback_used')}`")
-    out.append(f"- action_output: **`{vxn.get('action_output','')}`**\n")
+    out.append(f"- action_output: **`{vxn.get('action_output','')}`**")
+    if "trigger_reason" in vxn:
+        out.append(f"- trigger_reason: `{vxn.get('trigger_reason')}`\n")
+    else:
+        out.append("")
 
     out.append("### Latest\n")
     out.append(_table_kv(latest_view))
-
-    if stale_flag == "HIGH":
-        out.append("\n> ⚠️ VXN data is stale (lag > 2 days). Treat VOL-based interpretation as lower confidence.\n")
 
     hist = vxn.get("historical_simulation", {}) or {}
     out.append("### Historical simulation (conditional)\n")
@@ -265,6 +260,7 @@ def build_report(cache_dir: str) -> str:
     lines.append("- PRICE 的 `forward_mdd` 應永遠 `<= 0`（0 代表未回撤）。")
     lines.append("- VOL 的 `forward_max_runup` 應永遠 `>= 0`（數值越大代表波動「再爆衝」風險越大）。")
     lines.append("- `confidence` 規則：若 `staleness_flag!=OK` 則直接降為 LOW；否則依 sample_size：<30=LOW，30-79=MED，>=80=HIGH。")
+    lines.append("- `trigger_reason` 用於稽核 action_output 被哪條規則觸發。")
     lines.append("")
 
     return "\n".join(lines)
