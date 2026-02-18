@@ -11,11 +11,14 @@ Data source:
 Outputs (in --cache_dir):
 - stats_latest.json         : latest-day snapshot + forward_mdd distribution stats
 - history_lite.json         : last N rows of daily metrics (lite)
-- prices.csv                : fetched price table (audit/debug)
+- prices.csv                : fetched price table (audit/debug), includes price_raw and price_adj
 
-Key robustness fix:
-- Force all vectors (price/sma/std/upper/lower/z/pos/dist/forward_mdd) into 1D Series.
-  This prevents pandas ValueError: "Data must be 1-dimensional, got ndarray of shape (n, 1)".
+Key robustness:
+1) Force all vectors into 1D Series to avoid pandas ValueError: "Data must be 1-dimensional..."
+2) Automatic split/reverse-split detection + healing:
+   - detect jumps near factor=4 or 1/4 (configurable tolerance)
+   - adjust earlier history to make series continuous
+   - record split events into dq notes for auditability
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ import hashlib
 import json
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -80,7 +83,6 @@ def _to_1d_series(x, index, name: str) -> pd.Series:
 
     if isinstance(x, pd.Series):
         s = x.copy()
-        # Align to index; if mismatch, rebuild with provided index
         if len(s) != len(index):
             arr = np.asarray(s.to_numpy()).reshape(-1)
             s = pd.Series(arr, index=index, name=name)
@@ -98,7 +100,6 @@ def _to_1d_series(x, index, name: str) -> pd.Series:
 def read_csv_prices(csv_path: Path, price_col: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     df.columns = [c.strip() for c in df.columns]
-
     if "Date" not in df.columns:
         raise ValueError("CSV must contain 'Date' column (YYYY-MM-DD).")
 
@@ -199,6 +200,102 @@ def bb_state_from_z(z: Optional[float]) -> Tuple[str, str]:
     return ("IN_BAND", "-1.5<z<1.5")
 
 
+def _is_close_ratio(r: float, target: float, tol: float) -> bool:
+    # relative tolerance around target
+    if not np.isfinite(r) or r <= 0:
+        return False
+    return abs(r / target - 1.0) <= tol
+
+
+def detect_and_heal_splits(
+    price_raw: pd.Series,
+    factors: List[float],
+    tol: float,
+    min_price: float = 0.01,
+) -> Tuple[pd.Series, List[Dict[str, Any]]]:
+    """
+    Detect split/reverse-split jumps by scanning ratios r[t]=price[t]/price[t-1].
+    If r is close to 1/f or f for any f in factors, treat as split event and "heal" series:
+      - if r ~= 1/f  (price drops to 1/f), interpret as split (f:1): adjust earlier history DOWN by 1/f
+      - if r ~= f    (price jumps by f), interpret as reverse-split (1:f): adjust earlier history UP by f
+    We apply adjustments cumulatively in time order to keep final series continuous.
+
+    Returns:
+      price_adj, events
+    """
+    s = price_raw.copy()
+    s = pd.to_numeric(s, errors="coerce")
+    s = s.where(s > min_price)
+
+    idx = s.index
+    vals = s.to_numpy(dtype=float)
+    n = len(vals)
+    if n < 3:
+        return s, []
+
+    # Work on a copy for adjustment
+    adj = vals.copy()
+    events: List[Dict[str, Any]] = []
+
+    # cumulative multiplier applied to "earlier history"
+    # We implement healing by applying factor to slice [0:t] when split detected at t.
+    for t in range(1, n):
+        p_prev = adj[t - 1]
+        p_now_raw = adj[t]
+        if not (np.isfinite(p_prev) and np.isfinite(p_now_raw)) or p_prev <= 0:
+            continue
+
+        r = p_now_raw / p_prev
+
+        matched = None
+        direction = None
+        implied = None
+
+        for f in factors:
+            # split f:1 => price becomes ~1/f; ratio r ~= 1/f
+            if _is_close_ratio(r, 1.0 / f, tol):
+                matched = f
+                direction = "SPLIT"
+                implied = f
+                break
+            # reverse split => price becomes ~f; ratio r ~= f
+            if _is_close_ratio(r, f, tol):
+                matched = f
+                direction = "REVERSE_SPLIT"
+                implied = f
+                break
+
+        if matched is None:
+            continue
+
+        # Apply healing:
+        # - SPLIT (f:1): earlier prices should be divided by f to match post-split scale.
+        # - REVERSE_SPLIT (1:f): earlier prices should be multiplied by f.
+        if direction == "SPLIT":
+            factor_apply = 1.0 / float(implied)  # scale earlier down
+        else:
+            factor_apply = float(implied)        # scale earlier up
+
+        # Adjust earlier history including t-1 (but not t)
+        adj[:t] = adj[:t] * factor_apply
+
+        events.append(
+            {
+                "event_index": t,
+                "event_date": str(pd.to_datetime(idx[t]).date()),
+                "raw_ratio": float(r),
+                "direction": direction,
+                "implied_factor": float(implied),
+                "tolerance": float(tol),
+                "applied_to_range": f"[0:{t})",
+                "apply_multiplier_to_earlier": float(factor_apply),
+            }
+        )
+
+    price_adj = pd.Series(adj.reshape(-1), index=idx, name="price_adj")
+    return price_adj, events
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="TW0050 BB(60,2) + forward_mdd(20D) generator"
@@ -223,6 +320,24 @@ def main() -> int:
     ap.add_argument("--use_close", action="store_true", help="Use Close (overrides --use_adj_close)")
     ap.add_argument("--use_logclose", action="store_true", help="Compute BB on log(price)")
 
+    # Split healing options
+    ap.add_argument(
+        "--split_factors",
+        default="4",
+        help="Comma-separated split factors to detect (default: '4'). Example: '2,4,5,10'",
+    )
+    ap.add_argument(
+        "--split_tol",
+        type=float,
+        default=0.06,
+        help="Relative tolerance for detecting split ratios (default: 0.06 => ±6%%).",
+    )
+    ap.add_argument(
+        "--disable_split_heal",
+        action="store_true",
+        help="Disable split detection/healing (not recommended for 0050).",
+    )
+
     args = ap.parse_args()
 
     cache_dir = Path(args.cache_dir)
@@ -235,6 +350,8 @@ def main() -> int:
         "fetch_ok": False,
         "insufficient_history": False,
         "stale_days_local": None,
+        "split_heal_enabled": (not args.disable_split_heal),
+        "split_events": [],
         "notes": [],
     }
 
@@ -247,25 +364,18 @@ def main() -> int:
         data_source = "yfinance"
         df = fetch_yahoo_prices(args.symbol, args.start, args.end)
 
-        # Choose field
         if args.use_close:
             field = "Close"
         else:
-            # Prefer Adj Close if available (and either flag set or default)
             field = "Adj Close" if "Adj Close" in df.columns else "Close"
 
-        # If MultiIndex columns (rare but can happen), try best-effort flatten
         if isinstance(df.columns, pd.MultiIndex):
-            # common pattern: ('Adj Close', '0050.TW') etc.
-            # pick the first matching field level
             try:
                 sub = df[field]
-                # sub can still be DataFrame if multiple tickers/levels
                 if isinstance(sub, pd.DataFrame):
                     sub = sub.iloc[:, 0]
                 prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
             except Exception:
-                # fallback: take first column as price
                 sub = df.iloc[:, 0]
                 prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
         else:
@@ -285,25 +395,51 @@ def main() -> int:
 
     dq["fetch_ok"] = True
 
-    # Persist raw prices for audit
-    prices_out = prices_df.copy()
-    prices_out = prices_out.reset_index()
-    prices_out["Date"] = pd.to_datetime(prices_out["Date"]).dt.date.astype(str)
+    # ----- price_raw as 1D -----
+    price_raw = _to_1d_series(prices_df.iloc[:, 0], prices_df.index, "price_raw")
+    if price_raw.to_numpy().ndim != 1:
+        raise RuntimeError(f"price_raw not 1D after coercion: shape={price_raw.to_numpy().shape}")
+
+    # ----- Split detection & healing -----
+    if args.disable_split_heal:
+        price_adj = price_raw.copy()
+    else:
+        try:
+            factors = []
+            for tok in str(args.split_factors).split(","):
+                tok = tok.strip()
+                if tok:
+                    factors.append(float(tok))
+            if not factors:
+                factors = [4.0]
+        except Exception:
+            factors = [4.0]
+
+        price_adj, events = detect_and_heal_splits(price_raw, factors=factors, tol=float(args.split_tol))
+        dq["split_events"] = events
+        if events:
+            dq["notes"].append(f"Split heal applied: detected_events={len(events)} factors={factors} tol={args.split_tol}")
+        else:
+            dq["notes"].append(f"Split heal enabled but no events detected (factors={factors}, tol={args.split_tol})")
+
+    # Persist raw/adj prices for audit (in one CSV)
+    prices_out = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(prices_df.index).date.astype(str),
+            "price_raw": price_raw.to_numpy(dtype=float),
+            "price_adj": price_adj.to_numpy(dtype=float),
+        }
+    )
     prices_out.to_csv(cache_dir / "prices.csv", index=False)
 
-    # ----- Force price into 1D Series (critical fix) -----
-    price = _to_1d_series(prices_df.iloc[:, 0], prices_df.index, "price")
-    # sanity check: must be 1D
-    if price.to_numpy().ndim != 1:
-        raise RuntimeError(f"price not 1D after coercion: shape={price.to_numpy().shape}")
-
-    # ----- Compute indicators -----
+    # ----- Compute indicators on price_adj -----
+    price = _to_1d_series(price_adj, prices_df.index, "price")  # alias used below
     if args.use_logclose:
         base = np.log(price)
-        bb_base_label = "log(price)"
+        bb_base_label = "log(price_adj)"
     else:
         base = price.copy()
-        bb_base_label = "price"
+        bb_base_label = "price_adj"
 
     win = int(args.window)
     horizon = int(args.horizon)
@@ -314,11 +450,10 @@ def main() -> int:
             f"Insufficient length: need roughly window+horizon; len={len(base)}, window={win}, horizon={horizon}"
         )
 
-    # Ensure base is 1D Series
     base = _to_1d_series(base, prices_df.index, "bb_base")
 
     sma = base.rolling(window=win, min_periods=win).mean()
-    std = base.rolling(window=win, min_periods=win).std(ddof=0)  # ddof=0 to avoid small-sample inflation
+    std = base.rolling(window=win, min_periods=win).std(ddof=0)
 
     upper = sma + float(args.k) * std
     lower = sma - float(args.k) * std
@@ -327,9 +462,8 @@ def main() -> int:
     band_w = upper - lower
     pos = (base - lower) / band_w
 
-    # dist in real price space (interpretability)
+    # distance in adjusted price space
     if args.use_logclose:
-        # upper/lower/sma in log space; convert bands back to price space for distance
         lower_px = np.exp(lower)
         upper_px = np.exp(upper)
         dist_to_lower = (price - lower_px) / price
@@ -338,11 +472,11 @@ def main() -> int:
         dist_to_lower = (price - lower) / price
         dist_to_upper = (upper - price) / price
 
-    # forward mdd uses real price
+    # forward mdd uses adjusted price
     price_np = np.asarray(price.to_numpy()).astype(float).reshape(-1)
     fwd_mdd = calc_forward_mdd(price_np, horizon)
 
-    # ----- Coerce all vectors to 1D Series aligned to index (critical fix) -----
+    # Coerce all to 1D series
     sma = _to_1d_series(sma, prices_df.index, "sma")
     std = _to_1d_series(std, prices_df.index, "std")
     upper = _to_1d_series(upper, prices_df.index, "upper")
@@ -397,7 +531,6 @@ def main() -> int:
                 "forward_mdd": None if not np.isfinite(r["forward_mdd"]) else float(r["forward_mdd"]),
             }
         )
-
     write_json(cache_dir / "history_lite.json", history_lite)
 
     # ----- Latest snapshot -----
@@ -445,6 +578,8 @@ def main() -> int:
             "script_fingerprint": script_fp,
             "timezone_local": args.tz,
             "as_of_date": str(last_dt),
+            "split_factors": str(args.split_factors),
+            "split_tol": float(args.split_tol),
         },
         "dq": dq,
         "latest": {
@@ -479,6 +614,9 @@ def main() -> int:
                     f"--cache_dir {str(cache_dir)}",
                     "--use_close" if args.use_close else "--use_adj_close",
                     "--use_logclose" if args.use_logclose else "",
+                    f"--split_factors {args.split_factors}",
+                    f"--split_tol {float(args.split_tol)}",
+                    "--disable_split_heal" if args.disable_split_heal else "",
                 ]
             ).strip()
         },
