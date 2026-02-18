@@ -12,6 +12,10 @@ Outputs (in --cache_dir):
 - stats_latest.json         : latest-day snapshot + forward_mdd distribution stats
 - history_lite.json         : last N rows of daily metrics (lite)
 - prices.csv                : fetched price table (audit/debug)
+
+Key robustness fix:
+- Force all vectors (price/sma/std/upper/lower/z/pos/dist/forward_mdd) into 1D Series.
+  This prevents pandas ValueError: "Data must be 1-dimensional, got ndarray of shape (n, 1)".
 """
 
 from __future__ import annotations
@@ -19,8 +23,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-from dataclasses import dataclass
 from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -60,19 +62,47 @@ def write_json(path: Path, obj: Any) -> None:
         json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=True)
 
 
-def read_csv_prices(csv_path: Path, price_col: str) -> pd.Series:
-    df = pd.read_csv(csv_path)
-    # normalize column names
-    cols = {c: c.strip() for c in df.columns}
-    df.rename(columns=cols, inplace=True)
+def local_today(tz_name: str) -> date:
+    if ZoneInfo is None:
+        return datetime.now().date()
+    return datetime.now(ZoneInfo(tz_name)).date()
 
-    # required: Date
+
+def _to_1d_series(x, index, name: str) -> pd.Series:
+    """
+    Force x into a 1D pandas Series aligned to `index`.
+    Accepts Series / 1-col DataFrame / ndarray (n,) or (n,1).
+    """
+    if isinstance(x, pd.DataFrame):
+        if x.shape[1] != 1:
+            raise ValueError(f"{name}: expected 1 column, got {x.shape}")
+        x = x.iloc[:, 0]
+
+    if isinstance(x, pd.Series):
+        s = x.copy()
+        # Align to index; if mismatch, rebuild with provided index
+        if len(s) != len(index):
+            arr = np.asarray(s.to_numpy()).reshape(-1)
+            s = pd.Series(arr, index=index, name=name)
+        else:
+            s = s.reindex(index)
+    else:
+        arr = np.asarray(x).reshape(-1)  # crucial: (n,1) -> (n,)
+        s = pd.Series(arr, index=index, name=name)
+
+    s = pd.to_numeric(s, errors="coerce")
+    s.name = name
+    return s
+
+
+def read_csv_prices(csv_path: Path, price_col: str) -> pd.DataFrame:
+    df = pd.read_csv(csv_path)
+    df.columns = [c.strip() for c in df.columns]
+
     if "Date" not in df.columns:
         raise ValueError("CSV must contain 'Date' column (YYYY-MM-DD).")
 
-    # price column selection
     if price_col not in df.columns:
-        # try fallback
         candidates = ["Adj Close", "AdjClose", "Close", "close", "adj_close", "adjclose"]
         found = None
         for c in candidates:
@@ -81,26 +111,23 @@ def read_csv_prices(csv_path: Path, price_col: str) -> pd.Series:
                 break
         if not found:
             raise ValueError(
-                f"CSV must contain price column '{price_col}' "
-                f"or one of {candidates}."
+                f"CSV must contain price column '{price_col}' or one of {candidates}."
             )
         price_col = found
 
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df = df.dropna(subset=["Date"])
-    df = df.sort_values("Date")
-    s = pd.to_numeric(df[price_col], errors="coerce")
-    out = pd.Series(s.values, index=df["Date"].dt.date)
+    df = df.dropna(subset=["Date"]).sort_values("Date")
+    px = pd.to_numeric(df[price_col], errors="coerce")
+    out = pd.DataFrame({"price": px.values}, index=pd.to_datetime(df["Date"]).values)
+    out.index.name = "Date"
     out = out.dropna()
-    out.name = "price"
     return out
 
 
 def fetch_yahoo_prices(symbol: str, start: str, end: Optional[str]) -> pd.DataFrame:
     if yf is None:
-        raise RuntimeError(
-            "yfinance is not installed. Install with: pip install yfinance"
-        )
+        raise RuntimeError("yfinance is not installed. Install with: pip install yfinance")
+
     df = yf.download(
         symbol,
         start=start,
@@ -117,26 +144,23 @@ def fetch_yahoo_prices(symbol: str, start: str, end: Optional[str]) -> pd.DataFr
     return df
 
 
-def local_today(tz_name: str) -> date:
-    if ZoneInfo is None:
-        return datetime.now().date()
-    return datetime.now(ZoneInfo(tz_name)).date()
-
-
-def calc_forward_mdd(prices: np.ndarray, horizon: int) -> np.ndarray:
+def calc_forward_mdd(prices_1d: np.ndarray, horizon: int) -> np.ndarray:
     """
     forward_mdd[t] = minimum drawdown within next `horizon` trading days:
         min(0, min_{i=1..horizon} (price[t+i]/price[t] - 1))
+    prices_1d must be shape (n,) (1D).
     """
-    n = len(prices)
+    prices_1d = np.asarray(prices_1d).reshape(-1)
+    n = len(prices_1d)
     out = np.full(n, np.nan, dtype=float)
     if horizon <= 0:
         return out
+
     for t in range(0, n - horizon):
-        p0 = prices[t]
+        p0 = prices_1d[t]
         if not np.isfinite(p0) or p0 <= 0:
             continue
-        fut = prices[t + 1 : t + 1 + horizon]
+        fut = prices_1d[t + 1 : t + 1 + horizon]
         if fut.size == 0 or not np.all(np.isfinite(fut)):
             continue
         m = np.min(fut / p0 - 1.0)
@@ -152,7 +176,6 @@ def percentile_safe(x: np.ndarray, q: float) -> Optional[float]:
 
 
 def conf_from_n(n: int) -> str:
-    # conservative bucket: don't over-claim
     if n >= 120:
         return "HIGH"
     if n >= 60:
@@ -216,43 +239,66 @@ def main() -> int:
     }
 
     # ----- Load prices -----
-    data_source = None
     if args.input_csv:
         data_source = "csv"
-        s = read_csv_prices(Path(args.input_csv), args.csv_price_col)
-        px = s.astype(float)
-        prices_df = pd.DataFrame({"price": px.values}, index=pd.to_datetime(list(px.index)))
-        prices_df.index.name = "Date"
+        prices_df = read_csv_prices(Path(args.input_csv), args.csv_price_col)
+        price_basis = args.csv_price_col
     else:
         data_source = "yfinance"
         df = fetch_yahoo_prices(args.symbol, args.start, args.end)
-        # choose field
+
+        # Choose field
         if args.use_close:
             field = "Close"
         else:
-            field = "Adj Close" if (args.use_adj_close or "Adj Close" in df.columns) else "Close"
-        if field not in df.columns:
-            # fallback
-            field = "Close"
-        prices_df = df[[field]].rename(columns={field: "price"}).copy()
-        prices_df = prices_df.dropna()
-        prices_df.index.name = "Date"
+            # Prefer Adj Close if available (and either flag set or default)
+            field = "Adj Close" if "Adj Close" in df.columns else "Close"
 
-    if prices_df.empty or prices_df["price"].dropna().empty:
+        # If MultiIndex columns (rare but can happen), try best-effort flatten
+        if isinstance(df.columns, pd.MultiIndex):
+            # common pattern: ('Adj Close', '0050.TW') etc.
+            # pick the first matching field level
+            try:
+                sub = df[field]
+                # sub can still be DataFrame if multiple tickers/levels
+                if isinstance(sub, pd.DataFrame):
+                    sub = sub.iloc[:, 0]
+                prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
+            except Exception:
+                # fallback: take first column as price
+                sub = df.iloc[:, 0]
+                prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
+        else:
+            if field not in df.columns:
+                field = df.columns[0]
+            sub = df[field]
+            if isinstance(sub, pd.DataFrame):
+                sub = sub.iloc[:, 0]
+            prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
+
+        prices_df.index.name = "Date"
+        prices_df = prices_df.dropna()
+        price_basis = field
+
+    if prices_df.empty or prices_df.iloc[:, 0].dropna().empty:
         raise RuntimeError("No usable price data loaded.")
 
     dq["fetch_ok"] = True
 
-    # persist raw prices for audit
+    # Persist raw prices for audit
     prices_out = prices_df.copy()
-    prices_out["Date"] = prices_out.index.date.astype(str)
+    prices_out = prices_out.reset_index()
+    prices_out["Date"] = pd.to_datetime(prices_out["Date"]).dt.date.astype(str)
     prices_out.to_csv(cache_dir / "prices.csv", index=False)
 
-    # ----- Compute indicators -----
-    price = prices_df["price"].astype(float)
+    # ----- Force price into 1D Series (critical fix) -----
+    price = _to_1d_series(prices_df.iloc[:, 0], prices_df.index, "price")
+    # sanity check: must be 1D
+    if price.to_numpy().ndim != 1:
+        raise RuntimeError(f"price not 1D after coercion: shape={price.to_numpy().shape}")
 
+    # ----- Compute indicators -----
     if args.use_logclose:
-        # BB over log(price); still report real price in outputs
         base = np.log(price)
         bb_base_label = "log(price)"
     else:
@@ -260,28 +306,52 @@ def main() -> int:
         bb_base_label = "price"
 
     win = int(args.window)
-    if len(base) < win + args.horizon + 5:
+    horizon = int(args.horizon)
+
+    if len(base) < win + horizon + 5:
         dq["insufficient_history"] = True
         dq["notes"].append(
-            f"Insufficient length: need roughly window+horizon; len={len(base)}, window={win}, horizon={args.horizon}"
+            f"Insufficient length: need roughly window+horizon; len={len(base)}, window={win}, horizon={horizon}"
         )
 
-    sma = base.rolling(window=win, min_periods=win).mean()
-    # ddof=0 (population std) to avoid small-sample inflation; documented in report.
-    std = base.rolling(window=win, min_periods=win).std(ddof=0)
+    # Ensure base is 1D Series
+    base = _to_1d_series(base, prices_df.index, "bb_base")
 
-    upper = sma + args.k * std
-    lower = sma - args.k * std
+    sma = base.rolling(window=win, min_periods=win).mean()
+    std = base.rolling(window=win, min_periods=win).std(ddof=0)  # ddof=0 to avoid small-sample inflation
+
+    upper = sma + float(args.k) * std
+    lower = sma - float(args.k) * std
 
     z = (base - sma) / std
     band_w = upper - lower
     pos = (base - lower) / band_w
 
-    # dist in real price space (more interpretable)
-    dist_to_lower = (price - np.exp(lower) if args.use_logclose else price - lower) / price
-    dist_to_upper = (np.exp(upper) - price if args.use_logclose else upper - price) / price
+    # dist in real price space (interpretability)
+    if args.use_logclose:
+        # upper/lower/sma in log space; convert bands back to price space for distance
+        lower_px = np.exp(lower)
+        upper_px = np.exp(upper)
+        dist_to_lower = (price - lower_px) / price
+        dist_to_upper = (upper_px - price) / price
+    else:
+        dist_to_lower = (price - lower) / price
+        dist_to_upper = (upper - price) / price
 
-    fwd_mdd = calc_forward_mdd(price.values.astype(float), int(args.horizon))
+    # forward mdd uses real price
+    price_np = np.asarray(price.to_numpy()).astype(float).reshape(-1)
+    fwd_mdd = calc_forward_mdd(price_np, horizon)
+
+    # ----- Coerce all vectors to 1D Series aligned to index (critical fix) -----
+    sma = _to_1d_series(sma, prices_df.index, "sma")
+    std = _to_1d_series(std, prices_df.index, "std")
+    upper = _to_1d_series(upper, prices_df.index, "upper")
+    lower = _to_1d_series(lower, prices_df.index, "lower")
+    z = _to_1d_series(z, prices_df.index, "z")
+    pos = _to_1d_series(pos, prices_df.index, "pos")
+    dist_to_lower = _to_1d_series(dist_to_lower, prices_df.index, "dist_to_lower")
+    dist_to_upper = _to_1d_series(dist_to_upper, prices_df.index, "dist_to_upper")
+    fwd_mdd_s = _to_1d_series(fwd_mdd, prices_df.index, "forward_mdd")
 
     # ----- Age calculation (local) -----
     last_dt = pd.to_datetime(prices_df.index[-1]).date()
@@ -301,15 +371,13 @@ def main() -> int:
             "pos": pos,
             "dist_to_lower": dist_to_lower,
             "dist_to_upper": dist_to_upper,
-            "forward_mdd": fwd_mdd,
+            "forward_mdd": fwd_mdd_s,
         },
         index=prices_df.index,
     )
 
-    # keep last N rows to avoid repo bloat
     lite = out_df.tail(int(args.history_limit)).copy()
-    lite.reset_index(inplace=True)
-    lite.rename(columns={"Date": "date"}, inplace=True)
+    lite = lite.reset_index().rename(columns={"Date": "date"})
     lite["date"] = pd.to_datetime(lite["date"]).dt.date.astype(str)
 
     history_lite = []
@@ -337,10 +405,14 @@ def main() -> int:
     z_last = None if not np.isfinite(last_row["z"]) else float(last_row["z"])
     state, state_reason = bb_state_from_z(z_last)
 
-    # ----- forward_mdd stats (conditional and unconditional) -----
-    mdd_all = out_df["forward_mdd"].values
-    mask_cond = np.isfinite(out_df["forward_mdd"].values) & np.isfinite(out_df["z"].values) & (out_df["z"].values <= float(args.z_threshold))
-    mdd_cond = out_df.loc[mask_cond, "forward_mdd"].values
+    # ----- forward_mdd stats -----
+    mdd_all = out_df["forward_mdd"].to_numpy()
+    mask_cond = (
+        np.isfinite(out_df["forward_mdd"].to_numpy())
+        & np.isfinite(out_df["z"].to_numpy())
+        & (out_df["z"].to_numpy() <= float(args.z_threshold))
+    )
+    mdd_cond = out_df.loc[mask_cond, "forward_mdd"].to_numpy()
 
     stats_all = {
         "n": int(np.isfinite(mdd_all).sum()),
@@ -351,11 +423,11 @@ def main() -> int:
     }
     stats_cond = {
         "z_threshold": float(args.z_threshold),
-        "n": int(mdd_cond[np.isfinite(mdd_cond)].size),
+        "n": int(np.isfinite(mdd_cond).sum()),
         "p50": percentile_safe(mdd_cond, 50),
         "p10": percentile_safe(mdd_cond, 10),
         "min": None if mdd_cond[np.isfinite(mdd_cond)].size == 0 else float(np.min(mdd_cond[np.isfinite(mdd_cond)])),
-        "conf": conf_from_n(int(mdd_cond[np.isfinite(mdd_cond)].size)),
+        "conf": conf_from_n(int(np.isfinite(mdd_cond).sum())),
     }
 
     stats_latest = {
@@ -364,7 +436,7 @@ def main() -> int:
             "module": "tw0050_bb",
             "symbol": args.symbol,
             "data_source": data_source,
-            "price_basis": "Adj Close" if (not args.use_close) else "Close",
+            "price_basis": price_basis,
             "bb_base": bb_base_label,
             "window": int(args.window),
             "k": float(args.k),
@@ -398,14 +470,14 @@ def main() -> int:
             "command": " ".join(
                 [
                     "python",
-                    Path(__file__).name,
+                    str(Path(__file__)),
                     f"--symbol {args.symbol}",
                     f"--window {int(args.window)}",
                     f"--k {float(args.k)}",
                     f"--horizon {int(args.horizon)}",
                     f"--z_threshold {float(args.z_threshold)}",
                     f"--cache_dir {str(cache_dir)}",
-                    "--use_adj_close" if (not args.use_close) else "--use_close",
+                    "--use_close" if args.use_close else "--use_adj_close",
                     "--use_logclose" if args.use_logclose else "",
                 ]
             ).strip()
