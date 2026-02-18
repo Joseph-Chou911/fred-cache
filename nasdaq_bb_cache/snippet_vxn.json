@@ -1,16 +1,18 @@
 {
   "name": "VXN_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-02-18T04:38:27Z",
+  "generated_at_utc": "2026-02-18T04:59:03Z",
   "meta": {
     "attempt_errors": [],
-    "source": "fred",
-    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=VXNCLS",
-    "series_id": "VXNCLS",
-    "date_col": "observation_date",
-    "value_col": "VXNCLS",
-    "rows": 6296,
-    "min_date": "2001-02-02",
-    "max_date": "2026-02-13"
+    "selected_source": "cboe",
+    "fallback_used": false,
+    "source": "cboe",
+    "url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv",
+    "index_code": "VXN",
+    "date_col": "DATE",
+    "value_col": "CLOSE",
+    "rows": 4125,
+    "min_date": "2009-09-14",
+    "max_date": "2026-02-17"
   },
   "params": {
     "length": 60,
@@ -19,28 +21,49 @@
     "ddof": 0
   },
   "latest": {
-    "date": "2026-02-13",
-    "close": 26.37,
-    "bb_mid": 21.527786906431228,
-    "bb_lower": 16.242340010651947,
-    "bb_upper": 28.533179873391266,
-    "z": 1.4402971181362627,
-    "bandwidth_pct": 0.5709290934623449,
-    "bandwidth_delta_pct": -1.3063298946992097,
-    "walk_count": 0
+    "date": "2026-02-17",
+    "close": 25.98,
+    "bb_mid": 21.470195626707746,
+    "bb_lower": 16.369073725010853,
+    "bb_upper": 28.16098870303028,
+    "z": 1.4056839321927102,
+    "trigger_z_le_-2": false,
+    "trigger_z_ge_2": false,
+    "distance_to_lower_pct": 36.993557640450916,
+    "distance_to_upper_pct": 8.394875685258969,
+    "position_in_band": 0.8150437221523624,
+    "bandwidth_pct": 0.5492225214450739,
+    "walk_lower_count": 0,
+    "walk_upper_count": 0,
+    "bandwidth_delta_pct": -3.8019733563467217
   },
   "historical_simulation": {
-    "metric": "forward_max_runup",
-    "metric_interpretation": ">=0; larger means bigger vol spike risk",
-    "z_thresh": -2.0,
-    "horizon_days": 20,
-    "cooldown_bars": 20,
-    "sample_size": 59,
-    "p50": 0.17091388400702967,
-    "p90": 0.4422272036755716,
-    "mean": 0.2124973909152551,
-    "min": 0.0,
-    "max": 0.7660714285714287
+    "A_lowvol": {
+      "metric": "forward_max_runup",
+      "metric_interpretation": ">=0; larger means bigger spike risk",
+      "z_thresh": -2.0,
+      "horizon_days": 20,
+      "cooldown_bars": 20,
+      "sample_size": 29,
+      "p50": 0.22265625,
+      "p90": 0.5033782915581697,
+      "mean": 0.24737137153629538,
+      "min": 0.03359683794466428,
+      "max": 0.7660714285714287
+    },
+    "B_highvol": {
+      "metric": "forward_max_runup",
+      "metric_interpretation": ">=0; larger means further spike continuation risk",
+      "z_thresh": 2.0,
+      "horizon_days": 20,
+      "cooldown_bars": 20,
+      "sample_size": 54,
+      "p50": 0.09522952372885085,
+      "p90": 0.6742893081394336,
+      "mean": 0.21293039504739258,
+      "min": 0.0,
+      "max": 1.5807283274250725
+    }
   },
   "action_output": "NORMAL_RANGE"
 }

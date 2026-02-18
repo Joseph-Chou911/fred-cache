@@ -1,0 +1,50 @@
+{
+  "name": "QQQ_BB(len=60,k=2.0,log=True)",
+  "generated_at_utc": "2026-02-18T04:59:03Z",
+  "meta": {
+    "source": "stooq",
+    "url": "https://stooq.com/q/d/l/?s=qqq.us&i=d",
+    "date_col": "Date",
+    "value_col": "Close",
+    "rows": 6776,
+    "min_date": "1999-03-10",
+    "max_date": "2026-02-17"
+  },
+  "params": {
+    "length": 60,
+    "k": 2.0,
+    "use_log": true,
+    "ddof": 0
+  },
+  "latest": {
+    "date": "2026-02-17",
+    "close": 601.3,
+    "bb_mid": 616.4428261435169,
+    "bb_lower": 596.6043901487819,
+    "bb_upper": 636.9409346938277,
+    "z": -1.5206710938286117,
+    "trigger_z_le_-2": false,
+    "trigger_z_ge_2": false,
+    "distance_to_lower_pct": 0.7809096709160193,
+    "distance_to_upper_pct": 5.927313270219145,
+    "position_in_band": 0.11641081069733705,
+    "bandwidth_pct": 0.06543436444445669,
+    "walk_lower_count": 0,
+    "walk_upper_count": 0,
+    "bandwidth_delta_pct": -1.4714679227628813
+  },
+  "historical_simulation": {
+    "metric": "forward_mdd",
+    "metric_interpretation": "<=0; closer to 0 is less pain; more negative is deeper drawdown",
+    "z_thresh": -2.0,
+    "horizon_days": 20,
+    "cooldown_bars": 20,
+    "sample_size": 65,
+    "p50": -0.023771587762034363,
+    "p90": 0.0,
+    "mean": -0.049430303597037005,
+    "min": -0.25337677429028393,
+    "max": 0.0
+  },
+  "action_output": "NEAR_LOWER_BAND (MONITOR)"
+}
