@@ -52,13 +52,27 @@ jobs:
             --horizon 20 \
             --z_threshold -1.5 \
             --cache_dir "${OUTPUT_DIR}" \
-            --use_adj_close
+            --use_adj_close \
+            --split_factors 4 \
+            --split_tol 0.06
 
       - name: Build report (report also under OUTPUT_DIR)
         run: |
           python scripts/build_tw0050_bb_report.py \
             --cache_dir "${OUTPUT_DIR}" \
             --output "${OUTPUT_DIR}/report_tw0050_bb.md"
+
+      - name: List artifacts (quick sanity check)
+        run: |
+          echo "Artifacts under ${OUTPUT_DIR}:"
+          ls -lah "${OUTPUT_DIR}"
+          echo
+          echo "Tail of prices.csv (if exists):"
+          if [ -f "${OUTPUT_DIR}/prices.csv" ]; then
+            tail -n 5 "${OUTPUT_DIR}/prices.csv"
+          else
+            echo "prices.csv not found"
+          fi
 
       - name: Commit & push if changed
         run: |
