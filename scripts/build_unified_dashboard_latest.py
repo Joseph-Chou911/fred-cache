@@ -54,6 +54,36 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 
+# ----------------------------
+# Common helpers
+# ----------------------------
+
+
+def _norm_key(s: Any) -> str:
+    """Normalize keys for case/format-insensitive matching."""
+    if not isinstance(s, str):
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", s.lower())
+
+
+def _find_first_existing(base_dir: str, candidates: List[str]) -> Optional[str]:
+    """Return the first existing filename within base_dir, or None."""
+    for name in candidates:
+        p = os.path.join(base_dir, name)
+        if os.path.exists(p):
+            return name
+    return None
+
+
+def _find_first_existing(base_dir: str, candidates: List[str]) -> Optional[str]:
+    """Return first existing filename under base_dir from candidates."""
+    for name in candidates:
+        p = os.path.join(base_dir, name)
+        if os.path.exists(p):
+            return name
+    return None
+
+
 def _read_text(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
@@ -621,7 +651,19 @@ def _score_candidate(d: Dict[str, Any], kind: str) -> int:
     close_keys = ["close", "Close", "adj_close", "last", "last_close", "px_last", "price", "value", "Value"]
     signal_keys = ["signal", "tag", "state", "mode", "status", "bb_signal"]
     z_keys = ["z", "zscore", "z_score", "bb_z", "z_bb", "z60"]
-    pos_keys = ["position_in_band", "pos_in_band", "band_pos", "percent_b", "percentB", "pct_b", "pctB", "%b"]
+    pos_keys = [
+        "position_in_band",
+        "pos_in_band",
+        "band_pos",
+        "positionInBand",
+        "bandPosition",
+        "position",
+        "percent_b",
+        "percentB",
+        "pct_b",
+        "pctB",
+        "%b",
+    ]
     dl_keys = ["dist_to_lower", "dist_lower", "dist_lower_pct", "lower_dist", "pct_to_lower"]
     du_keys = ["dist_to_upper", "dist_upper", "dist_upper_pct", "upper_dist", "pct_to_upper"]
     wrappers = ["numbers", "price", "stats", "bb", "bands", "band", "data", "row", "latest", "last", "out", "result", "metrics"]
@@ -759,7 +801,19 @@ def _extract_symbol_block(obj: Any, kind: str, report_fallback: Optional[Dict[st
     value_keys = ["value", "Value", "close", "Close"]
     signal_keys = ["signal", "tag", "state", "mode", "status", "bb_signal"]
     z_keys = ["z", "zscore", "z_score", "bb_z", "z_bb", "z60"]
-    pos_keys = ["position_in_band", "pos_in_band", "band_pos", "percent_b", "percentB", "pct_b", "pctB", "%b"]
+    pos_keys = [
+        "position_in_band",
+        "pos_in_band",
+        "band_pos",
+        "positionInBand",
+        "bandPosition",
+        "position",
+        "percent_b",
+        "percentB",
+        "pct_b",
+        "pctB",
+        "%b",
+    ]
     dl_keys = ["dist_to_lower", "dist_lower", "dist_lower_pct", "lower_dist", "pct_to_lower"]
     du_keys = ["dist_to_upper", "dist_upper", "dist_upper_pct", "upper_dist", "pct_to_upper"]
 
