@@ -14,7 +14,7 @@ Features:
 - Markdown report with sections for QQQ (PRICE) and VXN (VOL)
 - Staleness flag + confidence label
 - Avoid double-wrapping backticks (fixes ``601.3000`` issue)
-- NEW: add a 15-second executive summary at the top, using existing snippet fields only
+- 15-second executive summary at the top (now includes confidence labels)
 """
 
 from __future__ import annotations
@@ -149,34 +149,31 @@ def _table_kv(d: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _safe_get(d: Dict[str, Any], path: Tuple[str, ...], default=None):
-    cur: Any = d
-    for k in path:
-        if not isinstance(cur, dict) or k not in cur:
-            return default
-        cur = cur[k]
-    return cur
-
-
 def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> str:
     """
     Build a compact, 15-second summary using existing snippet fields only.
+    Adds confidence labels (minimal change).
     Must not raise even if fields are missing.
     """
-    # --- PRICE summary ---
+    # ---- PRICE (QQQ) ----
+    p_meta = price.get("meta", {}) or {}
     p_latest = price.get("latest", {}) or {}
     p_hist = price.get("historical_simulation", {}) or {}
     p_action = price.get("action_output", "")
     p_reason = price.get("trigger_reason", "")
+
+    p_gen = price.get("generated_at_utc", "")
+    p_max_date = p_meta.get("max_date", "")
+    p_stale_days = _staleness_days(p_gen, p_max_date)
+    p_stale_flag = _staleness_flag(p_stale_days)
+    p_conf, _ = _confidence(p_hist.get("sample_size"), p_stale_flag)
+
     p_close = _fmt_float(p_latest.get("close"), 4)
     p_date = p_latest.get("date", "")
     p_dist_lo = _fmt_pct(p_latest.get("distance_to_lower_pct"), 3)
     p_dist_hi = _fmt_pct(p_latest.get("distance_to_upper_pct"), 3)
-    p_p50 = p_hist.get("p50")
-    p_p10 = p_hist.get("p10")
-    p_min = p_hist.get("min")
 
-    # p50/p10/min are in ratio (negative), print as percent with sign
+    # p50/p10/min are drawdowns in ratio (<=0). Convert to percent.
     def _dd_to_pct(x) -> str:
         if x is None:
             return ""
@@ -186,9 +183,9 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
         except Exception:
             return ""
 
-    dd_p50 = _dd_to_pct(p_p50)
-    dd_p10 = _dd_to_pct(p_p10)
-    dd_min = _dd_to_pct(p_min)
+    dd_p50 = _dd_to_pct(p_hist.get("p50"))
+    dd_p10 = _dd_to_pct(p_hist.get("p10"))
+    dd_min = _dd_to_pct(p_hist.get("min"))
 
     price_line = (
         f"- **QQQ** ({p_date} close={p_close}) → **{p_action}**"
@@ -200,17 +197,39 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
             if (dd_p50 or dd_p10 or dd_min)
             else ""
         )
+        + f" (conf={p_conf})"
     )
 
-    # --- VXN summary (optional) ---
+    # ---- VXN (optional) ----
     if not vxn:
         vxn_line = "- **VXN**: (missing) — VOL context not available."
         return "## 15秒摘要\n\n" + price_line + "\n" + vxn_line + "\n"
 
+    v_meta = vxn.get("meta", {}) or {}
     v_latest = vxn.get("latest", {}) or {}
     v_hist = vxn.get("historical_simulation", {}) or {}
     v_action = vxn.get("action_output", "")
     v_reason = vxn.get("trigger_reason", "")
+
+    v_gen = vxn.get("generated_at_utc", "")
+    v_max_date = v_meta.get("max_date", "")
+    v_stale_days = _staleness_days(v_gen, v_max_date)
+    v_stale_flag = _staleness_flag(v_stale_days)
+
+    # "overall" confidence: if split regimes exist, we base it on B_highvol sample_size when available,
+    # else on hist.sample_size; still obey staleness downgrade.
+    overall_n = None
+    conf_b = None
+
+    b = v_hist.get("B_highvol") if isinstance(v_hist, dict) else None
+    if isinstance(b, dict):
+        overall_n = b.get("sample_size")
+        conf_b, _ = _confidence(b.get("sample_size"), v_stale_flag)
+    elif isinstance(v_hist, dict):
+        overall_n = v_hist.get("sample_size")
+
+    v_conf_overall, _ = _confidence(overall_n, v_stale_flag)
+
     v_close = _fmt_float(v_latest.get("close"), 4)
     v_date = v_latest.get("date", "")
     v_z = _fmt_float(v_latest.get("z"), 4)
@@ -218,12 +237,8 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
     v_bw_d = _fmt_pct(v_latest.get("bandwidth_delta_pct"), 2)
 
     # Prefer B_highvol p90 if present (tail continuation risk)
-    b = v_hist.get("B_highvol") if isinstance(v_hist, dict) else None
-    b_p90 = None
-    b_n = None
-    if isinstance(b, dict):
-        b_p90 = b.get("p90")
-        b_n = b.get("sample_size")
+    b_p90 = b.get("p90") if isinstance(b, dict) else None
+    b_n = b.get("sample_size") if isinstance(b, dict) else None
 
     def _ru_to_pct(x) -> str:
         if x is None:
@@ -246,6 +261,11 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
             f"; High-Vol tail (B) p90 runup={ru_b_p90} (n={b_n})"
             if ru_b_p90
             else ""
+        )
+        + (
+            f" (conf_overall={v_conf_overall}, conf_B={conf_b})"
+            if conf_b is not None
+            else f" (conf_overall={v_conf_overall})"
         )
     )
 
@@ -390,7 +410,7 @@ def build_report(cache_dir: str) -> str:
     lines.append("# Nasdaq BB Monitor Report (QQQ + VXN)\n")
     lines.append(f"- report_generated_at_utc: `{_utc_now_iso()}`\n")
 
-    # NEW: 15-second executive summary
+    # 15-second executive summary (now includes confidence)
     lines.append(_build_15s_summary(price, vxn))
     lines.append("")
 
