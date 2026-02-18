@@ -283,9 +283,16 @@ def _render_nasdaq_bb_cache_display_only_12(lines: List[str], modules: Dict[str,
     """
     Display-only overlay. Fixed 12 lines (more fields) under this section.
     Must NOT affect positioning matrix / mode logic.
+
+    Schema (current):
+      modules.nasdaq_bb_cache.dashboard_latest.{QQQ,VXN,NDX}
+    Backward compat (older):
+      modules.nasdaq_bb_cache.series.{QQQ,VXN,NDX}
+      or modules.nasdaq_bb_cache.{QQQ,VXN,NDX}
     """
     mod = modules.get("nasdaq_bb_cache")
     lines.append("## nasdaq_bb_cache (display-only)")
+
     if not isinstance(mod, dict):
         # still emit 12 lines deterministically
         for s in [
@@ -306,41 +313,79 @@ def _render_nasdaq_bb_cache_display_only_12(lines: List[str], modules: Dict[str,
         lines.append("")
         return
 
-    status = _safe_get(mod, "status") or "NA"
-    note = _safe_get(mod, "note") or _safe_get(mod, "notes") or "display-only; not used for positioning/mode"
+    def _as_dict(x: Any) -> Dict[str, Any]:
+        return x if isinstance(x, dict) else {}
 
-    series = _safe_get(mod, "series") or {}
-    qqq = series.get("QQQ") if isinstance(series, dict) else None
-    vxn = series.get("VXN") if isinstance(series, dict) else None
+    status = _safe_get(mod, "status") or "NA"
+
+    # Prefer dashboard_latest (new schema)
+    dash = _as_dict(_safe_get(mod, "dashboard_latest"))
+    # Old schema fallback
+    series = _as_dict(_safe_get(mod, "series"))
+
+    # Resolve series containers by priority: dashboard_latest > series > mod(root)
+    if dash:
+        qqq = _as_dict(dash.get("QQQ"))
+        vxn = _as_dict(dash.get("VXN"))
+        note = _safe_get(mod, "note") or _safe_get(dash, "note") or "display-only; not used for positioning/mode"
+    elif series:
+        qqq = _as_dict(series.get("QQQ"))
+        vxn = _as_dict(series.get("VXN"))
+        note = _safe_get(mod, "note") or "display-only; not used for positioning/mode"
+    else:
+        qqq = _as_dict(mod.get("QQQ"))
+        vxn = _as_dict(mod.get("VXN"))
+        note = _safe_get(mod, "note") or "display-only; not used for positioning/mode"
 
     # QQQ fields (try multiple schema candidates)
     qqq_date = _pick_first(qqq, [("data_date",), ("date",), ("as_of_date",), ("as_of",)])
     qqq_close = _pick_first(qqq, [("close",), ("value",), ("price",), ("last",), ("px",)])
-    qqq_signal = _pick_first(qqq, [("signal",), ("signal_level",), ("state",), ("bb_signal",), ("status",)])
+    qqq_signal = _pick_first(qqq, [("signal",), ("signal_level",), ("state",), ("bb_signal",), ("status",), ("action_output",)])
     qqq_z = _pick_first(qqq, [("z",), ("zscore",), ("z60",), ("z20",), ("bb_z",)])
     qqq_pos = _pick_first(qqq, [("position_in_band",), ("band_position",), ("pos_in_band",), ("bb_pos",)])
-    qqq_dlow = _pick_first(qqq, [("dist_to_lower_pct",), ("dist_to_lower",), ("dist_lower",), ("bb_dist_to_lower",)])
-    qqq_dup = _pick_first(qqq, [("dist_to_upper_pct",), ("dist_to_upper",), ("dist_upper",), ("bb_dist_to_upper",)])
+    qqq_dlow = _pick_first(qqq, [("dist_to_lower",), ("distance_to_lower_pct",), ("dist_to_lower_pct",), ("dist_lower",), ("bb_dist_to_lower",)])
+    qqq_dup = _pick_first(qqq, [("dist_to_upper",), ("distance_to_upper_pct",), ("dist_to_upper_pct",), ("dist_upper",), ("bb_dist_to_upper",)])
 
     # VXN fields
     vxn_date = _pick_first(vxn, [("data_date",), ("date",), ("as_of_date",), ("as_of",)])
-    vxn_value = _pick_first(vxn, [("close",), ("value",), ("level",), ("last",)])
-    vxn_signal = _pick_first(vxn, [("signal",), ("signal_level",), ("state",), ("bb_signal",), ("status",)])
+    vxn_value = _pick_first(vxn, [("value",), ("close",), ("level",), ("last",)])
+    vxn_signal = _pick_first(vxn, [("signal",), ("signal_level",), ("state",), ("bb_signal",), ("status",), ("action_output",)])
     vxn_pos = _pick_first(vxn, [("position_in_band",), ("band_position",), ("pos_in_band",), ("bb_pos",)])
 
     # Emit fixed 12 lines
     lines.append(f"- status: {status}")
     lines.append(f"- note: {note}")
     lines.append(f"- QQQ.data_date: {qqq_date if qqq_date is not None else 'NA'}")
-    lines.append(f"- QQQ.close: {_fmt(qqq_close, 6) if isinstance(qqq_close, (int, float)) else (str(qqq_close) if qqq_close is not None else 'NA')}")
+    lines.append(
+        f"- QQQ.close: "
+        f"{_fmt(qqq_close, 6) if isinstance(qqq_close, (int, float)) else (str(qqq_close) if qqq_close is not None else 'NA')}"
+    )
     lines.append(f"- QQQ.signal: {qqq_signal if qqq_signal is not None else 'NA'}")
-    lines.append(f"- QQQ.z: {_fmt(qqq_z, 6) if isinstance(qqq_z, (int, float)) else (str(qqq_z) if qqq_z is not None else 'NA')}")
-    lines.append(f"- QQQ.position_in_band: {_fmt(qqq_pos, 6) if isinstance(qqq_pos, (int, float)) else (str(qqq_pos) if qqq_pos is not None else 'NA')}")
-    lines.append(f"- QQQ.dist_to_lower: {_fmt(qqq_dlow, 6) if isinstance(qqq_dlow, (int, float)) else (str(qqq_dlow) if qqq_dlow is not None else 'NA')}")
-    lines.append(f"- QQQ.dist_to_upper: {_fmt(qqq_dup, 6) if isinstance(qqq_dup, (int, float)) else (str(qqq_dup) if qqq_dup is not None else 'NA')}")
+    lines.append(
+        f"- QQQ.z: "
+        f"{_fmt(qqq_z, 6) if isinstance(qqq_z, (int, float)) else (str(qqq_z) if qqq_z is not None else 'NA')}"
+    )
+    lines.append(
+        f"- QQQ.position_in_band: "
+        f"{_fmt(qqq_pos, 6) if isinstance(qqq_pos, (int, float)) else (str(qqq_pos) if qqq_pos is not None else 'NA')}"
+    )
+    lines.append(
+        f"- QQQ.dist_to_lower: "
+        f"{_fmt(qqq_dlow, 6) if isinstance(qqq_dlow, (int, float)) else (str(qqq_dlow) if qqq_dlow is not None else 'NA')}"
+    )
+    lines.append(
+        f"- QQQ.dist_to_upper: "
+        f"{_fmt(qqq_dup, 6) if isinstance(qqq_dup, (int, float)) else (str(qqq_dup) if qqq_dup is not None else 'NA')}"
+    )
     lines.append(f"- VXN.data_date: {vxn_date if vxn_date is not None else 'NA'}")
-    lines.append(f"- VXN.value: {_fmt(vxn_value, 6) if isinstance(vxn_value, (int, float)) else (str(vxn_value) if vxn_value is not None else 'NA')}")
-    lines.append(f"- VXN.signal: {vxn_signal if vxn_signal is not None else 'NA'} (position_in_band={_fmt(vxn_pos, 6) if isinstance(vxn_pos, (int, float)) else (str(vxn_pos) if vxn_pos is not None else 'NA')})")
+    lines.append(
+        f"- VXN.value: "
+        f"{_fmt(vxn_value, 6) if isinstance(vxn_value, (int, float)) else (str(vxn_value) if vxn_value is not None else 'NA')}"
+    )
+    lines.append(
+        f"- VXN.signal: {vxn_signal if vxn_signal is not None else 'NA'} "
+        f"(position_in_band={_fmt(vxn_pos, 6) if isinstance(vxn_pos, (int, float)) else (str(vxn_pos) if vxn_pos is not None else 'NA')})"
+    )
     lines.append("")
 
 
