@@ -1,497 +1,767 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-Build nasdaq_bb_cache/report.md from snippet JSON files.
+nasdaq_bb_len60_k2_logclose.py
 
-Inputs (under --cache_dir):
-  - snippet_price.json
-  - snippet_vxn.json (optional)
+Audit-first Nasdaq risk monitor using Bollinger Bands (BB).
+- PRICE: QQQ from Stooq
+- VOL:   VXN from Cboe (best-effort) with fallback to FRED
 
-Output:
-  - report.md (default: <cache_dir>/report.md)
+Key points:
+- PRICE conditional stat: forward_mdd (<= 0 by construction)
+- VOL conditional stat(s):
+    (A) low-vol regime (z <= z_thresh_low):  forward_max_runup (>= 0)
+    (B) high-vol regime (z >= z_thresh_high): forward_max_runup (>= 0)
 
-CLI compatibility:
-  - Accepts --cache_dir (primary)
-  - Also accepts --in_dir / --out_dir as aliases (some workflows use these)
-
-Notes:
-- staleness_days computed as: date(snippet.generated_at_utc) - meta.max_date
-- staleness_flag: OK if <=2 days else HIGH
-- confidence: if staleness_flag != OK => LOW; else by sample_size: <30 LOW, 30-79 MED, >=80 HIGH
-- VXN overall confidence: max(conf_A, conf_B)
-- This script DOES NOT "fix" snippet metrics; it reports what exists and flags invariant violations.
+This is a monitoring utility, NOT a trading signal generator.
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
-from dataclasses import dataclass
-from datetime import datetime, date, timezone
-from typing import Any, Dict, Optional, Tuple, List
+import time
+import urllib.parse
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import requests
 
 
-# -------------------------
-# helpers: time / parsing
-# -------------------------
+# ---------------------------
+# Utilities
+# ---------------------------
 
-def parse_iso_utc(ts: str) -> datetime:
-    # Accept "2026-02-18T05:59:48Z" or ISO with offset
-    if ts.endswith("Z"):
-        ts = ts[:-1] + "+00:00"
-    return datetime.fromisoformat(ts).astimezone(timezone.utc)
+def _utc_now_iso() -> str:
+    return pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def parse_yyyy_mm_dd(s: str) -> date:
-    return datetime.strptime(s, "%Y-%m-%d").date()
+def _ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
 
 
-def safe_get(d: Dict[str, Any], path: str, default: Any = None) -> Any:
-    cur: Any = d
-    for k in path.split("."):
-        if not isinstance(cur, dict) or k not in cur:
+def _http_get(url: str, timeout: int = 30, max_retries: int = 3, backoff_s: float = 1.5) -> bytes:
+    last_err = None
+    headers = {"User-Agent": "risk-dashboard-bb-script/3.0"}
+    for i in range(max_retries):
+        try:
+            r = requests.get(url, timeout=timeout, headers=headers)
+            if r.status_code != 200:
+                raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
+            return r.content
+        except Exception as e:
+            last_err = e
+            if i < max_retries - 1:
+                time.sleep(backoff_s * (i + 1))
+    raise RuntimeError(f"GET failed after {max_retries} retries: {url}\nLast error: {last_err}")
+
+
+def _read_csv_bytes(content: bytes) -> pd.DataFrame:
+    from io import BytesIO
+    try:
+        return pd.read_csv(BytesIO(content))
+    except UnicodeDecodeError:
+        return pd.read_csv(BytesIO(content), encoding="latin-1")
+
+
+def _pick_date_col(df: pd.DataFrame) -> str:
+    candidates = [c for c in df.columns if str(c).strip().lower() in ("date", "trade date", "timestamp", "observation_date", "date ")]
+    if candidates:
+        return candidates[0]
+    for c in df.columns:
+        if "date" in str(c).strip().lower():
+            return c
+    raise ValueError(f"Cannot find a date column in columns={list(df.columns)[:10]}...")
+
+
+def _pick_value_col(df: pd.DataFrame) -> str:
+    # common exact names
+    for name in ("close", "closing", "value", "close value", "vix close", "vxn close", "close "):
+        for c in df.columns:
+            if str(c).strip().lower() == name:
+                return c
+
+    # close-like
+    close_like = [c for c in df.columns if "close" in str(c).strip().lower()]
+    if close_like:
+        close_like.sort(key=lambda x: len(str(x)))
+        return close_like[0]
+
+    # fallback numeric
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    if numeric_cols:
+        return numeric_cols[-1]
+
+    raise ValueError(f"Cannot find a close/value column in columns={list(df.columns)[:10]}...")
+
+
+def _coerce_series_df(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
+    out = df.copy()
+    out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
+    out = out.dropna(subset=[date_col]).sort_values(date_col).set_index(date_col)
+
+    out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
+    out = out.dropna(subset=[value_col])
+
+    out = out[~out.index.duplicated(keep="last")]
+    out = out.rename(columns={value_col: "close"})
+    return out[["close"]]
+
+
+def _safe_float(x, default=None):
+    try:
+        if x is None:
             return default
-        cur = cur[k]
-    return cur
-
-
-def fmt_float(x: Any, nd: int = 4) -> str:
-    if x is None:
-        return "NA"
-    try:
-        return f"{float(x):.{nd}f}"
+        v = float(x)
+        if np.isnan(v) or np.isinf(v):
+            return default
+        return v
     except Exception:
-        return "NA"
+        return default
 
 
-def fmt_pct_from_decimal(x: Any, nd: int = 2) -> str:
-    """x is decimal, e.g. -0.023 -> -2.30%"""
-    if x is None:
-        return "NA"
-    try:
-        return f"{float(x)*100.0:.{nd}f}%"
-    except Exception:
-        return "NA"
+# ---------------------------
+# Data sources
+# ---------------------------
+
+def fetch_stooq_daily(ticker: str) -> Tuple[pd.DataFrame, Dict]:
+    """
+    Stooq daily CSV endpoint:
+      https://stooq.com/q/d/l/?s=qqq.us&i=d
+    """
+    sym = urllib.parse.quote_plus(ticker.lower())
+    url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
+    content = _http_get(url)
+    raw = _read_csv_bytes(content)
+
+    date_col = _pick_date_col(raw)
+    value_col = _pick_value_col(raw)
+    df = _coerce_series_df(raw, date_col=date_col, value_col=value_col)
+
+    meta = {
+        "source": "stooq",
+        "url": url,
+        "date_col": date_col,
+        "value_col": value_col,
+        "rows": int(df.shape[0]),
+        "min_date": str(df.index.min().date()),
+        "max_date": str(df.index.max().date()),
+    }
+    return df, meta
 
 
-def fmt_pct_from_number(x: Any, nd: int = 2) -> str:
-    """x is already in percent points, e.g. 0.781 -> 0.78%"""
-    if x is None:
-        return "NA"
-    try:
-        return f"{float(x):.{nd}f}%"
-    except Exception:
-        return "NA"
+def fetch_fred_daily(series_id: str) -> Tuple[pd.DataFrame, Dict]:
+    """
+    FRED CSV endpoint (no API key required for this download format):
+      https://fred.stlouisfed.org/graph/fredgraph.csv?id=VXNCLS
+    """
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+    content = _http_get(url)
+    raw = _read_csv_bytes(content)
+
+    date_col = "DATE" if "DATE" in raw.columns else _pick_date_col(raw)
+    if series_id in raw.columns:
+        value_col = series_id
+    else:
+        value_col = _pick_value_col(raw)
+
+    df = raw[[date_col, value_col]].copy()
+    df = _coerce_series_df(df, date_col=date_col, value_col=value_col)
+
+    meta = {
+        "source": "fred",
+        "url": url,
+        "series_id": series_id,
+        "date_col": date_col,
+        "value_col": value_col,
+        "rows": int(df.shape[0]),
+        "min_date": str(df.index.min().date()),
+        "max_date": str(df.index.max().date()),
+    }
+    return df, meta
 
 
-def conf_from(staleness_flag: str, n: Optional[int]) -> str:
-    if staleness_flag != "OK":
-        return "LOW"
-    if n is None:
-        return "LOW"
-    if n < 30:
-        return "LOW"
-    if n < 80:
-        return "MED"
-    return "HIGH"
+def fetch_cboe_daily_prices(index_code: str) -> Tuple[pd.DataFrame, Dict]:
+    """
+    Cboe daily prices endpoint (best-effort):
+      https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
+    We try the same pattern for VXN (VXN_History.csv). It may 404 depending on Cboe product coverage.
+    """
+    url = f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{index_code.upper()}_History.csv"
+    content = _http_get(url)
+    raw = _read_csv_bytes(content)
+
+    date_col = _pick_date_col(raw)
+    value_col = _pick_value_col(raw)
+    df = _coerce_series_df(raw, date_col=date_col, value_col=value_col)
+
+    meta = {
+        "source": "cboe",
+        "url": url,
+        "index_code": index_code.upper(),
+        "date_col": date_col,
+        "value_col": value_col,
+        "rows": int(df.shape[0]),
+        "min_date": str(df.index.min().date()),
+        "max_date": str(df.index.max().date()),
+    }
+    return df, meta
 
 
-def conf_rank(c: str) -> int:
-    return {"LOW": 1, "MED": 2, "HIGH": 3}.get(c, 0)
+# ---------------------------
+# Bollinger calculations
+# ---------------------------
+
+@dataclasses.dataclass(frozen=True)
+class BBParams:
+    length: int = 60
+    k: float = 2.0
+    use_log: bool = True
+    ddof: int = 0  # 0=population std, 1=sample std
 
 
-def max_conf(*cs: str) -> str:
-    best = "LOW"
-    for c in cs:
-        if conf_rank(c) > conf_rank(best):
-            best = c
-    return best
+def compute_bollinger(df: pd.DataFrame, params: BBParams) -> pd.DataFrame:
+    if "close" not in df.columns:
+        raise ValueError("df must have a 'close' column")
+
+    out = df.copy().sort_index()
+
+    if params.use_log:
+        if (out["close"] <= 0).any():
+            raise ValueError("Found non-positive close while use_log=True")
+        out["x"] = np.log(out["close"].astype(float))
+    else:
+        out["x"] = out["close"].astype(float)
+
+    w = int(params.length)
+    if w < 2:
+        raise ValueError("length must be >= 2")
+
+    out["ma"] = out["x"].rolling(window=w, min_periods=w).mean()
+    out["sd"] = out["x"].rolling(window=w, min_periods=w).std(ddof=int(params.ddof))
+
+    out["upper_x"] = out["ma"] + params.k * out["sd"]
+    out["lower_x"] = out["ma"] - params.k * out["sd"]
+
+    if params.use_log:
+        out["mid_price"] = np.exp(out["ma"])
+        out["upper_price"] = np.exp(out["upper_x"])
+        out["lower_price"] = np.exp(out["lower_x"])
+    else:
+        out["mid_price"] = out["ma"]
+        out["upper_price"] = out["upper_x"]
+        out["lower_price"] = out["lower_x"]
+
+    # z can blow up if sd=0; keep inf as-is, later safe-cast will handle
+    out["z"] = (out["x"] - out["ma"]) / out["sd"]
+    out["bandwidth_pct"] = (out["upper_price"] - out["lower_price"]) / out["mid_price"]
+
+    # consecutive closes <= lower band (walking lower band)
+    close = out["close"].to_numpy(dtype=float)
+    lower = out["lower_price"].to_numpy(dtype=float)
+    upper = out["upper_price"].to_numpy(dtype=float)
+
+    walk_lower = np.zeros(len(out), dtype=int)
+    walk_upper = np.zeros(len(out), dtype=int)
+
+    for i in range(len(out)):
+        if np.isfinite(lower[i]) and np.isfinite(close[i]) and close[i] <= lower[i]:
+            walk_lower[i] = (walk_lower[i - 1] + 1) if i > 0 else 1
+        else:
+            walk_lower[i] = 0
+
+        if np.isfinite(upper[i]) and np.isfinite(close[i]) and close[i] >= upper[i]:
+            walk_upper[i] = (walk_upper[i - 1] + 1) if i > 0 else 1
+        else:
+            walk_upper[i] = 0
+
+    out["walk_lower_count"] = walk_lower
+    out["walk_upper_count"] = walk_upper
+
+    return out
 
 
-@dataclass
-class Staleness:
-    days: Optional[int]
-    flag: str
+# ---------------------------
+# Forward metrics
+# ---------------------------
+
+def forward_mdd(close_window: np.ndarray) -> float:
+    """
+    Forward MDD (<=0): min(close[t:t+H]) / close[t] - 1
+    Includes day t => cannot be positive.
+    """
+    if close_window.size < 1:
+        return np.nan
+    c0 = close_window[0]
+    m = np.min(close_window)
+    return float(m / c0 - 1.0)
 
 
-def compute_staleness(snippet_generated_at_utc: str, meta_max_date: Optional[str]) -> Staleness:
-    if not snippet_generated_at_utc or not meta_max_date:
-        return Staleness(days=None, flag="NA")
-    try:
-        gen_d = parse_iso_utc(snippet_generated_at_utc).date()
-        asof_d = parse_yyyy_mm_dd(meta_max_date)
-        days = (gen_d - asof_d).days
-        flag = "OK" if days <= 2 else "HIGH"
-        return Staleness(days=days, flag=flag)
-    except Exception:
-        return Staleness(days=None, flag="NA")
+def forward_max_runup(close_window: np.ndarray) -> float:
+    """
+    Forward max run-up (>=0): max(close[t:t+H]) / close[t] - 1
+    Includes day t => cannot be negative.
+    """
+    if close_window.size < 1:
+        return np.nan
+    c0 = close_window[0]
+    m = np.max(close_window)
+    return float(m / c0 - 1.0)
 
 
-# -------------------------
-# markdown render helpers
-# -------------------------
-
-def md_kv_table(rows: List[Tuple[str, str]]) -> str:
-    out = []
-    out.append("| field | value |")
-    out.append("|---|---:|")
-    for k, v in rows:
-        out.append(f"| {k} | {v} |")
-    return "\n".join(out)
-
-
-def md_header_line(k: str, v: str) -> str:
-    return f"- {k}: {v}"
+def _pick_event_positions_le(z: np.ndarray, thresh: float, cooldown: int) -> List[int]:
+    pos = []
+    i = 0
+    n = len(z)
+    cd = max(1, int(cooldown))
+    while i < n:
+        if np.isfinite(z[i]) and z[i] <= thresh:
+            pos.append(i)
+            i += cd
+        else:
+            i += 1
+    return pos
 
 
-def load_json(path: str) -> Dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+def _pick_event_positions_ge(z: np.ndarray, thresh: float, cooldown: int) -> List[int]:
+    pos = []
+    i = 0
+    n = len(z)
+    cd = max(1, int(cooldown))
+    while i < n:
+        if np.isfinite(z[i]) and z[i] >= thresh:
+            pos.append(i)
+            i += cd
+        else:
+            i += 1
+    return pos
 
 
-# -------------------------
-# report builders
-# -------------------------
-
-def build_price_section(price: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-    gen = safe_get(price, "generated_at_utc", "NA")
-    meta_max_date = safe_get(price, "meta.max_date", None)
-    st = compute_staleness(gen, meta_max_date)
-
-    src = safe_get(price, "meta.source", "NA")
-    url = safe_get(price, "meta.url", "NA")
-
-    action = safe_get(price, "action_output", "NA")
-    reason = safe_get(price, "trigger_reason", "none")
-
-    latest = safe_get(price, "latest", {}) or {}
-    hist = safe_get(price, "historical_simulation", {}) or {}
-
-    n = hist.get("sample_size")
-    conf = conf_from(st.flag, n if isinstance(n, int) else None)
-
-    # Invariant check (audit)
-    inv_warn = []
-    if hist.get("metric") == "forward_mdd":
-        # expected <= 0
-        for key in ["p10", "p50", "p90", "mean", "max"]:
-            v = hist.get(key)
-            if isinstance(v, (int, float)) and v > 1e-12:
-                inv_warn.append("PRICE forward_mdd has positive values (expected <= 0). Check computation.")
-                break
-
-    lines = []
-    lines.append("## QQQ (PRICE) — BB(60,2) logclose\n")
-    lines.append(md_header_line("snippet.generated_at_utc", f"`{gen}`"))
-    lines.append(md_header_line("data_as_of (meta.max_date)", f"`{meta_max_date}`  | staleness_days: `{st.days}`  | staleness_flag: **`{st.flag}`**"))
-    lines.append(md_header_line("source", f"`{src}`  | url: `{url}`"))
-    lines.append(md_header_line("action_output", f"**`{action}`**"))
-    lines.append(md_header_line("trigger_reason", f"`{reason}`"))
-    lines.append("")
-
-    # Latest table
-    latest_rows = [
-        ("date", f"`{latest.get('date','NA')}`"),
-        ("close", f"`{fmt_float(latest.get('close'),4)}`"),
-        ("bb_mid", f"`{fmt_float(latest.get('bb_mid'),4)}`"),
-        ("bb_lower", f"`{fmt_float(latest.get('bb_lower'),4)}`"),
-        ("bb_upper", f"`{fmt_float(latest.get('bb_upper'),4)}`"),
-        ("z", f"`{fmt_float(latest.get('z'),4)}`"),
-        ("trigger_z_le_-2", f"`{bool(latest.get('trigger_z_le_-2', False))}`"),
-        ("distance_to_lower_pct", f"`{fmt_pct_from_number(latest.get('distance_to_lower_pct'),3)}`"),
-        ("distance_to_upper_pct", f"`{fmt_pct_from_number(latest.get('distance_to_upper_pct'),3)}`"),
-        ("position_in_band", f"`{fmt_float(latest.get('position_in_band'),3)}`"),
-        ("bandwidth_pct", f"`{fmt_float(latest.get('bandwidth_pct'),4)}`"),
-        ("bandwidth_delta_pct", f"`{fmt_pct_from_number(latest.get('bandwidth_delta_pct'),2)}`"),
-        ("walk_lower_count", str(latest.get("walk_lower_count", 0))),
-    ]
-    lines.append("### Latest\n")
-    lines.append(md_kv_table(latest_rows))
-    lines.append("\n")
-
-    # Historical simulation table
-    lines.append("### Historical simulation (conditional)\n")
-    lines.append(f"- confidence: **`{conf}`** (sample_size={n} ({'30-79' if isinstance(n,int) and 30 <= n <= 79 else ('<30' if isinstance(n,int) and n < 30 else ('>=80' if isinstance(n,int) and n >= 80 else 'NA')}))\n")
-    hist_rows = [
-        ("metric", f"`{hist.get('metric','NA')}`"),
-        ("metric_interpretation", f"`{hist.get('metric_interpretation','NA')}`"),
-        ("z_thresh", f"`{fmt_float(hist.get('z_thresh'),6)}`"),
-        ("horizon_days", str(hist.get("horizon_days", "NA"))),
-        ("cooldown_bars", str(hist.get("cooldown_bars", "NA"))),
-        ("sample_size", str(hist.get("sample_size", "NA"))),
-        ("p10", f"`{fmt_float(hist.get('p10'),6)}`"),
-        ("p50", f"`{fmt_float(hist.get('p50'),6)}`"),
-        ("p90", f"`{fmt_float(hist.get('p90'),6)}`"),
-        ("mean", f"`{fmt_float(hist.get('mean'),6)}`"),
-        ("min", f"`{fmt_float(hist.get('min'),6)}`"),
-        ("max", f"`{fmt_float(hist.get('max'),6)}`"),
-    ]
-    lines.append(md_kv_table(hist_rows))
-    lines.append("\n")
-
-    return "\n".join(lines), {
-        "gen": gen,
-        "asof": meta_max_date,
-        "st": st,
-        "action": action,
-        "reason": reason,
-        "latest": latest,
-        "hist": hist,
-        "conf": conf,
-        "inv_warn": inv_warn,
+def _summarize(values: List[float], metric: str, interpretation: str, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    if len(values) == 0:
+        return {
+            "metric": metric,
+            "metric_interpretation": interpretation,
+            "z_thresh": z_thresh,
+            "horizon_days": horizon,
+            "cooldown_bars": cooldown,
+            "sample_size": 0,
+            "p50": None,
+            "p90": None,
+            "mean": None,
+            "min": None,
+            "max": None,
+        }
+    arr = np.array(values, dtype=float)
+    return {
+        "metric": metric,
+        "metric_interpretation": interpretation,
+        "z_thresh": z_thresh,
+        "horizon_days": horizon,
+        "cooldown_bars": cooldown,
+        "sample_size": int(arr.size),
+        "p50": float(np.nanpercentile(arr, 50)),
+        "p90": float(np.nanpercentile(arr, 90)),
+        "mean": float(np.nanmean(arr)),
+        "min": float(np.nanmin(arr)),
+        "max": float(np.nanmax(arr)),
     }
 
 
-def build_vxn_section(vxn: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-    gen = safe_get(vxn, "generated_at_utc", "NA")
-    meta_max_date = safe_get(vxn, "meta.max_date", None)
-    st = compute_staleness(gen, meta_max_date)
+def conditional_stats_price_mdd(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    df = df_bb.dropna(subset=["z", "close"]).copy()
+    close = df["close"].to_numpy(dtype=float)
+    z = df["z"].to_numpy(dtype=float)
 
-    src = safe_get(vxn, "meta.source", "NA")
-    url = safe_get(vxn, "meta.url", "NA")
+    trig_pos = _pick_event_positions_le(z=z, thresh=z_thresh, cooldown=cooldown)
+    vals: List[float] = []
+    for i in trig_pos:
+        j = min(i + horizon, len(close) - 1)
+        window = close[i: j + 1]
+        vals.append(forward_mdd(window))
 
-    selected_source = safe_get(vxn, "selected_source", "NA")
-    fallback_used = safe_get(vxn, "fallback_used", False)
+    return _summarize(
+        values=vals,
+        metric="forward_mdd",
+        interpretation="<=0; closer to 0 is less pain; more negative is deeper drawdown",
+        z_thresh=z_thresh,
+        horizon=horizon,
+        cooldown=cooldown,
+    )
 
-    action = safe_get(vxn, "action_output", "NA")
-    reason = safe_get(vxn, "trigger_reason", "none")
-    active_regime = safe_get(vxn, "active_regime", "NONE")
-    tail_b_applicable = bool(safe_get(vxn, "tail_B_applicable", False))
 
-    latest = safe_get(vxn, "latest", {}) or {}
-    hist = safe_get(vxn, "historical_simulation", {}) or {}
+def conditional_stats_runup_le(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    df = df_bb.dropna(subset=["z", "close"]).copy()
+    close = df["close"].to_numpy(dtype=float)
+    z = df["z"].to_numpy(dtype=float)
 
-    hist_a = hist.get("A", {}) if isinstance(hist.get("A"), dict) else {}
-    hist_b = hist.get("B", {}) if isinstance(hist.get("B"), dict) else {}
+    trig_pos = _pick_event_positions_le(z=z, thresh=z_thresh, cooldown=cooldown)
+    vals: List[float] = []
+    for i in trig_pos:
+        j = min(i + horizon, len(close) - 1)
+        window = close[i: j + 1]
+        vals.append(forward_max_runup(window))
 
-    nA = hist_a.get("sample_size") if isinstance(hist_a.get("sample_size"), int) else None
-    nB = hist_b.get("sample_size") if isinstance(hist_b.get("sample_size"), int) else None
+    return _summarize(
+        values=vals,
+        metric="forward_max_runup",
+        interpretation=">=0; larger means bigger spike risk",
+        z_thresh=z_thresh,
+        horizon=horizon,
+        cooldown=cooldown,
+    )
 
-    confA = conf_from(st.flag, nA)
-    confB = conf_from(st.flag, nB)
-    conf_overall = max_conf(confA, confB)
 
-    # Invariant check (audit)
-    inv_warn = []
-    # expected >= 0
-    for bucket_name, bucket in [("A", hist_a), ("B", hist_b)]:
-        if bucket.get("metric") == "forward_max_runup":
-            for key in ["p10", "p50", "p90", "mean", "min"]:
-                v = bucket.get(key)
-                if isinstance(v, (int, float)) and v < -1e-12:
-                    inv_warn.append(f"VXN forward_max_runup bucket {bucket_name} has negative values (expected >= 0). Check computation.")
-                    break
+def conditional_stats_runup_ge(df_bb: pd.DataFrame, z_thresh: float, horizon: int, cooldown: int) -> Dict:
+    df = df_bb.dropna(subset=["z", "close"]).copy()
+    close = df["close"].to_numpy(dtype=float)
+    z = df["z"].to_numpy(dtype=float)
 
-    lines = []
-    lines.append("## VXN (VOL) — BB(60,2) logclose\n")
-    lines.append(md_header_line("snippet.generated_at_utc", f"`{gen}`"))
-    lines.append(md_header_line("data_as_of (meta.max_date)", f"`{meta_max_date}`  | staleness_days: `{st.days}`  | staleness_flag: **`{st.flag}`**"))
-    lines.append(md_header_line("source", f"`{src}`  | url: `{url}`"))
-    lines.append(md_header_line("selected_source", f"`{selected_source}` | fallback_used: `{bool(fallback_used)}`"))
-    lines.append(md_header_line("action_output", f"**`{action}`**"))
-    lines.append(md_header_line("trigger_reason", f"`{reason}`"))
-    lines.append(md_header_line("active_regime", f"`{active_regime}`"))
-    lines.append(md_header_line("tail_B_applicable", f"`{tail_b_applicable}`"))
-    lines.append("")
+    trig_pos = _pick_event_positions_ge(z=z, thresh=z_thresh, cooldown=cooldown)
+    vals: List[float] = []
+    for i in trig_pos:
+        j = min(i + horizon, len(close) - 1)
+        window = close[i: j + 1]
+        vals.append(forward_max_runup(window))
 
-    latest_rows = [
-        ("date", f"`{latest.get('date','NA')}`"),
-        ("close", f"`{fmt_float(latest.get('close'),4)}`"),
-        ("bb_mid", f"`{fmt_float(latest.get('bb_mid'),4)}`"),
-        ("bb_lower", f"`{fmt_float(latest.get('bb_lower'),4)}`"),
-        ("bb_upper", f"`{fmt_float(latest.get('bb_upper'),4)}`"),
-        ("z", f"`{fmt_float(latest.get('z'),4)}`"),
-        ("trigger_z_le_-2 (A_lowvol)", f"`{bool(latest.get('trigger_z_le_-2', False))}`"),
-        ("trigger_z_ge_2 (B_highvol)", f"`{bool(latest.get('trigger_z_ge_2', False))}`"),
-        ("distance_to_lower_pct", f"`{fmt_pct_from_number(latest.get('distance_to_lower_pct'),3)}`"),
-        ("distance_to_upper_pct", f"`{fmt_pct_from_number(latest.get('distance_to_upper_pct'),3)}`"),
-        ("position_in_band", f"`{fmt_float(latest.get('position_in_band'),3)}`"),
-        ("bandwidth_pct", f"`{fmt_float(latest.get('bandwidth_pct'),4)}`"),
-        ("bandwidth_delta_pct", f"`{fmt_pct_from_number(latest.get('bandwidth_delta_pct'),2)}`"),
-        ("walk_upper_count", str(latest.get("walk_upper_count", 0))),
-    ]
-    lines.append("### Latest\n")
-    lines.append(md_kv_table(latest_rows))
-    lines.append("\n")
+    return _summarize(
+        values=vals,
+        metric="forward_max_runup",
+        interpretation=">=0; larger means further spike continuation risk",
+        z_thresh=z_thresh,
+        horizon=horizon,
+        cooldown=cooldown,
+    )
 
-    lines.append("### Historical simulation (conditional)\n")
 
-    # A
-    lines.append("#### A) Low-Vol / Complacency (z <= threshold)\n")
-    lines.append(f"- confidence: **`{confA}`** (sample_size={hist_a.get('sample_size','NA')} ({'<30' if isinstance(nA,int) and nA < 30 else ('30-79' if isinstance(nA,int) and 30 <= nA <= 79 else ('>=80' if isinstance(nA,int) and nA >= 80 else 'NA')}))\n")
-    rowsA = [
-        ("metric", f"`{hist_a.get('metric','NA')}`"),
-        ("metric_interpretation", f"`{hist_a.get('metric_interpretation','NA')}`"),
-        ("z_thresh", f"`{fmt_float(hist_a.get('z_thresh'),6)}`"),
-        ("horizon_days", str(hist_a.get("horizon_days", "NA"))),
-        ("cooldown_bars", str(hist_a.get("cooldown_bars", "NA"))),
-        ("sample_size", str(hist_a.get("sample_size", "NA"))),
-        ("p10", f"`{fmt_float(hist_a.get('p10'),6)}`"),
-        ("p50", f"`{fmt_float(hist_a.get('p50'),6)}`"),
-        ("p90", f"`{fmt_float(hist_a.get('p90'),6)}`"),
-        ("mean", f"`{fmt_float(hist_a.get('mean'),6)}`"),
-        ("min", f"`{fmt_float(hist_a.get('min'),6)}`"),
-        ("max", f"`{fmt_float(hist_a.get('max'),6)}`"),
-    ]
-    lines.append(md_kv_table(rowsA))
-    lines.append("\n")
+# ---------------------------
+# Latest derived fields
+# ---------------------------
 
-    # B
-    lines.append("#### B) High-Vol / Stress (z >= threshold)\n")
-    lines.append(f"- confidence: **`{confB}`** (sample_size={hist_b.get('sample_size','NA')} ({'<30' if isinstance(nB,int) and nB < 30 else ('30-79' if isinstance(nB,int) and 30 <= nB <= 79 else ('>=80' if isinstance(nB,int) and nB >= 80 else 'NA')}))\n")
-    rowsB = [
-        ("metric", f"`{hist_b.get('metric','NA')}`"),
-        ("metric_interpretation", f"`{hist_b.get('metric_interpretation','NA')}`"),
-        ("z_thresh", f"`{fmt_float(hist_b.get('z_thresh'),6)}`"),
-        ("horizon_days", str(hist_b.get("horizon_days", "NA"))),
-        ("cooldown_bars", str(hist_b.get("cooldown_bars", "NA"))),
-        ("sample_size", str(hist_b.get("sample_size", "NA"))),
-        ("p10", f"`{fmt_float(hist_b.get('p10'),6)}`"),
-        ("p50", f"`{fmt_float(hist_b.get('p50'),6)}`"),
-        ("p90", f"`{fmt_float(hist_b.get('p90'),6)}`"),
-        ("mean", f"`{fmt_float(hist_b.get('mean'),6)}`"),
-        ("min", f"`{fmt_float(hist_b.get('min'),6)}`"),
-        ("max", f"`{fmt_float(hist_b.get('max'),6)}`"),
-    ]
-    lines.append(md_kv_table(rowsB))
-    lines.append("\n")
+def _latest_derived(latest: pd.Series) -> Dict:
+    close = _safe_float(latest.get("close"))
+    lower = _safe_float(latest.get("lower_price"))
+    upper = _safe_float(latest.get("upper_price"))
+    z = _safe_float(latest.get("z"))
+    bw = _safe_float(latest.get("bandwidth_pct"))
+    walk_l = int(_safe_float(latest.get("walk_lower_count"), 0) or 0)
+    walk_u = int(_safe_float(latest.get("walk_upper_count"), 0) or 0)
 
-    return "\n".join(lines), {
-        "gen": gen,
-        "asof": meta_max_date,
-        "st": st,
-        "action": action,
-        "reason": reason,
-        "latest": latest,
-        "histA": hist_a,
-        "histB": hist_b,
-        "confA": confA,
-        "confB": confB,
-        "conf": conf_overall,
-        "active_regime": active_regime,
-        "tail_B_applicable": tail_b_applicable,
-        "inv_warn": inv_warn,
+    # distances: percentage of current close
+    dist_lower = None
+    dist_upper = None
+    pos_in_band = None
+
+    if close is not None and close > 0 and lower is not None:
+        dist_lower = float((close - lower) / close * 100.0)
+    if close is not None and close > 0 and upper is not None:
+        dist_upper = float((upper - close) / close * 100.0)
+
+    if lower is not None and upper is not None and close is not None and upper > lower:
+        pos_in_band = float((close - lower) / (upper - lower))
+        pos_in_band = float(np.clip(pos_in_band, 0.0, 1.0))
+
+    return {
+        "close": close,
+        "bb_mid": _safe_float(latest.get("mid_price")),
+        "bb_lower": lower,
+        "bb_upper": upper,
+        "z": z,
+        "trigger_z_le_-2": (z is not None and z <= -2.0),
+        "trigger_z_ge_2": (z is not None and z >= 2.0),
+        "distance_to_lower_pct": dist_lower,
+        "distance_to_upper_pct": dist_upper,
+        "position_in_band": pos_in_band,
+        "bandwidth_pct": bw,
+        "walk_lower_count": walk_l,
+        "walk_upper_count": walk_u,
     }
 
 
-def build_15s_summary(price_ctx: Dict[str, Any], vxn_ctx: Optional[Dict[str, Any]]) -> str:
-    # PRICE summary
-    p_date = price_ctx["latest"].get("date", "NA")
-    p_close = price_ctx["latest"].get("close", None)
-    p_action = price_ctx["action"]
-    p_reason = price_ctx["reason"]
+# ---------------------------
+# Action label (guardrail)
+# ---------------------------
 
-    p_dl = fmt_pct_from_number(price_ctx["latest"].get("distance_to_lower_pct"), 3)
-    p_du = fmt_pct_from_number(price_ctx["latest"].get("distance_to_upper_pct"), 3)
+def decide_action_price(latest: pd.Series, bw_delta_pct: Optional[float]) -> str:
+    z = _safe_float(latest.get("z"))
+    walk_lower = int(_safe_float(latest.get("walk_lower_count"), 0) or 0)
 
-    p_hist = price_ctx["hist"]
-    p50 = fmt_pct_from_decimal(p_hist.get("p50"), 2)
-    p10 = fmt_pct_from_decimal(p_hist.get("p10"), 2)
-    pmin = fmt_pct_from_decimal(p_hist.get("min"), 2)
-    pconf = price_ctx["conf"]
+    if z is None:
+        return "INSUFFICIENT_DATA"
 
-    line_price = (
-        f"- **QQQ** ({p_date} close={fmt_float(p_close,4)}) → **{p_action}** "
-        f"(reason={p_reason}); dist_to_lower={p_dl}; dist_to_upper={p_du}; "
-        f"20D forward_mdd: p50={p50}, p10={p10}, min={pmin} (conf={pconf})"
+    if walk_lower >= 3:
+        return "LOCKOUT_WALKING_LOWER_BAND (DO_NOT_CATCH_FALLING_KNIFE)"
+
+    if bw_delta_pct is not None and bw_delta_pct >= 10.0 and z <= -2.0:
+        return "LOCKOUT_VOL_EXPANSION_AT_LOWER (WAIT)"
+
+    if z <= -3.0:
+        return "EXTREME_TAIL_RISK (WAIT)"
+    if z <= -2.0:
+        return "LOWER_BAND_TOUCH (MONITOR / SCALE_IN_ONLY)"
+    if z <= -1.5:
+        return "NEAR_LOWER_BAND (MONITOR)"
+    return "NORMAL_RANGE"
+
+
+def decide_action_vol(latest: pd.Series, bw_delta_pct: Optional[float]) -> str:
+    z = _safe_float(latest.get("z"))
+    walk_upper = int(_safe_float(latest.get("walk_upper_count"), 0) or 0)
+
+    if z is None:
+        return "INSUFFICIENT_DATA"
+
+    # "walking upper band" => stress persists
+    if walk_upper >= 3:
+        return "STRESS_LOCKOUT_WALKING_UPPER_BAND (RISK_HIGH)"
+
+    # if vol is already at upper tail AND bandwidth expanding -> avoid "mean reversion" temptation
+    if bw_delta_pct is not None and bw_delta_pct >= 10.0 and z >= 2.0:
+        return "STRESS_VOL_EXPANSION (RISK_HIGH)"
+
+    # two-sided labels (so you get A & B)
+    if z >= 3.0:
+        return "EXTREME_VOL_SPIKE_ZONE (RISK_HIGH)"
+    if z >= 2.0:
+        return "UPPER_BAND_TOUCH (STRESS)"
+    if z >= 1.5:
+        return "NEAR_UPPER_BAND (WATCH)"
+
+    if z <= -3.0:
+        return "EXTREME_LOW_VOL_ZONE (COMPLACENCY)"
+    if z <= -2.0:
+        return "LOWER_BAND_TOUCH (COMPLACENCY)"
+    if z <= -1.5:
+        return "NEAR_LOWER_BAND (COMPLACENCY_WATCH)"
+
+    return "NORMAL_RANGE"
+
+
+# ---------------------------
+# Build snippet JSON
+# ---------------------------
+
+def build_snippet(
+    name: str,
+    df_bb: pd.DataFrame,
+    params: BBParams,
+    meta: Dict,
+    series_kind: str,
+    hist: Dict,
+) -> Dict:
+    df = df_bb.dropna(subset=["ma", "sd", "upper_price", "lower_price", "z"]).copy()
+    if df.empty:
+        return {
+            "name": name,
+            "status": "INSUFFICIENT_DATA",
+            "meta": meta,
+            "params": dataclasses.asdict(params),
+            "generated_at_utc": _utc_now_iso(),
+        }
+
+    latest = df.iloc[-1]
+    prev = df.iloc[-2] if len(df) >= 2 else None
+
+    bw_delta_pct = None
+    if prev is not None:
+        prev_bw = _safe_float(prev.get("bandwidth_pct"))
+        cur_bw = _safe_float(latest.get("bandwidth_pct"))
+        if prev_bw is not None and cur_bw is not None and prev_bw != 0:
+            bw_delta_pct = float((cur_bw / prev_bw - 1.0) * 100.0)
+
+    latest_pack = {
+        "date": str(latest.name.date()),
+        **_latest_derived(latest),
+        "bandwidth_delta_pct": bw_delta_pct,
+    }
+
+    if series_kind == "price":
+        action = decide_action_price(latest, bw_delta_pct)
+    elif series_kind == "vol":
+        action = decide_action_vol(latest, bw_delta_pct)
+    else:
+        action = "UNKNOWN_SERIES_KIND"
+
+    return {
+        "name": name,
+        "generated_at_utc": _utc_now_iso(),
+        "meta": meta,
+        "params": dataclasses.asdict(params),
+        "latest": latest_pack,
+        "historical_simulation": hist,
+        "action_output": action,
+    }
+
+
+# ---------------------------
+# CLI / Main
+# ---------------------------
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Nasdaq BB(60,2) monitor (logclose): QQQ + optional VXN (Cboe/FRED)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # VXN summary (optional)
-    if not vxn_ctx:
-        return "## 15秒摘要\n\n" + line_price + "\n"
+    p.add_argument("--price_ticker", default="qqq.us", help="Stooq ticker for price series (default: qqq.us)")
 
-    v_date = vxn_ctx["latest"].get("date", "NA")
-    v_close = vxn_ctx["latest"].get("close", None)
-    v_action = vxn_ctx["action"]
-    v_reason = vxn_ctx["reason"]
-    v_z = fmt_float(vxn_ctx["latest"].get("z"), 4)
-    v_pos = fmt_float(vxn_ctx["latest"].get("position_in_band"), 3)
-    v_bw_delta = fmt_pct_from_number(vxn_ctx["latest"].get("bandwidth_delta_pct"), 2)
+    p.add_argument("--vxn_enable", action="store_true")
+    p.add_argument("--vxn_source", choices=["cboe_first", "fred_first"], default="fred_first")
+    p.add_argument("--vxn_code", default="VXN", help="Cboe index code for CSV attempt (default: VXN)")
+    p.add_argument("--vxn_fred_series", default="VXNCLS", help="FRED series id (default: VXNCLS)")
 
-    tail_app = bool(vxn_ctx.get("tail_B_applicable", False))
-    b_p90 = fmt_pct_from_decimal(vxn_ctx["histB"].get("p90"), 1)
-    b_n = vxn_ctx["histB"].get("sample_size", "NA")
-    v_conf = vxn_ctx["conf"]
+    p.add_argument("--bb_len", type=int, default=60)
+    p.add_argument("--bb_k", type=float, default=2.0)
+    p.add_argument("--use_log", action="store_true", default=True)
+    p.add_argument("--no_log", action="store_true")
+    p.add_argument("--ddof", type=int, choices=[0, 1], default=0)
 
-    line_vxn = (
-        f"- **VXN** ({v_date} close={fmt_float(v_close,4)}) → **{v_action}** "
-        f"(reason={v_reason}); z={v_z}; pos={v_pos}; bwΔ={v_bw_delta}; "
-        f"High-Vol tail (B, applicable={'true' if tail_app else 'false'}) p90 runup={b_p90} (n={b_n}) (conf={v_conf})"
-    )
+    # PRICE trigger threshold
+    p.add_argument("--z_thresh", type=float, default=-2.0, help="PRICE trigger: z <= z_thresh")
+    # VOL two-sided thresholds (A & B)
+    p.add_argument("--z_thresh_low", type=float, default=-2.0, help="VOL(A) trigger: z <= z_thresh_low")
+    p.add_argument("--z_thresh_high", type=float, default=2.0, help="VOL(B) trigger: z >= z_thresh_high")
 
-    return "## 15秒摘要\n\n" + line_price + "\n" + line_vxn + "\n"
+    p.add_argument("--horizon", type=int, default=20)
+    p.add_argument("--cooldown", type=int, default=20)
+
+    p.add_argument("--out_dir", default="nasdaq_bb_cache")
+    p.add_argument("--quiet", action="store_true")
+
+    return p.parse_args()
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--cache_dir", default=None, help="Directory containing snippet_*.json; report.md will be written here by default.")
-    # Compatibility aliases
-    ap.add_argument("--in_dir", default=None, help="Alias of --cache_dir")
-    ap.add_argument("--out_dir", default=None, help="Alias of --cache_dir (older workflows)")
-    ap.add_argument("--report_path", default=None, help="Explicit output path for report.md (optional)")
-    ap.add_argument("--quiet", action="store_true")
+    args = parse_args()
+    use_log = bool(args.use_log) and (not bool(args.no_log))
+    params = BBParams(length=args.bb_len, k=args.bb_k, use_log=use_log, ddof=args.ddof)
 
-    args = ap.parse_args()
+    _ensure_dir(args.out_dir)
 
-    cache_dir = args.cache_dir or args.in_dir or args.out_dir
-    if not cache_dir:
-        cache_dir = "nasdaq_bb_cache"
+    # -----------------------
+    # PRICE: QQQ
+    # -----------------------
+    price_df, price_meta = fetch_stooq_daily(args.price_ticker)
+    price_bb = compute_bollinger(price_df, params)
 
-    price_path = os.path.join(cache_dir, "snippet_price.json")
-    vxn_path = os.path.join(cache_dir, "snippet_vxn.json")
+    price_hist = conditional_stats_price_mdd(
+        price_bb,
+        z_thresh=args.z_thresh,
+        horizon=args.horizon,
+        cooldown=args.cooldown,
+    )
 
-    if not os.path.exists(price_path):
-        raise SystemExit(f"Missing required file: {price_path}")
+    price_snippet = build_snippet(
+        name=f"QQQ_BB(len={params.length},k={params.k},log={params.use_log})",
+        df_bb=price_bb,
+        params=params,
+        meta=price_meta,
+        series_kind="price",
+        hist=price_hist,
+    )
 
-    price = load_json(price_path)
-    vxn = load_json(vxn_path) if os.path.exists(vxn_path) else None
+    price_json_path = os.path.join(args.out_dir, "snippet_price_qqq.json")
+    with open(price_json_path, "w", encoding="utf-8") as f:
+        json.dump(price_snippet, f, ensure_ascii=False, indent=2)
 
-    report_path = args.report_path or os.path.join(cache_dir, "report.md")
-    os.makedirs(os.path.dirname(report_path), exist_ok=True)
-
-    price_section, price_ctx = build_price_section(price)
-    vxn_section, vxn_ctx = (build_vxn_section(vxn) if vxn else ("", None))
-
-    # warnings
-    warnings: List[str] = []
-    warnings.extend(price_ctx.get("inv_warn", []))
-    if vxn_ctx:
-        warnings.extend(vxn_ctx.get("inv_warn", []))
-
-    report_lines = []
-    report_lines.append("# Nasdaq BB Monitor Report (QQQ + VXN)\n")
-    report_lines.append(f"- report_generated_at_utc: `{datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')}`\n")
-    report_lines.append(build_15s_summary(price_ctx, vxn_ctx))
-    report_lines.append("\n")
-    report_lines.append(price_section)
-    report_lines.append("\n")
-    if vxn_section:
-        report_lines.append(vxn_section)
-        report_lines.append("\n")
-
-    report_lines.append("---\n")
-    report_lines.append("Notes:\n")
-    report_lines.append("- `staleness_days` = snippet 的 `generated_at_utc` 日期 − `meta.max_date`；週末/假期可能放大此值。\n")
-    report_lines.append("- PRICE 的 `forward_mdd` **理論上**應永遠 `<= 0`（0 代表未回撤）。\n")
-    report_lines.append("- VOL 的 `forward_max_runup` **理論上**應永遠 `>= 0`（數值越大代表波動「再爆衝」風險越大）。\n")
-    report_lines.append("- `confidence` 規則：若 `staleness_flag!=OK` 則直接降為 LOW；否則依 sample_size：<30=LOW，30-79=MED，>=80=HIGH。\n")
-    report_lines.append("- `trigger_reason` 用於稽核 action_output 被哪條規則觸發。\n")
-
-    if warnings:
-        report_lines.append("\n⚠️ Data Quality warnings:\n")
-        for w in warnings:
-            report_lines.append(f"- {w}\n")
-
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(report_lines).rstrip() + "\n")
+    price_csv_path = os.path.join(args.out_dir, "tail_price_qqq.csv")
+    price_bb.tail(200).to_csv(price_csv_path, index=True)
 
     if not args.quiet:
-        print(report_path)
+        print("=== PRICE SNIPPET (QQQ) ===")
+        print(json.dumps(price_snippet, ensure_ascii=False, indent=2))
+
+    # -----------------------
+    # VOL: VXN (optional)
+    # -----------------------
+    if args.vxn_enable:
+        vxn_df = None
+        vxn_meta = None
+        attempt_errors: List[str] = []
+
+        order = ["cboe", "fred"] if args.vxn_source == "cboe_first" else ["fred", "cboe"]
+        selected_source = None
+
+        for src in order:
+            try:
+                if src == "cboe":
+                    vxn_df, vxn_meta = fetch_cboe_daily_prices(args.vxn_code)
+                else:
+                    vxn_df, vxn_meta = fetch_fred_daily(args.vxn_fred_series)
+                selected_source = src
+                break
+            except Exception as e:
+                attempt_errors.append(f"{src}: {e}")
+
+        if vxn_df is None or vxn_meta is None or selected_source is None:
+            raise RuntimeError("Failed to fetch VXN from all sources:\n" + "\n".join(attempt_errors))
+
+        # stamp fallback info into meta
+        vxn_meta2 = {
+            "attempt_errors": attempt_errors,
+            "selected_source": selected_source,
+            "fallback_used": (selected_source != order[0]),
+            **vxn_meta,
+        }
+
+        vxn_bb = compute_bollinger(vxn_df, params)
+
+        # A: low-vol -> future spike risk
+        vxn_hist_low = conditional_stats_runup_le(
+            vxn_bb,
+            z_thresh=args.z_thresh_low,
+            horizon=args.horizon,
+            cooldown=args.cooldown,
+        )
+        # B: high-vol -> further spike continuation risk
+        vxn_hist_high = conditional_stats_runup_ge(
+            vxn_bb,
+            z_thresh=args.z_thresh_high,
+            horizon=args.horizon,
+            cooldown=args.cooldown,
+        )
+
+        vxn_hist = {
+            "A_lowvol": vxn_hist_low,
+            "B_highvol": vxn_hist_high,
+        }
+
+        vxn_snippet = build_snippet(
+            name=f"VXN_BB(len={params.length},k={params.k},log={params.use_log})",
+            df_bb=vxn_bb,
+            params=params,
+            meta=vxn_meta2,
+            series_kind="vol",
+            hist=vxn_hist,
+        )
+
+        vxn_json_path = os.path.join(args.out_dir, "snippet_vxn.json")
+        with open(vxn_json_path, "w", encoding="utf-8") as f:
+            json.dump(vxn_snippet, f, ensure_ascii=False, indent=2)
+
+        vxn_csv_path = os.path.join(args.out_dir, "tail_vxn.csv")
+        vxn_bb.tail(200).to_csv(vxn_csv_path, index=True)
+
+        if not args.quiet:
+            print("\n=== VOL SNIPPET (VXN) ===")
+            print(json.dumps(vxn_snippet, ensure_ascii=False, indent=2))
+
+    if not args.quiet:
+        print("\nWrote:")
+        print(f"- {price_json_path}")
+        print(f"- {price_csv_path}")
+        if args.vxn_enable:
+            print(f"- {os.path.join(args.out_dir, 'snippet_vxn.json')}")
+            print(f"- {os.path.join(args.out_dir, 'tail_vxn.csv')}")
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        raise SystemExit(130)
