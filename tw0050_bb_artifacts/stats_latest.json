@@ -1,0 +1,58 @@
+{
+  "dq": {
+    "fetch_ok": true,
+    "insufficient_history": false,
+    "notes": [],
+    "stale_days_local": 8
+  },
+  "forward_mdd": {
+    "all_days": {
+      "conf": "HIGH",
+      "min": -0.7627551264496423,
+      "n": 4172,
+      "p10": -0.07015344461352901,
+      "p50": -0.018457954762270246
+    },
+    "cond_on_z_le_threshold": {
+      "conf": "HIGH",
+      "min": -0.22673443800561388,
+      "n": 410,
+      "p10": -0.10462967939134611,
+      "p50": -0.02811947769389178,
+      "z_threshold": -1.5
+    },
+    "definition": "min(0, min_{i=1..H} (price[t+i]/price[t]-1)), H=horizon trading days"
+  },
+  "latest": {
+    "date": "2026-02-11",
+    "dist_to_lower_pct": 27.598632850237593,
+    "dist_to_upper_pct": -0.3694244284653313,
+    "lower": 55.8938532301022,
+    "pos": 1.0135672114570156,
+    "price": 77.19999694824219,
+    "sma": 66.40432726542154,
+    "state": "ABOVE_UPPER_BAND",
+    "state_reason": "z>=2.0",
+    "std": 5.255237017659671,
+    "upper": 76.91480130074089,
+    "z": 2.054268845828063
+  },
+  "meta": {
+    "as_of_date": "2026-02-11",
+    "bb_base": "price",
+    "data_source": "yfinance",
+    "horizon": 20,
+    "k": 2.0,
+    "module": "tw0050_bb",
+    "price_basis": "Adj Close",
+    "run_ts_utc": "2026-02-18T16:40:37Z",
+    "script_fingerprint": "6b3f0011ae5f",
+    "symbol": "0050.TW",
+    "timezone_local": "Asia/Taipei",
+    "window": 60,
+    "z_threshold": -1.5
+  },
+  "repro": {
+    "command": "python /home/runner/work/fred-cache/fred-cache/scripts/tw0050_bb_len60_k2_forwardmdd.py --symbol 0050.TW --window 60 --k 2.0 --horizon 20 --z_threshold -1.5 --cache_dir tw0050_bb_artifacts --use_adj_close"
+  }
+}
