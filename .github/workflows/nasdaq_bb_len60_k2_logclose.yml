@@ -34,7 +34,6 @@ jobs:
           pip install --upgrade pip
           pip install pandas numpy requests
 
-      # 建議先保留一段時間，方便定位路徑/檔名問題
       - name: Debug list files
         run: |
           pwd
@@ -60,13 +59,19 @@ jobs:
             --cooldown 20 \
             --quiet
 
+      - name: Build report.md (cache only)
+        run: |
+          python scripts/build_nasdaq_bb_report.py \
+            --in_dir "nasdaq_bb_cache" \
+            --out "nasdaq_bb_cache/report.md"
+
       - name: Commit outputs (only if changed)
         run: |
           if [ -n "$(git status --porcelain nasdaq_bb_cache)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add nasdaq_bb_cache
-            git commit -m "update: nasdaq BB(60,2) QQQ logclose cache"
+            git commit -m "update: nasdaq BB(60,2) QQQ/VXN cache + report"
             git push
           else
             echo "No changes to commit."
