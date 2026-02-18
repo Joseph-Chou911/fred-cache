@@ -9,9 +9,10 @@ Data source:
 - Optional: user-provided CSV (Date + Close/Adj Close)
 
 Outputs (in --cache_dir):
-- stats_latest.json         : latest-day snapshot + forward_mdd distribution stats
+- stats_latest.json         : latest-day snapshot + forward_mdd distribution stats + dq audit
 - history_lite.json         : last N rows of daily metrics (lite)
-- prices.csv                : fetched price table (audit/debug), includes price_raw and price_adj
+- prices.csv                : fetched price table (audit/debug), includes price_raw, price_adj
+                              + ret_raw/ret_adj + adj_factor/adj_factor_chg + busday_gap
 
 Key robustness:
 1) Force all vectors into 1D Series to avoid pandas ValueError: "Data must be 1-dimensional..."
@@ -23,6 +24,11 @@ Key robustness:
    - z <= -1.5 (fear/cheap side)
    - z >= +1.5 (hot side)
    - z >= +2.0 (extreme hot side)
+4) NEW: Gap/Jump/Factor audit (DQ):
+   - detect missing business days between consecutive rows (weekdays-only heuristic; holidays not modeled)
+   - detect large one-step returns (raw/adj)
+   - detect raw jump but adj stable (typical split/adjust artifacts or inconsistent transforms)
+   - detect changes in adj_factor = raw/adj (should be near-constant; big changes imply transform regime change)
 """
 
 from __future__ import annotations
@@ -290,6 +296,129 @@ def detect_and_heal_splits(
     return price_adj, events
 
 
+def audit_gaps_and_jumps(
+    dates_index: pd.DatetimeIndex,
+    price_raw: pd.Series,
+    price_adj: pd.Series,
+    *,
+    gap_busdays_warn: int = 2,
+    ret_jump_raw: float = 0.20,
+    ret_jump_adj: float = 0.20,
+    raw_jump_thr: float = 0.20,
+    adj_stable_thr: float = 0.05,
+    factor_change_tol: float = 0.10,
+) -> Dict[str, Any]:
+    """
+    Audit helpers:
+    - Detect suspicious calendar gaps (missing business days) using np.busday_count (weekdays only; ignores holidays).
+    - Detect large one-step returns (raw/adj).
+    - Detect raw jump but adj stable (classic split/adjustment artifact or inconsistent transformation).
+    - Detect changes in adj_factor = raw/adj (should be near-constant unless transformation changes or split-adjust differs).
+
+    Returns dict suitable to merge into dq.
+
+    NOTE:
+    - busday_count is a weekday heuristic. Taiwan/US market holidays are NOT modeled and may create false positives.
+    """
+    out: Dict[str, Any] = {
+        "gap_suspects": [],
+        "jump_suspects": [],
+        "factor_change_suspects": [],
+        "summary": {},
+    }
+
+    dt = pd.to_datetime(dates_index).values.astype("datetime64[D]")
+    if len(dt) < 2:
+        out["summary"] = {"n": int(len(dt))}
+        return out
+
+    raw = pd.to_numeric(price_raw, errors="coerce").to_numpy(dtype=float)
+    adj = pd.to_numeric(price_adj, errors="coerce").to_numpy(dtype=float)
+
+    # 1) Business-day gaps (weekdays only)
+    prev = dt[:-1]
+    curr = dt[1:]
+    gap = np.busday_count(prev, curr) - 1
+    gap_idx = np.where(gap >= int(gap_busdays_warn))[0]
+    for i in gap_idx[:200]:
+        out["gap_suspects"].append(
+            {
+                "from": str(pd.to_datetime(dates_index[i]).date()),
+                "to": str(pd.to_datetime(dates_index[i + 1]).date()),
+                "missing_busdays": int(gap[i]),
+            }
+        )
+
+    # 2) Return jumps
+    def _pct_change(a: np.ndarray) -> np.ndarray:
+        r = np.full_like(a, np.nan, dtype=float)
+        r[1:] = a[1:] / a[:-1] - 1.0
+        return r
+
+    r_raw = _pct_change(raw)
+    r_adj = _pct_change(adj)
+
+    j_raw = np.where(np.isfinite(r_raw) & (np.abs(r_raw) >= float(ret_jump_raw)))[0]
+    j_adj = np.where(np.isfinite(r_adj) & (np.abs(r_adj) >= float(ret_jump_adj)))[0]
+
+    j_mixed = np.where(
+        np.isfinite(r_raw)
+        & np.isfinite(r_adj)
+        & (np.abs(r_raw) >= float(raw_jump_thr))
+        & (np.abs(r_adj) <= float(adj_stable_thr))
+    )[0]
+
+    def _emit_jump(i: int, kind: str) -> Dict[str, Any]:
+        return {
+            "date": str(pd.to_datetime(dates_index[i]).date()),
+            "kind": kind,
+            "ret_raw": None if not np.isfinite(r_raw[i]) else float(r_raw[i]),
+            "ret_adj": None if not np.isfinite(r_adj[i]) else float(r_adj[i]),
+            "price_raw": None if not np.isfinite(raw[i]) else float(raw[i]),
+            "price_adj": None if not np.isfinite(adj[i]) else float(adj[i]),
+        }
+
+    for i in j_raw[:200]:
+        out["jump_suspects"].append(_emit_jump(int(i), "RET_JUMP_RAW"))
+    for i in j_adj[:200]:
+        out["jump_suspects"].append(_emit_jump(int(i), "RET_JUMP_ADJ"))
+    for i in j_mixed[:200]:
+        out["jump_suspects"].append(_emit_jump(int(i), "RAW_JUMP_ADJ_STABLE"))
+
+    # 3) adj_factor change (raw/adj)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        fac = raw / adj
+    fac_chg = np.full_like(fac, np.nan, dtype=float)
+    fac_chg[1:] = fac[1:] / fac[:-1] - 1.0
+
+    f_idx = np.where(np.isfinite(fac_chg) & (np.abs(fac_chg) >= float(factor_change_tol)))[0]
+    for i in f_idx[:200]:
+        out["factor_change_suspects"].append(
+            {
+                "date": str(pd.to_datetime(dates_index[i]).date()),
+                "adj_factor": None if not np.isfinite(fac[i]) else float(fac[i]),
+                "adj_factor_chg": float(fac_chg[i]),
+            }
+        )
+
+    out["summary"] = {
+        "n": int(len(dt)),
+        "gap_count": int(len(out["gap_suspects"])),
+        "jump_count": int(len(out["jump_suspects"])),
+        "factor_change_count": int(len(out["factor_change_suspects"])),
+        "weekday_heuristic": True,
+        "params": {
+            "gap_busdays_warn": int(gap_busdays_warn),
+            "ret_jump_raw": float(ret_jump_raw),
+            "ret_jump_adj": float(ret_jump_adj),
+            "raw_jump_thr": float(raw_jump_thr),
+            "adj_stable_thr": float(adj_stable_thr),
+            "factor_change_tol": float(factor_change_tol),
+        },
+    }
+    return out
+
+
 def compute_mdd_stats(arr: np.ndarray) -> Dict[str, Any]:
     arr = np.asarray(arr, dtype=float)
     fin = arr[np.isfinite(arr)]
@@ -351,6 +480,14 @@ def main() -> int:
     ap.add_argument("--z_hot", type=float, default=1.5, help="Hot-side threshold (default: 1.5)")
     ap.add_argument("--z_hot2", type=float, default=2.0, help="Extreme hot-side threshold (default: 2.0)")
 
+    # NEW: Gap / jump / factor audit options
+    ap.add_argument("--gap_busdays_warn", type=int, default=2, help="Warn if missing business days between rows >= this (default: 2)")
+    ap.add_argument("--ret_jump_raw", type=float, default=0.20, help="Flag raw return jump abs>=x (default: 0.20)")
+    ap.add_argument("--ret_jump_adj", type=float, default=0.20, help="Flag adj return jump abs>=x (default: 0.20)")
+    ap.add_argument("--raw_jump_thr", type=float, default=0.20, help="Flag RAW_JUMP_ADJ_STABLE when abs(ret_raw)>=x (default: 0.20)")
+    ap.add_argument("--adj_stable_thr", type=float, default=0.05, help="Flag RAW_JUMP_ADJ_STABLE when abs(ret_adj)<=x (default: 0.05)")
+    ap.add_argument("--adj_factor_change_tol", type=float, default=0.10, help="Flag raw/adj factor change abs>=x (default: 0.10)")
+
     args = ap.parse_args()
 
     cache_dir = Path(args.cache_dir)
@@ -366,6 +503,7 @@ def main() -> int:
         "split_heal_enabled": (not args.disable_split_heal),
         "split_events": [],
         "notes": [],
+        # NEW fields will be added after audit
     }
 
     # ----- Load prices -----
@@ -416,6 +554,7 @@ def main() -> int:
     # ----- Split detection & healing -----
     if args.disable_split_heal:
         price_adj = price_raw.copy()
+        dq["notes"].append("Split heal disabled by flag.")
     else:
         try:
             factors = []
@@ -431,18 +570,64 @@ def main() -> int:
         price_adj, events = detect_and_heal_splits(price_raw, factors=factors, tol=float(args.split_tol))
         dq["split_events"] = events
         if events:
-            dq["notes"].append(f"Split heal applied: detected_events={len(events)} factors={factors} tol={args.split_tol}")
+            dq["notes"].append(
+                f"Split heal applied: detected_events={len(events)} factors={factors} tol={args.split_tol}"
+            )
         else:
-            dq["notes"].append(f"Split heal enabled but no events detected (factors={factors}, tol={args.split_tol})")
+            dq["notes"].append(
+                f"Split heal enabled but no events detected (factors={factors}, tol={args.split_tol})"
+            )
 
-    # Persist raw/adj prices for audit
+    # ----- Gap / jump audit (NEW) -----
+    audit = audit_gaps_and_jumps(
+        prices_df.index,
+        price_raw,
+        price_adj,
+        gap_busdays_warn=int(args.gap_busdays_warn),
+        ret_jump_raw=float(args.ret_jump_raw),
+        ret_jump_adj=float(args.ret_jump_adj),
+        raw_jump_thr=float(args.raw_jump_thr),
+        adj_stable_thr=float(args.adj_stable_thr),
+        factor_change_tol=float(args.adj_factor_change_tol),
+    )
+    dq["gap_audit"] = audit["summary"]
+    dq["gap_suspects"] = audit["gap_suspects"][:50]
+    dq["jump_suspects"] = audit["jump_suspects"][:50]
+    dq["factor_change_suspects"] = audit["factor_change_suspects"][:50]
+
+    # Notes: keep these explicit & auditable
+    dq["notes"].append("Gap audit uses weekday heuristic only (market holidays not modeled).")
+    if audit["summary"].get("gap_count", 0) > 0:
+        dq["notes"].append(f"GAP_WARNING: missing business days detected (count={audit['summary']['gap_count']})")
+    if audit["summary"].get("jump_count", 0) > 0:
+        dq["notes"].append(f"JUMP_WARNING: return jumps detected (count={audit['summary']['jump_count']})")
+    if audit["summary"].get("factor_change_count", 0) > 0:
+        dq["notes"].append(
+            f"FACTOR_WARNING: raw/adj factor changes detected (count={audit['summary']['factor_change_count']})"
+        )
+
+    # ----- Persist raw/adj prices for audit (expanded columns) -----
+    dates = pd.to_datetime(prices_df.index)
     prices_out = pd.DataFrame(
         {
-            "Date": pd.to_datetime(prices_df.index).date.astype(str),
+            "Date": dates.date.astype(str),
             "price_raw": price_raw.to_numpy(dtype=float),
             "price_adj": price_adj.to_numpy(dtype=float),
         }
     )
+    prices_out["ret_raw"] = prices_out["price_raw"].pct_change()
+    prices_out["ret_adj"] = prices_out["price_adj"].pct_change()
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        prices_out["adj_factor"] = prices_out["price_raw"] / prices_out["price_adj"]
+    prices_out["adj_factor_chg"] = prices_out["adj_factor"].pct_change()
+
+    # business-day gap (weekdays only)
+    dt = dates.values.astype("datetime64[D]")
+    prev = np.concatenate([dt[:1], dt[:-1]])
+    prices_out["busday_gap"] = np.busday_count(prev, dt) - 1
+    prices_out.loc[0, "busday_gap"] = 0
+
     prices_out.to_csv(cache_dir / "prices.csv", index=False)
 
     # ----- Compute indicators on price_adj -----
@@ -595,6 +780,13 @@ def main() -> int:
             "z_threshold_cheap": float(args.z_threshold),
             "z_threshold_hot": float(args.z_hot),
             "z_threshold_hot2": float(args.z_hot2),
+            # NEW: audit params (explicit)
+            "gap_busdays_warn": int(args.gap_busdays_warn),
+            "ret_jump_raw": float(args.ret_jump_raw),
+            "ret_jump_adj": float(args.ret_jump_adj),
+            "raw_jump_thr": float(args.raw_jump_thr),
+            "adj_stable_thr": float(args.adj_stable_thr),
+            "adj_factor_change_tol": float(args.adj_factor_change_tol),
         },
         "dq": dq,
         "latest": {
@@ -638,6 +830,12 @@ def main() -> int:
                     f"--z_threshold {float(args.z_threshold)}",
                     f"--z_hot {float(args.z_hot)}",
                     f"--z_hot2 {float(args.z_hot2)}",
+                    f"--gap_busdays_warn {int(args.gap_busdays_warn)}",
+                    f"--ret_jump_raw {float(args.ret_jump_raw)}",
+                    f"--ret_jump_adj {float(args.ret_jump_adj)}",
+                    f"--raw_jump_thr {float(args.raw_jump_thr)}",
+                    f"--adj_stable_thr {float(args.adj_stable_thr)}",
+                    f"--adj_factor_change_tol {float(args.adj_factor_change_tol)}",
                 ]
             ).strip()
         },
