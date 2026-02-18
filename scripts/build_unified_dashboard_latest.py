@@ -19,6 +19,10 @@ NEW (2026-01-26):
   - inflation_realrate_cache/dashboard_latest.json
   - asset_proxy_cache/dashboard_latest.json
 
+NEW (2026-02-18):
+- Optional merge-in (display-only; NO impact to unified logic):
+  - nasdaq_bb_cache/latest.json  (for report.md display-only lines)
+
 NO external fetch here. Pure merge + deterministic calculations.
 
 Inputs:
@@ -29,6 +33,7 @@ Inputs:
 - fx_cache/latest.json (+ fx_cache/history.json)
 - [optional] inflation_realrate_cache/dashboard_latest.json
 - [optional] asset_proxy_cache/dashboard_latest.json
+- [optional] nasdaq_bb_cache/latest.json
 
 Output:
 - unified_dashboard/latest.json (or any path you pass)
@@ -51,7 +56,8 @@ def _read_text(path: str) -> str:
 
 
 def _write_text(path: str, text: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # NOTE: guard for paths without directory (e.g., "latest.json")
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
 
@@ -337,8 +343,14 @@ def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str,
     signal = "NA"
     rule_hit = "NA"
     if points >= 1:
-        hit_watch = (points >= 5 and sum_last5 >= 100.0) or (points >= 5 and pos_days >= 4 and latest_chg is not None and latest_chg >= 40.0)
-        hit_info = (points >= 5 and sum_last5 >= 60.0) or (points >= 5 and pos_days >= 3 and latest_chg is not None and latest_chg >= 30.0)
+        hit_watch = (
+            (points >= 5 and sum_last5 >= 100.0)
+            or (points >= 5 and pos_days >= 4 and latest_chg is not None and latest_chg >= 40.0)
+        )
+        hit_info = (
+            (points >= 5 and sum_last5 >= 60.0)
+            or (points >= 5 and pos_days >= 3 and latest_chg is not None and latest_chg >= 30.0)
+        )
         if hit_watch:
             signal = "WATCH"
             rule_hit = "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)"
@@ -507,6 +519,42 @@ def _load_optional(path: str) -> Tuple[str, Any]:
         return f"ERROR: {type(e).__name__}", None
 
 
+def _normalize_nasdaq_bb_series(bb_obj: Any) -> Optional[Dict[str, Any]]:
+    """
+    Try to produce:
+      {"QQQ": {...}, "VXN": {...}}
+    from a variety of possible schemas.
+    Return None if not possible.
+    """
+    if not isinstance(bb_obj, dict):
+        return None
+
+    # Preferred schema
+    series = bb_obj.get("series")
+    if isinstance(series, dict):
+        out: Dict[str, Any] = {}
+        if isinstance(series.get("QQQ"), dict):
+            out["QQQ"] = series["QQQ"]
+        if isinstance(series.get("VXN"), dict):
+            out["VXN"] = series["VXN"]
+        return out or None
+
+    # Fallbacks: root keys
+    out = {}
+    if isinstance(bb_obj.get("QQQ"), dict):
+        out["QQQ"] = bb_obj["QQQ"]
+    if isinstance(bb_obj.get("VXN"), dict):
+        out["VXN"] = bb_obj["VXN"]
+
+    # Fallbacks: lowercase
+    if isinstance(bb_obj.get("qqq"), dict):
+        out["QQQ"] = bb_obj["qqq"]
+    if isinstance(bb_obj.get("vxn"), dict):
+        out["VXN"] = bb_obj["vxn"]
+
+    return out or None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--market-in", default="dashboard/dashboard_latest.json")
@@ -516,9 +564,12 @@ def main() -> int:
     ap.add_argument("--fx-in", default="fx_cache/latest.json")
     ap.add_argument("--fx-history", default="fx_cache/history.json")
 
-    # ✅ NEW: optional dashboards (display-only; do not affect calculations)
+    # ✅ optional dashboards (display-only; do not affect calculations)
     ap.add_argument("--inflation-in", default="inflation_realrate_cache/dashboard_latest.json")
     ap.add_argument("--assetproxy-in", default="asset_proxy_cache/dashboard_latest.json")
+
+    # ✅ NEW: nasdaq bb cache (display-only; do not affect calculations)
+    ap.add_argument("--nasdaq-bb-in", default="nasdaq_bb_cache/latest.json")
 
     ap.add_argument("--out", default="unified_dashboard/latest.json")
     ap.add_argument("--roll25-vol-n", type=int, default=int(os.getenv("ROLL25_VOL_N", "10")))
@@ -540,9 +591,10 @@ def main() -> int:
     roll_status, roll_obj = _load_or_fail(args.roll25_in)
     fx_status, fx_obj = _load_or_fail(args.fx_in)
 
-    # ✅ NEW optional loads (never break unified)
+    # ✅ optional loads (never break unified)
     infl_status, infl_obj = _load_optional(args.inflation_in)
     ap_status, ap_obj = _load_optional(args.assetproxy_in)
+    bb_status, bb_obj = _load_optional(args.nasdaq_bb_in)
 
     # roll25 derived
     roll25_derived: Dict[str, Any] = {"status": "NA"}
@@ -605,7 +657,9 @@ def main() -> int:
             "volume_multiplier": nums.get("VolumeMultiplier"),
             "vol_multiplier": nums.get("VolMultiplier"),
             "LookbackNTarget": _extract_lookback_target_from_roll25_report(roll_obj),
-            "LookbackNActual": roll_obj.get("lookback_n_actual") if isinstance(roll_obj.get("lookback_n_actual"), int) else None,
+            "LookbackNActual": roll_obj.get("lookback_n_actual")
+            if isinstance(roll_obj.get("lookback_n_actual"), int)
+            else None,
             "signals": {
                 "DownDay": sigs.get("DownDay"),
                 "VolumeAmplified": sigs.get("VolumeAmplified"),
@@ -688,9 +742,9 @@ def main() -> int:
             "roll25_in": args.roll25_in,
             "fx_in": args.fx_in,
             "fx_history": args.fx_history,
-            # ✅ NEW
             "inflation_in": args.inflation_in,
             "assetproxy_in": args.assetproxy_in,
+            "nasdaq_bb_in": args.nasdaq_bb_in,
         },
         "modules": {
             "market_cache": {
@@ -718,7 +772,7 @@ def main() -> int:
                 "derived": fx_derived,
             },
 
-            # ✅ NEW optional modules (display-only)
+            # ✅ optional modules (display-only)
             "inflation_realrate_cache": {
                 "status": "OK" if infl_status == "OK" else infl_status,
                 "dashboard_latest": infl_obj if infl_status == "OK" else None,
@@ -726,6 +780,14 @@ def main() -> int:
             "asset_proxy_cache": {
                 "status": "OK" if ap_status == "OK" else ap_status,
                 "dashboard_latest": ap_obj if ap_status == "OK" else None,
+            },
+
+            # ✅ NEW optional module (display-only)
+            "nasdaq_bb_cache": {
+                "status": "OK" if bb_status == "OK" else bb_status,
+                "note": "display-only; not used for positioning/mode/cross_module",
+                "series": _normalize_nasdaq_bb_series(bb_obj) if bb_status == "OK" else None,
+                "raw": bb_obj if bb_status == "OK" else None,
             },
         },
         "audit_notes": [
@@ -737,8 +799,8 @@ def main() -> int:
             "Roll25 split: roll25_heated_market (market behavior only) and roll25_data_quality_issue (data quality only).",
             "Consistency uses roll25_heated_market only; data quality issue does not force DIVERGENCE/CONVERGENCE flip, but should downgrade interpretation confidence.",
             "Backward compatibility: roll25_heated (legacy) == roll25_heated_market.",
-            # ✅ NEW
             "Optional modules inflation_realrate_cache / asset_proxy_cache are merged for display only; they do not affect positioning matrix or cross_module.",
+            "Optional module nasdaq_bb_cache is merged for display only; it does not affect positioning matrix or cross_module.",
         ],
     }
 
