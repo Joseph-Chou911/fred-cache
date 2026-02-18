@@ -26,6 +26,10 @@
 #   - RULESET_ID (args.ruleset_id)
 #   - SCRIPT_FINGERPRINT (args.script_fingerprint, optionally with @GITHUB_SHA7)
 # - Append script should dedupe by daily key (module, ruleset_id, stats_as_of_date).
+#
+# Deprecated / aliases (audit/readability):
+# - ret1_pct60: legacy alias of ret1_pct1d_absPrev (same 1D % value)
+# - z_delta60 / p_delta60: legacy names; markdown display uses z_poschg60 / p_poschg60
 
 from __future__ import annotations
 
@@ -51,7 +55,7 @@ P252_ALERT_LO = 2.0  # very extreme low tail
 # Jump thresholds
 ZDELTA60_JUMP_ABS = 0.75
 PDELTA60_JUMP_ABS = 15.0
-RET1PCT60_JUMP_ABS = 2.0  # percent units
+RET1PCT1D_JUMP_ABS = 2.0  # percent units (1D)
 
 # Near window: within X% of threshold
 NEAR_FRAC = 0.10  # 10%
@@ -65,55 +69,38 @@ DEFAULT_SCRIPT_FINGERPRINT = "render_dashboard_py_signals_v8"
 # -------------------------
 # Output-only metric definitions (NO algorithm change)
 # -------------------------
-# These are display notes only, meant to reduce misinterpretation.
 METRIC_DEFS_LINE = (
     "ZΔ60 = z60(today) - z60(yesterday); "
     "PΔ60 = p60(today) - p60(yesterday) (units: percentile points); "
-    "ret1% (1D) = (today - prev)/abs(prev) * 100"
+    "ret1%1d = (today - prev)/abs(prev) * 100"
 )
 
-# Display-only column name overrides (NO algorithm change):
-# - We keep reading the same underlying fields:
-#   z_delta60 -> w60.z_delta
-#   p_delta60 -> w60.p_delta
-#   ret1_pct60 -> w60.ret1_pct (which is 1-day % change by definition in update_market_cache.py)
+# Display-only column names (audit-friendly). Values are mirrored from legacy keys.
 DISPLAY_COL_ZDELTA = "z_poschg60"
 DISPLAY_COL_PDELTA = "p_poschg60"
-DISPLAY_COL_RET1PCT = "ret1_pct1d_absPrev"
+DISPLAY_COL_RET1PCT = "ret1_pct1d_absPrev"  # explicit 1D naming for audit/readability
 
 # -------------------------
 # Direction map (minimal extension)
 # -------------------------
-# HIGH: higher value => generally higher risk bias
-# LOW : lower value  => generally higher risk bias
-# RANGE: both tails can be risky (reserved)
-# MOVE: treat as "movement-only" (do not infer up/down risk from direction)
 DIRECTION_MAP: Dict[str, str] = {
-    # credit / stress / leverage (higher => more stress)
     "OFR_FSI": "HIGH",
     "STLFSI4": "HIGH",
     "BAMLH0A0HYM2": "HIGH",
     "NFCINONFINLEVERAGE": "HIGH",
 
-    # equity (overheat/valuation crowding bias; higher => more fragile)
     "SP500": "HIGH",
     "DJIA": "HIGH",
     "NASDAQCOM": "HIGH",
 
-    # vol (higher => more risk)
     "VIX": "HIGH",
     "VIXCLS": "HIGH",
 
-    # FX index (if you interpret USD strength as tighter conditions)
     "DTWEXBGS": "HIGH",
-
-    # oil (cost/inflation pressure bias)
     "DCOILWTICO": "HIGH",
 
-    # credit proxy ratio: ratio down => credit stress => risk (LOW)
     "HYG_IEF_RATIO": "LOW",
 
-    # rates: MVP treat as MOVE-only (avoid "rate down = risk up" misread)
     "DGS2": "MOVE",
     "DGS10": "MOVE",
     "T10Y2Y": "MOVE",
@@ -154,8 +141,16 @@ def get_w(series_obj: Dict[str, Any], key: str) -> Dict[str, Any]:
 
 
 def fmt(x: Any, nd: int = 6) -> str:
+    """
+    Formatting helper (audit-friendly):
+    - None => NA
+    - float => fixed decimals then strip trailing zeros/dot
+    - int => str(int) (nd is intentionally ignored for ints)
+    """
     if x is None:
         return "NA"
+    if isinstance(x, int):
+        return str(x)
     if isinstance(x, float):
         s = f"{x:.{nd}f}"
         return s.rstrip("0").rstrip(".")
@@ -187,11 +182,14 @@ def compute_signal_tag_near_from_metrics(
     p252: Optional[float],
     zdel60: Optional[float],
     pdel60: Optional[float],
-    ret1pct60: Optional[float],
+    ret1pct1d: Optional[float],
 ) -> Tuple[str, str, str, str]:
     """
     Returns (signal_level, reason_str, tag_str, near_str)
     Ruleset: signals_v8
+
+    NOTE (audit): ret1pct1d is 1-day percent change:
+      ret1%1d = (today - prev)/abs(prev) * 100
     """
     reasons: List[str] = []
     tags: List[str] = []
@@ -200,7 +198,7 @@ def compute_signal_tag_near_from_metrics(
     az60 = safe_abs(z60)
     azd = safe_abs(zdel60)
     apd = safe_abs(pdel60)
-    ar1p = safe_abs(ret1pct60)
+    ar1p = safe_abs(ret1pct1d)
 
     # Extreme checks
     z60_watch = False
@@ -254,13 +252,13 @@ def compute_signal_tag_near_from_metrics(
         if is_near(apd, PDELTA60_JUMP_ABS, NEAR_FRAC):
             nears.append("NEAR:PΔ60")
 
-    if ar1p is not None and ar1p >= RET1PCT60_JUMP_ABS:
-        reasons.append(f"abs(ret1%60)>={RET1PCT60_JUMP_ABS:g}")
+    if ar1p is not None and ar1p >= RET1PCT1D_JUMP_ABS:
+        reasons.append(f"abs(ret1%1d)>={RET1PCT1D_JUMP_ABS:g}")
         tags.append("JUMP_RET")
         jump_hits += 1
     else:
-        if is_near(ar1p, RET1PCT60_JUMP_ABS, NEAR_FRAC):
-            nears.append("NEAR:ret1%60")
+        if is_near(ar1p, RET1PCT1D_JUMP_ABS, NEAR_FRAC):
+            nears.append("NEAR:ret1%1d")
 
     # Level assignment
     if long_extreme_only and jump_hits == 0:
@@ -323,10 +321,6 @@ def build_series_signal_timeline(
     module: str,
     ruleset_id: str,
 ) -> Dict[str, List[str]]:
-    """
-    Only use item.module==module AND item.ruleset_id==ruleset_id.
-    Legacy items missing ruleset_id are ignored by design.
-    """
     timeline: Dict[str, List[str]] = {}
     for snap in history_snaps:
         if snap.get("module") != module:
@@ -347,16 +341,9 @@ def compute_prev_and_streaks(
     today_signal: str,
     timeline_hist_excl_today: Dict[str, List[str]],
 ) -> Tuple[str, int, int]:
-    """
-    Returns (prev_signal, streak_hist, streak_wa)
-    - prev_signal: last signal from history (excluding today)
-    - streak_hist: consecutive WATCH/ALERT ending at history end (excluding today)
-    - streak_wa: streak_hist + 1 if today is WATCH/ALERT else 0
-    """
     hist = timeline_hist_excl_today.get(sid, [])
     prev = hist[-1] if hist else "NA"
 
-    # streak_hist: count consecutive WATCH/ALERT at tail of hist
     streak_hist = 0
     for s in reversed(hist):
         if s in ("WATCH", "ALERT"):
@@ -421,22 +408,36 @@ def parse_tags(tag_str: str) -> List[str]:
 
 
 def parse_p252_tail(reason: str) -> str:
+    """
+    Parse p252 tail from reason string.
+
+    Assumption (current ruleset): P252>=HI and P252<=LO are mutually exclusive for a single point.
+    Defensive handling: if both patterns appear, return "BOTH" to avoid silent bias inference.
+    """
     if not reason or reason == "NA":
         return "NA"
-    if "P252>=" in reason:
+    has_hi = "P252>=" in reason
+    has_lo = "P252<=" in reason
+    if has_hi and has_lo:
+        return "BOTH"
+    if has_hi:
         return "HI"
-    if "P252<=" in reason:
+    if has_lo:
         return "LO"
     return "NA"
 
 
 def compute_dir_note(direction: str, reason: str, tags: List[str]) -> str:
     """
-    Conservative annotation:
+    Conservative annotation (maintenance-friendly):
     - MOVE => MOVE_ONLY
     - RANGE => RANGE_SENSITIVE
     - If P252 tail exists, infer bias for HIGH/LOW
-    - For abs(...) triggers, do NOT infer up/down; mark DIR_UNCERTAIN_ABS
+    - For JUMP_* or EXTREME_Z triggers, do NOT infer up/down; mark DIR_UNCERTAIN_ABS
+      (avoid relying on reason-string formats like 'abs(')
+
+    Note: If parse_p252_tail returns BOTH (should not happen under current rules),
+          we mark DIR_UNCERTAIN_ABS to prevent misleading bias annotation.
     """
     if direction == "MOVE":
         return "MOVE_ONLY"
@@ -444,15 +445,16 @@ def compute_dir_note(direction: str, reason: str, tags: List[str]) -> str:
         return "RANGE_SENSITIVE"
 
     p_tail = parse_p252_tail(reason)
+    if p_tail == "BOTH":
+        return "DIR_UNCERTAIN_ABS"
 
     if direction in ("HIGH", "LOW") and p_tail in ("HI", "LO"):
         if direction == "HIGH":
             return "RISK_BIAS_UP" if p_tail == "HI" else "RISK_BIAS_DOWN"
-        # LOW: low tail is risk-up, high tail is risk-down
         return "RISK_BIAS_UP" if p_tail == "LO" else "RISK_BIAS_DOWN"
 
     if direction in ("HIGH", "LOW"):
-        if any(t.startswith("JUMP_") for t in tags) or ("abs(" in (reason or "")):
+        if ("EXTREME_Z" in tags) or any(t.startswith("JUMP_") for t in tags):
             return "DIR_UNCERTAIN_ABS"
 
     return "NA"
@@ -468,11 +470,7 @@ def write_outputs(
     os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
 
-    payload = {
-        "meta": meta,
-        "rows": rows,
-        "series_signals": series_signals,
-    }
+    payload = {"meta": meta, "rows": rows, "series_signals": series_signals}
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
@@ -495,20 +493,24 @@ def write_outputs(
     lines.append(f"- stats_path: `{meta.get('stats_path','')}`")
     lines.append(f"- dash_history: `{meta.get('dash_history_path','NA')}`")
     lines.append(f"- streak_calc: `{meta.get('streak_calc','NA')}`")
+
+    # Explicitly surface today_day status (avoid silent fail-open)
+    if meta.get("today_day_missing"):
+        lines.append("- today_day_missing: `true` (streak baseline exclusion skipped; fail-open)")
+    else:
+        lines.append(f"- today_day: `{meta.get('today_day','NA')}`")
+
     lines.append(
         "- signal_rules: "
         f"`Extreme(abs(Z60)>={Z60_WATCH_ABS:g} (WATCH), abs(Z60)>={Z60_ALERT_ABS:g} (ALERT), "
         f"P252>={P252_EXTREME_HI:g} or <={P252_EXTREME_LO:g} (WATCH/INFO), P252<={P252_ALERT_LO:g} (ALERT)); "
-        f"Jump(abs(ZΔ60)>={ZDELTA60_JUMP_ABS:g} OR abs(PΔ60)>={PDELTA60_JUMP_ABS:g} OR abs(ret1%60)>={RET1PCT60_JUMP_ABS:g}); "
+        f"Jump(abs(ZΔ60)>={ZDELTA60_JUMP_ABS:g} OR abs(PΔ60)>={PDELTA60_JUMP_ABS:g} OR abs(ret1%1d)>={RET1PCT1D_JUMP_ABS:g}); "
         f"Near(within {NEAR_FRAC*100:.0f}% of jump thresholds); "
         "INFO if only long-extreme and no jump and abs(Z60)<2`"
     )
-
-    # Added: explicit metric definitions (display-only)
     lines.append(f"- metric_defs: {METRIC_DEFS_LINE}")
-
-    # Diagnostics-only note for extra columns
     lines.append("- diag_cols: p60 (w60 percentile), z252 (w252 z-score); diagnostics only, NOT used in rules/sorting")
+    lines.append("- deprecated_fields: `ret1_pct60 (legacy alias of ret1_pct1d_absPrev); z_delta60/p_delta60 (legacy; use z_poschg60/p_poschg60)`")
     lines.append("")
 
     header = [
@@ -526,6 +528,9 @@ def write_outputs(
     lines.append("|" + "|".join(["---"] * len(header)) + "|")
 
     for r in rows:
+        # Defensive fallback is kept intentionally:
+        # - When rows are generated by this script, display keys exist and fallback won't trigger.
+        # - If an external process loads legacy JSON rows (missing display keys), fallback preserves compatibility.
         lines.append("| " + " | ".join([
             md_escape_cell(r.get("signal_level", "NONE")),
             md_escape_cell(r.get("tag", "NA")),
@@ -545,9 +550,9 @@ def write_outputs(
             md_escape_cell(fmt(r.get("p60"), nd=6)),
             md_escape_cell(fmt(r.get("p252"), nd=6)),
             md_escape_cell(fmt(r.get("z252"), nd=6)),
-            md_escape_cell(fmt(r.get("z_delta60"), nd=6)),
-            md_escape_cell(fmt(r.get("p_delta60"), nd=6)),
-            md_escape_cell(fmt(r.get("ret1_pct60"), nd=6)),
+            md_escape_cell(fmt(r.get(DISPLAY_COL_ZDELTA, r.get("z_delta60")), nd=6)),
+            md_escape_cell(fmt(r.get(DISPLAY_COL_PDELTA, r.get("p_delta60")), nd=6)),
+            md_escape_cell(fmt(r.get(DISPLAY_COL_RET1PCT, r.get("ret1_pct60")), nd=6)),
             md_escape_cell(r.get("reason")),
             md_escape_cell(r.get("source_url")),
             md_escape_cell(r.get("as_of_ts")),
@@ -566,14 +571,12 @@ def main() -> None:
     ap.add_argument("--module", default="market_cache")
     ap.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
 
-    # A+B+C audit keys
     ap.add_argument("--ruleset-id", default=DEFAULT_RULESET_ID)
     ap.add_argument("--script-fingerprint", default=DEFAULT_SCRIPT_FINGERPRINT)
     args = ap.parse_args()
 
     run_ts = datetime.now(timezone.utc)
 
-    # Enhance fingerprint with GITHUB_SHA if available (stable per commit)
     sha = os.getenv("GITHUB_SHA", "")
     sha7 = sha[:7] if isinstance(sha, str) and len(sha) >= 7 else ""
     script_fingerprint = args.script_fingerprint
@@ -600,19 +603,23 @@ def main() -> None:
 
     today_stats_as_of_ts = stats.get("as_of_ts")
     today_day = iso_day(today_stats_as_of_ts)
+    today_day_missing = today_day is None
 
-    # Load full history
     history_all = load_dashboard_history(args.dash_history)
 
-    # ORDER-SAFE:
-    # If history already contains same-day key (module+ruleset_id+day), exclude it for prev/streak baseline.
+    # ORDER-SAFE: exclude same-day item (module+ruleset_id+day) for prev/streak baseline.
     history_excl_today: List[Dict[str, Any]] = []
     excluded_count = 0
-    for it in history_all:
-        if isinstance(it, dict) and today_day and same_key_daily_item(it, args.module, args.ruleset_id, str(today_stats_as_of_ts)):
-            excluded_count += 1
-            continue
-        history_excl_today.append(it)
+
+    if not today_day_missing:
+        for it in history_all:
+            if isinstance(it, dict) and same_key_daily_item(it, args.module, args.ruleset_id, today_stats_as_of_ts):
+                excluded_count += 1
+                continue
+            history_excl_today.append(it)
+    else:
+        # Fail-open: cannot determine today's day key, keep full history as baseline.
+        history_excl_today = list(history_all)
 
     timeline_hist = build_series_signal_timeline(history_excl_today, args.module, args.ruleset_id)
 
@@ -625,16 +632,24 @@ def main() -> None:
         "stats_path": args.stats,
         "stats_generated_at_utc": stats.get("generated_at_utc"),
         "stats_as_of_ts": today_stats_as_of_ts,
+        "today_day": today_day,
+        "today_day_missing": today_day_missing,
         "script_version": stats.get("script_version"),
         "series_count": stats.get("series_count"),
         "dash_history_path": args.dash_history or "NA",
         "streak_calc": (
             "PrevSignal/Streak derived from dashboard/history.json filtered by (module + ruleset_id); "
             "StreakWA includes today; StreakHist excludes today; "
-            "ORDER_SAFE: if history already contains same-day key, it is excluded from baseline"
+            "ORDER_SAFE: if history already contains same-day key, it is excluded from baseline; "
+            "Fail-open if today_day missing (no same-day exclusion)"
         ),
         "history_items_loaded": len(history_all),
-        "history_excluded_same_day": excluded_count,
+        "history_excluded_same_day": excluded_count if not today_day_missing else "NA",
+        "deprecated_fields": {
+            "ret1_pct60": "legacy alias of ret1_pct1d_absPrev (same 1D % value)",
+            "z_delta60": "legacy; markdown display uses z_poschg60",
+            "p_delta60": "legacy; markdown display uses p_poschg60",
+        },
     }
 
     series = stats.get("series", {})
@@ -655,15 +670,16 @@ def main() -> None:
         latest_asof_dt = parse_iso(latest.get("as_of_ts"))
         dq, age_hours = dq_from_ts(run_ts, latest_asof_dt, args.stale_hours)
 
+        ret1_1d = w60.get("ret1_pct")  # authoritative 1D % change in your pipeline
+
         signal_level, reason, tag, near = compute_signal_tag_near_from_metrics(
             z60=w60.get("z"),
             p252=w252.get("p"),
             zdel60=w60.get("z_delta"),
             pdel60=w60.get("p_delta"),
-            ret1pct60=w60.get("ret1_pct"),
+            ret1pct1d=ret1_1d,
         )
 
-        # prev/streaks against history excluding today
         prev_signal, streak_hist, streak_wa = compute_prev_and_streaks(
             sid=str(sid),
             today_signal=signal_level,
@@ -673,10 +689,13 @@ def main() -> None:
 
         series_signals[str(sid)] = str(signal_level)
 
-        # direction annotation (no effect on signal)
         direction = get_direction(str(sid))
         tags_list = parse_tags(tag)
         dir_note = compute_dir_note(direction, reason, tags_list)
+
+        # Mirror display keys for audit-friendly markdown columns (no algorithm change)
+        z_delta = w60.get("z_delta")
+        p_delta = w60.get("p_delta")
 
         row: Dict[str, Any] = {
             "module": args.module,
@@ -691,14 +710,19 @@ def main() -> None:
             "dq": dq,
             "age_hours": age_hours,
 
-            # core metrics (rules/sorting may use some of these)
             "z60": w60.get("z"),
-            "ret1_pct60": w60.get("ret1_pct"),
-            "z_delta60": w60.get("z_delta"),
-            "p_delta60": w60.get("p_delta"),
+
+            # legacy + display naming (same values)
+            "ret1_pct60": ret1_1d,
+            "ret1_pct1d_absPrev": ret1_1d,
+
+            "z_delta60": z_delta,
+            "p_delta60": p_delta,
+            "z_poschg60": z_delta,
+            "p_poschg60": p_delta,
+
             "p252": w252.get("p"),
 
-            # diagnostics-only (not used in rules/sorting)
             "p60": w60.get("p"),
             "z252": w252.get("z"),
 
@@ -717,7 +741,6 @@ def main() -> None:
         }
         rows.append(row)
 
-    # Sorting:
     sig_order = {"ALERT": 0, "WATCH": 1, "INFO": 2, "NONE": 3}
     dq_order = {"MISSING": 0, "STALE": 1, "OK": 2}
 
@@ -738,7 +761,7 @@ def main() -> None:
             return 2
         if d == "SAME":
             return 1
-        return 0  # changed first
+        return 0
 
     rows.sort(key=lambda r: (
         sig_order.get(r.get("signal_level", "NONE"), 9),
