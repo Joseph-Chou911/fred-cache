@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-02-18T11:38:28Z",
+  "generated_at_utc": "2026-02-18T11:56:25Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -11,7 +11,7 @@
     "fx_history": "fx_cache/history.json",
     "inflation_in": "inflation_realrate_cache/dashboard_latest.json",
     "assetproxy_in": "asset_proxy_cache/dashboard_latest.json",
-    "nasdaq_bb_in": "nasdaq_bb_cache/latest.json"
+    "nasdaqbb_dir": "nasdaq_bb_cache"
   },
   "modules": {
     "market_cache": {
@@ -2896,11 +2896,11 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-02-18T11:38:27Z",
+        "generated_at_utc": "2026-02-18T11:56:25Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-13",
-        "quote_time_local": "2026-02-18T19:25:00+08:00",
+        "quote_time_local": "2026-02-18T19:45:00+08:00",
         "usd_twd": {
           "spot_buy": 31.425,
           "spot_sell": 31.575,
@@ -3267,10 +3267,69 @@
       }
     },
     "nasdaq_bb_cache": {
-      "status": "MISSING",
+      "status": "OK",
       "note": "display-only; not used for positioning/mode/cross_module",
-      "series": null,
-      "raw": null
+      "dashboard_latest": {
+        "note": "display-only; not used for positioning/mode/cross_module",
+        "dir": "nasdaq_bb_cache",
+        "files_found": [
+          "report.md",
+          "snippet_price_^ndx.json",
+          "snippet_price_qqq.json",
+          "snippet_price_qqq.us.json",
+          "snippet_vxn.json",
+          "tail_price_^ndx.csv",
+          "tail_price_qqq.csv",
+          "tail_price_qqq.us.csv",
+          "tail_vxn.csv"
+        ],
+        "files_used": {
+          "QQQ": "nasdaq_bb_cache/snippet_price_qqq.us.json",
+          "VXN": "nasdaq_bb_cache/snippet_vxn.json",
+          "NDX": "nasdaq_bb_cache/snippet_price_^ndx.json"
+        },
+        "errors": {
+          "QQQ": "NA",
+          "VXN": "NA",
+          "NDX": "NA"
+        },
+        "QQQ": {
+          "data_date": "NA",
+          "close": "NA",
+          "value": "NA",
+          "close_or_value": "NA",
+          "signal": "NA",
+          "z": "NA",
+          "position_in_band": "NA",
+          "dist_to_lower": "NA",
+          "dist_to_upper": "NA",
+          "kind": "QQQ"
+        },
+        "VXN": {
+          "data_date": "NA",
+          "close": "NA",
+          "value": "NA",
+          "close_or_value": "NA",
+          "signal": "NA",
+          "z": "NA",
+          "position_in_band": "NA",
+          "dist_to_lower": "NA",
+          "dist_to_upper": "NA",
+          "kind": "VXN"
+        },
+        "NDX": {
+          "data_date": "NA",
+          "close": "NA",
+          "value": "NA",
+          "close_or_value": "NA",
+          "signal": "NA",
+          "z": "NA",
+          "position_in_band": "NA",
+          "dist_to_lower": "NA",
+          "dist_to_upper": "NA",
+          "kind": "NDX"
+        }
+      }
     }
   },
   "audit_notes": [

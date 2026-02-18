@@ -8,8 +8,8 @@
 - fx_usdtwd: OK
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
-- nasdaq_bb_cache: MISSING
-- unified_generated_at_utc: 2026-02-18T11:38:28Z
+- nasdaq_bb_cache: OK
+- unified_generated_at_utc: 2026-02-18T11:56:25Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -129,7 +129,7 @@
 | IAU.US_CLOSE | WATCH | MOVE | JUMP | 91.820000 | 2026-02-17 | 0.001047 | 0.937521 | 76.666667 | 94.444444 | -0.463092 | -13.163842 | -3.092348 | abs(ret1%1d)>=2 | JUMP_RET | WATCH | SAME | 5 | 6 | https://stooq.com/q/d/l/?s=iau.us&d1=20260119&d2=20260218&i=d |
 
 ## nasdaq_bb_cache (display-only)
-- status: MISSING
+- status: OK
 - note: display-only; not used for positioning/mode/cross_module
 - QQQ.data_date: NA
 - QQQ.close: NA
@@ -197,7 +197,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-17T15:13:33Z
 
-<!-- rendered_at_utc: 2026-02-18T11:38:29Z -->
+<!-- rendered_at_utc: 2026-02-18T11:56:25Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
