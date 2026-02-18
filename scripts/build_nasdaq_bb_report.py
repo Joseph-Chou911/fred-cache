@@ -10,14 +10,13 @@ Reads:
 Writes:
 - nasdaq_bb_cache/report.md
 
-Features:
-- Markdown report with sections for QQQ (PRICE) and VXN (VOL)
-- Staleness flag + confidence label
-- Avoid double-wrapping backticks
-- 15-second executive summary at the top
-  * QQQ: show (conf=...)
-  * VXN: show a single (conf=...) — prefer B_highvol confidence if B is referenced,
-         else fallback to available confidence
+Key audit fixes:
+1) 15-second summary chooses the correct VXN historical bucket based on trigger_reason:
+   - If trigger_reason indicates position_in_band and C_poswatch exists -> use C_poswatch
+   - Else if B_highvol exists -> use B_highvol
+   - Else: omit tail line
+2) The summary's confidence for VXN matches the selected bucket (not hardwired to B).
+3) VXN section renders C_poswatch bucket (if present) with its own confidence.
 """
 
 from __future__ import annotations
@@ -151,7 +150,7 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
     """
     Build a compact, 15-second summary using existing snippet fields only.
     - QQQ line ends with (conf=...)
-    - VXN line ends with a single (conf=...), preferring B_highvol confidence when B is referenced.
+    - VXN line ends with a single (conf=...), matched to the referenced bucket.
     """
     # ---- PRICE (QQQ) ----
     p_meta = price.get("meta", {}) or {}
@@ -219,8 +218,9 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
     v_pos = _fmt_float(v_latest.get("position_in_band"), 3)
     v_bw_d = _fmt_pct(v_latest.get("bandwidth_delta_pct"), 2)
 
-    # Prefer B_highvol stats if present since summary references "High-Vol tail (B)".
-    b = v_hist.get("B_highvol") if isinstance(v_hist, dict) else None
+    hist_dict = v_hist if isinstance(v_hist, dict) else {}
+    c = hist_dict.get("C_poswatch")
+    b = hist_dict.get("B_highvol")
 
     def _ru_to_pct(x) -> str:
         if x is None:
@@ -231,16 +231,31 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
         except Exception:
             return ""
 
-    ru_b_p90 = _ru_to_pct(b.get("p90")) if isinstance(b, dict) else ""
-    b_n = b.get("sample_size") if isinstance(b, dict) else None
+    reason_lc = (v_reason or "").lower()
 
-    # Single confidence for VXN summary:
-    # - If B_highvol exists: use its confidence (because we show B tail)
-    # - Else: use hist.sample_size confidence
-    if isinstance(b, dict):
-        v_conf, _ = _confidence(b.get("sample_size"), v_stale_flag)
-    else:
-        v_conf, _ = _confidence(v_hist.get("sample_size") if isinstance(v_hist, dict) else None, v_stale_flag)
+    # choose bucket
+    use_c = False
+    if isinstance(c, dict):
+        if ("position_in_band" in reason_lc) or ("pos=" in reason_lc):
+            use_c = True
+
+    tail_label = ""
+    tail_p90 = ""
+    tail_n = None
+    tail_sample = None
+
+    if use_c:
+        tail_label = "Pos-WATCH (C)"
+        tail_p90 = _ru_to_pct(c.get("p90"))
+        tail_n = c.get("sample_size")
+        tail_sample = tail_n
+    elif isinstance(b, dict):
+        tail_label = "High-Vol tail (B)"
+        tail_p90 = _ru_to_pct(b.get("p90"))
+        tail_n = b.get("sample_size")
+        tail_sample = tail_n
+
+    v_conf, _ = _confidence(tail_sample, v_stale_flag)
 
     vxn_line = (
         f"- **VXN** ({v_date} close={v_close}) → **{v_action}**"
@@ -248,7 +263,7 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
         + (f"; z={v_z}" if v_z else "")
         + (f"; pos={v_pos}" if v_pos else "")
         + (f"; bwΔ={v_bw_d}" if v_bw_d else "")
-        + (f"; High-Vol tail (B) p90 runup={ru_b_p90} (n={b_n})" if ru_b_p90 else "")
+        + (f"; {tail_label} p90 runup={tail_p90} (n={tail_n})" if (tail_label and tail_p90) else "")
         + f" (conf={v_conf})"
     )
 
@@ -292,7 +307,8 @@ def _render_price_section(price: Dict[str, Any]) -> str:
     out.append(f"- source: `{meta.get('source','')}`  | url: `{meta.get('url','')}`")
     out.append(f"- action_output: **`{price.get('action_output','')}`**")
     if "trigger_reason" in price:
-        out.append(f"- trigger_reason: `{price.get('trigger_reason')}`\n")
+        tr = price.get("trigger_reason") or ""
+        out.append(f"- trigger_reason: `{tr}`\n")
     else:
         out.append("")
 
@@ -342,7 +358,8 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
         out.append(f"- selected_source: `{meta.get('selected_source')}` | fallback_used: `{meta.get('fallback_used')}`")
     out.append(f"- action_output: **`{vxn.get('action_output','')}`**")
     if "trigger_reason" in vxn:
-        out.append(f"- trigger_reason: `{vxn.get('trigger_reason')}`\n")
+        tr = vxn.get("trigger_reason") or ""
+        out.append(f"- trigger_reason: `{tr}`\n")
     else:
         out.append("")
 
@@ -352,7 +369,18 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
     hist = vxn.get("historical_simulation", {}) or {}
     out.append("### Historical simulation (conditional)\n")
 
-    if isinstance(hist, dict) and ("A_lowvol" in hist or "B_highvol" in hist):
+    if isinstance(hist, dict):
+        # C) pos-based watch bucket (if present)
+        if "C_poswatch" in hist:
+            c = hist["C_poswatch"] or {}
+            n_c = c.get("sample_size")
+            conf_c, reason_c = _confidence(n_c, stale_flag)
+            out.append("#### C) Position-based WATCH (pos >= threshold)\n")
+            out.append(f"- confidence: **`{conf_c}`** ({reason_c})\n")
+            out.append(_table_kv(c))
+            out.append("")
+
+        # A) / B) z-based buckets
         if "A_lowvol" in hist:
             a = hist["A_lowvol"] or {}
             n_a = a.get("sample_size")
@@ -419,7 +447,7 @@ def parse_args() -> argparse.Namespace:
         description="Build nasdaq_bb_cache/report.md from snippet JSON",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--cache_dir", default="nasdaq_bb_cache")
+    p.add_argument("--cache_dir", "--out_dir", dest="cache_dir", default="nasdaq_bb_cache")
     return p.parse_args()
 
 
