@@ -159,7 +159,7 @@ def compute_bb_features(df: pd.DataFrame, bb_len: int, bb_k: float, use_log: boo
     out["distance_to_lower_pct"] = (out["close"] - out["bb_lower"]) / out["close"] * 100.0
     out["distance_to_upper_pct"] = (out["bb_upper"] - out["close"]) / out["close"] * 100.0
     out["position_in_band"] = (out["close"] - out["bb_lower"]) / (out["bb_upper"] - out["bb_lower"])
-    out["bandwidth_pct"] = (out["bb_upper"] - out["bb_lower"]) / out["bb_mid"]  # ratio
+    out["bandwidth_pct"] = (out["bb_upper"] - out["bb_lower"]) / out["bb_mid"]  # ratio (not percent)
     out["bandwidth_delta_pct"] = out["bandwidth_pct"].pct_change() * 100.0
     return out
 
@@ -286,8 +286,15 @@ def decide_vxn_action(latest: Dict[str, Any], z_low: float, z_high: float, pos_w
     return "NORMAL_RANGE", "none"
 
 
-def build_price_snippet(bb: pd.DataFrame, meta: Dict[str, Any], params: Dict[str, Any], z_thresh: float, z_near: float,
-                        horizon_days: int, cooldown_bars: int) -> Dict[str, Any]:
+def build_price_snippet(
+    bb: pd.DataFrame,
+    meta: Dict[str, Any],
+    params: Dict[str, Any],
+    z_thresh: float,
+    z_near: float,
+    horizon_days: int,
+    cooldown_bars: int,
+) -> Dict[str, Any]:
     bb2 = bb.dropna().copy()
     if bb2.empty:
         raise RuntimeError("Not enough data to compute BB (price).")
@@ -325,8 +332,18 @@ def build_price_snippet(bb: pd.DataFrame, meta: Dict[str, Any], params: Dict[str
     }
 
 
-def build_vxn_snippet(bb: pd.DataFrame, meta: Dict[str, Any], params: Dict[str, Any], z_low: float, z_high: float, pos_watch: float,
-                      horizon_days: int, cooldown_bars: int, selected_source: str, fallback_used: bool) -> Dict[str, Any]:
+def build_vxn_snippet(
+    bb: pd.DataFrame,
+    meta: Dict[str, Any],
+    params: Dict[str, Any],
+    z_low: float,
+    z_high: float,
+    pos_watch: float,
+    horizon_days: int,
+    cooldown_bars: int,
+    selected_source: str,
+    fallback_used: bool,
+) -> Dict[str, Any]:
     bb2 = bb.dropna().copy()
     if bb2.empty:
         raise RuntimeError("Not enough data to compute BB (VXN).")
@@ -420,8 +437,16 @@ def main() -> int:
 
     ap.add_argument("--vxn_enable", action="store_true")
     ap.add_argument("--vxn_code", default="VXN")
+
+    # Primary name
     ap.add_argument("--fred_series", default="VXNCLS")
+    # Backward/alt name (your current CLI/YML): --vxn_fred_series VXNCLS
+    ap.add_argument("--vxn_fred_series", default=None)
+
+    # Primary name
     ap.add_argument("--vxn_source", default="cboe_first", choices=["cboe_first", "fred_first"])
+    # Alias (some configs may use this)
+    ap.add_argument("--vxn_source_policy", default=None)
 
     ap.add_argument("--bb_len", type=int, default=60)
     ap.add_argument("--bb_k", type=float, default=2.0)
@@ -439,6 +464,12 @@ def main() -> int:
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
+    # Apply aliases (so your existing YML/CLI keeps working)
+    if args.vxn_fred_series:
+        args.fred_series = args.vxn_fred_series
+    if args.vxn_source_policy:
+        args.vxn_source = args.vxn_source_policy
+
     use_log = not args.no_log
 
     price_df, price_meta = fetch_stooq_daily(args.price_ticker)
@@ -455,11 +486,15 @@ def main() -> int:
         "cooldown_bars": args.cooldown_bars,
     }
     price_bb = compute_bb_features(price_df, args.bb_len, args.bb_k, use_log=use_log, ddof=args.ddof)
-    price_snip = build_price_snippet(price_bb, price_meta, price_params, args.z_thresh, args.z_near, args.horizon_days, args.cooldown_bars)
+    price_snip = build_price_snippet(
+        price_bb, price_meta, price_params, args.z_thresh, args.z_near, args.horizon_days, args.cooldown_bars
+    )
     write_json(os.path.join(args.out_dir, "snippet_price.json"), price_snip)
 
     if args.vxn_enable:
-        vxn_df, vxn_meta, selected_source, fallback_used = fetch_vxn_with_fallback(args.vxn_code, args.fred_series, args.vxn_source)
+        vxn_df, vxn_meta, selected_source, fallback_used = fetch_vxn_with_fallback(
+            args.vxn_code, args.fred_series, args.vxn_source
+        )
         vxn_params = {
             "vxn_code": args.vxn_code,
             "fred_series": args.fred_series,
@@ -476,8 +511,16 @@ def main() -> int:
         }
         vxn_bb = compute_bb_features(vxn_df, args.bb_len, args.bb_k, use_log=use_log, ddof=args.ddof)
         vxn_snip = build_vxn_snippet(
-            vxn_bb, vxn_meta, vxn_params, args.z_thresh_low, args.z_thresh_high, args.pos_watch,
-            args.horizon_days, args.cooldown_bars, selected_source, fallback_used
+            vxn_bb,
+            vxn_meta,
+            vxn_params,
+            args.z_thresh_low,
+            args.z_thresh_high,
+            args.pos_watch,
+            args.horizon_days,
+            args.cooldown_bars,
+            selected_source,
+            fallback_used,
         )
         write_json(os.path.join(args.out_dir, "snippet_vxn.json"), vxn_snip)
 
