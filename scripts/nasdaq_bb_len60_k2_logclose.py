@@ -4,20 +4,20 @@
 """
 nasdaq_bb_len60_k2_logclose.py
 
-Outputs:
-- nasdaq_bb_cache/snippet_price_qqq.json
-- nasdaq_bb_cache/snippet_vxn.json
+Outputs (under out_dir/cache_dir):
+- snippet_price_qqq.json
+- snippet_vxn.json (optional; when --vxn_enable)
 
-Key addition (Suggestion #2):
-- snippet_vxn.json includes:
-    - active_regime: "A_lowvol" | "B_highvol" | "NONE"
-    - tail_B_applicable: bool   (True only when active_regime == "B_highvol")
+This version adds argparse aliases to match existing workflow calls, including:
+--price_ticker, --out_dir, --vxn_enable, --vxn_code, --bb_len, --bb_k,
+--z_thresh, --z_thresh_low, --z_thresh_high, --quiet
 
-Notes:
-- BB computed on log(close) if --use_log, then bands are exponentiated back to price space.
-- z is computed in transformed space (log space when use_log=True).
-- QQQ source: stooq
-- VXN source: cboe_first or fred_first, with fallback
+And keeps backward compatibility with:
+--cache_dir, --length, --k, --qqq_url, --vxn_source, etc.
+
+VXN snippet additions:
+- active_regime: "A_lowvol" | "B_highvol" | "NONE"
+- tail_B_applicable: bool (True only when active_regime == "B_highvol")
 """
 
 from __future__ import annotations
@@ -67,6 +67,26 @@ def quantile_safe(s: pd.Series, q: float) -> Optional[float]:
         return None
 
 
+def stooq_daily_url(ticker: str) -> str:
+    # e.g. qqq.us -> https://stooq.com/q/d/l/?s=qqq.us&i=d
+    return f"https://stooq.com/q/d/l/?s={ticker}&i=d"
+
+
+def cboe_daily_url(code: str) -> str:
+    # e.g. VXN -> https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv
+    c = code.strip().upper()
+    return f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{c}_History.csv"
+
+
+def default_fred_series_for_vxn_code(code: str) -> str:
+    # for VXN, common fred series is VXNCLS
+    c = code.strip().upper()
+    if c == "VXN":
+        return "VXNCLS"
+    # fallback: user should pass explicit --vxn_fred_series if not VXN
+    return f"{c}CLS"
+
+
 # ----------------------------
 # Fetchers
 # ----------------------------
@@ -96,9 +116,7 @@ def fetch_csv(url: str, timeout: int = 20, retries: int = 3, backoff_sec: float 
 
 
 def parse_stooq_daily(csv_text: str) -> pd.DataFrame:
-    # columns: Date, Open, High, Low, Close, Volume
     df = pd.read_csv(pd.io.common.StringIO(csv_text))
-    # stooq uses "Date"
     df.rename(columns={"Date": "date", "Close": "close"}, inplace=True)
     df["date"] = pd.to_datetime(df["date"])
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
@@ -109,7 +127,6 @@ def parse_stooq_daily(csv_text: str) -> pd.DataFrame:
 
 def parse_fred(csv_text: str, series_id: str) -> pd.DataFrame:
     df = pd.read_csv(pd.io.common.StringIO(csv_text))
-    # columns: observation_date, <series_id>
     date_col = "observation_date"
     val_col = series_id
     df.rename(columns={date_col: "date", val_col: "close"}, inplace=True)
@@ -121,16 +138,13 @@ def parse_fred(csv_text: str, series_id: str) -> pd.DataFrame:
 
 
 def parse_cboe_vxn(csv_text: str) -> pd.DataFrame:
-    # CBOE VXN history format (commonly):
-    # Date, Open, High, Low, Close
     df = pd.read_csv(pd.io.common.StringIO(csv_text))
-    # be tolerant to column name variants
     col_map = {}
     for c in df.columns:
         cl = c.strip().lower()
-        if cl in ("date",):
+        if cl == "date":
             col_map[c] = "date"
-        if cl in ("close", "closing", "close value"):
+        if cl == "close":
             col_map[c] = "close"
     df.rename(columns=col_map, inplace=True)
 
@@ -146,12 +160,7 @@ def parse_cboe_vxn(csv_text: str) -> pd.DataFrame:
 
 def fetch_qqq_stooq(url: str, timeout: int, retries: int) -> FetchResult:
     txt, errs = fetch_csv(url, timeout=timeout, retries=retries)
-    meta = {
-        "source": "stooq",
-        "url": url,
-        "date_col": "date",
-        "value_col": "close",
-    }
+    meta = {"source": "stooq", "url": url, "date_col": "date", "value_col": "close"}
     if txt is None:
         return FetchResult(False, None, meta, errs)
     try:
@@ -169,12 +178,7 @@ def fetch_qqq_stooq(url: str, timeout: int, retries: int) -> FetchResult:
 
 def fetch_vxn_cboe(url: str, timeout: int, retries: int) -> FetchResult:
     txt, errs = fetch_csv(url, timeout=timeout, retries=retries)
-    meta = {
-        "source": "cboe",
-        "url": url,
-        "date_col": "date",
-        "value_col": "close",
-    }
+    meta = {"source": "cboe", "url": url, "date_col": "date", "value_col": "close"}
     if txt is None:
         return FetchResult(False, None, meta, errs)
     try:
@@ -218,25 +222,7 @@ def fetch_vxn_fred(series_id: str, url: str, timeout: int, retries: int) -> Fetc
 # Bollinger + Metrics
 # ----------------------------
 
-def compute_bb(
-    df: pd.DataFrame,
-    length: int,
-    k: float,
-    use_log: bool,
-    ddof: int,
-) -> pd.DataFrame:
-    """
-    Input df columns: date (str), close (float)
-    Output adds:
-      x, mid_x, std_x, lower_x, upper_x
-      bb_mid, bb_lower, bb_upper  (price-space if use_log else same)
-      z
-      bandwidth_pct (ratio)
-      bandwidth_delta_pct (percent units)
-      position_in_band
-      distance_to_lower_pct (percent units)
-      distance_to_upper_pct (percent units)
-    """
+def compute_bb(df: pd.DataFrame, length: int, k: float, use_log: bool, ddof: int) -> pd.DataFrame:
     out = df.copy()
     out["close"] = pd.to_numeric(out["close"], errors="coerce")
     out = out.dropna(subset=["close"]).reset_index(drop=True)
@@ -262,17 +248,12 @@ def compute_bb(
 
     out["z"] = (out["x"] - out["mid_x"]) / out["std_x"]
 
-    # bandwidth ratio in price-space
     out["bandwidth_pct"] = (out["bb_upper"] - out["bb_lower"]) / out["bb_mid"]
-
-    # bandwidth delta pct (percent units)
     out["bandwidth_delta_pct"] = (out["bandwidth_pct"] / out["bandwidth_pct"].shift(1) - 1.0) * 100.0
 
-    # distance to bands (percent units)
     out["distance_to_lower_pct"] = (out["close"] - out["bb_lower"]) / out["close"] * 100.0
     out["distance_to_upper_pct"] = (out["bb_upper"] - out["close"]) / out["close"] * 100.0
 
-    # position in band [0..1]
     denom = (out["bb_upper"] - out["bb_lower"])
     out["position_in_band"] = (out["close"] - out["bb_lower"]) / denom.replace(0, float("nan"))
 
@@ -280,11 +261,6 @@ def compute_bb(
 
 
 def walk_count(series_x: pd.Series, band_x: pd.Series, direction: str) -> int:
-    """
-    Count consecutive days at the end where:
-    - direction=="lower": x <= lower_x
-    - direction=="upper": x >= upper_x
-    """
     if len(series_x) == 0:
         return 0
     cnt = 0
@@ -305,27 +281,19 @@ def walk_count(series_x: pd.Series, band_x: pd.Series, direction: str) -> int:
 
 
 def events_with_cooldown(mask: pd.Series, cooldown: int) -> List[int]:
-    """
-    Given boolean mask aligned to df index, pick indices with cooldown to avoid clustering.
-    """
     idxs: List[int] = []
     i = 0
     n = len(mask)
     while i < n:
         if bool(mask.iloc[i]):
             idxs.append(i)
-            i += cooldown  # skip forward cooldown bars
+            i += cooldown
         else:
             i += 1
     return idxs
 
 
 def forward_mdd(close: pd.Series, start_idx: int, horizon: int) -> Optional[float]:
-    """
-    Forward max drawdown over horizon:
-      min(close[t+1 .. t+h]) / close[t] - 1
-    <= 0
-    """
     if start_idx >= len(close):
         return None
     entry = safe_float(close.iloc[start_idx])
@@ -343,11 +311,6 @@ def forward_mdd(close: pd.Series, start_idx: int, horizon: int) -> Optional[floa
 
 
 def forward_max_runup(close: pd.Series, start_idx: int, horizon: int) -> Optional[float]:
-    """
-    Forward max runup over horizon:
-      max(close[t+1 .. t+h]) / close[t] - 1
-    >= 0 (or 0)
-    """
     if start_idx >= len(close):
         return None
     entry = safe_float(close.iloc[start_idx])
@@ -364,7 +327,7 @@ def forward_max_runup(close: pd.Series, start_idx: int, horizon: int) -> Optiona
     return m / entry - 1.0
 
 
-def summarize_series(vals: List[Optional[float]], want_p10: bool = True) -> Dict[str, Any]:
+def summarize_series(vals: List[Optional[float]]) -> Dict[str, Any]:
     s = pd.Series([v for v in vals if v is not None], dtype="float64")
     if len(s) == 0:
         return {
@@ -378,7 +341,7 @@ def summarize_series(vals: List[Optional[float]], want_p10: bool = True) -> Dict
         }
     return {
         "sample_size": int(len(s)),
-        "p10": quantile_safe(s, 0.10) if want_p10 else None,
+        "p10": quantile_safe(s, 0.10),
         "p50": quantile_safe(s, 0.50),
         "p90": quantile_safe(s, 0.90),
         "mean": float(s.mean()),
@@ -404,17 +367,14 @@ def build_price_snippet(
 ) -> Dict[str, Any]:
     dfb = compute_bb(df, length=length, k=k, use_log=use_log, ddof=ddof)
     dfb = dfb.dropna(subset=["bb_mid", "bb_lower", "bb_upper", "z"]).reset_index(drop=True)
-
     if len(dfb) == 0:
         raise ValueError("Not enough data after BB computation.")
 
     last = dfb.iloc[-1]
-
-    # triggers
     z = float(last["z"])
-    trigger_z_le_neg2 = bool(z <= z_thresh)
+    trigger_z_le = bool(z <= z_thresh)
 
-    # action_output (keep your existing behavior)
+    # action_output + trigger_reason (align with your report examples)
     if z <= -2.0:
         action_output = "TOUCH_LOWER_BAND (TRIGGER)"
         trigger_reason = "z<=-2"
@@ -425,35 +385,26 @@ def build_price_snippet(
         action_output = "NORMAL_RANGE"
         trigger_reason = ""
 
-    # walk lower count in transformed space
     wl = walk_count(dfb["x"], dfb["lower_x"], direction="lower")
 
-    # historical simulation conditional on z <= z_thresh
     mask = dfb["z"] <= z_thresh
     event_idxs = events_with_cooldown(mask, cooldown=cooldown_bars)
     mdds = [forward_mdd(dfb["close"], i, horizon=horizon_days) for i in event_idxs]
+
     hist = {
         "metric": "forward_mdd",
         "metric_interpretation": "<=0; closer to 0 is less pain; more negative is deeper drawdown",
         "z_thresh": float(z_thresh),
         "horizon_days": int(horizon_days),
         "cooldown_bars": int(cooldown_bars),
-        **summarize_series(mdds, want_p10=True),
+        **summarize_series(mdds),
     }
 
-    snippet = {
+    return {
         "name": f"QQQ_BB(len={length},k={k},log={use_log})",
         "generated_at_utc": utc_now_iso(),
-        "meta": {
-            "attempt_errors": meta.get("attempt_errors", []),
-            **meta,
-        },
-        "params": {
-            "length": int(length),
-            "k": float(k),
-            "use_log": bool(use_log),
-            "ddof": int(ddof),
-        },
+        "meta": {"attempt_errors": meta.get("attempt_errors", []), **meta},
+        "params": {"length": int(length), "k": float(k), "use_log": bool(use_log), "ddof": int(ddof)},
         "latest": {
             "date": str(last["date"]),
             "close": float(last["close"]),
@@ -461,7 +412,7 @@ def build_price_snippet(
             "bb_lower": float(last["bb_lower"]),
             "bb_upper": float(last["bb_upper"]),
             "z": float(last["z"]),
-            "trigger_z_le_-2": bool(trigger_z_le_neg2),
+            "trigger_z_le_-2": bool(trigger_z_le),
             "distance_to_lower_pct": float(last["distance_to_lower_pct"]),
             "distance_to_upper_pct": float(last["distance_to_upper_pct"]),
             "position_in_band": float(last["position_in_band"]),
@@ -473,7 +424,6 @@ def build_price_snippet(
         "action_output": action_output,
         "trigger_reason": trigger_reason,
     }
-    return snippet
 
 
 def build_vxn_snippet(
@@ -490,7 +440,6 @@ def build_vxn_snippet(
 ) -> Dict[str, Any]:
     dfb = compute_bb(df, length=length, k=k, use_log=use_log, ddof=ddof)
     dfb = dfb.dropna(subset=["bb_mid", "bb_lower", "bb_upper", "z"]).reset_index(drop=True)
-
     if len(dfb) == 0:
         raise ValueError("Not enough data after BB computation.")
 
@@ -500,7 +449,7 @@ def build_vxn_snippet(
     trigger_low = bool(z <= z_low)
     trigger_high = bool(z >= z_high)
 
-    # --- Suggestion #2 additions ---
+    # Suggestion #2 fields
     if trigger_low:
         active_regime = "A_lowvol"
         tail_B_applicable = False
@@ -510,9 +459,7 @@ def build_vxn_snippet(
     else:
         active_regime = "NONE"
         tail_B_applicable = False
-    # -----------------------------
 
-    # action_output (keep your existing behavior: near upper by position_in_band)
     pos = safe_float(last["position_in_band"])
     if pos is not None and pos >= 0.8:
         action_output = "NEAR_UPPER_BAND (WATCH)"
@@ -526,7 +473,6 @@ def build_vxn_snippet(
 
     wu = walk_count(dfb["x"], dfb["upper_x"], direction="upper")
 
-    # historical simulation A/B (separately)
     mask_a = dfb["z"] <= z_low
     idx_a = events_with_cooldown(mask_a, cooldown=cooldown_bars)
     runups_a = [forward_max_runup(dfb["close"], i, horizon=horizon_days) for i in idx_a]
@@ -541,35 +487,24 @@ def build_vxn_snippet(
         "z_thresh": float(z_low),
         "horizon_days": int(horizon_days),
         "cooldown_bars": int(cooldown_bars),
-        **summarize_series(runups_a, want_p10=True),
+        **summarize_series(runups_a),
     }
-
     hist_b = {
         "metric": "forward_max_runup",
         "metric_interpretation": ">=0; larger means further spike continuation risk",
         "z_thresh": float(z_high),
         "horizon_days": int(horizon_days),
         "cooldown_bars": int(cooldown_bars),
-        **summarize_series(runups_b, want_p10=True),
+        **summarize_series(runups_b),
     }
 
-    snippet = {
+    return {
         "name": f"VXN_BB(len={length},k={k},log={use_log})",
         "generated_at_utc": utc_now_iso(),
-        "meta": {
-            "attempt_errors": meta.get("attempt_errors", []),
-            **meta,
-        },
-        "params": {
-            "length": int(length),
-            "k": float(k),
-            "use_log": bool(use_log),
-            "ddof": int(ddof),
-        },
-        # --- Suggestion #2 fields (for audit) ---
+        "meta": {"attempt_errors": meta.get("attempt_errors", []), **meta},
+        "params": {"length": int(length), "k": float(k), "use_log": bool(use_log), "ddof": int(ddof)},
         "active_regime": active_regime,
         "tail_B_applicable": bool(tail_B_applicable),
-        # ----------------------------------------
         "latest": {
             "date": str(last["date"]),
             "close": float(last["close"]),
@@ -593,7 +528,6 @@ def build_vxn_snippet(
         "action_output": action_output,
         "trigger_reason": trigger_reason,
     }
-    return snippet
 
 
 # ----------------------------
@@ -603,36 +537,53 @@ def build_vxn_snippet(
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description="Compute BB(60,2) (logclose) for QQQ and VXN and write snippets into cache dir.",
+        description="Compute BB for QQQ price + optional VXN vol, output snippets into cache dir.",
     )
-    p.add_argument("--cache_dir", default="nasdaq_bb_cache")
-    p.add_argument("--length", type=int, default=60)
-    p.add_argument("--k", type=float, default=2.0)
+
+    # Output directory (alias: --out_dir)
+    p.add_argument("--cache_dir", "--out_dir", dest="cache_dir", default="nasdaq_bb_cache")
+
+    # BB params (aliases: --bb_len, --bb_k)
+    p.add_argument("--length", "--bb_len", dest="length", type=int, default=60)
+    p.add_argument("--k", "--bb_k", dest="k", type=float, default=2.0)
     p.add_argument("--use_log", action="store_true", default=True)
     p.add_argument("--ddof", type=int, default=0)
 
+    # simulation params
     p.add_argument("--horizon_days", type=int, default=20)
     p.add_argument("--cooldown_bars", type=int, default=20)
 
+    # QQQ source:
     p.add_argument("--qqq_url", default="https://stooq.com/q/d/l/?s=qqq.us&i=d")
+    p.add_argument("--price_ticker", dest="price_ticker", default=None,
+                   help="If provided, overrides qqq_url to stooq daily url for this ticker (e.g. qqq.us).")
 
-    p.add_argument(
-        "--vxn_source",
-        choices=["cboe_first", "fred_first"],
-        default="cboe_first",
-        help="VXN data source preference with fallback.",
-    )
-    p.add_argument("--vxn_cboe_url", default="https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv")
-    p.add_argument("--vxn_fred_series", default="VXNCLS")
-    p.add_argument("--vxn_fred_url", default="https://fred.stlouisfed.org/graph/fredgraph.csv?id=VXNCLS")
+    # thresholds (aliases to match workflow)
+    p.add_argument("--qqq_z_thresh", "--z_thresh", dest="qqq_z_thresh", type=float, default=-2.0)
+    p.add_argument("--vxn_z_low", "--z_thresh_low", dest="vxn_z_low", type=float, default=-2.0)
+    p.add_argument("--vxn_z_high", "--z_thresh_high", dest="vxn_z_high", type=float, default=2.0)
 
+    # VXN enable + code (workflow style)
+    p.add_argument("--vxn_enable", action="store_true", default=False,
+                   help="Enable VXN fetch/compute. If not set, only QQQ snippet is produced.")
+    p.add_argument("--vxn_code", dest="vxn_code", default="VXN",
+                   help="Index code for CBOE history url pattern: {CODE}_History.csv (default VXN).")
+
+    # VXN source preference (kept)
+    p.add_argument("--vxn_source", choices=["cboe_first", "fred_first"], default="cboe_first")
+    p.add_argument("--vxn_cboe_url", default=None,
+                   help="If set, overrides default CBOE url derived from vxn_code.")
+    p.add_argument("--vxn_fred_series", default=None,
+                   help="If set, overrides default fred series (VXN -> VXNCLS).")
+    p.add_argument("--vxn_fred_url", default=None,
+                   help="If set, overrides default fred url.")
+
+    # network
     p.add_argument("--timeout", type=int, default=20)
     p.add_argument("--retries", type=int, default=3)
 
-    # thresholds
-    p.add_argument("--qqq_z_thresh", type=float, default=-2.0)
-    p.add_argument("--vxn_z_low", type=float, default=-2.0)
-    p.add_argument("--vxn_z_high", type=float, default=2.0)
+    # misc
+    p.add_argument("--quiet", action="store_true", default=False)
 
     return p.parse_args()
 
@@ -641,9 +592,14 @@ def main() -> int:
     args = parse_args()
     ensure_dir(args.cache_dir)
 
+    # resolve QQQ url
+    qqq_url = args.qqq_url
+    if args.price_ticker:
+        qqq_url = stooq_daily_url(args.price_ticker.strip())
+
     # ---- Fetch QQQ ----
-    qqq_meta = {"attempt_errors": []}
-    qqq_res = fetch_qqq_stooq(args.qqq_url, timeout=args.timeout, retries=args.retries)
+    qqq_meta: Dict[str, Any] = {"attempt_errors": []}
+    qqq_res = fetch_qqq_stooq(qqq_url, timeout=args.timeout, retries=args.retries)
     qqq_meta.update(qqq_res.meta)
     if not qqq_res.ok or qqq_res.df is None:
         qqq_meta["attempt_errors"].extend(qqq_res.errors)
@@ -661,66 +617,76 @@ def main() -> int:
         cooldown_bars=args.cooldown_bars,
     )
 
-    # ---- Fetch VXN (preferred + fallback) ----
-    vxn_attempt_errors: List[str] = []
-    selected_source = None
-    fallback_used = False
-    vxn_df: Optional[pd.DataFrame] = None
-    vxn_meta: Dict[str, Any] = {"attempt_errors": vxn_attempt_errors}
-
-    def try_cboe() -> Tuple[bool, Optional[pd.DataFrame], Dict[str, Any], List[str]]:
-        r = fetch_vxn_cboe(args.vxn_cboe_url, timeout=args.timeout, retries=args.retries)
-        return r.ok, r.df, r.meta, r.errors
-
-    def try_fred() -> Tuple[bool, Optional[pd.DataFrame], Dict[str, Any], List[str]]:
-        r = fetch_vxn_fred(args.vxn_fred_series, args.vxn_fred_url, timeout=args.timeout, retries=args.retries)
-        return r.ok, r.df, r.meta, r.errors
-
-    order = ["cboe", "fred"] if args.vxn_source == "cboe_first" else ["fred", "cboe"]
-    first = True
-    for src in order:
-        ok, df, meta, errs = (try_cboe() if src == "cboe" else try_fred())
-        vxn_attempt_errors.extend(errs)
-        if ok and df is not None:
-            vxn_df = df
-            vxn_meta.update(meta)
-            selected_source = meta.get("source", src)
-            if not first:
-                fallback_used = True
-            break
-        first = False
-
-    if vxn_df is None:
-        raise RuntimeError(f"VXN fetch failed: {vxn_attempt_errors}")
-
-    vxn_meta["selected_source"] = selected_source
-    vxn_meta["fallback_used"] = bool(fallback_used)
-
-    vxn_snip = build_vxn_snippet(
-        vxn_df,
-        meta=vxn_meta,
-        length=args.length,
-        k=args.k,
-        use_log=args.use_log,
-        ddof=args.ddof,
-        z_low=args.vxn_z_low,
-        z_high=args.vxn_z_high,
-        horizon_days=args.horizon_days,
-        cooldown_bars=args.cooldown_bars,
-    )
-
-    # ---- Write snippets ----
     out_price = os.path.join(args.cache_dir, "snippet_price_qqq.json")
-    out_vxn = os.path.join(args.cache_dir, "snippet_vxn.json")
-
     with open(out_price, "w", encoding="utf-8") as f:
         json.dump(qqq_snip, f, ensure_ascii=False, indent=2)
 
-    with open(out_vxn, "w", encoding="utf-8") as f:
-        json.dump(vxn_snip, f, ensure_ascii=False, indent=2)
+    if not args.quiet:
+        print(f"Wrote: {out_price}")
 
-    print(f"Wrote: {out_price}")
-    print(f"Wrote: {out_vxn}")
+    # ---- Optional VXN ----
+    if args.vxn_enable:
+        vxn_code = args.vxn_code.strip().upper()
+
+        cboe_url = args.vxn_cboe_url or cboe_daily_url(vxn_code)
+
+        fred_series = args.vxn_fred_series or default_fred_series_for_vxn_code(vxn_code)
+        fred_url = args.vxn_fred_url or f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={fred_series}"
+
+        vxn_attempt_errors: List[str] = []
+        selected_source = None
+        fallback_used = False
+        vxn_df: Optional[pd.DataFrame] = None
+        vxn_meta: Dict[str, Any] = {"attempt_errors": vxn_attempt_errors}
+
+        def try_cboe():
+            r = fetch_vxn_cboe(cboe_url, timeout=args.timeout, retries=args.retries)
+            return r.ok, r.df, r.meta, r.errors
+
+        def try_fred():
+            r = fetch_vxn_fred(fred_series, fred_url, timeout=args.timeout, retries=args.retries)
+            return r.ok, r.df, r.meta, r.errors
+
+        order = ["cboe", "fred"] if args.vxn_source == "cboe_first" else ["fred", "cboe"]
+        first = True
+        for src in order:
+            ok, df, meta, errs = (try_cboe() if src == "cboe" else try_fred())
+            vxn_attempt_errors.extend(errs)
+            if ok and df is not None:
+                vxn_df = df
+                vxn_meta.update(meta)
+                selected_source = meta.get("source", src)
+                if not first:
+                    fallback_used = True
+                break
+            first = False
+
+        if vxn_df is None:
+            raise RuntimeError(f"VXN fetch failed: {vxn_attempt_errors}")
+
+        vxn_meta["selected_source"] = selected_source
+        vxn_meta["fallback_used"] = bool(fallback_used)
+
+        vxn_snip = build_vxn_snippet(
+            vxn_df,
+            meta=vxn_meta,
+            length=args.length,
+            k=args.k,
+            use_log=args.use_log,
+            ddof=args.ddof,
+            z_low=args.vxn_z_low,
+            z_high=args.vxn_z_high,
+            horizon_days=args.horizon_days,
+            cooldown_bars=args.cooldown_bars,
+        )
+
+        out_vxn = os.path.join(args.cache_dir, "snippet_vxn.json")
+        with open(out_vxn, "w", encoding="utf-8") as f:
+            json.dump(vxn_snip, f, ensure_ascii=False, indent=2)
+
+        if not args.quiet:
+            print(f"Wrote: {out_vxn}")
+
     return 0
 
 
