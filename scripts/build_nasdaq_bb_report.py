@@ -13,8 +13,11 @@ Writes:
 Features:
 - Markdown report with sections for QQQ (PRICE) and VXN (VOL)
 - Staleness flag + confidence label
-- Avoid double-wrapping backticks (fixes ``601.3000`` issue)
-- 15-second executive summary at the top (now includes confidence labels)
+- Avoid double-wrapping backticks
+- 15-second executive summary at the top
+  * QQQ: show (conf=...)
+  * VXN: show a single (conf=...) — prefer B_highvol confidence if B is referenced,
+         else fallback to available confidence
 """
 
 from __future__ import annotations
@@ -111,10 +114,7 @@ def _fmt_ratio_to_pct(r: Any, nd: int = 2) -> str:
 
 
 def _md_code(s: Any) -> str:
-    """
-    Wrap value in markdown inline code backticks, but DO NOT double-wrap
-    if it is already wrapped as `...`.
-    """
+    """Wrap value in markdown inline code backticks, but do not double-wrap if already `...`."""
     if s is None:
         return ""
     if isinstance(s, str) and s.startswith("`") and s.endswith("`"):
@@ -126,9 +126,7 @@ def _table_kv(d: Dict[str, Any]) -> str:
     """
     Render a dict as a 2-col markdown table.
 
-    Key fix:
-    - If a value is already a backticked string (e.g. `601.3000`), keep it as-is
-      rather than wrapping again, avoiding ``601.3000``.
+    If a value is already a backticked string (e.g. `601.3000`), keep it as-is.
     """
     lines = ["| field | value |", "|---|---:|"]
     for k, v in d.items():
@@ -152,8 +150,8 @@ def _table_kv(d: Dict[str, Any]) -> str:
 def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> str:
     """
     Build a compact, 15-second summary using existing snippet fields only.
-    Adds confidence labels (minimal change).
-    Must not raise even if fields are missing.
+    - QQQ line ends with (conf=...)
+    - VXN line ends with a single (conf=...), preferring B_highvol confidence when B is referenced.
     """
     # ---- PRICE (QQQ) ----
     p_meta = price.get("meta", {}) or {}
@@ -173,7 +171,6 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
     p_dist_lo = _fmt_pct(p_latest.get("distance_to_lower_pct"), 3)
     p_dist_hi = _fmt_pct(p_latest.get("distance_to_upper_pct"), 3)
 
-    # p50/p10/min are drawdowns in ratio (<=0). Convert to percent.
     def _dd_to_pct(x) -> str:
         if x is None:
             return ""
@@ -216,29 +213,14 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
     v_stale_days = _staleness_days(v_gen, v_max_date)
     v_stale_flag = _staleness_flag(v_stale_days)
 
-    # "overall" confidence: if split regimes exist, we base it on B_highvol sample_size when available,
-    # else on hist.sample_size; still obey staleness downgrade.
-    overall_n = None
-    conf_b = None
-
-    b = v_hist.get("B_highvol") if isinstance(v_hist, dict) else None
-    if isinstance(b, dict):
-        overall_n = b.get("sample_size")
-        conf_b, _ = _confidence(b.get("sample_size"), v_stale_flag)
-    elif isinstance(v_hist, dict):
-        overall_n = v_hist.get("sample_size")
-
-    v_conf_overall, _ = _confidence(overall_n, v_stale_flag)
-
     v_close = _fmt_float(v_latest.get("close"), 4)
     v_date = v_latest.get("date", "")
     v_z = _fmt_float(v_latest.get("z"), 4)
     v_pos = _fmt_float(v_latest.get("position_in_band"), 3)
     v_bw_d = _fmt_pct(v_latest.get("bandwidth_delta_pct"), 2)
 
-    # Prefer B_highvol p90 if present (tail continuation risk)
-    b_p90 = b.get("p90") if isinstance(b, dict) else None
-    b_n = b.get("sample_size") if isinstance(b, dict) else None
+    # Prefer B_highvol stats if present since summary references "High-Vol tail (B)".
+    b = v_hist.get("B_highvol") if isinstance(v_hist, dict) else None
 
     def _ru_to_pct(x) -> str:
         if x is None:
@@ -249,7 +231,16 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
         except Exception:
             return ""
 
-    ru_b_p90 = _ru_to_pct(b_p90)
+    ru_b_p90 = _ru_to_pct(b.get("p90")) if isinstance(b, dict) else ""
+    b_n = b.get("sample_size") if isinstance(b, dict) else None
+
+    # Single confidence for VXN summary:
+    # - If B_highvol exists: use its confidence (because we show B tail)
+    # - Else: use hist.sample_size confidence
+    if isinstance(b, dict):
+        v_conf, _ = _confidence(b.get("sample_size"), v_stale_flag)
+    else:
+        v_conf, _ = _confidence(v_hist.get("sample_size") if isinstance(v_hist, dict) else None, v_stale_flag)
 
     vxn_line = (
         f"- **VXN** ({v_date} close={v_close}) → **{v_action}**"
@@ -257,16 +248,8 @@ def _build_15s_summary(price: Dict[str, Any], vxn: Optional[Dict[str, Any]]) -> 
         + (f"; z={v_z}" if v_z else "")
         + (f"; pos={v_pos}" if v_pos else "")
         + (f"; bwΔ={v_bw_d}" if v_bw_d else "")
-        + (
-            f"; High-Vol tail (B) p90 runup={ru_b_p90} (n={b_n})"
-            if ru_b_p90
-            else ""
-        )
-        + (
-            f" (conf_overall={v_conf_overall}, conf_B={conf_b})"
-            if conf_b is not None
-            else f" (conf_overall={v_conf_overall})"
-        )
+        + (f"; High-Vol tail (B) p90 runup={ru_b_p90} (n={b_n})" if ru_b_p90 else "")
+        + f" (conf={v_conf})"
     )
 
     return "## 15秒摘要\n\n" + price_line + "\n" + vxn_line + "\n"
@@ -410,7 +393,7 @@ def build_report(cache_dir: str) -> str:
     lines.append("# Nasdaq BB Monitor Report (QQQ + VXN)\n")
     lines.append(f"- report_generated_at_utc: `{_utc_now_iso()}`\n")
 
-    # 15-second executive summary (now includes confidence)
+    # 15-second executive summary
     lines.append(_build_15s_summary(price, vxn))
     lines.append("")
 
