@@ -24,10 +24,9 @@ Env:
 - DATA_SHA (optional) commit sha that contains the data files (preferred for pinned)
 - GITHUB_SHA fallback
 
-Important behavior notes:
-- attempted_success: used to avoid repeatedly doing the HEAVY self-heal backfill (to reach >=252 valid points).
-  It does NOT guarantee there are no "internal holes" inside the most recent window.
-- Therefore, we add a separate "recent-heal" mechanism to repair missed days even when >=252 valid points exist.
+Behavior notes:
+- attempted_success avoids repeatedly doing HEAVY self-heal (to reach >=252 valid points).
+- recent_heal is a LIGHTWEIGHT hole-repair mechanism, independent from attempted_success/backfill_target logic.
 """
 
 from __future__ import annotations
@@ -71,6 +70,14 @@ SERIES_IDS: List[str] = [
     "T10Y3M",
 ]
 
+# Series that are not daily (weekly/monthly/etc.) and thus should not use daily-gap heuristic.
+# Keep this explicit for auditability; update when you add new non-daily series.
+KNOWN_NONDAILY_SERIES = {
+    "STLFSI4",              # weekly
+    "NFCINONFINLEVERAGE",   # weekly (often)
+    # add more if needed
+}
+
 CSV_FIELDNAMES = ["as_of_ts", "series_id", "data_date", "value", "source_url", "notes"]
 
 # -------------------------
@@ -89,19 +96,43 @@ CAP_PER_SERIES = 400  # keep last N records PER series (records keyed by (series
 # -------------------------
 # backfill policy (heavy self-heal)
 # -------------------------
-# - target_valid: we want >=252 VALID values for metrics
-# - fetch_limit: because some series have missing values, fetch more to achieve target_valid
 BACKFILL_TARGET_VALID = 252
-BACKFILL_FETCH_LIMIT = 420  # should be >= target_valid; 420 is a safe ceiling for daily series with gaps
+BACKFILL_FETCH_LIMIT = 420  # safe ceiling for daily series with gaps
 
 # -------------------------
 # recent-heal policy (lightweight hole repair)
 # -------------------------
-# Goal: repair "internal holes" even when we already have >=252 valid points.
-# This is independent from attempted_success/backfill_target logic.
-RECENT_HEAL_ENABLE = (os.getenv("RECENT_HEAL_ENABLE", "1").strip() != "0")
-RECENT_HEAL_LIMIT = int(os.getenv("RECENT_HEAL_LIMIT", "90"))  # fetch last N obs for repair when triggered
-RECENT_HEAL_TAIL_POINTS = int(os.getenv("RECENT_HEAL_TAIL_POINTS", "40"))  # check last N points for suspicious gaps
+def _env_int(name: str, default: int, min_v: Optional[int] = None, max_v: Optional[int] = None) -> int:
+    """
+    Parse env int with fallback, never raising.
+    Optional bounds (min_v/max_v) to prevent accidental runaway.
+    """
+    raw = os.getenv(name, str(default))
+    try:
+        v = int(str(raw).strip())
+    except Exception:
+        return default
+    if min_v is not None and v < min_v:
+        return min_v
+    if max_v is not None and v > max_v:
+        return max_v
+    return v
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "1" if default else "0")
+    s = str(raw).strip().lower()
+    if s in {"1", "true", "yes", "y", "on"}:
+        return True
+    if s in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+RECENT_HEAL_ENABLE = _env_bool("RECENT_HEAL_ENABLE", True)
+RECENT_HEAL_LIMIT = _env_int("RECENT_HEAL_LIMIT", 90, min_v=2, max_v=500)
+RECENT_HEAL_TAIL_POINTS = _env_int("RECENT_HEAL_TAIL_POINTS", 40, min_v=5, max_v=200)
+RECENT_HEAL_MAX_CALLS_PER_RUN = _env_int("RECENT_HEAL_MAX_CALLS_PER_RUN", 6, min_v=0, max_v=50)
 
 # -------------------------
 # stats policy (version-governed)
@@ -114,8 +145,6 @@ RET1_MODE = "delta"  # robust across negatives/rates; ret1 = latest - prev_valid
 PERCENTILE_METHOD = "P = count(x<=latest)/n * 100"
 WINDOW_DEFINITION = "last N valid points (not calendar days)"
 
-# IMPORTANT: bump this when you change any of:
-# - ddof, windows, percentile definition, window definition, ret1_mode
 STATS_SCRIPT_VERSION = "stats_v1_ddof0_w60_w252_pct_le_ret1_delta"
 
 # deterministic Taipei fallback
@@ -126,7 +155,6 @@ def _warn(msg: str) -> None:
     try:
         print(f"[WARN] {msg}", file=sys.stderr)
     except Exception:
-        # last resort: never crash due to logging
         pass
 
 
@@ -402,7 +430,7 @@ def fetch_recent_observations(
         dd = str(o.get("date", "NA"))
         vv = str(o.get("value", "NA"))
 
-        if vv.strip() in {"", "NA", "."}:
+        if vv.strip() in {"", "NA", ".", "N/A"}:
             continue
         if not _is_ymd(dd):
             continue
@@ -592,7 +620,6 @@ def _recent_dates_from_history(
             continue
         dds.append((dd, dt))
 
-    # de-dup by ymd
     uniq: Dict[str, date_cls] = {}
     for dd, dt in dds:
         uniq[dd] = dt
@@ -603,12 +630,12 @@ def _recent_dates_from_history(
     return asc
 
 
-def _has_suspicious_gaps(dates_asc: List[date_cls]) -> bool:
+def _has_suspicious_gaps_daily(dates_asc: List[date_cls]) -> bool:
     """
-    Heuristic gap detector without a holiday calendar.
+    Daily-series gap heuristic (no holiday calendar):
     - allow Fri->Mon (3 days) as normal weekend gap
-    - anything else with delta_days > 1 is considered suspicious and triggers recent-heal
-    This is intentionally conservative: better to do an extra repair call than to leave holes.
+    - any other delta_days > 1 is suspicious
+    Conservative: better to do a small repair call than leave holes.
     """
     if len(dates_asc) < 2:
         return False
@@ -621,11 +648,10 @@ def _has_suspicious_gaps(dates_asc: List[date_cls]) -> bool:
         if delta <= 1:
             continue
 
-        # Allow Fri->Mon weekend gap (3 days)
+        # Allow Fri->Mon weekend gap
         if a.weekday() == 4 and b.weekday() == 0 and delta == 3:
             continue
 
-        # Otherwise suspicious
         return True
 
     return False
@@ -640,7 +666,6 @@ def _upsert_history_per_series(
     Key = (series_id, data_date)
     Same (series_id, data_date) reruns overwrite by keeping the greatest as_of_ts.
     Keep only last `cap_per_series` records per series by (data_date, as_of_ts).
-    Output format stays list[dict].
     """
     best: Dict[Tuple[str, str], Dict[str, str]] = {}
 
@@ -739,7 +764,6 @@ def _repo_slug() -> str:
 
 
 def _data_sha() -> str:
-    # In workflow you can set DATA_SHA post-commit; otherwise fallback to GITHUB_SHA
     return os.getenv("DATA_SHA") or os.getenv("GITHUB_SHA") or "NA"
 
 
@@ -784,9 +808,6 @@ def _std(xs: List[float], ddof: int = 0) -> Optional[float]:
 
 
 def _percentile_le(latest: float, xs: List[float]) -> Optional[float]:
-    """
-    Percentile (0..100): proportion of values <= latest (inclusive).
-    """
     if not xs:
         return None
     le = sum(1 for x in xs if x <= latest)
@@ -796,10 +817,6 @@ def _percentile_le(latest: float, xs: List[float]) -> Optional[float]:
 def _series_points_from_history_lite(
     lite_rows: List[Dict[str, Any]], series_id: str
 ) -> List[Tuple[str, float]]:
-    """
-    Returns sorted list of (data_date, value_float) for a series, ascending by data_date.
-    Only keeps entries with valid YMD and float value.
-    """
     pts: List[Tuple[str, float]] = []
     for r in lite_rows:
         if not isinstance(r, dict):
@@ -815,7 +832,7 @@ def _series_points_from_history_lite(
             continue
         pts.append((dd, vf))
     pts.sort(key=lambda x: x[0])
-    # De-dup by data_date (should already be unique, but keep safe)
+
     dedup: Dict[str, float] = {}
     for dd, v in pts:
         dedup[dd] = v
@@ -828,20 +845,9 @@ def _compute_stats_for_series(
     points: List[Tuple[str, float]],
     source_url_latest: str,
 ) -> Dict[str, Any]:
-    """
-    Compute:
-    - ma60, dev60, z60, p60 using last 60 valid points
-    - z252, p252 using last 252 valid points
-    - ret1 (delta) using last 2 valid points
-    Returns NA when insufficient points or std=0.
-    """
     out: Dict[str, Any] = {
         "series_id": series_id,
-        "latest": {
-            "data_date": "NA",
-            "value": "NA",
-            "source_url": source_url_latest,
-        },
+        "latest": {"data_date": "NA", "value": "NA", "source_url": source_url_latest},
         "windows": {
             "w60": {"n": 0, "start_date": "NA", "end_date": "NA"},
             "w252": {"n": 0, "start_date": "NA", "end_date": "NA"},
@@ -871,14 +877,10 @@ def _compute_stats_for_series(
     out["latest"]["data_date"] = latest_dd
     out["latest"]["value"] = latest_v
 
-    # ret1 (delta) using last 2 valid points
     if len(points) >= 2:
         _prev_dd, prev_v = points[-2]
         out["metrics"]["ret1"] = latest_v - prev_v
-    else:
-        out["metrics"]["ret1"] = "NA"
 
-    # w60
     if len(points) >= STATS_W60:
         w60_pts = points[-STATS_W60:]
         xs60 = [v for _dd, v in w60_pts]
@@ -892,18 +894,11 @@ def _compute_stats_for_series(
             out["metrics"]["ma60"] = mu60
         if sd60 is not None:
             out["metrics"]["dev60"] = sd60
-
         if mu60 is not None and sd60 is not None and sd60 != 0.0:
             out["metrics"]["z60"] = (latest_v - mu60) / sd60
-        else:
-            out["metrics"]["z60"] = "NA"
-
         p60 = _percentile_le(latest_v, xs60)
         out["metrics"]["p60"] = p60 if p60 is not None else "NA"
-    else:
-        out["windows"]["w60"]["n"] = len(points)
 
-    # w252
     if len(points) >= STATS_W252:
         w252_pts = points[-STATS_W252:]
         xs252 = [v for _dd, v in w252_pts]
@@ -915,13 +910,8 @@ def _compute_stats_for_series(
         sd252 = _std(xs252, ddof=STATS_STD_DDOF)
         if mu252 is not None and sd252 is not None and sd252 != 0.0:
             out["metrics"]["z252"] = (latest_v - mu252) / sd252
-        else:
-            out["metrics"]["z252"] = "NA"
-
         p252 = _percentile_le(latest_v, xs252)
         out["metrics"]["p252"] = p252 if p252 is not None else "NA"
-    else:
-        out["windows"]["w252"]["n"] = len(points)
 
     return out
 
@@ -931,21 +921,11 @@ def _compute_stats_latest(
     as_of_ts: str,
     data_commit_sha: str,
 ) -> Dict[str, Any]:
-    """
-    Create compact stats payload:
-    - meta (generated_at_utc/as_of_ts/data_commit_sha)
-    - stats_policy (version-governed)
-    - series: dict keyed by series_id
-    """
     series_out: Dict[str, Any] = {}
     for sid in SERIES_IDS:
         pts = _series_points_from_history_lite(lite_rows, sid)
         src = _safe_source_url_latest(sid)
-        series_out[sid] = _compute_stats_for_series(
-            sid,
-            pts,
-            source_url_latest=src,
-        )
+        series_out[sid] = _compute_stats_for_series(sid, pts, source_url_latest=src)
 
     return {
         "generated_at_utc": _now_utc_iso(),
@@ -970,8 +950,11 @@ def main() -> int:
     as_of_ts = _now_iso(tz)
     generated_at_utc = _now_utc_iso()
 
+    # Cache this once; avoid calling _data_sha() multiple times.
+    data_sha = _data_sha()
+
     session = requests.Session()
-    session.headers.update({"User-Agent": "fred-cache/4.2"})
+    session.headers.update({"User-Agent": "fred-cache/4.3"})
 
     rows: List[Dict[str, str]] = []
 
@@ -985,6 +968,8 @@ def main() -> int:
             "enable": RECENT_HEAL_ENABLE,
             "limit": RECENT_HEAL_LIMIT,
             "tail_points": RECENT_HEAL_TAIL_POINTS,
+            "max_calls_per_run": RECENT_HEAL_MAX_CALLS_PER_RUN,
+            "calls_used": 0,
             "attempted": {},
             "meta": {},
         },
@@ -1054,7 +1039,7 @@ def main() -> int:
     if read_status.startswith("err:") or read_status.startswith("warn:"):
         _warn(f"history.json read status: {read_status}")
 
-    # 4) Load backfill state (only last_attempt + attempted_success flag)
+    # 4) Load backfill state
     backfill_state, backfill_state_read = _load_json_dict(backfill_state_path)
     dq["fs"]["backfill_state_read"] = backfill_state_read
     if backfill_state_read.startswith("err:") or backfill_state_read.startswith("warn:"):
@@ -1065,37 +1050,54 @@ def main() -> int:
     counts_before = _count_valid_per_series(existing_hist)
     dq["backfill"]["counts_before"] = counts_before
 
-    # 5) Recent-heal (repair internal holes), independent from 252-valid logic
+    # 5) Recent-heal (light hole repair) with tightened triggers + budget + non-daily exemptions
     recent_heal_rows: List[Dict[str, str]] = []
-    if RECENT_HEAL_ENABLE and RECENT_HEAL_LIMIT >= 2:
-        # Build quick map from latest rows to decide additional triggers (warn/err)
+    if RECENT_HEAL_ENABLE and RECENT_HEAL_LIMIT >= 2 and RECENT_HEAL_MAX_CALLS_PER_RUN > 0:
         latest_by_sid: Dict[str, Dict[str, str]] = {r.get("series_id", ""): r for r in rows if r.get("series_id")}
+
         for sid in SERIES_IDS:
+            if dq["recent_heal"]["calls_used"] >= RECENT_HEAL_MAX_CALLS_PER_RUN:
+                dq["recent_heal"]["attempted"][sid] = "skip:budget_exhausted"
+                continue
+
+            # Skip non-daily series: daily-gap heuristic does not apply
+            if sid in KNOWN_NONDAILY_SERIES:
+                dq["recent_heal"]["attempted"][sid] = "skip:nondaily_series"
+                continue
+
             tail_dates = _recent_dates_from_history(existing_hist, sid, RECENT_HEAL_TAIL_POINTS)
-            suspicious = _has_suspicious_gaps(tail_dates)
+            suspicious = _has_suspicious_gaps_daily(tail_dates)
 
             latest_note = latest_by_sid.get(sid, {}).get("notes", "NA")
-            latest_warn = latest_note.startswith("warn:") or latest_note.startswith("err:")
 
-            if suspicious or latest_warn:
-                reason = []
-                if suspicious:
-                    reason.append("suspicious_gap")
-                if latest_warn:
-                    reason.append(f"latest_{latest_note}")
+            # Tighten: do NOT trigger on warn:retried_Nx (network jitter).
+            # Trigger on:
+            # - err:* (latest fetch failed)
+            # - warn:missing_value
+            latest_problem = latest_note.startswith("err:") or (latest_note == "warn:missing_value")
 
-                dq["recent_heal"]["attempted"][sid] = "trigger:" + ",".join(reason)
+            if not suspicious and not latest_problem:
+                dq["recent_heal"]["attempted"][sid] = "skip:no_gap_no_problem"
+                continue
 
-                heal_rows, meta = fetch_recent_observations(
-                    session, sid, as_of_ts, RECENT_HEAL_LIMIT, note_prefix="recent_heal"
-                )
-                dq["recent_heal"]["meta"][sid] = meta
-                if heal_rows:
-                    recent_heal_rows.extend(heal_rows)
-            else:
-                dq["recent_heal"]["attempted"][sid] = "skip:no_gap_no_warn"
+            reason = []
+            if suspicious:
+                reason.append("suspicious_gap")
+            if latest_problem:
+                reason.append(f"latest_{latest_note}")
 
-    # 6) Heavy self-heal backfill to reach >=252 valid points (quota-saving via attempted_success)
+            dq["recent_heal"]["attempted"][sid] = "trigger:" + ",".join(reason)
+
+            heal_rows, meta = fetch_recent_observations(
+                session, sid, as_of_ts, RECENT_HEAL_LIMIT, note_prefix="recent_heal"
+            )
+            dq["recent_heal"]["meta"][sid] = meta
+            dq["recent_heal"]["calls_used"] += 1
+
+            if heal_rows:
+                recent_heal_rows.extend(heal_rows)
+
+    # 6) Heavy self-heal backfill to reach >=252 valid points
     backfill_rows: List[Dict[str, str]] = []
     for sid in SERIES_IDS:
         have = int(counts_before.get(sid, 0))
@@ -1106,10 +1108,13 @@ def main() -> int:
             dq["backfill"]["attempted"][sid] = "skip:already_enough"
             backfill_state["series"].setdefault(sid, {})
             backfill_state["series"][sid]["attempted_success"] = True
-            backfill_state["series"][sid]["last_attempt"] = {"at": as_of_ts, "note": "skip:already_enough", "have_after": have}
+            backfill_state["series"][sid]["last_attempt"] = {
+                "at": as_of_ts,
+                "note": "skip:already_enough",
+                "have_after": have,
+            }
             continue
 
-        # If previously "success" but still not enough, treat as stale and retry
         if attempted_success and have < BACKFILL_TARGET_VALID:
             dq["backfill"]["attempted"][sid] = f"retry:stale_success_flag (have={have} < {BACKFILL_TARGET_VALID})"
         else:
@@ -1118,7 +1123,6 @@ def main() -> int:
         bf_rows, meta = fetch_recent_observations(session, sid, as_of_ts, BACKFILL_FETCH_LIMIT, note_prefix="backfill")
         dq["backfill"]["meta"][sid] = meta
 
-        # record last_attempt (only)
         backfill_state["series"].setdefault(sid, {})
         backfill_state["series"][sid].setdefault("attempted_success", False)
         backfill_state["series"][sid]["last_attempt"] = {
@@ -1144,7 +1148,7 @@ def main() -> int:
     counts_after = _count_valid_per_series(merged_hist)
     dq["backfill"]["counts_after"] = counts_after
 
-    # 8) Update attempted_success + have_after in backfill_state
+    # 8) Update attempted_success + have_after
     for sid in SERIES_IDS:
         have_after = int(counts_after.get(sid, 0))
         backfill_state["series"].setdefault(sid, {})
@@ -1159,22 +1163,20 @@ def main() -> int:
     if not ok:
         _warn(f"failed to write backfill_state.json: {st}")
 
-    # 9) Write history.json in record-per-line JSON array
-    # List[Dict[str, str]] is OK as Dict[str, Any]
+    # 9) Write history.json
     ok, st = _write_json_array_record_per_line(history_json, merged_hist)  # type: ignore[arg-type]
     dq["fs"]["history_json_write"] = st
     if not ok:
         _warn(f"failed to write history.json: {st}")
 
-    # 10) Write history_lite.json (per series last target_valid)
+    # 10) Write history_lite.json
     lite_hist = _make_history_lite(merged_hist, per_series_keep=BACKFILL_TARGET_VALID)
     ok, st = _write_json_array_record_per_line(history_lite_json, lite_hist)  # type: ignore[arg-type]
     dq["fs"]["history_lite_json_write"] = st
     if not ok:
         _warn(f"failed to write history_lite.json: {st}")
 
-    # 11) Precompute stats_latest.json (compact + version-governed policy)
-    data_sha = _data_sha()
+    # 11) Write stats_latest.json
     stats_obj = _compute_stats_latest(lite_hist, as_of_ts=as_of_ts, data_commit_sha=data_sha)
     ok, st = _write_json_compact(stats_latest_json, stats_obj)
     dq["fs"]["stats_latest_json_write"] = st
@@ -1187,9 +1189,9 @@ def main() -> int:
     if not ok:
         _warn(f"failed to write dq_state.json: {st}")
 
-    # 13) Write manifest.json (pretty)
+    # 13) Write manifest.json
     repo = _repo_slug()
-    sha = _data_sha()
+    sha = data_sha
 
     manifest_obj: Dict[str, Any] = {
         "generated_at_utc": generated_at_utc,
@@ -1207,11 +1209,9 @@ def main() -> int:
             "backfill_state_json": str(backfill_state_path.as_posix()),
         },
         "history_policy": {
-            "format": "list",
             "key": "(series_id, data_date)",
             "same_key_rerun": "overwrite_by_latest_as_of_ts",
             "cap_per_series": CAP_PER_SERIES,
-            "ordering": "series_id asc, data_date asc, as_of_ts asc",
             "history_json_format": "json_array_record_per_line",
             "history_lite_target_per_series": BACKFILL_TARGET_VALID,
             "backfill_policy": "self_heal_until_target_valid; fetch_limit_used_when_needed",
@@ -1219,7 +1219,9 @@ def main() -> int:
                 "enable": RECENT_HEAL_ENABLE,
                 "limit": RECENT_HEAL_LIMIT,
                 "tail_points": RECENT_HEAL_TAIL_POINTS,
-                "trigger": "suspicious_gaps_in_recent_tail OR latest_warn/err",
+                "max_calls_per_run": RECENT_HEAL_MAX_CALLS_PER_RUN,
+                "nondaily_series": sorted(list(KNOWN_NONDAILY_SERIES)),
+                "trigger": "suspicious_gaps_daily OR latest_err OR latest_missing_value (excluding warn:retried_Nx)",
             },
         },
         "stats_policy": {
