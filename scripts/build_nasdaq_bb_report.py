@@ -10,7 +10,9 @@ Reads:
 Writes:
 - nasdaq_bb_cache/report.md
 
-This script only renders; the workflow (yml) should only orchestrate.
+Enhancement (Suggestion 2):
+- Add confidence (HIGH/MED/LOW) for each historical simulation block,
+  based on sample_size and staleness_flag.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
 
@@ -45,6 +47,37 @@ def _staleness_flag(days: Optional[int], warn_gt: int = 2) -> str:
     if days is None:
         return "UNKNOWN"
     return "HIGH" if days > warn_gt else "OK"
+
+
+def _confidence(sample_size: Optional[int], staleness_flag: str) -> Tuple[str, str]:
+    """
+    Confidence rule:
+    - If staleness_flag != OK => LOW (hard downgrade)
+    - Else by sample_size:
+        >= 80 => HIGH
+        30-79 => MED
+        < 30  => LOW
+        0/None => UNKNOWN
+    Returns: (level, reason)
+    """
+    if staleness_flag != "OK":
+        return "LOW", f"staleness_flag={staleness_flag}"
+
+    if sample_size is None:
+        return "UNKNOWN", "sample_size=None"
+
+    try:
+        n = int(sample_size)
+    except Exception:
+        return "UNKNOWN", f"sample_size={sample_size}"
+
+    if n <= 0:
+        return "UNKNOWN", "sample_size<=0"
+    if n < 30:
+        return "LOW", f"sample_size={n} (<30)"
+    if n < 80:
+        return "MED", f"sample_size={n} (30-79)"
+    return "HIGH", f"sample_size={n} (>=80)"
 
 
 def _fmt_float(x: Any, nd: int = 4) -> str:
@@ -76,7 +109,7 @@ def _table_kv(d: Dict[str, Any]) -> str:
     for k, v in d.items():
         if isinstance(v, bool):
             s = f"`{v}`"
-        elif isinstance(v, (int,)):
+        elif isinstance(v, int):
             s = f"{v}"
         elif isinstance(v, float):
             s = _fmt_float(v, 6)
@@ -96,7 +129,10 @@ def _render_price_section(price: Dict[str, Any]) -> str:
     stale_days = _staleness_days(gen, max_date)
     stale_flag = _staleness_flag(stale_days)
 
-    # human-friendly subset
+    hist = price.get("historical_simulation", {}) or {}
+    n = hist.get("sample_size")
+    conf_level, conf_reason = _confidence(n, stale_flag)
+
     latest_view = {
         "date": latest.get("date"),
         "close": _fmt_float(latest.get("close"), 4),
@@ -121,10 +157,13 @@ def _render_price_section(price: Dict[str, Any]) -> str:
     )
     out.append(f"- source: `{meta.get('source','')}`  | url: `{meta.get('url','')}`")
     out.append(f"- action_output: **`{price.get('action_output','')}`**\n")
+
     out.append("### Latest\n")
     out.append(_table_kv(latest_view))
+
     out.append("\n### Historical simulation (conditional)\n")
-    out.append(_table_kv(price.get("historical_simulation", {})))
+    out.append(f"- confidence: **`{conf_level}`** ({conf_reason})\n")
+    out.append(_table_kv(hist))
     out.append("")
     return "\n".join(out)
 
@@ -137,7 +176,6 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
     stale_days = _staleness_days(gen, max_date)
     stale_flag = _staleness_flag(stale_days)
 
-    # A & B triggers
     latest_view = {
         "date": latest.get("date"),
         "close": _fmt_float(latest.get("close"), 4),
@@ -172,21 +210,31 @@ def _render_vxn_section(vxn: Dict[str, Any]) -> str:
     if stale_flag == "HIGH":
         out.append("\n> ⚠️ VXN data is stale (lag > 2 days). Treat VOL-based interpretation as lower confidence.\n")
 
-    hist = vxn.get("historical_simulation", {})
+    hist = vxn.get("historical_simulation", {}) or {}
     out.append("### Historical simulation (conditional)\n")
 
-    # Expect A_lowvol and B_highvol, but degrade gracefully
     if isinstance(hist, dict) and ("A_lowvol" in hist or "B_highvol" in hist):
         if "A_lowvol" in hist:
+            a = hist["A_lowvol"] or {}
+            n_a = a.get("sample_size")
+            conf_a, reason_a = _confidence(n_a, stale_flag)
             out.append("#### A) Low-Vol / Complacency (z <= threshold)\n")
-            out.append(_table_kv(hist["A_lowvol"]))
+            out.append(f"- confidence: **`{conf_a}`** ({reason_a})\n")
+            out.append(_table_kv(a))
             out.append("")
         if "B_highvol" in hist:
+            b = hist["B_highvol"] or {}
+            n_b = b.get("sample_size")
+            conf_b, reason_b = _confidence(n_b, stale_flag)
             out.append("#### B) High-Vol / Stress (z >= threshold)\n")
-            out.append(_table_kv(hist["B_highvol"]))
+            out.append(f"- confidence: **`{conf_b}`** ({reason_b})\n")
+            out.append(_table_kv(b))
             out.append("")
     else:
-        out.append(_table_kv(hist))
+        n = hist.get("sample_size") if isinstance(hist, dict) else None
+        conf, reason = _confidence(n, stale_flag)
+        out.append(f"- confidence: **`{conf}`** ({reason})\n")
+        out.append(_table_kv(hist if isinstance(hist, dict) else {}))
         out.append("")
 
     return "\n".join(out)
@@ -216,6 +264,7 @@ def build_report(cache_dir: str) -> str:
     lines.append("- `staleness_days` = snippet 的 `generated_at_utc` 日期 − `meta.max_date`；週末/假期可能放大此值。")
     lines.append("- PRICE 的 `forward_mdd` 應永遠 `<= 0`（0 代表未回撤）。")
     lines.append("- VOL 的 `forward_max_runup` 應永遠 `>= 0`（數值越大代表波動「再爆衝」風險越大）。")
+    lines.append("- `confidence` 規則：若 `staleness_flag!=OK` 則直接降為 LOW；否則依 sample_size：<30=LOW，30-79=MED，>=80=HIGH。")
     lines.append("")
 
     return "\n".join(lines)
