@@ -1,6 +1,6 @@
 {
   "name": "VXN_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-02-18T07:47:05Z",
+  "generated_at_utc": "2026-02-18T08:15:40Z",
   "meta": {
     "attempt_errors": [],
     "selected_source": "cboe",
@@ -38,6 +38,25 @@
     "bandwidth_delta_pct": -3.8019733563467217
   },
   "historical_simulation": {
+    "C_poswatch": {
+      "metric": "forward_max_runup",
+      "metric_interpretation": ">=0; larger means further spike continuation risk",
+      "z_thresh": null,
+      "horizon_days": 20,
+      "cooldown_bars": 20,
+      "sample_size": 78,
+      "p10": 0.0,
+      "p50": 0.11134644561834828,
+      "p90": 0.5812127543571184,
+      "mean": 0.2059025916382221,
+      "min": 0.0,
+      "max": 1.7396510434485117,
+      "condition": {
+        "field": "position_in_band",
+        "op": ">=",
+        "value": 0.8
+      }
+    },
     "A_lowvol": {
       "metric": "forward_max_runup",
       "metric_interpretation": ">=0; larger means bigger spike risk",
@@ -50,7 +69,12 @@
       "p90": 0.5033782915581697,
       "mean": 0.24737137153629538,
       "min": 0.03359683794466428,
-      "max": 0.7660714285714287
+      "max": 0.7660714285714287,
+      "condition": {
+        "field": "z",
+        "op": "<=",
+        "value": -2.0
+      }
     },
     "B_highvol": {
       "metric": "forward_max_runup",
@@ -64,7 +88,12 @@
       "p90": 0.6742893081394336,
       "mean": 0.21293039504739258,
       "min": 0.0,
-      "max": 1.5807283274250725
+      "max": 1.5807283274250725,
+      "condition": {
+        "field": "z",
+        "op": ">=",
+        "value": 2.0
+      }
     }
   },
   "action_output": "NEAR_UPPER_BAND (WATCH)",
