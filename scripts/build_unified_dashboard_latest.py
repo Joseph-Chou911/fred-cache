@@ -561,182 +561,413 @@ def _pick_existing(base_dir: str, candidates: List[str]) -> Optional[str]:
     return None
 
 
-def _extract_symbol_block(obj: Any, kind: str) -> Dict[str, Any]:
+def _path_to_str(path: Tuple[Any, ...]) -> str:
+    if not path:
+        return "root"
+    parts: List[str] = ["root"]
+    for p in path:
+        if isinstance(p, int):
+            parts.append(f"[{p}]")
+        else:
+            # dot-escape minimally
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", str(p)):
+                parts.append(f".{p}")
+            else:
+                parts.append(f"[{json.dumps(str(p), ensure_ascii=False)}]")
+    return "".join(parts)
+
+
+def _iter_dict_nodes(obj: Any, path: Tuple[Any, ...] = (), max_nodes: int = 2000) -> List[Tuple[Tuple[Any, ...], Dict[str, Any]]]:
     """
-    Extract a minimal, stable set of keys from a nasdaq_bb_cache snippet JSON.
-
-    Downstream compatibility note:
-    - For price-like series (QQQ / NDX): we populate "close".
-    - For VIX-like series (VXN): we populate "value".
-    - We also keep "close_or_value" as a debug convenience.
+    Return a flat list of (path, dict_node) for all dict nodes found within obj.
+    Deterministic DFS order.
     """
-    empty = {
-        "data_date": "NA",
-        "close": "NA",
-        "value": "NA",
-        "close_or_value": "NA",
-        "signal": "NA",
-        "z": "NA",
-        "position_in_band": "NA",
-        "dist_to_lower": "NA",
-        "dist_to_upper": "NA",
-        "kind": kind,
-    }
+    out: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
+    stack: List[Tuple[Tuple[Any, ...], Any]] = [(path, obj)]
+    while stack and len(out) < max_nodes:
+        p, cur = stack.pop()
+        if isinstance(cur, dict):
+            out.append((p, cur))
+            # deterministic: push reversed so first key visited first
+            for k in reversed(list(cur.keys())):
+                stack.append((p + (k,), cur.get(k)))
+        elif isinstance(cur, list):
+            for i in reversed(range(len(cur))):
+                stack.append((p + (i,), cur[i]))
+    return out
 
-    if not isinstance(obj, dict):
-        return empty
 
-    # data_date / as_of_date
-    data_date = (
-        _safe_get(obj, "meta", "data_date")
-        or obj.get("data_date")
-        or _safe_get(obj, "meta", "as_of_date")
-        or obj.get("as_of_date")
-        or obj.get("date")
-    )
-    if not isinstance(data_date, str) or not data_date:
-        data_date = "NA"
+def _find_any_key(d: Dict[str, Any], keys: List[str]) -> Tuple[Any, Optional[Tuple[Any, ...]]]:
+    for k in keys:
+        if k in d:
+            return d.get(k), (k,)
+    return None, None
 
-    # close/value (raw)
-    raw_cv = (
-        obj.get("close")
-        or obj.get("value")
-        or _safe_get(obj, "numbers", "close")
-        or _safe_get(obj, "numbers", "value")
-        or _safe_get(obj, "price", "close")
-        or _safe_get(obj, "price", "value")
-        or _safe_get(obj, "last", "close")
-        or _safe_get(obj, "last", "value")
+
+def _find_any_key_one_level_nested(d: Dict[str, Any], wrappers: List[str], keys: List[str]) -> Tuple[Any, Optional[Tuple[Any, ...]]]:
+    # check wrapper dicts one level deep (common schemas)
+    for w in wrappers:
+        node = d.get(w)
+        if isinstance(node, dict):
+            v, kp = _find_any_key(node, keys)
+            if kp is not None:
+                return v, (w,) + kp
+    return None, None
+
+
+def _score_candidate(d: Dict[str, Any], kind: str) -> int:
+    # scoring weights prioritize having price/value + signal + band stats
+    date_keys = ["data_date", "date", "as_of_date", "asof", "as_of", "day", "dt", "used_date"]
+    close_keys = ["close", "Close", "adj_close", "last", "last_close", "px_last", "price", "value", "Value"]
+    signal_keys = ["signal", "tag", "state", "mode", "status", "bb_signal"]
+    z_keys = ["z", "zscore", "z_score", "bb_z", "z_bb", "z60"]
+    pos_keys = ["position_in_band", "pos_in_band", "band_pos", "percent_b", "percentB", "pct_b", "pctB", "%b"]
+    dl_keys = ["dist_to_lower", "dist_lower", "dist_lower_pct", "lower_dist", "pct_to_lower"]
+    du_keys = ["dist_to_upper", "dist_upper", "dist_upper_pct", "upper_dist", "pct_to_upper"]
+    wrappers = ["numbers", "price", "stats", "bb", "bands", "band", "data", "row", "latest", "last", "out", "result", "metrics"]
+
+    score = 0
+
+    # date
+    v, _ = _find_any_key(d, date_keys)
+    if v is None:
+        v, _ = _find_any_key_one_level_nested(d, ["meta"] + wrappers, date_keys)
+    if v is not None:
+        score += 1
+
+    # close/value
+    v, _ = _find_any_key(d, close_keys)
+    if v is None:
+        v, _ = _find_any_key_one_level_nested(d, wrappers, close_keys)
+    if v is not None:
+        score += 3
+
+    # signal
+    v, _ = _find_any_key(d, signal_keys)
+    if v is None:
+        v, _ = _find_any_key_one_level_nested(d, wrappers, signal_keys)
+    if v is not None:
+        score += 2
+
+    # z
+    v, _ = _find_any_key(d, z_keys)
+    if v is None:
+        v, _ = _find_any_key_one_level_nested(d, wrappers, z_keys)
+    if v is not None:
+        score += 2
+
+    # position in band
+    v, _ = _find_any_key(d, pos_keys)
+    if v is None:
+        v, _ = _find_any_key_one_level_nested(d, wrappers, pos_keys)
+    if v is not None:
+        score += 2
+
+    # dist to lower/upper
+    v, _ = _find_any_key(d, dl_keys)
+    if v is None:
+        v, _ = _find_any_key_one_level_nested(d, wrappers, dl_keys)
+    if v is not None:
+        score += 1
+
+    v, _ = _find_any_key(d, du_keys)
+    if v is None:
+        v, _ = _find_any_key_one_level_nested(d, wrappers, du_keys)
+    if v is not None:
+        score += 1
+
+    # kind hint
+    k = d.get("kind")
+    if isinstance(k, str) and k.upper() == kind.upper():
+        score += 1
+
+    return score
+
+
+def _select_best_candidate(obj: Any, kind: str) -> Tuple[Optional[Dict[str, Any]], str, int]:
+    """
+    Return (best_dict_node, best_path_str, best_score).
+    If no dict nodes exist, returns (None, "NA", 0).
+    """
+    nodes = _iter_dict_nodes(obj)
+    best: Optional[Dict[str, Any]] = None
+    best_path = "NA"
+    best_score = 0
+    best_depth = 10**9
+
+    for p, d in nodes:
+        sc = _score_candidate(d, kind)
+        depth = len(p)
+        if (sc > best_score) or (sc == best_score and depth < best_depth):
+            best = d
+            best_score = sc
+            best_depth = depth
+            best_path = _path_to_str(p)
+
+    return best, best_path, best_score
+
+
+def _parse_nasdaq_report_md(text: str) -> Dict[str, Dict[str, Any]]:
+    """
+    Best-effort parse for report.md produced by nasdaq BB scripts.
+    Only used as fallback to fill missing fields.
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+
+    # Example line (from your pasted report.md):
+    # - **QQQ** (2026-02-17 close=601.3000) → **NEAR_LOWER_BAND (MONITOR)** (reason=z<=-1.5); dist_to_lower=0.781%; dist_to_upper=5.927%; ...
+    pat = re.compile(
+        r"\*\*(?P<sym>[A-Z0-9\^]+)\*\*"
+        r"\s*\((?P<date>\d{4}-\d{2}-\d{2})\s+(?:close|value)=(?P<cv>[-+0-9\.,]+)\)"
+        r"\s*→\s*\*\*(?P<sig>[^*]+)\*\*"
+        r".*?dist_to_lower=(?P<dl>[-+0-9\.]+)%"
+        r";\s*dist_to_upper=(?P<du>[-+0-9\.]+)%",
+        re.IGNORECASE,
     )
 
-    # signal/tag/state
-    signal = (
-        obj.get("signal")
-        or obj.get("tag")
-        or _safe_get(obj, "signal", "state")
-        or _safe_get(obj, "signal", "tag")
-        or _safe_get(obj, "bb", "signal")
-    )
-    if not isinstance(signal, str) or not signal:
-        signal = "NA"
+    for m in pat.finditer(text):
+        sym = m.group("sym").upper()
+        dd = m.group("date")
+        cv = _to_float(m.group("cv"))
+        dl = _to_float(m.group("dl"))
+        du = _to_float(m.group("du"))
+        sig = m.group("sig").strip()
 
-    # z-score / position / distances
-    z = (
-        obj.get("z")
-        or _safe_get(obj, "numbers", "z")
-        or _safe_get(obj, "bb", "z")
-        or _safe_get(obj, "bb", "zscore")
-    )
-    pos = (
-        obj.get("position_in_band")
-        or _safe_get(obj, "numbers", "position_in_band")
-        or _safe_get(obj, "bb", "position_in_band")
-    )
-    dlow = (
-        obj.get("dist_to_lower")
-        or _safe_get(obj, "numbers", "dist_to_lower")
-        or _safe_get(obj, "bb", "dist_to_lower")
-    )
-    dup = (
-        obj.get("dist_to_upper")
-        or _safe_get(obj, "numbers", "dist_to_upper")
-        or _safe_get(obj, "bb", "dist_to_upper")
-    )
+        out[sym] = {
+            "data_date": dd,
+            "close_or_value": cv,
+            "signal": sig,
+            "dist_to_lower": dl,
+            "dist_to_upper": du,
+        }
 
-    # normalize numbers when possible (keep original if not parseable)
-    cv = _to_float(raw_cv)
-    zf = _to_float(z)
-    pf = _to_float(pos)
-    lf = _to_float(dlow)
-    uf = _to_float(dup)
+    return out
 
-    close_val: Any = "NA"
-    value_val: Any = "NA"
+
+def _extract_symbol_block(obj: Any, kind: str, report_fallback: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    Return (block, dbg) where block is the normalized symbol dict and dbg is internal debug for errors[] only.
+    """
+    candidate, cand_path, cand_score = _select_best_candidate(obj, kind)
+    base = candidate if isinstance(candidate, dict) else (obj if isinstance(obj, dict) else {})
+    dbg: Dict[str, Any] = {"candidate_path": cand_path, "candidate_score": cand_score}
+
+    # Try keys at base, then common wrappers.
+    wrappers = ["numbers", "price", "stats", "bb", "bands", "band", "data", "row", "latest", "last", "out", "result", "metrics"]
+    date_keys = ["data_date", "date", "as_of_date", "asof", "as_of", "day", "dt", "used_date"]
+    close_keys = ["close", "Close", "adj_close", "last", "last_close", "px_last", "price"]
+    value_keys = ["value", "Value", "close", "Close"]
+    signal_keys = ["signal", "tag", "state", "mode", "status", "bb_signal"]
+    z_keys = ["z", "zscore", "z_score", "bb_z", "z_bb", "z60"]
+    pos_keys = ["position_in_band", "pos_in_band", "band_pos", "percent_b", "percentB", "pct_b", "pctB", "%b"]
+    dl_keys = ["dist_to_lower", "dist_lower", "dist_lower_pct", "lower_dist", "pct_to_lower"]
+    du_keys = ["dist_to_upper", "dist_upper", "dist_upper_pct", "upper_dist", "pct_to_upper"]
+
+    def _pick(keys: List[str]) -> Tuple[Any, str]:
+        v, kp = _find_any_key(base, keys)
+        if kp is not None:
+            return v, _path_to_str(kp)
+        v, kp = _find_any_key_one_level_nested(base, ["meta"] + wrappers, keys)
+        if kp is not None:
+            return v, _path_to_str(kp)
+        return None, "NA"
+
+    # date
+    raw_date, date_path = _pick(date_keys)
+    if raw_date is None and isinstance(obj, dict):
+        # last resort: root meta
+        v = _safe_get(obj, "meta", "data_date")
+        if isinstance(v, str):
+            raw_date, date_path = v, "root.meta.data_date"
+
+    data_date = raw_date if isinstance(raw_date, str) else "NA"
+
+    # close/value
+    raw_close, close_path = _pick(close_keys)
+    raw_value, value_path = _pick(value_keys)
+
+    # Choose close vs value by kind
+    raw_cv = None
+    cv_path = "NA"
     if kind.upper() == "VXN":
-        value_val = cv if cv is not None else ("NA" if raw_cv is None else raw_cv)
+        raw_cv = raw_value if raw_value is not None else raw_close
+        cv_path = value_path if raw_value is not None else close_path
     else:
-        close_val = cv if cv is not None else ("NA" if raw_cv is None else raw_cv)
+        raw_cv = raw_close if raw_close is not None else raw_value
+        cv_path = close_path if raw_close is not None else value_path
 
-    return {
+    cv = _to_float(raw_cv)
+    close = cv if kind.upper() != "VXN" else "NA"
+    value = cv if kind.upper() == "VXN" else "NA"
+
+    # signal (string)
+    raw_sig, sig_path = _pick(signal_keys)
+    signal = raw_sig.strip() if isinstance(raw_sig, str) and raw_sig.strip() else "NA"
+
+    # z / position / dist
+    raw_z, z_path = _pick(z_keys)
+    z = _to_float(raw_z)
+
+    raw_pos, pos_path = _pick(pos_keys)
+    position_in_band = _to_float(raw_pos)
+
+    raw_dl, dl_path = _pick(dl_keys)
+    dist_to_lower = _to_float(raw_dl)
+
+    raw_du, du_path = _pick(du_keys)
+    dist_to_upper = _to_float(raw_du)
+
+    # Fallback from report.md (only fill missing, never override extracted numeric values)
+    fb = report_fallback or {}
+    fb_sym = fb if isinstance(fb, dict) else {}
+    if data_date == "NA" and isinstance(fb_sym.get("data_date"), str):
+        data_date = fb_sym["data_date"]
+    if cv is None and isinstance(fb_sym.get("close_or_value"), (int, float)):
+        cv = float(fb_sym["close_or_value"])
+        close = cv if kind.upper() != "VXN" else "NA"
+        value = cv if kind.upper() == "VXN" else "NA"
+    if signal == "NA" and isinstance(fb_sym.get("signal"), str):
+        signal = fb_sym["signal"]
+    if dist_to_lower is None and isinstance(fb_sym.get("dist_to_lower"), (int, float)):
+        dist_to_lower = float(fb_sym["dist_to_lower"])
+    if dist_to_upper is None and isinstance(fb_sym.get("dist_to_upper"), (int, float)):
+        dist_to_upper = float(fb_sym["dist_to_upper"])
+
+    dbg.update(
+        {
+            "paths": {
+                "data_date": date_path,
+                "close_or_value": cv_path,
+                "signal": sig_path,
+                "z": z_path,
+                "position_in_band": pos_path,
+                "dist_to_lower": dl_path,
+                "dist_to_upper": du_path,
+            }
+        }
+    )
+
+    block = {
         "data_date": data_date,
-        "close": close_val,
-        "value": value_val,
-        "close_or_value": cv if cv is not None else ("NA" if raw_cv is None else raw_cv),
+        "close": close if isinstance(close, (int, float)) else "NA",
+        "value": value if isinstance(value, (int, float)) else "NA",
+        "close_or_value": cv if isinstance(cv, (int, float)) else "NA",
         "signal": signal,
-        "z": zf if zf is not None else ("NA" if z is None else z),
-        "position_in_band": pf if pf is not None else ("NA" if pos is None else pos),
-        "dist_to_lower": lf if lf is not None else ("NA" if dlow is None else dlow),
-        "dist_to_upper": uf if uf is not None else ("NA" if dup is None else dup),
+        "z": z if isinstance(z, (int, float)) else "NA",
+        "position_in_band": position_in_band if isinstance(position_in_band, (int, float)) else "NA",
+        "dist_to_lower": dist_to_lower if isinstance(dist_to_lower, (int, float)) else "NA",
+        "dist_to_upper": dist_to_upper if isinstance(dist_to_upper, (int, float)) else "NA",
         "kind": kind,
     }
+    return block, dbg
 
 
-
-def _load_nasdaq_bb_cache_dir(base_dir: str) -> Tuple[str, Any]:
+def _load_nasdaq_bb_cache_dir(base_dir: str) -> Tuple[str, Dict[str, Any]]:
     """
-    Optional input (DIR):
-    - If dir missing => status=MISSING
-    - If snippets missing => status=MISSING_SNIPPETS
-    - If some snippets load => status=OK
-    - If JSON invalid => status=ERROR:<...> (only if all fail)
+    Load nasdaq_bb_cache output directory for display-only merge.
+
+    Expected files (best-effort):
+    - snippet_price_qqq.us.json (preferred) or snippet_price_qqq.json
+    - snippet_vxn.json
+    - snippet_price_^ndx.json
+
+    Robust parsing:
+    - Select best candidate dict node by heuristic scoring (handles nested schemas).
+    - Fallback fill from report.md (if present) for date/close/signal/dist values.
     """
-    note = "display-only; not used for positioning/mode/cross_module"
     if not os.path.isdir(base_dir):
         return "MISSING", {
-            "note": note,
+            "note": "display-only; not used for positioning/mode/cross_module",
             "dir": base_dir,
             "files_found": [],
-            "files_used": {"QQQ": "NA", "VXN": "NA", "NDX": "NA"},
-            "QQQ": _extract_symbol_block(None, "QQQ"),
-            "VXN": _extract_symbol_block(None, "VXN"),
-            "NDX": _extract_symbol_block(None, "NDX"),
         }
 
-    files = _listdir_safe(base_dir)
+    files = sorted(os.listdir(base_dir))
+    report_path = os.path.join(base_dir, "report.md")
 
-    qqq_path = _pick_existing(base_dir, ["snippet_price_qqq.us.json", "snippet_price_qqq.json"])
-    vxn_path = _pick_existing(base_dir, ["snippet_vxn.json"])
-    ndx_path = _pick_existing(base_dir, ["snippet_price_^ndx.json", "snippet_price_%5Endx.json", "snippet_price_ndx.json"])
-
-    def _load_one(path: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        if not path:
-            return None, None
+    # report.md fallback
+    report_fallback_all: Dict[str, Dict[str, Any]] = {}
+    if os.path.exists(report_path):
         try:
-            obj = _load_json(path)
-            return obj if isinstance(obj, dict) else {"raw": obj}, None
-        except Exception as e:
-            return None, f"{type(e).__name__}: {e}"
+            report_fallback_all = _parse_nasdaq_report_md(_read_text(report_path))
+        except Exception:
+            report_fallback_all = {}
 
-    qqq_obj, qqq_err = _load_one(qqq_path)
-    vxn_obj, vxn_err = _load_one(vxn_path)
-    ndx_obj, ndx_err = _load_one(ndx_path)
+    # choose snippet files
+    p_qqq = _find_first_existing(base_dir, ["snippet_price_qqq.us.json", "snippet_price_qqq.json"])
+    p_vxn = _find_first_existing(base_dir, ["snippet_vxn.json"])
+    p_ndx = _find_first_existing(base_dir, ["snippet_price_^ndx.json", "snippet_price_ndx.json", "snippet_price_ndx.us.json"])
 
-    ok_any = (qqq_obj is not None) or (vxn_obj is not None) or (ndx_obj is not None)
-    if not ok_any:
-        # if any error exists, surface one (but keep a stable shape)
-        err = qqq_err or vxn_err or ndx_err
-        status = f"ERROR: {err}" if err else "MISSING_SNIPPETS"
-        return status, {
-            "note": note,
-            "dir": base_dir,
-            "files_found": files,
-            "files_used": {"QQQ": qqq_path or "NA", "VXN": vxn_path or "NA", "NDX": ndx_path or "NA"},
-            "errors": {"QQQ": qqq_err or "NA", "VXN": vxn_err or "NA", "NDX": ndx_err or "NA"},
-            "QQQ": _extract_symbol_block(None, "QQQ"),
-            "VXN": _extract_symbol_block(None, "VXN"),
-            "NDX": _extract_symbol_block(None, "NDX"),
-        }
+    files_used = {
+        "QQQ": (os.path.join(base_dir, p_qqq) if p_qqq else "NA"),
+        "VXN": (os.path.join(base_dir, p_vxn) if p_vxn else "NA"),
+        "NDX": (os.path.join(base_dir, p_ndx) if p_ndx else "NA"),
+    }
 
-    return "OK", {
-        "note": note,
+    errors: Dict[str, str] = {"QQQ": "NA", "VXN": "NA", "NDX": "NA"}
+    out: Dict[str, Any] = {
+        "note": "display-only; not used for positioning/mode/cross_module",
         "dir": base_dir,
         "files_found": files,
-        "files_used": {"QQQ": qqq_path or "NA", "VXN": vxn_path or "NA", "NDX": ndx_path or "NA"},
-        "errors": {"QQQ": qqq_err or "NA", "VXN": vxn_err or "NA", "NDX": ndx_err or "NA"},
-        "QQQ": _extract_symbol_block(qqq_obj, "QQQ"),
-        "VXN": _extract_symbol_block(vxn_obj, "VXN"),
-        "NDX": _extract_symbol_block(ndx_obj, "NDX"),
+        "files_used": files_used,
+        "errors": errors,
     }
+
+    def _load_one(path: str) -> Any:
+        return _load_json(path)
+
+    def _load_and_extract(kind: str, path: Optional[str]) -> Dict[str, Any]:
+        if not path:
+            errors[kind] = "MISSING_SNIPPET"
+            return {
+                "data_date": "NA",
+                "close": "NA",
+                "value": "NA",
+                "close_or_value": "NA",
+                "signal": "NA",
+                "z": "NA",
+                "position_in_band": "NA",
+                "dist_to_lower": "NA",
+                "dist_to_upper": "NA",
+                "kind": kind,
+            }
+
+        full = os.path.join(base_dir, path)
+        try:
+            obj = _load_one(full)
+        except Exception as e:
+            errors[kind] = f"READ_ERROR:{type(e).__name__}"
+            return {
+                "data_date": "NA",
+                "close": "NA",
+                "value": "NA",
+                "close_or_value": "NA",
+                "signal": "NA",
+                "z": "NA",
+                "position_in_band": "NA",
+                "dist_to_lower": "NA",
+                "dist_to_upper": "NA",
+                "kind": kind,
+            }
+
+        fb = report_fallback_all.get(kind.upper(), {})
+        block, dbg = _extract_symbol_block(obj, kind, report_fallback=fb)
+
+        # If still nothing parsed, surface debug in errors (display-only)
+        all_na = all(block.get(k) == "NA" for k in ["data_date", "close_or_value", "signal", "z", "position_in_band", "dist_to_lower", "dist_to_upper"])
+        if all_na and errors.get(kind, "NA") == "NA":
+            errors[kind] = f"PARSE_NO_FIELDS:{dbg.get('candidate_path','NA')}/score={dbg.get('candidate_score','NA')}"
+        elif errors.get(kind, "NA") == "NA":
+            # keep NA; but if some key paths are NA, still okay
+            pass
+
+        return block
+
+    out["QQQ"] = _load_and_extract("QQQ", p_qqq)
+    out["VXN"] = _load_and_extract("VXN", p_vxn)
+    out["NDX"] = _load_and_extract("NDX", p_ndx)
+
+    return "OK", out
 
 
 def main() -> int:
