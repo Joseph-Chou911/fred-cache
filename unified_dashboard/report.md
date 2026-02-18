@@ -9,7 +9,7 @@
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
 - nasdaq_bb_cache: OK
-- unified_generated_at_utc: 2026-02-18T13:16:58Z
+- unified_generated_at_utc: 2026-02-18T13:30:17Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -131,16 +131,16 @@
 ## nasdaq_bb_cache (display-only)
 - status: OK
 - note: display-only; not used for positioning/mode/cross_module
-- QQQ.data_date: NA
-- QQQ.close: NA
-- QQQ.signal: NA
-- QQQ.z: NA
-- QQQ.position_in_band: NA
-- QQQ.dist_to_lower: NA
-- QQQ.dist_to_upper: NA
-- VXN.data_date: NA
-- VXN.value: NA
-- VXN.signal: NA (position_in_band=NA)
+- QQQ.data_date: 2026-02-17
+- QQQ.close: 601.300000
+- QQQ.signal: NEAR_LOWER_BAND (MONITOR)
+- QQQ.z: -1.520671
+- QQQ.position_in_band: 0.116411
+- QQQ.dist_to_lower: 0.781000
+- QQQ.dist_to_upper: 5.927000
+- VXN.data_date: 2026-02-17
+- VXN.value: 25.980000
+- VXN.signal: NEAR_UPPER_BAND (WATCH) (position_in_band=0.815044)
 
 ## roll25_cache (TW turnover)
 - status: OK
@@ -197,7 +197,7 @@
 - schema_version: taiwan_margin_financing_latest_v1
 - generated_at_utc: 2026-02-17T15:13:33Z
 
-<!-- rendered_at_utc: 2026-02-18T13:16:58Z -->
+<!-- rendered_at_utc: 2026-02-18T13:30:17Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
