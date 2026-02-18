@@ -14,12 +14,29 @@ Adds:
   - consistency (CONVERGENCE/DIVERGENCE) based on margin_signal × roll25_heated_market
   - deterministic rationale
 
-Optional merge-in (display-only; NO impact to unified logic):
-- inflation_realrate_cache/dashboard_latest.json
-- asset_proxy_cache/dashboard_latest.json
-- nasdaq_bb_cache/* (directory; snippets + report.md, display-only)
+NEW (2026-01-26):
+- Optional merge-in (display-only; NO impact to unified logic):
+  - inflation_realrate_cache/dashboard_latest.json
+  - asset_proxy_cache/dashboard_latest.json
+
+NEW (2026-02-18):
+- Optional merge-in (display-only; NO impact to unified logic):
+  - nasdaq_bb_cache/ (a directory containing snippet_*.json outputs)
 
 NO external fetch here. Pure merge + deterministic calculations.
+
+Inputs:
+- dashboard/dashboard_latest.json
+- dashboard_fred_cache/dashboard_latest.json
+- taiwan_margin_cache/latest.json
+- roll25_cache/latest_report.json
+- fx_cache/latest.json (+ fx_cache/history.json)
+- [optional] inflation_realrate_cache/dashboard_latest.json
+- [optional] asset_proxy_cache/dashboard_latest.json
+- [optional] nasdaq_bb_cache/ (dir)
+
+Output:
+- unified_dashboard/latest.json (or any path you pass)
 """
 
 from __future__ import annotations
@@ -32,8 +49,6 @@ import re
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-
-# ---------------- IO helpers ----------------
 
 def _read_text(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
@@ -67,21 +82,15 @@ def _safe_get(d: Any, *keys: str) -> Any:
     return cur
 
 
-def _is_na(x: Any) -> bool:
-    if x is None:
-        return True
-    if isinstance(x, str) and x.strip().upper() in {"NA", "N/A", ""}:
-        return True
-    return False
-
-
 def _to_float(x: Any) -> Optional[float]:
-    if _is_na(x):
+    if x is None:
         return None
     if isinstance(x, (int, float)):
         return float(x)
     if isinstance(x, str):
         s = x.strip()
+        if not s or s.upper() in {"NA", "N/A", "NULL", "NONE"}:
+            return None
         try:
             return float(s)
         except Exception:
@@ -89,29 +98,25 @@ def _to_float(x: Any) -> Optional[float]:
     return None
 
 
-def _find_first_existing(base_dir: str, candidates: List[str]) -> Optional[str]:
-    """
-    Return relative path (base_dir/<candidate>) of the first existing file.
-    """
-    for name in candidates:
-        p = os.path.join(base_dir, name)
-        if os.path.isfile(p):
-            return p
-    return None
+def _fmt_na_num(x: Optional[float], nd: int = 3) -> Any:
+    if x is None or (isinstance(x, float) and (math.isnan(x) or math.isinf(x))):
+        return "NA"
+    if nd < 0:
+        return float(x)
+    return round(float(x), nd)
 
 
-def _list_files_in_dir(base_dir: str) -> List[str]:
-    if not os.path.isdir(base_dir):
-        return []
-    out: List[str] = []
-    for fn in os.listdir(base_dir):
-        p = os.path.join(base_dir, fn)
-        if os.path.isfile(p):
-            out.append(fn)
-    return sorted(out)
+def _infer_run_day_tag_from_utc_z(generated_at_utc_z: str) -> str:
+    try:
+        dt_utc = datetime.strptime(generated_at_utc_z, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        dt_tpe = dt_utc.astimezone(timezone(timedelta(hours=8)))
+        wd = dt_tpe.weekday()
+        return "NON_TRADING_DAY" if wd >= 5 else "TRADING_DAY"
+    except Exception:
+        return "NA"
 
 
-# ---------------- Roll25 derived metrics ----------------
+# ---------- Roll25 derived metrics ----------
 
 def _extract_roll25_closes(roll25_latest_report: Dict[str, Any]) -> List[float]:
     arr = roll25_latest_report.get("cache_roll25")
@@ -200,16 +205,6 @@ def _extract_useddate_from_roll25_report(roll_obj: Dict[str, Any]) -> Optional[s
     if isinstance(v2, str):
         return v2
     return None
-
-
-def _infer_run_day_tag_from_utc_z(generated_at_utc_z: str) -> str:
-    try:
-        dt_utc = datetime.strptime(generated_at_utc_z, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        dt_tpe = dt_utc.astimezone(timezone(timedelta(hours=8)))
-        wd = dt_tpe.weekday()
-        return "NON_TRADING_DAY" if wd >= 5 else "TRADING_DAY"
-    except Exception:
-        return "NA"
 
 
 def _max_roll25_date(latest_report: Dict[str, Any]) -> Optional[str]:
@@ -341,7 +336,7 @@ def _roll25_heated_rule_v2_split(roll_obj: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-# ---------------- Margin signal (TWSE) ----------------
+# ---------- Margin signal (TWSE) ----------
 
 def _extract_twm_series(twm_obj: Dict[str, Any], market: str) -> Optional[Dict[str, Any]]:
     series = _safe_get(twm_obj, "series")
@@ -371,8 +366,12 @@ def _derive_margin_signal_rule_v1_from_twm(twm_obj: Dict[str, Any]) -> Dict[str,
     signal = "NA"
     rule_hit = "NA"
     if points >= 1:
-        hit_watch = (points >= 5 and sum_last5 >= 100.0) or (points >= 5 and pos_days >= 4 and latest_chg is not None and latest_chg >= 40.0)
-        hit_info = (points >= 5 and sum_last5 >= 60.0) or (points >= 5 and pos_days >= 3 and latest_chg is not None and latest_chg >= 30.0)
+        hit_watch = (points >= 5 and sum_last5 >= 100.0) or (
+            points >= 5 and pos_days >= 4 and latest_chg is not None and latest_chg >= 40.0
+        )
+        hit_info = (points >= 5 and sum_last5 >= 60.0) or (
+            points >= 5 and pos_days >= 3 and latest_chg is not None and latest_chg >= 30.0
+        )
         if hit_watch:
             signal = "WATCH"
             rule_hit = "WATCH if sum_last5>=100 OR (pos_days>=4 AND latest_chg>=40)"
@@ -438,7 +437,7 @@ def _consistency_rule_v1(margin_signal: str, roll25_heated_market: bool) -> Dict
     }
 
 
-# ---------------- FX derived metrics ----------------
+# ---------- FX derived metrics ----------
 
 def _load_fx_history(path: str) -> List[Dict[str, Any]]:
     if not os.path.exists(path):
@@ -524,7 +523,7 @@ def _fx_signal_rule_v1(ret1_pct: Optional[float], chg_5d_pct: Optional[float], p
     }
 
 
-# ---------------- Optional module loader (display-only) ----------------
+# ---------- Optional module loader (display-only) ----------
 
 def _load_optional(path: str) -> Tuple[str, Any]:
     """
@@ -541,222 +540,160 @@ def _load_optional(path: str) -> Tuple[str, Any]:
         return f"ERROR: {type(e).__name__}", None
 
 
-# ---------------- Nasdaq BB cache loader (display-only) ----------------
+# ---------- Optional Nasdaq BB cache dir loader (display-only) ----------
 
-def _parse_nasdaq_bb_snippet(kind: str, obj: Dict[str, Any]) -> Dict[str, Any]:
+def _find_first_existing(base_dir: str, candidates: List[str]) -> Optional[str]:
+    for name in candidates:
+        p = os.path.join(base_dir, name)
+        if os.path.isfile(p):
+            try:
+                if os.path.getsize(p) > 0:
+                    return p
+            except Exception:
+                return p
+    return None
+
+
+def _list_dir_files(base_dir: str) -> List[str]:
+    if not os.path.isdir(base_dir):
+        return []
+    out: List[str] = []
+    try:
+        for fn in sorted(os.listdir(base_dir)):
+            p = os.path.join(base_dir, fn)
+            if os.path.isfile(p):
+                out.append(fn)
+    except Exception:
+        return []
+    return out
+
+
+def _parse_bb_snippet(snippet_obj: Dict[str, Any], kind: str) -> Dict[str, Any]:
     """
-    Normalize snippet JSON into unified display schema.
-
-    Expected snippet fields (from your examples):
-    - generated_at_utc
-    - meta.source / meta.url
-    - latest.date
-    - latest.close
-    - latest.z
-    - latest.position_in_band (sometimes)
-    - latest.distance_to_lower_pct / latest.distance_to_upper_pct (sometimes)
-    - latest.bb_mid / bb_lower / bb_upper (often)
-    - action_output (signal)
-    - trigger_reason (reason)
+    Normalize snippet_*.json into a stable display-only shape.
+    Rules:
+    - signal is taken from root.action_output first (NOT from latest)
+    - for VXN: treat latest.close as 'value' (close="NA", value=<num>)
+    - for PRICE series: treat latest.close as 'close' (value="NA")
+    - dist_to_lower/dist_to_upper:
+      - use latest.distance_to_lower_pct / latest.distance_to_upper_pct if present
+      - else derive from close & bb bands deterministically
+    - position_in_band:
+      - use latest.position_in_band if present
+      - else derive from close & bb bands deterministically
     """
-    latest = obj.get("latest") if isinstance(obj.get("latest"), dict) else {}
-    meta = obj.get("meta") if isinstance(obj.get("meta"), dict) else {}
+    latest = snippet_obj.get("latest") if isinstance(snippet_obj.get("latest"), dict) else {}
+    date = latest.get("date") if isinstance(latest.get("date"), str) else "NA"
 
-    data_date = latest.get("date") if isinstance(latest.get("date"), str) else "NA"
-    close_raw = _to_float(latest.get("close"))
+    action_output = snippet_obj.get("action_output")
+    signal = action_output if isinstance(action_output, str) and action_output.strip() else "NA"
+
     z = _to_float(latest.get("z"))
-    pos = _to_float(latest.get("position_in_band"))
 
     bb_lower = _to_float(latest.get("bb_lower"))
     bb_upper = _to_float(latest.get("bb_upper"))
-    bb_mid = _to_float(latest.get("bb_mid"))
 
-    d_lower = _to_float(latest.get("distance_to_lower_pct"))
-    d_upper = _to_float(latest.get("distance_to_upper_pct"))
+    raw_close = _to_float(latest.get("close"))
+    raw_value = raw_close  # in VXN file, 'close' is the index value
 
-    # signal + reason (prefer upstream action_output/trigger_reason)
-    action_output = obj.get("action_output") if isinstance(obj.get("action_output"), str) else None
-    trigger_reason = obj.get("trigger_reason") if isinstance(obj.get("trigger_reason"), str) else None
+    # Use provided distances if present
+    dlow = _to_float(latest.get("distance_to_lower_pct"))
+    dup = _to_float(latest.get("distance_to_upper_pct"))
 
-    signal = action_output if (isinstance(action_output, str) and action_output.strip()) else None
-    signal_source = "RAW.action_output" if signal is not None else "NA"
+    # Use provided position if present
+    pos = _to_float(latest.get("position_in_band"))
 
-    # kind-specific: VXN uses value; others use close
-    close_val = close_raw if kind != "VXN" else None
-    value_val = close_raw if kind == "VXN" else None
-    close_or_value = close_raw
+    # Derive distances/position if missing and bands+value exist
+    base = raw_close
+    if base is not None and bb_lower is not None and bb_upper is not None:
+        if dlow is None:
+            dlow = (base - bb_lower) / abs(base) * 100.0 if base != 0 else None
+        if dup is None:
+            dup = (bb_upper - base) / abs(base) * 100.0 if base != 0 else None
+        if pos is None:
+            denom = (bb_upper - bb_lower)
+            pos = (base - bb_lower) / denom if denom not in (0.0, None) else None
 
-    # derived distances if missing and bands are available (display-only)
-    dist_source = "RAW.distance_to_*_pct"
-    if d_lower is None or d_upper is None:
-        if close_or_value is not None and bb_lower is not None and bb_upper is not None and close_or_value != 0:
-            if d_lower is None:
-                d_lower = (close_or_value - bb_lower) / abs(close_or_value) * 100.0
-            if d_upper is None:
-                d_upper = (bb_upper - close_or_value) / abs(close_or_value) * 100.0
-            dist_source = "DERIVED.display_only.from_bb"
-        else:
-            dist_source = "NA"
+    # Format output fields by kind
+    if kind.upper() == "VXN":
+        close_field = "NA"
+        value_field = _fmt_na_num(raw_value, nd=-1)
+        cov = raw_value
+    else:
+        close_field = _fmt_na_num(raw_close, nd=-1)
+        value_field = "NA"
+        cov = raw_close
 
-    # derived position if missing and bands are available (display-only)
-    pos_source = "RAW.position_in_band"
-    if pos is None:
-        if close_or_value is not None and bb_lower is not None and bb_upper is not None and (bb_upper - bb_lower) != 0:
-            pos = (close_or_value - bb_lower) / (bb_upper - bb_lower)
-            pos_source = "DERIVED.display_only.from_bb"
-        elif d_lower is not None and d_upper is not None and (d_lower + d_upper) != 0:
-            pos = d_lower / (d_lower + d_upper)
-            pos_source = "DERIVED.display_only.from_dist"
-        else:
-            pos_source = "NA"
-
-    # If signal missing, optionally derive display-only signal (conservative)
-    derived_reason = None
-    if signal is None:
-        # Prefer position gate if available, else z heuristic
-        if pos is not None:
-            if pos >= 0.8:
-                signal = "NEAR_UPPER_BAND (WATCH)"
-                derived_reason = f"derived: position_in_band>=0.8 (pos={pos:.3f})"
-                signal_source = "DERIVED.display_only.position_in_band"
-            elif pos <= 0.2:
-                signal = "NEAR_LOWER_BAND (MONITOR)"
-                derived_reason = f"derived: position_in_band<=0.2 (pos={pos:.3f})"
-                signal_source = "DERIVED.display_only.position_in_band"
-        if signal is None and z is not None:
-            if z <= -1.5:
-                signal = "NEAR_LOWER_BAND (MONITOR)"
-                derived_reason = f"derived: z<=-1.5 (z={z:.3f})"
-                signal_source = "DERIVED.display_only.z"
-            elif z >= 1.5:
-                signal = "NEAR_UPPER_BAND (WATCH)"
-                derived_reason = f"derived: z>=1.5 (z={z:.3f})"
-                signal_source = "DERIVED.display_only.z"
-
-    reason = trigger_reason if (isinstance(trigger_reason, str) and trigger_reason.strip()) else (derived_reason or "NA")
-    reason_source = "RAW.trigger_reason" if (isinstance(trigger_reason, str) and trigger_reason.strip()) else ("DERIVED.display_only" if derived_reason else "NA")
-
-    out = {
+    return {
+        "data_date": date or "NA",
+        "close": close_field,
+        "value": value_field,
+        "close_or_value": _fmt_na_num(cov, nd=-1),
+        "signal": signal,
+        "z": _fmt_na_num(z, nd=-1),
+        "position_in_band": _fmt_na_num(pos, nd=-1),
+        "dist_to_lower": _fmt_na_num(dlow, nd=3),
+        "dist_to_upper": _fmt_na_num(dup, nd=3),
         "kind": kind,
-        "data_date": data_date or "NA",
-        "close": close_val if close_val is not None else "NA",
-        "value": value_val if value_val is not None else "NA",
-        "close_or_value": close_or_value if close_or_value is not None else "NA",
-        "signal": signal if signal is not None else "NA",
-        "signal_source": signal_source,
-        "reason": reason,
-        "reason_source": reason_source,
-        "z": z if z is not None else "NA",
-        "position_in_band": pos if pos is not None else "NA",
-        "position_source": pos_source,
-        "dist_to_lower": d_lower if d_lower is not None else "NA",
-        "dist_to_upper": d_upper if d_upper is not None else "NA",
-        "dist_source": dist_source,
-        "bb_mid": bb_mid if bb_mid is not None else "NA",
-        "bb_lower": bb_lower if bb_lower is not None else "NA",
-        "bb_upper": bb_upper if bb_upper is not None else "NA",
-        "bandwidth_pct": (_to_float(latest.get("bandwidth_pct")) if _to_float(latest.get("bandwidth_pct")) is not None else "NA"),
-        "bandwidth_delta_pct": (_to_float(latest.get("bandwidth_delta_pct")) if _to_float(latest.get("bandwidth_delta_pct")) is not None else "NA"),
-        "generated_at_utc": obj.get("generated_at_utc") if isinstance(obj.get("generated_at_utc"), str) else "NA",
-        "source": meta.get("source") if isinstance(meta.get("source"), str) else "NA",
-        "source_url": meta.get("url") if isinstance(meta.get("url"), str) else "NA",
-        "max_date": meta.get("max_date") if isinstance(meta.get("max_date"), str) else "NA",
-        "name": obj.get("name") if isinstance(obj.get("name"), str) else "NA",
     }
-    return out
 
 
 def _load_nasdaq_bb_cache_dir(base_dir: str) -> Tuple[str, Any]:
     """
-    Read nasdaq_bb_cache directory for display-only.
-
-    Files expected (from your screenshot / latest.json):
-    - report.md
-    - snippet_price_qqq.us.json or snippet_price_qqq.json
-    - snippet_vxn.json
-    - snippet_price_^ndx.json
-    plus tail_*.csv (optional)
-
-    Return:
-    - status: OK / MISSING / ERROR: <type>
-    - obj: normalized dashboard_latest (when OK)
+    Optional input dir:
+    - If dir missing => status=MISSING (never break unified)
+    - If partial files => status=OK but with errors filled
     """
-    try:
-        files_found = _list_files_in_dir(base_dir)
-        if not files_found:
-            return "MISSING", None
+    if not os.path.isdir(base_dir):
+        return "MISSING", None
 
-        p_qqq = _find_first_existing(base_dir, ["snippet_price_qqq.us.json", "snippet_price_qqq.json"])
-        p_vxn = _find_first_existing(base_dir, ["snippet_vxn.json"])
-        p_ndx = _find_first_existing(base_dir, ["snippet_price_^ndx.json", "snippet_price_%5Endx.json"])
+    files_found = _list_dir_files(base_dir)
+    out: Dict[str, Any] = {
+        "note": "display-only; not used for positioning/mode/cross_module",
+        "dir": base_dir,
+        "files_found": files_found,
+        "files_used": {"QQQ": "NA", "VXN": "NA", "NDX": "NA"},
+        "errors": {"QQQ": "NA", "VXN": "NA", "NDX": "NA"},
+        "QQQ": {"data_date": "NA", "close": "NA", "value": "NA", "close_or_value": "NA",
+                "signal": "NA", "z": "NA", "position_in_band": "NA",
+                "dist_to_lower": "NA", "dist_to_upper": "NA", "kind": "QQQ"},
+        "VXN": {"data_date": "NA", "close": "NA", "value": "NA", "close_or_value": "NA",
+                "signal": "NA", "z": "NA", "position_in_band": "NA",
+                "dist_to_lower": "NA", "dist_to_upper": "NA", "kind": "VXN"},
+        "NDX": {"data_date": "NA", "close": "NA", "value": "NA", "close_or_value": "NA",
+                "signal": "NA", "z": "NA", "position_in_band": "NA",
+                "dist_to_lower": "NA", "dist_to_upper": "NA", "kind": "NDX"},
+    }
 
-        files_used = {
-            "QQQ": p_qqq.replace("\\", "/") if isinstance(p_qqq, str) else "NA",
-            "VXN": p_vxn.replace("\\", "/") if isinstance(p_vxn, str) else "NA",
-            "NDX": p_ndx.replace("\\", "/") if isinstance(p_ndx, str) else "NA",
-        }
+    # Pick files
+    p_qqq = _find_first_existing(base_dir, ["snippet_price_qqq.us.json", "snippet_price_qqq.json"])
+    p_vxn = _find_first_existing(base_dir, ["snippet_vxn.json"])
+    p_ndx = _find_first_existing(base_dir, ["snippet_price_^ndx.json"])
 
-        errors = {"QQQ": "NA", "VXN": "NA", "NDX": "NA"}
-        out_blocks: Dict[str, Any] = {}
+    out["files_used"]["QQQ"] = p_qqq if p_qqq else "NA"
+    out["files_used"]["VXN"] = p_vxn if p_vxn else "NA"
+    out["files_used"]["NDX"] = p_ndx if p_ndx else "NA"
 
-        def _load_one(kind: str, path: Optional[str]) -> None:
-            if not isinstance(path, str) or not os.path.isfile(path):
-                errors[kind] = "MISSING"
-                out_blocks[kind] = {
-                    "kind": kind,
-                    "data_date": "NA",
-                    "close": "NA",
-                    "value": "NA",
-                    "close_or_value": "NA",
-                    "signal": "NA",
-                    "z": "NA",
-                    "position_in_band": "NA",
-                    "dist_to_lower": "NA",
-                    "dist_to_upper": "NA",
-                }
+    def _try_load(path: Optional[str], kind: str) -> None:
+        if not path:
+            out["errors"][kind] = "MISSING_FILE"
+            return
+        try:
+            obj = _load_json(path)
+            if not isinstance(obj, dict):
+                out["errors"][kind] = "INVALID_JSON_ROOT"
                 return
-            try:
-                obj = _load_json(path)
-                if not isinstance(obj, dict):
-                    raise ValueError("snippet_not_dict")
-                out_blocks[kind] = _parse_nasdaq_bb_snippet(kind, obj)
-                errors[kind] = "NA"
-            except Exception as e:
-                errors[kind] = f"ERROR: {type(e).__name__}"
-                out_blocks[kind] = {
-                    "kind": kind,
-                    "data_date": "NA",
-                    "close": "NA",
-                    "value": "NA",
-                    "close_or_value": "NA",
-                    "signal": "NA",
-                    "z": "NA",
-                    "position_in_band": "NA",
-                    "dist_to_lower": "NA",
-                    "dist_to_upper": "NA",
-                }
+            out[kind] = _parse_bb_snippet(obj, kind)
+            out["errors"][kind] = "NA"
+        except Exception as e:
+            out["errors"][kind] = f"ERROR: {type(e).__name__}: {e}"
 
-        _load_one("QQQ", p_qqq)
-        _load_one("VXN", p_vxn)
-        _load_one("NDX", p_ndx)
+    _try_load(p_qqq, "QQQ")
+    _try_load(p_vxn, "VXN")
+    _try_load(p_ndx, "NDX")
 
-        dashboard_latest = {
-            "note": "display-only; not used for positioning/mode/cross_module",
-            "dir": base_dir,
-            "files_found": files_found,
-            "files_used": files_used,
-            "errors": errors,
-            "QQQ": out_blocks.get("QQQ"),
-            "VXN": out_blocks.get("VXN"),
-            "NDX": out_blocks.get("NDX"),
-        }
-        return "OK", dashboard_latest
+    return "OK", out
 
-    except Exception as e:
-        return f"ERROR: {type(e).__name__}", None
-
-
-# ---------------- main ----------------
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -771,7 +708,7 @@ def main() -> int:
     ap.add_argument("--inflation-in", default="inflation_realrate_cache/dashboard_latest.json")
     ap.add_argument("--assetproxy-in", default="asset_proxy_cache/dashboard_latest.json")
 
-    # optional directory (display-only)
+    # ✅ optional nasdaq bb cache dir (display-only)
     ap.add_argument("--nasdaqbb-dir", default="nasdaq_bb_cache")
 
     ap.add_argument("--out", default="unified_dashboard/latest.json")
@@ -794,10 +731,9 @@ def main() -> int:
     roll_status, roll_obj = _load_or_fail(args.roll25_in)
     fx_status, fx_obj = _load_or_fail(args.fx_in)
 
+    # optional loads (never break unified)
     infl_status, infl_obj = _load_optional(args.inflation_in)
     ap_status, ap_obj = _load_optional(args.assetproxy_in)
-
-    # nasdaq bb cache (display-only)
     nbb_status, nbb_obj = _load_nasdaq_bb_cache_dir(args.nasdaqbb_dir)
 
     # roll25 derived
@@ -839,7 +775,6 @@ def main() -> int:
 
         used_date = _extract_useddate_from_roll25_report(roll_obj)
         used_date_selection_tag = roll_obj.get("tag") if isinstance(roll_obj.get("tag"), str) else "NA"
-        tag_legacy = used_date_selection_tag
         used_date_status, used_date_status_dbg = _compute_used_date_status_v1(roll_obj)
 
         nums = roll_obj.get("numbers") if isinstance(roll_obj.get("numbers"), dict) else {}
@@ -851,7 +786,7 @@ def main() -> int:
             "used_date_status": used_date_status,
             "used_date_status_dbg": used_date_status_dbg,
             "used_date_selection_tag": used_date_selection_tag,
-            "tag_legacy": tag_legacy,
+            "tag_legacy": used_date_selection_tag,
             "risk_level": roll_obj.get("risk_level") if isinstance(roll_obj.get("risk_level"), str) else "NA",
             "turnover_twd": nums.get("TradeValue"),
             "turnover_unit": "TWD",
@@ -992,8 +927,12 @@ def main() -> int:
             "FX derived metrics are computed from fx_cache/history.json (local) + fx_cache/latest.json (local).",
             "Margin×Roll25 cross_module is computed deterministically from twmargin latest + roll25 latest only (no external fetch).",
             "Signal rules are deterministic; missing data => NA and confidence downgrade (no guessing).",
+            "Roll25 semantics: run_day_tag derived from unified builder run date (Asia/Taipei).",
+            "Roll25 split: roll25_heated_market (market behavior only) and roll25_data_quality_issue (data quality only).",
+            "Consistency uses roll25_heated_market only; data quality issue does not force DIVERGENCE/CONVERGENCE flip, but should downgrade interpretation confidence.",
             "Optional modules inflation_realrate_cache / asset_proxy_cache are merged for display only; they do not affect positioning matrix or cross_module.",
-            "nasdaq_bb_cache is display-only; signal/position/dist fields prefer upstream snippet action_output/trigger_reason, and may derive missing fields with explicit source tags.",
+            "Optional module nasdaq_bb_cache is merged for display only; it does not affect positioning matrix or cross_module.",
+            "Nasdaq BB cache mapping: signal uses root.action_output; distances/position may be derived from close & BB bands if fields absent.",
         ],
     }
 
