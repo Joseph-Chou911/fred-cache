@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-02-18T03:28:47Z",
-  "as_of_ts": "2026-02-18T03:28:47Z",
+  "generated_at_utc": "2026-02-18T13:34:48Z",
+  "as_of_ts": "2026-02-18T13:34:48Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "dq": "OK",
   "checks": [
@@ -103,8 +103,8 @@
       "series_id": "HYG_IEF_RATIO",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": -0.00042883697971762835,
-      "std60": 0.005434708613607645,
+      "ret1_delta": -0.0003259563212814065,
+      "std60": 0.005432590613601631,
       "threshold": "8*std60"
     }
   ]
