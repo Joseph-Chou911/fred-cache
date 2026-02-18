@@ -58,7 +58,7 @@ jobs:
             --vxn_fred_series VXNCLS \
             --bb_len 60 \
             --bb_k 2.0 \
-            --z_thresh -2.0 \
+            --z_thresh -1.5 \
             --z_thresh_low -2.0 \
             --z_thresh_high 2.0 \
             --horizon 20 \
