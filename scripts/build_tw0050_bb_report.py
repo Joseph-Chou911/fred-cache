@@ -10,8 +10,8 @@ Inputs (expected in cache_dir):
 CLI:
   --cache_dir <dir>   (default: tw0050_bb_cache)
   --out <path>        (default: report.md)
-  --tail_days <N>     (default: 15)   # compatible with your workflow
-  --tail_n <N>        (optional)      # alias; if provided, overrides tail_days
+  --tail_days <N>     (default: 15)   # compatible with workflow
+  --tail_n <N>        (optional)      # alias; overrides tail_days
 """
 
 from __future__ import annotations
@@ -61,8 +61,8 @@ def load_json(path: str) -> Dict[str, Any]:
 
 def load_prices_tail(cache_dir: str, n: int) -> Optional[pd.DataFrame]:
     """
-    Prefer data.csv (from compute script). If absent, try prices.csv.
-    Normalizes to columns: date, close, adjclose, volume
+    Prefer data.csv; fallback to prices.csv.
+    Normalize to columns: date, close, adjclose, volume
     """
     candidates = [
         os.path.join(cache_dir, "data.csv"),
@@ -80,43 +80,31 @@ def load_prices_tail(cache_dir: str, n: int) -> Optional[pd.DataFrame]:
     if df.empty:
         return None
 
-    # normalize date column
+    # normalize date
+    if "date" not in df.columns and "Date" in df.columns:
+        df.rename(columns={"Date": "date"}, inplace=True)
     if "date" not in df.columns:
-        # some csv may have Date
-        if "Date" in df.columns:
-            df.rename(columns={"Date": "date"}, inplace=True)
-        else:
-            return None
-
-    # normalize columns naming
-    colmap = {c: c.lower() for c in df.columns}
-    df.rename(columns=colmap, inplace=True)
-
-    keep = []
-    for c in ["date", "close", "adjclose", "volume"]:
-        if c in df.columns:
-            keep.append(c)
-
-    if "adjclose" not in keep and "adj close" in df.columns:
-        df.rename(columns={"adj close": "adjclose"}, inplace=True)
-        keep.append("adjclose")
-
-    if "close" not in keep:
         return None
 
-    if "adjclose" not in keep:
+    # normalize columns to lowercase
+    df.rename(columns={c: c.lower() for c in df.columns}, inplace=True)
+
+    if "adj close" in df.columns and "adjclose" not in df.columns:
+        df.rename(columns={"adj close": "adjclose"}, inplace=True)
+
+    if "close" not in df.columns:
+        return None
+
+    if "adjclose" not in df.columns:
         df["adjclose"] = df["close"]
-        keep.append("adjclose")
 
-    if "volume" not in keep:
+    if "volume" not in df.columns:
         df["volume"] = pd.NA
-        keep.append("volume")
 
-    df = df[keep].copy()
+    df = df[["date", "close", "adjclose", "volume"]].copy()
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date")
 
-    # coerce numeric
     for c in ["close", "adjclose", "volume"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
@@ -158,7 +146,7 @@ def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) 
         f"p50={fmt4(p50)}; p10={fmt4(p10)}; p05={fmt4(p05)}; min={fmt4(mn)}"
     )
 
-    # If audit trail exists, append
+    # Append audit trail if exists
     med = safe_get(fwd, "min_entry_date")
     mfd = safe_get(fwd, "min_future_date")
     mep = safe_get(fwd, "min_entry_price")
@@ -176,10 +164,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", default="tw0050_bb_cache")
     ap.add_argument("--out", default="report.md")
-    # Your workflow passes this:
-    ap.add_argument("--tail_days", type=int, default=15, help="Tail rows for raw prices table.")
-    # Alias (optional): overrides tail_days if provided
-    ap.add_argument("--tail_n", type=int, default=None, help="Alias of tail_days (higher priority).")
+    ap.add_argument("--tail_days", type=int, default=15)
+    ap.add_argument("--tail_n", type=int, default=None)  # alias; overrides tail_days
     args = ap.parse_args()
 
     tail_n = args.tail_n if args.tail_n is not None else args.tail_days
@@ -223,6 +209,7 @@ def main() -> int:
     lines.append(f"- forward_window_days: `{fwd_days}`")
     lines.append(f"- price_calc: `{price_calc}`")
     lines.append("")
+
     lines.append("## 快速摘要（非預測，僅狀態）")
     lines.append(
         f"- state: **{state}**; bb_z={fmt4(bb_z)}; pos_in_band={fmt4(bb_pos)}; "
@@ -264,6 +251,7 @@ def main() -> int:
     lines.append(f"| p05 | {fmt4(safe_get(fwd, 'p05'))} |")
     lines.append(f"| min | {fmt4(safe_get(fwd, 'min'))} |")
 
+    # Always show Min Audit Trail if fields exist
     med = safe_get(fwd, "min_entry_date")
     mfd = safe_get(fwd, "min_future_date")
     if med and mfd:
@@ -276,8 +264,8 @@ def main() -> int:
         lines.append(f"| min_entry_price | {fmt4(safe_get(fwd, 'min_entry_price'))} |")
         lines.append(f"| min_future_date | {mfd} |")
         lines.append(f"| min_future_price | {fmt4(safe_get(fwd, 'min_future_price'))} |")
-
     lines.append("")
+
     lines.append(f"## Recent Raw Prices (tail {tail_n})")
     lines.append("")
     tail_df = load_prices_tail(args.cache_dir, n=tail_n)
@@ -292,14 +280,18 @@ def main() -> int:
     if not dq_flags:
         lines.append("- (none)")
     else:
-        lines.append("- flags:")
-        for fl in dq_flags:
-            lines.append(f"  - `{fl}`")
-        if dq_notes:
-            lines.append("- notes:")
+        # Keep your current one-line style: "- FLAG: note"
+        # If notes count mismatches flags, still print what we have.
+        if dq_notes and len(dq_notes) == len(dq_flags):
+            for fl, nt in zip(dq_flags, dq_notes):
+                lines.append(f"- {fl}: {nt}")
+        else:
+            for fl in dq_flags:
+                lines.append(f"- {fl}")
             for nt in dq_notes:
-                lines.append(f"  - {nt}")
+                lines.append(f"  - note: {nt}")
     lines.append("")
+
     lines.append("## Caveats")
     lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
