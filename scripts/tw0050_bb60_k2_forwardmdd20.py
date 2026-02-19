@@ -21,11 +21,11 @@ Key features:
     The primary field "forward_mdd" uses CLEAN by default (audit-grade usable).
   - Keeps Min Audit Trail for both raw and clean.
   - DQ flags disclose break detection and cleaning.
-  - Adds Trend / Volatility filters:
-      * trend: MA(trend_ma_days) + slope over slope_days (%)
-      * vol  : RV(vol_window_days) annualized + ATR(atr_window_days) and ATR%
-        - ATR needs High/Low; if unavailable, DQ flag will disclose.
 
+Added features:
+  - Trend filter: MA200 + slope20D (on MA200), threshold (default 0.50%)
+  - Vol filter: RV20 annualized + ATR14 (Wilder ATR; fallback to close-only TR if OHLC missing)
+  - Regime tag (simple): TREND_UP & RV20_percentile <= pctl_max & rv_hist_n >= min_samples
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ except Exception:
     yf = None
 
 
-SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-19.v5"
+SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-19.v6"
 TZ_LOCAL = "Asia/Taipei"
 TRADING_DAYS_PER_YEAR = 252
 
@@ -62,8 +62,10 @@ TRADING_DAYS_PER_YEAR = 252
 def utc_now_iso_z() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+
 def ensure_dir(p: str) -> None:
     os.makedirs(p, exist_ok=True)
+
 
 def _to_scalar_str(x: Any, default: str = "") -> str:
     if x is None:
@@ -74,10 +76,12 @@ def _to_scalar_str(x: Any, default: str = "") -> str:
         return str(x[0])
     return str(x)
 
+
 def _quantile(a: np.ndarray, q: float) -> float:
     if a.size == 0:
         return float("nan")
     return float(np.quantile(a, q))
+
 
 def _nan_to_none(x: Any) -> Optional[float]:
     try:
@@ -90,17 +94,41 @@ def _nan_to_none(x: Any) -> Optional[float]:
     except Exception:
         return None
 
+
 def _local_day_key_now() -> str:
     tz = pytz.timezone(TZ_LOCAL)
     return datetime.now(timezone.utc).astimezone(tz).strftime("%Y-%m-%d")
 
+
 def _df_to_csv_min(df: pd.DataFrame) -> pd.DataFrame:
-    # Keep as minimal as possible, but include OHLC if present for auditability.
     cols = []
-    for c in ["date", "open", "high", "low", "close", "adjclose", "volume"]:
+    for c in ["date", "close", "adjclose", "volume"]:
         if c in df.columns:
             cols.append(c)
     return df[cols].copy()
+
+
+def percentile_rank_leq(values: np.ndarray, x: float) -> Optional[float]:
+    """
+    Percentile rank in [0,100], defined as P(value <= x).
+    Deterministic and audit-friendly.
+    """
+    try:
+        v = values[np.isfinite(values)]
+        if v.size == 0 or (not np.isfinite(x)):
+            return None
+        return float((np.sum(v <= x) / v.size) * 100.0)
+    except Exception:
+        return None
+
+
+def safe_get(d: Any, k: str, default=None):
+    try:
+        if isinstance(d, dict):
+            return d.get(k, default)
+        return default
+    except Exception:
+        return default
 
 
 # -------------------------
@@ -122,7 +150,13 @@ def _twse_months_back_list(months_back: int) -> List[Tuple[int, int]]:
     out.reverse()
     return out
 
+
 def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -> pd.DataFrame:
+    """
+    TWSE STOCK_DAY fields typically include:
+      日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數
+    We map to: date, open, high, low, close, adjclose(=close), volume
+    """
     url = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
     date_str = f"{year}{month:02d}01"
     params = {"date": date_str, "stockNo": stock_no, "response": "json"}
@@ -174,35 +208,41 @@ def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -
 
     out = pd.DataFrame()
     out["date"] = df[col_date].map(roc_to_date)
-
-    def _to_num_series(s: pd.Series) -> pd.Series:
-        return pd.to_numeric(s.astype(str).str.replace(",", "", regex=False), errors="coerce")
-
+    out["close"] = df[col_close].astype(str).str.replace(",", "", regex=False)
     if col_open:
-        out["open"] = _to_num_series(df[col_open])
+        out["open"] = df[col_open].astype(str).str.replace(",", "", regex=False)
+    else:
+        out["open"] = None
     if col_high:
-        out["high"] = _to_num_series(df[col_high])
+        out["high"] = df[col_high].astype(str).str.replace(",", "", regex=False)
+    else:
+        out["high"] = None
     if col_low:
-        out["low"] = _to_num_series(df[col_low])
-
-    out["close"] = _to_num_series(df[col_close])
+        out["low"] = df[col_low].astype(str).str.replace(",", "", regex=False)
+    else:
+        out["low"] = None
 
     if col_vol:
-        out["volume"] = _to_num_series(df[col_vol])
+        out["volume"] = df[col_vol].astype(str).str.replace(",", "", regex=False)
     else:
-        out["volume"] = np.nan
+        out["volume"] = None
 
     out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    for c in ["open", "high", "low", "close", "volume"]:
+        out[c] = pd.to_numeric(out[c], errors="coerce")
+
     out = out.dropna(subset=["date", "close"]).sort_values("date")
 
-    # TWSE fallback has no true adjclose => treat as close
-    out["adjclose"] = out["close"]
+    # If OHLC missing, backfill with close
+    for c in ["open", "high", "low"]:
+        if c not in out.columns or out[c].isna().all():
+            out[c] = out["close"]
+        else:
+            out[c] = out[c].fillna(out["close"])
 
-    keep = ["date"]
-    for c in ["open", "high", "low", "close", "adjclose", "volume"]:
-        if c in out.columns:
-            keep.append(c)
-    return out[keep].reset_index(drop=True)
+    out["adjclose"] = out["close"]
+    return out[["date", "open", "high", "low", "close", "adjclose", "volume"]].reset_index(drop=True)
+
 
 def fetch_twse_recent_0050(months_back: int, dq_flags: List[str], dq_notes: List[str]) -> pd.DataFrame:
     stock_no = "0050"
@@ -229,6 +269,7 @@ def fetch_yfinance(ticker: str, start: str, dq_flags: List[str], dq_notes: List[
         dq_flags.append("YFINANCE_IMPORT_ERROR")
         dq_notes.append("yfinance not importable in runtime; fallback will be used.")
         return pd.DataFrame()
+
     try:
         df = yf.download(
             tickers=ticker,
@@ -242,12 +283,11 @@ def fetch_yfinance(ticker: str, start: str, dq_flags: List[str], dq_notes: List[
         if df is None or len(df) == 0:
             return pd.DataFrame()
 
-        # Flatten MultiIndex columns if present
+        # normalize possible MultiIndex
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
 
         df = df.reset_index()
-
         rename = {
             "Date": "date",
             "Open": "open",
@@ -262,20 +302,25 @@ def fetch_yfinance(ticker: str, start: str, dq_flags: List[str], dq_notes: List[
         if "date" not in df.columns or "close" not in df.columns:
             return pd.DataFrame()
 
-        # Ensure optional columns exist
         if "adjclose" not in df.columns:
             df["adjclose"] = df["close"]
-        for c in ["open", "high", "low"]:
-            if c not in df.columns:
-                df[c] = pd.NA
         if "volume" not in df.columns:
             df["volume"] = pd.NA
+
+        # If OHLC missing, backfill with close (still lets ATR fallback)
+        for c in ["open", "high", "low"]:
+            if c not in df.columns:
+                df[c] = df["close"]
 
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
         for c in ["open", "high", "low", "close", "adjclose", "volume"]:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
         df = df.dropna(subset=["date", "close"]).sort_values("date").reset_index(drop=True)
+
+        # backfill OHLC NaNs with close
+        for c in ["open", "high", "low"]:
+            df[c] = df[c].fillna(df["close"])
 
         return df[["date", "open", "high", "low", "close", "adjclose", "volume"]]
     except Exception as e:
@@ -295,137 +340,19 @@ def compute_bb(price: pd.Series, window: int, k: float) -> Tuple[pd.Series, pd.S
     lower = ma - k * sd
     return ma, sd, upper, lower
 
+
 def classify_state(bb_z: float, bb_pos: float) -> str:
     if bb_z is None or not np.isfinite(bb_z):
         return "NA"
-    if bb_z >= 2.0 or bb_pos >= 1.0:
+    if bb_z >= 2.0 or (bb_pos is not None and np.isfinite(bb_pos) and bb_pos >= 1.0):
         return "EXTREME_UPPER_BAND"
-    if bb_z <= -2.0 or bb_pos <= 0.0:
+    if bb_z <= -2.0 or (bb_pos is not None and np.isfinite(bb_pos) and bb_pos <= 0.0):
         return "EXTREME_LOWER_BAND"
-    if bb_z >= 1.5 or bb_pos >= 0.8:
+    if bb_z >= 1.5 or (bb_pos is not None and np.isfinite(bb_pos) and bb_pos >= 0.8):
         return "NEAR_UPPER_BAND"
-    if bb_z <= -1.5 or bb_pos <= 0.2:
+    if bb_z <= -1.5 or (bb_pos is not None and np.isfinite(bb_pos) and bb_pos <= 0.2):
         return "NEAR_LOWER_BAND"
     return "IN_BAND"
-
-def compute_trend_filter(
-    price_used: pd.Series,
-    ma_days: int,
-    slope_days: int,
-    slope_thr_pct: float
-) -> Dict[str, Any]:
-    """
-    Trend filter:
-      - trend_ma = SMA(ma_days)
-      - slope_pct = (trend_ma[t] / trend_ma[t-slope_days] - 1) * 100
-      - price_vs_ma_pct = (price / trend_ma - 1) * 100
-    """
-    out: Dict[str, Any] = {
-        "ma_days": int(ma_days),
-        "slope_days": int(slope_days),
-        "slope_thr_pct": float(slope_thr_pct),
-        "ma_last": None,
-        "ma_prev": None,
-        "slope_pct": None,
-        "price_vs_ma_pct": None,
-        "state": "NA",
-    }
-
-    if price_used is None or len(price_used) < (ma_days + slope_days + 1):
-        return out
-
-    ma = price_used.rolling(window=ma_days, min_periods=ma_days).mean()
-
-    last_idx = len(price_used) - 1
-    ma_last = ma.iloc[last_idx]
-    if not np.isfinite(ma_last) or ma_last <= 0:
-        return out
-
-    prev_idx = last_idx - slope_days
-    ma_prev = ma.iloc[prev_idx] if prev_idx >= 0 else np.nan
-
-    price_last = price_used.iloc[last_idx]
-    if not np.isfinite(price_last) or price_last <= 0:
-        return out
-
-    out["ma_last"] = float(ma_last)
-    if np.isfinite(ma_prev) and ma_prev > 0:
-        out["ma_prev"] = float(ma_prev)
-        slope_pct = (ma_last / ma_prev - 1.0) * 100.0
-        out["slope_pct"] = float(slope_pct)
-
-        if slope_pct >= slope_thr_pct:
-            out["state"] = "TREND_UP"
-        elif slope_pct <= -slope_thr_pct:
-            out["state"] = "TREND_DOWN"
-        else:
-            out["state"] = "TREND_FLAT"
-
-    out["price_vs_ma_pct"] = float((price_last / ma_last - 1.0) * 100.0)
-    return out
-
-def compute_realized_vol_ann(price_used: pd.Series, vol_window_days: int) -> Dict[str, Any]:
-    """
-    Realized volatility from log returns:
-      rv_daily = std(logret, window=vol_window_days)
-      rv_ann   = rv_daily * sqrt(252)
-    """
-    out: Dict[str, Any] = {
-        "rv_days": int(vol_window_days),
-        "rv_daily": None,
-        "rv_ann": None,
-    }
-    if price_used is None or len(price_used) < (vol_window_days + 2):
-        return out
-
-    p = price_used.astype(float)
-    logret = np.log(p / p.shift(1))
-    rv = logret.rolling(window=vol_window_days, min_periods=vol_window_days).std(ddof=0)
-    last = rv.iloc[-1]
-    if np.isfinite(last) and last >= 0:
-        out["rv_daily"] = float(last)
-        out["rv_ann"] = float(last * np.sqrt(TRADING_DAYS_PER_YEAR))
-    return out
-
-def compute_atr(close: pd.Series, high: Optional[pd.Series], low: Optional[pd.Series], atr_window_days: int) -> Dict[str, Any]:
-    """
-    ATR (simple moving average of True Range). Requires high/low.
-    ATR% is ATR / close * 100
-    """
-    out: Dict[str, Any] = {
-        "atr_days": int(atr_window_days),
-        "atr": None,
-        "atr_pct": None,
-    }
-
-    if close is None or len(close) < (atr_window_days + 2):
-        return out
-    if high is None or low is None:
-        return out
-
-    c = close.astype(float)
-    h = high.astype(float)
-    l = low.astype(float)
-
-    # If high/low are mostly missing, bail.
-    if (h.notna().sum() < (atr_window_days + 2)) or (l.notna().sum() < (atr_window_days + 2)):
-        return out
-
-    prev_close = c.shift(1)
-    tr1 = (h - l).abs()
-    tr2 = (h - prev_close).abs()
-    tr3 = (l - prev_close).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-
-    atr = tr.rolling(window=atr_window_days, min_periods=atr_window_days).mean()
-    atr_last = atr.iloc[-1]
-    close_last = c.iloc[-1]
-
-    if np.isfinite(atr_last) and np.isfinite(close_last) and close_last > 0:
-        out["atr"] = float(atr_last)
-        out["atr_pct"] = float((atr_last / close_last) * 100.0)
-
-    return out
 
 
 @dataclass
@@ -450,6 +377,7 @@ def compute_forward_mdd(
 
     valid_entry_mask:
       - optional boolean mask length n; if provided, only compute out[t] when mask[t] is True.
+      - This is how we "clean" windows contaminated by detected breaks, without altering price series.
     """
     n = len(prices)
     out = np.full(n, np.nan, dtype=float)
@@ -498,11 +426,182 @@ def compute_forward_mdd(
     return out, stats
 
 
+def compute_trend_filter(price: pd.Series, ma_days: int, slope_days: int, slope_thr_pct: float) -> Dict[str, Any]:
+    """
+    Trend filter:
+      - trend_ma = SMA(ma_days)
+      - slope_pct = (trend_ma[t] / trend_ma[t-slope_days] - 1) * 100
+      - price_vs_ma_pct = (price[t] / trend_ma[t] - 1) * 100
+    Rule:
+      - TREND_UP: price_vs_ma_pct > 0 AND slope_pct >= slope_thr_pct
+      - TREND_DOWN: price_vs_ma_pct < 0 AND slope_pct <= -slope_thr_pct
+      - otherwise: TREND_SIDE
+    """
+    out: Dict[str, Any] = {
+        "trend_ma_days": int(ma_days),
+        "trend_slope_days": int(slope_days),
+        "trend_slope_thr_pct": float(slope_thr_pct),
+        "trend_ma_last": None,
+        "trend_slope_pct": None,
+        "price_vs_trend_ma_pct": None,
+        "state": "TREND_NA",
+    }
+
+    ma = price.rolling(window=ma_days, min_periods=ma_days).mean()
+    if ma.isna().all():
+        return out
+
+    last = ma.iloc[-1]
+    if not np.isfinite(last):
+        return out
+
+    out["trend_ma_last"] = _nan_to_none(float(last))
+
+    px = float(price.iloc[-1]) if np.isfinite(price.iloc[-1]) else float("nan")
+    if np.isfinite(px) and float(last) > 0:
+        out["price_vs_trend_ma_pct"] = _nan_to_none((px / float(last) - 1.0) * 100.0)
+
+    if len(ma) > slope_days and np.isfinite(ma.iloc[-slope_days - 1]) and float(ma.iloc[-slope_days - 1]) > 0:
+        prev = float(ma.iloc[-slope_days - 1])
+        slope_pct = (float(last) / prev - 1.0) * 100.0
+        out["trend_slope_pct"] = _nan_to_none(slope_pct)
+
+        p_vs = out["price_vs_trend_ma_pct"]
+        if p_vs is None or out["trend_slope_pct"] is None:
+            out["state"] = "TREND_NA"
+        else:
+            if (p_vs > 0) and (slope_pct >= slope_thr_pct):
+                out["state"] = "TREND_UP"
+            elif (p_vs < 0) and (slope_pct <= -slope_thr_pct):
+                out["state"] = "TREND_DOWN"
+            else:
+                out["state"] = "TREND_SIDE"
+    else:
+        out["state"] = "TREND_NA"
+
+    return out
+
+
+def compute_rv20_ann(price: pd.Series, rv_days: int) -> Dict[str, Any]:
+    """
+    Realized Vol (RV) annualized from log returns:
+      rv_daily = std(logret over rv_days)
+      rv_ann = rv_daily * sqrt(252)
+    """
+    out: Dict[str, Any] = {
+        "rv_days": int(rv_days),
+        "rv_ann": None,  # decimal (e.g. 0.207 for 20.7%)
+        "rv_ann_pctl": None,  # 0..100
+        "rv_hist_n": 0,
+        "rv_hist_q20": None,
+        "rv_hist_q50": None,
+        "rv_hist_q80": None,
+    }
+
+    p = price.astype(float)
+    logret = np.log(p / p.shift(1))
+    rv_daily = logret.rolling(window=rv_days, min_periods=rv_days).std(ddof=0)
+    rv_ann = rv_daily * np.sqrt(TRADING_DAYS_PER_YEAR)
+
+    rv_last = rv_ann.iloc[-1]
+    if np.isfinite(rv_last):
+        out["rv_ann"] = _nan_to_none(float(rv_last))
+
+    rv_hist = rv_ann.dropna().to_numpy(dtype=float)
+    out["rv_hist_n"] = int(rv_hist.size)
+    if rv_hist.size > 0:
+        out["rv_hist_q20"] = _nan_to_none(float(np.quantile(rv_hist, 0.20)))
+        out["rv_hist_q50"] = _nan_to_none(float(np.quantile(rv_hist, 0.50)))
+        out["rv_hist_q80"] = _nan_to_none(float(np.quantile(rv_hist, 0.80)))
+
+    if out["rv_ann"] is not None and rv_hist.size > 0:
+        out["rv_ann_pctl"] = percentile_rank_leq(rv_hist, float(out["rv_ann"]))
+
+    return out
+
+
+def compute_atr14(df_ohlc: pd.DataFrame, atr_days: int, price_for_pct: float) -> Dict[str, Any]:
+    """
+    Wilder's ATR:
+      TR = max(high-low, abs(high-prev_close), abs(low-prev_close))
+      ATR_t = (ATR_{t-1}*(n-1) + TR_t)/n, seeded by SMA(TR, n) at first valid.
+
+    Fallback:
+      if high/low not available, use TR = abs(close - prev_close)
+    """
+    out: Dict[str, Any] = {
+        "atr_days": int(atr_days),
+        "atr": None,
+        "atr_pct": None,  # percent (0..100) stored as percent value? we store as percentage number (e.g. 1.66)
+        "tr_mode": "OHLC"  # or "CLOSE_ONLY"
+    }
+
+    if df_ohlc is None or df_ohlc.empty or "close" not in df_ohlc.columns:
+        return out
+
+    close = df_ohlc["close"].astype(float).copy()
+    prev_close = close.shift(1)
+
+    have_ohlc = all(c in df_ohlc.columns for c in ["high", "low"])
+    if have_ohlc:
+        high = df_ohlc["high"].astype(float).copy()
+        low = df_ohlc["low"].astype(float).copy()
+
+        tr1 = (high - low).abs()
+        tr2 = (high - prev_close).abs()
+        tr3 = (low - prev_close).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        out["tr_mode"] = "OHLC"
+    else:
+        tr = (close - prev_close).abs()
+        out["tr_mode"] = "CLOSE_ONLY"
+
+    tr = tr.replace([np.inf, -np.inf], np.nan)
+
+    # Need at least atr_days + 1 points (because prev_close)
+    if tr.dropna().shape[0] < atr_days:
+        return out
+
+    # Wilder ATR
+    atr = pd.Series(index=tr.index, dtype=float)
+    tr_sma = tr.rolling(window=atr_days, min_periods=atr_days).mean()
+    # Seed at first point where SMA valid
+    first_valid = tr_sma.first_valid_index()
+    if first_valid is None:
+        return out
+    atr.loc[first_valid] = tr_sma.loc[first_valid]
+
+    # Iterate forward
+    idxs = list(tr.index)
+    start_pos = idxs.index(first_valid)
+    for i in range(start_pos + 1, len(idxs)):
+        t = idxs[i]
+        t_prev = idxs[i - 1]
+        if not np.isfinite(atr.loc[t_prev]) or not np.isfinite(tr.loc[t]):
+            atr.loc[t] = np.nan
+            continue
+        atr.loc[t] = (atr.loc[t_prev] * (atr_days - 1) + tr.loc[t]) / atr_days
+
+    atr_last = atr.iloc[-1]
+    if np.isfinite(atr_last):
+        out["atr"] = _nan_to_none(float(atr_last))
+        if np.isfinite(price_for_pct) and price_for_pct > 0:
+            out["atr_pct"] = _nan_to_none((float(atr_last) / float(price_for_pct)) * 100.0)
+
+    return out
+
+
 # -------------------------
 # Price break detection
 # -------------------------
 
 def detect_price_breaks(prices: np.ndarray, ratio_hi: float, ratio_lo: float) -> np.ndarray:
+    """
+    Detect split-like / data-break points using day-to-day ratio.
+
+    breaks[t] = True means the transition from t-1 -> t is suspicious:
+      prices[t] / prices[t-1] >= ratio_hi OR <= ratio_lo
+    """
     n = len(prices)
     breaks = np.zeros(n, dtype=bool)
     for i in range(1, n):
@@ -515,17 +614,20 @@ def detect_price_breaks(prices: np.ndarray, ratio_hi: float, ratio_lo: float) ->
             breaks[i] = True
     return breaks
 
+
 def build_clean_entry_mask(n: int, breaks: np.ndarray, fwd_days: int) -> np.ndarray:
     """
     If there's a break at index j (transition j-1->j), then any entry i whose window [i+1..i+fwd]
-    includes j should be excluded:
-      i < j <= i+fwd_days  =>  i in [j - fwd_days, j-1]
+    includes j should be excluded.
+
+    Exclude entries i where:
+      i < j <= i+fwd_days  => i in [j - fwd_days, j-1]
     """
     mask = np.ones(n, dtype=bool)
     break_idxs = np.where(breaks)[0]
     for j in break_idxs:
         lo = max(0, j - fwd_days)
-        hi = min(n, j)
+        hi = min(n, j)  # exclude up to j-1
         mask[lo:hi] = False
     return mask
 
@@ -540,9 +642,11 @@ def load_history_lite(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
 def save_history_lite(path: str, hist: Dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(hist, f, ensure_ascii=False, indent=2, sort_keys=True)
+
 
 def upsert_history_row(hist: Dict[str, Any], day_key: str, latest: Dict[str, Any], meta: Dict[str, Any]) -> None:
     rows = hist.get("rows", [])
@@ -593,13 +697,18 @@ def main() -> int:
     # Cleaning mode for primary forward_mdd
     ap.add_argument("--forward_mode", choices=["raw", "clean"], default="clean")
 
-    # Trend / Vol filters
-    ap.add_argument("--trend_ma_days", type=int, default=200)      # allow 200 or 252
-    ap.add_argument("--trend_slope_days", type=int, default=20)    # slope horizon
-    ap.add_argument("--trend_slope_thr_pct", type=float, default=0.5)
+    # Trend filter params
+    ap.add_argument("--trend_ma_days", type=int, default=200)
+    ap.add_argument("--trend_slope_days", type=int, default=20)
+    ap.add_argument("--trend_slope_thr_pct", type=float, default=0.50)
 
-    ap.add_argument("--vol_window_days", type=int, default=20)     # RV20
-    ap.add_argument("--atr_window_days", type=int, default=14)     # ATR14 (common)
+    # Vol/ATR params
+    ap.add_argument("--rv_days", type=int, default=20)
+    ap.add_argument("--atr_days", type=int, default=14)
+
+    # Regime (relative percentile)
+    ap.add_argument("--regime_rv_pctl_max", type=float, default=0.60)   # 0~1
+    ap.add_argument("--regime_min_samples", type=int, default=252)
 
     args = ap.parse_args()
 
@@ -699,11 +808,15 @@ def main() -> int:
         dq_flags.append("FWD_MDD_CLEAN_APPLIED")
         dq_notes.append("Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).")
 
-    # tag outlier on RAW only
     thr = float(args.outlier_min_threshold)
-    if fwd_raw_stats.n > 0 and np.isfinite(fwd_raw_stats.min) and fwd_raw_stats.min < thr:
+    raw_outlier = (fwd_raw_stats.n > 0 and np.isfinite(fwd_raw_stats.min) and fwd_raw_stats.min < thr)
+    if raw_outlier:
         dq_flags.append("FWD_MDD_OUTLIER_MIN_RAW")
         dq_notes.append(f"forward_mdd_raw min={fwd_raw_stats.min:.4f} < threshold({thr}); see raw min_audit_trail.")
+        # If we are using clean as primary, explicitly tag that raw outlier got excluded by clean.
+        if str(args.forward_mode).lower() == "clean":
+            dq_flags.append("RAW_OUTLIER_EXCLUDED")
+            dq_notes.append("Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.")
 
     # choose primary forward_mdd
     forward_mode = str(args.forward_mode).lower()
@@ -718,25 +831,76 @@ def main() -> int:
         mfp = float(prices_np[stats.min_future_idx])
         return med, mep, mfd, mfp
 
-    # Trend / Volatility
+    # Trend/Vol/ATR
     trend = compute_trend_filter(
-        price_used=price_used,
+        price=price_used,
         ma_days=int(args.trend_ma_days),
         slope_days=int(args.trend_slope_days),
         slope_thr_pct=float(args.trend_slope_thr_pct),
     )
 
-    vol_rv = compute_realized_vol_ann(price_used=price_used, vol_window_days=int(args.vol_window_days))
+    vol_rv = compute_rv20_ann(price=price_used, rv_days=int(args.rv_days))
+    atr = compute_atr14(df_ohlc=df, atr_days=int(args.atr_days), price_for_pct=float(latest_price))
 
-    # ATR uses close/high/low (not adjclose)
-    high = df["high"] if "high" in df.columns else None
-    low = df["low"] if "low" in df.columns else None
-    close = df["close"] if "close" in df.columns else None
-    atr = compute_atr(close=close, high=high, low=low, atr_window_days=int(args.atr_window_days))
+    # Regime tag (simple, percentile-based)
+    rv_hist_n = int(safe_get(vol_rv, "rv_hist_n", 0) or 0)
+    rv_pctl_val = safe_get(vol_rv, "rv_ann_pctl", None)
+    trend_state = safe_get(trend, "state", "TREND_NA")
 
-    if atr.get("atr") is None:
-        dq_flags.append("ATR_UNAVAILABLE")
-        dq_notes.append("ATR not computed (missing/insufficient high-low data).")
+    pctl_max_100 = float(args.regime_rv_pctl_max) * 100.0
+    min_samples = int(args.regime_min_samples)
+
+    trend_ok = (trend_state == "TREND_UP")
+    rv_hist_ok = (rv_hist_n >= min_samples)
+    rv_ok = (rv_pctl_val is not None) and (float(rv_pctl_val) <= pctl_max_100)
+
+    regime: Dict[str, Any] = {
+        "definition": "TREND_UP & RV20_percentile<=pctl_max & rv_hist_n>=min_samples => RISK_ON_ALLOWED",
+        "params": {
+            "rv_pctl_max": pctl_max_100,      # stored as 0..100
+            "min_samples": min_samples,
+            "trend_required": "TREND_UP",
+        },
+        "inputs": {
+            "trend_state": trend_state,
+            "rv_ann": safe_get(vol_rv, "rv_ann"),
+            "rv_ann_pctl": rv_pctl_val,
+            "rv_hist_n": rv_hist_n,
+            "bb_state": state,
+        },
+        "passes": {
+            "trend_ok": bool(trend_ok),
+            "rv_hist_ok": bool(rv_hist_ok),
+            "rv_ok": bool(rv_ok),
+        },
+        "tag": "RISK_ON_UNKNOWN",
+        "allowed": False,
+        "reasons": [],
+    }
+
+    if (not rv_hist_ok) or (rv_pctl_val is None):
+        regime["tag"] = "RISK_ON_UNKNOWN"
+        regime["allowed"] = False
+        regime["reasons"].append("insufficient_rv_history_or_missing_percentile")
+        dq_flags.append("REGIME_INSUFFICIENT_HISTORY")
+        dq_notes.append(f"regime requires rv_hist_n>={min_samples}; got {rv_hist_n}.")
+    else:
+        if trend_ok and rv_ok:
+            regime["tag"] = "RISK_ON_ALLOWED"
+            regime["allowed"] = True
+        else:
+            regime["tag"] = "RISK_OFF_OR_DEFENSIVE"
+            regime["allowed"] = False
+
+    # Context reasons (do not block allowed; just notes)
+    if state == "EXTREME_UPPER_BAND":
+        regime["reasons"].append("bb_extreme_upper_band_stretched")
+    if state == "EXTREME_LOWER_BAND":
+        regime["reasons"].append("bb_extreme_lower_band_stressed")
+
+    if used_fallback:
+        dq_flags.append("REGIME_DQ_SHORT_HISTORY_RISK")
+        dq_notes.append("Using TWSE fallback recent-only data; rv percentile/regime should be down-weighted.")
 
     # build outputs
     run_ts_utc = utc_now_iso_z()
@@ -769,9 +933,12 @@ def main() -> int:
             "trend_slope_thr_pct": float(args.trend_slope_thr_pct),
         },
         "vol_params": {
-            "vol_window_days": int(args.vol_window_days),
-            "atr_window_days": int(args.atr_window_days),
-            "rv_annualization_days": TRADING_DAYS_PER_YEAR,
+            "rv_days": int(args.rv_days),
+            "atr_days": int(args.atr_days),
+        },
+        "regime_params": {
+            "rv_pctl_max": float(args.regime_rv_pctl_max),
+            "min_samples": int(args.regime_min_samples),
         },
     }
 
@@ -815,14 +982,20 @@ def main() -> int:
     stats_out = {
         "meta": meta,
         "latest": latest,
-        "trend": trend,          # NEW
-        "vol": {                 # NEW (merge rv + atr)
-            **vol_rv,
-            **atr,
-        },
+
+        # Primary used by report (build script reads this)
         "forward_mdd": forward_primary,
+
+        # Audit extras
         "forward_mdd_raw": forward_raw,
         "forward_mdd_clean": forward_clean,
+
+        # Added blocks
+        "trend": trend,
+        "vol": vol_rv,
+        "atr": atr,
+        "regime": regime,
+
         "dq": {"flags": dq_flags, "notes": dq_notes},
     }
 
@@ -831,7 +1004,7 @@ def main() -> int:
     with open(stats_path, "w", encoding="utf-8") as f:
         json.dump(stats_out, f, ensure_ascii=False, indent=2, sort_keys=True)
 
-    # write data.csv
+    # write data.csv (keep minimal columns)
     out_df = df.copy()
     out_df["date"] = out_df["date"].dt.strftime("%Y-%m-%d")
     out_csv = _df_to_csv_min(out_df)
