@@ -1,6 +1,6 @@
 {
   "name": "VXN_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-02-19T14:45:07Z",
+  "generated_at_utc": "2026-02-19T15:30:42Z",
   "meta": {
     "attempt_errors": [],
     "selected_source": "cboe",
@@ -23,7 +23,7 @@
   "latest": {
     "date": "2026-02-18",
     "close": 24.96,
-    "bb_mid": 21.412906347885702,
+    "bb_mid": 21.4129063478857,
     "bb_lower": 16.477993471378745,
     "bb_upper": 27.825751907216837,
     "z": 1.1702242771920641,
@@ -32,10 +32,10 @@
     "distance_to_lower_pct": 33.98239795120695,
     "distance_to_upper_pct": 11.481377833400785,
     "position_in_band": 0.7474609700743788,
-    "bandwidth_pct": 0.5299494730643401,
+    "bandwidth_pct": 0.5299494730643403,
     "walk_lower_count": 0,
     "walk_upper_count": 0,
-    "bandwidth_delta_pct": -3.5091511415125343
+    "bandwidth_delta_pct": -3.509151141512512
   },
   "historical_simulation": {
     "C_poswatch": {
