@@ -15,9 +15,14 @@ Resilience:
   - fallback to Ticker().history(period="max")
   - fallback to TWSE STOCK_DAY endpoint when Yahoo returns empty (common on CI)
 
-Important fixes (CI-safe):
+CI-safety fixes:
   - Force all DatetimeIndex to tz-naive to avoid tz-aware vs tz-naive comparison/merge errors.
   - _safe_pct supports scalar/Series/ndarray to avoid "float(Series)" TypeError.
+
+Audit enhancement:
+  - Locate forward_mdd min details:
+      min_entry_date, min_entry_price, min_future_date, min_future_price
+  - Add DQ flag if min looks abnormal (threshold configurable)
 """
 
 from __future__ import annotations
@@ -29,7 +34,7 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -73,7 +78,6 @@ def _to_float(x: Any) -> Optional[float]:
 def _safe_pct(x: Any) -> Any:
     """
     Accept scalar OR vector-like (pd.Series / np.ndarray) and multiply by 100.
-    This is critical because dist_to_lower/dist_to_upper are Series.
     """
     if x is None:
         return None
@@ -81,7 +85,6 @@ def _safe_pct(x: Any) -> Any:
         return x * 100.0
     if isinstance(x, np.ndarray):
         return x * 100.0
-    # scalar
     try:
         return float(x) * 100.0
     except Exception:
@@ -102,21 +105,16 @@ def _ensure_tz_naive_index(df: pd.DataFrame) -> pd.DataFrame:
         return df
     idx = df.index
     try:
-        # DatetimeIndex may have tz
         if isinstance(idx, pd.DatetimeIndex) and idx.tz is not None:
             df = df.copy()
             df.index = idx.tz_localize(None)
     except Exception:
-        # If anything weird, leave as-is
         pass
     return df
 
 
 def normalize_yf_df(df: pd.DataFrame) -> pd.DataFrame:
     """
-    yfinance may return:
-      - normal columns: ["Open","High","Low","Close","Adj Close","Volume"]
-      - or MultiIndex columns for some versions/tickers
     Standardize to columns: open/high/low/close/adjclose/volume with tz-naive DatetimeIndex.
     """
     if df is None or df.empty:
@@ -160,7 +158,6 @@ def load_existing_csv(path: str) -> pd.DataFrame:
             return pd.DataFrame()
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date").sort_index()
-        # csv is tz-naive by nature; still enforce
         df = _ensure_tz_naive_index(df)
         return df
     except Exception:
@@ -226,7 +223,7 @@ def fetch_from_yfinance(ticker: str, start: str, tries: int = 4) -> pd.DataFrame
     for i in range(tries):
         try:
             raw = yf.Ticker(ticker).history(period="max", interval="1d", auto_adjust=False, actions=False)
-            df = normalize_yf_df(raw)  # includes tz-naive enforcement
+            df = normalize_yf_df(raw)
             if not df.empty:
                 df = df[df.index >= start_dt]
                 if not df.empty:
@@ -241,6 +238,7 @@ def fetch_from_yfinance(ticker: str, start: str, tries: int = 4) -> pd.DataFrame
 
 
 def _roc_date_to_dt(s: str) -> pd.Timestamp:
+    # TWSE ROC date format: "112/02/01"
     y, m, d = s.split("/")
     return pd.Timestamp(year=int(y) + 1911, month=int(m), day=int(d))
 
@@ -291,6 +289,7 @@ def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
                     break  # not retryable
 
                 data = js.get("data", [])
+                # 0 日期, 1 成交股數, 2 成交金額, 3 開盤價, 4 最高價, 5 最低價, 6 收盤價, 7 漲跌價差, 8 成交筆數
                 for it in data:
                     dt = _roc_date_to_dt(it[0])
                     if dt < start_dt:
@@ -309,7 +308,7 @@ def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
                             "high": h,
                             "low": l,
                             "close": c,
-                            "adjclose": c,
+                            "adjclose": c,  # TWSE no adjusted close
                             "volume": int(vol) if vol is not None else None,
                         }
                     )
@@ -389,6 +388,59 @@ def classify_bb_state(z: Optional[float]) -> str:
     return "MID_BAND"
 
 
+def locate_forward_mdd_min_details(
+    out: pd.DataFrame,
+    price_series: pd.Series,
+    fwd_key: str,
+    fwd_days: int,
+) -> Tuple[Optional[pd.Timestamp], Optional[float], Optional[pd.Timestamp], Optional[float]]:
+    """
+    Find the entry date that yields min forward_mdd and the min future price/date within the next fwd_days.
+    Returns:
+      (min_entry_date, min_entry_price, min_future_date, min_future_price)
+    """
+    if fwd_key not in out.columns:
+        return None, None, None, None
+
+    s = out[fwd_key].dropna()
+    if s.empty:
+        return None, None, None, None
+
+    try:
+        min_entry_date = s.idxmin()
+    except Exception:
+        return None, None, None, None
+
+    min_entry_price = None
+    try:
+        if min_entry_date in price_series.index and pd.notna(price_series.loc[min_entry_date]):
+            min_entry_price = float(price_series.loc[min_entry_date])
+    except Exception:
+        pass
+
+    min_future_date = None
+    min_future_price = None
+
+    try:
+        idx_pos = out.index.get_loc(min_entry_date)
+        if isinstance(idx_pos, slice):
+            # should not happen after de-dup, but handle defensively
+            idx_pos = idx_pos.start
+        if isinstance(idx_pos, (int, np.integer)):
+            start_pos = int(idx_pos) + 1
+            end_pos = min(len(out), start_pos + int(fwd_days))
+            if start_pos < len(out) and start_pos < end_pos:
+                future_idx = out.index[start_pos:end_pos]
+                fut_prices = price_series.reindex(future_idx).dropna()
+                if not fut_prices.empty:
+                    min_future_date = fut_prices.idxmin()
+                    min_future_price = float(fut_prices.loc[min_future_date])
+    except Exception:
+        pass
+
+    return min_entry_date, min_entry_price, min_future_date, min_future_price
+
+
 def main() -> None:
     p = argparse.ArgumentParser(
         description="0050 BB(60,2) + forward_mdd(20D) calculator (standalone, audit-friendly)."
@@ -408,6 +460,12 @@ def main() -> None:
     p.add_argument("--use_log_price", action="store_true", help="Compute BB on log(price).")
     p.add_argument("--history_keep", type=int, default=400, help="Keep last N rows in history_lite.json")
     p.add_argument("--tz", default="Asia/Taipei", help="Timezone label for report metadata. Default: Asia/Taipei")
+    p.add_argument(
+        "--fwd_mdd_outlier_threshold",
+        type=float,
+        default=-0.40,
+        help="If forward_mdd min < threshold, add DQ flag for audit. Default: -0.40",
+    )
     args = p.parse_args()
 
     ensure_dir(args.cache_dir)
@@ -504,14 +562,19 @@ def main() -> None:
     dist_to_lower = (price_level - lower_level) / price_level
     dist_to_upper = (upper_level - price_level) / price_level
 
-    # FIX: _safe_pct must accept Series
     out["dist_to_lower_pct"] = _safe_pct(dist_to_lower)
     out["dist_to_upper_pct"] = _safe_pct(dist_to_upper)
 
     # forward_mdd on level price
     price_np = price_series.to_numpy(dtype=float)
     fwd_mdd = compute_forward_mdd_from_entry(price_np, fwd_days=args.fwd_days)
-    out[f"forward_mdd_{args.fwd_days}d"] = fwd_mdd
+    fwd_key = f"forward_mdd_{args.fwd_days}d"
+    out[fwd_key] = fwd_mdd
+
+    # Audit: locate min details (entry date & min future price/date)
+    min_entry_date, min_entry_price, min_future_date, min_future_price = locate_forward_mdd_min_details(
+        out=out, price_series=price_series, fwd_key=fwd_key, fwd_days=int(args.fwd_days)
+    )
 
     # Latest
     latest_idx = out.index.max()
@@ -520,10 +583,17 @@ def main() -> None:
     latest_pos = _to_float(latest_row.get("bb_pos"))
 
     # Distribution
-    fwd_vals = out[f"forward_mdd_{args.fwd_days}d"].dropna().to_numpy(dtype=float)
+    fwd_vals = out[fwd_key].dropna().to_numpy(dtype=float)
     fwd_n = int(fwd_vals.size)
     if fwd_n < 200:
         dq.add("LOW_SAMPLE_FORWARD_MDD", f"forward_mdd sample size is small (n={fwd_n}).")
+
+    fwd_min = float(np.min(fwd_vals)) if fwd_n > 0 else None
+    if (fwd_min is not None) and (fwd_min < float(args.fwd_mdd_outlier_threshold)):
+        dq.add(
+            "FWD_MDD_OUTLIER_MIN",
+            f"forward_mdd min={fwd_min:.4f} < threshold({args.fwd_mdd_outlier_threshold}); audit min_entry_date.",
+        )
 
     stats = {
         "meta": {
@@ -566,7 +636,12 @@ def main() -> None:
             "p25": _quantile(fwd_vals, 0.25),
             "p10": _quantile(fwd_vals, 0.10),
             "p05": _quantile(fwd_vals, 0.05),
-            "min": float(np.min(fwd_vals)) if fwd_n > 0 else None,
+            "min": fwd_min,
+            # audit details
+            "min_entry_date": min_entry_date.date().isoformat() if min_entry_date is not None else None,
+            "min_entry_price": min_entry_price,
+            "min_future_date": min_future_date.date().isoformat() if min_future_date is not None else None,
+            "min_future_price": min_future_price,
         },
     }
 
@@ -576,7 +651,6 @@ def main() -> None:
     # history_lite.json
     tail = out.tail(args.history_keep).copy()
     hist_items: List[Dict[str, Any]] = []
-    fwd_key = f"forward_mdd_{args.fwd_days}d"
     for idx, r in tail.iterrows():
         hist_items.append(
             {
