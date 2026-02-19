@@ -64,6 +64,31 @@ jobs:
           print("OK: min-audit fields present.")
           PY
 
+      # ✅ 新增：在 compute 後、build report 前抓籌碼 overlay
+      - name: Fetch 0050 chip overlay (TWSE T86 + TWT72U)
+        run: |
+          python scripts/fetch_tw0050_chip_overlay.py \
+            --cache_dir tw0050_bb_cache \
+            --stats_path tw0050_bb_cache/stats_latest.json \
+            --out_path tw0050_bb_cache/chip_overlay.json \
+            --window_n 5 \
+            --stock_no 0050
+
+      - name: Debug chip overlay
+        run: |
+          ls -al tw0050_bb_cache
+          echo "---- chip_overlay head ----"
+          python - << 'PY'
+          import json
+          p="tw0050_bb_cache/chip_overlay.json"
+          j=json.load(open(p,"r",encoding="utf-8"))
+          print("meta:", j.get("meta", {}))
+          print("dq.flags:", j.get("dq", {}).get("flags", []))
+          data=j.get("data", {})
+          print("t86_agg:", data.get("t86_agg", {}))
+          print("borrow_summary:", data.get("borrow_summary", {}))
+          PY
+
       - name: Build report
         run: |
           python scripts/build_tw0050_bb_report.py \
