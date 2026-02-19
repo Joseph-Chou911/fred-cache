@@ -720,3 +720,274 @@ def main() -> int:
     if split_heal_enabled and events:
         price_adj, applied = apply_split_events_to_earlier_history(price_raw, events)
         dq["split_events"] = applied
+        dq["notes"].append(f"Split heal applied: detected_events={len([e for e in applied if e.get('applied')])} source={split_event_source}")
+    else:
+        price_adj = _to_1d_series(price_raw, prices_df.index, "price_adj")
+        dq["split_events"] = []
+        if split_heal_enabled and not events:
+            dq["notes"].append("Split heal enabled but no events detected.")
+        else:
+            dq["notes"].append("Split heal disabled.")
+
+    # ----- DQ audit (gaps/jumps/factor changes) -----
+    gap_audit = audit_gaps_and_jumps(
+        prices_df.index,
+        price_raw=_to_1d_series(price_raw, prices_df.index, "price_raw"),
+        price_adj=_to_1d_series(price_adj, prices_df.index, "price_adj"),
+        gap_busdays_warn=int(args.gap_busdays_warn),
+        ret_jump_raw=float(args.ret_jump_raw),
+        ret_jump_adj=float(args.ret_jump_adj),
+        raw_jump_thr=float(args.raw_jump_thr),
+        adj_stable_thr=float(args.adj_stable_thr),
+        adj_factor_change_tol=float(args.adj_factor_change_tol),
+    )
+    dq["gap_audit"] = gap_audit
+    dq["gap_suspects"] = gap_audit.get("gap_suspects", [])
+    dq["jump_suspects"] = gap_audit.get("jump_suspects", [])
+    dq["factor_change_suspects"] = gap_audit.get("factor_change_suspects", [])
+
+    if gap_audit.get("weekday_heuristic", False):
+        dq["notes"].append("Gap audit uses weekday heuristic only (market holidays not modeled).")
+
+    if gap_audit.get("gap_count", 0) > 0:
+        dq["notes"].append(f"GAP_WARNING: missing business days detected (count={gap_audit['gap_count']})")
+    if gap_audit.get("jump_count", 0) > 0:
+        dq["notes"].append(f"JUMP_WARNING: return jumps detected (count={gap_audit['jump_count']})")
+    if gap_audit.get("factor_change_count", 0) > 0:
+        dq["notes"].append(f"FACTOR_WARNING: raw/adj factor changes detected (count={gap_audit['factor_change_count']})")
+
+    # ----- Persist prices.csv (expanded for audit clarity) -----
+    out_prices = pd.DataFrame(index=prices_df.index)
+    if "Close" in prices_df.columns:
+        out_prices["close"] = pd.to_numeric(prices_df["Close"], errors="coerce")
+    if "Adj Close" in prices_df.columns:
+        out_prices["adj_close"] = pd.to_numeric(prices_df["Adj Close"], errors="coerce")
+
+    out_prices["price_raw"] = _to_1d_series(price_raw, prices_df.index, "price_raw")
+    out_prices["price_adj"] = _to_1d_series(price_adj, prices_df.index, "price_adj")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out_prices["adj_factor"] = out_prices["price_adj"] / out_prices["price_raw"]
+
+    out_prices = out_prices.reset_index().rename(columns={"Date": "date"})
+    out_prices["date"] = pd.to_datetime(out_prices["date"]).dt.date.astype(str)
+    out_prices.to_csv(cache_dir / "prices.csv", index=False)
+
+    # ----- Age calculation (local) -----
+    last_dt = pd.to_datetime(prices_df.index[-1]).date()
+    today_local = local_today(args.tz)
+    dq["stale_days_local"] = int((today_local - last_dt).days)
+
+    # ----- Compute indicators on price_adj -----
+    price = _to_1d_series(price_adj, prices_df.index, "price")
+
+    if args.use_logclose:
+        base = np.log(price)
+        bb_base_label = "log(price_adj)"
+    else:
+        base = price.copy()
+        bb_base_label = "price_adj"
+
+    win = int(args.window)
+    horizon = int(args.horizon)
+
+    if len(base) < win + horizon + 5:
+        dq["insufficient_history"] = True
+        dq["notes"].append(
+            f"Insufficient length: need roughly window+horizon; len={len(base)}, window={win}, horizon={horizon}"
+        )
+
+    base = _to_1d_series(base, prices_df.index, "bb_base")
+
+    sma = base.rolling(window=win, min_periods=win).mean()
+    std = base.rolling(window=win, min_periods=win).std(ddof=0)
+
+    upper = sma + float(args.k) * std
+    lower = sma - float(args.k) * std
+
+    z = (base - sma) / std
+    band_w = upper - lower
+    pos = (base - lower) / band_w
+
+    if args.use_logclose:
+        lower_px = np.exp(lower)
+        upper_px = np.exp(upper)
+        dist_to_lower = (price - lower_px) / price
+        dist_to_upper = (upper_px - price) / price
+    else:
+        dist_to_lower = (price - lower) / price
+        dist_to_upper = (upper - price) / price
+
+    price_np = np.asarray(price.to_numpy()).astype(float).reshape(-1)
+    fwd_mdd = calc_forward_mdd(price_np, horizon)
+
+    # Coerce all to 1D series
+    sma = _to_1d_series(sma, prices_df.index, "sma")
+    std = _to_1d_series(std, prices_df.index, "std")
+    upper = _to_1d_series(upper, prices_df.index, "upper")
+    lower = _to_1d_series(lower, prices_df.index, "lower")
+    z = _to_1d_series(z, prices_df.index, "z")
+    pos = _to_1d_series(pos, prices_df.index, "pos")
+    dist_to_lower = _to_1d_series(dist_to_lower, prices_df.index, "dist_to_lower")
+    dist_to_upper = _to_1d_series(dist_to_upper, prices_df.index, "dist_to_upper")
+    fwd_mdd_s = _to_1d_series(fwd_mdd, prices_df.index, "forward_mdd")
+
+    # ----- Build lite history -----
+    out_df = pd.DataFrame(
+        {
+            "price": price,
+            "bb_base": base,
+            "sma": sma,
+            "std": std,
+            "upper": upper,
+            "lower": lower,
+            "z": z,
+            "pos": pos,
+            "dist_to_lower": dist_to_lower,
+            "dist_to_upper": dist_to_upper,
+            "forward_mdd": fwd_mdd_s,
+        },
+        index=prices_df.index,
+    )
+
+    lite = out_df.tail(int(args.history_limit)).copy()
+    lite = lite.reset_index().rename(columns={"Date": "date"})
+    lite["date"] = pd.to_datetime(lite["date"]).dt.date.astype(str)
+
+    history_lite = []
+    for _, r in lite.iterrows():
+        history_lite.append(
+            {
+                "date": r["date"],
+                "price": None if not np.isfinite(r["price"]) else float(r["price"]),
+                "sma": None if not np.isfinite(r["sma"]) else float(r["sma"]),
+                "std": None if not np.isfinite(r["std"]) else float(r["std"]),
+                "upper": None if not np.isfinite(r["upper"]) else float(r["upper"]),
+                "lower": None if not np.isfinite(r["lower"]) else float(r["lower"]),
+                "z": None if not np.isfinite(r["z"]) else float(r["z"]),
+                "pos": None if not np.isfinite(r["pos"]) else float(r["pos"]),
+                "dist_to_lower": None if not np.isfinite(r["dist_to_lower"]) else float(r["dist_to_lower"]),
+                "dist_to_upper": None if not np.isfinite(r["dist_to_upper"]) else float(r["dist_to_upper"]),
+                "forward_mdd": None if not np.isfinite(r["forward_mdd"]) else float(r["forward_mdd"]),
+            }
+        )
+    write_json(cache_dir / "history_lite.json", history_lite)
+
+    # ----- Latest snapshot -----
+    last_row = out_df.iloc[-1]
+    z_last = None if not np.isfinite(last_row["z"]) else float(last_row["z"])
+    state, state_reason = bb_state_from_z(z_last)
+
+    # ----- forward_mdd stats (direction-complete) -----
+    mdd_all = out_df["forward_mdd"].to_numpy()
+    z_arr = out_df["z"].to_numpy()
+
+    stats_all = compute_mdd_stats(mdd_all)
+
+    z_cheap = float(args.z_threshold)
+    mask_cheap = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr <= z_cheap)
+    stats_cheap = compute_mdd_stats(out_df.loc[mask_cheap, "forward_mdd"].to_numpy())
+    stats_cheap["condition"] = f"z <= {z_cheap}"
+    stats_cheap["z_threshold"] = z_cheap
+
+    z_hot = float(args.z_hot)
+    mask_hot = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr >= z_hot)
+    stats_hot = compute_mdd_stats(out_df.loc[mask_hot, "forward_mdd"].to_numpy())
+    stats_hot["condition"] = f"z >= {z_hot}"
+    stats_hot["z_threshold"] = z_hot
+
+    z_hot2 = float(args.z_hot2)
+    mask_hot2 = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr >= z_hot2)
+    stats_hot2 = compute_mdd_stats(out_df.loc[mask_hot2, "forward_mdd"].to_numpy())
+    stats_hot2["condition"] = f"z >= {z_hot2}"
+    stats_hot2["z_threshold"] = z_hot2
+
+    stats_latest = {
+        "meta": {
+            "run_ts_utc": utc_now_iso(),
+            "module": "tw0050_bb",
+            "symbol": args.symbol,
+            "data_source": data_source,
+            "price_basis": price_basis,
+            "bb_base": bb_base_label,
+            "window": int(args.window),
+            "k": float(args.k),
+            "horizon": int(args.horizon),
+            "script_fingerprint": script_fp,
+            "timezone_local": args.tz,
+            "as_of_date": str(last_dt),
+            "split_factors": str(args.split_factors),
+            "split_tol": float(args.split_tol),
+            "z_threshold_cheap": float(args.z_threshold),
+            "z_threshold_hot": float(args.z_hot),
+            "z_threshold_hot2": float(args.z_hot2),
+            # audit params
+            "gap_busdays_warn": int(args.gap_busdays_warn),
+            "ret_jump_raw": float(args.ret_jump_raw),
+            "ret_jump_adj": float(args.ret_jump_adj),
+            "raw_jump_thr": float(args.raw_jump_thr),
+            "adj_stable_thr": float(args.adj_stable_thr),
+            "adj_factor_change_tol": float(args.adj_factor_change_tol),
+        },
+        "dq": dq,
+        "latest": {
+            "date": str(last_dt),
+            "price": None if not np.isfinite(last_row["price"]) else float(last_row["price"]),
+            "sma": None if not np.isfinite(last_row["sma"]) else float(last_row["sma"]),
+            "std": None if not np.isfinite(last_row["std"]) else float(last_row["std"]),
+            "upper": None if not np.isfinite(last_row["upper"]) else float(last_row["upper"]),
+            "lower": None if not np.isfinite(last_row["lower"]) else float(last_row["lower"]),
+            "z": z_last,
+            "pos": None if not np.isfinite(last_row["pos"]) else float(last_row["pos"]),
+            "dist_to_lower_pct": None if not np.isfinite(last_row["dist_to_lower"]) else float(last_row["dist_to_lower"] * 100.0),
+            "dist_to_upper_pct": None if not np.isfinite(last_row["dist_to_upper"]) else float(last_row["dist_to_upper"] * 100.0),
+            "state": state,
+            "state_reason": state_reason,
+        },
+        "forward_mdd": {
+            "definition": "min(0, min_{i=1..H} (price[t+i]/price[t]-1)), H=horizon trading days",
+            "all_days": stats_all,
+            "conditional": {
+                "cheap_side": stats_cheap,
+                "hot_side": stats_hot,
+                "hot_side_extreme": stats_hot2,
+            },
+        },
+        "repro": {
+            "command": " ".join(
+                [
+                    "python",
+                    str(Path(__file__)),
+                    f"--symbol {args.symbol}",
+                    f"--start {args.start}",
+                    f"--end {args.end}" if args.end else "",
+                    ("--use_close" if args.use_close else "--use_adj_close"),
+                    f'--force_splits "{args.force_splits}"' if args.force_splits else ("--prefer_yf_splits" if args.prefer_yf_splits else ""),
+                    f"--window {int(args.window)}",
+                    f"--k {float(args.k)}",
+                    f"--horizon {int(args.horizon)}",
+                    f"--cache_dir {str(Path(args.cache_dir))}",
+                    "--use_logclose" if args.use_logclose else "",
+                    "--disable_split_heal" if args.disable_split_heal else "",
+                    "--split_heal_on_adjclose" if args.split_heal_on_adjclose else "",
+                    f"--split_factors {args.split_factors}",
+                    f"--split_tol {float(args.split_tol)}",
+                    f"--z_threshold {float(args.z_threshold)}",
+                    f"--z_hot {float(args.z_hot)}",
+                    f"--z_hot2 {float(args.z_hot2)}",
+                    f"--gap_busdays_warn {int(args.gap_busdays_warn)}",
+                    f"--ret_jump_raw {float(args.ret_jump_raw)}",
+                    f"--ret_jump_adj {float(args.ret_jump_adj)}",
+                    f"--raw_jump_thr {float(args.raw_jump_thr)}",
+                    f"--adj_stable_thr {float(args.adj_stable_thr)}",
+                    f"--adj_factor_change_tol {float(args.adj_factor_change_tol)}",
+                ]
+            ).strip()
+        },
+    }
+
+    write_json(cache_dir / "stats_latest.json", stats_latest)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
