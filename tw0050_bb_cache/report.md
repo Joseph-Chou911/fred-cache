@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T03:31:51Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v2`
+- report_generated_at_utc: `2026-02-19T04:24:11Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v3`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -13,7 +13,8 @@
 
 ## 快速摘要（非預測，僅狀態）
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0136; dist_to_lower=38.12%; dist_to_upper=0.37%
-- forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528)
+- forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:FWD_MDD_OUTLIER_MIN_RAW]
+- margin(5D,thr=100.0億): TOTAL -197.7 億 => **DELEVERAGING**; TWSE -160.0 / TPEX -37.7; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
 
 ## Latest Snapshot
 
@@ -52,6 +53,26 @@
 | min_future_date | 2020-03-19 |
 | min_future_price | 14.4528 |
 
+## Margin Overlay（融資）
+
+- overlay_generated_at_utc: `2026-02-18T15:13:18Z`
+- data_date: `2026-02-11`
+- params: window_n=5, threshold_yi=100.0
+- date_alignment: margin_latest_date=`2026-02-11` vs price_last_date=`2026-02-11` => **ALIGNED**
+
+| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |
+|---|---:|---:|---:|---:|---:|---:|
+| TWSE | 2026-02-11 | 3,680.5 | -45.4 | -160.0 | DELEVERAGING | 5 |
+| TPEX | 2026-02-11 | 1,313.3 | -9.0 | -37.7 | NEUTRAL | 5 |
+| TOTAL | 2026-02-11 | 4,993.8 | N/A | -197.7 | DELEVERAGING | N/A |
+
+### Margin Sources
+
+- TWSE source: `HiStock`
+- TWSE url: `https://histock.tw/stock/three.aspx?m=mg`
+- TPEX source: `HiStock`
+- TPEX url: `https://histock.tw/stock/three.aspx?m=mg&no=TWOI`
+
 ## Recent Raw Prices (tail 15)
 
 | date | close | adjclose | volume |
@@ -81,3 +102,4 @@
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。
+- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；若日期不對齊應降低解讀權重。

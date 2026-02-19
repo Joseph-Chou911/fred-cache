@@ -14,59 +14,102 @@
   "forward_mdd": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean",
-    "min": -0.25570038572447173,
+    "min": -0.2557001652754234,
     "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.41792106628418,
+    "min_entry_price": 19.417919158935547,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452751159667969,
+    "min_future_price": 14.452754020690918,
     "n": 4151,
-    "p05": -0.09279044961851252,
-    "p10": -0.0686695003632567,
-    "p25": -0.04022449989133653,
-    "p50": -0.018276354577913656
+    "p05": -0.0927904277879863,
+    "p10": -0.06866929002354538,
+    "p25": -0.04022432798932363,
+    "p50": -0.018276234498060706
   },
   "forward_mdd_clean": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean",
-    "min": -0.25570038572447173,
+    "min": -0.2557001652754234,
     "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.41792106628418,
+    "min_entry_price": 19.417919158935547,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452751159667969,
+    "min_future_price": 14.452754020690918,
     "n": 4151,
-    "p05": -0.09279044961851252,
-    "p10": -0.0686695003632567,
-    "p25": -0.04022449989133653,
-    "p50": -0.018276354577913656
+    "p05": -0.0927904277879863,
+    "p10": -0.06866929002354538,
+    "p25": -0.04022432798932363,
+    "p50": -0.018276234498060706
   },
   "forward_mdd_raw": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_raw",
-    "min": -0.7627550057038054,
+    "min": -0.7627550298529826,
     "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.476131439208984,
+    "min_entry_price": 37.47613525390625,
     "min_future_date": "2014-02-05",
     "min_future_price": 8.891024589538574,
     "n": 4171,
-    "p05": -0.09523864744573635,
-    "p10": -0.0701612430696763,
-    "p25": -0.04078603754630439,
-    "p50": -0.018467466274533106
+    "p05": -0.09523860042851762,
+    "p10": -0.07016153256341551,
+    "p25": -0.0407859599670472,
+    "p50": -0.018467351052423808
   },
   "latest": {
     "adjclose": 77.19999694824219,
-    "bb_lower": 55.893853230104156,
+    "bb_lower": 55.89385323010196,
     "bb_ma": 66.40432726542154,
-    "bb_pos": 1.0135672114571113,
-    "bb_sd": 5.255237017658695,
-    "bb_upper": 76.91480130073893,
-    "bb_z": 2.0542688458284446,
+    "bb_pos": 1.0135672114570045,
+    "bb_sd": 5.25523701765979,
+    "bb_upper": 76.91480130074112,
+    "bb_z": 2.0542688458280165,
     "close": 77.19999694824219,
     "date": "2026-02-11",
-    "dist_to_lower_pct": 38.118938822172034,
-    "dist_to_upper_pct": 0.3707942329437053,
+    "dist_to_lower_pct": 38.11893882217745,
+    "dist_to_upper_pct": 0.3707942329408631,
     "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
+  },
+  "margin_overlay": {
+    "data_date": "2026-02-11",
+    "generated_at_utc": "2026-02-18T15:13:18Z",
+    "params": {
+      "state_total_preferred": true,
+      "threshold_yi": 100.0,
+      "window_n": 5
+    },
+    "path": "/home/runner/work/fred-cache/fred-cache/taiwan_margin_cache/latest.json",
+    "schema": "margin_overlay_v1",
+    "source": {
+      "tpex": "HiStock",
+      "tpex_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
+      "twse": "HiStock",
+      "twse_url": "https://histock.tw/stock/three.aspx?m=mg"
+    },
+    "states": {
+      "total_state_nd": "DELEVERAGING",
+      "tpex_state_nd": "NEUTRAL",
+      "twse_state_nd": "DELEVERAGING"
+    },
+    "total": {
+      "chg_nd_yi": -197.7,
+      "latest_balance_yi": 4993.8,
+      "state_nd": "DELEVERAGING"
+    },
+    "tpex": {
+      "chg_nd_yi": -37.7,
+      "label": "TPEX",
+      "latest_balance_yi": 1313.3,
+      "latest_chg_yi": -9.0,
+      "latest_date": "2026-02-11",
+      "rows_used": 5
+    },
+    "twse": {
+      "chg_nd_yi": -160.0,
+      "label": "TWSE",
+      "latest_balance_yi": 3680.5,
+      "latest_chg_yi": -45.4,
+      "latest_date": "2026-02-11",
+      "rows_used": 5
+    }
   },
   "meta": {
     "bb_k": 2.0,
@@ -81,13 +124,20 @@
     "fetch_start_effective": "2003-01-01",
     "fwd_days": 20,
     "last_date": "2026-02-11",
+    "margin_overlay": {
+      "available": true,
+      "enabled": true,
+      "latest_path": "/home/runner/work/fred-cache/fred-cache/taiwan_margin_cache/latest.json",
+      "threshold_yi": 100.0,
+      "window_n": 5
+    },
     "module": "tw0050_bb",
     "price_calc": "adjclose",
     "price_col_requested": "adjclose",
     "price_col_used": "adjclose",
     "rows": 4192,
-    "run_ts_utc": "2026-02-19T03:31:51Z",
-    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v4",
+    "run_ts_utc": "2026-02-19T04:24:11Z",
+    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v5",
     "start": "2003-01-01",
     "ticker": "0050.TW",
     "tz": "Asia/Taipei"
