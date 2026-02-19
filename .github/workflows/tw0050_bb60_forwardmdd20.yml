@@ -3,7 +3,6 @@ name: tw0050-bb60-forwardmdd20
 on:
   workflow_dispatch:
   schedule:
-    # 週一到週五 06:35 UTC（= Asia/Taipei 14:35，收盤後更新）
     - cron: "35 6 * * 1-5"
 
 permissions:
@@ -50,11 +49,33 @@ jobs:
             --fwd_days 20 \
             --price_col adjclose
 
+      - name: Assert stats has min-audit fields
+        run: |
+          python - << 'PY'
+          import json
+          p="tw0050_bb_cache/stats_latest.json"
+          j=json.load(open(p,"r",encoding="utf-8"))
+          f=j.get("forward_mdd",{})
+          need=["min_entry_date","min_entry_price","min_future_date","min_future_price"]
+          miss=[k for k in need if k not in f]
+          print("forward_mdd keys:", sorted(list(f.keys())))
+          if miss:
+            raise SystemExit(f"ERROR: stats_latest.json missing min-audit fields: {miss}")
+          print("OK: min-audit fields present.")
+          PY
+
       - name: Build report
         run: |
           python scripts/build_tw0050_bb_report.py \
             --cache_dir tw0050_bb_cache \
-            --tail_days 15
+            --tail_days 15 \
+            --out tw0050_bb_cache/report.md
+
+      - name: Debug artifacts
+        run: |
+          ls -al tw0050_bb_cache
+          echo "---- report head ----"
+          head -n 30 tw0050_bb_cache/report.md || true
 
       - name: Commit artifacts (if changed)
         run: |
@@ -63,7 +84,7 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add tw0050_bb_cache/data.csv tw0050_bb_cache/stats_latest.json tw0050_bb_cache/history_lite.json tw0050_bb_cache/report.md
+            git add -A tw0050_bb_cache
             git commit -m "Update 0050 BB(60,2) + forward_mdd(20D)"
             git push
           else
