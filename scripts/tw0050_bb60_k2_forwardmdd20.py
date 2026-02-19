@@ -15,7 +15,9 @@ Resilience:
   - fallback to Ticker().history(period="max")
   - fallback to TWSE STOCK_DAY endpoint when Yahoo returns empty (common on CI)
 
-Default uses Adj Close for computations when available; TWSE fallback has no adjclose => adjclose=close (DQ flagged).
+Important fixes (CI-safe):
+  - Force all DatetimeIndex to tz-naive to avoid tz-aware vs tz-naive comparison/merge errors.
+  - _safe_pct supports scalar/Series/ndarray to avoid "float(Series)" TypeError.
 """
 
 from __future__ import annotations
@@ -68,10 +70,22 @@ def _to_float(x: Any) -> Optional[float]:
         return None
 
 
-def _safe_pct(x: Optional[float]) -> Optional[float]:
+def _safe_pct(x: Any) -> Any:
+    """
+    Accept scalar OR vector-like (pd.Series / np.ndarray) and multiply by 100.
+    This is critical because dist_to_lower/dist_to_upper are Series.
+    """
     if x is None:
         return None
-    return float(x) * 100.0
+    if isinstance(x, pd.Series):
+        return x * 100.0
+    if isinstance(x, np.ndarray):
+        return x * 100.0
+    # scalar
+    try:
+        return float(x) * 100.0
+    except Exception:
+        return None
 
 
 def _quantile(values: np.ndarray, q: float) -> Optional[float]:
@@ -80,12 +94,30 @@ def _quantile(values: np.ndarray, q: float) -> Optional[float]:
     return float(np.quantile(values, q))
 
 
+def _ensure_tz_naive_index(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Make index tz-naive (strip timezone) to avoid tz-aware vs tz-naive comparison errors.
+    """
+    if df is None or df.empty:
+        return df
+    idx = df.index
+    try:
+        # DatetimeIndex may have tz
+        if isinstance(idx, pd.DatetimeIndex) and idx.tz is not None:
+            df = df.copy()
+            df.index = idx.tz_localize(None)
+    except Exception:
+        # If anything weird, leave as-is
+        pass
+    return df
+
+
 def normalize_yf_df(df: pd.DataFrame) -> pd.DataFrame:
     """
     yfinance may return:
       - normal columns: ["Open","High","Low","Close","Adj Close","Volume"]
       - or MultiIndex columns for some versions/tickers
-    Standardize to columns: open/high/low/close/adjclose/volume with DatetimeIndex.
+    Standardize to columns: open/high/low/close/adjclose/volume with tz-naive DatetimeIndex.
     """
     if df is None or df.empty:
         return pd.DataFrame()
@@ -112,7 +144,9 @@ def normalize_yf_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.rename(columns=colmap).copy()
     keep = [c for c in ["open", "high", "low", "close", "adjclose", "volume"] if c in out.columns]
     out = out[keep].copy()
+
     out.index = pd.to_datetime(out.index)
+    out = _ensure_tz_naive_index(out)
     out = out.sort_index()
     return out
 
@@ -126,6 +160,8 @@ def load_existing_csv(path: str) -> pd.DataFrame:
             return pd.DataFrame()
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date").sort_index()
+        # csv is tz-naive by nature; still enforce
+        df = _ensure_tz_naive_index(df)
         return df
     except Exception:
         return pd.DataFrame()
@@ -133,12 +169,12 @@ def load_existing_csv(path: str) -> pd.DataFrame:
 
 def save_csv_with_date_index(df: pd.DataFrame, path: str) -> None:
     out = df.copy().sort_index()
+    out = _ensure_tz_naive_index(out)
     out.index.name = "date"
     out.reset_index().to_csv(path, index=False)
 
 
 def _sleep_backoff(attempt: int, base: float = 1.6) -> None:
-    # 1.6, 2.56, 4.096... capped at 10s
     t = min(10.0, base ** attempt)
     time.sleep(t)
 
@@ -161,8 +197,10 @@ class DQ:
 def fetch_from_yfinance(ticker: str, start: str, tries: int = 4) -> pd.DataFrame:
     """
     Try multiple ways to fetch Yahoo data to reduce empty dataframe failures in CI.
+    Returns tz-naive index.
     """
     last_err: Optional[Exception] = None
+    start_dt = pd.to_datetime(start)
 
     # 1) yf.download(start=...)
     for i in range(tries):
@@ -175,7 +213,7 @@ def fetch_from_yfinance(ticker: str, start: str, tries: int = 4) -> pd.DataFrame
                 interval="1d",
                 actions=False,
                 group_by="column",
-                threads=False,  # tends to be more stable in CI
+                threads=False,
             )
             df = normalize_yf_df(raw)
             if not df.empty:
@@ -184,13 +222,13 @@ def fetch_from_yfinance(ticker: str, start: str, tries: int = 4) -> pd.DataFrame
             last_err = e
         _sleep_backoff(i)
 
-    # 2) yf.Ticker().history(period="max")
+    # 2) yf.Ticker().history(period="max") then slice
     for i in range(tries):
         try:
             raw = yf.Ticker(ticker).history(period="max", interval="1d", auto_adjust=False, actions=False)
-            df = normalize_yf_df(raw)
+            df = normalize_yf_df(raw)  # includes tz-naive enforcement
             if not df.empty:
-                df = df[df.index >= pd.to_datetime(start)]
+                df = df[df.index >= start_dt]
                 if not df.empty:
                     return df
         except Exception as e:
@@ -203,7 +241,6 @@ def fetch_from_yfinance(ticker: str, start: str, tries: int = 4) -> pd.DataFrame
 
 
 def _roc_date_to_dt(s: str) -> pd.Timestamp:
-    # TWSE ROC date format: "112/02/01"
     y, m, d = s.split("/")
     return pd.Timestamp(year=int(y) + 1911, month=int(m), day=int(d))
 
@@ -221,11 +258,11 @@ def _to_num(s: str) -> Optional[float]:
 
 def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
     """
-    TWSE open data endpoint (monthly):
+    TWSE open data monthly endpoint:
       https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=YYYYMMDD&stockNo=0050
 
-    Returns columns: open/high/low/close/adjclose/volume
-    Note: TWSE has no adjusted close => adjclose=close (caller should flag DQ).
+    Returns columns: open/high/low/close/adjclose/volume (adjclose=close).
+    tz-naive index.
     """
     start_dt = pd.to_datetime(start).normalize()
     today = pd.Timestamp.today().normalize()
@@ -243,7 +280,6 @@ def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
         yyyymmdd = f"{cur.year}{cur.month:02d}01"
         url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={yyyymmdd}&stockNo={stock_no}"
 
-        got = False
         for i in range(tries):
             try:
                 r = requests.get(url, headers=headers, timeout=20)
@@ -252,11 +288,9 @@ def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
                     continue
                 js = r.json()
                 if js.get("stat") != "OK":
-                    got = True  # not retryable
-                    break
+                    break  # not retryable
 
                 data = js.get("data", [])
-                # 0 日期, 1 成交股數, 2 成交金額, 3 開盤價, 4 最高價, 5 最低價, 6 收盤價, 7 漲跌價差, 8 成交筆數
                 for it in data:
                     dt = _roc_date_to_dt(it[0])
                     if dt < start_dt:
@@ -275,19 +309,15 @@ def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
                             "high": h,
                             "low": l,
                             "close": c,
-                            "adjclose": c,  # TWSE no adjusted close
+                            "adjclose": c,
                             "volume": int(vol) if vol is not None else None,
                         }
                     )
-                got = True
                 break
             except Exception:
                 _sleep_backoff(i)
 
-        # be nice to TWSE
         time.sleep(0.25)
-
-        # next month
         cur = (cur + pd.offsets.MonthBegin(1)).normalize()
 
     if not rows:
@@ -295,6 +325,8 @@ def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
 
     df = pd.DataFrame(rows).drop_duplicates(subset=["date"]).sort_values("date")
     df = df.set_index("date")
+    df.index = pd.to_datetime(df.index)
+    df = _ensure_tz_naive_index(df)
     return df
 
 
@@ -307,7 +339,6 @@ def compute_bb(price: pd.Series, window: int, k: float) -> pd.DataFrame:
     sd = price.rolling(window=window, min_periods=window).std(ddof=0)
     upper = ma + k * sd
     lower = ma - k * sd
-
     z = (price - ma) / sd
     band_pos = (price - lower) / (upper - lower)
 
@@ -326,7 +357,6 @@ def compute_bb(price: pd.Series, window: int, k: float) -> pd.DataFrame:
 def compute_forward_mdd_from_entry(price: np.ndarray, fwd_days: int) -> np.ndarray:
     """
     forward_mdd[t] = min_{k=1..fwd_days} (price[t+k]/price[t] - 1)
-    'Worst drawdown from entry price within next fwd_days'.
     """
     n = price.shape[0]
     out = np.full(n, np.nan, dtype=float)
@@ -388,7 +418,7 @@ def main() -> None:
     stats_path = os.path.join(args.cache_dir, "stats_latest.json")
     hist_path = os.path.join(args.cache_dir, "history_lite.json")
 
-    # Load existing to allow incremental merge
+    # Load existing for incremental merge
     existing = load_existing_csv(data_csv_path)
 
     # Decide fetch range
@@ -397,11 +427,11 @@ def main() -> None:
         last_dt = existing.index.max()
         fetch_start = (last_dt - pd.Timedelta(days=14)).date().isoformat()
 
-    # --- Fetch with resilience ---
+    # Fetch
     df_new = fetch_from_yfinance(args.ticker, fetch_start, tries=4)
 
     if df_new.empty:
-        # Yahoo blocked / transient. Try TWSE fallback.
+        # Yahoo blocked/transient => TWSE fallback
         stock_no = args.ticker.split(".")[0]
         df_twse = fetch_from_twse(stock_no=stock_no, start=fetch_start, tries=3)
         if not df_twse.empty:
@@ -414,14 +444,18 @@ def main() -> None:
                 "Likely network / endpoint blocking in CI."
             )
 
-    # Merge existing + new
+    df_new = _ensure_tz_naive_index(df_new)
+
+    # Merge
     if not existing.empty:
         merged = pd.concat([existing, df_new], axis=0)
         merged = merged[~merged.index.duplicated(keep="last")].sort_index()
     else:
         merged = df_new.sort_index()
 
-    # Basic DQ
+    merged = _ensure_tz_naive_index(merged)
+
+    # DQ checks
     if "adjclose" not in merged.columns:
         dq.add("MISSING_ADJCLOSE", "Data did not provide Adj Close; set adjclose=close.")
         merged["adjclose"] = merged["close"]
@@ -432,14 +466,14 @@ def main() -> None:
             f"Rows={merged.shape[0]} < bb_window({args.bb_window}) + fwd_days({args.fwd_days}) + buffer.",
         )
 
-    # Persist merged data
+    # Persist data
     save_csv_with_date_index(merged, data_csv_path)
 
-    # Select price series
+    # Price series
     price_used_col = args.price_col
     price_series = merged[price_used_col].copy()
 
-    # Check non-positive values for log
+    # Calc price series for BB
     if args.use_log_price:
         if (price_series <= 0).any():
             dq.add("NON_POSITIVE_PRICE", "Non-positive prices exist; log(price) invalid for those rows.")
@@ -452,8 +486,9 @@ def main() -> None:
     # BB
     bb = compute_bb(price_calc, window=args.bb_window, k=args.bb_k)
     out = pd.concat([merged, bb], axis=1)
+    out = _ensure_tz_naive_index(out)
 
-    # Distances (level price for intuition)
+    # Distances (level price)
     upper = out["bb_upper"]
     lower = out["bb_lower"]
 
@@ -469,21 +504,22 @@ def main() -> None:
     dist_to_lower = (price_level - lower_level) / price_level
     dist_to_upper = (upper_level - price_level) / price_level
 
+    # FIX: _safe_pct must accept Series
     out["dist_to_lower_pct"] = _safe_pct(dist_to_lower)
     out["dist_to_upper_pct"] = _safe_pct(dist_to_upper)
 
-    # forward_mdd on LEVEL price (entry drawdown)
+    # forward_mdd on level price
     price_np = price_series.to_numpy(dtype=float)
     fwd_mdd = compute_forward_mdd_from_entry(price_np, fwd_days=args.fwd_days)
     out[f"forward_mdd_{args.fwd_days}d"] = fwd_mdd
 
-    # Latest snapshot
+    # Latest
     latest_idx = out.index.max()
     latest_row = out.loc[latest_idx]
     latest_z = _to_float(latest_row.get("bb_z"))
     latest_pos = _to_float(latest_row.get("bb_pos"))
 
-    # Distribution stats
+    # Distribution
     fwd_vals = out[f"forward_mdd_{args.fwd_days}d"].dropna().to_numpy(dtype=float)
     fwd_n = int(fwd_vals.size)
     if fwd_n < 200:
