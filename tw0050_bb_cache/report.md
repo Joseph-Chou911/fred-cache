@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T07:54:21Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v5`
+- report_generated_at_utc: `2026-02-19T08:13:54Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v6`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -10,6 +10,7 @@
 - bb_window,k: `60`, `2.0`
 - forward_window_days: `20`
 - price_calc: `adjclose`
+- chip_overlay_path: `tw0050_bb_cache/chip_overlay.json`
 
 ## 快速摘要（非預測，僅狀態）
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0136; dist_to_lower=38.12%; dist_to_upper=0.37%
@@ -18,6 +19,7 @@
 - vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
 - margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
+- chip_overlay(T86+TWT72U,5D): total3_5D=-8,882,867; foreign=-14,398,187; trust=17,326,000; dealer=-11,810,680; borrow_shares=135,405,000 (Δ1D=-9,446,000); borrow_mv(億)=104.5 (Δ1D=-4.8); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
 
 ## Latest Snapshot
 
@@ -104,6 +106,50 @@
 | min_future_date | 2020-03-19 |
 | min_future_price | 14.4528 |
 
+## Chip Overlay（籌碼：TWSE T86 + TWT72U）
+
+- overlay_generated_at_utc: `2026-02-19T08:13:54.501028Z`
+- stock_no: `0050`
+- overlay_window_n: `5` (expect=5)
+- date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
+
+### Borrow Summary（借券：TWT72U）
+
+| item | value |
+|---|---:|
+| asof_date | 20260211 |
+| borrow_shares | 135,405,000 |
+| borrow_shares_chg_1d | -9,446,000 |
+| borrow_mv_ntd(億) | 104.5 |
+| borrow_mv_ntd_chg_1d(億) | -4.8 |
+
+### T86 Aggregate（法人：5D sum）
+
+| item | value |
+|---|---:|
+| days_used | 20260205, 20260206, 20260209, 20260210, 20260211 |
+| foreign_net_shares_sum | -14,398,187 |
+| trust_net_shares_sum | 17,326,000 |
+| dealer_net_shares_sum | -11,810,680 |
+| total3_net_shares_sum | -8,882,867 |
+
+### ETF Units（受益權單位）
+
+| item | value |
+|---|---:|
+| units_outstanding | N/A |
+| units_chg_1d | N/A |
+| dq | ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED |
+
+### Chip Overlay Sources
+
+- T86 template: `https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999`
+- TWT72U template: `https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB`
+
+### Chip Overlay DQ
+
+- ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED
+
 ## Margin Overlay（融資）
 
 - overlay_generated_at_utc: `2026-02-18T15:13:18Z`
@@ -151,8 +197,12 @@
 - FWD_MDD_OUTLIER_MIN_RAW: forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
 - RAW_OUTLIER_EXCLUDED: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
 
+### Chip Overlay DQ (extra)
+- CHIP_OVERLAY:ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED
+
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。
 - Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；若資料不足會以 DQ 明示。
 - 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；若日期不對齊應降低解讀權重。
+- Chip overlay（T86/TWT72U）是籌碼/借券的描述資訊；ETF 申贖與避險行為可能影響解讀，建議視為輔助註記而非單一交易信號。
