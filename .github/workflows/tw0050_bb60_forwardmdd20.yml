@@ -32,7 +32,7 @@ jobs:
 
       - name: Run compute
         run: |
-          python tw0050_bb60_k2_forwardmdd20.py \
+          python scripts/tw0050_bb60_k2_forwardmdd20.py \
             --ticker 0050.TW \
             --cache_dir tw0050_bb_cache \
             --bb_window 60 \
@@ -42,7 +42,7 @@ jobs:
 
       - name: Build report
         run: |
-          python build_tw0050_bb_report.py \
+          python scripts/build_tw0050_bb_report.py \
             --cache_dir tw0050_bb_cache \
             --tail_days 15
 
