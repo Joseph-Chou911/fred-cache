@@ -22,57 +22,57 @@
   "forward_mdd": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean",
-    "min": -0.25570009216566325,
+    "min": -0.2557005319438912,
     "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.417917251586914,
+    "min_entry_price": 19.417924880981445,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452754020690918,
+    "min_future_price": 14.452751159667969,
     "n": 4151,
-    "p05": -0.092790175560931,
-    "p10": -0.068669493141296,
-    "p25": -0.040224165405643664,
-    "p50": -0.018276295655726416
+    "p05": -0.09279041989365244,
+    "p10": -0.06866929724548554,
+    "p25": -0.04022430617544398,
+    "p50": -0.018276294537990845
   },
   "forward_mdd_clean": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean",
-    "min": -0.25570009216566325,
+    "min": -0.2557005319438912,
     "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.417917251586914,
+    "min_entry_price": 19.417924880981445,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452754020690918,
+    "min_future_price": 14.452751159667969,
     "n": 4151,
-    "p05": -0.092790175560931,
-    "p10": -0.068669493141296,
-    "p25": -0.040224165405643664,
-    "p50": -0.018276295655726416
+    "p05": -0.09279041989365244,
+    "p10": -0.06866929724548554,
+    "p25": -0.04022430617544398,
+    "p50": -0.018276294537990845
   },
   "forward_mdd_raw": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_raw",
-    "min": -0.7627551290463314,
+    "min": -0.7627551518971416,
     "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.47614288330078,
+    "min_entry_price": 37.47615051269531,
     "min_future_date": "2014-02-05",
-    "min_future_price": 8.891022682189941,
+    "min_future_price": 8.891023635864258,
     "n": 4171,
-    "p05": -0.0952384635468787,
-    "p10": -0.07016142682209014,
-    "p25": -0.0407859265428549,
-    "p50": -0.01846723791959126
+    "p05": -0.09523870999666678,
+    "p10": -0.0701612430696763,
+    "p25": -0.04078597522602323,
+    "p50": -0.01846734896316038
   },
   "latest": {
     "adjclose": 77.19999694824219,
-    "bb_lower": 55.89385323010296,
+    "bb_lower": 55.89385323010044,
     "bb_ma": 66.40432726542154,
-    "bb_pos": 1.013567211457053,
-    "bb_sd": 5.255237017659291,
-    "bb_upper": 76.91480130074012,
-    "bb_z": 2.0542688458282115,
+    "bb_pos": 1.01356721145693,
+    "bb_sd": 5.2552370176605505,
+    "bb_upper": 76.91480130074264,
+    "bb_z": 2.0542688458277194,
     "close": 77.19999694824219,
     "date": "2026-02-11",
-    "dist_to_lower_pct": 38.11893882217498,
-    "dist_to_upper_pct": 0.37079423294215097,
+    "dist_to_lower_pct": 38.11893882218123,
+    "dist_to_upper_pct": 0.3707942329388647,
     "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
   },
@@ -98,7 +98,7 @@
       "rv_pctl_max": 0.6
     },
     "rows": 4192,
-    "run_ts_utc": "2026-02-19T09:17:21Z",
+    "run_ts_utc": "2026-02-19T09:34:15Z",
     "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v6",
     "start": "2003-01-01",
     "ticker": "0050.TW",
@@ -118,7 +118,7 @@
     "definition": "TREND_UP & RV20_percentile<=pctl_max & rv_hist_n>=min_samples => RISK_ON_ALLOWED",
     "inputs": {
       "bb_state": "EXTREME_UPPER_BAND",
-      "rv_ann": 0.2069566003876856,
+      "rv_ann": 0.20695660038767352,
       "rv_ann_pctl": 79.8418024928092,
       "rv_hist_n": 4172,
       "trend_state": "TREND_UP"
@@ -139,21 +139,21 @@
     "tag": "RISK_OFF_OR_DEFENSIVE"
   },
   "trend": {
-    "price_vs_trend_ma_pct": 37.68914715691349,
+    "price_vs_trend_ma_pct": 37.689147063234515,
     "state": "TREND_UP",
     "trend_ma_days": 200,
-    "trend_ma_last": 56.068323860168455,
+    "trend_ma_last": 56.06832389831543,
     "trend_slope_days": 20,
-    "trend_slope_pct": 6.133171152210215,
+    "trend_slope_pct": 6.133171071143373,
     "trend_slope_thr_pct": 0.5
   },
   "vol": {
-    "rv_ann": 0.2069566003876856,
+    "rv_ann": 0.20695660038767352,
     "rv_ann_pctl": 79.8418024928092,
     "rv_days": 20,
     "rv_hist_n": 4172,
-    "rv_hist_q20": 0.11199381225952272,
-    "rv_hist_q50": 0.14829648988930494,
-    "rv_hist_q80": 0.20795987084450493
+    "rv_hist_q20": 0.11199426598145963,
+    "rv_hist_q50": 0.1482964576021289,
+    "rv_hist_q80": 0.20795968731294368
   }
 }
