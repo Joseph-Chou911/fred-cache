@@ -3,7 +3,7 @@
 
 """
 Build a human-readable Markdown report from stats_latest.json + data.csv.
-Standalone: does not depend on your other dashboard modules.
+Standalone: does not depend on other dashboard modules.
 """
 
 from __future__ import annotations
@@ -76,14 +76,9 @@ def main() -> None:
     latest = stats.get("latest", {})
     fwd = stats.get("forward_mdd", {})
 
-    # Build tail table (use columns if present; else minimal)
-    cols = []
-    for c in ["close", "adjclose", "volume"]:
-        if c in df.columns:
-            cols.append(c)
-    tail = df[cols].tail(args.tail_days).copy()
+    cols = [c for c in ["close", "adjclose", "volume"] if c in df.columns]
+    tail = df[cols].tail(args.tail_days).copy() if cols else pd.DataFrame()
 
-    # Compose markdown
     lines = []
     lines.append("# 0050 BB(60,2) + forward_mdd(20D) Report")
     lines.append("")
@@ -96,7 +91,6 @@ def main() -> None:
     lines.append(f"- price_calc: `{meta.get('price_calc','NA')}`")
     lines.append("")
 
-    # 15-sec summary style
     lines.append("## 快速摘要（非預測，僅狀態）")
     lines.append(
         f"- state: **{latest.get('state','NA')}**; "
@@ -107,7 +101,8 @@ def main() -> None:
     )
     lines.append(
         f"- forward_mdd({meta.get('fwd_days','NA')}D) distribution (n={fwd.get('n','NA')}): "
-        f"p50={_fmt(fwd.get('p50'),4)}; p10={_fmt(fwd.get('p10'),4)}; p05={_fmt(fwd.get('p05'),4)}; min={_fmt(fwd.get('min'),4)}"
+        f"p50={_fmt(fwd.get('p50'),4)}; p10={_fmt(fwd.get('p10'),4)}; "
+        f"p05={_fmt(fwd.get('p05'),4)}; min={_fmt(fwd.get('min'),4)}"
     )
     lines.append("")
 
@@ -172,9 +167,8 @@ def main() -> None:
 
     lines.append("")
     lines.append("## Caveats")
-    lines.append("- BB 與 forward_mdd 是**描述性統計**，不是方向預測。")
-    lines.append("- 資料源為 Yahoo Finance，可能出現延遲、回補或欄位變動；已在 dq flags 留痕。")
-    lines.append("- 預設用 Adj Close 計算（較適合長期含配息/分割的比較）；若你要純價格技術面，可改用 `--price_col close`。")
+    lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
+    lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
     lines.append("")
 
     with open(out_path, "w", encoding="utf-8") as f:
