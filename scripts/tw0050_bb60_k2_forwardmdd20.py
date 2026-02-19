@@ -22,6 +22,13 @@ Key features:
   - Keeps Min Audit Trail for both raw and clean.
   - DQ flags disclose break detection and cleaning.
 
+NEW (2026-02-19.v5):
+  - Integrates taiwan_margin_cache/latest.json as a "margin_overlay" block into stats_latest.json:
+      * TWSE / TPEX / TOTAL latest balance (億)
+      * N-day (default 5) sum chg_yi (億)
+      * margin_state_{N}d: DELEVERAGING / NEUTRAL / LEVERAGE_BUILDING
+    With DQ flags/notes for missing file, parse errors, insufficient rows, and date mismatch.
+
 """
 
 from __future__ import annotations
@@ -46,7 +53,7 @@ except Exception:
     yf = None
 
 
-SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-19.v4"
+SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-19.v5"
 TZ_LOCAL = "Asia/Taipei"
 
 
@@ -95,6 +102,206 @@ def _df_to_csv_min(df: pd.DataFrame) -> pd.DataFrame:
         if c in df.columns:
             cols.append(c)
     return df[cols].copy()
+
+def _repo_root_from_this_file() -> str:
+    # scripts/this.py -> repo root
+    here = os.path.abspath(os.path.dirname(__file__))
+    return os.path.abspath(os.path.join(here, ".."))
+
+def _read_json_file(path: str) -> Any:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _safe_float(x: Any) -> Optional[float]:
+    try:
+        if x is None:
+            return None
+        return float(x)
+    except Exception:
+        return None
+
+
+# -------------------------
+# Margin overlay
+# -------------------------
+
+def _parse_margin_series(series_obj: Dict[str, Any],
+                         window_n: int,
+                         dq_flags: List[str],
+                         dq_notes: List[str],
+                         label: str) -> Dict[str, Any]:
+    """
+    Parse one series (TWSE or TPEX) from taiwan_margin_cache/latest.json.
+    Computes:
+      - latest_date, latest_balance_yi, latest_chg_yi
+      - chg_nd_yi: sum of last N rows' chg_yi
+      - rows_used
+    """
+    out: Dict[str, Any] = {
+        "label": label,
+        "latest_date": None,
+        "latest_balance_yi": None,
+        "latest_chg_yi": None,
+        "chg_nd_yi": None,
+        "rows_used": 0,
+    }
+
+    rows = series_obj.get("rows", [])
+    if not isinstance(rows, list) or len(rows) == 0:
+        dq_flags.append("MARGIN_ROWS_EMPTY")
+        dq_notes.append(f"margin overlay: {label} rows empty or not a list.")
+        return out
+
+    df = pd.DataFrame(rows)
+    if "date" not in df.columns or "balance_yi" not in df.columns or "chg_yi" not in df.columns:
+        dq_flags.append("MARGIN_ROWS_SCHEMA_MISSING")
+        dq_notes.append(f"margin overlay: {label} rows missing required keys (date/balance_yi/chg_yi).")
+        return out
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["balance_yi"] = pd.to_numeric(df["balance_yi"], errors="coerce")
+    df["chg_yi"] = pd.to_numeric(df["chg_yi"], errors="coerce")
+    df = df.dropna(subset=["date", "balance_yi"]).sort_values("date", ascending=False)
+
+    if len(df) == 0:
+        dq_flags.append("MARGIN_ROWS_PARSE_EMPTY")
+        dq_notes.append(f"margin overlay: {label} rows parsed empty after cleaning.")
+        return out
+
+    latest = df.iloc[0]
+    out["latest_date"] = latest["date"].strftime("%Y-%m-%d")
+    out["latest_balance_yi"] = _nan_to_none(latest["balance_yi"])
+    out["latest_chg_yi"] = _nan_to_none(latest["chg_yi"]) if pd.notna(latest["chg_yi"]) else None
+
+    # Sum last N rows' chg_yi (requires chg_yi present; if missing, we still try with available)
+    take_n = min(int(window_n), len(df))
+    sub = df.iloc[:take_n]
+    out["rows_used"] = int(take_n)
+
+    if "chg_yi" not in sub.columns or sub["chg_yi"].isna().all():
+        dq_flags.append("MARGIN_CHG_MISSING")
+        dq_notes.append(f"margin overlay: {label} chg_yi missing; cannot compute {window_n}d sum.")
+        out["chg_nd_yi"] = None
+        return out
+
+    chg_sum = float(sub["chg_yi"].fillna(0.0).sum())
+    if take_n < int(window_n):
+        dq_flags.append("MARGIN_INSUFFICIENT_ROWS")
+        dq_notes.append(f"margin overlay: {label} rows<{window_n} (rows={take_n}); used available for sum.")
+    out["chg_nd_yi"] = _nan_to_none(chg_sum)
+    return out
+
+def load_margin_overlay(margin_latest_path: str,
+                        last_date: str,
+                        window_n: int,
+                        threshold_yi: float,
+                        dq_flags: List[str],
+                        dq_notes: List[str]) -> Optional[Dict[str, Any]]:
+    """
+    Loads taiwan_margin_cache/latest.json and computes overlay summary.
+    Returns dict for stats_latest.json["margin_overlay"], or None if not available.
+    """
+    try:
+        if not os.path.exists(margin_latest_path):
+            dq_flags.append("MARGIN_LATEST_MISSING")
+            dq_notes.append(f"margin overlay: file not found: {margin_latest_path}")
+            return None
+
+        j = _read_json_file(margin_latest_path)
+        if not isinstance(j, dict):
+            dq_flags.append("MARGIN_LATEST_BAD_JSON")
+            dq_notes.append("margin overlay: latest.json not a dict.")
+            return None
+
+        series = j.get("series", {})
+        if not isinstance(series, dict):
+            dq_flags.append("MARGIN_SERIES_MISSING")
+            dq_notes.append("margin overlay: latest.json missing 'series' dict.")
+            return None
+
+        twse_obj = series.get("TWSE", {})
+        tpex_obj = series.get("TPEX", {})
+
+        twse = _parse_margin_series(twse_obj, window_n=window_n, dq_flags=dq_flags, dq_notes=dq_notes, label="TWSE")
+        tpex = _parse_margin_series(tpex_obj, window_n=window_n, dq_flags=dq_flags, dq_notes=dq_notes, label="TPEX")
+
+        # Compute TOTAL if both balances present
+        total_latest_balance = None
+        if twse.get("latest_balance_yi") is not None and tpex.get("latest_balance_yi") is not None:
+            total_latest_balance = float(twse["latest_balance_yi"]) + float(tpex["latest_balance_yi"])
+
+        total_chg_nd = None
+        if twse.get("chg_nd_yi") is not None and tpex.get("chg_nd_yi") is not None:
+            total_chg_nd = float(twse["chg_nd_yi"]) + float(tpex["chg_nd_yi"])
+
+        def _state(x: Optional[float], thr: float) -> Optional[str]:
+            if x is None or not np.isfinite(x):
+                return None
+            if x <= -thr:
+                return "DELEVERAGING"
+            if x >= thr:
+                return "LEVERAGE_BUILDING"
+            return "NEUTRAL"
+
+        # Prefer total state; fall back to TWSE-only if total unavailable
+        state_total = _state(total_chg_nd, threshold_yi)
+        state_twse = _state(twse.get("chg_nd_yi"), threshold_yi)
+        state_tpex = _state(tpex.get("chg_nd_yi"), threshold_yi)
+
+        # Data dates
+        twse_data_date = _to_scalar_str(twse_obj.get("data_date"), default="")
+        tpex_data_date = _to_scalar_str(tpex_obj.get("data_date"), default="")
+        data_date = twse_data_date or tpex_data_date or None
+
+        # Date alignment check (soft)
+        # Compare to price last_date; mismatch is not fatal but should be visible.
+        # If margin latest_date exists and differs from last_date -> flag.
+        margin_latest_date = twse.get("latest_date") or tpex.get("latest_date")
+        if margin_latest_date and last_date and margin_latest_date != last_date:
+            dq_flags.append("MARGIN_DATE_MISMATCH")
+            dq_notes.append(f"margin overlay: margin_latest_date={margin_latest_date} != price_last_date={last_date} (soft mismatch).")
+
+        overlay = {
+            "schema": "margin_overlay_v1",
+            "path": margin_latest_path,
+            "source": {
+                "twse": _to_scalar_str(twse_obj.get("source"), default=None),
+                "twse_url": _to_scalar_str(twse_obj.get("source_url"), default=None),
+                "tpex": _to_scalar_str(tpex_obj.get("source"), default=None),
+                "tpex_url": _to_scalar_str(tpex_obj.get("source_url"), default=None),
+            },
+            "generated_at_utc": _to_scalar_str(j.get("generated_at_utc"), default=None),
+            "data_date": data_date,
+            "params": {
+                "window_n": int(window_n),
+                "threshold_yi": float(threshold_yi),
+                "state_total_preferred": True,
+            },
+            "twse": twse,
+            "tpex": tpex,
+            "total": {
+                "latest_balance_yi": _nan_to_none(total_latest_balance) if total_latest_balance is not None else None,
+                "chg_nd_yi": _nan_to_none(total_chg_nd) if total_chg_nd is not None else None,
+                "state_nd": state_total,
+            },
+            "states": {
+                "twse_state_nd": state_twse,
+                "tpex_state_nd": state_tpex,
+                "total_state_nd": state_total,
+            },
+        }
+
+        # Extra: if total state missing, note why
+        if overlay["total"]["chg_nd_yi"] is None:
+            dq_flags.append("MARGIN_TOTAL_INCOMPLETE")
+            dq_notes.append("margin overlay: TOTAL chg_nd_yi not computed (missing TWSE/TPEX chg_nd_yi).")
+
+        return overlay
+
+    except Exception as e:
+        dq_flags.append("MARGIN_OVERLAY_ERROR")
+        dq_notes.append(f"margin overlay: error loading/parsing: {e.__class__.__name__}: {e}")
+        return None
 
 
 # -------------------------
@@ -362,10 +569,9 @@ def detect_price_breaks(prices: np.ndarray, ratio_hi: float, ratio_lo: float) ->
 def build_clean_entry_mask(n: int, breaks: np.ndarray, fwd_days: int) -> np.ndarray:
     """
     If there's a break at index j (transition j-1->j), then any entry i whose window [i+1..i+fwd]
-    includes j should be excluded, and also entries at/after j may also be affected until enough
-    time passes.
+    includes j should be excluded.
 
-    Concretely exclude entries i where:
+    Exclude entries i where:
       i < j <= i+fwd_days
     => i in [j - fwd_days, j-1]
     """
@@ -440,6 +646,12 @@ def main() -> int:
 
     # Cleaning mode for primary forward_mdd
     ap.add_argument("--forward_mode", choices=["raw", "clean"], default="clean")
+
+    # Margin overlay (optional; soft-fail with DQ flags)
+    repo_root = _repo_root_from_this_file()
+    ap.add_argument("--margin_latest_path", default=os.path.join(repo_root, "taiwan_margin_cache", "latest.json"))
+    ap.add_argument("--margin_window_n", type=int, default=5)
+    ap.add_argument("--margin_state_threshold_yi", type=float, default=100.0)
 
     args = ap.parse_args()
 
@@ -526,7 +738,6 @@ def main() -> int:
     if len(break_idxs) > 0:
         dq_flags.append("PRICE_SERIES_BREAK_DETECTED")
         # Keep notes concise but auditable
-        # Show up to first 3 breaks with dates and ratio
         show = []
         for j in break_idxs[:3]:
             d = df.loc[j, "date"].strftime("%Y-%m-%d")
@@ -541,7 +752,7 @@ def main() -> int:
         dq_flags.append("FWD_MDD_CLEAN_APPLIED")
         dq_notes.append("Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).")
 
-    # tag outlier on RAW only (clean should usually remove it)
+    # tag outlier on RAW only
     thr = float(args.outlier_min_threshold)
     if fwd_raw_stats.n > 0 and np.isfinite(fwd_raw_stats.min) and fwd_raw_stats.min < thr:
         dq_flags.append("FWD_MDD_OUTLIER_MIN_RAW")
@@ -560,8 +771,19 @@ def main() -> int:
         mfp = float(prices_np[stats.min_future_idx])
         return med, mep, mfd, mfp
 
-    # build outputs
     run_ts_utc = utc_now_iso_z()
+
+    # Margin overlay (soft)
+    margin_overlay = load_margin_overlay(
+        margin_latest_path=_to_scalar_str(args.margin_latest_path).strip(),
+        last_date=last_date,
+        window_n=int(args.margin_window_n),
+        threshold_yi=float(args.margin_state_threshold_yi),
+        dq_flags=dq_flags,
+        dq_notes=dq_notes,
+    )
+
+    # build outputs
     meta = {
         "run_ts_utc": run_ts_utc,
         "module": "tw0050_bb",
@@ -584,6 +806,13 @@ def main() -> int:
             "break_ratio_lo": float(args.break_ratio_lo),
             "break_count": int(len(break_idxs)),
             "forward_mode_primary": forward_mode,
+        },
+        "margin_overlay": {
+            "enabled": True,
+            "latest_path": _to_scalar_str(args.margin_latest_path).strip(),
+            "window_n": int(args.margin_window_n),
+            "threshold_yi": float(args.margin_state_threshold_yi),
+            "available": True if margin_overlay is not None else False,
         },
     }
 
@@ -624,7 +853,7 @@ def main() -> int:
     forward_raw = pack_fwd(fwd_raw_stats, "forward_mdd_raw")
     forward_clean = pack_fwd(fwd_clean_stats, "forward_mdd_clean")
 
-    stats_out = {
+    stats_out: Dict[str, Any] = {
         "meta": meta,
         "latest": latest,
         # Primary used by report (build script reads this)
@@ -632,6 +861,8 @@ def main() -> int:
         # Audit extras
         "forward_mdd_raw": forward_raw,
         "forward_mdd_clean": forward_clean,
+        # Margin overlay (optional)
+        "margin_overlay": margin_overlay,
         "dq": {"flags": dq_flags, "notes": dq_notes},
     }
 
@@ -656,6 +887,11 @@ def main() -> int:
     print(f"[OK] wrote: {stats_path}")
     print(f"[OK] wrote: {out_csv_path}")
     print(f"[OK] wrote: {hist_path}")
+    if margin_overlay is None:
+        print("[WARN] margin_overlay unavailable (see dq flags/notes).")
+    else:
+        total = margin_overlay.get("total", {}) if isinstance(margin_overlay, dict) else {}
+        print(f"[OK] margin_overlay: total_chg_nd_yi={total.get('chg_nd_yi')} state_nd={total.get('state_nd')}")
     return 0
 
 
