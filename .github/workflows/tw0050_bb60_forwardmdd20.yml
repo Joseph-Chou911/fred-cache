@@ -28,7 +28,18 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy yfinance pytz
+          pip install pandas numpy yfinance pytz requests
+
+      # 可選：快速診斷 Yahoo 是否在 CI 被擋（建議保留，出問題時一眼看懂）
+      - name: Debug yfinance fetch (quick)
+        run: |
+          python - << 'PY'
+          import yfinance as yf
+          print("yfinance_version:", yf.__version__)
+          df = yf.Ticker("0050.TW").history(period="5d", interval="1d")
+          print("rows:", 0 if df is None else len(df))
+          print(df.tail(3))
+          PY
 
       - name: Run compute
         run: |
