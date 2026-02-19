@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-19T03:11:27Z`
-- generated_at_local: `2026-02-19T11:11:27.864951+08:00`
+- generated_at_utc: `2026-02-19T10:01:04Z`
+- generated_at_local: `2026-02-19T18:01:04.841924+08:00`
 - report_date_local: `2026-02-19`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-11` (latest available)
