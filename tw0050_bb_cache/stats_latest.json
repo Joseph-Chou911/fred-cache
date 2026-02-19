@@ -1,43 +1,82 @@
 {
   "dq": {
     "flags": [
-      "FWD_MDD_OUTLIER_MIN"
+      "PRICE_SERIES_BREAK_DETECTED",
+      "FWD_MDD_CLEAN_APPLIED",
+      "FWD_MDD_OUTLIER_MIN_RAW"
     ],
     "notes": [
-      "forward_mdd min=-0.7628 < threshold(-0.4); audit min_entry_date."
+      "Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.",
+      "Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).",
+      "forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail."
     ]
   },
   "forward_mdd": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
-    "min": -0.7627551290463314,
+    "label": "forward_mdd_clean",
+    "min": -0.25570038572447173,
+    "min_entry_date": "2020-02-19",
+    "min_entry_price": 19.41792106628418,
+    "min_future_date": "2020-03-19",
+    "min_future_price": 14.452751159667969,
+    "n": 4151,
+    "p05": -0.09279044961851252,
+    "p10": -0.0686695003632567,
+    "p25": -0.04022449989133653,
+    "p50": -0.018276354577913656
+  },
+  "forward_mdd_clean": {
+    "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
+    "label": "forward_mdd_clean",
+    "min": -0.25570038572447173,
+    "min_entry_date": "2020-02-19",
+    "min_entry_price": 19.41792106628418,
+    "min_future_date": "2020-03-19",
+    "min_future_price": 14.452751159667969,
+    "n": 4151,
+    "p05": -0.09279044961851252,
+    "p10": -0.0686695003632567,
+    "p25": -0.04022449989133653,
+    "p50": -0.018276354577913656
+  },
+  "forward_mdd_raw": {
+    "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
+    "label": "forward_mdd_raw",
+    "min": -0.7627550057038054,
     "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.47614288330078,
+    "min_entry_price": 37.476131439208984,
     "min_future_date": "2014-02-05",
-    "min_future_price": 8.891022682189941,
+    "min_future_price": 8.891024589538574,
     "n": 4171,
-    "p05": -0.09523872170870273,
-    "p10": -0.07016143375465389,
-    "p25": -0.040785859568060856,
-    "p50": -0.018467015832377864
+    "p05": -0.09523864744573635,
+    "p10": -0.0701612430696763,
+    "p25": -0.04078603754630439,
+    "p50": -0.018467466274533106
   },
   "latest": {
     "adjclose": 77.19999694824219,
-    "bb_lower": 55.893853230104256,
+    "bb_lower": 55.893853230104156,
     "bb_ma": 66.40432726542154,
-    "bb_pos": 1.0135672114571161,
-    "bb_sd": 5.255237017658642,
-    "bb_upper": 76.91480130073883,
-    "bb_z": 2.0542688458284655,
+    "bb_pos": 1.0135672114571113,
+    "bb_sd": 5.255237017658695,
+    "bb_upper": 76.91480130073893,
+    "bb_z": 2.0542688458284446,
     "close": 77.19999694824219,
     "date": "2026-02-11",
-    "dist_to_lower_pct": 38.118938822171785,
-    "dist_to_upper_pct": 0.3707942329438385,
+    "dist_to_lower_pct": 38.118938822172034,
+    "dist_to_upper_pct": 0.3707942329437053,
     "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
   },
   "meta": {
     "bb_k": 2.0,
     "bb_window": 60,
+    "break_detection": {
+      "break_count": 1,
+      "break_ratio_hi": 1.8,
+      "break_ratio_lo": 0.5555555555555556,
+      "forward_mode_primary": "clean"
+    },
     "data_source": "yfinance_yahoo_or_twse_fallback",
     "fetch_start_effective": "2003-01-01",
     "fwd_days": 20,
@@ -47,8 +86,8 @@
     "price_col_requested": "adjclose",
     "price_col_used": "adjclose",
     "rows": 4192,
-    "run_ts_utc": "2026-02-19T03:25:12Z",
-    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v3",
+    "run_ts_utc": "2026-02-19T03:31:51Z",
+    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v4",
     "start": "2003-01-01",
     "ticker": "0050.TW",
     "tz": "Asia/Taipei"

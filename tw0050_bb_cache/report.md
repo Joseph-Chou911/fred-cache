@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T03:25:12Z`
+- report_generated_at_utc: `2026-02-19T03:31:51Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v2`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
@@ -13,7 +13,7 @@
 
 ## 快速摘要（非預測，僅狀態）
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0136; dist_to_lower=38.12%; dist_to_upper=0.37%
-- forward_mdd(20D) distribution (n=4171): p50=-0.0185; p10=-0.0702; p05=-0.0952; min=-0.7628 (min_window: 2013-12-30->2014-02-05; 37.4761->8.8910) [DQ:FWD_MDD_OUTLIER_MIN]
+- forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528)
 
 ## Latest Snapshot
 
@@ -37,20 +37,20 @@
 
 | quantile | value |
 |---|---:|
-| p50 | -0.0185 |
-| p25 | -0.0408 |
-| p10 | -0.0702 |
-| p05 | -0.0952 |
-| min | -0.7628 |
+| p50 | -0.0183 |
+| p25 | -0.0402 |
+| p10 | -0.0687 |
+| p05 | -0.0928 |
+| min | -0.2557 |
 
 ### forward_mdd Min Audit Trail
 
 | item | value |
 |---|---:|
-| min_entry_date | 2013-12-30 |
-| min_entry_price | 37.4761 |
-| min_future_date | 2014-02-05 |
-| min_future_price | 8.8910 |
+| min_entry_date | 2020-02-19 |
+| min_entry_price | 19.4179 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
 
 ## Recent Raw Prices (tail 15)
 
@@ -74,7 +74,9 @@
 
 ## Data Quality Flags
 
-- FWD_MDD_OUTLIER_MIN: forward_mdd min=-0.7628 < threshold(-0.4); audit min_entry_date.
+- PRICE_SERIES_BREAK_DETECTED: Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
+- FWD_MDD_CLEAN_APPLIED: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
+- FWD_MDD_OUTLIER_MIN_RAW: forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
