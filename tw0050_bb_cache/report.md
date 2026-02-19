@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T08:13:54Z`
+- report_generated_at_utc: `2026-02-19T09:17:54Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v6`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
@@ -108,7 +108,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-19T08:13:54.501028Z`
+- overlay_generated_at_utc: `2026-02-19T09:17:53.855Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -139,7 +139,7 @@
 |---|---:|
 | units_outstanding | N/A |
 | units_chg_1d | N/A |
-| dq | ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED |
+| dq | ETF_UNITS_FETCH_FAILED, ETF_UNITS_PCF_NET_CHANGE_NOT_FOUND, ETF_UNITS_PCF_OUTSTANDING_NOT_FOUND, ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND, ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND |
 
 ### Chip Overlay Sources
 
@@ -148,7 +148,12 @@
 
 ### Chip Overlay DQ
 
-- ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED
+- ETF_UNITS_FETCH_FAILED
+- ETF_UNITS_FETCH_FAILED
+- ETF_UNITS_PCF_NET_CHANGE_NOT_FOUND
+- ETF_UNITS_PCF_OUTSTANDING_NOT_FOUND
+- ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND
+- ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND
 
 ## Margin Overlay（融資）
 
@@ -198,7 +203,12 @@
 - RAW_OUTLIER_EXCLUDED: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
 
 ### Chip Overlay DQ (extra)
-- CHIP_OVERLAY:ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED
+- CHIP_OVERLAY:ETF_UNITS_FETCH_FAILED
+- CHIP_OVERLAY:ETF_UNITS_FETCH_FAILED
+- CHIP_OVERLAY:ETF_UNITS_PCF_NET_CHANGE_NOT_FOUND
+- CHIP_OVERLAY:ETF_UNITS_PCF_OUTSTANDING_NOT_FOUND
+- CHIP_OVERLAY:ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND
+- CHIP_OVERLAY:ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
