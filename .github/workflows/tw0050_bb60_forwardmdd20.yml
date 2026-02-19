@@ -64,15 +64,14 @@ jobs:
           print("OK: min-audit fields present.")
           PY
 
-      # ✅ 新增：在 compute 後、build report 前抓籌碼 overlay
+      # ✅ compute 後、build report 前：抓 0050 籌碼 overlay（TWSE T86 + TWT72U）
       - name: Fetch 0050 chip overlay (TWSE T86 + TWT72U)
         run: |
           python scripts/fetch_tw0050_chip_overlay.py \
-            --cache_dir tw0050_bb_cache \
+            --stock_no 0050 \
             --stats_path tw0050_bb_cache/stats_latest.json \
-            --out_path tw0050_bb_cache/chip_overlay.json \
-            --window_n 5 \
-            --stock_no 0050
+            --out tw0050_bb_cache/chip_overlay.json \
+            --window_n 5
 
       - name: Debug chip overlay
         run: |
@@ -87,6 +86,13 @@ jobs:
           data=j.get("data", {})
           print("t86_agg:", data.get("t86_agg", {}))
           print("borrow_summary:", data.get("borrow_summary", {}))
+
+          # minimal sanity checks (fail fast if structure is broken)
+          if "per_day" not in data:
+            raise SystemExit("ERROR: chip_overlay missing data.per_day")
+          bs=data.get("borrow_summary", {})
+          if bs and (bs.get("asof_date") is None):
+            raise SystemExit("ERROR: borrow_summary.asof_date is null")
           PY
 
       - name: Build report
