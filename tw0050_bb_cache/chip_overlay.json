@@ -1,7 +1,7 @@
 {
   "meta": {
-    "run_ts_utc": "2026-02-19T09:34:46Z",
-    "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v4",
+    "run_ts_utc": "2026-02-19T09:50:40.084Z",
+    "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v5",
     "stock_no": "0050",
     "window_n": 5,
     "timeout": 15.0,
@@ -15,9 +15,7 @@
     "pcf_url": "https://www.yuantaetfs.com/tradeInfo/pcf/0050"
   },
   "dq": {
-    "flags": [
-      "ETF_UNITS_FETCH_FAILED"
-    ]
+    "flags": []
   },
   "data": {
     "borrow_summary": {
@@ -32,14 +30,11 @@
       "source_url": "https://www.yuantaetfs.com/tradeInfo/pcf/0050",
       "trade_date": null,
       "posting_dt": null,
-      "units_outstanding": null,
-      "units_chg_1d": null,
+      "units_outstanding": 16191000000,
+      "units_chg_1d": 44000000,
       "dq": [
         "ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND",
-        "ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND",
-        "ETF_UNITS_PCF_OUTSTANDING_NOT_FOUND",
-        "ETF_UNITS_PCF_NET_CHANGE_NOT_FOUND",
-        "ETF_UNITS_PCF_PARSE_ALL_MISSING"
+        "ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND"
       ]
     },
     "per_day": [
@@ -97,12 +92,12 @@
           "col_idx": {
             "foreign": 4,
             "trust": 10,
-            "dealer": 11,
+            "dealer": 7,
             "total3": 18
           },
           "foreign_net_shares": 1195300,
           "trust_net_shares": 8500000,
-          "dealer_net_shares": -15171792,
+          "dealer_net_shares": 0,
           "total3_net_shares": -5476492
         },
         "twt72u": {
@@ -135,8 +130,8 @@
             "mv": 7
           },
           "borrow_shares": 135405000,
-          "borrow_mv_ntd": 10453266000.0,
-          "close": 77.2
+          "close": 77.2,
+          "borrow_mv_ntd": 10453266000.0
         }
       },
       {
@@ -193,12 +188,12 @@
           "col_idx": {
             "foreign": 4,
             "trust": 10,
-            "dealer": 11,
+            "dealer": 7,
             "total3": 18
           },
           "foreign_net_shares": 23352001,
           "trust_net_shares": 4526000,
-          "dealer_net_shares": 5174839,
+          "dealer_net_shares": 0,
           "total3_net_shares": 33052840
         },
         "twt72u": {
@@ -231,8 +226,8 @@
             "mv": 7
           },
           "borrow_shares": 144851000,
-          "borrow_mv_ntd": 10936250500.0,
-          "close": 75.5
+          "close": 75.5,
+          "borrow_mv_ntd": 10936250500.0
         }
       },
       {
@@ -289,12 +284,12 @@
           "col_idx": {
             "foreign": 4,
             "trust": 10,
-            "dealer": 11,
+            "dealer": 7,
             "total3": 18
           },
           "foreign_net_shares": 36795082,
           "trust_net_shares": 2200000,
-          "dealer_net_shares": 22906904,
+          "dealer_net_shares": 0,
           "total3_net_shares": 61901986
         },
         "twt72u": {
@@ -327,8 +322,8 @@
             "mv": 7
           },
           "borrow_shares": 208280000,
-          "borrow_mv_ntd": 15402306000.0,
-          "close": 73.95
+          "close": 73.95,
+          "borrow_mv_ntd": 15402306000.0
         }
       },
       {
@@ -344,13 +339,17 @@
           "dq": [
             "T86_EMPTY"
           ],
-          "fields": []
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
         },
         "twt72u": {
           "dq": [
             "TWT72U_EMPTY"
           ],
-          "fields": []
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
         }
       },
       {
@@ -366,13 +365,17 @@
           "dq": [
             "T86_EMPTY"
           ],
-          "fields": []
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
         },
         "twt72u": {
           "dq": [
             "TWT72U_EMPTY"
           ],
-          "fields": []
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
         }
       },
       {
@@ -429,12 +432,12 @@
           "col_idx": {
             "foreign": 4,
             "trust": 10,
-            "dealer": 11,
+            "dealer": 7,
             "total3": 18
           },
           "foreign_net_shares": -26941369,
           "trust_net_shares": 2100000,
-          "dealer_net_shares": -7653199,
+          "dealer_net_shares": 0,
           "total3_net_shares": -32494568
         },
         "twt72u": {
@@ -467,8 +470,8 @@
             "mv": 7
           },
           "borrow_shares": 216023000,
-          "borrow_mv_ntd": 15532053700.0,
-          "close": 71.9
+          "close": 71.9,
+          "borrow_mv_ntd": 15532053700.0
         }
       },
       {
@@ -525,12 +528,12 @@
           "col_idx": {
             "foreign": 4,
             "trust": 10,
-            "dealer": 11,
+            "dealer": 7,
             "total3": 18
           },
           "foreign_net_shares": -48799201,
           "trust_net_shares": 0,
-          "dealer_net_shares": -17067432,
+          "dealer_net_shares": 0,
           "total3_net_shares": -65866633
         },
         "twt72u": {
@@ -563,8 +566,8 @@
             "mv": 7
           },
           "borrow_shares": 215684000,
-          "borrow_mv_ntd": 15529248000.0,
-          "close": 72.0
+          "close": 72.0,
+          "borrow_mv_ntd": 15529248000.0
         }
       }
     ],
@@ -579,7 +582,7 @@
       ],
       "foreign_net_shares_sum": -14398187,
       "trust_net_shares_sum": 17326000,
-      "dealer_net_shares_sum": -11810680,
+      "dealer_net_shares_sum": 0,
       "total3_net_shares_sum": -8882867
     }
   }
