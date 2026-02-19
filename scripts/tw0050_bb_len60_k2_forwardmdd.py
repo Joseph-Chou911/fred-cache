@@ -3,30 +3,18 @@
 
 """
 TW0050 Bollinger Bands (window=60, k=2) + forward MDD (20 trading days)
+with auditable split handling + gap/jump audit.
 
-Data source:
-- Default: Yahoo Finance via yfinance (symbol: 0050.TW)
-- Optional: user-provided CSV (Date + Close/Adj Close)
+Key outputs (in --cache_dir):
+- stats_latest.json   : latest snapshot + DQ audit + forward_mdd distribution stats
+- history_lite.json   : last N rows of daily metrics (lite)
+- prices.csv          : audit table (close/adj_close/price_raw/price_adj/adj_factor)
 
-Outputs (in --cache_dir):
-- stats_latest.json         : latest-day snapshot + forward_mdd distribution stats + dq audit
-- history_lite.json         : last N rows of daily metrics (lite)
-- prices.csv                : fetched price table (audit/debug), includes price_raw and price_adj
-
-Key robustness:
-1) Force all vectors into 1D Series to avoid pandas ValueError: "Data must be 1-dimensional..."
-2) Split/reverse-split detection + optional healing:
-   - detect jumps near factor=f or 1/f (configurable tolerance)
-   - optionally heal earlier history to make series continuous
-   - IMPORTANT: healing can be constrained by known split dates (whitelist gating)
-3) Forward MDD conditional stats are direction-complete:
-   - z <= -1.5 (cheap side)
-   - z >= +1.5 (hot side)
-   - z >= +2.0 (extreme hot side)
-4) DQ gap/jump/factor audits (weekday heuristic only; market holidays not modeled):
-   - missing business days gaps
-   - raw/adj return jump suspects
-   - raw vs adj factor change suspects
+Important behavioral change vs your earlier version:
+- If you use Adj Close (default), split-heal is OFF by default, because Adj Close may already be adjusted.
+  You can override with --split_heal_on_adjclose.
+- You can force split events by --force_splits "YYYY-MM-DD:4,YYYY-MM-DD:2".
+  For 0050 split per TWSE announcement, align to the first trading date after halt: 2025-06-18:4.
 """
 
 from __future__ import annotations
@@ -36,7 +24,7 @@ import hashlib
 import json
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -55,6 +43,9 @@ except Exception:
 DEFAULT_TZ = "Asia/Taipei"
 
 
+# ----------------------------
+# Utils
+# ----------------------------
 def utc_now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
@@ -105,6 +96,9 @@ def _to_1d_series(x, index, name: str) -> pd.Series:
     return s
 
 
+# ----------------------------
+# Data loading
+# ----------------------------
 def read_csv_prices(csv_path: Path, price_col: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     df.columns = [c.strip() for c in df.columns]
@@ -150,14 +144,214 @@ def fetch_yahoo_prices(symbol: str, start: str, end: Optional[str]) -> pd.DataFr
     df = df.copy()
     df.index = pd.to_datetime(df.index, errors="coerce")
     df = df.dropna(axis=0, how="any")
+    df.index.name = "Date"
     return df
 
 
+def try_fetch_yf_splits(symbol: str) -> Optional[pd.Series]:
+    """
+    Best-effort: fetch Yahoo split series via yfinance Ticker.
+    Returns a Series indexed by date with split ratio (e.g. 4.0 means 4:1 split).
+    """
+    if yf is None:
+        return None
+    try:
+        t = yf.Ticker(symbol)
+        s = t.splits
+        if s is None:
+            return None
+        s = pd.to_numeric(s, errors="coerce").dropna()
+        if s.empty:
+            return None
+        s.index = pd.to_datetime(s.index, errors="coerce")
+        s = s.dropna()
+        return s
+    except Exception:
+        return None
+
+
+# ----------------------------
+# Split handling
+# ----------------------------
+def _is_close_ratio(r: float, target: float, tol: float) -> bool:
+    if not np.isfinite(r) or r <= 0:
+        return False
+    return abs(r / target - 1.0) <= tol
+
+
+def parse_force_splits(s: Optional[str]) -> List[Dict[str, Any]]:
+    """
+    Parse: "YYYY-MM-DD:4,YYYY-MM-DD:2"
+    Meaning: at that date (or next trading date), apply split factor=4 (4:1).
+    """
+    out: List[Dict[str, Any]] = []
+    if not s:
+        return out
+
+    parts = [p.strip() for p in str(s).split(",") if p.strip()]
+    for p in parts:
+        if ":" not in p:
+            raise ValueError(f"--force_splits item must be like YYYY-MM-DD:4, got: {p}")
+        d, f = p.split(":", 1)
+        d = d.strip()
+        f = float(f.strip())
+        if f <= 0:
+            raise ValueError(f"Split factor must be >0, got: {f} in {p}")
+        dt = pd.to_datetime(d, errors="raise").date()
+        out.append({"date": str(dt), "factor": float(f), "direction": "SPLIT"})
+    out.sort(key=lambda x: x["date"])
+    return out
+
+
+def detect_split_events_by_ratio(
+    price_raw: pd.Series,
+    factors: List[float],
+    tol: float,
+    min_price: float = 0.01,
+) -> List[Dict[str, Any]]:
+    """
+    Heuristic detection: scan ratios r[t] = price[t] / price[t-1]
+    If r ~ 1/f => SPLIT(f:1) at t
+    If r ~ f   => REVERSE_SPLIT(1:f) at t
+    """
+    s = pd.to_numeric(price_raw.copy(), errors="coerce").where(lambda x: x > min_price)
+    idx = s.index
+    vals = s.to_numpy(dtype=float)
+    n = len(vals)
+    if n < 3:
+        return []
+
+    events: List[Dict[str, Any]] = []
+    for t in range(1, n):
+        p0 = vals[t - 1]
+        p1 = vals[t]
+        if not (np.isfinite(p0) and np.isfinite(p1)) or p0 <= 0:
+            continue
+        r = p1 / p0
+
+        for f in factors:
+            if _is_close_ratio(r, 1.0 / f, tol):
+                events.append(
+                    {
+                        "event_index": int(t),
+                        "event_date": str(pd.to_datetime(idx[t]).date()),
+                        "direction": "SPLIT",
+                        "factor": float(f),
+                        "raw_ratio": float(r),
+                        "tolerance": float(tol),
+                        "source": "ratio_detect",
+                    }
+                )
+                break
+            if _is_close_ratio(r, f, tol):
+                events.append(
+                    {
+                        "event_index": int(t),
+                        "event_date": str(pd.to_datetime(idx[t]).date()),
+                        "direction": "REVERSE_SPLIT",
+                        "factor": float(f),
+                        "raw_ratio": float(r),
+                        "tolerance": float(tol),
+                        "source": "ratio_detect",
+                    }
+                )
+                break
+
+    # de-dup same date multiple hits
+    uniq: Dict[str, Dict[str, Any]] = {}
+    for e in events:
+        k = f'{e["event_date"]}:{e["direction"]}:{e["factor"]}'
+        if k not in uniq:
+            uniq[k] = e
+    out = list(uniq.values())
+    out.sort(key=lambda x: x["event_date"])
+    return out
+
+
+def apply_split_events_to_earlier_history(
+    price_raw: pd.Series,
+    events: List[Dict[str, Any]],
+) -> Tuple[pd.Series, List[Dict[str, Any]]]:
+    """
+    Make series continuous in the "post-event unit" by adjusting earlier history:
+
+    - SPLIT factor f (f:1): price drops to ~1/f at event -> multiply earlier history by 1/f
+    - REVERSE_SPLIT factor f (1:f): price jumps by f at event -> multiply earlier history by f
+
+    We apply events in chronological order.
+    """
+    s = pd.to_numeric(price_raw.copy(), errors="coerce")
+    idx = s.index
+    adj = s.to_numpy(dtype=float).reshape(-1)
+    n = len(adj)
+
+    applied: List[Dict[str, Any]] = []
+    if n < 3 or not events:
+        return pd.Series(adj, index=idx, name="price_adj"), applied
+
+    # Build a date->index map for exact hits; otherwise use first index >= date
+    idx_dates = pd.to_datetime(idx).date
+
+    def find_event_index(d: date) -> Optional[int]:
+        # exact
+        for i, di in enumerate(idx_dates):
+            if di == d:
+                return i
+        # next trading day
+        for i, di in enumerate(idx_dates):
+            if di > d:
+                return i
+        return None
+
+    for e in events:
+        d = pd.to_datetime(e["event_date"], errors="coerce").date()
+        t = e.get("event_index", None)
+        if t is None:
+            t = find_event_index(d)
+        if t is None or t <= 0 or t >= n:
+            applied.append(
+                {
+                    **e,
+                    "applied": False,
+                    "reason": "event date not in index and no later trading date",
+                }
+            )
+            continue
+
+        f = float(e["factor"])
+        direction = str(e["direction"]).upper()
+        if direction == "SPLIT":
+            mult = 1.0 / f
+        elif direction == "REVERSE_SPLIT":
+            mult = f
+        else:
+            applied.append({**e, "applied": False, "reason": f"unknown direction={direction}"})
+            continue
+
+        # adjust earlier history
+        adj[:t] = adj[:t] * mult
+
+        applied.append(
+            {
+                **e,
+                "applied": True,
+                "apply_multiplier_to_earlier": float(mult),
+                "applied_to_range": f"[0:{t})",
+                "event_index_used": int(t),
+                "event_date_used": str(pd.to_datetime(idx[t]).date()),
+            }
+        )
+
+    return pd.Series(adj, index=idx, name="price_adj"), applied
+
+
+# ----------------------------
+# Forward MDD + BB
+# ----------------------------
 def calc_forward_mdd(prices_1d: np.ndarray, horizon: int) -> np.ndarray:
     """
     forward_mdd[t] = minimum drawdown within next `horizon` trading days:
         min(0, min_{i=1..horizon} (price[t+i]/price[t] - 1))
-    prices_1d must be shape (n,) (1D).
     """
     prices_1d = np.asarray(prices_1d).reshape(-1)
     n = len(prices_1d)
@@ -187,148 +381,6 @@ def conf_from_n(n: int) -> str:
     return "NA"
 
 
-def bb_state_from_z(z: Optional[float]) -> Tuple[str, str]:
-    if z is None or not np.isfinite(z):
-        return ("NA", "z is NA")
-    if z <= -2.0:
-        return ("BELOW_LOWER_BAND", "z<=-2.0")
-    if z <= -1.5:
-        return ("NEAR_LOWER_BAND", "z<=-1.5")
-    if z >= 2.0:
-        return ("ABOVE_UPPER_BAND", "z>=2.0")
-    if z >= 1.5:
-        return ("NEAR_UPPER_BAND", "z>=1.5")
-    return ("IN_BAND", "-1.5<z<1.5")
-
-
-def _is_close_ratio(r: float, target: float, tol: float) -> bool:
-    if not np.isfinite(r) or r <= 0:
-        return False
-    return abs(r / target - 1.0) <= tol
-
-
-def _parse_known_split_days(s: str) -> Set[pd.Timestamp]:
-    out: Set[pd.Timestamp] = set()
-    if not str(s).strip():
-        return out
-    for tok in str(s).split(","):
-        tok = tok.strip()
-        if not tok:
-            continue
-        out.add(pd.Timestamp(tok).normalize())
-    return out
-
-
-def _allowed_by_known_dates(
-    event_day: pd.Timestamp,
-    known_days: Optional[Set[pd.Timestamp]],
-    window_days: int,
-) -> bool:
-    if not known_days:
-        return True
-    d = event_day.normalize()
-    for kd in known_days:
-        if abs((d - kd).days) <= int(window_days):
-            return True
-    return False
-
-
-def detect_and_heal_splits(
-    price_raw: pd.Series,
-    factors: List[float],
-    tol: float,
-    min_price: float = 0.01,
-    known_split_days: Optional[Set[pd.Timestamp]] = None,
-    split_date_window: int = 1,
-) -> Tuple[pd.Series, List[Dict[str, Any]]]:
-    """
-    Detect split/reverse-split jumps by scanning ratios r[t]=price[t]/price[t-1].
-
-    If r is close to 1/f or f for any f in factors, record an event.
-    Healing (modifying earlier history) is applied ONLY if:
-      - known_split_days is empty => allow all heals (legacy behavior)
-      - otherwise event_date must be within +/- split_date_window days of any known_split_day
-
-    Healing rule:
-      - if r ~= 1/f  (price drops to 1/f), interpret as split (f:1): adjust earlier history DOWN by 1/f
-      - if r ~= f    (price jumps by f), interpret as reverse-split (1:f): adjust earlier history UP by f
-    Apply cumulatively in time order.
-
-    Returns:
-      price_adj, events
-    """
-    s = price_raw.copy()
-    s = pd.to_numeric(s, errors="coerce")
-    s = s.where(s > min_price)
-
-    idx = s.index
-    vals = s.to_numpy(dtype=float)
-    n = len(vals)
-    if n < 3:
-        return s, []
-
-    adj = vals.copy()
-    events: List[Dict[str, Any]] = []
-
-    for t in range(1, n):
-        p_prev = adj[t - 1]
-        p_now = adj[t]
-        if not (np.isfinite(p_prev) and np.isfinite(p_now)) or p_prev <= 0:
-            continue
-
-        r = p_now / p_prev
-
-        matched = None
-        direction = None
-        implied = None
-
-        for f in factors:
-            if _is_close_ratio(r, 1.0 / f, tol):
-                matched = f
-                direction = "SPLIT"
-                implied = f
-                break
-            if _is_close_ratio(r, f, tol):
-                matched = f
-                direction = "REVERSE_SPLIT"
-                implied = f
-                break
-
-        if matched is None:
-            continue
-
-        if direction == "SPLIT":
-            factor_apply = 1.0 / float(implied)
-        else:
-            factor_apply = float(implied)
-
-        event_day = pd.Timestamp(idx[t]).normalize()
-        allow_heal = _allowed_by_known_dates(event_day, known_split_days, split_date_window)
-
-        ev: Dict[str, Any] = {
-            "event_index": t,
-            "event_date": str(event_day.date()),
-            "raw_ratio": float(r),
-            "direction": direction,
-            "implied_factor": float(implied),
-            "tolerance": float(tol),
-            "applied_to_range": f"[0:{t})",
-            "apply_multiplier_to_earlier": float(factor_apply),
-            "healed": bool(allow_heal),
-        }
-
-        if not allow_heal:
-            ev["heal_skipped_reason"] = "not_in_known_split_window"
-            events.append(ev)
-            continue
-
-        adj[:t] = adj[:t] * factor_apply
-        events.append(ev)
-
-    price_adj = pd.Series(adj.reshape(-1), index=idx, name="price_adj")
-    return price_adj, events
-
-
 def compute_mdd_stats(arr: np.ndarray) -> Dict[str, Any]:
     arr = np.asarray(arr, dtype=float)
     fin = arr[np.isfinite(arr)]
@@ -344,224 +396,201 @@ def compute_mdd_stats(arr: np.ndarray) -> Dict[str, Any]:
     }
 
 
-def _business_days_missing(prev_day: pd.Timestamp, next_day: pd.Timestamp) -> int:
-    """
-    Count missing business days between prev_day and next_day excluding endpoints.
-    Weekday heuristic only; does not model exchange holidays.
-    """
-    if next_day <= prev_day:
-        return 0
-    start = (prev_day + pd.Timedelta(days=1)).normalize()
-    end = (next_day - pd.Timedelta(days=1)).normalize()
-    if end < start:
-        return 0
-    rng = pd.bdate_range(start, end, inclusive="both")
-    return int(len(rng))
+def bb_state_from_z(z: Optional[float]) -> Tuple[str, str]:
+    if z is None or not np.isfinite(z):
+        return ("NA", "z is NA")
+    if z <= -2.0:
+        return ("BELOW_LOWER_BAND", "z<=-2.0")
+    if z <= -1.5:
+        return ("NEAR_LOWER_BAND", "z<=-1.5")
+    if z >= 2.0:
+        return ("ABOVE_UPPER_BAND", "z>=2.0")
+    if z >= 1.5:
+        return ("NEAR_UPPER_BAND", "z>=1.5")
+    return ("IN_BAND", "-1.5<z<1.5")
 
 
-def run_gap_jump_factor_audit(
+# ----------------------------
+# DQ audit: gaps / jumps / factor changes
+# ----------------------------
+def audit_gaps_and_jumps(
+    idx: pd.DatetimeIndex,
     price_raw: pd.Series,
     price_adj: pd.Series,
-    params: Dict[str, Any],
+    *,
+    gap_busdays_warn: int,
+    ret_jump_raw: float,
+    ret_jump_adj: float,
+    raw_jump_thr: float,
+    adj_stable_thr: float,
+    adj_factor_change_tol: float,
 ) -> Dict[str, Any]:
     """
-    Build dq audit fields:
-      - gap_suspects: missing business days between consecutive quotes
-      - jump_suspects: return jumps on raw/adj
-      - factor_change_suspects: raw vs adj factor change jumps
-      - gap_audit summary (counts + params + weekday_heuristic)
+    Gap audit uses weekday heuristic only (Mon-Fri business days), NOT Taiwan market holidays.
+    This is why you may see many "gaps" around lunar new year etc.
     """
-    gap_busdays_warn = int(params["gap_busdays_warn"])
-    ret_jump_raw_thr = float(params["ret_jump_raw"])
-    ret_jump_adj_thr = float(params["ret_jump_adj"])
-    raw_jump_thr = float(params["raw_jump_thr"])
-    adj_stable_thr = float(params["adj_stable_thr"])
-    adj_factor_change_tol = float(params["adj_factor_change_tol"])
-
-    idx = price_raw.index
+    idx = pd.to_datetime(idx)
     n = int(len(idx))
-
-    # --- gaps ---
-    gap_suspects: List[Dict[str, Any]] = []
-    for i in range(1, n):
-        d0 = pd.Timestamp(idx[i - 1]).normalize()
-        d1 = pd.Timestamp(idx[i]).normalize()
-        miss = _business_days_missing(d0, d1)
-        if miss > gap_busdays_warn:
-            gap_suspects.append(
-                {"from": str(d0.date()), "to": str(d1.date()), "missing_busdays": int(miss)}
-            )
-
-    # --- returns & jumps ---
-    pr = price_raw.to_numpy(dtype=float)
-    pa = price_adj.to_numpy(dtype=float)
-
-    # ret[t] is return from t-1 -> t; ret[0]=nan
-    ret_raw = np.full(n, np.nan, dtype=float)
-    ret_adj = np.full(n, np.nan, dtype=float)
-
-    for i in range(1, n):
-        if np.isfinite(pr[i - 1]) and np.isfinite(pr[i]) and pr[i - 1] > 0:
-            ret_raw[i] = pr[i] / pr[i - 1] - 1.0
-        if np.isfinite(pa[i - 1]) and np.isfinite(pa[i]) and pa[i - 1] > 0:
-            ret_adj[i] = pa[i] / pa[i - 1] - 1.0
-
-    jump_suspects: List[Dict[str, Any]] = []
-    for i in range(1, n):
-        day = str(pd.Timestamp(idx[i]).normalize().date())
-
-        if np.isfinite(ret_raw[i]) and abs(ret_raw[i]) >= ret_jump_raw_thr:
-            jump_suspects.append(
-                {
-                    "date": day,
-                    "kind": "RET_JUMP_RAW",
-                    "price_raw": None if not np.isfinite(pr[i]) else float(pr[i]),
-                    "price_adj": None if not np.isfinite(pa[i]) else float(pa[i]),
-                    "ret_raw": float(ret_raw[i]),
-                    "ret_adj": None if not np.isfinite(ret_adj[i]) else float(ret_adj[i]),
-                }
-            )
-
-        if np.isfinite(ret_adj[i]) and abs(ret_adj[i]) >= ret_jump_adj_thr:
-            jump_suspects.append(
-                {
-                    "date": day,
-                    "kind": "RET_JUMP_ADJ",
-                    "price_raw": None if not np.isfinite(pr[i]) else float(pr[i]),
-                    "price_adj": None if not np.isfinite(pa[i]) else float(pa[i]),
-                    "ret_raw": None if not np.isfinite(ret_raw[i]) else float(ret_raw[i]),
-                    "ret_adj": float(ret_adj[i]),
-                }
-            )
-
-        # raw jump but adj stable => suspicious data/split handling discrepancy
-        if (
-            np.isfinite(ret_raw[i])
-            and abs(ret_raw[i]) >= raw_jump_thr
-            and np.isfinite(ret_adj[i])
-            and abs(ret_adj[i]) <= adj_stable_thr
-        ):
-            jump_suspects.append(
-                {
-                    "date": day,
-                    "kind": "RAW_JUMP_ADJ_STABLE",
-                    "price_raw": None if not np.isfinite(pr[i]) else float(pr[i]),
-                    "price_adj": None if not np.isfinite(pa[i]) else float(pa[i]),
-                    "ret_raw": float(ret_raw[i]),
-                    "ret_adj": float(ret_adj[i]),
-                }
-            )
-
-    # --- factor changes (adj/raw) ---
-    factor_change_suspects: List[Dict[str, Any]] = []
-    # adj_factor[t] = adj/raw; factor_chg[t] = factor[t-1] - factor[t]  (matches your sample -0.75)
-    adj_factor = np.full(n, np.nan, dtype=float)
-    for i in range(n):
-        if np.isfinite(pr[i]) and pr[i] > 0 and np.isfinite(pa[i]):
-            adj_factor[i] = pa[i] / pr[i]
-
-    for i in range(1, n):
-        if np.isfinite(adj_factor[i - 1]) and np.isfinite(adj_factor[i]):
-            chg = adj_factor[i - 1] - adj_factor[i]
-            if abs(chg) >= adj_factor_change_tol:
-                factor_change_suspects.append(
-                    {
-                        "date": str(pd.Timestamp(idx[i]).normalize().date()),
-                        "adj_factor": float(adj_factor[i]),
-                        "adj_factor_chg": float(chg),
-                    }
-                )
-
-    gap_audit = {
-        "n": int(n),
-        "gap_count": int(len(gap_suspects)),
-        "jump_count": int(len(jump_suspects)),
-        "factor_change_count": int(len(factor_change_suspects)),
+    out: Dict[str, Any] = {
+        "n": n,
+        "gap_count": 0,
+        "gap_suspects": [],
+        "jump_count": 0,
+        "jump_suspects": [],
+        "factor_change_count": 0,
+        "factor_change_suspects": [],
         "params": {
-            "gap_busdays_warn": gap_busdays_warn,
-            "ret_jump_raw": ret_jump_raw_thr,
-            "ret_jump_adj": ret_jump_adj_thr,
-            "raw_jump_thr": raw_jump_thr,
-            "adj_stable_thr": adj_stable_thr,
-            "adj_factor_change_tol": adj_factor_change_tol,
+            "gap_busdays_warn": int(gap_busdays_warn),
+            "ret_jump_raw": float(ret_jump_raw),
+            "ret_jump_adj": float(ret_jump_adj),
+            "raw_jump_thr": float(raw_jump_thr),
+            "adj_stable_thr": float(adj_stable_thr),
+            "factor_change_tol": float(adj_factor_change_tol),
         },
         "weekday_heuristic": True,
     }
 
-    return {
-        "gap_audit": gap_audit,
-        "gap_suspects": gap_suspects,
-        "jump_suspects": jump_suspects,
-        "factor_change_suspects": factor_change_suspects,
-    }
+    # gaps
+    dates = pd.to_datetime(idx).date
+    for i in range(1, n):
+        d0 = dates[i - 1]
+        d1 = dates[i]
+        if d1 <= d0:
+            continue
+        # business days strictly between
+        mid = pd.bdate_range(pd.Timestamp(d0) + pd.Timedelta(days=1),
+                             pd.Timestamp(d1) - pd.Timedelta(days=1))
+        missing = int(len(mid))
+        if missing >= gap_busdays_warn:
+            out["gap_suspects"].append({"from": str(d0), "to": str(d1), "missing_busdays": missing})
+
+    out["gap_count"] = int(len(out["gap_suspects"]))
+
+    # jumps
+    pr = pd.to_numeric(price_raw, errors="coerce")
+    pa = pd.to_numeric(price_adj, errors="coerce")
+    ret_r = pr.pct_change()
+    ret_a = pa.pct_change()
+
+    for i in range(1, n):
+        rr = ret_r.iloc[i]
+        ra = ret_a.iloc[i]
+        if not (np.isfinite(rr) and np.isfinite(ra)):
+            continue
+
+        # raw return jump
+        if abs(rr) >= ret_jump_raw:
+            out["jump_suspects"].append(
+                {
+                    "date": str(pd.to_datetime(idx[i]).date()),
+                    "kind": "RET_JUMP_RAW",
+                    "ret_raw": float(rr),
+                    "ret_adj": float(ra),
+                    "price_raw": None if not np.isfinite(pr.iloc[i]) else float(pr.iloc[i]),
+                    "price_adj": None if not np.isfinite(pa.iloc[i]) else float(pa.iloc[i]),
+                }
+            )
+
+        # adj return jump
+        if abs(ra) >= ret_jump_adj:
+            out["jump_suspects"].append(
+                {
+                    "date": str(pd.to_datetime(idx[i]).date()),
+                    "kind": "RET_JUMP_ADJ",
+                    "ret_raw": float(rr),
+                    "ret_adj": float(ra),
+                    "price_raw": None if not np.isfinite(pr.iloc[i]) else float(pr.iloc[i]),
+                    "price_adj": None if not np.isfinite(pa.iloc[i]) else float(pa.iloc[i]),
+                }
+            )
+
+        # raw jump but adj stable => likely split heal signature
+        if abs(rr) >= raw_jump_thr and abs(ra) <= adj_stable_thr:
+            out["jump_suspects"].append(
+                {
+                    "date": str(pd.to_datetime(idx[i]).date()),
+                    "kind": "RAW_JUMP_ADJ_STABLE",
+                    "ret_raw": float(rr),
+                    "ret_adj": float(ra),
+                    "price_raw": None if not np.isfinite(pr.iloc[i]) else float(pr.iloc[i]),
+                    "price_adj": None if not np.isfinite(pa.iloc[i]) else float(pa.iloc[i]),
+                }
+            )
+
+    out["jump_count"] = int(len(out["jump_suspects"]))
+
+    # factor change suspects: adj_factor = price_adj / price_raw
+    with np.errstate(divide="ignore", invalid="ignore"):
+        adj_factor = (pa / pr).replace([np.inf, -np.inf], np.nan)
+
+    af_chg = adj_factor.pct_change()
+    for i in range(1, n):
+        chg = af_chg.iloc[i]
+        if not np.isfinite(chg):
+            continue
+        if abs(chg) >= adj_factor_change_tol:
+            out["factor_change_suspects"].append(
+                {
+                    "date": str(pd.to_datetime(idx[i]).date()),
+                    "adj_factor": None if not np.isfinite(adj_factor.iloc[i]) else float(adj_factor.iloc[i]),
+                    "adj_factor_chg": float(chg),
+                }
+            )
+    out["factor_change_count"] = int(len(out["factor_change_suspects"]))
+    return out
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(
-        description="TW0050 BB(60,2) + forward_mdd(20D) generator"
-    )
+    ap = argparse.ArgumentParser(description="TW0050 BB(60,2) + forward_mdd(20D) generator (auditable split/gap)")
     ap.add_argument("--symbol", default="0050.TW", help="Yahoo Finance symbol (default: 0050.TW)")
     ap.add_argument("--start", default="2003-01-01", help="Start date YYYY-MM-DD (default: 2003-01-01)")
     ap.add_argument("--end", default=None, help="End date YYYY-MM-DD (default: None)")
     ap.add_argument("--window", type=int, default=60, help="BB window length (default: 60)")
     ap.add_argument("--k", type=float, default=2.0, help="BB k (default: 2.0)")
     ap.add_argument("--horizon", type=int, default=20, help="Forward MDD horizon in trading days (default: 20)")
-    ap.add_argument("--z_threshold", type=float, default=-1.5, help="Cheap-side conditional stats threshold (default: -1.5)")
     ap.add_argument("--cache_dir", default="tw0050_bb_cache", help="Output cache dir")
     ap.add_argument("--history_limit", type=int, default=400, help="Rows to keep in history_lite.json (default: 400)")
-    ap.add_argument("--tz", default=DEFAULT_TZ, help=f"Local timezone for age calculation (default: {DEFAULT_TZ})")
+    ap.add_argument("--tz", default=DEFAULT_TZ, help=f"Local timezone for staleness calc (default: {DEFAULT_TZ})")
 
     # Data input options
     ap.add_argument("--input_csv", default=None, help="Optional CSV input instead of yfinance")
     ap.add_argument("--csv_price_col", default="Adj Close", help="CSV price column name (default: 'Adj Close')")
 
     # Price selection for yfinance
-    ap.add_argument("--use_adj_close", action="store_true", help="Use Adj Close (recommended)")
-    ap.add_argument("--use_close", action="store_true", help="Use Close (overrides --use_adj_close)")
-    ap.add_argument("--use_logclose", action="store_true", help="Compute BB on log(price)")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--use_adj_close", action="store_true", help="Use Adj Close (default if neither flag is set)")
+    g.add_argument("--use_close", action="store_true", help="Use Close")
+    ap.add_argument("--use_logclose", action="store_true", help="Compute BB on log(price_adj)")
 
-    # Split detection/healing
-    ap.add_argument(
-        "--split_factors",
-        default="4",
-        help="Comma-separated split factors to detect (default: '4'). Example: '2,4,5,10'",
-    )
-    ap.add_argument(
-        "--split_tol",
-        type=float,
-        default=0.06,
-        help="Relative tolerance for detecting split ratios (default: 0.06 => ±6%%).",
-    )
-    ap.add_argument(
-        "--disable_split_heal",
-        action="store_true",
-        help="Disable split detection/healing (not recommended unless your data is already cleaned).",
-    )
+    # Split options
+    ap.add_argument("--force_splits", default=None,
+                    help='Force split events, e.g. "2025-06-18:4" or "2025-06-18:4,2014-01-02:4"')
+    ap.add_argument("--prefer_yf_splits", action="store_true",
+                    help="If no --force_splits, try yfinance Ticker().splits as split source (recommended with --use_close)")
+    ap.add_argument("--disable_split_heal", action="store_true",
+                    help="Disable split detection/healing entirely")
+    ap.add_argument("--split_heal_on_adjclose", action="store_true",
+                    help="Allow split-heal even when using Adj Close (default is OFF for Adj Close).")
 
-    # NEW: whitelist gating for split healing (prevents false-heal on data-provider artifacts)
-    ap.add_argument(
-        "--known_split_dates",
-        default="",
-        help="Comma-separated YYYY-MM-DD dates where split healing is allowed (e.g. '2025-06-18'). Empty => allow all (legacy behavior).",
-    )
-    ap.add_argument(
-        "--split_date_window",
-        type=int,
-        default=1,
-        help="Allow heal within +/- N calendar days around known_split_dates (default: 1).",
-    )
+    # Heuristic split detection (only used when not forced and not prefer_yf_splits)
+    ap.add_argument("--split_factors", default="4",
+                    help="Comma-separated split factors to detect (default: '4'). Example: '2,4,5,10'")
+    ap.add_argument("--split_tol", type=float, default=0.06,
+                    help="Relative tolerance for detecting split ratios (default: 0.06 => ±6%%).")
 
-    # Hot-side thresholds
+    # Conditional thresholds for forward MDD stats
+    ap.add_argument("--z_threshold", type=float, default=-1.5,
+                    help="Cheap-side threshold for conditional stats (default: -1.5)")
     ap.add_argument("--z_hot", type=float, default=1.5, help="Hot-side threshold (default: 1.5)")
     ap.add_argument("--z_hot2", type=float, default=2.0, help="Extreme hot-side threshold (default: 2.0)")
 
-    # DQ audit thresholds (match your repro/meta)
-    ap.add_argument("--gap_busdays_warn", type=int, default=2, help="Warn if missing business days > this (default: 2)")
-    ap.add_argument("--ret_jump_raw", type=float, default=0.2, help="Raw daily return jump threshold abs(ret)>=thr (default: 0.2)")
-    ap.add_argument("--ret_jump_adj", type=float, default=0.2, help="Adj daily return jump threshold abs(ret)>=thr (default: 0.2)")
+    # Gap/jump audit params (to match your stats_latest.json schema)
+    ap.add_argument("--gap_busdays_warn", type=int, default=2, help="Warn if missing business days >= this (default: 2)")
+    ap.add_argument("--ret_jump_raw", type=float, default=0.2, help="Raw return jump threshold (default: 0.2)")
+    ap.add_argument("--ret_jump_adj", type=float, default=0.2, help="Adj return jump threshold (default: 0.2)")
     ap.add_argument("--raw_jump_thr", type=float, default=0.2, help="Raw jump threshold for RAW_JUMP_ADJ_STABLE (default: 0.2)")
     ap.add_argument("--adj_stable_thr", type=float, default=0.05, help="Adj stable threshold for RAW_JUMP_ADJ_STABLE (default: 0.05)")
-    ap.add_argument("--adj_factor_change_tol", type=float, default=0.1, help="Factor change tolerance for adj/raw (default: 0.1)")
+    ap.add_argument("--adj_factor_change_tol", type=float, default=0.1, help="Adj factor change tol (default: 0.1)")
 
     args = ap.parse_args()
 
@@ -574,360 +603,120 @@ def main() -> int:
         "fetch_ok": False,
         "insufficient_history": False,
         "stale_days_local": None,
-        "split_heal_enabled": (not args.disable_split_heal),
+        "split_heal_enabled": False,
         "split_events": [],
+        "gap_audit": None,
+        "gap_suspects": [],
+        "jump_suspects": [],
+        "factor_change_suspects": [],
         "notes": [],
     }
 
-    known_split_days = _parse_known_split_days(args.known_split_dates)
-    split_window = int(args.split_date_window)
-
     # ----- Load prices -----
+    data_source = "csv" if args.input_csv else "yfinance"
+
+    yf_splits: Optional[pd.Series] = None
     if args.input_csv:
-        data_source = "csv"
         prices_df = read_csv_prices(Path(args.input_csv), args.csv_price_col)
-        price_basis = args.csv_price_col
-    else:
-        data_source = "yfinance"
-        df = fetch_yahoo_prices(args.symbol, args.start, args.end)
-
-        if args.use_close:
-            field = "Close"
-        else:
-            # default prefer Adj Close if present
-            field = "Adj Close" if "Adj Close" in df.columns else "Close"
-
-        # yfinance sometimes returns MultiIndex columns
-        if isinstance(df.columns, pd.MultiIndex):
-            try:
-                sub = df[field]
-                if isinstance(sub, pd.DataFrame):
-                    sub = sub.iloc[:, 0]
-                prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
-            except Exception:
-                sub = df.iloc[:, 0]
-                prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
-        else:
-            if field not in df.columns:
-                field = df.columns[0]
-            sub = df[field]
-            if isinstance(sub, pd.DataFrame):
-                sub = sub.iloc[:, 0]
-            prices_df = pd.DataFrame({"price": pd.to_numeric(sub, errors="coerce")}, index=df.index)
-
         prices_df.index.name = "Date"
-        prices_df = prices_df.dropna()
-        price_basis = field
+        close_s = None
+        adj_close_s = None
+    else:
+        df = fetch_yahoo_prices(args.symbol, args.start, args.end)
+        close_s = df["Close"] if "Close" in df.columns else None
+        adj_close_s = df["Adj Close"] if "Adj Close" in df.columns else None
+        yf_splits = try_fetch_yf_splits(args.symbol)
 
-    if prices_df.empty or prices_df.iloc[:, 0].dropna().empty:
+        # keep a unified df for audit columns
+        cols = {}
+        if close_s is not None:
+            cols["Close"] = pd.to_numeric(close_s, errors="coerce")
+        if adj_close_s is not None:
+            cols["Adj Close"] = pd.to_numeric(adj_close_s, errors="coerce")
+        if not cols:
+            # fallback: take first column
+            cols["Close"] = pd.to_numeric(df.iloc[:, 0], errors="coerce")
+        prices_df = pd.DataFrame(cols, index=df.index).dropna(how="all")
+        prices_df.index.name = "Date"
+
+    if prices_df.empty:
         raise RuntimeError("No usable price data loaded.")
 
     dq["fetch_ok"] = True
 
-    # ----- price_raw as 1D -----
-    price_raw = _to_1d_series(prices_df.iloc[:, 0], prices_df.index, "price_raw")
-    if price_raw.to_numpy().ndim != 1:
-        raise RuntimeError(f"price_raw not 1D after coercion: shape={price_raw.to_numpy().shape}")
+    # ----- Choose price_raw basis -----
+    if args.use_close:
+        chosen = "Close"
+    else:
+        # default to Adj Close if available; else Close
+        chosen = "Adj Close" if ("Adj Close" in prices_df.columns) else "Close"
 
-    # ----- Split detection & healing (with optional whitelist gating) -----
+    if chosen not in prices_df.columns:
+        chosen = prices_df.columns[0]
+
+    price_raw = _to_1d_series(prices_df[chosen], prices_df.index, "price_raw").dropna()
+    price_raw = price_raw.reindex(prices_df.index)  # keep alignment
+    price_basis = chosen
+
+    # ----- Decide split heal enablement -----
+    forced_events = parse_force_splits(args.force_splits)
+
+    split_heal_enabled = False
+    split_event_source = "none"
+
     if args.disable_split_heal:
-        price_adj = price_raw.copy()
-        dq["notes"].append("Split heal disabled by --disable_split_heal.")
+        split_heal_enabled = False
     else:
-        try:
-            factors: List[float] = []
-            for tok in str(args.split_factors).split(","):
-                tok = tok.strip()
-                if tok:
-                    factors.append(float(tok))
-            if not factors:
-                factors = [4.0]
-        except Exception:
-            factors = [4.0]
-
-        price_adj, events = detect_and_heal_splits(
-            price_raw,
-            factors=factors,
-            tol=float(args.split_tol),
-            known_split_days=known_split_days if known_split_days else None,
-            split_date_window=split_window,
-        )
-        dq["split_events"] = events
-
-        healed_cnt = sum(1 for e in events if e.get("healed") is True)
-        detected_cnt = len(events)
-
-        if known_split_days:
-            dq["notes"].append(
-                f"Split heal whitelist active: known_split_dates={sorted([str(d.date()) for d in known_split_days])} window=±{split_window}d"
-            )
-
-        if detected_cnt == 0:
-            dq["notes"].append(
-                f"Split heal enabled but no events detected (factors={factors}, tol={args.split_tol})"
-            )
+        if price_basis == "Adj Close" and (not args.split_heal_on_adjclose) and (not forced_events):
+            # IMPORTANT safety: Adj Close may already be split adjusted.
+            split_heal_enabled = False
+            dq["notes"].append("Split heal OFF by default for Adj Close (to avoid double-adjust). Use --use_close or --split_heal_on_adjclose.")
         else:
-            dq["notes"].append(
-                f"Split events detected={detected_cnt}, healed={healed_cnt} (factors={factors}, tol={args.split_tol})"
-            )
-            if healed_cnt == 0 and known_split_days:
-                dq["notes"].append(
-                    "NOTE: All detected split-like events were outside known_split_dates window; no healing applied."
-                )
+            split_heal_enabled = True
 
-    # Persist raw/adj prices for audit
-    prices_out = pd.DataFrame(
-        {
-            "Date": pd.to_datetime(prices_df.index).date.astype(str),
-            "price_raw": price_raw.to_numpy(dtype=float),
-            "price_adj": price_adj.to_numpy(dtype=float),
-        }
-    )
-    prices_out.to_csv(cache_dir / "prices.csv", index=False)
+    dq["split_heal_enabled"] = bool(split_heal_enabled)
 
-    # ----- DQ audits: gaps/jumps/factors -----
-    audit_params = {
-        "gap_busdays_warn": int(args.gap_busdays_warn),
-        "ret_jump_raw": float(args.ret_jump_raw),
-        "ret_jump_adj": float(args.ret_jump_adj),
-        "raw_jump_thr": float(args.raw_jump_thr),
-        "adj_stable_thr": float(args.adj_stable_thr),
-        "adj_factor_change_tol": float(args.adj_factor_change_tol),
-    }
-    audit = run_gap_jump_factor_audit(price_raw=price_raw, price_adj=price_adj, params=audit_params)
-
-    # Merge audit into dq
-    dq.update(audit)
-    dq["notes"].append("Gap audit uses weekday heuristic only (market holidays not modeled).")
-
-    ga = dq.get("gap_audit", {})
-    if isinstance(ga, dict):
-        if int(ga.get("gap_count", 0)) > 0:
-            dq["notes"].append(f"GAP_WARNING: missing business days detected (count={ga.get('gap_count')})")
-        if int(ga.get("jump_count", 0)) > 0:
-            dq["notes"].append(f"JUMP_WARNING: return jumps detected (count={ga.get('jump_count')})")
-        if int(ga.get("factor_change_count", 0)) > 0:
-            dq["notes"].append(f"FACTOR_WARNING: raw/adj factor changes detected (count={ga.get('factor_change_count')})")
-
-    # ----- Compute indicators on price_adj -----
-    price = _to_1d_series(price_adj, prices_df.index, "price")
-
-    if args.use_logclose:
-        base = np.log(price)
-        bb_base_label = "log(price_adj)"
-    else:
-        base = price.copy()
-        bb_base_label = "price_adj"
-
-    win = int(args.window)
-    horizon = int(args.horizon)
-
-    if len(base) < win + horizon + 5:
-        dq["insufficient_history"] = True
-        dq["notes"].append(
-            f"Insufficient length: need roughly window+horizon; len={len(base)}, window={win}, horizon={horizon}"
-        )
-
-    base = _to_1d_series(base, prices_df.index, "bb_base")
-
-    sma = base.rolling(window=win, min_periods=win).mean()
-    std = base.rolling(window=win, min_periods=win).std(ddof=0)
-
-    upper = sma + float(args.k) * std
-    lower = sma - float(args.k) * std
-
-    z = (base - sma) / std
-    band_w = upper - lower
-    pos = (base - lower) / band_w
-
-    if args.use_logclose:
-        lower_px = np.exp(lower)
-        upper_px = np.exp(upper)
-        dist_to_lower = (price - lower_px) / price
-        dist_to_upper = (upper_px - price) / price
-    else:
-        dist_to_lower = (price - lower) / price
-        dist_to_upper = (upper - price) / price
-
-    price_np = np.asarray(price.to_numpy()).astype(float).reshape(-1)
-    fwd_mdd = calc_forward_mdd(price_np, horizon)
-
-    # Coerce all to 1D series
-    sma = _to_1d_series(sma, prices_df.index, "sma")
-    std = _to_1d_series(std, prices_df.index, "std")
-    upper = _to_1d_series(upper, prices_df.index, "upper")
-    lower = _to_1d_series(lower, prices_df.index, "lower")
-    z = _to_1d_series(z, prices_df.index, "z")
-    pos = _to_1d_series(pos, prices_df.index, "pos")
-    dist_to_lower = _to_1d_series(dist_to_lower, prices_df.index, "dist_to_lower")
-    dist_to_upper = _to_1d_series(dist_to_upper, prices_df.index, "dist_to_upper")
-    fwd_mdd_s = _to_1d_series(fwd_mdd, prices_df.index, "forward_mdd")
-
-    # ----- Age calculation (local) -----
-    last_dt = pd.to_datetime(prices_df.index[-1]).date()
-    today_local = local_today(args.tz)
-    dq["stale_days_local"] = int((today_local - last_dt).days)
-
-    # ----- Build lite history -----
-    out_df = pd.DataFrame(
-        {
-            "price": price,
-            "bb_base": base,
-            "sma": sma,
-            "std": std,
-            "upper": upper,
-            "lower": lower,
-            "z": z,
-            "pos": pos,
-            "dist_to_lower": dist_to_lower,
-            "dist_to_upper": dist_to_upper,
-            "forward_mdd": fwd_mdd_s,
-        },
-        index=prices_df.index,
-    )
-
-    lite = out_df.tail(int(args.history_limit)).copy()
-    lite = lite.reset_index().rename(columns={"Date": "date"})
-    lite["date"] = pd.to_datetime(lite["date"]).dt.date.astype(str)
-
-    history_lite = []
-    for _, r in lite.iterrows():
-        history_lite.append(
+    # ----- Build split events -----
+    events: List[Dict[str, Any]] = []
+    if forced_events:
+        events = [
             {
-                "date": r["date"],
-                "price": None if not np.isfinite(r["price"]) else float(r["price"]),
-                "sma": None if not np.isfinite(r["sma"]) else float(r["sma"]),
-                "std": None if not np.isfinite(r["std"]) else float(r["std"]),
-                "upper": None if not np.isfinite(r["upper"]) else float(r["upper"]),
-                "lower": None if not np.isfinite(r["lower"]) else float(r["lower"]),
-                "z": None if not np.isfinite(r["z"]) else float(r["z"]),
-                "pos": None if not np.isfinite(r["pos"]) else float(r["pos"]),
-                "dist_to_lower": None if not np.isfinite(r["dist_to_lower"]) else float(r["dist_to_lower"]),
-                "dist_to_upper": None if not np.isfinite(r["dist_to_upper"]) else float(r["dist_to_upper"]),
-                "forward_mdd": None if not np.isfinite(r["forward_mdd"]) else float(r["forward_mdd"]),
+                "event_date": e["date"],
+                "direction": e["direction"],
+                "factor": float(e["factor"]),
+                "source": "forced",
             }
-        )
-    write_json(cache_dir / "history_lite.json", history_lite)
+            for e in forced_events
+        ]
+        split_event_source = "forced"
+    elif split_heal_enabled and args.prefer_yf_splits and (yf_splits is not None) and (not yf_splits.empty):
+        # Use Yahoo-reported splits as primary source (best effort)
+        tmp: List[Dict[str, Any]] = []
+        for ts, ratio in yf_splits.items():
+            if not np.isfinite(ratio) or ratio <= 0:
+                continue
+            d = pd.to_datetime(ts).date()
+            # yfinance splits are usually split ratios (e.g. 4.0 means 4:1 split)
+            tmp.append({"event_date": str(d), "direction": "SPLIT", "factor": float(ratio), "source": "yfinance_splits"})
+        tmp.sort(key=lambda x: x["event_date"])
+        events = tmp
+        split_event_source = "yfinance_splits"
+    elif split_heal_enabled:
+        # Heuristic detection
+        factors = []
+        for tok in str(args.split_factors).split(","):
+            tok = tok.strip()
+            if tok:
+                try:
+                    factors.append(float(tok))
+                except Exception:
+                    pass
+        if not factors:
+            factors = [4.0]
+        events = detect_split_events_by_ratio(price_raw, factors=factors, tol=float(args.split_tol))
+        split_event_source = "ratio_detect"
 
-    # ----- Latest snapshot -----
-    last_row = out_df.iloc[-1]
-    z_last = None if not np.isfinite(last_row["z"]) else float(last_row["z"])
-    state, state_reason = bb_state_from_z(z_last)
-
-    # ----- forward_mdd stats (direction-complete) -----
-    mdd_all = out_df["forward_mdd"].to_numpy()
-    z_arr = out_df["z"].to_numpy()
-
-    stats_all = compute_mdd_stats(mdd_all)
-
-    # Cheap-side
-    z_cheap = float(args.z_threshold)
-    mask_cheap = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr <= z_cheap)
-    stats_cheap = compute_mdd_stats(out_df.loc[mask_cheap, "forward_mdd"].to_numpy())
-    stats_cheap["condition"] = f"z <= {z_cheap}"
-    stats_cheap["z_threshold"] = z_cheap
-
-    # Hot-side
-    z_hot = float(args.z_hot)
-    mask_hot = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr >= z_hot)
-    stats_hot = compute_mdd_stats(out_df.loc[mask_hot, "forward_mdd"].to_numpy())
-    stats_hot["condition"] = f"z >= {z_hot}"
-    stats_hot["z_threshold"] = z_hot
-
-    # Extreme hot-side
-    z_hot2 = float(args.z_hot2)
-    mask_hot2 = np.isfinite(mdd_all) & np.isfinite(z_arr) & (z_arr >= z_hot2)
-    stats_hot2 = compute_mdd_stats(out_df.loc[mask_hot2, "forward_mdd"].to_numpy())
-    stats_hot2["condition"] = f"z >= {z_hot2}"
-    stats_hot2["z_threshold"] = z_hot2
-
-    # Repro command (include known_split gating only if set)
-    repro_parts = [
-        "python",
-        str(Path(__file__)),
-        f"--symbol {args.symbol}",
-        f"--window {int(args.window)}",
-        f"--k {float(args.k)}",
-        f"--horizon {int(args.horizon)}",
-        f"--cache_dir {str(Path(args.cache_dir))}",
-        "--use_close" if args.use_close else "--use_adj_close",
-        "--use_logclose" if args.use_logclose else "",
-        f"--split_factors {args.split_factors}",
-        f"--split_tol {float(args.split_tol)}",
-        "--disable_split_heal" if args.disable_split_heal else "",
-        (f"--known_split_dates {args.known_split_dates}" if str(args.known_split_dates).strip() else ""),
-        (f"--split_date_window {int(args.split_date_window)}" if str(args.known_split_dates).strip() else ""),
-        f"--z_threshold {float(args.z_threshold)}",
-        f"--z_hot {float(args.z_hot)}",
-        f"--z_hot2 {float(args.z_hot2)}",
-        f"--gap_busdays_warn {int(args.gap_busdays_warn)}",
-        f"--ret_jump_raw {float(args.ret_jump_raw)}",
-        f"--ret_jump_adj {float(args.ret_jump_adj)}",
-        f"--raw_jump_thr {float(args.raw_jump_thr)}",
-        f"--adj_stable_thr {float(args.adj_stable_thr)}",
-        f"--adj_factor_change_tol {float(args.adj_factor_change_tol)}",
-    ]
-    repro_cmd = " ".join([p for p in repro_parts if p]).strip()
-
-    stats_latest = {
-        "meta": {
-            "run_ts_utc": utc_now_iso(),
-            "module": "tw0050_bb",
-            "symbol": args.symbol,
-            "data_source": data_source,
-            "price_basis": price_basis,
-            "bb_base": bb_base_label,
-            "window": int(args.window),
-            "k": float(args.k),
-            "horizon": int(args.horizon),
-            "script_fingerprint": script_fp,
-            "timezone_local": args.tz,
-            "as_of_date": str(last_dt),
-            "split_factors": str(args.split_factors),
-            "split_tol": float(args.split_tol),
-            "known_split_dates": str(args.known_split_dates),
-            "split_date_window": int(args.split_date_window),
-            "z_threshold_cheap": float(args.z_threshold),
-            "z_threshold_hot": float(args.z_hot),
-            "z_threshold_hot2": float(args.z_hot2),
-            # dq thresholds
-            "gap_busdays_warn": int(args.gap_busdays_warn),
-            "ret_jump_raw": float(args.ret_jump_raw),
-            "ret_jump_adj": float(args.ret_jump_adj),
-            "raw_jump_thr": float(args.raw_jump_thr),
-            "adj_stable_thr": float(args.adj_stable_thr),
-            "adj_factor_change_tol": float(args.adj_factor_change_tol),
-        },
-        "dq": dq,
-        "latest": {
-            "date": str(last_dt),
-            "price": None if not np.isfinite(last_row["price"]) else float(last_row["price"]),
-            "sma": None if not np.isfinite(last_row["sma"]) else float(last_row["sma"]),
-            "std": None if not np.isfinite(last_row["std"]) else float(last_row["std"]),
-            "upper": None if not np.isfinite(last_row["upper"]) else float(last_row["upper"]),
-            "lower": None if not np.isfinite(last_row["lower"]) else float(last_row["lower"]),
-            "z": z_last,
-            "pos": None if not np.isfinite(last_row["pos"]) else float(last_row["pos"]),
-            "dist_to_lower_pct": None if not np.isfinite(last_row["dist_to_lower"]) else float(last_row["dist_to_lower"] * 100.0),
-            "dist_to_upper_pct": None if not np.isfinite(last_row["dist_to_upper"]) else float(last_row["dist_to_upper"] * 100.0),
-            "state": state,
-            "state_reason": state_reason,
-        },
-        "forward_mdd": {
-            "definition": "min(0, min_{i=1..H} (price[t+i]/price[t]-1)), H=horizon trading days",
-            "all_days": stats_all,
-            "conditional": {
-                "cheap_side": stats_cheap,
-                "hot_side": stats_hot,
-                "hot_side_extreme": stats_hot2,
-            },
-        },
-        "repro": {"command": repro_cmd},
-    }
-
-    write_json(Path(args.cache_dir) / "stats_latest.json", stats_latest)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    # ----- Apply split events -----
+    if split_heal_enabled and events:
+        price_adj, applied = apply_split_events_to_earlier_history(price_raw, events)
+        dq["split_events"] = applied
