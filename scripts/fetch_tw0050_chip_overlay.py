@@ -14,18 +14,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-# ===== Audit stamp (use this to prove which script generated the artifact) =====
-BUILD_SCRIPT_FINGERPRINT = "fetch_tw0050_chip_overlay@2026-02-19.v5"
+# ===== Audit stamp =====
+BUILD_SCRIPT_FINGERPRINT = "fetch_tw0050_chip_overlay@2026-02-19.v6"
 
 TWSE_T86_TPL = "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999"
 TWSE_TWT72U_TPL = "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB"
-
-# Yuanta PCF page (contains: Posting Date, Trade Date, Total Outstanding Shares, Net Change)
 YUANTA_PCF_URL_TPL = "https://www.yuantaetfs.com/tradeInfo/pcf/{stock_no}"
 
 
 def utc_now_iso_millis() -> str:
-    # e.g. 2026-02-19T09:34:46.855Z
     dt = datetime.now(timezone.utc)
     ms = int(dt.microsecond / 1000)
     dt2 = dt.replace(microsecond=0)
@@ -53,12 +50,6 @@ def write_json(path: str, obj: Dict[str, Any]) -> None:
 
 
 def parse_iso_ymd(s: str) -> Optional[date]:
-    """
-    Accept:
-      - YYYY-MM-DD
-      - YYYY/MM/DD
-      - YYYYMMDD
-    """
     if not s:
         return None
     s = str(s).strip()
@@ -109,9 +100,6 @@ class FetchCfg:
 
 
 def http_get_text(url: str, cfg: FetchCfg) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Returns (text, err)
-    """
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; chip_overlay_bot/1.0; +https://github.com/)",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -133,9 +121,6 @@ def http_get_text(url: str, cfg: FetchCfg) -> Tuple[Optional[str], Optional[str]
 
 
 def http_get_json(url: str, cfg: FetchCfg) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """
-    Returns (json, err)
-    """
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; chip_overlay_bot/1.0; +https://github.com/)",
         "Accept": "application/json,text/plain,*/*",
@@ -155,29 +140,7 @@ def http_get_json(url: str, cfg: FetchCfg) -> Tuple[Optional[Dict[str, Any]], Op
     return None, last_err
 
 
-def _find_field_idx(fields: List[str], predicates: List[str]) -> Optional[int]:
-    """
-    Find first field index that contains ALL keywords in predicates.
-    """
-    if not fields:
-        return None
-    for i, f in enumerate(fields):
-        ff = str(f)
-        ok = True
-        for kw in predicates:
-            if kw not in ff:
-                ok = False
-                break
-        if ok:
-            return i
-    return None
-
-
 def _pick_row_by_stock(data_rows: List[List[Any]], stock_no: str) -> Optional[List[Any]]:
-    """
-    TWSE responses usually return rows as list[list[str]].
-    We pick row where col0 == stock_no after strip.
-    """
     if not isinstance(data_rows, list):
         return None
     for row in data_rows:
@@ -189,6 +152,60 @@ def _pick_row_by_stock(data_rows: List[List[Any]], stock_no: str) -> Optional[Li
         except Exception:
             continue
     return None
+
+
+# ---------- Field index helpers (T86) ----------
+
+def _idx_exact(fields: List[str], exact: str) -> Optional[int]:
+    for i, f in enumerate(fields or []):
+        if str(f).strip() == exact:
+            return i
+    return None
+
+
+def _idx_contains(fields: List[str], contains: str, exclude_contains: Optional[str] = None) -> Optional[int]:
+    for i, f in enumerate(fields or []):
+        s = str(f)
+        if contains in s:
+            if exclude_contains and exclude_contains in s:
+                continue
+            return i
+    return None
+
+
+def _t86_idx_foreign(fields: List[str]) -> Optional[int]:
+    # Prefer exact
+    exact = "外陸資買賣超股數(不含外資自營商)"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    # fallback contains
+    return _idx_contains(fields, "外陸資買賣超股數")
+
+
+def _t86_idx_trust(fields: List[str]) -> Optional[int]:
+    exact = "投信買賣超股數"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    return _idx_contains(fields, "投信買賣超股數")
+
+
+def _t86_idx_dealer(fields: List[str]) -> Optional[int]:
+    # IMPORTANT: exclude 外資自營商
+    exact = "自營商買賣超股數"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    return _idx_contains(fields, "自營商買賣超股數", exclude_contains="外資自營商")
+
+
+def _t86_idx_total3(fields: List[str]) -> Optional[int]:
+    exact = "三大法人買賣超股數"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    return _idx_contains(fields, "三大法人買賣超股數")
 
 
 def fetch_t86_one_day(stock_no: str, ymd_str: str, cfg: FetchCfg) -> Dict[str, Any]:
@@ -211,14 +228,12 @@ def fetch_t86_one_day(stock_no: str, ymd_str: str, cfg: FetchCfg) -> Dict[str, A
 
     out["raw_row"] = row
 
-    # robust index lookup by field names
-    idx_foreign = _find_field_idx(fields, ["外陸資買賣超股數"])
-    idx_trust = _find_field_idx(fields, ["投信買賣超股數"])
-    # "自營商買賣超股數" (aggregate) exists and is what we want as dealer net
-    idx_dealer = _find_field_idx(fields, ["自營商買賣超股數"])
-    idx_total3 = _find_field_idx(fields, ["三大法人買賣超股數"])
+    idx_foreign = _t86_idx_foreign(fields)
+    idx_trust = _t86_idx_trust(fields)
+    idx_dealer = _t86_idx_dealer(fields)
+    idx_total3 = _t86_idx_total3(fields)
 
-    # fallback (older fixed layout)
+    # fallback fixed layout (TWSE usually stable)
     if idx_foreign is None:
         idx_foreign = 4
     if idx_trust is None:
@@ -238,10 +253,10 @@ def fetch_t86_one_day(stock_no: str, ymd_str: str, cfg: FetchCfg) -> Dict[str, A
         except Exception:
             return None
 
-    out["foreign_net_shares"] = at(idx_foreign) if idx_foreign is not None else None
-    out["trust_net_shares"] = at(idx_trust) if idx_trust is not None else None
-    out["dealer_net_shares"] = at(idx_dealer) if idx_dealer is not None else None
-    out["total3_net_shares"] = at(idx_total3) if idx_total3 is not None else None
+    out["foreign_net_shares"] = at(idx_foreign)
+    out["trust_net_shares"] = at(idx_trust)
+    out["dealer_net_shares"] = at(idx_dealer)
+    out["total3_net_shares"] = at(idx_total3)
     return out
 
 
@@ -265,12 +280,16 @@ def fetch_twt72u_one_day(stock_no: str, ymd_str: str, cfg: FetchCfg) -> Dict[str
 
     out["raw_row"] = row
 
-    # Robust index lookup by field names
-    idx_shares_end = _find_field_idx(fields, ["本日借券餘額股"])
-    idx_close = _find_field_idx(fields, ["本日收盤價"])
-    idx_mv = _find_field_idx(fields, ["借券餘額市值"])
+    def idx_contains(label: str) -> Optional[int]:
+        for i, f in enumerate(fields):
+            if label in str(f):
+                return i
+        return None
 
-    # fallback fixed layout
+    idx_shares_end = idx_contains("本日借券餘額股")
+    idx_close = idx_contains("本日收盤價")
+    idx_mv = idx_contains("借券餘額市值")
+
     if idx_shares_end is None:
         idx_shares_end = 5
     if idx_close is None:
@@ -280,45 +299,32 @@ def fetch_twt72u_one_day(stock_no: str, ymd_str: str, cfg: FetchCfg) -> Dict[str
 
     out["col_idx"] = {"shares_end": idx_shares_end, "close": idx_close, "mv": idx_mv}
 
-    def at_int(i: int) -> Optional[int]:
-        try:
-            if i < 0 or i >= len(row):
-                return None
-            return _strip_int(row[i])
-        except Exception:
-            return None
-
-    def at_float(i: int) -> Optional[float]:
-        try:
-            if i < 0 or i >= len(row):
-                return None
-            return _strip_num(row[i])
-        except Exception:
-            return None
-
-    out["borrow_shares"] = at_int(idx_shares_end) if idx_shares_end is not None else None
-    out["close"] = at_float(idx_close) if idx_close is not None else None
-    # mv might be big int
-    mv = None
-    if idx_mv is not None and idx_mv < len(row):
-        try:
-            mv = _strip_num(row[idx_mv])
-        except Exception:
-            mv = None
-    out["borrow_mv_ntd"] = mv
+    out["borrow_shares"] = _strip_int(row[idx_shares_end]) if idx_shares_end < len(row) else None
+    out["close"] = _strip_num(row[idx_close]) if idx_close < len(row) else None
+    out["borrow_mv_ntd"] = _strip_num(row[idx_mv]) if idx_mv < len(row) else None
     return out
 
 
+# ---------- Yuanta PCF parsing ----------
+
+_DATE_RE_LIST = [
+    # YYYY-MM-DD HH:MM:SS
+    r"([0-9]{4}-[0-9]{2}-[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})",
+    # YYYY-MM-DD
+    r"([0-9]{4}-[0-9]{2}-[0-9]{2})",
+    # YYYY/MM/DD
+    r"([0-9]{4}/[0-9]{2}/[0-9]{2})",
+]
+
+def _find_first_date(snippet: str) -> Optional[str]:
+    for pat in _DATE_RE_LIST:
+        m = re.search(pat, snippet)
+        if m:
+            return m.group(1)
+    return None
+
+
 def parse_yuanta_pcf_units(html: str) -> Tuple[Dict[str, Any], List[str]]:
-    """
-    Parse units from Yuanta PCF page.
-    Expect fields exist (English headings):
-      - Posting Date：YYYY-MM-DD HH:MM:SS
-      - Trade Date: YYYY/MM/DD
-      - Total Outstanding Shares -> number with commas
-      - Net Change in Outstanding Shares -> number with commas
-    Returns (etf_units_dict, dq_list)
-    """
     dq: List[str] = []
     etf: Dict[str, Any] = {
         "source": "yuanta_pcf",
@@ -335,50 +341,62 @@ def parse_yuanta_pcf_units(html: str) -> Tuple[Dict[str, Any], List[str]]:
         etf["dq"] = dq
         return etf, dq
 
-    # normalize full-width colon and whitespace
+    # normalize
     t = html.replace("\uFF1A", ":")
-    # collapse multiple spaces but keep newlines meaningful for regex \s
     t = re.sub(r"[ \t\r\f\v]+", " ", t)
 
-    # Posting Date
-    m = re.search(r"Posting Date\s*:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})", t)
-    if m:
-        etf["posting_dt"] = m.group(1)
+    # helper: find near a label within N chars
+    def near(label_variants: List[str], span: int = 900) -> Optional[str]:
+        for lab in label_variants:
+            idx = t.find(lab)
+            if idx >= 0:
+                return t[idx : idx + span]
+        return None
+
+    # Posting date (English + Chinese variants)
+    sn = near(["Posting Date", "公告日期", "揭示日期", "資料日期", "更新時間"])
+    if sn:
+        d = _find_first_date(sn)
+        if d:
+            etf["posting_dt"] = d
+        else:
+            dq.append("ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND")
     else:
         dq.append("ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND")
 
-    # Trade Date (there are multiple occurrences; use the first one after 'Trade Date')
-    m = re.search(r"Trade Date\s*:\s*([0-9]{4}/[0-9]{2}/[0-9]{2})", t)
-    if m:
-        etf["trade_date"] = m.group(1)
+    # Trade date (English + Chinese variants)
+    sn = near(["Trade Date", "交易日", "交易日期"])
+    if sn:
+        d = _find_first_date(sn)
+        if d:
+            etf["trade_date"] = d
+        else:
+            dq.append("ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND")
     else:
         dq.append("ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND")
 
-    def find_number_after(label: str, max_chars: int = 400) -> Optional[int]:
-        idx = t.find(label)
-        if idx < 0:
-            return None
-        snippet = t[idx : idx + max_chars]
-        mm = re.search(r"([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{6,})", snippet)
-        if not mm:
-            return None
-        try:
-            return int(mm.group(1).replace(",", ""))
-        except Exception:
-            return None
+    def find_number_after(label_variants: List[str], max_chars: int = 900) -> Optional[int]:
+        for lab in label_variants:
+            idx = t.find(lab)
+            if idx < 0:
+                continue
+            snippet = t[idx : idx + max_chars]
+            mm = re.search(r"([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{6,})", snippet)
+            if not mm:
+                continue
+            try:
+                return int(mm.group(1).replace(",", ""))
+            except Exception:
+                continue
+        return None
 
-    units = find_number_after("Total Outstanding Shares")
-    if units is None:
-        # fallback (in case label changes slightly)
-        units = find_number_after("Outstanding Shares")
+    units = find_number_after(["Total Outstanding Shares", "Outstanding Shares", "流通在外", "流通單位", "發行單位數"])
     if units is not None:
         etf["units_outstanding"] = units
     else:
         dq.append("ETF_UNITS_PCF_OUTSTANDING_NOT_FOUND")
 
-    chg = find_number_after("Net Change in Outstanding Shares")
-    if chg is None:
-        chg = find_number_after("Net Change")
+    chg = find_number_after(["Net Change in Outstanding Shares", "Net Change", "增減", "日增減", "淨增減"])
     if chg is not None:
         etf["units_chg_1d"] = chg
     else:
@@ -416,19 +434,13 @@ def fetch_etf_units(stock_no: str, cfg: FetchCfg, pcf_url: Optional[str]) -> Tup
     return etf, dq
 
 
-def build_overlay(
-    stock_no: str,
-    stats_path: str,
-    window_n: int,
-    cfg: FetchCfg,
-    pcf_url: Optional[str] = None,
-) -> Dict[str, Any]:
+def build_overlay(stock_no: str, stats_path: str, window_n: int, cfg: FetchCfg, pcf_url: Optional[str]) -> Dict[str, Any]:
     if not os.path.exists(stats_path):
         raise SystemExit(f"ERROR: stats_path not found: {stats_path}")
 
     s = load_json(stats_path)
     meta = safe_get(s, "meta", {}) or {}
-    last_date_s = safe_get(meta, "last_date", None) or safe_get(safe_get(s, "latest", {}), "date", None)
+    last_date_s = safe_get(meta, "last_date", None)
     last_dt = parse_iso_ymd(str(last_date_s)) if last_date_s else None
     if last_dt is None:
         raise SystemExit(f"ERROR: cannot parse meta.last_date from stats_latest.json: {last_date_s}")
@@ -437,13 +449,8 @@ def build_overlay(
 
     per_day: List[Dict[str, Any]] = []
     t86_days_used: List[str] = []
-    foreign_sum = 0
-    trust_sum = 0
-    dealer_sum = 0
-    total3_sum = 0
+    foreign_sum = trust_sum = dealer_sum = total3_sum = 0
 
-    # We must include non-trading days until we collect >= window_n valid trading days for aggregation.
-    # Max lookback is defensive to avoid infinite loop.
     max_lookback = max(30, window_n * 8)
     got = 0
     cur = last_dt
@@ -461,23 +468,19 @@ def build_overlay(
 
         t86 = fetch_t86_one_day(stock_no, ds, cfg)
         twt72u = fetch_twt72u_one_day(stock_no, ds, cfg)
-
         day_entry["t86"] = t86
         day_entry["twt72u"] = twt72u
 
-        # mark non-trading / no-data
         is_t86_ok = ("T86_EMPTY" not in (t86.get("dq") or [])) and (t86.get("raw_row") is not None)
         is_twt_ok = ("TWT72U_EMPTY" not in (twt72u.get("dq") or [])) and (twt72u.get("raw_row") is not None)
         if (not is_t86_ok) and (not is_twt_ok):
             day_entry["dq"].append("NON_TRADING_OR_NO_DATA")
 
-        # use day for aggregation only if T86 is OK (we want consistent window definition)
         if is_t86_ok:
             f = t86.get("foreign_net_shares")
             t = t86.get("trust_net_shares")
             d = t86.get("dealer_net_shares")
             tt = t86.get("total3_net_shares")
-            # be defensive: only count when all are present ints
             if all(isinstance(x, int) for x in [f, t, d, tt]):
                 foreign_sum += int(f)
                 trust_sum += int(t)
@@ -489,7 +492,7 @@ def build_overlay(
         per_day.append(day_entry)
         cur = cur - timedelta(days=1)
 
-    # Borrow summary: use the latest two available TWT72U rows in per_day
+    # Borrow summary: latest two available
     def _borrow_rec(e: Dict[str, Any]) -> Optional[Tuple[str, Optional[int], Optional[float]]]:
         tw = safe_get(e, "twt72u", {}) or {}
         bs = safe_get(tw, "borrow_shares", None)
@@ -507,12 +510,10 @@ def build_overlay(
         "borrow_mv_ntd_chg_1d": None,
     }
     if borrow_rows:
-        # per_day is newest -> oldest
         asof_date, bs, mv = borrow_rows[0]
         borrow_summary["asof_date"] = asof_date
         borrow_summary["borrow_shares"] = bs
         borrow_summary["borrow_mv_ntd"] = mv
-
         if len(borrow_rows) >= 2:
             _, bs_prev, mv_prev = borrow_rows[1]
             if bs is not None and bs_prev is not None:
@@ -520,7 +521,6 @@ def build_overlay(
             if mv is not None and mv_prev is not None:
                 borrow_summary["borrow_mv_ntd_chg_1d"] = float(mv) - float(mv_prev)
 
-    # T86 aggregate (keep day order ascending for readability)
     t86_agg = {
         "window_n": window_n,
         "days_used": list(reversed(t86_days_used)),
@@ -530,27 +530,19 @@ def build_overlay(
         "total3_net_shares_sum": int(total3_sum),
     }
 
-    # ETF units
     etf_units, etf_dq = fetch_etf_units(stock_no, cfg, pcf_url=pcf_url)
 
-    # extra alignment check: ETF trade_date vs aligned_last_date
-    if etf_units.get("trade_date"):
-        td = parse_iso_ymd(str(etf_units["trade_date"]))
-        if td is not None and ymd(td) != aligned_last_date:
-            etf_dq = list(etf_dq or [])
-            etf_dq.append("ETF_UNITS_DATE_MISALIGNED")
-            etf_units["dq"] = etf_dq
-
+    # Only escalate to top-level flags if units cannot be obtained (dates missing alone should not break report)
     dq_flags: List[str] = []
-    # Promote ETF dq to top-level (only key ones)
     if etf_dq:
-        dq_flags.append("ETF_UNITS_FETCH_FAILED") if "ETF_UNITS_FETCH_FAILED" in etf_dq else None
+        if "ETF_UNITS_FETCH_FAILED" in etf_dq:
+            dq_flags.append("ETF_UNITS_FETCH_FAILED")
         if "ETF_UNITS_PCF_PARSE_ALL_MISSING" in etf_dq:
             dq_flags.append("ETF_UNITS_PCF_PARSE_ALL_MISSING")
-        if "ETF_UNITS_DATE_MISALIGNED" in etf_dq:
-            dq_flags.append("ETF_UNITS_DATE_MISALIGNED")
+        if (etf_units.get("units_outstanding") is None) or (etf_units.get("units_chg_1d") is None):
+            # missing key numeric values => treat as important
+            dq_flags.append("ETF_UNITS_VALUE_MISSING")
 
-    # final payload
     payload: Dict[str, Any] = {
         "meta": {
             "run_ts_utc": utc_now_iso_millis(),
@@ -580,28 +572,21 @@ def build_overlay(
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-
-    # ---- compatibility knobs ----
     ap.add_argument("--cache_dir", default=None, help="optional; used to infer default stats_path/out")
-    ap.add_argument("--out", default=None, help="output json path (preferred arg name)")
-    ap.add_argument("--out_path", default=None, help="alias of --out (backward compatible)")
+    ap.add_argument("--out", default=None, help="output json path (preferred)")
+    ap.add_argument("--out_path", default=None, help="alias of --out")
     ap.add_argument("--stats_path", default=None, help="path to stats_latest.json")
     ap.add_argument("--stock_no", default="0050")
     ap.add_argument("--window_n", type=int, default=5)
     ap.add_argument("--timeout", type=float, default=15.0)
     ap.add_argument("--retries", type=int, default=3)
     ap.add_argument("--backoff", type=float, default=1.5)
-
-    # optional override for Yuanta PCF URL (debug / mirror)
     ap.add_argument("--pcf_url", default=None)
-
     args = ap.parse_args()
 
-    # Resolve out path
     out_path = args.out or args.out_path
     stats_path = args.stats_path
 
-    # cache_dir is OPTIONAL now (fix your workflow error)
     if args.cache_dir:
         if stats_path is None:
             stats_path = os.path.join(args.cache_dir, "stats_latest.json")
@@ -614,7 +599,6 @@ def main() -> int:
         raise SystemExit("ERROR: missing --out (or provide --cache_dir to infer it)")
 
     cfg = FetchCfg(timeout=float(args.timeout), retries=int(args.retries), backoff=float(args.backoff))
-
     payload = build_overlay(
         stock_no=str(args.stock_no).strip(),
         stats_path=str(stats_path),
