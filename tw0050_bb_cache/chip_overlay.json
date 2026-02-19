@@ -589,7 +589,7 @@
     "aligned_last_date": "20260211",
     "backoff": 1.5,
     "retries": 3,
-    "run_ts_utc": "2026-02-19T07:27:13Z",
+    "run_ts_utc": "2026-02-19T07:32:42Z",
     "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v1",
     "stock_no": "0050",
     "timeout": 15.0,
