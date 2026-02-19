@@ -1,0 +1,47 @@
+{
+  "dq": {
+    "flags": [],
+    "notes": []
+  },
+  "forward_mdd": {
+    "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
+    "min": -0.7627551786429906,
+    "n": 4172,
+    "p05": -0.09523579786281465,
+    "p10": -0.07015372372509239,
+    "p25": -0.040785105909023345,
+    "p50": -0.018457919791559696
+  },
+  "latest": {
+    "adjclose": 77.19999694824219,
+    "bb_lower": 55.89385323010454,
+    "bb_ma": 66.40432726542154,
+    "bb_pos": 1.0135672114571301,
+    "bb_sd": 5.2552370176585015,
+    "bb_upper": 76.91480130073855,
+    "bb_z": 2.05426884582852,
+    "close": 77.19999694824219,
+    "date": "2026-02-11",
+    "dist_to_lower_pct": 27.598632850234562,
+    "dist_to_upper_pct": -0.36942442846836854,
+    "price_used": 77.19999694824219,
+    "state": "EXTREME_UPPER_BAND"
+  },
+  "meta": {
+    "bb_k": 2.0,
+    "bb_window": 60,
+    "data_source": "yfinance_yahoo_or_twse_fallback",
+    "fetch_start_effective": "2003-01-01",
+    "fwd_days": 20,
+    "last_date": "2026-02-11",
+    "module": "tw0050_bb",
+    "price_calc": "adjclose",
+    "price_col_requested": "adjclose",
+    "price_col_used": "adjclose",
+    "rows": 4192,
+    "run_ts_utc": "2026-02-19T02:13:30Z",
+    "start": "2003-01-01",
+    "ticker": "0050.TW",
+    "tz": "Asia/Taipei"
+  }
+}
