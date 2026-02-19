@@ -1,18 +1,42 @@
 {
+  "meta": {
+    "run_ts_utc": "2026-02-19T07:54:21.045782Z",
+    "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v2",
+    "stock_no": "0050",
+    "window_n": 5,
+    "timeout": 15.0,
+    "retries": 3,
+    "backoff": 1.5,
+    "aligned_last_date": "20260211"
+  },
+  "sources": {
+    "t86_tpl": "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999",
+    "twt72u_tpl": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB"
+  },
+  "dq": {
+    "flags": []
+  },
   "data": {
     "borrow_summary": {
       "asof_date": "20260211",
+      "borrow_shares": 135405000,
+      "borrow_shares_chg_1d": -9446000,
       "borrow_mv_ntd": 10453266000.0,
-      "borrow_mv_ntd_chg_1d": -482984500.0,
-      "borrow_shares": 144851000,
-      "borrow_shares_chg_1d": -63429000.0
+      "borrow_mv_ntd_chg_1d": -482984500.0
     },
-    "etf_units": {
-      "dq": [
-        "ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED"
+    "t86_agg": {
+      "window_n": 5,
+      "days_used": [
+        "20260205",
+        "20260206",
+        "20260209",
+        "20260210",
+        "20260211"
       ],
-      "units_chg_1d": null,
-      "units_outstanding": null
+      "foreign_net_shares_sum": -14398187,
+      "trust_net_shares_sum": 17326000,
+      "dealer_net_shares_sum": -11810680,
+      "total3_net_shares_sum": -8882867
     },
     "per_day": [
       {
@@ -23,13 +47,6 @@
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260204&selectType=SLBNLB"
         },
         "t86": {
-          "col_idx": {
-            "dealer": 4,
-            "foreign": 4,
-            "trust": 10
-          },
-          "dealer_net_shares": -15873207,
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -51,7 +68,6 @@
             "自營商買賣超股數(避險)",
             "三大法人買賣超股數"
           ],
-          "foreign_net_shares": -15873207,
           "raw_row": [
             "0050",
             "元大台灣50      ",
@@ -73,16 +89,19 @@
             "2,733,100",
             "-11,401,721"
           ],
-          "trust_net_shares": 2100000
+          "col_idx": {
+            "foreign": 4,
+            "trust": 10,
+            "dealer": 11,
+            "total3": 18
+          },
+          "foreign_net_shares": -15873207,
+          "trust_net_shares": 2100000,
+          "dealer_net_shares": 2371486,
+          "total3_net_shares": -11401721,
+          "dq": []
         },
         "twt72u": {
-          "borrow_mv_ntd": 15851959200.0,
-          "borrow_shares": 218349000,
-          "col_idx": {
-            "mv": 7,
-            "shares": 2
-          },
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -104,7 +123,16 @@
             "72.90",
             "15,851,959,200",
             "集中市場"
-          ]
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "mv": 7,
+            "close": 6
+          },
+          "borrow_shares": 217448000,
+          "borrow_mv_ntd": 15851959200.0,
+          "close": 72.9,
+          "dq": []
         }
       },
       {
@@ -115,13 +143,6 @@
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260205&selectType=SLBNLB"
         },
         "t86": {
-          "col_idx": {
-            "dealer": 4,
-            "foreign": 4,
-            "trust": 10
-          },
-          "dealer_net_shares": -48799201,
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -143,7 +164,6 @@
             "自營商買賣超股數(避險)",
             "三大法人買賣超股數"
           ],
-          "foreign_net_shares": -48799201,
           "raw_row": [
             "0050",
             "元大台灣50      ",
@@ -165,16 +185,19 @@
             "-11,859,804",
             "-65,866,633"
           ],
-          "trust_net_shares": 0
+          "col_idx": {
+            "foreign": 4,
+            "trust": 10,
+            "dealer": 11,
+            "total3": 18
+          },
+          "foreign_net_shares": -48799201,
+          "trust_net_shares": 0,
+          "dealer_net_shares": -17067432,
+          "total3_net_shares": -65866633,
+          "dq": []
         },
         "twt72u": {
-          "borrow_mv_ntd": 15529248000.0,
-          "borrow_shares": 217448000,
-          "col_idx": {
-            "mv": 7,
-            "shares": 2
-          },
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -196,7 +219,16 @@
             "72.00",
             "15,529,248,000",
             "集中市場"
-          ]
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "mv": 7,
+            "close": 6
+          },
+          "borrow_shares": 215684000,
+          "borrow_mv_ntd": 15529248000.0,
+          "close": 72.0,
+          "dq": []
         }
       },
       {
@@ -207,13 +239,6 @@
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260206&selectType=SLBNLB"
         },
         "t86": {
-          "col_idx": {
-            "dealer": 4,
-            "foreign": 4,
-            "trust": 10
-          },
-          "dealer_net_shares": -26941369,
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -235,7 +260,6 @@
             "自營商買賣超股數(避險)",
             "三大法人買賣超股數"
           ],
-          "foreign_net_shares": -26941369,
           "raw_row": [
             "0050",
             "元大台灣50      ",
@@ -257,16 +281,19 @@
             "-10,907,079",
             "-32,494,568"
           ],
-          "trust_net_shares": 2100000
+          "col_idx": {
+            "foreign": 4,
+            "trust": 10,
+            "dealer": 11,
+            "total3": 18
+          },
+          "foreign_net_shares": -26941369,
+          "trust_net_shares": 2100000,
+          "dealer_net_shares": -7653199,
+          "total3_net_shares": -32494568,
+          "dq": []
         },
         "twt72u": {
-          "borrow_mv_ntd": 15532053700.0,
-          "borrow_shares": 215684000,
-          "col_idx": {
-            "mv": 7,
-            "shares": 2
-          },
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -288,7 +315,16 @@
             "71.90",
             "15,532,053,700",
             "集中市場"
-          ]
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "mv": 7,
+            "close": 6
+          },
+          "borrow_shares": 216023000,
+          "borrow_mv_ntd": 15532053700.0,
+          "close": 71.9,
+          "dq": []
         }
       },
       {
@@ -299,13 +335,6 @@
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260209&selectType=SLBNLB"
         },
         "t86": {
-          "col_idx": {
-            "dealer": 4,
-            "foreign": 4,
-            "trust": 10
-          },
-          "dealer_net_shares": 36795082,
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -327,7 +356,6 @@
             "自營商買賣超股數(避險)",
             "三大法人買賣超股數"
           ],
-          "foreign_net_shares": 36795082,
           "raw_row": [
             "0050",
             "元大台灣50      ",
@@ -349,16 +377,19 @@
             "20,664,069",
             "61,901,986"
           ],
-          "trust_net_shares": 2200000
+          "col_idx": {
+            "foreign": 4,
+            "trust": 10,
+            "dealer": 11,
+            "total3": 18
+          },
+          "foreign_net_shares": 36795082,
+          "trust_net_shares": 2200000,
+          "dealer_net_shares": 22906904,
+          "total3_net_shares": 61901986,
+          "dq": []
         },
         "twt72u": {
-          "borrow_mv_ntd": 15402306000.0,
-          "borrow_shares": 216023000,
-          "col_idx": {
-            "mv": 7,
-            "shares": 2
-          },
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -380,7 +411,16 @@
             "73.95",
             "15,402,306,000",
             "集中市場"
-          ]
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "mv": 7,
+            "close": 6
+          },
+          "borrow_shares": 208280000,
+          "borrow_mv_ntd": 15402306000.0,
+          "close": 73.95,
+          "dq": []
         }
       },
       {
@@ -391,13 +431,6 @@
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260210&selectType=SLBNLB"
         },
         "t86": {
-          "col_idx": {
-            "dealer": 4,
-            "foreign": 4,
-            "trust": 10
-          },
-          "dealer_net_shares": 23352001,
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -419,7 +452,6 @@
             "自營商買賣超股數(避險)",
             "三大法人買賣超股數"
           ],
-          "foreign_net_shares": 23352001,
           "raw_row": [
             "0050",
             "元大台灣50      ",
@@ -441,16 +473,19 @@
             "3,611,839",
             "33,052,840"
           ],
-          "trust_net_shares": 4526000
+          "col_idx": {
+            "foreign": 4,
+            "trust": 10,
+            "dealer": 11,
+            "total3": 18
+          },
+          "foreign_net_shares": 23352001,
+          "trust_net_shares": 4526000,
+          "dealer_net_shares": 5174839,
+          "total3_net_shares": 33052840,
+          "dq": []
         },
         "twt72u": {
-          "borrow_mv_ntd": 10936250500.0,
-          "borrow_shares": 208280000,
-          "col_idx": {
-            "mv": 7,
-            "shares": 2
-          },
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -472,7 +507,16 @@
             "75.50",
             "10,936,250,500",
             "集中市場"
-          ]
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "mv": 7,
+            "close": 6
+          },
+          "borrow_shares": 144851000,
+          "borrow_mv_ntd": 10936250500.0,
+          "close": 75.5,
+          "dq": []
         }
       },
       {
@@ -483,13 +527,6 @@
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260211&selectType=SLBNLB"
         },
         "t86": {
-          "col_idx": {
-            "dealer": 4,
-            "foreign": 4,
-            "trust": 10
-          },
-          "dealer_net_shares": 1195300,
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -511,7 +548,6 @@
             "自營商買賣超股數(避險)",
             "三大法人買賣超股數"
           ],
-          "foreign_net_shares": 1195300,
           "raw_row": [
             "0050",
             "元大台灣50      ",
@@ -533,16 +569,19 @@
             "-12,370,637",
             "-5,476,492"
           ],
-          "trust_net_shares": 8500000
+          "col_idx": {
+            "foreign": 4,
+            "trust": 10,
+            "dealer": 11,
+            "total3": 18
+          },
+          "foreign_net_shares": 1195300,
+          "trust_net_shares": 8500000,
+          "dealer_net_shares": -15171792,
+          "total3_net_shares": -5476492,
+          "dq": []
         },
         "twt72u": {
-          "borrow_mv_ntd": 10453266000.0,
-          "borrow_shares": 144851000,
-          "col_idx": {
-            "mv": 7,
-            "shares": 2
-          },
-          "dq": [],
           "fields": [
             "證券代號",
             "證券名稱",
@@ -564,40 +603,25 @@
             "77.20",
             "10,453,266,000",
             "集中市場"
-          ]
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "mv": 7,
+            "close": 6
+          },
+          "borrow_shares": 135405000,
+          "borrow_mv_ntd": 10453266000.0,
+          "close": 77.2,
+          "dq": []
         }
       }
     ],
-    "t86_agg": {
-      "days_used": [
-        "20260205",
-        "20260206",
-        "20260209",
-        "20260210",
-        "20260211"
+    "etf_units": {
+      "dq": [
+        "ETF_UNITS_ENDPOINT_NOT_IMPLEMENTED"
       ],
-      "dealer_net_shares_sum": -14398187,
-      "foreign_net_shares_sum": -14398187,
-      "trust_net_shares_sum": 17326000,
-      "window_n": 5
+      "units_outstanding": null,
+      "units_chg_1d": null
     }
-  },
-  "dq": {
-    "flags": []
-  },
-  "meta": {
-    "aligned_last_date": "20260211",
-    "backoff": 1.5,
-    "retries": 3,
-    "run_ts_utc": "2026-02-19T07:32:42Z",
-    "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v1",
-    "stock_no": "0050",
-    "timeout": 15.0,
-    "window_n": 5
-  },
-  "sources": {
-    "t86_tpl": "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999",
-    "twt72u_html_fallback_tpl": "https://www.twse.com.tw/exchangeReport/TWT72U?response=html&date={ymd}&selectType=SLBNLB",
-    "twt72u_tpl": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB"
   }
 }
