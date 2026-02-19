@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp (use this to prove which script generated the report) =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v5"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v6"
 
 
 def utc_now_iso() -> str:
@@ -55,6 +55,28 @@ def fmt_pct1(x: Any) -> str:
         return "N/A"
 
 
+def fmt_int(x: Any) -> str:
+    try:
+        if x is None:
+            return "N/A"
+        return f"{int(float(x)):,}"
+    except Exception:
+        return "N/A"
+
+
+def fmt_yi_from_ntd(x: Any, digits: int = 1) -> str:
+    """
+    NTD -> 億 (1e8 NTD). Returns string like 104.5 億
+    """
+    try:
+        if x is None:
+            return "N/A"
+        yi = float(x) / 1e8
+        return f"{yi:,.{digits}f}"
+    except Exception:
+        return "N/A"
+
+
 def safe_get(d: Any, k: str, default=None):
     try:
         if isinstance(d, dict):
@@ -67,6 +89,35 @@ def safe_get(d: Any, k: str, default=None):
 def load_json(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def normalize_date_key(x: Any) -> Optional[str]:
+    """
+    Normalize dates like:
+      - "2026-02-11" -> "20260211"
+      - "20260211" -> "20260211"
+      - datetime -> "YYYYMMDD"
+    Return None if not parseable.
+    """
+    try:
+        if x is None:
+            return None
+        if isinstance(x, datetime):
+            return x.strftime("%Y%m%d")
+        s = str(x).strip()
+        if not s:
+            return None
+        if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+            return s[:10].replace("-", "")
+        if len(s) == 8 and s.isdigit():
+            return s
+        # try pandas parse
+        dt = pd.to_datetime(s, errors="coerce")
+        if pd.isna(dt):
+            return None
+        return dt.strftime("%Y%m%d")
+    except Exception:
+        return None
 
 
 def load_prices_tail(cache_dir: str, n: int) -> Optional[pd.DataFrame]:
@@ -233,8 +284,12 @@ def sum_chg(rows: List[Dict[str, Any]]) -> float:
     return float(s)
 
 
-def margin_overlay_block(margin_json: Dict[str, Any], price_last_date: str, window_n: int, threshold_yi: float
-                         ) -> Tuple[List[str], Optional[str]]:
+def margin_overlay_block(
+    margin_json: Dict[str, Any],
+    price_last_date: str,
+    window_n: int,
+    threshold_yi: float,
+) -> Tuple[List[str], Optional[str]]:
     """
     Returns:
       - markdown lines for the section
@@ -255,7 +310,7 @@ def margin_overlay_block(margin_json: Dict[str, Any], price_last_date: str, wind
     tpex_last = tpex_rows[0]["date"] if (isinstance(tpex_rows, list) and len(tpex_rows) > 0) else None
     margin_last_date = twse_last or tpex_last or "N/A"
 
-    aligned = (str(margin_last_date) == str(price_last_date))
+    aligned = (normalize_date_key(margin_last_date) == normalize_date_key(price_last_date))
     align_tag = "ALIGNED" if aligned else "MISALIGNED"
 
     twse_n = take_last_n_rows(twse_rows, window_n)
@@ -307,7 +362,9 @@ def margin_overlay_block(margin_json: Dict[str, Any], price_last_date: str, wind
     lines.append(f"- overlay_generated_at_utc: `{gen_utc}`")
     lines.append(f"- data_date: `{data_date}`")
     lines.append(f"- params: window_n={window_n}, threshold_yi={threshold_yi:.2f}")
-    lines.append(f"- date_alignment: margin_latest_date=`{margin_last_date}` vs price_last_date=`{price_last_date}` => **{align_tag}**")
+    lines.append(
+        f"- date_alignment: margin_latest_date=`{margin_last_date}` vs price_last_date=`{price_last_date}` => **{align_tag}**"
+    )
     lines.append("")
     lines.append("| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
@@ -320,9 +377,15 @@ def margin_overlay_block(margin_json: Dict[str, Any], price_last_date: str, wind
         except Exception:
             return "N/A"
 
-    lines.append(f"| TWSE | {twse_last or 'N/A'} | {fmt_yi(twse_bal)} | {fmt_yi(twse_chg_today)} | {twse_sum:.1f} | {twse_state} | {len(twse_n)} |")
-    lines.append(f"| TPEX | {tpex_last or 'N/A'} | {fmt_yi(tpex_bal)} | {fmt_yi(tpex_chg_today)} | {tpex_sum:.1f} | {tpex_state} | {len(tpex_n)} |")
-    lines.append(f"| TOTAL | {margin_last_date} | {fmt_yi(total_bal)} | N/A | {total_sum:.1f} | {total_state} | N/A |")
+    lines.append(
+        f"| TWSE | {twse_last or 'N/A'} | {fmt_yi(twse_bal)} | {fmt_yi(twse_chg_today)} | {twse_sum:.1f} | {twse_state} | {len(twse_n)} |"
+    )
+    lines.append(
+        f"| TPEX | {tpex_last or 'N/A'} | {fmt_yi(tpex_bal)} | {fmt_yi(tpex_chg_today)} | {tpex_sum:.1f} | {tpex_state} | {len(tpex_n)} |"
+    )
+    lines.append(
+        f"| TOTAL | {margin_last_date} | {fmt_yi(total_bal)} | N/A | {total_sum:.1f} | {total_state} | N/A |"
+    )
     lines.append("")
     lines.append("### Margin Sources")
     lines.append("")
@@ -345,17 +408,183 @@ def build_regime_line(regime: Dict[str, Any]) -> Optional[str]:
     return f"- regime(relative_pctl): **{tag}**; allowed={str(allowed).lower()}; rv20_pctl={fmt2(rv_pctl)}"
 
 
+def read_chip_overlay(path: str) -> Optional[Dict[str, Any]]:
+    if not path or (not os.path.exists(path)):
+        return None
+    try:
+        return load_json(path)
+    except Exception:
+        return None
+
+
+def chip_overlay_block(
+    chip_json: Dict[str, Any],
+    price_last_date: str,
+    expect_window_n: int,
+) -> Tuple[List[str], Optional[str], List[str]]:
+    """
+    Minimal-intrusion "chip overlay" section:
+      - if present: show a small table + alignment + sources
+      - if missing/misaligned/mismatch: emit DQ flags (returned to caller)
+
+    Returns:
+      - markdown lines for the section
+      - quick summary line (or None)
+      - dq_extra_flags (list)
+    """
+    lines: List[str] = []
+    dq_extra: List[str] = []
+
+    meta = safe_get(chip_json, "meta", {}) or {}
+    data = safe_get(chip_json, "data", {}) or {}
+    sources = safe_get(chip_json, "sources", {}) or {}
+    root_dq = safe_get(safe_get(chip_json, "dq", {}) or {}, "flags", []) or []
+
+    run_ts_utc = safe_get(meta, "run_ts_utc", "N/A")
+    stock_no = safe_get(meta, "stock_no", "N/A")
+    window_n = safe_get(meta, "window_n", None)
+    aligned_last_date = safe_get(meta, "aligned_last_date", None)
+
+    # alignment
+    aligned = (normalize_date_key(aligned_last_date) == normalize_date_key(price_last_date))
+    align_tag = "ALIGNED" if aligned else "MISALIGNED"
+    if not aligned:
+        dq_extra.append("CHIP_OVERLAY_MISALIGNED")
+
+    # window mismatch (optional guard)
+    try:
+        if (window_n is not None) and (expect_window_n is not None) and (int(window_n) != int(expect_window_n)):
+            dq_extra.append("CHIP_OVERLAY_WINDOW_MISMATCH")
+    except Exception:
+        dq_extra.append("CHIP_OVERLAY_WINDOW_MISMATCH")
+
+    borrow = safe_get(data, "borrow_summary", {}) or {}
+    t86 = safe_get(data, "t86_agg", {}) or {}
+    etf_units = safe_get(data, "etf_units", {}) or {}
+    etf_units_dq = safe_get(etf_units, "dq", []) or []
+
+    # Compose quick line (keep it short)
+    total3_sum = safe_get(t86, "total3_net_shares_sum")
+    foreign_sum = safe_get(t86, "foreign_net_shares_sum")
+    trust_sum = safe_get(t86, "trust_net_shares_sum")
+    dealer_sum = safe_get(t86, "dealer_net_shares_sum")
+
+    b_asof = safe_get(borrow, "asof_date")
+    b_shares = safe_get(borrow, "borrow_shares")
+    b_shares_chg = safe_get(borrow, "borrow_shares_chg_1d")
+    b_mv = safe_get(borrow, "borrow_mv_ntd")
+    b_mv_chg = safe_get(borrow, "borrow_mv_ntd_chg_1d")
+
+    quick = (
+        f"- chip_overlay(T86+TWT72U,{expect_window_n}D): "
+        f"total3_5D={fmt_int(total3_sum)}; foreign={fmt_int(foreign_sum)}; trust={fmt_int(trust_sum)}; dealer={fmt_int(dealer_sum)}; "
+        f"borrow_shares={fmt_int(b_shares)} (Δ1D={fmt_int(b_shares_chg)}); borrow_mv(億)={fmt_yi_from_ntd(b_mv)} (Δ1D={fmt_yi_from_ntd(b_mv_chg)}); "
+        f"asof={b_asof}; price_last_date={price_last_date} ({align_tag})"
+    )
+
+    # Section header
+    lines.append("## Chip Overlay（籌碼：TWSE T86 + TWT72U）")
+    lines.append("")
+    lines.append(f"- overlay_generated_at_utc: `{run_ts_utc}`")
+    lines.append(f"- stock_no: `{stock_no}`")
+    lines.append(f"- overlay_window_n: `{window_n if window_n is not None else 'N/A'}` (expect={expect_window_n})")
+    lines.append(
+        f"- date_alignment: overlay_aligned_last_date=`{aligned_last_date}` vs price_last_date=`{price_last_date}` => **{align_tag}**"
+    )
+    lines.append("")
+
+    # Borrow summary (TWT72U)
+    lines.append("### Borrow Summary（借券：TWT72U）")
+    lines.append("")
+    lines.append(
+        md_table_kv(
+            [
+                ["asof_date", str(b_asof) if b_asof is not None else "N/A"],
+                ["borrow_shares", fmt_int(b_shares)],
+                ["borrow_shares_chg_1d", fmt_int(b_shares_chg)],
+                ["borrow_mv_ntd(億)", fmt_yi_from_ntd(b_mv)],
+                ["borrow_mv_ntd_chg_1d(億)", fmt_yi_from_ntd(b_mv_chg)],
+            ]
+        )
+    )
+    lines.append("")
+
+    # T86 aggregate (5D)
+    lines.append(f"### T86 Aggregate（法人：{expect_window_n}D sum）")
+    lines.append("")
+    days_used = safe_get(t86, "days_used", []) or []
+    lines.append(
+        md_table_kv(
+            [
+                ["days_used", ", ".join([str(x) for x in days_used]) if days_used else "N/A"],
+                ["foreign_net_shares_sum", fmt_int(foreign_sum)],
+                ["trust_net_shares_sum", fmt_int(trust_sum)],
+                ["dealer_net_shares_sum", fmt_int(dealer_sum)],
+                ["total3_net_shares_sum", fmt_int(total3_sum)],
+            ]
+        )
+    )
+    lines.append("")
+
+    # ETF units (currently may be NA)
+    lines.append("### ETF Units（受益權單位）")
+    lines.append("")
+    lines.append(
+        md_table_kv(
+            [
+                ["units_outstanding", fmt_int(safe_get(etf_units, "units_outstanding"))],
+                ["units_chg_1d", fmt_int(safe_get(etf_units, "units_chg_1d"))],
+                ["dq", ", ".join([str(x) for x in etf_units_dq]) if etf_units_dq else "(none)"],
+            ]
+        )
+    )
+    lines.append("")
+
+    # Sources and DQ
+    lines.append("### Chip Overlay Sources")
+    lines.append("")
+    lines.append(f"- T86 template: `{safe_get(sources, 't86_tpl', 'N/A')}`")
+    lines.append(f"- TWT72U template: `{safe_get(sources, 'twt72u_tpl', 'N/A')}`")
+    lines.append("")
+
+    # Root dq flags (if any) and etf_units dq flags (if any)
+    if root_dq or etf_units_dq:
+        lines.append("### Chip Overlay DQ")
+        lines.append("")
+        if root_dq:
+            for fl in root_dq:
+                lines.append(f"- {fl}")
+        if etf_units_dq:
+            for fl in etf_units_dq:
+                lines.append(f"- {fl}")
+        lines.append("")
+
+    # Propagate DQ flags to caller
+    for fl in root_dq:
+        if isinstance(fl, str) and fl.strip():
+            dq_extra.append(f"CHIP_OVERLAY:{fl}")
+    for fl in etf_units_dq:
+        if isinstance(fl, str) and fl.strip():
+            dq_extra.append(f"CHIP_OVERLAY:{fl}")
+
+    return lines, quick, dq_extra
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", default="tw0050_bb_cache")
     ap.add_argument("--out", default="report.md")
     ap.add_argument("--tail_days", type=int, default=15)  # workflow compatibility
-    ap.add_argument("--tail_n", type=int, default=None)   # alias; overrides tail_days
+    ap.add_argument("--tail_n", type=int, default=None)  # alias; overrides tail_days
 
     # margin overlay
     ap.add_argument("--margin_json", default="taiwan_margin_cache/latest.json")
     ap.add_argument("--margin_window_n", type=int, default=5)
     ap.add_argument("--margin_threshold_yi", type=float, default=100.0)
+
+    # chip overlay (minimal intrusion)
+    ap.add_argument("--chip_overlay_json", default=None)  # default resolved after args parsed
+    ap.add_argument("--chip_window_n", type=int, default=5)
 
     args = ap.parse_args()
 
@@ -381,9 +610,7 @@ def main() -> int:
     regime = s.get("regime", {}) or {}
 
     # Detect whether min audit fields exist
-    has_min_audit = all(
-        k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
-    )
+    has_min_audit = all(k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"])
     fwd_keys_sorted = sorted(list(fwd.keys())) if isinstance(fwd, dict) else []
 
     ticker = safe_get(meta, "ticker", "0050.TW")
@@ -400,6 +627,11 @@ def main() -> int:
     dist_to_lower = safe_get(latest, "dist_to_lower_pct")
     dist_to_upper = safe_get(latest, "dist_to_upper_pct")
 
+    # Resolve chip overlay path default
+    chip_path = args.chip_overlay_json
+    if chip_path is None:
+        chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
+
     lines: List[str] = []
     lines.append("# 0050 BB(60,2) + forward_mdd(20D) Report")
     lines.append("")
@@ -413,6 +645,7 @@ def main() -> int:
     lines.append(f"- bb_window,k: `{bb_window}`, `{bb_k}`")
     lines.append(f"- forward_window_days: `{fwd_days}`")
     lines.append(f"- price_calc: `{price_calc}`")
+    lines.append(f"- chip_overlay_path: `{chip_path}`")
     lines.append("")
 
     # ===== Quick summary =====
@@ -436,7 +669,6 @@ def main() -> int:
 
     # margin quick line (if file exists)
     margin_json = read_margin_latest(args.margin_json)
-    margin_quick = None
     if margin_json is not None:
         _, margin_quick = margin_overlay_block(
             margin_json=margin_json,
@@ -446,6 +678,22 @@ def main() -> int:
         )
         if margin_quick:
             lines.append(margin_quick)
+
+    # chip quick line (if file exists; otherwise concise DQ)
+    chip_json = read_chip_overlay(chip_path)
+    chip_dq_extra: List[str] = []
+    if chip_json is not None:
+        _, chip_quick, chip_dq_extra = chip_overlay_block(
+            chip_json=chip_json,
+            price_last_date=str(last_date),
+            expect_window_n=int(args.chip_window_n),
+        )
+        if chip_quick:
+            lines.append(chip_quick)
+    else:
+        # Minimal-intrusion behavior: N/A + DQ
+        lines.append(f"- chip_overlay(T86+TWT72U): N/A (missing `{chip_path}`) [DQ:CHIP_OVERLAY_MISSING]")
+        chip_dq_extra.append("CHIP_OVERLAY_MISSING")
 
     lines.append("")
 
@@ -476,37 +724,70 @@ def main() -> int:
         lines.append("## Trend & Vol Filters")
         lines.append("")
         if isinstance(trend, dict) and trend:
-            lines.append(md_table_kv([
-                ["trend_ma_days", str(safe_get(trend, "trend_ma_days", "N/A"))],
-                ["trend_ma_last", fmt4(safe_get(trend, "trend_ma_last"))],
-                ["trend_slope_days", str(safe_get(trend, "trend_slope_days", "N/A"))],
-                ["trend_slope_pct", fmt_pct2(safe_get(trend, "trend_slope_pct"))],
-                ["price_vs_trend_ma_pct", fmt_pct2(safe_get(trend, "price_vs_trend_ma_pct"))],
-                ["trend_state", str(safe_get(trend, "state", "N/A"))],
-            ]))
+            lines.append(
+                md_table_kv(
+                    [
+                        ["trend_ma_days", str(safe_get(trend, "trend_ma_days", "N/A"))],
+                        ["trend_ma_last", fmt4(safe_get(trend, "trend_ma_last"))],
+                        ["trend_slope_days", str(safe_get(trend, "trend_slope_days", "N/A"))],
+                        ["trend_slope_pct", fmt_pct2(safe_get(trend, "trend_slope_pct"))],
+                        ["price_vs_trend_ma_pct", fmt_pct2(safe_get(trend, "price_vs_trend_ma_pct"))],
+                        ["trend_state", str(safe_get(trend, "state", "N/A"))],
+                    ]
+                )
+            )
             lines.append("")
 
         if isinstance(vol, dict) and vol:
             rv_ann = safe_get(vol, "rv_ann")
             rv_pct = None if rv_ann is None else float(rv_ann) * 100.0
-            lines.append(md_table_kv([
-                ["rv_days", str(safe_get(vol, "rv_days", "N/A"))],
-                ["rv_ann(%)", fmt_pct1(rv_pct)],
-                ["rv20_percentile", fmt2(safe_get(vol, "rv_ann_pctl"))],
-                ["rv_hist_n", str(safe_get(vol, "rv_hist_n", "N/A"))],
-                ["rv_hist_q20(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q20") is None else float(safe_get(vol, "rv_hist_q20")) * 100.0)],
-                ["rv_hist_q50(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q50") is None else float(safe_get(vol, "rv_hist_q50")) * 100.0)],
-                ["rv_hist_q80(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q80") is None else float(safe_get(vol, "rv_hist_q80")) * 100.0)],
-            ]))
+            lines.append(
+                md_table_kv(
+                    [
+                        ["rv_days", str(safe_get(vol, "rv_days", "N/A"))],
+                        ["rv_ann(%)", fmt_pct1(rv_pct)],
+                        ["rv20_percentile", fmt2(safe_get(vol, "rv_ann_pctl"))],
+                        ["rv_hist_n", str(safe_get(vol, "rv_hist_n", "N/A"))],
+                        [
+                            "rv_hist_q20(%)",
+                            fmt_pct1(
+                                None
+                                if safe_get(vol, "rv_hist_q20") is None
+                                else float(safe_get(vol, "rv_hist_q20")) * 100.0
+                            ),
+                        ],
+                        [
+                            "rv_hist_q50(%)",
+                            fmt_pct1(
+                                None
+                                if safe_get(vol, "rv_hist_q50") is None
+                                else float(safe_get(vol, "rv_hist_q50")) * 100.0
+                            ),
+                        ],
+                        [
+                            "rv_hist_q80(%)",
+                            fmt_pct1(
+                                None
+                                if safe_get(vol, "rv_hist_q80") is None
+                                else float(safe_get(vol, "rv_hist_q80")) * 100.0
+                            ),
+                        ],
+                    ]
+                )
+            )
             lines.append("")
 
         if isinstance(atr, dict) and atr:
-            lines.append(md_table_kv([
-                ["atr_days", str(safe_get(atr, "atr_days", "N/A"))],
-                ["atr", fmt4(safe_get(atr, "atr"))],
-                ["atr_pct", fmt_pct2(safe_get(atr, "atr_pct"))],
-                ["tr_mode", str(safe_get(atr, "tr_mode", "N/A"))],
-            ]))
+            lines.append(
+                md_table_kv(
+                    [
+                        ["atr_days", str(safe_get(atr, "atr_days", "N/A"))],
+                        ["atr", fmt4(safe_get(atr, "atr"))],
+                        ["atr_pct", fmt_pct2(safe_get(atr, "atr_pct"))],
+                        ["tr_mode", str(safe_get(atr, "tr_mode", "N/A"))],
+                    ]
+                )
+            )
             lines.append("")
 
     # ===== Regime section =====
@@ -521,20 +802,24 @@ def main() -> int:
         rv_ann = safe_get(inputs, "rv_ann")
         rv_pct = None if rv_ann is None else float(rv_ann) * 100.0
 
-        lines.append(md_table_kv([
-            ["tag", f"**{safe_get(regime,'tag','N/A')}**"],
-            ["allowed", str(bool(safe_get(regime,'allowed', False))).lower()],
-            ["trend_state", str(safe_get(inputs, "trend_state", "N/A"))],
-            ["rv_ann(%)", fmt_pct1(rv_pct)],
-            ["rv20_percentile", fmt2(safe_get(inputs, "rv_ann_pctl"))],
-            ["rv_hist_n", str(safe_get(inputs, "rv_hist_n", "N/A"))],
-            ["rv_pctl_max", fmt2(safe_get(params, "rv_pctl_max"))],
-            ["min_samples", str(safe_get(params, "min_samples", "N/A"))],
-            ["pass_trend", str(bool(safe_get(passes, "trend_ok", False))).lower()],
-            ["pass_rv_hist", str(bool(safe_get(passes, "rv_hist_ok", False))).lower()],
-            ["pass_rv", str(bool(safe_get(passes, "rv_ok", False))).lower()],
-            ["bb_state_note", str(safe_get(inputs, "bb_state", "N/A"))],
-        ]))
+        lines.append(
+            md_table_kv(
+                [
+                    ["tag", f"**{safe_get(regime,'tag','N/A')}**"],
+                    ["allowed", str(bool(safe_get(regime,'allowed', False))).lower()],
+                    ["trend_state", str(safe_get(inputs, "trend_state", "N/A"))],
+                    ["rv_ann(%)", fmt_pct1(rv_pct)],
+                    ["rv20_percentile", fmt2(safe_get(inputs, "rv_ann_pctl"))],
+                    ["rv_hist_n", str(safe_get(inputs, "rv_hist_n", "N/A"))],
+                    ["rv_pctl_max", fmt2(safe_get(params, "rv_pctl_max"))],
+                    ["min_samples", str(safe_get(params, "min_samples", "N/A"))],
+                    ["pass_trend", str(bool(safe_get(passes, "trend_ok", False))).lower()],
+                    ["pass_rv_hist", str(bool(safe_get(passes, "rv_hist_ok", False))).lower()],
+                    ["pass_rv", str(bool(safe_get(passes, "rv_ok", False))).lower()],
+                    ["bb_state_note", str(safe_get(inputs, "bb_state", "N/A"))],
+                ]
+            )
+        )
         if reasons:
             lines.append("")
             lines.append("### Regime Notes")
@@ -574,6 +859,21 @@ def main() -> int:
         lines.append(f"- forward_mdd keys: `{', '.join(fwd_keys_sorted)}`")
     lines.append("")
 
+    # ===== Chip Overlay =====
+    if chip_json is not None:
+        cb_lines, _, _ = chip_overlay_block(
+            chip_json=chip_json,
+            price_last_date=str(last_date),
+            expect_window_n=int(args.chip_window_n),
+        )
+        lines.extend(cb_lines)
+    else:
+        # minimal section stub
+        lines.append("## Chip Overlay（籌碼：TWSE T86 + TWT72U）")
+        lines.append("")
+        lines.append(f"- chip_overlay: `N/A` (missing `{chip_path}`)")
+        lines.append("")
+
     # ===== Margin Overlay =====
     if margin_json is not None:
         mb_lines, _ = margin_overlay_block(
@@ -608,6 +908,14 @@ def main() -> int:
                 lines.append(f"- {fl}")
             for nt in dq_notes:
                 lines.append(f"  - note: {nt}")
+
+    # append chip DQ (minimal intrusion; explicit NA handling)
+    if chip_dq_extra:
+        lines.append("")
+        lines.append("### Chip Overlay DQ (extra)")
+        for fl in chip_dq_extra:
+            lines.append(f"- {fl}")
+
     lines.append("")
 
     # ===== Caveats =====
@@ -616,6 +924,7 @@ def main() -> int:
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
     lines.append("- Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；若資料不足會以 DQ 明示。")
     lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；若日期不對齊應降低解讀權重。")
+    lines.append("- Chip overlay（T86/TWT72U）是籌碼/借券的描述資訊；ETF 申贖與避險行為可能影響解讀，建議視為輔助註記而非單一交易信號。")
     lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as f:
