@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T04:24:11Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v3`
+- report_generated_at_utc: `2026-02-19T04:49:30Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v4`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -13,8 +13,10 @@
 
 ## 快速摘要（非預測，僅狀態）
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0136; dist_to_lower=38.12%; dist_to_upper=0.37%
-- forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:FWD_MDD_OUTLIER_MIN_RAW]
-- margin(5D,thr=100.0億): TOTAL -197.7 億 => **DELEVERAGING**; TWSE -160.0 / TPEX -37.7; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
+- forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED]
+- trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
+- vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2786 (1.66%)
+- margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
 
 ## Latest Snapshot
 
@@ -31,6 +33,25 @@
 | pos_in_band | 1.0136 |
 | dist_to_lower | 38.12% |
 | dist_to_upper | 0.37% |
+
+## Trend & Vol Filters
+
+| item | value |
+|---|---:|
+| trend_ma_days | 200 |
+| trend_ma_last | 56.0683 |
+| trend_slope_days | 20 |
+| trend_slope_pct | 6.13% |
+| price_vs_trend_ma_pct | 37.69% |
+| trend_state | TREND_UP |
+
+| item | value |
+|---|---:|
+| rv_days | 20 |
+| rv_ann(%) | 20.7% |
+| atr_days | 14 |
+| atr | 1.2786 |
+| atr_pct | 1.66% |
 
 ## forward_mdd Distribution
 
@@ -57,7 +78,7 @@
 
 - overlay_generated_at_utc: `2026-02-18T15:13:18Z`
 - data_date: `2026-02-11`
-- params: window_n=5, threshold_yi=100.0
+- params: window_n=5, threshold_yi=100.00
 - date_alignment: margin_latest_date=`2026-02-11` vs price_last_date=`2026-02-11` => **ALIGNED**
 
 | scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |
@@ -102,4 +123,5 @@
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。
+- Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；若資料不足會以 DQ 明示。
 - 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；若日期不對齊應降低解讀權重。
