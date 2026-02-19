@@ -1,510 +1,507 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-fetch_tw0050_chip_overlay.py
-
-Purpose:
-- Fetch TWSE T86 (institutional net buy/sell) + TWT72U (securities lending) for an ETF (default: 0050)
-- Fetch Yuanta ETF PCF page for units outstanding / net change / trade date / posting date
-- Align "last date" using stats_latest.json (stats_path), then walk backward by calendar days
-  until collecting N trading days (window_n). Non-trading days are included with dq flags.
-
-Design principles:
-- Audit-friendly JSON output: include sources URLs, raw rows, field names, derived indices
-- Deterministic: no randomness; retry/backoff is deterministic
-- Fail-soft on partial data: output dq flags rather than crashing
-"""
+from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import os
 import re
 import time
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
+# ===== Audit stamp =====
+BUILD_SCRIPT_FINGERPRINT = "fetch_tw0050_chip_overlay@2026-02-19.v6"
 
-TZ_TAIPEI = dt.timezone(dt.timedelta(hours=8))
-
-
-def utc_now_iso_ms() -> str:
-    # 2026-02-19T10:10:27.097Z
-    now = dt.datetime.now(dt.timezone.utc)
-    return now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+TWSE_T86_TPL = "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999"
+TWSE_TWT72U_TPL = "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB"
+YUANTA_PCF_URL_TPL = "https://www.yuantaetfs.com/tradeInfo/pcf/{stock_no}"
 
 
-def ymd(d: dt.date) -> str:
-    return d.strftime("%Y%m%d")
+def utc_now_iso_millis() -> str:
+    dt = datetime.now(timezone.utc)
+    ms = int(dt.microsecond / 1000)
+    dt2 = dt.replace(microsecond=0)
+    return dt2.isoformat().replace("+00:00", "Z").replace("Z", f".{ms:03d}Z")
 
 
-def parse_int_maybe(s: Any) -> Optional[int]:
-    if s is None:
+def safe_get(d: Any, k: str, default=None):
+    try:
+        if isinstance(d, dict):
+            return d.get(k, default)
+        return default
+    except Exception:
+        return default
+
+
+def load_json(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_json(path: str, obj: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+
+def parse_iso_ymd(s: str) -> Optional[date]:
+    if not s:
         return None
-    if isinstance(s, (int, float)):
-        return int(s)
-    if not isinstance(s, str):
+    s = str(s).strip()
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+            return datetime.strptime(s, "%Y-%m-%d").date()
+        if re.fullmatch(r"\d{4}/\d{2}/\d{2}", s):
+            return datetime.strptime(s, "%Y/%m/%d").date()
+        if re.fullmatch(r"\d{8}", s):
+            return datetime.strptime(s, "%Y%m%d").date()
+    except Exception:
         return None
-    t = s.strip().replace(",", "")
-    if t == "" or t.upper() == "N/A":
-        return None
-    if re.fullmatch(r"-?\d+", t):
-        return int(t)
     return None
 
 
-def parse_float_maybe(s: Any) -> Optional[float]:
+def ymd(d: date) -> str:
+    return d.strftime("%Y%m%d")
+
+
+def _strip_num(s: Any) -> Optional[float]:
     if s is None:
         return None
-    if isinstance(s, (int, float)):
-        return float(s)
-    if not isinstance(s, str):
-        return None
-    t = s.strip().replace(",", "")
-    if t == "" or t.upper() == "N/A":
-        return None
     try:
+        t = str(s).strip()
+        if t == "" or t in {"-", "N/A", "NA", "None"}:
+            return None
+        t = t.replace(",", "")
         return float(t)
     except Exception:
         return None
 
 
-def read_aligned_last_date_from_stats(stats_path: str) -> Optional[str]:
-    """
-    Try best-effort extraction of a local trading date from stats_latest.json.
-    Returns YYYYMMDD or None.
-    """
-    if not stats_path or not os.path.exists(stats_path):
+def _strip_int(s: Any) -> Optional[int]:
+    v = _strip_num(s)
+    if v is None:
         return None
     try:
-        j = json.load(open(stats_path, "r", encoding="utf-8"))
+        return int(round(v))
     except Exception:
         return None
 
-    # common patterns
-    candidates = []
 
-    # 1) meta.day_key_local = "2026-02-11"
-    meta = j.get("meta", {}) if isinstance(j, dict) else {}
-    if isinstance(meta, dict):
-        v = meta.get("day_key_local")
-        if isinstance(v, str):
-            candidates.append(v)
-
-        v = meta.get("stats_as_of_ts")
-        if isinstance(v, str):
-            candidates.append(v)
-
-        v = meta.get("as_of_ts")
-        if isinstance(v, str):
-            candidates.append(v)
-
-    # 2) root.day_key_local
-    v = j.get("day_key_local") if isinstance(j, dict) else None
-    if isinstance(v, str):
-        candidates.append(v)
-
-    # normalize
-    for c in candidates:
-        c = c.strip()
-        # ISO timestamp
-        if re.match(r"^\d{4}-\d{2}-\d{2}T", c):
-            try:
-                t = dt.datetime.fromisoformat(c.replace("Z", "+00:00"))
-                t_local = t.astimezone(TZ_TAIPEI)
-                return ymd(t_local.date())
-            except Exception:
-                pass
-        # date only "YYYY-MM-DD"
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", c):
-            try:
-                d = dt.date.fromisoformat(c)
-                return ymd(d)
-            except Exception:
-                pass
-        # already yyyymmdd
-        if re.fullmatch(r"\d{8}", c):
-            return c
-
-    return None
+@dataclass
+class FetchCfg:
+    timeout: float = 15.0
+    retries: int = 3
+    backoff: float = 1.5
 
 
-def http_get_json(session: requests.Session, url: str, timeout: float, retries: int, backoff: float) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def http_get_text(url: str, cfg: FetchCfg) -> Tuple[Optional[str], Optional[str]]:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; chip_overlay_bot/1.0; +https://github.com/)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,zh-TW;q=0.8,zh;q=0.7",
+        "Connection": "close",
+    }
     last_err = None
-    for i in range(retries):
+    for i in range(max(1, cfg.retries)):
         try:
-            r = session.get(url, timeout=timeout)
+            r = requests.get(url, headers=headers, timeout=cfg.timeout)
+            r.raise_for_status()
+            r.encoding = r.encoding or "utf-8"
+            return r.text, None
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {e}"
+            if i < cfg.retries - 1:
+                time.sleep(cfg.backoff * (2**i))
+    return None, last_err
+
+
+def http_get_json(url: str, cfg: FetchCfg) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; chip_overlay_bot/1.0; +https://github.com/)",
+        "Accept": "application/json,text/plain,*/*",
+        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.7",
+        "Connection": "close",
+    }
+    last_err = None
+    for i in range(max(1, cfg.retries)):
+        try:
+            r = requests.get(url, headers=headers, timeout=cfg.timeout)
             r.raise_for_status()
             return r.json(), None
         except Exception as e:
-            last_err = str(e)
-            if i < retries - 1:
-                time.sleep(backoff * (i + 1))
+            last_err = f"{type(e).__name__}: {e}"
+            if i < cfg.retries - 1:
+                time.sleep(cfg.backoff * (2**i))
     return None, last_err
 
 
-def http_get_text(session: requests.Session, url: str, timeout: float, retries: int, backoff: float) -> Tuple[Optional[str], Optional[str]]:
-    last_err = None
-    for i in range(retries):
-        try:
-            r = session.get(url, timeout=timeout)
-            r.raise_for_status()
-            return r.text, None
-        except Exception as e:
-            last_err = str(e)
-            if i < retries - 1:
-                time.sleep(backoff * (i + 1))
-    return None, last_err
-
-
-def find_row_by_stock_no(data_rows: List[List[str]], stock_no: str) -> Optional[List[str]]:
+def _pick_row_by_stock(data_rows: List[List[Any]], stock_no: str) -> Optional[List[Any]]:
+    if not isinstance(data_rows, list):
+        return None
     for row in data_rows:
-        if not row:
+        try:
+            if not isinstance(row, list) or len(row) == 0:
+                continue
+            if str(row[0]).strip() == str(stock_no).strip():
+                return row
+        except Exception:
             continue
-        if str(row[0]).strip() == stock_no:
-            return row
     return None
 
 
-def t86_fetch_one(session: requests.Session, stock_no: str, date_ymd: str, timeout: float, retries: int, backoff: float) -> Dict[str, Any]:
-    url = f"https://www.twse.com.tw/fund/T86?response=json&date={date_ymd}&selectType=ALLBUT0999"
-    out: Dict[str, Any] = {
-        "dq": [],
-        "fields": [],
-        "raw_row": None,
-        "col_idx": {},
-    }
-    j, err = http_get_json(session, url, timeout, retries, backoff)
+# ---------- Field index helpers (T86) ----------
+
+def _idx_exact(fields: List[str], exact: str) -> Optional[int]:
+    for i, f in enumerate(fields or []):
+        if str(f).strip() == exact:
+            return i
+    return None
+
+
+def _idx_contains(fields: List[str], contains: str, exclude_contains: Optional[str] = None) -> Optional[int]:
+    for i, f in enumerate(fields or []):
+        s = str(f)
+        if contains in s:
+            if exclude_contains and exclude_contains in s:
+                continue
+            return i
+    return None
+
+
+def _t86_idx_foreign(fields: List[str]) -> Optional[int]:
+    # Prefer exact
+    exact = "外陸資買賣超股數(不含外資自營商)"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    # fallback contains
+    return _idx_contains(fields, "外陸資買賣超股數")
+
+
+def _t86_idx_trust(fields: List[str]) -> Optional[int]:
+    exact = "投信買賣超股數"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    return _idx_contains(fields, "投信買賣超股數")
+
+
+def _t86_idx_dealer(fields: List[str]) -> Optional[int]:
+    # IMPORTANT: exclude 外資自營商
+    exact = "自營商買賣超股數"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    return _idx_contains(fields, "自營商買賣超股數", exclude_contains="外資自營商")
+
+
+def _t86_idx_total3(fields: List[str]) -> Optional[int]:
+    exact = "三大法人買賣超股數"
+    i = _idx_exact(fields, exact)
+    if i is not None:
+        return i
+    return _idx_contains(fields, "三大法人買賣超股數")
+
+
+def fetch_t86_one_day(stock_no: str, ymd_str: str, cfg: FetchCfg) -> Dict[str, Any]:
+    url = TWSE_T86_TPL.format(ymd=ymd_str)
+    out: Dict[str, Any] = {"dq": [], "fields": [], "raw_row": None, "col_idx": {}}
+    j, err = http_get_json(url, cfg)
     if j is None:
         out["dq"].append("T86_FETCH_FAILED")
-        out["fetch_error"] = err
+        out["dq"].append(f"T86_ERR:{err}")
         return out
 
-    fields = j.get("fields", [])
-    data = j.get("data", [])
-    if not fields or not data:
+    fields = safe_get(j, "fields", []) or []
+    data_rows = safe_get(j, "data", []) or []
+    out["fields"] = fields
+
+    row = _pick_row_by_stock(data_rows, stock_no)
+    if not row:
         out["dq"].append("T86_EMPTY")
         return out
 
-    row = find_row_by_stock_no(data, stock_no)
-    if row is None:
-        out["dq"].append("T86_ROW_NOT_FOUND")
-        out["fields"] = fields
-        return out
-
-    out["fields"] = fields
     out["raw_row"] = row
 
-    # locate indices by exact field names (robust against column order shifts)
-    def idx_of(name: str) -> Optional[int]:
+    idx_foreign = _t86_idx_foreign(fields)
+    idx_trust = _t86_idx_trust(fields)
+    idx_dealer = _t86_idx_dealer(fields)
+    idx_total3 = _t86_idx_total3(fields)
+
+    # fallback fixed layout (TWSE usually stable)
+    if idx_foreign is None:
+        idx_foreign = 4
+    if idx_trust is None:
+        idx_trust = 10
+    if idx_dealer is None:
+        idx_dealer = 11
+    if idx_total3 is None:
+        idx_total3 = 18
+
+    out["col_idx"] = {"foreign": idx_foreign, "trust": idx_trust, "dealer": idx_dealer, "total3": idx_total3}
+
+    def at(i: int) -> Optional[int]:
         try:
-            return fields.index(name)
+            if i < 0 or i >= len(row):
+                return None
+            return _strip_int(row[i])
         except Exception:
             return None
 
-    idx_foreign = idx_of("外陸資買賣超股數(不含外資自營商)")
-    idx_trust = idx_of("投信買賣超股數")
-    idx_dealer = idx_of("自營商買賣超股數")
-    idx_total3 = idx_of("三大法人買賣超股數")
-
-    # fallback to known positions if fields are non-standard
-    # (your current output uses 4,10,11,18)
-    if idx_foreign is None and len(fields) > 4:
-        idx_foreign = 4
-    if idx_trust is None and len(fields) > 10:
-        idx_trust = 10
-    if idx_dealer is None and len(fields) > 11:
-        idx_dealer = 11
-    if idx_total3 is None and len(fields) > 18:
-        idx_total3 = 18
-
-    out["col_idx"] = {
-        "foreign": idx_foreign if idx_foreign is not None else -1,
-        "trust": idx_trust if idx_trust is not None else -1,
-        "dealer": idx_dealer if idx_dealer is not None else -1,
-        "total3": idx_total3 if idx_total3 is not None else -1,
-    }
-
-    def get_int(idx: Optional[int]) -> Optional[int]:
-        if idx is None or idx < 0:
-            return None
-        if idx >= len(row):
-            return None
-        return parse_int_maybe(row[idx])
-
-    foreign = get_int(idx_foreign)
-    trust = get_int(idx_trust)
-    dealer = get_int(idx_dealer)
-    total3 = get_int(idx_total3)
-
-    if foreign is None:
-        out["dq"].append("T86_FOREIGN_NET_MISSING")
-    if trust is None:
-        out["dq"].append("T86_TRUST_NET_MISSING")
-    if dealer is None:
-        out["dq"].append("T86_DEALER_NET_MISSING")
-    if total3 is None:
-        out["dq"].append("T86_TOTAL3_NET_MISSING")
-
-    out["foreign_net_shares"] = foreign
-    out["trust_net_shares"] = trust
-    out["dealer_net_shares"] = dealer
-    out["total3_net_shares"] = total3
+    out["foreign_net_shares"] = at(idx_foreign)
+    out["trust_net_shares"] = at(idx_trust)
+    out["dealer_net_shares"] = at(idx_dealer)
+    out["total3_net_shares"] = at(idx_total3)
     return out
 
 
-def twt72u_fetch_one(session: requests.Session, stock_no: str, date_ymd: str, timeout: float, retries: int, backoff: float) -> Dict[str, Any]:
-    url = f"https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={date_ymd}&selectType=SLBNLB"
-    out: Dict[str, Any] = {
-        "dq": [],
-        "fields": [],
-        "raw_row": None,
-        "col_idx": {},
-    }
-    j, err = http_get_json(session, url, timeout, retries, backoff)
+def fetch_twt72u_one_day(stock_no: str, ymd_str: str, cfg: FetchCfg) -> Dict[str, Any]:
+    url = TWSE_TWT72U_TPL.format(ymd=ymd_str)
+    out: Dict[str, Any] = {"dq": [], "fields": [], "raw_row": None, "col_idx": {}}
+    j, err = http_get_json(url, cfg)
     if j is None:
         out["dq"].append("TWT72U_FETCH_FAILED")
-        out["fetch_error"] = err
+        out["dq"].append(f"TWT72U_ERR:{err}")
         return out
 
-    fields = j.get("fields", [])
-    data = j.get("data", [])
-    if not fields or not data:
+    fields = safe_get(j, "fields", []) or []
+    data_rows = safe_get(j, "data", []) or []
+    out["fields"] = fields
+
+    row = _pick_row_by_stock(data_rows, stock_no)
+    if not row:
         out["dq"].append("TWT72U_EMPTY")
         return out
 
-    row = find_row_by_stock_no(data, stock_no)
-    if row is None:
-        out["dq"].append("TWT72U_ROW_NOT_FOUND")
-        out["fields"] = fields
-        return out
-
-    out["fields"] = fields
     out["raw_row"] = row
 
-    def idx_of(name: str) -> Optional[int]:
-        try:
-            return fields.index(name)
-        except Exception:
-            return None
+    def idx_contains(label: str) -> Optional[int]:
+        for i, f in enumerate(fields):
+            if label in str(f):
+                return i
+        return None
 
-    idx_shares_end = idx_of("本日借券餘額股(4)=(1)+(2)-(3)")
-    idx_close = idx_of("本日收盤價(5)單位：元")
-    idx_mv = idx_of("借券餘額市值單位：元(6)=(4)*(5)")
+    idx_shares_end = idx_contains("本日借券餘額股")
+    idx_close = idx_contains("本日收盤價")
+    idx_mv = idx_contains("借券餘額市值")
 
-    # fallback (your output uses 5,6,7)
-    if idx_shares_end is None and len(fields) > 5:
+    if idx_shares_end is None:
         idx_shares_end = 5
-    if idx_close is None and len(fields) > 6:
+    if idx_close is None:
         idx_close = 6
-    if idx_mv is None and len(fields) > 7:
+    if idx_mv is None:
         idx_mv = 7
 
-    out["col_idx"] = {
-        "shares_end": idx_shares_end if idx_shares_end is not None else -1,
-        "close": idx_close if idx_close is not None else -1,
-        "mv": idx_mv if idx_mv is not None else -1,
-    }
+    out["col_idx"] = {"shares_end": idx_shares_end, "close": idx_close, "mv": idx_mv}
 
-    def get_int(idx: Optional[int]) -> Optional[int]:
-        if idx is None or idx < 0:
-            return None
-        if idx >= len(row):
-            return None
-        return parse_int_maybe(row[idx])
-
-    def get_float(idx: Optional[int]) -> Optional[float]:
-        if idx is None or idx < 0:
-            return None
-        if idx >= len(row):
-            return None
-        return parse_float_maybe(row[idx])
-
-    shares_end = get_int(idx_shares_end)
-    close = get_float(idx_close)
-    mv = get_int(idx_mv)
-
-    if shares_end is None:
-        out["dq"].append("TWT72U_SHARES_END_MISSING")
-    if close is None:
-        out["dq"].append("TWT72U_CLOSE_MISSING")
-    if mv is None:
-        out["dq"].append("TWT72U_MV_MISSING")
-
-    out["borrow_shares"] = shares_end
-    out["close"] = close
-    out["borrow_mv_ntd"] = float(mv) if mv is not None else None
+    out["borrow_shares"] = _strip_int(row[idx_shares_end]) if idx_shares_end < len(row) else None
+    out["close"] = _strip_num(row[idx_close]) if idx_close < len(row) else None
+    out["borrow_mv_ntd"] = _strip_num(row[idx_mv]) if idx_mv < len(row) else None
     return out
 
 
-def parse_yuanta_pcf(html: str) -> Dict[str, Any]:
-    """
-    Best-effort parse of Yuanta PCF page.
-    Targets:
-      - Trade Date
-      - Posting Date (timestamp)
-      - Total Outstanding Shares
-      - Net Change in Outstanding Shares
+# ---------- Yuanta PCF parsing ----------
 
-    Returns dict with 'trade_date', 'posting_dt', 'units_outstanding', 'units_chg_1d', and dq list.
-    """
+_DATE_RE_LIST = [
+    # YYYY-MM-DD HH:MM:SS
+    r"([0-9]{4}-[0-9]{2}-[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})",
+    # YYYY-MM-DD
+    r"([0-9]{4}-[0-9]{2}-[0-9]{2})",
+    # YYYY/MM/DD
+    r"([0-9]{4}/[0-9]{2}/[0-9]{2})",
+]
+
+def _find_first_date(snippet: str) -> Optional[str]:
+    for pat in _DATE_RE_LIST:
+        m = re.search(pat, snippet)
+        if m:
+            return m.group(1)
+    return None
+
+
+def parse_yuanta_pcf_units(html: str) -> Tuple[Dict[str, Any], List[str]]:
     dq: List[str] = []
-    out: Dict[str, Any] = {
+    etf: Dict[str, Any] = {
+        "source": "yuanta_pcf",
+        "source_url": None,
         "trade_date": None,
         "posting_dt": None,
         "units_outstanding": None,
         "units_chg_1d": None,
-        "dq": dq,
+        "dq": [],
     }
 
-    # normalize whitespace for regex
-    txt = re.sub(r"\s+", " ", html)
+    if not html:
+        dq.append("ETF_UNITS_PCF_EMPTY_HTML")
+        etf["dq"] = dq
+        return etf, dq
 
-    # Multiple language patterns (English / Chinese)
-    trade_patterns = [
-        r"Trade Date[^0-9]*(\d{4}/\d{2}/\d{2})",
-        r"交易日期[^0-9]*(\d{4}/\d{2}/\d{2})",
-    ]
-    posting_patterns = [
-        r"Posting Date[^0-9]*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})",
-        r"公告時間[^0-9]*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})",
-        r"Posting Date[^0-9]*(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})",
-    ]
-    outstanding_patterns = [
-        r"Total Outstanding Shares[^0-9]*([0-9][0-9,]+)",
-        r"Outstanding Shares[^0-9]*([0-9][0-9,]+)",
-        r"流通受益權單位數[^0-9]*([0-9][0-9,]+)",
-    ]
-    netchg_patterns = [
-        r"Net Change in Outstanding Shares[^0-9\-]*(-?[0-9][0-9,]+)",
-        r"Net Change[^0-9\-]*(-?[0-9][0-9,]+)",
-        r"受益權單位淨變動[^0-9\-]*(-?[0-9][0-9,]+)",
-    ]
+    # normalize
+    t = html.replace("\uFF1A", ":")
+    t = re.sub(r"[ \t\r\f\v]+", " ", t)
 
-    def first_match(patterns: List[str]) -> Optional[str]:
-        for p in patterns:
-            m = re.search(p, txt, flags=re.IGNORECASE)
-            if m:
-                return m.group(1)
+    # helper: find near a label within N chars
+    def near(label_variants: List[str], span: int = 900) -> Optional[str]:
+        for lab in label_variants:
+            idx = t.find(lab)
+            if idx >= 0:
+                return t[idx : idx + span]
         return None
 
-    trade_date = first_match(trade_patterns)
-    posting_dt = first_match(posting_patterns)
-    outstanding = first_match(outstanding_patterns)
-    netchg = first_match(netchg_patterns)
-
-    if trade_date is None:
-        dq.append("ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND")
+    # Posting date (English + Chinese variants)
+    sn = near(["Posting Date", "公告日期", "揭示日期", "資料日期", "更新時間"])
+    if sn:
+        d = _find_first_date(sn)
+        if d:
+            etf["posting_dt"] = d
+        else:
+            dq.append("ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND")
     else:
-        out["trade_date"] = trade_date
-
-    if posting_dt is None:
         dq.append("ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND")
-    else:
-        # normalize posting date to "YYYY-MM-DD HH:MM:SS" if it uses slashes
-        posting_dt_norm = posting_dt.replace("/", "-")
-        out["posting_dt"] = posting_dt_norm
 
-    units_out = parse_int_maybe(outstanding) if outstanding is not None else None
-    if units_out is None:
+    # Trade date (English + Chinese variants)
+    sn = near(["Trade Date", "交易日", "交易日期"])
+    if sn:
+        d = _find_first_date(sn)
+        if d:
+            etf["trade_date"] = d
+        else:
+            dq.append("ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND")
+    else:
+        dq.append("ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND")
+
+    def find_number_after(label_variants: List[str], max_chars: int = 900) -> Optional[int]:
+        for lab in label_variants:
+            idx = t.find(lab)
+            if idx < 0:
+                continue
+            snippet = t[idx : idx + max_chars]
+            mm = re.search(r"([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{6,})", snippet)
+            if not mm:
+                continue
+            try:
+                return int(mm.group(1).replace(",", ""))
+            except Exception:
+                continue
+        return None
+
+    units = find_number_after(["Total Outstanding Shares", "Outstanding Shares", "流通在外", "流通單位", "發行單位數"])
+    if units is not None:
+        etf["units_outstanding"] = units
+    else:
         dq.append("ETF_UNITS_PCF_OUTSTANDING_NOT_FOUND")
-    else:
-        out["units_outstanding"] = units_out
 
-    units_chg = parse_int_maybe(netchg) if netchg is not None else None
-    if units_chg is None:
+    chg = find_number_after(["Net Change in Outstanding Shares", "Net Change", "增減", "日增減", "淨增減"])
+    if chg is not None:
+        etf["units_chg_1d"] = chg
+    else:
         dq.append("ETF_UNITS_PCF_NET_CHANGE_NOT_FOUND")
-    else:
-        out["units_chg_1d"] = units_chg
 
-    if out["units_outstanding"] is None and out["units_chg_1d"] is None:
+    if (
+        etf["posting_dt"] is None
+        and etf["trade_date"] is None
+        and etf["units_outstanding"] is None
+        and etf["units_chg_1d"] is None
+    ):
         dq.append("ETF_UNITS_PCF_PARSE_ALL_MISSING")
 
-    return out
+    etf["dq"] = dq
+    return etf, dq
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--stock_no", required=True, help="e.g. 0050")
-    ap.add_argument("--stats_path", default=None, help="path to stats_latest.json to align last date")
-    ap.add_argument("--cache_dir", default=None, help="cache directory (optional if --out is provided)")
-    ap.add_argument("--out", default=None, help="output json path (recommended)")
-    ap.add_argument("--window_n", type=int, default=5, help="number of trading days to aggregate")
-    ap.add_argument("--timeout", type=float, default=15.0)
-    ap.add_argument("--retries", type=int, default=3)
-    ap.add_argument("--backoff", type=float, default=1.5)
-    args = ap.parse_args()
+def fetch_etf_units(stock_no: str, cfg: FetchCfg, pcf_url: Optional[str]) -> Tuple[Dict[str, Any], List[str]]:
+    url = pcf_url or YUANTA_PCF_URL_TPL.format(stock_no=str(stock_no).strip())
+    html, err = http_get_text(url, cfg)
+    if html is None:
+        etf = {
+            "source": "yuanta_pcf",
+            "source_url": url,
+            "trade_date": None,
+            "posting_dt": None,
+            "units_outstanding": None,
+            "units_chg_1d": None,
+            "dq": ["ETF_UNITS_FETCH_FAILED", f"ETF_UNITS_ERR:{err}"],
+        }
+        return etf, etf["dq"]
 
-    if not args.out and not args.cache_dir:
-        raise SystemExit("ERROR: must provide either --out or --cache_dir")
+    etf, dq = parse_yuanta_pcf_units(html)
+    etf["source_url"] = url
+    return etf, dq
 
-    out_path = args.out
-    if not out_path:
-        out_path = os.path.join(args.cache_dir, "chip_overlay.json")
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+def build_overlay(stock_no: str, stats_path: str, window_n: int, cfg: FetchCfg, pcf_url: Optional[str]) -> Dict[str, Any]:
+    if not os.path.exists(stats_path):
+        raise SystemExit(f"ERROR: stats_path not found: {stats_path}")
 
-    aligned = read_aligned_last_date_from_stats(args.stats_path) if args.stats_path else None
-    if aligned is None:
-        # fallback: today local
-        aligned = ymd(dt.datetime.now(TZ_TAIPEI).date())
+    s = load_json(stats_path)
+    meta = safe_get(s, "meta", {}) or {}
+    last_date_s = safe_get(meta, "last_date", None)
+    last_dt = parse_iso_ymd(str(last_date_s)) if last_date_s else None
+    if last_dt is None:
+        raise SystemExit(f"ERROR: cannot parse meta.last_date from stats_latest.json: {last_date_s}")
 
-    aligned_date = dt.datetime.strptime(aligned, "%Y%m%d").date()
-
-    session = requests.Session()
-    # TWSE sometimes behaves better with a UA
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (compatible; tw0050-bot/1.0; +https://github.com/)",
-        "Accept": "application/json,text/html;q=0.9,*/*;q=0.8",
-    })
+    aligned_last_date = ymd(last_dt)
 
     per_day: List[Dict[str, Any]] = []
-    used_days: List[str] = []
+    t86_days_used: List[str] = []
+    foreign_sum = trust_sum = dealer_sum = total3_sum = 0
 
-    cursor = aligned_date
-    # walk backward by calendar day until we got window_n trading days
-    while len(used_days) < args.window_n:
-        d_ymd = ymd(cursor)
-        item: Dict[str, Any] = {
-            "date": d_ymd,
+    max_lookback = max(30, window_n * 8)
+    got = 0
+    cur = last_dt
+
+    while got < window_n and len(per_day) < max_lookback:
+        ds = ymd(cur)
+        day_entry: Dict[str, Any] = {
+            "date": ds,
             "dq": [],
             "sources": {
-                "t86": f"https://www.twse.com.tw/fund/T86?response=json&date={d_ymd}&selectType=ALLBUT0999",
-                "twt72u": f"https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={d_ymd}&selectType=SLBNLB",
+                "t86": TWSE_T86_TPL.format(ymd=ds),
+                "twt72u": TWSE_TWT72U_TPL.format(ymd=ds),
             },
         }
 
-        t86 = t86_fetch_one(session, args.stock_no, d_ymd, args.timeout, args.retries, args.backoff)
-        twt72u = twt72u_fetch_one(session, args.stock_no, d_ymd, args.timeout, args.retries, args.backoff)
-        item["t86"] = t86
-        item["twt72u"] = twt72u
+        t86 = fetch_t86_one_day(stock_no, ds, cfg)
+        twt72u = fetch_twt72u_one_day(stock_no, ds, cfg)
+        day_entry["t86"] = t86
+        day_entry["twt72u"] = twt72u
 
-        # trading day iff both endpoints have row data (not EMPTY / not ROW_NOT_FOUND)
-        is_trading = ("T86_EMPTY" not in t86.get("dq", [])) and ("TWT72U_EMPTY" not in twt72u.get("dq", [])) \
-                     and ("T86_ROW_NOT_FOUND" not in t86.get("dq", [])) and ("TWT72U_ROW_NOT_FOUND" not in twt72u.get("dq", []))
+        is_t86_ok = ("T86_EMPTY" not in (t86.get("dq") or [])) and (t86.get("raw_row") is not None)
+        is_twt_ok = ("TWT72U_EMPTY" not in (twt72u.get("dq") or [])) and (twt72u.get("raw_row") is not None)
+        if (not is_t86_ok) and (not is_twt_ok):
+            day_entry["dq"].append("NON_TRADING_OR_NO_DATA")
 
-        if not is_trading:
-            item["dq"].append("NON_TRADING_OR_NO_DATA")
-        else:
-            used_days.append(d_ymd)
+        if is_t86_ok:
+            f = t86.get("foreign_net_shares")
+            t = t86.get("trust_net_shares")
+            d = t86.get("dealer_net_shares")
+            tt = t86.get("total3_net_shares")
+            if all(isinstance(x, int) for x in [f, t, d, tt]):
+                foreign_sum += int(f)
+                trust_sum += int(t)
+                dealer_sum += int(d)
+                total3_sum += int(tt)
+                t86_days_used.append(ds)
+                got += 1
 
-        per_day.append(item)
-        cursor = cursor - dt.timedelta(days=1)
+        per_day.append(day_entry)
+        cur = cur - timedelta(days=1)
 
-        # safety stop to avoid infinite loops (should never hit in practice)
-        if len(per_day) > 40:
-            break
+    # Borrow summary: latest two available
+    def _borrow_rec(e: Dict[str, Any]) -> Optional[Tuple[str, Optional[int], Optional[float]]]:
+        tw = safe_get(e, "twt72u", {}) or {}
+        bs = safe_get(tw, "borrow_shares", None)
+        mv = safe_get(tw, "borrow_mv_ntd", None)
+        if bs is None and mv is None:
+            return None
+        return (str(e.get("date")), bs, mv)
 
-    # aggregate sums over used days
-    foreign_sum = 0
-    trust_sum = 0
-    dealer_sum = 0
-    total3_sum = 0
-    used_count = 0
-
-    # borrow summary based on last (most recent) used day and prior used day
+    borrow_rows = [r for r in (_borrow_rec(e) for e in per_day) if r is not None]
     borrow_summary: Dict[str, Any] = {
         "asof_date": None,
         "borrow_shares": None,
@@ -512,148 +509,108 @@ def main() -> None:
         "borrow_mv_ntd": None,
         "borrow_mv_ntd_chg_1d": None,
     }
-
-    # build a map date -> (t86,twt72u) for used days
-    used_map: Dict[str, Tuple[Dict[str, Any], Dict[str, Any]]] = {}
-    for it in per_day:
-        d = it["date"]
-        if d in used_days:
-            used_map[d] = (it["t86"], it["twt72u"])
-
-    # used_days currently in descending order? (because we start from aligned_date backward)
-    # yes: first is aligned date if trading day, then earlier dates...
-    for d in used_days:
-        t86, _ = used_map[d]
-        f = t86.get("foreign_net_shares")
-        t = t86.get("trust_net_shares")
-        dl = t86.get("dealer_net_shares")
-        tot = t86.get("total3_net_shares")
-        if isinstance(f, int):
-            foreign_sum += f
-        if isinstance(t, int):
-            trust_sum += t
-        if isinstance(dl, int):
-            dealer_sum += dl
-        if isinstance(tot, int):
-            total3_sum += tot
-        used_count += 1
-
-    # borrow summary
-    if used_days:
-        d0 = used_days[0]  # most recent used day
-        _, tw0 = used_map[d0]
-        borrow_summary["asof_date"] = d0
-        borrow_summary["borrow_shares"] = tw0.get("borrow_shares")
-        borrow_summary["borrow_mv_ntd"] = tw0.get("borrow_mv_ntd")
-
-        if len(used_days) >= 2:
-            d1 = used_days[1]
-            _, tw1 = used_map[d1]
-            s0 = tw0.get("borrow_shares")
-            s1 = tw1.get("borrow_shares")
-            mv0 = tw0.get("borrow_mv_ntd")
-            mv1 = tw1.get("borrow_mv_ntd")
-            if isinstance(s0, int) and isinstance(s1, int):
-                borrow_summary["borrow_shares_chg_1d"] = s0 - s1
-            if isinstance(mv0, (int, float)) and isinstance(mv1, (int, float)):
-                borrow_summary["borrow_mv_ntd_chg_1d"] = float(mv0) - float(mv1)
+    if borrow_rows:
+        asof_date, bs, mv = borrow_rows[0]
+        borrow_summary["asof_date"] = asof_date
+        borrow_summary["borrow_shares"] = bs
+        borrow_summary["borrow_mv_ntd"] = mv
+        if len(borrow_rows) >= 2:
+            _, bs_prev, mv_prev = borrow_rows[1]
+            if bs is not None and bs_prev is not None:
+                borrow_summary["borrow_shares_chg_1d"] = int(bs) - int(bs_prev)
+            if mv is not None and mv_prev is not None:
+                borrow_summary["borrow_mv_ntd_chg_1d"] = float(mv) - float(mv_prev)
 
     t86_agg = {
-        "window_n": args.window_n,
-        "days_used": list(reversed(sorted(used_days))),  # ascending for readability (YYYYMMDD)
-        "foreign_net_shares_sum": foreign_sum,
-        "trust_net_shares_sum": trust_sum,
-        "dealer_net_shares_sum": dealer_sum,
-        "total3_net_shares_sum": total3_sum,
+        "window_n": window_n,
+        "days_used": list(reversed(t86_days_used)),
+        "foreign_net_shares_sum": int(foreign_sum),
+        "trust_net_shares_sum": int(trust_sum),
+        "dealer_net_shares_sum": int(dealer_sum),
+        "total3_net_shares_sum": int(total3_sum),
     }
 
-    # PCF parse
-    pcf_url = f"https://www.yuantaetfs.com/tradeInfo/pcf/{args.stock_no}"
-    pcf_html, pcf_err = http_get_text(session, pcf_url, args.timeout, args.retries, args.backoff)
-    etf_units = {
-        "source": "yuanta_pcf",
-        "source_url": pcf_url,
-        "trade_date": None,
-        "posting_dt": None,
-        "units_outstanding": None,
-        "units_chg_1d": None,
-        "dq": [],
-    }
+    etf_units, etf_dq = fetch_etf_units(stock_no, cfg, pcf_url=pcf_url)
+
+    # Only escalate to top-level flags if units cannot be obtained (dates missing alone should not break report)
     dq_flags: List[str] = []
-
-    if pcf_html is None:
-        etf_units["dq"].append("ETF_UNITS_FETCH_FAILED")
-        etf_units["fetch_error"] = pcf_err
-        dq_flags.append("ETF_UNITS_FETCH_FAILED")
-    else:
-        parsed = parse_yuanta_pcf(pcf_html)
-        etf_units["trade_date"] = parsed["trade_date"]
-        etf_units["posting_dt"] = parsed["posting_dt"]
-        etf_units["units_outstanding"] = parsed["units_outstanding"]
-        etf_units["units_chg_1d"] = parsed["units_chg_1d"]
-        etf_units["dq"] = parsed["dq"]
-        # global flag if critical missing
-        if (etf_units["units_outstanding"] is None) or (etf_units["units_chg_1d"] is None):
+    if etf_dq:
+        if "ETF_UNITS_FETCH_FAILED" in etf_dq:
             dq_flags.append("ETF_UNITS_FETCH_FAILED")
+        if "ETF_UNITS_PCF_PARSE_ALL_MISSING" in etf_dq:
+            dq_flags.append("ETF_UNITS_PCF_PARSE_ALL_MISSING")
+        if (etf_units.get("units_outstanding") is None) or (etf_units.get("units_chg_1d") is None):
+            # missing key numeric values => treat as important
+            dq_flags.append("ETF_UNITS_VALUE_MISSING")
 
-    # derived metrics (safe, optional)
-    derived: Dict[str, Any] = {}
-    try:
-        u0 = etf_units.get("units_outstanding")
-        du = etf_units.get("units_chg_1d")
-        bs = borrow_summary.get("borrow_shares")
-        if isinstance(u0, int) and u0 > 0 and isinstance(bs, int):
-            derived["borrow_ratio"] = bs / u0  # fraction
-        if isinstance(u0, int) and isinstance(du, int):
-            u_prev = u0 - du
-            if u_prev > 0 and isinstance(borrow_summary.get("borrow_shares"), int) and isinstance(borrow_summary.get("borrow_shares_chg_1d"), int):
-                bs0 = borrow_summary["borrow_shares"]
-                # infer prev borrow shares
-                bs_prev = bs0 - borrow_summary["borrow_shares_chg_1d"]
-                derived["borrow_ratio_prev"] = bs_prev / u_prev if u_prev > 0 else None
-                if derived.get("borrow_ratio") is not None and derived.get("borrow_ratio_prev") is not None:
-                    derived["borrow_ratio_chg_pp"] = (derived["borrow_ratio"] - derived["borrow_ratio_prev"]) * 100.0
-            if u_prev > 0:
-                derived["units_chg_pct_1d"] = du / u_prev
-    except Exception:
-        # do not fail
-        pass
-
-    out = {
+    payload: Dict[str, Any] = {
         "meta": {
-            "run_ts_utc": utc_now_iso_ms(),
-            "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v7",
-            "stock_no": args.stock_no,
-            "window_n": args.window_n,
-            "timeout": args.timeout,
-            "retries": args.retries,
-            "backoff": args.backoff,
-            "aligned_last_date": aligned,
+            "run_ts_utc": utc_now_iso_millis(),
+            "script_fingerprint": BUILD_SCRIPT_FINGERPRINT,
+            "stock_no": str(stock_no),
+            "window_n": int(window_n),
+            "timeout": float(cfg.timeout),
+            "retries": int(cfg.retries),
+            "backoff": float(cfg.backoff),
+            "aligned_last_date": aligned_last_date,
         },
         "sources": {
-            "t86_tpl": "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999",
-            "twt72u_tpl": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB",
-            "pcf_url": pcf_url,
+            "t86_tpl": TWSE_T86_TPL,
+            "twt72u_tpl": TWSE_TWT72U_TPL,
+            "pcf_url": etf_units.get("source_url") or (pcf_url or YUANTA_PCF_URL_TPL.format(stock_no=str(stock_no))),
         },
-        "dq": {
-            "flags": dq_flags,
-        },
+        "dq": {"flags": dq_flags},
         "data": {
             "borrow_summary": borrow_summary,
             "etf_units": etf_units,
             "per_day": per_day,
             "t86_agg": t86_agg,
-            "derived": derived,
         },
     }
+    return payload
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=2)
 
-    print(f"OK: wrote {out_path}")
-    if dq_flags:
-        print("DQ flags:", dq_flags)
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cache_dir", default=None, help="optional; used to infer default stats_path/out")
+    ap.add_argument("--out", default=None, help="output json path (preferred)")
+    ap.add_argument("--out_path", default=None, help="alias of --out")
+    ap.add_argument("--stats_path", default=None, help="path to stats_latest.json")
+    ap.add_argument("--stock_no", default="0050")
+    ap.add_argument("--window_n", type=int, default=5)
+    ap.add_argument("--timeout", type=float, default=15.0)
+    ap.add_argument("--retries", type=int, default=3)
+    ap.add_argument("--backoff", type=float, default=1.5)
+    ap.add_argument("--pcf_url", default=None)
+    args = ap.parse_args()
+
+    out_path = args.out or args.out_path
+    stats_path = args.stats_path
+
+    if args.cache_dir:
+        if stats_path is None:
+            stats_path = os.path.join(args.cache_dir, "stats_latest.json")
+        if out_path is None:
+            out_path = os.path.join(args.cache_dir, "chip_overlay.json")
+
+    if stats_path is None:
+        raise SystemExit("ERROR: missing --stats_path (or provide --cache_dir to infer it)")
+    if out_path is None:
+        raise SystemExit("ERROR: missing --out (or provide --cache_dir to infer it)")
+
+    cfg = FetchCfg(timeout=float(args.timeout), retries=int(args.retries), backoff=float(args.backoff))
+    payload = build_overlay(
+        stock_no=str(args.stock_no).strip(),
+        stats_path=str(stats_path),
+        window_n=int(args.window_n),
+        cfg=cfg,
+        pcf_url=args.pcf_url,
+    )
+
+    write_json(str(out_path), payload)
+    print(f"Wrote chip overlay: {out_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
