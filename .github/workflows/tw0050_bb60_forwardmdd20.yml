@@ -30,7 +30,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas numpy yfinance pytz requests
 
-      # 可選：快速診斷 Yahoo 是否在 CI 被擋（建議保留，出問題時一眼看懂）
       - name: Debug yfinance fetch (quick)
         run: |
           python - << 'PY'
