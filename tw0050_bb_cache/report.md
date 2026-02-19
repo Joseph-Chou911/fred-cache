@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T05:05:45Z`
+- report_generated_at_utc: `2026-02-19T07:27:40Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v5`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
