@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Build markdown report for 0050 BB(60,2) + forward_mdd(20D).
-
-Inputs (expected in cache_dir):
-  - stats_latest.json   (required)
-  - data.csv OR prices.csv (optional; for Recent Raw Prices tail)
-
-CLI:
-  --cache_dir <dir>   (default: tw0050_bb_cache)
-  --out <path>        (default: report.md)
-  --tail_days <N>     (default: 15)   # compatible with workflow
-  --tail_n <N>        (optional)      # alias; overrides tail_days
-"""
 
 from __future__ import annotations
 
@@ -23,6 +10,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+
+# ===== Audit stamp (use this to prove which script generated the report) =====
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v2"
 
 
 def utc_now_iso() -> str:
@@ -80,13 +70,11 @@ def load_prices_tail(cache_dir: str, n: int) -> Optional[pd.DataFrame]:
     if df.empty:
         return None
 
-    # normalize date
     if "date" not in df.columns and "Date" in df.columns:
         df.rename(columns={"Date": "date"}, inplace=True)
     if "date" not in df.columns:
         return None
 
-    # normalize columns to lowercase
     df.rename(columns={c: c.lower() for c in df.columns}, inplace=True)
 
     if "adj close" in df.columns and "adjclose" not in df.columns:
@@ -164,8 +152,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", default="tw0050_bb_cache")
     ap.add_argument("--out", default="report.md")
-    ap.add_argument("--tail_days", type=int, default=15)
-    ap.add_argument("--tail_n", type=int, default=None)  # alias; overrides tail_days
+    ap.add_argument("--tail_days", type=int, default=15)  # workflow compatibility
+    ap.add_argument("--tail_n", type=int, default=None)   # alias; overrides tail_days
     args = ap.parse_args()
 
     tail_n = args.tail_n if args.tail_n is not None else args.tail_days
@@ -183,6 +171,12 @@ def main() -> int:
     dq = s.get("dq", {"flags": [], "notes": []}) or {}
     dq_flags = dq.get("flags") or []
     dq_notes = dq.get("notes") or []
+
+    # Detect whether min audit fields exist (this is the key for your current issue)
+    has_min_audit = all(
+        k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
+    )
+    fwd_keys_sorted = sorted(list(fwd.keys())) if isinstance(fwd, dict) else []
 
     ticker = safe_get(meta, "ticker", "0050.TW")
     last_date = safe_get(meta, "last_date", "N/A")
@@ -202,6 +196,9 @@ def main() -> int:
     lines.append("# 0050 BB(60,2) + forward_mdd(20D) Report")
     lines.append("")
     lines.append(f"- report_generated_at_utc: `{utc_now_iso()}`")
+    lines.append(f"- build_script_fingerprint: `{BUILD_SCRIPT_FINGERPRINT}`")
+    lines.append(f"- stats_path: `{stats_path}`")
+    lines.append(f"- stats_has_min_audit_fields: `{str(has_min_audit).lower()}`")
     lines.append(f"- data_source: `{data_source}`")
     lines.append(f"- ticker: `{ticker}`")
     lines.append(f"- last_date: `{last_date}`")
@@ -251,19 +248,21 @@ def main() -> int:
     lines.append(f"| p05 | {fmt4(safe_get(fwd, 'p05'))} |")
     lines.append(f"| min | {fmt4(safe_get(fwd, 'min'))} |")
 
-    # Always show Min Audit Trail if fields exist
-    med = safe_get(fwd, "min_entry_date")
-    mfd = safe_get(fwd, "min_future_date")
-    if med and mfd:
-        lines.append("")
-        lines.append("### forward_mdd Min Audit Trail")
-        lines.append("")
+    # Min audit trail (or explicit missing-field message)
+    lines.append("")
+    lines.append("### forward_mdd Min Audit Trail")
+    lines.append("")
+    if has_min_audit:
         lines.append("| item | value |")
         lines.append("|---|---:|")
-        lines.append(f"| min_entry_date | {med} |")
+        lines.append(f"| min_entry_date | {safe_get(fwd, 'min_entry_date')} |")
         lines.append(f"| min_entry_price | {fmt4(safe_get(fwd, 'min_entry_price'))} |")
-        lines.append(f"| min_future_date | {mfd} |")
+        lines.append(f"| min_future_date | {safe_get(fwd, 'min_future_date')} |")
         lines.append(f"| min_future_price | {fmt4(safe_get(fwd, 'min_future_price'))} |")
+    else:
+        lines.append("- min audit fields are missing in stats_latest.json.")
+        lines.append(f"- forward_mdd keys: `{', '.join(fwd_keys_sorted)}`")
+
     lines.append("")
 
     lines.append(f"## Recent Raw Prices (tail {tail_n})")
@@ -280,8 +279,7 @@ def main() -> int:
     if not dq_flags:
         lines.append("- (none)")
     else:
-        # Keep your current one-line style: "- FLAG: note"
-        # If notes count mismatches flags, still print what we have.
+        # Keep your current one-line style "- FLAG: note"
         if dq_notes and len(dq_notes) == len(dq_flags):
             for fl, nt in zip(dq_flags, dq_notes):
                 lines.append(f"- {fl}: {nt}")
