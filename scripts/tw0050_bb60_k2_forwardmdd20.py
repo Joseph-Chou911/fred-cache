@@ -21,13 +21,10 @@ Key features:
     The primary field "forward_mdd" uses CLEAN by default (audit-grade usable).
   - Keeps Min Audit Trail for both raw and clean.
   - DQ flags disclose break detection and cleaning.
-
-NEW (2026-02-19.v5):
-  - Integrates taiwan_margin_cache/latest.json as a "margin_overlay" block into stats_latest.json:
-      * TWSE / TPEX / TOTAL latest balance (億)
-      * N-day (default 5) sum chg_yi (億)
-      * margin_state_{N}d: DELEVERAGING / NEUTRAL / LEVERAGE_BUILDING
-    With DQ flags/notes for missing file, parse errors, insufficient rows, and date mismatch.
+  - Adds Trend / Volatility filters:
+      * trend: MA(trend_ma_days) + slope over slope_days (%)
+      * vol  : RV(vol_window_days) annualized + ATR(atr_window_days) and ATR%
+        - ATR needs High/Low; if unavailable, DQ flag will disclose.
 
 """
 
@@ -55,6 +52,7 @@ except Exception:
 
 SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-19.v5"
 TZ_LOCAL = "Asia/Taipei"
+TRADING_DAYS_PER_YEAR = 252
 
 
 # -------------------------
@@ -97,211 +95,12 @@ def _local_day_key_now() -> str:
     return datetime.now(timezone.utc).astimezone(tz).strftime("%Y-%m-%d")
 
 def _df_to_csv_min(df: pd.DataFrame) -> pd.DataFrame:
+    # Keep as minimal as possible, but include OHLC if present for auditability.
     cols = []
-    for c in ["date", "close", "adjclose", "volume"]:
+    for c in ["date", "open", "high", "low", "close", "adjclose", "volume"]:
         if c in df.columns:
             cols.append(c)
     return df[cols].copy()
-
-def _repo_root_from_this_file() -> str:
-    # scripts/this.py -> repo root
-    here = os.path.abspath(os.path.dirname(__file__))
-    return os.path.abspath(os.path.join(here, ".."))
-
-def _read_json_file(path: str) -> Any:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def _safe_float(x: Any) -> Optional[float]:
-    try:
-        if x is None:
-            return None
-        return float(x)
-    except Exception:
-        return None
-
-
-# -------------------------
-# Margin overlay
-# -------------------------
-
-def _parse_margin_series(series_obj: Dict[str, Any],
-                         window_n: int,
-                         dq_flags: List[str],
-                         dq_notes: List[str],
-                         label: str) -> Dict[str, Any]:
-    """
-    Parse one series (TWSE or TPEX) from taiwan_margin_cache/latest.json.
-    Computes:
-      - latest_date, latest_balance_yi, latest_chg_yi
-      - chg_nd_yi: sum of last N rows' chg_yi
-      - rows_used
-    """
-    out: Dict[str, Any] = {
-        "label": label,
-        "latest_date": None,
-        "latest_balance_yi": None,
-        "latest_chg_yi": None,
-        "chg_nd_yi": None,
-        "rows_used": 0,
-    }
-
-    rows = series_obj.get("rows", [])
-    if not isinstance(rows, list) or len(rows) == 0:
-        dq_flags.append("MARGIN_ROWS_EMPTY")
-        dq_notes.append(f"margin overlay: {label} rows empty or not a list.")
-        return out
-
-    df = pd.DataFrame(rows)
-    if "date" not in df.columns or "balance_yi" not in df.columns or "chg_yi" not in df.columns:
-        dq_flags.append("MARGIN_ROWS_SCHEMA_MISSING")
-        dq_notes.append(f"margin overlay: {label} rows missing required keys (date/balance_yi/chg_yi).")
-        return out
-
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df["balance_yi"] = pd.to_numeric(df["balance_yi"], errors="coerce")
-    df["chg_yi"] = pd.to_numeric(df["chg_yi"], errors="coerce")
-    df = df.dropna(subset=["date", "balance_yi"]).sort_values("date", ascending=False)
-
-    if len(df) == 0:
-        dq_flags.append("MARGIN_ROWS_PARSE_EMPTY")
-        dq_notes.append(f"margin overlay: {label} rows parsed empty after cleaning.")
-        return out
-
-    latest = df.iloc[0]
-    out["latest_date"] = latest["date"].strftime("%Y-%m-%d")
-    out["latest_balance_yi"] = _nan_to_none(latest["balance_yi"])
-    out["latest_chg_yi"] = _nan_to_none(latest["chg_yi"]) if pd.notna(latest["chg_yi"]) else None
-
-    # Sum last N rows' chg_yi (requires chg_yi present; if missing, we still try with available)
-    take_n = min(int(window_n), len(df))
-    sub = df.iloc[:take_n]
-    out["rows_used"] = int(take_n)
-
-    if "chg_yi" not in sub.columns or sub["chg_yi"].isna().all():
-        dq_flags.append("MARGIN_CHG_MISSING")
-        dq_notes.append(f"margin overlay: {label} chg_yi missing; cannot compute {window_n}d sum.")
-        out["chg_nd_yi"] = None
-        return out
-
-    chg_sum = float(sub["chg_yi"].fillna(0.0).sum())
-    if take_n < int(window_n):
-        dq_flags.append("MARGIN_INSUFFICIENT_ROWS")
-        dq_notes.append(f"margin overlay: {label} rows<{window_n} (rows={take_n}); used available for sum.")
-    out["chg_nd_yi"] = _nan_to_none(chg_sum)
-    return out
-
-def load_margin_overlay(margin_latest_path: str,
-                        last_date: str,
-                        window_n: int,
-                        threshold_yi: float,
-                        dq_flags: List[str],
-                        dq_notes: List[str]) -> Optional[Dict[str, Any]]:
-    """
-    Loads taiwan_margin_cache/latest.json and computes overlay summary.
-    Returns dict for stats_latest.json["margin_overlay"], or None if not available.
-    """
-    try:
-        if not os.path.exists(margin_latest_path):
-            dq_flags.append("MARGIN_LATEST_MISSING")
-            dq_notes.append(f"margin overlay: file not found: {margin_latest_path}")
-            return None
-
-        j = _read_json_file(margin_latest_path)
-        if not isinstance(j, dict):
-            dq_flags.append("MARGIN_LATEST_BAD_JSON")
-            dq_notes.append("margin overlay: latest.json not a dict.")
-            return None
-
-        series = j.get("series", {})
-        if not isinstance(series, dict):
-            dq_flags.append("MARGIN_SERIES_MISSING")
-            dq_notes.append("margin overlay: latest.json missing 'series' dict.")
-            return None
-
-        twse_obj = series.get("TWSE", {})
-        tpex_obj = series.get("TPEX", {})
-
-        twse = _parse_margin_series(twse_obj, window_n=window_n, dq_flags=dq_flags, dq_notes=dq_notes, label="TWSE")
-        tpex = _parse_margin_series(tpex_obj, window_n=window_n, dq_flags=dq_flags, dq_notes=dq_notes, label="TPEX")
-
-        # Compute TOTAL if both balances present
-        total_latest_balance = None
-        if twse.get("latest_balance_yi") is not None and tpex.get("latest_balance_yi") is not None:
-            total_latest_balance = float(twse["latest_balance_yi"]) + float(tpex["latest_balance_yi"])
-
-        total_chg_nd = None
-        if twse.get("chg_nd_yi") is not None and tpex.get("chg_nd_yi") is not None:
-            total_chg_nd = float(twse["chg_nd_yi"]) + float(tpex["chg_nd_yi"])
-
-        def _state(x: Optional[float], thr: float) -> Optional[str]:
-            if x is None or not np.isfinite(x):
-                return None
-            if x <= -thr:
-                return "DELEVERAGING"
-            if x >= thr:
-                return "LEVERAGE_BUILDING"
-            return "NEUTRAL"
-
-        # Prefer total state; fall back to TWSE-only if total unavailable
-        state_total = _state(total_chg_nd, threshold_yi)
-        state_twse = _state(twse.get("chg_nd_yi"), threshold_yi)
-        state_tpex = _state(tpex.get("chg_nd_yi"), threshold_yi)
-
-        # Data dates
-        twse_data_date = _to_scalar_str(twse_obj.get("data_date"), default="")
-        tpex_data_date = _to_scalar_str(tpex_obj.get("data_date"), default="")
-        data_date = twse_data_date or tpex_data_date or None
-
-        # Date alignment check (soft)
-        # Compare to price last_date; mismatch is not fatal but should be visible.
-        # If margin latest_date exists and differs from last_date -> flag.
-        margin_latest_date = twse.get("latest_date") or tpex.get("latest_date")
-        if margin_latest_date and last_date and margin_latest_date != last_date:
-            dq_flags.append("MARGIN_DATE_MISMATCH")
-            dq_notes.append(f"margin overlay: margin_latest_date={margin_latest_date} != price_last_date={last_date} (soft mismatch).")
-
-        overlay = {
-            "schema": "margin_overlay_v1",
-            "path": margin_latest_path,
-            "source": {
-                "twse": _to_scalar_str(twse_obj.get("source"), default=None),
-                "twse_url": _to_scalar_str(twse_obj.get("source_url"), default=None),
-                "tpex": _to_scalar_str(tpex_obj.get("source"), default=None),
-                "tpex_url": _to_scalar_str(tpex_obj.get("source_url"), default=None),
-            },
-            "generated_at_utc": _to_scalar_str(j.get("generated_at_utc"), default=None),
-            "data_date": data_date,
-            "params": {
-                "window_n": int(window_n),
-                "threshold_yi": float(threshold_yi),
-                "state_total_preferred": True,
-            },
-            "twse": twse,
-            "tpex": tpex,
-            "total": {
-                "latest_balance_yi": _nan_to_none(total_latest_balance) if total_latest_balance is not None else None,
-                "chg_nd_yi": _nan_to_none(total_chg_nd) if total_chg_nd is not None else None,
-                "state_nd": state_total,
-            },
-            "states": {
-                "twse_state_nd": state_twse,
-                "tpex_state_nd": state_tpex,
-                "total_state_nd": state_total,
-            },
-        }
-
-        # Extra: if total state missing, note why
-        if overlay["total"]["chg_nd_yi"] is None:
-            dq_flags.append("MARGIN_TOTAL_INCOMPLETE")
-            dq_notes.append("margin overlay: TOTAL chg_nd_yi not computed (missing TWSE/TPEX chg_nd_yi).")
-
-        return overlay
-
-    except Exception as e:
-        dq_flags.append("MARGIN_OVERLAY_ERROR")
-        dq_notes.append(f"margin overlay: error loading/parsing: {e.__class__.__name__}: {e}")
-        return None
 
 
 # -------------------------
@@ -350,11 +149,21 @@ def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -
             return None
 
     col_date = None
+    col_open = None
+    col_high = None
+    col_low = None
     col_close = None
     col_vol = None
+
     for c in df.columns:
         if "日期" in c:
             col_date = c
+        if "開盤" in c:
+            col_open = c
+        if "最高" in c:
+            col_high = c
+        if "最低" in c:
+            col_low = c
         if "收盤" in c:
             col_close = c
         if "成交股數" in c:
@@ -365,19 +174,35 @@ def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -
 
     out = pd.DataFrame()
     out["date"] = df[col_date].map(roc_to_date)
-    out["close"] = df[col_close].astype(str).str.replace(",", "", regex=False)
+
+    def _to_num_series(s: pd.Series) -> pd.Series:
+        return pd.to_numeric(s.astype(str).str.replace(",", "", regex=False), errors="coerce")
+
+    if col_open:
+        out["open"] = _to_num_series(df[col_open])
+    if col_high:
+        out["high"] = _to_num_series(df[col_high])
+    if col_low:
+        out["low"] = _to_num_series(df[col_low])
+
+    out["close"] = _to_num_series(df[col_close])
+
     if col_vol:
-        out["volume"] = df[col_vol].astype(str).str.replace(",", "", regex=False)
+        out["volume"] = _to_num_series(df[col_vol])
     else:
-        out["volume"] = None
+        out["volume"] = np.nan
 
     out["date"] = pd.to_datetime(out["date"], errors="coerce")
-    out["close"] = pd.to_numeric(out["close"], errors="coerce")
-    out["volume"] = pd.to_numeric(out["volume"], errors="coerce")
     out = out.dropna(subset=["date", "close"]).sort_values("date")
 
+    # TWSE fallback has no true adjclose => treat as close
     out["adjclose"] = out["close"]
-    return out[["date", "close", "adjclose", "volume"]].reset_index(drop=True)
+
+    keep = ["date"]
+    for c in ["open", "high", "low", "close", "adjclose", "volume"]:
+        if c in out.columns:
+            keep.append(c)
+    return out[keep].reset_index(drop=True)
 
 def fetch_twse_recent_0050(months_back: int, dq_flags: List[str], dq_notes: List[str]) -> pd.DataFrame:
     stock_no = "0050"
@@ -417,12 +242,17 @@ def fetch_yfinance(ticker: str, start: str, dq_flags: List[str], dq_notes: List[
         if df is None or len(df) == 0:
             return pd.DataFrame()
 
+        # Flatten MultiIndex columns if present
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
 
         df = df.reset_index()
+
         rename = {
             "Date": "date",
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
             "Close": "close",
             "Adj Close": "adjclose",
             "Volume": "volume",
@@ -431,16 +261,23 @@ def fetch_yfinance(ticker: str, start: str, dq_flags: List[str], dq_notes: List[
 
         if "date" not in df.columns or "close" not in df.columns:
             return pd.DataFrame()
+
+        # Ensure optional columns exist
         if "adjclose" not in df.columns:
             df["adjclose"] = df["close"]
+        for c in ["open", "high", "low"]:
+            if c not in df.columns:
+                df[c] = pd.NA
         if "volume" not in df.columns:
             df["volume"] = pd.NA
 
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
-        for c in ["close", "adjclose", "volume"]:
+        for c in ["open", "high", "low", "close", "adjclose", "volume"]:
             df[c] = pd.to_numeric(df[c], errors="coerce")
+
         df = df.dropna(subset=["date", "close"]).sort_values("date").reset_index(drop=True)
-        return df[["date", "close", "adjclose", "volume"]]
+
+        return df[["date", "open", "high", "low", "close", "adjclose", "volume"]]
     except Exception as e:
         dq_flags.append("YFINANCE_ERROR")
         dq_notes.append(f"yfinance fetch failed: {e.__class__.__name__}: {e}")
@@ -471,6 +308,125 @@ def classify_state(bb_z: float, bb_pos: float) -> str:
         return "NEAR_LOWER_BAND"
     return "IN_BAND"
 
+def compute_trend_filter(
+    price_used: pd.Series,
+    ma_days: int,
+    slope_days: int,
+    slope_thr_pct: float
+) -> Dict[str, Any]:
+    """
+    Trend filter:
+      - trend_ma = SMA(ma_days)
+      - slope_pct = (trend_ma[t] / trend_ma[t-slope_days] - 1) * 100
+      - price_vs_ma_pct = (price / trend_ma - 1) * 100
+    """
+    out: Dict[str, Any] = {
+        "ma_days": int(ma_days),
+        "slope_days": int(slope_days),
+        "slope_thr_pct": float(slope_thr_pct),
+        "ma_last": None,
+        "ma_prev": None,
+        "slope_pct": None,
+        "price_vs_ma_pct": None,
+        "state": "NA",
+    }
+
+    if price_used is None or len(price_used) < (ma_days + slope_days + 1):
+        return out
+
+    ma = price_used.rolling(window=ma_days, min_periods=ma_days).mean()
+
+    last_idx = len(price_used) - 1
+    ma_last = ma.iloc[last_idx]
+    if not np.isfinite(ma_last) or ma_last <= 0:
+        return out
+
+    prev_idx = last_idx - slope_days
+    ma_prev = ma.iloc[prev_idx] if prev_idx >= 0 else np.nan
+
+    price_last = price_used.iloc[last_idx]
+    if not np.isfinite(price_last) or price_last <= 0:
+        return out
+
+    out["ma_last"] = float(ma_last)
+    if np.isfinite(ma_prev) and ma_prev > 0:
+        out["ma_prev"] = float(ma_prev)
+        slope_pct = (ma_last / ma_prev - 1.0) * 100.0
+        out["slope_pct"] = float(slope_pct)
+
+        if slope_pct >= slope_thr_pct:
+            out["state"] = "TREND_UP"
+        elif slope_pct <= -slope_thr_pct:
+            out["state"] = "TREND_DOWN"
+        else:
+            out["state"] = "TREND_FLAT"
+
+    out["price_vs_ma_pct"] = float((price_last / ma_last - 1.0) * 100.0)
+    return out
+
+def compute_realized_vol_ann(price_used: pd.Series, vol_window_days: int) -> Dict[str, Any]:
+    """
+    Realized volatility from log returns:
+      rv_daily = std(logret, window=vol_window_days)
+      rv_ann   = rv_daily * sqrt(252)
+    """
+    out: Dict[str, Any] = {
+        "rv_days": int(vol_window_days),
+        "rv_daily": None,
+        "rv_ann": None,
+    }
+    if price_used is None or len(price_used) < (vol_window_days + 2):
+        return out
+
+    p = price_used.astype(float)
+    logret = np.log(p / p.shift(1))
+    rv = logret.rolling(window=vol_window_days, min_periods=vol_window_days).std(ddof=0)
+    last = rv.iloc[-1]
+    if np.isfinite(last) and last >= 0:
+        out["rv_daily"] = float(last)
+        out["rv_ann"] = float(last * np.sqrt(TRADING_DAYS_PER_YEAR))
+    return out
+
+def compute_atr(close: pd.Series, high: Optional[pd.Series], low: Optional[pd.Series], atr_window_days: int) -> Dict[str, Any]:
+    """
+    ATR (simple moving average of True Range). Requires high/low.
+    ATR% is ATR / close * 100
+    """
+    out: Dict[str, Any] = {
+        "atr_days": int(atr_window_days),
+        "atr": None,
+        "atr_pct": None,
+    }
+
+    if close is None or len(close) < (atr_window_days + 2):
+        return out
+    if high is None or low is None:
+        return out
+
+    c = close.astype(float)
+    h = high.astype(float)
+    l = low.astype(float)
+
+    # If high/low are mostly missing, bail.
+    if (h.notna().sum() < (atr_window_days + 2)) or (l.notna().sum() < (atr_window_days + 2)):
+        return out
+
+    prev_close = c.shift(1)
+    tr1 = (h - l).abs()
+    tr2 = (h - prev_close).abs()
+    tr3 = (l - prev_close).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+    atr = tr.rolling(window=atr_window_days, min_periods=atr_window_days).mean()
+    atr_last = atr.iloc[-1]
+    close_last = c.iloc[-1]
+
+    if np.isfinite(atr_last) and np.isfinite(close_last) and close_last > 0:
+        out["atr"] = float(atr_last)
+        out["atr_pct"] = float((atr_last / close_last) * 100.0)
+
+    return out
+
 
 @dataclass
 class ForwardMDDStats:
@@ -484,14 +440,16 @@ class ForwardMDDStats:
     min_future_idx: int
 
 
-def compute_forward_mdd(prices: np.ndarray, fwd_days: int, valid_entry_mask: Optional[np.ndarray] = None
-                        ) -> Tuple[np.ndarray, ForwardMDDStats]:
+def compute_forward_mdd(
+    prices: np.ndarray,
+    fwd_days: int,
+    valid_entry_mask: Optional[np.ndarray] = None
+) -> Tuple[np.ndarray, ForwardMDDStats]:
     """
     forward_mdd[t] = min(prices[t+1..t+fwd]/prices[t] - 1)
 
     valid_entry_mask:
       - optional boolean mask length n; if provided, only compute out[t] when mask[t] is True.
-      - This is how we "clean" windows contaminated by detected breaks, without altering price series.
     """
     n = len(prices)
     out = np.full(n, np.nan, dtype=float)
@@ -545,15 +503,6 @@ def compute_forward_mdd(prices: np.ndarray, fwd_days: int, valid_entry_mask: Opt
 # -------------------------
 
 def detect_price_breaks(prices: np.ndarray, ratio_hi: float, ratio_lo: float) -> np.ndarray:
-    """
-    Detect split-like / data-break points using day-to-day ratio.
-
-    breaks[t] = True means the transition from t-1 -> t is suspicious:
-      prices[t] / prices[t-1] >= ratio_hi OR <= ratio_lo
-
-    Example:
-      ratio_hi=1.8, ratio_lo=1/1.8 (~0.555...)
-    """
     n = len(prices)
     breaks = np.zeros(n, dtype=bool)
     for i in range(1, n):
@@ -569,17 +518,14 @@ def detect_price_breaks(prices: np.ndarray, ratio_hi: float, ratio_lo: float) ->
 def build_clean_entry_mask(n: int, breaks: np.ndarray, fwd_days: int) -> np.ndarray:
     """
     If there's a break at index j (transition j-1->j), then any entry i whose window [i+1..i+fwd]
-    includes j should be excluded.
-
-    Exclude entries i where:
-      i < j <= i+fwd_days
-    => i in [j - fwd_days, j-1]
+    includes j should be excluded:
+      i < j <= i+fwd_days  =>  i in [j - fwd_days, j-1]
     """
     mask = np.ones(n, dtype=bool)
     break_idxs = np.where(breaks)[0]
     for j in break_idxs:
         lo = max(0, j - fwd_days)
-        hi = min(n, j)  # exclude up to j-1
+        hi = min(n, j)
         mask[lo:hi] = False
     return mask
 
@@ -647,11 +593,13 @@ def main() -> int:
     # Cleaning mode for primary forward_mdd
     ap.add_argument("--forward_mode", choices=["raw", "clean"], default="clean")
 
-    # Margin overlay (optional; soft-fail with DQ flags)
-    repo_root = _repo_root_from_this_file()
-    ap.add_argument("--margin_latest_path", default=os.path.join(repo_root, "taiwan_margin_cache", "latest.json"))
-    ap.add_argument("--margin_window_n", type=int, default=5)
-    ap.add_argument("--margin_state_threshold_yi", type=float, default=100.0)
+    # Trend / Vol filters
+    ap.add_argument("--trend_ma_days", type=int, default=200)      # allow 200 or 252
+    ap.add_argument("--trend_slope_days", type=int, default=20)    # slope horizon
+    ap.add_argument("--trend_slope_thr_pct", type=float, default=0.5)
+
+    ap.add_argument("--vol_window_days", type=int, default=20)     # RV20
+    ap.add_argument("--atr_window_days", type=int, default=14)     # ATR14 (common)
 
     args = ap.parse_args()
 
@@ -737,7 +685,6 @@ def main() -> int:
 
     if len(break_idxs) > 0:
         dq_flags.append("PRICE_SERIES_BREAK_DETECTED")
-        # Keep notes concise but auditable
         show = []
         for j in break_idxs[:3]:
             d = df.loc[j, "date"].strftime("%Y-%m-%d")
@@ -771,19 +718,28 @@ def main() -> int:
         mfp = float(prices_np[stats.min_future_idx])
         return med, mep, mfd, mfp
 
-    run_ts_utc = utc_now_iso_z()
-
-    # Margin overlay (soft)
-    margin_overlay = load_margin_overlay(
-        margin_latest_path=_to_scalar_str(args.margin_latest_path).strip(),
-        last_date=last_date,
-        window_n=int(args.margin_window_n),
-        threshold_yi=float(args.margin_state_threshold_yi),
-        dq_flags=dq_flags,
-        dq_notes=dq_notes,
+    # Trend / Volatility
+    trend = compute_trend_filter(
+        price_used=price_used,
+        ma_days=int(args.trend_ma_days),
+        slope_days=int(args.trend_slope_days),
+        slope_thr_pct=float(args.trend_slope_thr_pct),
     )
 
+    vol_rv = compute_realized_vol_ann(price_used=price_used, vol_window_days=int(args.vol_window_days))
+
+    # ATR uses close/high/low (not adjclose)
+    high = df["high"] if "high" in df.columns else None
+    low = df["low"] if "low" in df.columns else None
+    close = df["close"] if "close" in df.columns else None
+    atr = compute_atr(close=close, high=high, low=low, atr_window_days=int(args.atr_window_days))
+
+    if atr.get("atr") is None:
+        dq_flags.append("ATR_UNAVAILABLE")
+        dq_notes.append("ATR not computed (missing/insufficient high-low data).")
+
     # build outputs
+    run_ts_utc = utc_now_iso_z()
     meta = {
         "run_ts_utc": run_ts_utc,
         "module": "tw0050_bb",
@@ -807,12 +763,15 @@ def main() -> int:
             "break_count": int(len(break_idxs)),
             "forward_mode_primary": forward_mode,
         },
-        "margin_overlay": {
-            "enabled": True,
-            "latest_path": _to_scalar_str(args.margin_latest_path).strip(),
-            "window_n": int(args.margin_window_n),
-            "threshold_yi": float(args.margin_state_threshold_yi),
-            "available": True if margin_overlay is not None else False,
+        "trend_params": {
+            "trend_ma_days": int(args.trend_ma_days),
+            "trend_slope_days": int(args.trend_slope_days),
+            "trend_slope_thr_pct": float(args.trend_slope_thr_pct),
+        },
+        "vol_params": {
+            "vol_window_days": int(args.vol_window_days),
+            "atr_window_days": int(args.atr_window_days),
+            "rv_annualization_days": TRADING_DAYS_PER_YEAR,
         },
     }
 
@@ -836,7 +795,7 @@ def main() -> int:
         med, mep, mfd, mfp = min_audit_from(stats)
         return {
             "label": label,
-            "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
+            "definition": f"min(price[t+1..t+{fwd_days}]/price[t]-1), level-price based",
             "n": int(stats.n),
             "p50": _nan_to_none(stats.p50),
             "p25": _nan_to_none(stats.p25),
@@ -853,16 +812,17 @@ def main() -> int:
     forward_raw = pack_fwd(fwd_raw_stats, "forward_mdd_raw")
     forward_clean = pack_fwd(fwd_clean_stats, "forward_mdd_clean")
 
-    stats_out: Dict[str, Any] = {
+    stats_out = {
         "meta": meta,
         "latest": latest,
-        # Primary used by report (build script reads this)
+        "trend": trend,          # NEW
+        "vol": {                 # NEW (merge rv + atr)
+            **vol_rv,
+            **atr,
+        },
         "forward_mdd": forward_primary,
-        # Audit extras
         "forward_mdd_raw": forward_raw,
         "forward_mdd_clean": forward_clean,
-        # Margin overlay (optional)
-        "margin_overlay": margin_overlay,
         "dq": {"flags": dq_flags, "notes": dq_notes},
     }
 
@@ -887,11 +847,6 @@ def main() -> int:
     print(f"[OK] wrote: {stats_path}")
     print(f"[OK] wrote: {out_csv_path}")
     print(f"[OK] wrote: {hist_path}")
-    if margin_overlay is None:
-        print("[WARN] margin_overlay unavailable (see dq flags/notes).")
-    else:
-        total = margin_overlay.get("total", {}) if isinstance(margin_overlay, dict) else {}
-        print(f"[OK] margin_overlay: total_chg_nd_yi={total.get('chg_nd_yi')} state_nd={total.get('state_nd')}")
     return 0
 
 
