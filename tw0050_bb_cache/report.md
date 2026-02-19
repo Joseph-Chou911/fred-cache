@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T09:50:40Z`
+- report_generated_at_utc: `2026-02-19T10:10:27Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v6`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
@@ -19,7 +19,7 @@
 - vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
 - margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
-- chip_overlay(T86+TWT72U,5D): total3_5D=-8,882,867; foreign=-14,398,187; trust=17,326,000; dealer=0; borrow_shares=135,405,000 (Δ1D=-9,446,000); borrow_mv(億)=104.5 (Δ1D=-4.8); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
+- chip_overlay(T86+TWT72U,5D): total3_5D=-8,882,867; foreign=-14,398,187; trust=17,326,000; dealer=-11,810,680; borrow_shares=135,405,000 (Δ1D=-9,446,000); borrow_mv(億)=104.5 (Δ1D=-4.8); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
 
 ## Latest Snapshot
 
@@ -108,7 +108,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-19T09:50:40.084Z`
+- overlay_generated_at_utc: `2026-02-19T10:10:27.097Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -130,7 +130,7 @@
 | days_used | 20260205, 20260206, 20260209, 20260210, 20260211 |
 | foreign_net_shares_sum | -14,398,187 |
 | trust_net_shares_sum | 17,326,000 |
-| dealer_net_shares_sum | 0 |
+| dealer_net_shares_sum | -11,810,680 |
 | total3_net_shares_sum | -8,882,867 |
 
 ### ETF Units（受益權單位）
@@ -139,17 +139,12 @@
 |---|---:|
 | units_outstanding | 16,191,000,000 |
 | units_chg_1d | 44,000,000 |
-| dq | ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND, ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND |
+| dq | (none) |
 
 ### Chip Overlay Sources
 
 - T86 template: `https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999`
 - TWT72U template: `https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB`
-
-### Chip Overlay DQ
-
-- ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND
-- ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND
 
 ## Margin Overlay（融資）
 
@@ -197,10 +192,6 @@
 - FWD_MDD_CLEAN_APPLIED: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
 - FWD_MDD_OUTLIER_MIN_RAW: forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
 - RAW_OUTLIER_EXCLUDED: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
-
-### Chip Overlay DQ (extra)
-- CHIP_OVERLAY:ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND
-- CHIP_OVERLAY:ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
