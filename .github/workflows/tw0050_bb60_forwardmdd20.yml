@@ -74,7 +74,7 @@ jobs:
             --cache_dir tw0050_bb_cache \
             --stock_no 0050 \
             --stats_path tw0050_bb_cache/stats_latest.json \
-            --out_path tw0050_bb_cache/chip_overlay.json \
+            --out tw0050_bb_cache/chip_overlay.json \
             --window_n 5
 
       - name: Debug chip overlay
