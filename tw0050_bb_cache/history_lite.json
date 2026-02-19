@@ -2805,6 +2805,18 @@
     "history_keep": 400,
     "rows_kept": 400,
     "run_ts_utc": "2026-02-19T02:33:11Z",
-    "ticker": "0050.TW"
-  }
+    "ticker": "0050.TW",
+    "updated_at_utc": "2026-02-19T03:25:12Z"
+  },
+  "rows": [
+    {
+      "as_of_last_date": "2026-02-11",
+      "bb_pos": 1.0135672114571161,
+      "bb_z": 2.0542688458284655,
+      "day_key_local": "2026-02-19",
+      "price_used": 77.19999694824219,
+      "run_ts_utc": "2026-02-19T03:25:12Z",
+      "state": "EXTREME_UPPER_BAND"
+    }
+  ]
 }

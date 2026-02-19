@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T03:15:55Z`
+- report_generated_at_utc: `2026-02-19T03:25:12Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v2`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
@@ -12,8 +12,8 @@
 - price_calc: `adjclose`
 
 ## 快速摘要（非預測，僅狀態）
-- state: **EXTREME_UPPER_BAND**; bb_z=2.0050; pos_in_band=1.0013; dist_to_lower=26.18%; dist_to_upper=-0.03%
-- forward_mdd(20D) distribution (n=113): p50=-0.0064; p10=-0.0533; p05=-0.0626; min=-0.0803 (min_window: 2025-10-31->2025-11-24; 64.7500->59.5500)
+- state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0136; dist_to_lower=38.12%; dist_to_upper=0.37%
+- forward_mdd(20D) distribution (n=4171): p50=-0.0185; p10=-0.0702; p05=-0.0952; min=-0.7628 (min_window: 2013-12-30->2014-02-05; 37.4761->8.8910) [DQ:FWD_MDD_OUTLIER_MIN]
 
 ## Latest Snapshot
 
@@ -22,14 +22,14 @@
 | close | 77.2000 |
 | adjclose | 77.2000 |
 | price_used | 77.2000 |
-| bb_ma | 67.0833 |
-| bb_sd | 5.0457 |
-| bb_upper | 77.1747 |
-| bb_lower | 56.9920 |
-| bb_z | 2.0050 |
-| pos_in_band | 1.0013 |
-| dist_to_lower | 26.18% |
-| dist_to_upper | -0.03% |
+| bb_ma | 66.4043 |
+| bb_sd | 5.2552 |
+| bb_upper | 76.9148 |
+| bb_lower | 55.8939 |
+| bb_z | 2.0543 |
+| pos_in_band | 1.0136 |
+| dist_to_lower | 38.12% |
+| dist_to_upper | 0.37% |
 
 ## forward_mdd Distribution
 
@@ -37,20 +37,20 @@
 
 | quantile | value |
 |---|---:|
-| p50 | -0.0064 |
-| p25 | -0.0267 |
-| p10 | -0.0533 |
-| p05 | -0.0626 |
-| min | -0.0803 |
+| p50 | -0.0185 |
+| p25 | -0.0408 |
+| p10 | -0.0702 |
+| p05 | -0.0952 |
+| min | -0.7628 |
 
 ### forward_mdd Min Audit Trail
 
 | item | value |
 |---|---:|
-| min_entry_date | 2025-10-31 |
-| min_entry_price | 64.7500 |
-| min_future_date | 2025-11-24 |
-| min_future_price | 59.5500 |
+| min_entry_date | 2013-12-30 |
+| min_entry_price | 37.4761 |
+| min_future_date | 2014-02-05 |
+| min_future_price | 8.8910 |
 
 ## Recent Raw Prices (tail 15)
 
@@ -74,8 +74,7 @@
 
 ## Data Quality Flags
 
-- YFINANCE_ERROR: yfinance fetch failed: AttributeError: 'tuple' object has no attribute 'lower'
-- DATA_SOURCE_TWSE_FALLBACK: Used TWSE fallback (recent-only, months_back=6).
+- FWD_MDD_OUTLIER_MIN: forward_mdd min=-0.7628 < threshold(-0.4); audit min_entry_date.
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。

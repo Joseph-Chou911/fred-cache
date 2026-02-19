@@ -1,58 +1,56 @@
 {
   "dq": {
     "flags": [
-      "YFINANCE_ERROR",
-      "DATA_SOURCE_TWSE_FALLBACK"
+      "FWD_MDD_OUTLIER_MIN"
     ],
     "notes": [
-      "yfinance fetch failed: AttributeError: 'tuple' object has no attribute 'lower'",
-      "Used TWSE fallback (recent-only, months_back=6)."
+      "forward_mdd min=-0.7628 < threshold(-0.4); audit min_entry_date."
     ]
   },
   "forward_mdd": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
-    "n": 113,
-    "p50": -0.006420545746388395,
-    "p25": -0.026729559748427723,
-    "p10": -0.05325914149443567,
-    "p05": -0.06263629683328675,
-    "min": -0.08030888030888039,
-    "min_entry_date": "2025-10-31",
-    "min_entry_price": 64.75,
-    "min_future_date": "2025-11-24",
-    "min_future_price": 59.55
+    "min": -0.7627551290463314,
+    "min_entry_date": "2013-12-30",
+    "min_entry_price": 37.47614288330078,
+    "min_future_date": "2014-02-05",
+    "min_future_price": 8.891022682189941,
+    "n": 4171,
+    "p05": -0.09523872170870273,
+    "p10": -0.07016143375465389,
+    "p25": -0.040785859568060856,
+    "p50": -0.018467015832377864
   },
   "latest": {
+    "adjclose": 77.19999694824219,
+    "bb_lower": 55.893853230104256,
+    "bb_ma": 66.40432726542154,
+    "bb_pos": 1.0135672114571161,
+    "bb_sd": 5.255237017658642,
+    "bb_upper": 76.91480130073883,
+    "bb_z": 2.0542688458284655,
+    "close": 77.19999694824219,
     "date": "2026-02-11",
-    "close": 77.2,
-    "adjclose": 77.2,
-    "price_used": 77.2,
-    "bb_ma": 67.08333333333333,
-    "bb_sd": 5.045661558702884,
-    "bb_upper": 77.17465645073909,
-    "bb_lower": 56.992010215927564,
-    "bb_z": 2.0050228397140892,
-    "bb_pos": 1.0012557099285224,
-    "dist_to_lower_pct": 26.176152570042017,
-    "dist_to_upper_pct": -0.03282843168511656,
+    "dist_to_lower_pct": 38.118938822171785,
+    "dist_to_upper_pct": 0.3707942329438385,
+    "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
   },
   "meta": {
-    "run_ts_utc": "2026-02-19T03:15:54Z",
-    "module": "tw0050_bb",
-    "tz": "Asia/Taipei",
-    "ticker": "0050.TW",
-    "start": "2003-01-01",
-    "fetch_start_effective": "2003-01-01",
-    "last_date": "2026-02-11",
-    "rows": 133,
-    "bb_window": 60,
     "bb_k": 2.0,
+    "bb_window": 60,
+    "data_source": "yfinance_yahoo_or_twse_fallback",
+    "fetch_start_effective": "2003-01-01",
     "fwd_days": 20,
+    "last_date": "2026-02-11",
+    "module": "tw0050_bb",
     "price_calc": "adjclose",
     "price_col_requested": "adjclose",
     "price_col_used": "adjclose",
-    "data_source": "yfinance_yahoo_or_twse_fallback",
-    "data_source_detail": "twse_fallback"
+    "rows": 4192,
+    "run_ts_utc": "2026-02-19T03:25:12Z",
+    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v3",
+    "start": "2003-01-01",
+    "ticker": "0050.TW",
+    "tz": "Asia/Taipei"
   }
 }
