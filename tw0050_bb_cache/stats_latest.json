@@ -1,70 +1,78 @@
 {
+  "atr": {
+    "atr": 1.2304300879000425,
+    "atr_days": 14,
+    "atr_pct": 1.5938214203880987,
+    "tr_mode": "OHLC"
+  },
   "dq": {
     "flags": [
       "PRICE_SERIES_BREAK_DETECTED",
       "FWD_MDD_CLEAN_APPLIED",
-      "FWD_MDD_OUTLIER_MIN_RAW"
+      "FWD_MDD_OUTLIER_MIN_RAW",
+      "RAW_OUTLIER_EXCLUDED"
     ],
     "notes": [
       "Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.",
       "Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).",
-      "forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail."
+      "forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail.",
+      "Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask."
     ]
   },
   "forward_mdd": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean",
-    "min": -0.2557001903918843,
+    "min": -0.2557002143885291,
     "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.417917251586914,
+    "min_entry_price": 19.417919158935547,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
+    "min_future_price": 14.452753067016602,
     "n": 4151,
-    "p05": -0.0927903008460737,
-    "p10": -0.06866929724548554,
-    "p25": -0.040224334868879,
-    "p50": -0.018276234498060706
+    "p05": -0.09279032477457388,
+    "p10": -0.06866918485368978,
+    "p25": -0.04022448268598905,
+    "p50": -0.01827623338032891
   },
   "forward_mdd_clean": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean",
-    "min": -0.2557001903918843,
+    "min": -0.2557002143885291,
     "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.417917251586914,
+    "min_entry_price": 19.417919158935547,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
+    "min_future_price": 14.452753067016602,
     "n": 4151,
-    "p05": -0.0927903008460737,
-    "p10": -0.06866929724548554,
-    "p25": -0.040224334868879,
-    "p50": -0.018276234498060706
+    "p05": -0.09279032477457388,
+    "p10": -0.06866918485368978,
+    "p25": -0.04022448268598905,
+    "p50": -0.01827623338032891
   },
   "forward_mdd_raw": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_raw",
-    "min": -0.7627551277479867,
+    "min": -0.7627551290463314,
     "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.47614669799805,
+    "min_entry_price": 37.47614288330078,
     "min_future_date": "2014-02-05",
-    "min_future_price": 8.891023635864258,
+    "min_future_price": 8.891022682189941,
     "n": 4171,
-    "p05": -0.09523823931296066,
-    "p10": -0.07016134187844758,
-    "p25": -0.040785893123567174,
-    "p50": -0.018466904788733363
+    "p05": -0.09523887061103797,
+    "p10": -0.07016153256341551,
+    "p25": -0.04078600580161218,
+    "p50": -0.018467017921604323
   },
   "latest": {
     "adjclose": 77.19999694824219,
-    "bb_lower": 55.89385323010079,
+    "bb_lower": 55.89385323010366,
     "bb_ma": 66.40432726542154,
-    "bb_pos": 1.0135672114569467,
-    "bb_sd": 5.255237017660378,
-    "bb_upper": 76.9148013007423,
-    "bb_z": 2.0542688458277865,
+    "bb_pos": 1.013567211457087,
+    "bb_sd": 5.25523701765894,
+    "bb_upper": 76.91480130073943,
+    "bb_z": 2.0542688458283487,
     "close": 77.19999694824219,
     "date": "2026-02-11",
-    "dist_to_lower_pct": 38.11893882218036,
-    "dist_to_upper_pct": 0.370794232939331,
+    "dist_to_lower_pct": 38.118938822173256,
+    "dist_to_upper_pct": 0.37079423294306135,
     "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
   },
@@ -85,9 +93,13 @@
     "price_calc": "adjclose",
     "price_col_requested": "adjclose",
     "price_col_used": "adjclose",
+    "regime_params": {
+      "min_samples": 252,
+      "rv_pctl_max": 0.6
+    },
     "rows": 4192,
-    "run_ts_utc": "2026-02-19T04:49:29Z",
-    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v5",
+    "run_ts_utc": "2026-02-19T05:05:45Z",
+    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-19.v6",
     "start": "2003-01-01",
     "ticker": "0050.TW",
     "trend_params": {
@@ -97,27 +109,51 @@
     },
     "tz": "Asia/Taipei",
     "vol_params": {
-      "atr_window_days": 14,
-      "rv_annualization_days": 252,
-      "vol_window_days": 20
+      "atr_days": 14,
+      "rv_days": 20
     }
   },
+  "regime": {
+    "allowed": false,
+    "definition": "TREND_UP & RV20_percentile<=pctl_max & rv_hist_n>=min_samples => RISK_ON_ALLOWED",
+    "inputs": {
+      "bb_state": "EXTREME_UPPER_BAND",
+      "rv_ann": 0.2069566003876574,
+      "rv_ann_pctl": 79.8418024928092,
+      "rv_hist_n": 4172,
+      "trend_state": "TREND_UP"
+    },
+    "params": {
+      "min_samples": 252,
+      "rv_pctl_max": 60.0,
+      "trend_required": "TREND_UP"
+    },
+    "passes": {
+      "rv_hist_ok": true,
+      "rv_ok": false,
+      "trend_ok": true
+    },
+    "reasons": [
+      "bb_extreme_upper_band_stretched"
+    ],
+    "tag": "RISK_OFF_OR_DEFENSIVE"
+  },
   "trend": {
-    "ma_days": 200,
-    "ma_last": 56.06832389831543,
-    "ma_prev": 52.8282753944397,
-    "price_vs_ma_pct": 37.689147063234515,
-    "slope_days": 20,
-    "slope_pct": 6.133171071143373,
-    "slope_thr_pct": 0.5,
-    "state": "TREND_UP"
+    "price_vs_trend_ma_pct": 37.68914715691349,
+    "state": "TREND_UP",
+    "trend_ma_days": 200,
+    "trend_ma_last": 56.068323860168455,
+    "trend_slope_days": 20,
+    "trend_slope_pct": 6.133171152210215,
+    "trend_slope_thr_pct": 0.5
   },
   "vol": {
-    "atr": 1.2785709926060267,
-    "atr_days": 14,
-    "atr_pct": 1.6561801077054825,
-    "rv_ann": 0.2069566003876864,
-    "rv_daily": 0.013037040400218853,
-    "rv_days": 20
+    "rv_ann": 0.2069566003876574,
+    "rv_ann_pctl": 79.8418024928092,
+    "rv_days": 20,
+    "rv_hist_n": 4172,
+    "rv_hist_q20": 0.11199350733618664,
+    "rv_hist_q50": 0.1482966338811053,
+    "rv_hist_q80": 0.20796036627967934
   }
 }

@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T04:49:30Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v4`
+- report_generated_at_utc: `2026-02-19T05:05:45Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v5`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -15,7 +15,8 @@
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0136; dist_to_lower=38.12%; dist_to_upper=0.37%
 - forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED]
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
-- vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2786 (1.66%)
+- vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
+- regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
 - margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
 
 ## Latest Snapshot
@@ -49,9 +50,38 @@
 |---|---:|
 | rv_days | 20 |
 | rv_ann(%) | 20.7% |
+| rv20_percentile | 79.84 |
+| rv_hist_n | 4172 |
+| rv_hist_q20(%) | 11.2% |
+| rv_hist_q50(%) | 14.8% |
+| rv_hist_q80(%) | 20.8% |
+
+| item | value |
+|---|---:|
 | atr_days | 14 |
-| atr | 1.2786 |
-| atr_pct | 1.66% |
+| atr | 1.2304 |
+| atr_pct | 1.59% |
+| tr_mode | OHLC |
+
+## Regime Tag
+
+| item | value |
+|---|---:|
+| tag | **RISK_OFF_OR_DEFENSIVE** |
+| allowed | false |
+| trend_state | TREND_UP |
+| rv_ann(%) | 20.7% |
+| rv20_percentile | 79.84 |
+| rv_hist_n | 4172 |
+| rv_pctl_max | 60.00 |
+| min_samples | 252 |
+| pass_trend | true |
+| pass_rv_hist | true |
+| pass_rv | false |
+| bb_state_note | EXTREME_UPPER_BAND |
+
+### Regime Notes
+- bb_extreme_upper_band_stretched
 
 ## forward_mdd Distribution
 
@@ -119,6 +149,7 @@
 - PRICE_SERIES_BREAK_DETECTED: Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
 - FWD_MDD_CLEAN_APPLIED: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
 - FWD_MDD_OUTLIER_MIN_RAW: forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
+- RAW_OUTLIER_EXCLUDED: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
