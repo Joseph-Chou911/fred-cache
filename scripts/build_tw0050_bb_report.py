@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 # ===== Audit stamp (use this to prove which script generated the report) =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v2"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v3"
 
 
 def utc_now_iso() -> str:
@@ -24,6 +24,15 @@ def fmt4(x: Any) -> str:
         if x is None:
             return "N/A"
         return f"{float(x):.4f}"
+    except Exception:
+        return "N/A"
+
+
+def fmt2(x: Any) -> str:
+    try:
+        if x is None:
+            return "N/A"
+        return f"{float(x):.2f}"
     except Exception:
         return "N/A"
 
@@ -142,10 +151,116 @@ def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) 
     if med and mfd and mep is not None and mfp is not None:
         line += f" (min_window: {med}->{mfd}; {fmt4(mep)}->{fmt4(mfp)})"
 
-    if "FWD_MDD_OUTLIER_MIN" in set(dq_flags):
-        line += " [DQ:FWD_MDD_OUTLIER_MIN]"
+    # FIX: accept both old/new flag names
+    flags = set(dq_flags or [])
+    if ("FWD_MDD_OUTLIER_MIN_RAW" in flags) or ("FWD_MDD_OUTLIER_MIN" in flags):
+        line += " [DQ:FWD_MDD_OUTLIER_MIN_RAW]"
 
     return line
+
+
+def _fmt_yi(x: Any) -> str:
+    # 融資單位：億
+    try:
+        if x is None:
+            return "N/A"
+        return f"{float(x):,.1f}"
+    except Exception:
+        return "N/A"
+
+
+def _margin_quick_line(mo: Optional[Dict[str, Any]], last_date: str) -> str:
+    """
+    Build one-line summary for quick section.
+    """
+    if not isinstance(mo, dict):
+        return "- margin (N/A): overlay missing"
+
+    params = mo.get("params", {}) or {}
+    n = params.get("window_n", "N/A")
+    thr = params.get("threshold_yi", "N/A")
+
+    total = mo.get("total", {}) or {}
+    twse = mo.get("twse", {}) or {}
+    tpex = mo.get("tpex", {}) or {}
+
+    data_date = mo.get("data_date") or mo.get("generated_at_utc") or "N/A"
+    # Alignment: compare margin latest_date vs price last_date
+    margin_latest_date = twse.get("latest_date") or tpex.get("latest_date") or "N/A"
+    align = "ALIGNED" if (margin_latest_date == last_date and margin_latest_date != "N/A") else "MISMATCH"
+
+    total_chg = total.get("chg_nd_yi")
+    total_state = total.get("state_nd") or mo.get("states", {}).get("total_state_nd") or "N/A"
+    twse_chg = twse.get("chg_nd_yi")
+    tpex_chg = tpex.get("chg_nd_yi")
+
+    return (
+        f"- margin({n}D,thr={thr}億): TOTAL { _fmt_yi(total_chg) } 億 => **{total_state}**; "
+        f"TWSE { _fmt_yi(twse_chg) } / TPEX { _fmt_yi(tpex_chg) }; "
+        f"margin_date={margin_latest_date}, price_last_date={last_date} ({align}); data_date={data_date}"
+    )
+
+
+def _margin_section(mo: Optional[Dict[str, Any]], last_date: str) -> List[str]:
+    """
+    Render a detailed section (markdown).
+    """
+    lines: List[str] = []
+    lines.append("## Margin Overlay（融資）")
+    lines.append("")
+    if not isinstance(mo, dict):
+        lines.append("- margin_overlay is missing in stats_latest.json.")
+        lines.append("")
+        return lines
+
+    params = mo.get("params", {}) or {}
+    n = params.get("window_n", "N/A")
+    thr = params.get("threshold_yi", "N/A")
+
+    source = mo.get("source", {}) or {}
+    gen = mo.get("generated_at_utc", "N/A")
+    data_date = mo.get("data_date", "N/A")
+
+    twse = mo.get("twse", {}) or {}
+    tpex = mo.get("tpex", {}) or {}
+    total = mo.get("total", {}) or {}
+    states = mo.get("states", {}) or {}
+
+    margin_latest_date = twse.get("latest_date") or tpex.get("latest_date") or "N/A"
+    align = "ALIGNED" if (margin_latest_date == last_date and margin_latest_date != "N/A") else "MISMATCH"
+
+    lines.append(f"- overlay_generated_at_utc: `{gen}`")
+    lines.append(f"- data_date: `{data_date}`")
+    lines.append(f"- params: window_n={n}, threshold_yi={thr}")
+    lines.append(f"- date_alignment: margin_latest_date=`{margin_latest_date}` vs price_last_date=`{last_date}` => **{align}**")
+    lines.append("")
+    lines.append("| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|")
+
+    def row(scope: str, obj: Dict[str, Any], state: Any) -> str:
+        return (
+            f"| {scope} | {obj.get('latest_date','N/A')} | {_fmt_yi(obj.get('latest_balance_yi'))} | "
+            f"{_fmt_yi(obj.get('latest_chg_yi'))} | {_fmt_yi(obj.get('chg_nd_yi'))} | "
+            f"{state or 'N/A'} | {obj.get('rows_used', 'N/A')} |"
+        )
+
+    lines.append(row("TWSE", twse, states.get("twse_state_nd")))
+    lines.append(row("TPEX", tpex, states.get("tpex_state_nd")))
+    lines.append(
+        f"| TOTAL | {margin_latest_date} | {_fmt_yi(total.get('latest_balance_yi'))} | N/A | "
+        f"{_fmt_yi(total.get('chg_nd_yi'))} | {states.get('total_state_nd') or total.get('state_nd') or 'N/A'} | N/A |"
+    )
+    lines.append("")
+
+    # Sources (as plain text; do not embed raw URLs if you prefer)
+    lines.append("### Margin Sources")
+    lines.append("")
+    lines.append(f"- TWSE source: `{source.get('twse')}`")
+    lines.append(f"- TWSE url: `{source.get('twse_url')}`")
+    lines.append(f"- TPEX source: `{source.get('tpex')}`")
+    lines.append(f"- TPEX url: `{source.get('tpex_url')}`")
+    lines.append("")
+    return lines
 
 
 def main() -> int:
@@ -172,7 +287,10 @@ def main() -> int:
     dq_flags = dq.get("flags") or []
     dq_notes = dq.get("notes") or []
 
-    # Detect whether min audit fields exist (this is the key for your current issue)
+    # NEW: margin overlay (from stats_latest.json)
+    margin_overlay = s.get("margin_overlay", None)
+
+    # Detect whether min audit fields exist
     has_min_audit = all(
         k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
     )
@@ -213,6 +331,8 @@ def main() -> int:
         f"dist_to_lower={fmt_pct2(dist_to_lower)}; dist_to_upper={fmt_pct2(dist_to_upper)}"
     )
     lines.append(build_forward_line(fwd, dq_flags, fwd_days))
+    # NEW: margin one-liner
+    lines.append(_margin_quick_line(margin_overlay, last_date))
     lines.append("")
 
     lines.append("## Latest Snapshot")
@@ -265,6 +385,9 @@ def main() -> int:
 
     lines.append("")
 
+    # NEW: Margin section (detailed)
+    lines.extend(_margin_section(margin_overlay, last_date))
+
     lines.append(f"## Recent Raw Prices (tail {tail_n})")
     lines.append("")
     tail_df = load_prices_tail(args.cache_dir, n=tail_n)
@@ -293,6 +416,7 @@ def main() -> int:
     lines.append("## Caveats")
     lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
+    lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；若日期不對齊應降低解讀權重。")
     lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as f:
