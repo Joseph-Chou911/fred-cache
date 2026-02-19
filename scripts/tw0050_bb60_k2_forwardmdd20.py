@@ -2,15 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """
-Compute 0050 (ticker default: 0050.TW) Bollinger Bands (60, 2) and forward MDD (20D),
+Compute 0050 (default ticker: 0050.TW) Bollinger Bands (60, 2) and forward MDD (20D),
 then write audit-friendly artifacts:
 
-- <cache_dir>/data.csv                (merged OHLCV from Yahoo Finance)
+- <cache_dir>/data.csv                (merged OHLCV)
 - <cache_dir>/stats_latest.json       (latest BB + distribution of forward_mdd_20d)
 - <cache_dir>/history_lite.json       (last N rows: date, price, z, band_pos, fwd_mdd)
 
-Data source: yfinance (Yahoo Finance).
-Default uses Adj Close for computations to account for distributions/splits over long horizons.
+Primary data source: yfinance (Yahoo Finance)
+Resilience:
+  - retry with backoff
+  - fallback to Ticker().history(period="max")
+  - fallback to TWSE STOCK_DAY endpoint when Yahoo returns empty (common on CI)
+
+Default uses Adj Close for computations when available; TWSE fallback has no adjclose => adjclose=close (DQ flagged).
 """
 
 from __future__ import annotations
@@ -19,12 +24,14 @@ import argparse
 import json
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+import requests
 
 try:
     import yfinance as yf
@@ -54,7 +61,7 @@ def _to_float(x: Any) -> Optional[float]:
         return float(x)
     try:
         s = str(x).strip()
-        if s in ("", "N/A", "NA", "nan", "None"):
+        if s in ("", "N/A", "NA", "nan", "None", "--"):
             return None
         return float(s)
     except Exception:
@@ -78,13 +85,11 @@ def normalize_yf_df(df: pd.DataFrame) -> pd.DataFrame:
     yfinance may return:
       - normal columns: ["Open","High","Low","Close","Adj Close","Volume"]
       - or MultiIndex columns for some versions/tickers
-    This function flattens and standardizes to:
-      date index (DatetimeIndex), columns: open/high/low/close/adjclose/volume
+    Standardize to columns: open/high/low/close/adjclose/volume with DatetimeIndex.
     """
     if df is None or df.empty:
         return pd.DataFrame()
 
-    # flatten multiindex
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [" ".join([str(x) for x in col if str(x) != ""]).strip() for col in df.columns]
 
@@ -105,7 +110,6 @@ def normalize_yf_df(df: pd.DataFrame) -> pd.DataFrame:
             colmap[c] = "volume"
 
     out = df.rename(columns=colmap).copy()
-    # Keep only known columns
     keep = [c for c in ["open", "high", "low", "close", "adjclose", "volume"] if c in out.columns]
     out = out[keep].copy()
     out.index = pd.to_datetime(out.index)
@@ -128,10 +132,15 @@ def load_existing_csv(path: str) -> pd.DataFrame:
 
 
 def save_csv_with_date_index(df: pd.DataFrame, path: str) -> None:
-    out = df.copy()
-    out = out.sort_index()
+    out = df.copy().sort_index()
     out.index.name = "date"
     out.reset_index().to_csv(path, index=False)
+
+
+def _sleep_backoff(attempt: int, base: float = 1.6) -> None:
+    # 1.6, 2.56, 4.096... capped at 10s
+    t = min(10.0, base ** attempt)
+    time.sleep(t)
 
 
 @dataclass
@@ -146,24 +155,163 @@ class DQ:
 
 
 # -----------------------------
+# Data fetch (resilient)
+# -----------------------------
+
+def fetch_from_yfinance(ticker: str, start: str, tries: int = 4) -> pd.DataFrame:
+    """
+    Try multiple ways to fetch Yahoo data to reduce empty dataframe failures in CI.
+    """
+    last_err: Optional[Exception] = None
+
+    # 1) yf.download(start=...)
+    for i in range(tries):
+        try:
+            raw = yf.download(
+                tickers=ticker,
+                start=start,
+                auto_adjust=False,
+                progress=False,
+                interval="1d",
+                actions=False,
+                group_by="column",
+                threads=False,  # tends to be more stable in CI
+            )
+            df = normalize_yf_df(raw)
+            if not df.empty:
+                return df
+        except Exception as e:
+            last_err = e
+        _sleep_backoff(i)
+
+    # 2) yf.Ticker().history(period="max")
+    for i in range(tries):
+        try:
+            raw = yf.Ticker(ticker).history(period="max", interval="1d", auto_adjust=False, actions=False)
+            df = normalize_yf_df(raw)
+            if not df.empty:
+                df = df[df.index >= pd.to_datetime(start)]
+                if not df.empty:
+                    return df
+        except Exception as e:
+            last_err = e
+        _sleep_backoff(i)
+
+    if last_err:
+        print(f"[yfinance] last exception: {last_err}")
+    return pd.DataFrame()
+
+
+def _roc_date_to_dt(s: str) -> pd.Timestamp:
+    # TWSE ROC date format: "112/02/01"
+    y, m, d = s.split("/")
+    return pd.Timestamp(year=int(y) + 1911, month=int(m), day=int(d))
+
+
+def _to_num(s: str) -> Optional[float]:
+    s = str(s).strip()
+    if s in ("", "--", "N/A", "NA", "nan", "None"):
+        return None
+    s = s.replace(",", "")
+    try:
+        return float(s)
+    except Exception:
+        return None
+
+
+def fetch_from_twse(stock_no: str, start: str, tries: int = 3) -> pd.DataFrame:
+    """
+    TWSE open data endpoint (monthly):
+      https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=YYYYMMDD&stockNo=0050
+
+    Returns columns: open/high/low/close/adjclose/volume
+    Note: TWSE has no adjusted close => adjclose=close (caller should flag DQ).
+    """
+    start_dt = pd.to_datetime(start).normalize()
+    today = pd.Timestamp.today().normalize()
+
+    cur = pd.Timestamp(year=start_dt.year, month=start_dt.month, day=1)
+    end = pd.Timestamp(year=today.year, month=today.month, day=1)
+
+    rows: List[Dict[str, Any]] = []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (GitHubActions; research data fetch)",
+        "Accept": "application/json,text/plain,*/*",
+    }
+
+    while cur <= end:
+        yyyymmdd = f"{cur.year}{cur.month:02d}01"
+        url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={yyyymmdd}&stockNo={stock_no}"
+
+        got = False
+        for i in range(tries):
+            try:
+                r = requests.get(url, headers=headers, timeout=20)
+                if r.status_code != 200:
+                    _sleep_backoff(i)
+                    continue
+                js = r.json()
+                if js.get("stat") != "OK":
+                    got = True  # not retryable
+                    break
+
+                data = js.get("data", [])
+                # 0 日期, 1 成交股數, 2 成交金額, 3 開盤價, 4 最高價, 5 最低價, 6 收盤價, 7 漲跌價差, 8 成交筆數
+                for it in data:
+                    dt = _roc_date_to_dt(it[0])
+                    if dt < start_dt:
+                        continue
+                    vol = _to_num(it[1])
+                    o = _to_num(it[3])
+                    h = _to_num(it[4])
+                    l = _to_num(it[5])
+                    c = _to_num(it[6])
+                    if c is None:
+                        continue
+                    rows.append(
+                        {
+                            "date": dt,
+                            "open": o,
+                            "high": h,
+                            "low": l,
+                            "close": c,
+                            "adjclose": c,  # TWSE no adjusted close
+                            "volume": int(vol) if vol is not None else None,
+                        }
+                    )
+                got = True
+                break
+            except Exception:
+                _sleep_backoff(i)
+
+        # be nice to TWSE
+        time.sleep(0.25)
+
+        # next month
+        cur = (cur + pd.offsets.MonthBegin(1)).normalize()
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows).drop_duplicates(subset=["date"]).sort_values("date")
+    df = df.set_index("date")
+    return df
+
+
+# -----------------------------
 # Core calculations
 # -----------------------------
 
-def compute_bb(
-    price: pd.Series,
-    window: int,
-    k: float,
-) -> pd.DataFrame:
+def compute_bb(price: pd.Series, window: int, k: float) -> pd.DataFrame:
     ma = price.rolling(window=window, min_periods=window).mean()
-    # Use population std (ddof=0) for deterministic BB; if you prefer sample std, change ddof=1.
     sd = price.rolling(window=window, min_periods=window).std(ddof=0)
     upper = ma + k * sd
     lower = ma - k * sd
 
     z = (price - ma) / sd
-    band_pos = (price - lower) / (upper - lower)  # 0..1, may exceed if outside band
+    band_pos = (price - lower) / (upper - lower)
 
-    out = pd.DataFrame(
+    return pd.DataFrame(
         {
             "bb_ma": ma,
             "bb_sd": sd,
@@ -173,13 +321,12 @@ def compute_bb(
             "bb_pos": band_pos,
         }
     )
-    return out
 
 
 def compute_forward_mdd_from_entry(price: np.ndarray, fwd_days: int) -> np.ndarray:
     """
     forward_mdd[t] = min_{k=1..fwd_days} (price[t+k]/price[t] - 1)
-    Interpreted as "worst drawdown from entry price within next fwd_days".
+    'Worst drawdown from entry price within next fwd_days'.
     """
     n = price.shape[0]
     out = np.full(n, np.nan, dtype=float)
@@ -194,15 +341,11 @@ def compute_forward_mdd_from_entry(price: np.ndarray, fwd_days: int) -> np.ndarr
         window = window[np.isfinite(window)]
         if window.size == 0:
             continue
-        min_p = window.min()
-        out[t] = (min_p / p0) - 1.0
+        out[t] = (window.min() / p0) - 1.0
     return out
 
 
 def classify_bb_state(z: Optional[float]) -> str:
-    """
-    Simple, deterministic label only based on z (no "prediction").
-    """
     if z is None or not np.isfinite(z):
         return "NA"
     if z <= -2.0:
@@ -252,38 +395,35 @@ def main() -> None:
     fetch_start = args.start
     if not existing.empty:
         last_dt = existing.index.max()
-        # fetch from a bit earlier to handle revisions / timezone / last row overlap
         fetch_start = (last_dt - pd.Timedelta(days=14)).date().isoformat()
 
-    # Fetch
-    try:
-        raw = yf.download(
-            tickers=args.ticker,
-            start=fetch_start,
-            auto_adjust=False,
-            progress=False,
-            interval="1d",
-            actions=False,
-            group_by="column",
-        )
-    except Exception as e:
-        raise SystemExit(f"ERROR: yfinance download failed: {e}")
+    # --- Fetch with resilience ---
+    df_new = fetch_from_yfinance(args.ticker, fetch_start, tries=4)
 
-    df_new = normalize_yf_df(raw)
     if df_new.empty:
-        raise SystemExit("ERROR: Empty data from yfinance. (ticker wrong? network blocked? Yahoo transient?)")
+        # Yahoo blocked / transient. Try TWSE fallback.
+        stock_no = args.ticker.split(".")[0]
+        df_twse = fetch_from_twse(stock_no=stock_no, start=fetch_start, tries=3)
+        if not df_twse.empty:
+            dq.add("YFINANCE_EMPTY_FALLBACK_TWSE", "yfinance returned empty; used TWSE STOCK_DAY fallback.")
+            dq.add("TWSE_NO_ADJCLOSE", "TWSE has no adjusted close; adjclose is set equal to close.")
+            df_new = df_twse
+        else:
+            raise SystemExit(
+                "ERROR: Empty data from yfinance, and TWSE fallback also returned empty. "
+                "Likely network / endpoint blocking in CI."
+            )
 
     # Merge existing + new
     if not existing.empty:
         merged = pd.concat([existing, df_new], axis=0)
-        merged = merged[~merged.index.duplicated(keep="last")]
-        merged = merged.sort_index()
+        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
     else:
-        merged = df_new
+        merged = df_new.sort_index()
 
     # Basic DQ
     if "adjclose" not in merged.columns:
-        dq.add("MISSING_ADJCLOSE", "Yahoo data did not provide Adj Close; falling back to Close when needed.")
+        dq.add("MISSING_ADJCLOSE", "Data did not provide Adj Close; set adjclose=close.")
         merged["adjclose"] = merged["close"]
 
     if merged.shape[0] < (args.bb_window + args.fwd_days + 10):
@@ -313,11 +453,10 @@ def main() -> None:
     bb = compute_bb(price_calc, window=args.bb_window, k=args.bb_k)
     out = pd.concat([merged, bb], axis=1)
 
-    # Distances (computed on original level price to be intuitive; still deterministic)
+    # Distances (level price for intuition)
     upper = out["bb_upper"]
     lower = out["bb_lower"]
 
-    # If log mode, convert upper/lower back to level space for distance display
     if args.use_log_price:
         upper_level = np.exp(upper)
         lower_level = np.exp(lower)
@@ -333,7 +472,7 @@ def main() -> None:
     out["dist_to_lower_pct"] = _safe_pct(dist_to_lower)
     out["dist_to_upper_pct"] = _safe_pct(dist_to_upper)
 
-    # forward_mdd_20d on LEVEL price (entry drawdown)
+    # forward_mdd on LEVEL price (entry drawdown)
     price_np = price_series.to_numpy(dtype=float)
     fwd_mdd = compute_forward_mdd_from_entry(price_np, fwd_days=args.fwd_days)
     out[f"forward_mdd_{args.fwd_days}d"] = fwd_mdd
@@ -341,14 +480,12 @@ def main() -> None:
     # Latest snapshot
     latest_idx = out.index.max()
     latest_row = out.loc[latest_idx]
-
     latest_z = _to_float(latest_row.get("bb_z"))
     latest_pos = _to_float(latest_row.get("bb_pos"))
 
-    # Distribution stats of forward_mdd over history where it is defined
+    # Distribution stats
     fwd_vals = out[f"forward_mdd_{args.fwd_days}d"].dropna().to_numpy(dtype=float)
     fwd_n = int(fwd_vals.size)
-
     if fwd_n < 200:
         dq.add("LOW_SAMPLE_FORWARD_MDD", f"forward_mdd sample size is small (n={fwd_n}).")
 
@@ -357,7 +494,7 @@ def main() -> None:
             "run_ts_utc": run_ts_utc,
             "module": "tw0050_bb",
             "ticker": args.ticker,
-            "data_source": "yfinance_yahoo",
+            "data_source": "yfinance_yahoo_or_twse_fallback",
             "tz": args.tz,
             "start": args.start,
             "fetch_start_effective": fetch_start,
@@ -370,10 +507,7 @@ def main() -> None:
             "rows": int(out.shape[0]),
             "last_date": latest_idx.date().isoformat(),
         },
-        "dq": {
-            "flags": dq.flags,
-            "notes": dq.notes,
-        },
+        "dq": {"flags": dq.flags, "notes": dq.notes},
         "latest": {
             "date": latest_idx.date().isoformat(),
             "close": _to_float(latest_row.get("close")),
@@ -403,9 +537,10 @@ def main() -> None:
     with open(stats_path, "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2, sort_keys=True)
 
-    # history_lite.json (keep last N rows, include forward_mdd for those dates)
+    # history_lite.json
     tail = out.tail(args.history_keep).copy()
     hist_items: List[Dict[str, Any]] = []
+    fwd_key = f"forward_mdd_{args.fwd_days}d"
     for idx, r in tail.iterrows():
         hist_items.append(
             {
@@ -413,7 +548,7 @@ def main() -> None:
                 "price": _to_float(price_series.loc[idx]) if idx in price_series.index else None,
                 "bb_z": _to_float(r.get("bb_z")),
                 "bb_pos": _to_float(r.get("bb_pos")),
-                f"forward_mdd_{args.fwd_days}d": _to_float(r.get(f"forward_mdd_{args.fwd_days}d")),
+                fwd_key: _to_float(r.get(fwd_key)),
             }
         )
 
