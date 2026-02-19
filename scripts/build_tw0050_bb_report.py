@@ -11,7 +11,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v4"
+# ===== Audit stamp (use this to prove which script generated the report) =====
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v5"
 
 
 def utc_now_iso() -> str:
@@ -54,9 +55,11 @@ def fmt_pct1(x: Any) -> str:
         return "N/A"
 
 
-def safe_get(d: Dict[str, Any], k: str, default=None):
+def safe_get(d: Any, k: str, default=None):
     try:
-        return d.get(k, default)
+        if isinstance(d, dict):
+            return d.get(k, default)
+        return default
     except Exception:
         return default
 
@@ -67,6 +70,10 @@ def load_json(path: str) -> Dict[str, Any]:
 
 
 def load_prices_tail(cache_dir: str, n: int) -> Optional[pd.DataFrame]:
+    """
+    Prefer data.csv; fallback to prices.csv.
+    Normalize to columns: date, close, adjclose, volume
+    """
     candidates = [
         os.path.join(cache_dir, "data.csv"),
         os.path.join(cache_dir, "prices.csv"),
@@ -89,13 +96,16 @@ def load_prices_tail(cache_dir: str, n: int) -> Optional[pd.DataFrame]:
         return None
 
     df.rename(columns={c: c.lower() for c in df.columns}, inplace=True)
+
     if "adj close" in df.columns and "adjclose" not in df.columns:
         df.rename(columns={"adj close": "adjclose"}, inplace=True)
 
     if "close" not in df.columns:
         return None
+
     if "adjclose" not in df.columns:
         df["adjclose"] = df["close"]
+
     if "volume" not in df.columns:
         df["volume"] = pd.NA
 
@@ -133,7 +143,6 @@ def md_table_prices(df: pd.DataFrame) -> str:
 
 
 def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) -> str:
-    label = str(safe_get(fwd, "label", "") or "")
     n = safe_get(fwd, "n", 0)
     p50 = safe_get(fwd, "p50")
     p10 = safe_get(fwd, "p10")
@@ -145,6 +154,7 @@ def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) 
         f"p50={fmt4(p50)}; p10={fmt4(p10)}; p05={fmt4(p05)}; min={fmt4(mn)}"
     )
 
+    # Append audit trail if exists
     med = safe_get(fwd, "min_entry_date")
     mfd = safe_get(fwd, "min_future_date")
     mep = safe_get(fwd, "min_entry_price")
@@ -152,168 +162,197 @@ def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) 
     if med and mfd and mep is not None and mfp is not None:
         line += f" (min_window: {med}->{mfd}; {fmt4(mep)}->{fmt4(mfp)})"
 
-    dq_set = set(dq_flags or [])
-    # Avoid misleading tag: if primary is clean, but raw had outlier, state it clearly.
-    if "FWD_MDD_OUTLIER_MIN_RAW" in dq_set:
-        if "clean" in label:
-            line += " [DQ:RAW_OUTLIER_EXCLUDED]"
-        elif "raw" in label:
-            line += " [DQ:FWD_MDD_OUTLIER_MIN_RAW]"
-        else:
-            line += " [DQ:FWD_MDD_OUTLIER_MIN_RAW]"
-
-    # backward compatibility
-    if "FWD_MDD_OUTLIER_MIN" in dq_set and "FWD_MDD_OUTLIER_MIN_RAW" not in dq_set:
-        line += " [DQ:FWD_MDD_OUTLIER_MIN]"
+    # DQ tags (keep concise)
+    sflags = set(dq_flags or [])
+    if "RAW_OUTLIER_EXCLUDED" in sflags:
+        line += " [DQ:RAW_OUTLIER_EXCLUDED]"
+    elif "FWD_MDD_OUTLIER_MIN_RAW" in sflags:
+        line += " [DQ:FWD_MDD_OUTLIER_MIN_RAW]"
 
     return line
 
 
 def build_trend_line(trend: Dict[str, Any]) -> str:
-    if not isinstance(trend, dict) or not trend:
-        return "- trend_filter: N/A"
-    ma_days = safe_get(trend, "ma_days", "N/A")
-    slope_days = safe_get(trend, "slope_days", "N/A")
-    thr = safe_get(trend, "slope_thr_pct", "N/A")
-    pvs = safe_get(trend, "price_vs_ma_pct")
-    slope = safe_get(trend, "slope_pct")
-    st = safe_get(trend, "state", "NA")
+    ma_days = safe_get(trend, "trend_ma_days", 200)
+    slope_days = safe_get(trend, "trend_slope_days", 20)
+    thr = safe_get(trend, "trend_slope_thr_pct", 0.50)
+    p_vs = safe_get(trend, "price_vs_trend_ma_pct")
+    slope = safe_get(trend, "trend_slope_pct")
+    state = safe_get(trend, "state", "TREND_NA")
     return (
-        f"- trend_filter(MA{ma_days},slope{int(slope_days)}D,thr={fmt2(thr)}%): "
-        f"price_vs_ma={fmt_pct2(pvs)}; slope={fmt_pct2(slope)} => **{st}**"
+        f"- trend_filter(MA{ma_days},slope{slope_days}D,thr={fmt_pct2(thr)}): "
+        f"price_vs_ma={fmt_pct2(p_vs)}; slope={fmt_pct2(slope)} => **{state}**"
     )
 
 
-def build_vol_line(vol: Dict[str, Any]) -> str:
-    if not isinstance(vol, dict) or not vol:
-        return "- vol_filter: N/A"
-    rv_days = safe_get(vol, "rv_days", "N/A")
+def build_vol_line(vol: Dict[str, Any], atr: Dict[str, Any]) -> str:
+    rv_days = safe_get(vol, "rv_days", 20)
     rv_ann = safe_get(vol, "rv_ann")
-    atr_days = safe_get(vol, "atr_days", "N/A")
-    atr = safe_get(vol, "atr")
-    atr_pct = safe_get(vol, "atr_pct")
-    # rv_ann is fraction, convert to %
-    rv_ann_pct = (float(rv_ann) * 100.0) if rv_ann is not None else None
-    return (
-        f"- vol_filter(RV{rv_days},ATR{atr_days}): "
-        f"rv_ann={fmt_pct1(rv_ann_pct)}; atr={fmt4(atr)} ({fmt_pct2(atr_pct)})"
-    )
+    atr_days = safe_get(atr, "atr_days", 14)
+    atr_v = safe_get(atr, "atr")
+    atr_pct = safe_get(atr, "atr_pct")
+    rv_pct = None if rv_ann is None else float(rv_ann) * 100.0
+    return f"- vol_filter(RV{rv_days},ATR{atr_days}): rv_ann={fmt_pct1(rv_pct)}; atr={fmt4(atr_v)} ({fmt_pct2(atr_pct)})"
 
 
-def _fmt_yi1(x: Any) -> str:
+def read_margin_latest(path: str) -> Optional[Dict[str, Any]]:
+    if not path or (not os.path.exists(path)):
+        return None
     try:
-        return f"{float(x):,.1f}"
+        return load_json(path)
     except Exception:
-        return "N/A"
+        return None
 
 
-def _margin_state(sum_chg: float, thr: float) -> str:
-    if sum_chg <= -thr:
-        return "DELEVERAGING"
-    if sum_chg >= thr:
+def margin_state(sum_chg_yi: float, threshold_yi: float) -> str:
+    if sum_chg_yi >= threshold_yi:
         return "LEVERAGING"
+    if sum_chg_yi <= -threshold_yi:
+        return "DELEVERAGING"
     return "NEUTRAL"
 
 
-def load_margin_overlay(margin_json_path: str) -> Optional[Dict[str, Any]]:
-    if not margin_json_path or not os.path.exists(margin_json_path):
-        return None
-    try:
-        return load_json(margin_json_path)
-    except Exception:
-        return None
+def take_last_n_rows(rows: List[Dict[str, Any]], n: int) -> List[Dict[str, Any]]:
+    if not isinstance(rows, list) or n <= 0:
+        return []
+    # rows in your latest.json are newest first; keep that assumption but be defensive
+    # We want the latest n trading days -> first n
+    return rows[:n]
 
 
-def compute_margin_overlay(
-    mj: Dict[str, Any],
-    window_n: int,
-    threshold_yi: float
-) -> Optional[Dict[str, Any]]:
+def sum_chg(rows: List[Dict[str, Any]]) -> float:
+    s = 0.0
+    for r in rows:
+        try:
+            v = r.get("chg_yi", None)
+            if v is None:
+                continue
+            s += float(v)
+        except Exception:
+            continue
+    return float(s)
+
+
+def margin_overlay_block(margin_json: Dict[str, Any], price_last_date: str, window_n: int, threshold_yi: float
+                         ) -> Tuple[List[str], Optional[str]]:
     """
-    mj: taiwan_margin_cache/latest.json structure (TWSE & TPEX)
-    Returns dict with computed sums and alignment-ready info.
+    Returns:
+      - markdown lines for the section
+      - quick summary line (or None)
     """
-    if not mj or "series" not in mj:
-        return None
+    lines: List[str] = []
+    series = safe_get(margin_json, "series", {}) or {}
+    twse = safe_get(series, "TWSE", {}) or {}
+    tpex = safe_get(series, "TPEX", {}) or {}
 
-    gen_utc = safe_get(mj, "generated_at_utc")
-    series = mj.get("series", {}) or {}
-    tw = series.get("TWSE", {}) or {}
-    tp = series.get("TPEX", {}) or {}
+    gen_utc = safe_get(margin_json, "generated_at_utc", "N/A")
+    data_date = safe_get(twse, "data_date", None) or safe_get(tpex, "data_date", None) or "N/A"
 
-    def _scope_pack(scope_obj: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        rows = scope_obj.get("rows") or []
-        if not rows:
+    twse_rows = safe_get(twse, "rows", []) or []
+    tpex_rows = safe_get(tpex, "rows", []) or []
+
+    twse_last = twse_rows[0]["date"] if (isinstance(twse_rows, list) and len(twse_rows) > 0) else None
+    tpex_last = tpex_rows[0]["date"] if (isinstance(tpex_rows, list) and len(tpex_rows) > 0) else None
+    margin_last_date = twse_last or tpex_last or "N/A"
+
+    aligned = (str(margin_last_date) == str(price_last_date))
+    align_tag = "ALIGNED" if aligned else "MISALIGNED"
+
+    twse_n = take_last_n_rows(twse_rows, window_n)
+    tpex_n = take_last_n_rows(tpex_rows, window_n)
+
+    twse_sum = sum_chg(twse_n)
+    tpex_sum = sum_chg(tpex_n)
+    total_sum = twse_sum + tpex_sum
+
+    twse_state = margin_state(twse_sum, threshold_yi)
+    tpex_state = margin_state(tpex_sum, threshold_yi)
+    total_state = margin_state(total_sum, threshold_yi)
+
+    # balances (latest)
+    def latest_balance(rows: List[Dict[str, Any]]) -> Optional[float]:
+        try:
+            if not rows:
+                return None
+            return float(rows[0].get("balance_yi"))
+        except Exception:
             return None
-        # rows are typically latest-first; take first window_n
-        use = rows[:window_n]
-        chgs = []
-        for r in use:
-            v = r.get("chg_yi")
-            try:
-                chgs.append(float(v))
-            except Exception:
-                chgs.append(float("nan"))
-        chgs = [x for x in chgs if pd.notna(x)]
-        if not chgs:
+
+    twse_bal = latest_balance(twse_rows)
+    tpex_bal = latest_balance(tpex_rows)
+    total_bal = (twse_bal + tpex_bal) if (twse_bal is not None and tpex_bal is not None) else None
+
+    # today's change (latest)
+    def latest_chg(rows: List[Dict[str, Any]]) -> Optional[float]:
+        try:
+            if not rows:
+                return None
+            return float(rows[0].get("chg_yi"))
+        except Exception:
             return None
-        sum_chg = float(sum(chgs))
-        latest = rows[0]
-        return {
-            "source": scope_obj.get("source"),
-            "source_url": scope_obj.get("source_url"),
-            "data_date": scope_obj.get("data_date"),
-            "latest_date": latest.get("date"),
-            "balance_yi": latest.get("balance_yi"),
-            "chg_today_yi": latest.get("chg_yi"),
-            "chg_nd_sum_yi": sum_chg,
-            "rows_used": len(use),
-            "state_nd": _margin_state(sum_chg, threshold_yi),
-        }
 
-    twp = _scope_pack(tw)
-    tpp = _scope_pack(tp)
-    if twp is None and tpp is None:
+    twse_chg_today = latest_chg(twse_rows)
+    tpex_chg_today = latest_chg(tpex_rows)
+
+    # quick summary line
+    quick = (
+        f"- margin({window_n}D,thr={threshold_yi:.2f}億): TOTAL {total_sum:.2f} 億 => **{total_state}**; "
+        f"TWSE {twse_sum:.2f} / TPEX {tpex_sum:.2f}; "
+        f"margin_date={margin_last_date}, price_last_date={price_last_date} ({align_tag}); data_date={data_date}"
+    )
+
+    # section lines
+    lines.append("## Margin Overlay（融資）")
+    lines.append("")
+    lines.append(f"- overlay_generated_at_utc: `{gen_utc}`")
+    lines.append(f"- data_date: `{data_date}`")
+    lines.append(f"- params: window_n={window_n}, threshold_yi={threshold_yi:.2f}")
+    lines.append(f"- date_alignment: margin_latest_date=`{margin_last_date}` vs price_last_date=`{price_last_date}` => **{align_tag}**")
+    lines.append("")
+    lines.append("| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|")
+
+    def fmt_yi(x: Optional[float]) -> str:
+        try:
+            if x is None:
+                return "N/A"
+            return f"{float(x):,.1f}"
+        except Exception:
+            return "N/A"
+
+    lines.append(f"| TWSE | {twse_last or 'N/A'} | {fmt_yi(twse_bal)} | {fmt_yi(twse_chg_today)} | {twse_sum:.1f} | {twse_state} | {len(twse_n)} |")
+    lines.append(f"| TPEX | {tpex_last or 'N/A'} | {fmt_yi(tpex_bal)} | {fmt_yi(tpex_chg_today)} | {tpex_sum:.1f} | {tpex_state} | {len(tpex_n)} |")
+    lines.append(f"| TOTAL | {margin_last_date} | {fmt_yi(total_bal)} | N/A | {total_sum:.1f} | {total_state} | N/A |")
+    lines.append("")
+    lines.append("### Margin Sources")
+    lines.append("")
+    lines.append(f"- TWSE source: `{safe_get(twse, 'source', 'N/A')}`")
+    lines.append(f"- TWSE url: `{safe_get(twse, 'source_url', 'N/A')}`")
+    lines.append(f"- TPEX source: `{safe_get(tpex, 'source', 'N/A')}`")
+    lines.append(f"- TPEX url: `{safe_get(tpex, 'source_url', 'N/A')}`")
+    lines.append("")
+
+    return lines, quick
+
+
+def build_regime_line(regime: Dict[str, Any]) -> Optional[str]:
+    if not isinstance(regime, dict) or not regime:
         return None
-
-    total_sum = 0.0
-    total_balance = 0.0
-    if twp and isinstance(twp.get("chg_nd_sum_yi"), float):
-        total_sum += float(twp["chg_nd_sum_yi"])
-    if tpp and isinstance(tpp.get("chg_nd_sum_yi"), float):
-        total_sum += float(tpp["chg_nd_sum_yi"])
-    if twp and twp.get("balance_yi") is not None:
-        total_balance += float(twp["balance_yi"])
-    if tpp and tpp.get("balance_yi") is not None:
-        total_balance += float(tpp["balance_yi"])
-
-    # choose latest date for total (prefer TWSE if exists, else TPEX)
-    latest_date = (twp.get("latest_date") if twp else None) or (tpp.get("latest_date") if tpp else None)
-    data_date = (twp.get("data_date") if twp else None) or (tpp.get("data_date") if tpp else None)
-
-    return {
-        "overlay_generated_at_utc": gen_utc,
-        "data_date": data_date,
-        "params": {"window_n": window_n, "threshold_yi": threshold_yi},
-        "TWSE": twp,
-        "TPEX": tpp,
-        "TOTAL": {
-            "latest_date": latest_date,
-            "balance_yi": total_balance if total_balance > 0 else None,
-            "chg_nd_sum_yi": total_sum,
-            "state_nd": _margin_state(total_sum, threshold_yi),
-        }
-    }
+    tag = safe_get(regime, "tag", "N/A")
+    allowed = bool(safe_get(regime, "allowed", False))
+    inputs = safe_get(regime, "inputs", {}) or {}
+    rv_pctl = safe_get(inputs, "rv_ann_pctl", None)
+    return f"- regime(relative_pctl): **{tag}**; allowed={str(allowed).lower()}; rv20_pctl={fmt2(rv_pctl)}"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", default="tw0050_bb_cache")
-    ap.add_argument("--out", default=None)
+    ap.add_argument("--out", default="report.md")
     ap.add_argument("--tail_days", type=int, default=15)  # workflow compatibility
     ap.add_argument("--tail_n", type=int, default=None)   # alias; overrides tail_days
 
-    # Margin overlay
+    # margin overlay
     ap.add_argument("--margin_json", default="taiwan_margin_cache/latest.json")
     ap.add_argument("--margin_window_n", type=int, default=5)
     ap.add_argument("--margin_threshold_yi", type=float, default=100.0)
@@ -332,13 +371,16 @@ def main() -> int:
     meta = s.get("meta", {}) or {}
     latest = s.get("latest", {}) or {}
     fwd = s.get("forward_mdd", {}) or {}
-    trend = s.get("trend", {}) or {}
-    vol = s.get("vol", {}) or {}
-
     dq = s.get("dq", {"flags": [], "notes": []}) or {}
     dq_flags = dq.get("flags") or []
     dq_notes = dq.get("notes") or []
 
+    trend = s.get("trend", {}) or {}
+    vol = s.get("vol", {}) or {}
+    atr = s.get("atr", {}) or {}
+    regime = s.get("regime", {}) or {}
+
+    # Detect whether min audit fields exist
     has_min_audit = all(
         k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
     )
@@ -358,36 +400,6 @@ def main() -> int:
     dist_to_lower = safe_get(latest, "dist_to_lower_pct")
     dist_to_upper = safe_get(latest, "dist_to_upper_pct")
 
-    # Margin overlay
-    margin_json_path = args.margin_json
-    mj = load_margin_overlay(margin_json_path)
-    margin = compute_margin_overlay(mj, window_n=int(args.margin_window_n), threshold_yi=float(args.margin_threshold_yi)) if mj else None
-
-    price_last_date = last_date
-    margin_alignment = None
-    margin_summary_line = None
-    if margin and margin.get("TOTAL"):
-        m_latest = safe_get(margin["TOTAL"], "latest_date")
-        m_data_date = safe_get(margin, "data_date")
-        aligned = (m_latest == price_last_date)
-        margin_alignment = "ALIGNED" if aligned else "NOT_ALIGNED"
-
-        total_sum = safe_get(margin["TOTAL"], "chg_nd_sum_yi")
-        total_state = safe_get(margin["TOTAL"], "state_nd", "N/A")
-
-        tw_sum = safe_get((margin.get("TWSE") or {}), "chg_nd_sum_yi")
-        tp_sum = safe_get((margin.get("TPEX") or {}), "chg_nd_sum_yi")
-
-        margin_summary_line = (
-            f"- margin({int(args.margin_window_n)}D,thr={fmt2(args.margin_threshold_yi)}億): "
-            f"TOTAL {fmt2(total_sum)} 億 => **{total_state}**; "
-            f"TWSE {fmt2(tw_sum)} / TPEX {fmt2(tp_sum)}; "
-            f"margin_date={m_latest}, price_last_date={price_last_date} ({margin_alignment}); "
-            f"data_date={m_data_date}"
-        )
-
-    out_path = args.out or os.path.join(args.cache_dir, "report.md")
-
     lines: List[str] = []
     lines.append("# 0050 BB(60,2) + forward_mdd(20D) Report")
     lines.append("")
@@ -403,18 +415,41 @@ def main() -> int:
     lines.append(f"- price_calc: `{price_calc}`")
     lines.append("")
 
+    # ===== Quick summary =====
     lines.append("## 快速摘要（非預測，僅狀態）")
     lines.append(
         f"- state: **{state}**; bb_z={fmt4(bb_z)}; pos_in_band={fmt4(bb_pos)}; "
         f"dist_to_lower={fmt_pct2(dist_to_lower)}; dist_to_upper={fmt_pct2(dist_to_upper)}"
     )
     lines.append(build_forward_line(fwd, dq_flags, fwd_days))
-    lines.append(build_trend_line(trend))
-    lines.append(build_vol_line(vol))
-    if margin_summary_line:
-        lines.append(margin_summary_line)
+
+    # trend/vol quick lines (only if present)
+    if isinstance(trend, dict) and trend:
+        lines.append(build_trend_line(trend))
+    if isinstance(vol, dict) and vol and isinstance(atr, dict) and atr:
+        lines.append(build_vol_line(vol, atr))
+
+    # regime quick line
+    reg_line = build_regime_line(regime)
+    if reg_line:
+        lines.append(reg_line)
+
+    # margin quick line (if file exists)
+    margin_json = read_margin_latest(args.margin_json)
+    margin_quick = None
+    if margin_json is not None:
+        _, margin_quick = margin_overlay_block(
+            margin_json=margin_json,
+            price_last_date=str(last_date),
+            window_n=int(args.margin_window_n),
+            threshold_yi=float(args.margin_threshold_yi),
+        )
+        if margin_quick:
+            lines.append(margin_quick)
+
     lines.append("")
 
+    # ===== Latest snapshot =====
     lines.append("## Latest Snapshot")
     lines.append("")
     lines.append(
@@ -436,34 +471,81 @@ def main() -> int:
     )
     lines.append("")
 
-    lines.append("## Trend & Vol Filters")
-    lines.append("")
-    if isinstance(trend, dict) and trend:
-        lines.append(md_table_kv([
-            ["trend_ma_days", str(safe_get(trend, "ma_days", "N/A"))],
-            ["trend_ma_last", fmt4(safe_get(trend, "ma_last"))],
-            ["trend_slope_days", str(safe_get(trend, "slope_days", "N/A"))],
-            ["trend_slope_pct", fmt_pct2(safe_get(trend, "slope_pct"))],
-            ["price_vs_trend_ma_pct", fmt_pct2(safe_get(trend, "price_vs_ma_pct"))],
-            ["trend_state", str(safe_get(trend, "state", "NA"))],
-        ]))
-    else:
-        lines.append("_No trend data in stats_latest.json._")
-    lines.append("")
-    if isinstance(vol, dict) and vol:
-        rv_ann = safe_get(vol, "rv_ann")
-        rv_ann_pct = (float(rv_ann) * 100.0) if rv_ann is not None else None
-        lines.append(md_table_kv([
-            ["rv_days", str(safe_get(vol, "rv_days", "N/A"))],
-            ["rv_ann(%)", fmt_pct1(rv_ann_pct)],
-            ["atr_days", str(safe_get(vol, "atr_days", "N/A"))],
-            ["atr", fmt4(safe_get(vol, "atr"))],
-            ["atr_pct", fmt_pct2(safe_get(vol, "atr_pct"))],
-        ]))
-    else:
-        lines.append("_No vol data in stats_latest.json._")
-    lines.append("")
+    # ===== Trend & Vol =====
+    if (isinstance(trend, dict) and trend) or (isinstance(vol, dict) and vol) or (isinstance(atr, dict) and atr):
+        lines.append("## Trend & Vol Filters")
+        lines.append("")
+        if isinstance(trend, dict) and trend:
+            lines.append(md_table_kv([
+                ["trend_ma_days", str(safe_get(trend, "trend_ma_days", "N/A"))],
+                ["trend_ma_last", fmt4(safe_get(trend, "trend_ma_last"))],
+                ["trend_slope_days", str(safe_get(trend, "trend_slope_days", "N/A"))],
+                ["trend_slope_pct", fmt_pct2(safe_get(trend, "trend_slope_pct"))],
+                ["price_vs_trend_ma_pct", fmt_pct2(safe_get(trend, "price_vs_trend_ma_pct"))],
+                ["trend_state", str(safe_get(trend, "state", "N/A"))],
+            ]))
+            lines.append("")
 
+        if isinstance(vol, dict) and vol:
+            rv_ann = safe_get(vol, "rv_ann")
+            rv_pct = None if rv_ann is None else float(rv_ann) * 100.0
+            lines.append(md_table_kv([
+                ["rv_days", str(safe_get(vol, "rv_days", "N/A"))],
+                ["rv_ann(%)", fmt_pct1(rv_pct)],
+                ["rv20_percentile", fmt2(safe_get(vol, "rv_ann_pctl"))],
+                ["rv_hist_n", str(safe_get(vol, "rv_hist_n", "N/A"))],
+                ["rv_hist_q20(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q20") is None else float(safe_get(vol, "rv_hist_q20")) * 100.0)],
+                ["rv_hist_q50(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q50") is None else float(safe_get(vol, "rv_hist_q50")) * 100.0)],
+                ["rv_hist_q80(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q80") is None else float(safe_get(vol, "rv_hist_q80")) * 100.0)],
+            ]))
+            lines.append("")
+
+        if isinstance(atr, dict) and atr:
+            lines.append(md_table_kv([
+                ["atr_days", str(safe_get(atr, "atr_days", "N/A"))],
+                ["atr", fmt4(safe_get(atr, "atr"))],
+                ["atr_pct", fmt_pct2(safe_get(atr, "atr_pct"))],
+                ["tr_mode", str(safe_get(atr, "tr_mode", "N/A"))],
+            ]))
+            lines.append("")
+
+    # ===== Regime section =====
+    lines.append("## Regime Tag")
+    lines.append("")
+    if isinstance(regime, dict) and regime:
+        inputs = safe_get(regime, "inputs", {}) or {}
+        params = safe_get(regime, "params", {}) or {}
+        passes = safe_get(regime, "passes", {}) or {}
+        reasons = safe_get(regime, "reasons", []) or []
+
+        rv_ann = safe_get(inputs, "rv_ann")
+        rv_pct = None if rv_ann is None else float(rv_ann) * 100.0
+
+        lines.append(md_table_kv([
+            ["tag", f"**{safe_get(regime,'tag','N/A')}**"],
+            ["allowed", str(bool(safe_get(regime,'allowed', False))).lower()],
+            ["trend_state", str(safe_get(inputs, "trend_state", "N/A"))],
+            ["rv_ann(%)", fmt_pct1(rv_pct)],
+            ["rv20_percentile", fmt2(safe_get(inputs, "rv_ann_pctl"))],
+            ["rv_hist_n", str(safe_get(inputs, "rv_hist_n", "N/A"))],
+            ["rv_pctl_max", fmt2(safe_get(params, "rv_pctl_max"))],
+            ["min_samples", str(safe_get(params, "min_samples", "N/A"))],
+            ["pass_trend", str(bool(safe_get(passes, "trend_ok", False))).lower()],
+            ["pass_rv_hist", str(bool(safe_get(passes, "rv_hist_ok", False))).lower()],
+            ["pass_rv", str(bool(safe_get(passes, "rv_ok", False))).lower()],
+            ["bb_state_note", str(safe_get(inputs, "bb_state", "N/A"))],
+        ]))
+        if reasons:
+            lines.append("")
+            lines.append("### Regime Notes")
+            for r in reasons:
+                lines.append(f"- {r}")
+        lines.append("")
+    else:
+        lines.append("_No regime data in stats_latest.json._")
+        lines.append("")
+
+    # ===== forward_mdd Distribution =====
     lines.append("## forward_mdd Distribution")
     lines.append("")
     lines.append(f"- definition: `{safe_get(fwd, 'definition', 'N/A')}`")
@@ -475,8 +557,9 @@ def main() -> int:
     lines.append(f"| p10 | {fmt4(safe_get(fwd, 'p10'))} |")
     lines.append(f"| p05 | {fmt4(safe_get(fwd, 'p05'))} |")
     lines.append(f"| min | {fmt4(safe_get(fwd, 'min'))} |")
-
     lines.append("")
+
+    # Min audit trail (or explicit missing-field message)
     lines.append("### forward_mdd Min Audit Trail")
     lines.append("")
     if has_min_audit:
@@ -489,65 +572,19 @@ def main() -> int:
     else:
         lines.append("- min audit fields are missing in stats_latest.json.")
         lines.append(f"- forward_mdd keys: `{', '.join(fwd_keys_sorted)}`")
-
     lines.append("")
 
-    # Margin section (detailed)
-    if margin:
-        lines.append("## Margin Overlay（融資）")
-        lines.append("")
-        lines.append(f"- overlay_generated_at_utc: `{safe_get(margin, 'overlay_generated_at_utc', 'N/A')}`")
-        lines.append(f"- data_date: `{safe_get(margin, 'data_date', 'N/A')}`")
-        lines.append(f"- params: window_n={int(args.margin_window_n)}, threshold_yi={fmt2(args.margin_threshold_yi)}")
-        if margin_alignment:
-            lines.append(
-                f"- date_alignment: margin_latest_date=`{safe_get(margin.get('TOTAL', {}), 'latest_date', 'N/A')}` "
-                f"vs price_last_date=`{price_last_date}` => **{margin_alignment}**"
-            )
-        lines.append("")
-        lines.append("| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |")
-        lines.append("|---|---:|---:|---:|---:|---:|---:|")
+    # ===== Margin Overlay =====
+    if margin_json is not None:
+        mb_lines, _ = margin_overlay_block(
+            margin_json=margin_json,
+            price_last_date=str(last_date),
+            window_n=int(args.margin_window_n),
+            threshold_yi=float(args.margin_threshold_yi),
+        )
+        lines.extend(mb_lines)
 
-        def _row(scope: str, pack: Optional[Dict[str, Any]], rows_used: Any) -> List[str]:
-            if not pack:
-                return [scope, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]
-            return [
-                scope,
-                str(safe_get(pack, "latest_date", "N/A")),
-                _fmt_yi1(safe_get(pack, "balance_yi")),
-                _fmt_yi1(safe_get(pack, "chg_today_yi")),
-                _fmt_yi1(safe_get(pack, "chg_nd_sum_yi")),
-                str(safe_get(pack, "state_nd", "N/A")),
-                str(rows_used),
-            ]
-
-        twp = margin.get("TWSE")
-        tpp = margin.get("TPEX")
-        tot = margin.get("TOTAL")
-
-        lines.append("| " + " | ".join(_row("TWSE", twp, safe_get(twp or {}, "rows_used", "N/A"))) + " |")
-        lines.append("| " + " | ".join(_row("TPEX", tpp, safe_get(tpp or {}, "rows_used", "N/A"))) + " |")
-        # TOTAL chg_today not meaningful -> N/A
-        lines.append("| " + " | ".join([
-            "TOTAL",
-            str(safe_get(tot or {}, "latest_date", "N/A")),
-            _fmt_yi1(safe_get(tot or {}, "balance_yi")),
-            "N/A",
-            _fmt_yi1(safe_get(tot or {}, "chg_nd_sum_yi")),
-            str(safe_get(tot or {}, "state_nd", "N/A")),
-            "N/A",
-        ]) + " |")
-        lines.append("")
-        lines.append("### Margin Sources")
-        lines.append("")
-        if twp:
-            lines.append(f"- TWSE source: `{safe_get(twp, 'source', 'N/A')}`")
-            lines.append(f"- TWSE url: `{safe_get(twp, 'source_url', 'N/A')}`")
-        if tpp:
-            lines.append(f"- TPEX source: `{safe_get(tpp, 'source', 'N/A')}`")
-            lines.append(f"- TPEX url: `{safe_get(tpp, 'source_url', 'N/A')}`")
-        lines.append("")
-
+    # ===== Prices tail =====
     lines.append(f"## Recent Raw Prices (tail {tail_n})")
     lines.append("")
     tail_df = load_prices_tail(args.cache_dir, n=tail_n)
@@ -557,6 +594,7 @@ def main() -> int:
         lines.append(md_table_prices(tail_df))
     lines.append("")
 
+    # ===== DQ =====
     lines.append("## Data Quality Flags")
     lines.append("")
     if not dq_flags:
@@ -572,6 +610,7 @@ def main() -> int:
                 lines.append(f"  - note: {nt}")
     lines.append("")
 
+    # ===== Caveats =====
     lines.append("## Caveats")
     lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
@@ -579,10 +618,10 @@ def main() -> int:
     lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；若日期不對齊應降低解讀權重。")
     lines.append("")
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open(args.out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    print(f"Wrote report: {out_path}")
+    print(f"Wrote report: {args.out}")
     return 0
 
 
