@@ -1,35 +1,35 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-02-18T16:13:10.706352Z",
-  "as_of_ts": "2026-02-19T00:13:10.706380+08:00",
-  "data_commit_sha": "96f2cf8f77f008f666032a481d94de2924e74de2",
+  "generated_at_utc": "2026-02-19T16:08:16.148222Z",
+  "as_of_ts": "2026-02-20T00:08:16.148237+08:00",
+  "data_commit_sha": "8eeb8e9e2f77cf04089fa2fd65941c0a3bd97b1a",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-02-18T13:34:48Z",
-    "market_cache_as_of_ts": "2026-02-18T13:34:48Z",
+    "market_cache_generated_at_utc": "2026-02-19T03:25:48Z",
+    "market_cache_as_of_ts": "2026-02-19T03:25:48Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
     "tw_roll25_report_path": "roll25_cache/latest_report.json",
     "tw_margin_path": "taiwan_margin_cache/latest.json"
   },
-  "bottom_state_global": "BOTTOM_CANDIDATE",
+  "bottom_state_global": "NONE",
   "triggers_global": {
-    "TRIG_PANIC": 1,
+    "TRIG_PANIC": 0,
     "TRIG_SYSTEMIC_VETO": 0,
-    "TRIG_REVERSAL": 1
+    "TRIG_REVERSAL": 0
   },
   "context_global": {
     "context_equity_extreme_sp500_p252_ge_95": 0,
-    "sp500_p252": 81.74603174603175
+    "sp500_p252": 86.90476190476191
   },
   "distances_global": {
-    "vix_panic_gap": -0.28999999999999915,
-    "sp500_ret1_panic_gap": 1.603127921043511,
-    "hyg_veto_gap_z": 0.7738526354371842,
-    "ofr_veto_gap_z": 0.6307692248181846
+    "vix_panic_gap": 0.379999999999999,
+    "sp500_ret1_panic_gap": 2.0566093154976772,
+    "hyg_veto_gap_z": 1.2611245916142613,
+    "ofr_veto_gap_z": 0.8924346591221737
   },
   "tw_local_gate": {
     "tw_state": "NONE",
@@ -97,21 +97,21 @@
       "series_id": "VIX",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-02-17",
-        "value": 20.29,
-        "as_of_ts": "2026-02-18T13:34:48Z",
+        "data_date": "2026-02-18",
+        "value": 19.62,
+        "as_of_ts": "2026-02-19T03:25:48Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
-        "z": 1.8770404578145636,
-        "p": 91.66666666666666,
-        "ret1_pct": -4.29245283018868,
-        "z_delta": -0.292073632639009,
-        "p_delta": -5.000000000000014
+        "z": 1.5594744957041178,
+        "p": 90.0,
+        "ret1_pct": -3.30211927057663,
+        "z_delta": -0.31756596211044585,
+        "p_delta": -1.6666666666666572
       },
       "w252": {
-        "z": 0.23291820081785783,
-        "p": 73.80952380952381
+        "z": 0.10579859989743337,
+        "p": 69.84126984126983
       },
       "series_signal": "NONE"
     },
@@ -119,21 +119,21 @@
       "series_id": "SP500",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-02-17",
-        "value": 6843.22,
-        "as_of_ts": "2026-02-18T13:34:48Z",
+        "data_date": "2026-02-18",
+        "value": 6881.31,
+        "as_of_ts": "2026-02-19T03:25:48Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
-        "z": -0.28387410670713636,
-        "p": 33.33333333333333,
-        "ret1_pct": 0.10312792104351094,
-        "z_delta": 0.01789165053451841,
-        "p_delta": 1.6666666666666643
+        "z": 0.09863244063392766,
+        "p": 48.333333333333336,
+        "ret1_pct": 0.5566093154976772,
+        "z_delta": 0.38250654734106404,
+        "p_delta": 15.000000000000007
       },
       "w252": {
-        "z": 1.0236021460916824,
-        "p": 81.74603174603175
+        "z": 1.0909805163449002,
+        "p": 86.90476190476191
       },
       "series_signal": "NONE"
     },
@@ -141,21 +141,21 @@
       "series_id": "HYG_IEF_RATIO",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-02-17",
-        "value": 0.8313786008230453,
-        "as_of_ts": "2026-02-18T13:34:48Z",
+        "data_date": "2026-02-18",
+        "value": 0.8341752577319588,
+        "as_of_ts": "2026-02-19T03:25:48Z",
         "source_url": "DERIVED"
       },
       "w60": {
-        "z": -1.2261473645628158,
-        "p": 13.333333333333334,
-        "ret1_pct": -0.03919135929717443,
-        "z_delta": -0.08506257780904991,
-        "p_delta": -1.666666666666666
+        "z": -0.7388754083857386,
+        "p": 20.0,
+        "ret1_pct": 0.3363878870763433,
+        "z_delta": 0.4872719561770772,
+        "p_delta": 6.666666666666666
       },
       "w252": {
-        "z": -0.6625676225124246,
-        "p": 21.428571428571427
+        "z": -0.35333548731447467,
+        "p": 29.761904761904763
       },
       "series_signal": "NONE"
     },
@@ -163,21 +163,21 @@
       "series_id": "OFR_FSI",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-02-13",
-        "value": -2.115,
-        "as_of_ts": "2026-02-18T13:34:48Z",
+        "data_date": "2026-02-16",
+        "value": -2.21,
+        "as_of_ts": "2026-02-19T03:25:48Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
-        "z": 1.3692307751818154,
-        "p": 95.0,
-        "ret1_pct": 1.0757717492983951,
-        "z_delta": 0.27360255731207883,
-        "p_delta": 5.0
+        "z": 1.1075653408778263,
+        "p": 88.33333333333333,
+        "ret1_pct": -4.4917257683215,
+        "z_delta": -0.26166543430398903,
+        "p_delta": -6.666666666666671
       },
       "w252": {
-        "z": -0.36991374167714464,
-        "p": 47.61904761904761
+        "z": -0.47324053821205875,
+        "p": 41.269841269841265
       },
       "series_signal": "NONE"
     }
@@ -185,11 +185,11 @@
   "history_audit": {
     "history_load_status": "OK",
     "history_load_reason": "dict.items",
-    "loaded_items": 15,
+    "loaded_items": 16,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260218T161310Z.json",
-    "backup_bytes": 13979,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260219T160816Z.json",
+    "backup_bytes": 14920,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -197,10 +197,10 @@
       "deleted": 0
     },
     "history_file_exists": true,
-    "history_pre_items": 15,
-    "history_pre_unique_days": 15,
-    "history_post_items": 16,
-    "history_post_unique_days": 16,
+    "history_pre_items": 16,
+    "history_pre_unique_days": 16,
+    "history_post_items": 17,
+    "history_post_unique_days": 17,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,
