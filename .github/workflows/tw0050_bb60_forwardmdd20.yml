@@ -66,11 +66,15 @@ jobs:
 
       # ✅ compute 後、build report 前：抓 0050 籌碼 overlay（TWSE T86 + TWT72U）
       - name: Fetch 0050 chip overlay (TWSE T86 + TWT72U)
+        shell: bash
         run: |
+          set -euo pipefail
+          set -x
           python scripts/fetch_tw0050_chip_overlay.py \
+            --cache_dir tw0050_bb_cache \
             --stock_no 0050 \
             --stats_path tw0050_bb_cache/stats_latest.json \
-            --out tw0050_bb_cache/chip_overlay.json \
+            --out_path tw0050_bb_cache/chip_overlay.json \
             --window_n 5
 
       - name: Debug chip overlay
