@@ -2806,16 +2806,16 @@
     "rows_kept": 400,
     "run_ts_utc": "2026-02-19T02:33:11Z",
     "ticker": "0050.TW",
-    "updated_at_utc": "2026-02-19T10:43:31Z"
+    "updated_at_utc": "2026-02-19T10:50:34Z"
   },
   "rows": [
     {
       "as_of_last_date": "2026-02-11",
-      "bb_pos": 1.0135672114570606,
-      "bb_z": 2.054268845828243,
+      "bb_pos": 1.0135672114571537,
+      "bb_z": 2.0542688458286147,
       "day_key_local": "2026-02-19",
       "price_used": 77.19999694824219,
-      "run_ts_utc": "2026-02-19T10:43:31Z",
+      "run_ts_utc": "2026-02-19T10:50:34Z",
       "state": "EXTREME_UPPER_BAND"
     }
   ]
