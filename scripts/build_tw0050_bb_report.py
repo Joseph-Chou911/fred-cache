@@ -1,9 +1,10 @@
-#!/usr/bin/env python3
+# scripts/build_tw0050_bb_report.py
 # -*- coding: utf-8 -*-
-
 """
-Build a human-readable Markdown report from stats_latest.json + data.csv.
-Standalone: does not depend on other dashboard modules.
+Build markdown report from cache_dir/stats_latest.json and cache_dir/prices.csv (tail).
+
+Example:
+  python scripts/build_tw0050_bb_report.py --cache_dir tw0050_bb_cache --out report.md
 """
 
 from __future__ import annotations
@@ -12,9 +13,8 @@ import argparse
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 
@@ -22,160 +22,243 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _fmt(x: Optional[float], nd: int = 4) -> str:
-    if x is None:
-        return "NA"
+def fmt4(x: Any) -> str:
     try:
-        if isinstance(x, (int, np.integer)):
-            return str(int(x))
-        xf = float(x)
-        if np.isnan(xf):
-            return "NA"
-        return f"{xf:.{nd}f}"
+        return f"{float(x):.4f}"
     except Exception:
-        return "NA"
+        return "N/A"
 
 
-def _fmt_pct(x: Optional[float], nd: int = 2) -> str:
-    if x is None:
-        return "NA"
+def fmt_pct2(x: Any) -> str:
     try:
-        xf = float(x)
-        if np.isnan(xf):
-            return "NA"
-        return f"{xf:.{nd}f}%"
+        return f"{float(x):.2f}%"
     except Exception:
-        return "NA"
+        return "N/A"
 
 
-def main() -> None:
-    p = argparse.ArgumentParser(description="Build 0050 BB(60,2) + forward_mdd(20D) Markdown report.")
-    p.add_argument("--cache_dir", default="tw0050_bb_cache", help="Cache directory.")
-    p.add_argument("--out", default=None, help="Output markdown path. Default: <cache_dir>/report.md")
-    p.add_argument("--tail_days", type=int, default=15, help="Show last N rows in a table. Default: 15")
-    args = p.parse_args()
+def safe_get(d: Dict[str, Any], k: str, default=None):
+    return d.get(k, default)
+
+
+def load_json(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_prices_tail(cache_dir: str, n: int = 15) -> Optional[pd.DataFrame]:
+    p = os.path.join(cache_dir, "prices.csv")
+    if not os.path.exists(p):
+        return None
+    df = pd.read_csv(p)
+    if df.empty:
+        return None
+    if "date" not in df.columns:
+        return None
+    # Normalize columns if present
+    keep = [c for c in ["date", "close", "adjclose", "volume"] if c in df.columns]
+    df = df[keep].copy()
+    # Coerce numeric
+    for c in ["close", "adjclose", "volume"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df.sort_values("date")
+    return df.tail(n)
+
+
+def md_table_kv(rows: List[List[str]]) -> str:
+    out = []
+    out.append("| item | value |")
+    out.append("|---|---:|")
+    for k, v in rows:
+        out.append(f"| {k} | {v} |")
+    return "\n".join(out)
+
+
+def md_table_prices(df: pd.DataFrame) -> str:
+    cols = df.columns.tolist()
+    # Force ordering if possible
+    order = ["date", "close", "adjclose", "volume"]
+    cols = [c for c in order if c in cols]
+    out = []
+    out.append("| date | close | adjclose | volume |")
+    out.append("|---|---:|---:|---:|")
+    for _, r in df.iterrows():
+        date = str(r.get("date", ""))
+        close = fmt4(r.get("close"))
+        adj = fmt4(r.get("adjclose"))
+        vol = r.get("volume")
+        try:
+            vol_s = f"{int(float(vol))}"
+        except Exception:
+            vol_s = "N/A"
+        out.append(f"| {date} | {close} | {adj} | {vol_s} |")
+    return "\n".join(out)
+
+
+def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str]) -> str:
+    n = safe_get(fwd, "n", 0)
+    p50 = safe_get(fwd, "p50", None)
+    p10 = safe_get(fwd, "p10", None)
+    p05 = safe_get(fwd, "p05", None)
+    mn = safe_get(fwd, "min", None)
+
+    line = (
+        f"- forward_mdd(20D) distribution (n={n}): "
+        f"p50={fmt4(p50)}; p10={fmt4(p10)}; p05={fmt4(p05)}; min={fmt4(mn)}"
+    )
+
+    # If min-entry details exist, append audit snippet
+    med = safe_get(fwd, "min_entry_date", None)
+    mfd = safe_get(fwd, "min_future_date", None)
+    mep = safe_get(fwd, "min_entry_price", None)
+    mfp = safe_get(fwd, "min_future_price", None)
+    if med and mfd and mep is not None and mfp is not None:
+        line += f" (min_window: {med}->{mfd}; {fmt4(mep)}->{fmt4(mfp)})"
+
+    if "FWD_MDD_OUTLIER_MIN" in set(dq_flags):
+        line += " [DQ:FWD_MDD_OUTLIER_MIN]"
+
+    return line
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cache_dir", default="tw0050_bb_cache")
+    ap.add_argument("--out", default="report.md")
+    args = ap.parse_args()
 
     stats_path = os.path.join(args.cache_dir, "stats_latest.json")
-    data_path = os.path.join(args.cache_dir, "data.csv")
-    out_path = args.out or os.path.join(args.cache_dir, "report.md")
-
     if not os.path.exists(stats_path):
         raise SystemExit(f"ERROR: missing {stats_path}")
-    if not os.path.exists(data_path):
-        raise SystemExit(f"ERROR: missing {data_path}")
 
-    with open(stats_path, "r", encoding="utf-8") as f:
-        stats: Dict[str, Any] = json.load(f)
+    s = load_json(stats_path)
 
-    df = pd.read_csv(data_path)
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").set_index("date")
+    meta = s.get("meta", {})
+    latest = s.get("latest", {})
+    fwd = s.get("forward_mdd", {})
+    dq = s.get("dq", {"flags": [], "notes": []})
+    dq_flags = dq.get("flags") or []
+    dq_notes = dq.get("notes") or []
 
-    meta = stats.get("meta", {})
-    dq = stats.get("dq", {})
-    latest = stats.get("latest", {})
-    fwd = stats.get("forward_mdd", {})
+    ticker = safe_get(meta, "ticker", "0050.TW")
+    last_date = safe_get(meta, "last_date", "N/A")
+    bb_window = safe_get(meta, "bb_window", 60)
+    bb_k = safe_get(meta, "bb_k", 2.0)
+    fwd_days = safe_get(meta, "fwd_days", 20)
+    price_calc = safe_get(meta, "price_calc", "adjclose")
+    data_source = safe_get(meta, "data_source", "yfinance_yahoo_or_twse_fallback")
 
-    cols = [c for c in ["close", "adjclose", "volume"] if c in df.columns]
-    tail = df[cols].tail(args.tail_days).copy() if cols else pd.DataFrame()
+    # Snapshot fields
+    state = safe_get(latest, "state", "N/A")
+    bb_z = safe_get(latest, "bb_z", None)
+    bb_pos = safe_get(latest, "bb_pos", None)
+    dist_to_lower = safe_get(latest, "dist_to_lower_pct", None)
+    dist_to_upper = safe_get(latest, "dist_to_upper_pct", None)
 
-    lines = []
-    lines.append("# 0050 BB(60,2) + forward_mdd(20D) Report")
-    lines.append("")
-    lines.append(f"- report_generated_at_utc: `{utc_now_iso()}`")
-    lines.append(f"- data_source: `{meta.get('data_source','NA')}`")
-    lines.append(f"- ticker: `{meta.get('ticker','NA')}`")
-    lines.append(f"- last_date: `{meta.get('last_date','NA')}`")
-    lines.append(f"- bb_window,k: `{meta.get('bb_window','NA')}`, `{meta.get('bb_k','NA')}`")
-    lines.append(f"- forward_window_days: `{meta.get('fwd_days','NA')}`")
-    lines.append(f"- price_calc: `{meta.get('price_calc','NA')}`")
-    lines.append("")
+    report_lines: List[str] = []
 
-    lines.append("## 快速摘要（非預測，僅狀態）")
-    lines.append(
-        f"- state: **{latest.get('state','NA')}**; "
-        f"bb_z={_fmt(latest.get('bb_z'),3)}; "
-        f"pos_in_band={_fmt(latest.get('bb_pos'),3)}; "
-        f"dist_to_lower={_fmt_pct(latest.get('dist_to_lower_pct'),2)}; "
-        f"dist_to_upper={_fmt_pct(latest.get('dist_to_upper_pct'),2)}"
+    report_lines.append("# 0050 BB(60,2) + forward_mdd(20D) Report")
+    report_lines.append("")
+    report_lines.append(f"- report_generated_at_utc: `{utc_now_iso()}`")
+    report_lines.append(f"- data_source: `{data_source}`")
+    report_lines.append(f"- ticker: `{ticker}`")
+    report_lines.append(f"- last_date: `{last_date}`")
+    report_lines.append(f"- bb_window,k: `{bb_window}`, `{bb_k}`")
+    report_lines.append(f"- forward_window_days: `{fwd_days}`")
+    report_lines.append(f"- price_calc: `{price_calc}`")
+    report_lines.append("")
+    report_lines.append("## 快速摘要（非預測，僅狀態）")
+    report_lines.append(
+        f"- state: **{state}**; bb_z={fmt4(bb_z)}; pos_in_band={fmt4(bb_pos)}; "
+        f"dist_to_lower={fmt_pct2(dist_to_lower)}; dist_to_upper={fmt_pct2(dist_to_upper)}"
     )
-    lines.append(
-        f"- forward_mdd({meta.get('fwd_days','NA')}D) distribution (n={fwd.get('n','NA')}): "
-        f"p50={_fmt(fwd.get('p50'),4)}; p10={_fmt(fwd.get('p10'),4)}; "
-        f"p05={_fmt(fwd.get('p05'),4)}; min={_fmt(fwd.get('min'),4)}"
+    report_lines.append(build_forward_line(fwd, dq_flags))
+    report_lines.append("")
+
+    report_lines.append("## Latest Snapshot")
+    report_lines.append("")
+    report_lines.append(
+        md_table_kv(
+            [
+                ["close", fmt4(safe_get(latest, "close"))],
+                ["adjclose", fmt4(safe_get(latest, "adjclose"))],
+                ["price_used", fmt4(safe_get(latest, "price_used"))],
+                ["bb_ma", fmt4(safe_get(latest, "bb_ma"))],
+                ["bb_sd", fmt4(safe_get(latest, "bb_sd"))],
+                ["bb_upper", fmt4(safe_get(latest, "bb_upper"))],
+                ["bb_lower", fmt4(safe_get(latest, "bb_lower"))],
+                ["bb_z", fmt4(safe_get(latest, "bb_z"))],
+                ["pos_in_band", fmt4(safe_get(latest, "bb_pos"))],
+                ["dist_to_lower", fmt_pct2(safe_get(latest, "dist_to_lower_pct"))],
+                ["dist_to_upper", fmt_pct2(safe_get(latest, "dist_to_upper_pct"))],
+            ]
+        )
     )
-    lines.append("")
+    report_lines.append("")
 
-    lines.append("## Latest Snapshot")
-    lines.append("")
-    lines.append("| item | value |")
-    lines.append("|---|---:|")
-    lines.append(f"| close | {_fmt(latest.get('close'),4)} |")
-    lines.append(f"| adjclose | {_fmt(latest.get('adjclose'),4)} |")
-    lines.append(f"| price_used | {_fmt(latest.get('price_used'),4)} |")
-    lines.append(f"| bb_ma | {_fmt(latest.get('bb_ma'),4)} |")
-    lines.append(f"| bb_sd | {_fmt(latest.get('bb_sd'),4)} |")
-    lines.append(f"| bb_upper | {_fmt(latest.get('bb_upper'),4)} |")
-    lines.append(f"| bb_lower | {_fmt(latest.get('bb_lower'),4)} |")
-    lines.append(f"| bb_z | {_fmt(latest.get('bb_z'),4)} |")
-    lines.append(f"| pos_in_band | {_fmt(latest.get('bb_pos'),4)} |")
-    lines.append(f"| dist_to_lower | {_fmt_pct(latest.get('dist_to_lower_pct'),2)} |")
-    lines.append(f"| dist_to_upper | {_fmt_pct(latest.get('dist_to_upper_pct'),2)} |")
-    lines.append("")
+    report_lines.append("## forward_mdd Distribution")
+    report_lines.append("")
+    report_lines.append(f"- definition: `{safe_get(fwd, 'definition', 'N/A')}`")
+    report_lines.append("")
+    report_lines.append("| quantile | value |")
+    report_lines.append("|---|---:|")
+    report_lines.append(f"| p50 | {fmt4(safe_get(fwd, 'p50'))} |")
+    report_lines.append(f"| p25 | {fmt4(safe_get(fwd, 'p25'))} |")
+    report_lines.append(f"| p10 | {fmt4(safe_get(fwd, 'p10'))} |")
+    report_lines.append(f"| p05 | {fmt4(safe_get(fwd, 'p05'))} |")
+    report_lines.append(f"| min | {fmt4(safe_get(fwd, 'min'))} |")
 
-    lines.append("## forward_mdd Distribution")
-    lines.append("")
-    lines.append(f"- definition: `{fwd.get('definition','NA')}`")
-    lines.append("")
-    lines.append("| quantile | value |")
-    lines.append("|---|---:|")
-    lines.append(f"| p50 | {_fmt(fwd.get('p50'),4)} |")
-    lines.append(f"| p25 | {_fmt(fwd.get('p25'),4)} |")
-    lines.append(f"| p10 | {_fmt(fwd.get('p10'),4)} |")
-    lines.append(f"| p05 | {_fmt(fwd.get('p05'),4)} |")
-    lines.append(f"| min | {_fmt(fwd.get('min'),4)} |")
-    lines.append("")
+    # If min details exist, show an extra audit section
+    med = safe_get(fwd, "min_entry_date", None)
+    mfd = safe_get(fwd, "min_future_date", None)
+    if med and mfd:
+        report_lines.append("")
+        report_lines.append("### forward_mdd Min Audit Trail")
+        report_lines.append("")
+        report_lines.append("| item | value |")
+        report_lines.append("|---|---:|")
+        report_lines.append(f"| min_entry_date | {med} |")
+        report_lines.append(f"| min_entry_price | {fmt4(safe_get(fwd, 'min_entry_price'))} |")
+        report_lines.append(f"| min_future_date | {mfd} |")
+        report_lines.append(f"| min_future_price | {fmt4(safe_get(fwd, 'min_future_price'))} |")
 
-    lines.append("## Recent Raw Prices (tail)")
-    lines.append("")
-    if not tail.empty:
-        lines.append("| date | " + " | ".join(tail.columns) + " |")
-        lines.append("|---|" + "|".join(["---:"] * len(tail.columns)) + "|")
-        for idx, r in tail.iterrows():
-            items = []
-            for c in tail.columns:
-                v = r[c]
-                if c == "volume":
-                    items.append(str(int(v)) if pd.notna(v) else "NA")
-                else:
-                    items.append(_fmt(v, 4))
-            lines.append(f"| {idx.date().isoformat()} | " + " | ".join(items) + " |")
+    report_lines.append("")
+
+    tail_df = load_prices_tail(args.cache_dir, n=15)
+    report_lines.append("## Recent Raw Prices (tail)")
+    report_lines.append("")
+    if tail_df is None:
+        report_lines.append("_No prices.csv tail available._")
     else:
-        lines.append("- NA (tail table empty)")
-    lines.append("")
+        report_lines.append(md_table_prices(tail_df))
+    report_lines.append("")
 
-    lines.append("## Data Quality Flags")
-    lines.append("")
-    flags = dq.get("flags", []) or []
-    notes = dq.get("notes", []) or []
-    if not flags:
-        lines.append("- (none)")
+    report_lines.append("## Data Quality Flags")
+    report_lines.append("")
+    if not dq_flags:
+        report_lines.append("- (none)")
     else:
-        for i, fl in enumerate(flags):
-            note = notes[i] if i < len(notes) else ""
-            lines.append(f"- {fl}: {note}")
+        report_lines.append("- flags:")
+        for fl in dq_flags:
+            report_lines.append(f"  - `{fl}`")
+        if dq_notes:
+            report_lines.append("- notes:")
+            for nt in dq_notes:
+                report_lines.append(f"  - {nt}")
+    report_lines.append("")
 
-    lines.append("")
-    lines.append("## Caveats")
-    lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
-    lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
-    lines.append("")
+    report_lines.append("## Caveats")
+    report_lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
+    report_lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
+    report_lines.append("")
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+    out_text = "\n".join(report_lines)
+    with open(args.out, "w", encoding="utf-8") as f:
+        f.write(out_text)
 
-    print(f"OK: wrote {out_path}")
+    print(f"Wrote report: {args.out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
