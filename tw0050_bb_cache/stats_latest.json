@@ -1,29 +1,37 @@
 {
   "dq": {
-    "flags": [],
-    "notes": []
+    "flags": [
+      "FWD_MDD_OUTLIER_MIN"
+    ],
+    "notes": [
+      "forward_mdd min=-0.7628 < threshold(-0.4); audit min_entry_date."
+    ]
   },
   "forward_mdd": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "min": -0.7627551786429906,
+    "min_entry_date": "2013-12-30",
+    "min_entry_price": 37.47614669799805,
+    "min_future_date": "2014-02-05",
+    "min_future_price": 8.891021728515625,
     "n": 4172,
-    "p05": -0.09523579786281465,
+    "p05": -0.0952357978628146,
     "p10": -0.07015372372509239,
-    "p25": -0.040785105909023345,
+    "p25": -0.0407851059090234,
     "p50": -0.018457919791559696
   },
   "latest": {
     "adjclose": 77.19999694824219,
-    "bb_lower": 55.89385323010454,
+    "bb_lower": 55.893853230104355,
     "bb_ma": 66.40432726542154,
-    "bb_pos": 1.0135672114571301,
-    "bb_sd": 5.2552370176585015,
-    "bb_upper": 76.91480130073855,
-    "bb_z": 2.05426884582852,
+    "bb_pos": 1.013567211457121,
+    "bb_sd": 5.255237017658592,
+    "bb_upper": 76.91480130073873,
+    "bb_z": 2.054268845828485,
     "close": 77.19999694824219,
     "date": "2026-02-11",
-    "dist_to_lower_pct": 27.598632850234562,
-    "dist_to_upper_pct": -0.36942442846836854,
+    "dist_to_lower_pct": 27.5986328502348,
+    "dist_to_upper_pct": -0.3694244284681293,
     "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
   },
@@ -31,7 +39,7 @@
     "bb_k": 2.0,
     "bb_window": 60,
     "data_source": "yfinance_yahoo_or_twse_fallback",
-    "fetch_start_effective": "2003-01-01",
+    "fetch_start_effective": "2026-01-28",
     "fwd_days": 20,
     "last_date": "2026-02-11",
     "module": "tw0050_bb",
@@ -39,7 +47,7 @@
     "price_col_requested": "adjclose",
     "price_col_used": "adjclose",
     "rows": 4192,
-    "run_ts_utc": "2026-02-19T02:13:30Z",
+    "run_ts_utc": "2026-02-19T02:33:11Z",
     "start": "2003-01-01",
     "ticker": "0050.TW",
     "tz": "Asia/Taipei"

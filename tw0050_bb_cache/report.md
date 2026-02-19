@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T02:13:41Z`
+- report_generated_at_utc: `2026-02-19T02:33:21Z`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
 - last_date: `2026-02-11`
@@ -62,7 +62,7 @@
 
 ## Data Quality Flags
 
-- (none)
+- FWD_MDD_OUTLIER_MIN: forward_mdd min=-0.7628 < threshold(-0.4); audit min_entry_date.
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
