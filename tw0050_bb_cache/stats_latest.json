@@ -23,102 +23,102 @@
   "forward_mdd": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean_20D",
-    "min": -0.2557002635016348,
+    "min": -0.2557002143885291,
     "min_entry_date": "2020-02-19",
     "min_entry_price": 19.417919158935547,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
+    "min_future_price": 14.452753067016602,
     "n": 4151,
-    "p05": -0.09279020396223375,
-    "p10": -0.0686693951934011,
-    "p25": -0.04022450204458411,
+    "p05": -0.09279047257740869,
+    "p10": -0.0686696055331123,
+    "p25": -0.04022437027164877,
     "p50": -0.018276294537990845
   },
   "forward_mdd10": {
     "definition": "min(price[t+1..t+10]/price[t]-1), level-price based",
     "label": "forward_mdd_clean_10D",
-    "min": -0.24002209906184802,
+    "min": -0.2400220489142083,
     "min_entry_date": "2020-03-05",
     "min_entry_price": 19.017332077026367,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
+    "min_future_price": 14.452753067016602,
     "n": 4171,
-    "p05": -0.06313615243704584,
-    "p10": -0.047979811605395994,
-    "p25": -0.02710058050220482,
-    "p50": -0.011383302128255446
+    "p05": -0.06313589909682193,
+    "p10": -0.047979697800666576,
+    "p25": -0.027100495479934206,
+    "p50": -0.011383720217209126
   },
   "forward_mdd10_clean": {
     "definition": "min(price[t+1..t+10]/price[t]-1), level-price based",
     "label": "forward_mdd_clean_10D",
-    "min": -0.24002209906184802,
+    "min": -0.2400220489142083,
     "min_entry_date": "2020-03-05",
     "min_entry_price": 19.017332077026367,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
+    "min_future_price": 14.452753067016602,
     "n": 4171,
-    "p05": -0.06313615243704584,
-    "p10": -0.047979811605395994,
-    "p25": -0.02710058050220482,
-    "p50": -0.011383302128255446
+    "p05": -0.06313589909682193,
+    "p10": -0.047979697800666576,
+    "p25": -0.027100495479934206,
+    "p50": -0.011383720217209126
   },
   "forward_mdd10_raw": {
     "definition": "min(price[t+1..t+10]/price[t]-1), level-price based",
     "label": "forward_mdd_raw_10D",
-    "min": -0.7553146100754824,
+    "min": -0.7553146095345081,
     "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.476139068603516,
+    "min_entry_price": 37.47614288330078,
     "min_future_date": "2014-01-09",
-    "min_future_price": 9.1698637008667,
+    "min_future_price": 9.169864654541016,
     "n": 4181,
     "p05": -0.06422019586124472,
-    "p10": -0.04832509236338833,
+    "p10": -0.048325040257936935,
     "p25": -0.027281315277046025,
-    "p50": -0.011424177382769796
+    "p50": -0.01142409584534998
   },
   "forward_mdd_clean": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_clean_20D",
-    "min": -0.2557002635016348,
+    "min": -0.2557002143885291,
     "min_entry_date": "2020-02-19",
     "min_entry_price": 19.417919158935547,
     "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
+    "min_future_price": 14.452753067016602,
     "n": 4151,
-    "p05": -0.09279020396223375,
-    "p10": -0.0686693951934011,
-    "p25": -0.04022450204458411,
+    "p05": -0.09279047257740869,
+    "p10": -0.0686696055331123,
+    "p25": -0.04022437027164877,
     "p50": -0.018276294537990845
   },
   "forward_mdd_raw": {
     "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
     "label": "forward_mdd_raw_20D",
-    "min": -0.762755079449662,
+    "min": -0.7627550781513223,
     "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.476139068603516,
+    "min_entry_price": 37.47614288330078,
     "min_future_date": "2014-02-05",
-    "min_future_price": 8.891023635864258,
+    "min_future_price": 8.891024589538574,
     "n": 4171,
-    "p05": -0.09523868123543378,
-    "p10": -0.07016114426090492,
-    "p25": -0.040786004122111696,
-    "p50": -0.018467126875997164
+    "p05": -0.09523860559517688,
+    "p10": -0.07016105238466097,
+    "p25": -0.0407859599670472,
+    "p50": -0.018467353141687792
   },
   "latest": {
     "adjclose": 77.19999694824219,
-    "band_width_geo_pct": 37.60869372183364,
-    "band_width_std_pct": 31.65599131306348,
-    "bb_lower": 55.8938532301015,
+    "band_width_geo_pct": 37.60869372183062,
+    "band_width_std_pct": 31.655991313061342,
+    "bb_lower": 55.89385323010221,
     "bb_ma": 66.40432726542154,
     "bb_pos": 1.0,
-    "bb_pos_raw": 1.0135672114569814,
-    "bb_sd": 5.255237017660024,
-    "bb_upper": 76.91480130074159,
-    "bb_z": 2.054268845827925,
+    "bb_pos_raw": 1.0135672114570162,
+    "bb_sd": 5.255237017659665,
+    "bb_upper": 76.91480130074088,
+    "bb_z": 2.0542688458280653,
     "close": 77.19999694824219,
     "date": "2026-02-11",
-    "dist_to_lower_pct": 27.598632850238502,
-    "dist_to_upper_pct": -0.3694244284644293,
+    "dist_to_lower_pct": 27.598632850237582,
+    "dist_to_upper_pct": -0.3694244284653497,
     "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
   },
@@ -145,8 +145,8 @@
       "rv_pctl_max": 0.6
     },
     "rows": 4192,
-    "run_ts_utc": "2026-02-20T12:44:59Z",
-    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-20.v7",
+    "run_ts_utc": "2026-02-20T13:06:23Z",
+    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-20.v8",
     "start": "2003-01-01",
     "ticker": "0050.TW",
     "trend_params": {
@@ -167,12 +167,62 @@
       "rv_days": 20
     }
   },
+  "pledge": {
+    "decision": {
+      "action_bucket": "VETO",
+      "pledge_policy": "DISALLOW",
+      "veto_reasons": [
+        "regime_gate_closed",
+        "no_chase_state:EXTREME_UPPER_BAND",
+        "no_chase_z>= 1.50"
+      ]
+    },
+    "inputs": {
+      "bb_state": "EXTREME_UPPER_BAND",
+      "bb_z": 2.0542688458280653,
+      "forward_mode_primary": "clean",
+      "regime_allowed": false
+    },
+    "scope": "compute_only_no_margin_no_chip",
+    "thresholds": {
+      "accumulate_z_threshold": -1.5,
+      "no_chase_z_threshold": 1.5,
+      "require_regime_allowed": true
+    },
+    "unconditional_tranche_levels": {
+      "levels": [
+        {
+          "drawdown": -0.047979697800666576,
+          "label": "10D_p10_uncond",
+          "price_level": 73.49596442445315
+        },
+        {
+          "drawdown": -0.06313589909682193,
+          "label": "10D_p05_uncond",
+          "price_level": 72.325905730643
+        },
+        {
+          "drawdown": -0.0686696055331123,
+          "label": "20D_p10_uncond",
+          "price_level": 71.89870361064892
+        },
+        {
+          "drawdown": -0.09279047257740869,
+          "label": "20D_p05_uncond",
+          "price_level": 70.03657274844029
+        }
+      ],
+      "note": "levels derived from unconditional forward_mdd quantiles; not conditioned on current state",
+      "price_anchor": 77.19999694824219
+    },
+    "version": "pledge_guidance_v1"
+  },
   "regime": {
     "allowed": false,
     "definition": "TREND_UP & RV20_percentile<=pctl_max & rv_hist_n>=min_samples => RISK_ON_ALLOWED",
     "inputs": {
       "bb_state": "EXTREME_UPPER_BAND",
-      "rv_ann": 0.20695660038765068,
+      "rv_ann": 0.20695660038767105,
       "rv_ann_pctl": 79.8418024928092,
       "rv_hist_n": 4172,
       "trend_state": "TREND_UP"
@@ -193,21 +243,21 @@
     "tag": "RISK_OFF_OR_DEFENSIVE"
   },
   "trend": {
-    "price_vs_trend_ma_pct": 37.68914715691349,
+    "price_vs_trend_ma_pct": 37.689147063234515,
     "state": "TREND_UP",
     "trend_ma_days": 200,
-    "trend_ma_last": 56.068323860168455,
+    "trend_ma_last": 56.06832389831543,
     "trend_slope_days": 20,
-    "trend_slope_pct": 6.133171152210215,
+    "trend_slope_pct": 6.133171071143373,
     "trend_slope_thr_pct": 0.5
   },
   "vol": {
-    "rv_ann": 0.20695660038765068,
+    "rv_ann": 0.20695660038767105,
     "rv_ann_pctl": 79.8418024928092,
     "rv_days": 20,
     "rv_hist_n": 4172,
-    "rv_hist_q20": 0.11199377235216092,
-    "rv_hist_q50": 0.14829661275254938,
-    "rv_hist_q80": 0.20795989423988068
+    "rv_hist_q20": 0.11199378644573947,
+    "rv_hist_q50": 0.1482964272271172,
+    "rv_hist_q80": 0.20795962198074294
   }
 }
