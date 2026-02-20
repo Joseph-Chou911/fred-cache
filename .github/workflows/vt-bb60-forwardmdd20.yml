@@ -42,15 +42,35 @@ jobs:
             --fx_history fx_cache/history.json \
             --max_history_rows 2500
 
+      - name: Debug outputs
+        run: |
+          set -e
+          pwd
+          echo "---- ls repo root ----"
+          ls -al
+          echo "---- ls vt_bb_cache ----"
+          ls -al vt_bb_cache || true
+          echo "---- find vt_bb_cache files ----"
+          find vt_bb_cache -maxdepth 2 -type f -print || true
+          echo "---- git status ----"
+          git status --porcelain || true
+          echo "---- check ignore (if any) ----"
+          git check-ignore -v vt_bb_cache/latest.json || true
+
       - name: Commit changes (if any)
         run: |
           set -e
-          if git status --porcelain | grep -E "^( M|A |??) (vt_bb_cache/|scripts/vt_bb60_forwardmdd20.py|\.github/workflows/vt-bb60-forwardmdd20\.yml)"; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add vt_bb_cache/latest.json vt_bb_cache/history.json vt_bb_cache/report.md || true
-            git commit -m "vt_bb_cache: update" || exit 0
-            git push
-          else
-            echo "No changes to commit."
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Force add (in case vt_bb_cache is ignored by .gitignore)
+          git add -f vt_bb_cache/latest.json vt_bb_cache/history.json vt_bb_cache/report.md || true
+
+          # If nothing staged, exit cleanly
+          if git diff --cached --quiet; then
+            echo "No staged changes."
+            exit 0
           fi
+
+          git commit -m "vt_bb_cache: update"
+          git push
