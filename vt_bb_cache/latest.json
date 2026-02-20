@@ -1,16 +1,74 @@
 {
-  "bb": {
-    "band_width_pct": 0.09000219840526347,
-    "bucket": "MID_BAND",
-    "dist_to_lower": 0.06668425486934726,
-    "dist_to_upper": 0.017316213998658025,
-    "lower_usd": 136.89874665995546,
-    "pos_dist_consistency": {
-      "reason": "within_tolerance",
-      "status": "OK",
-      "tol": 0.05
+  "band_width_observation": {
+    "current": {
+      "band_width_pct": 0.09000219840535428,
+      "percentile": 40.44738644145172
     },
-    "pos_in_band": 0.8007884183557286,
+    "forward_mdd20_bw_slices": {
+      "bw<=p20": {
+        "condition": "band_width_pct <= p20",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.11750665594764731,
+        "min_n_required": 200,
+        "n": 877,
+        "p10": -0.06028363116361224,
+        "p50": -0.014219824280303883
+      },
+      "bw>=p80": {
+        "condition": "band_width_pct >= p80",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.31574045684105334,
+        "min_n_required": 200,
+        "n": 877,
+        "p10": -0.10218124873528545,
+        "p50": -0.01995521421575508
+      }
+    },
+    "forward_mdd20_bw_slices_in_bucket": {
+      "bucket=MID_BAND ∩ bw<=p20": {
+        "condition": "(bucket==MID_BAND) AND (band_width_pct <= p20)",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.11750665594764731,
+        "min_n_required": 200,
+        "n": 570,
+        "p10": -0.06396522313158426,
+        "p50": -0.015306435903181592
+      },
+      "bucket=MID_BAND ∩ bw>=p80": {
+        "condition": "(bucket==MID_BAND) AND (band_width_pct >= p80)",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.25287672257145954,
+        "min_n_required": 200,
+        "n": 618,
+        "p10": -0.09897548615035869,
+        "p50": -0.016128342390581807
+      }
+    },
+    "note": "Independent observation only. Does NOT affect bucket rules nor main forward_mdd stats.",
+    "quantiles": {
+      "n_bw_samples": 4381,
+      "p50": 0.0985492650538422,
+      "p_high": 0.16700576431034686,
+      "p_low": 0.06869604393455697,
+      "q_high": 80.0,
+      "q_low": 20.0
+    },
+    "streak": {
+      "bw_ge_p_high_streak": 0,
+      "bw_le_p_low_streak": 0
+    }
+  },
+  "bb": {
+    "band_width_pct": 0.09000219840535428,
+    "bucket": "MID_BAND",
+    "dist_to_lower": 0.06668425486938621,
+    "dist_to_upper": 0.01731621399870046,
+    "lower_usd": 136.89874665994975,
+    "pos_in_band": 0.8007884183554371,
     "streak": {
       "bucket_streak": 5,
       "dist_u_le_threshold_streak": 2,
@@ -18,10 +76,18 @@
       "pos_ge_threshold_streak": 2,
       "pos_threshold": 0.8
     },
-    "upper_usd": 149.21993481827667,
-    "z": 1.203153673422902
+    "upper_usd": 149.2199348182829,
+    "z": 1.2031536734217554
   },
   "close_usd": 146.67999267578125,
+  "consistency_check": {
+    "pos_vs_dist_to_upper": {
+      "reason": "outside_tolerance",
+      "rel_err": 0.03420435433708312,
+      "status": "WARN",
+      "tolerance": 0.02
+    }
+  },
   "data_date": "2026-02-19",
   "derived_twd": {
     "close_twd": null,
@@ -33,54 +99,54 @@
   "forward_mdd20": {
     "conf": "HIGH",
     "conf_decision": "OK",
-    "min": -0.3157060141957808,
+    "min": -0.3157058701296732,
     "min_n_required": 200,
     "n": 2896,
-    "p10": -0.07279355503908103,
-    "p50": -0.01636918860932013
+    "p10": -0.07279347544451237,
+    "p50": -0.016369445682355488
   },
   "forward_mdd20_slices": {
     "dist_to_upper<=2.0%": {
       "condition": "dist_to_upper<=0.0200",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539545829194,
+      "min": -0.31285385074966576,
       "min_n_required": 200,
       "n": 1743,
-      "p10": -0.0548569838338673,
-      "p50": -0.014434066790691369
+      "p10": -0.05485708794330184,
+      "p50": -0.014433937582451484
     },
     "pos>=0.80": {
       "condition": "pos_in_band>=0.80",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539545829194,
+      "min": -0.31285385074966576,
       "min_n_required": 200,
       "n": 1704,
-      "p10": -0.05430565127751018,
-      "p50": -0.015082158867813444
+      "p10": -0.05430531194661968,
+      "p50": -0.015081952288688194
     }
   },
   "forward_mdd20_slices_in_bucket": {
-    "bucket=MID_BAND & dist_to_upper<=2.0%": {
+    "bucket=MID_BAND ∩ dist_to_upper<=2.0%": {
       "condition": "(bucket==MID_BAND) AND (dist_to_upper<=0.0200)",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539545829194,
+      "min": -0.31285385074966576,
       "min_n_required": 200,
       "n": 718,
-      "p10": -0.05322477264701466,
-      "p50": -0.01395371541688123
+      "p10": -0.05322457724765696,
+      "p50": -0.013953991241247021
     },
-    "bucket=MID_BAND & pos>=0.80": {
+    "bucket=MID_BAND ∩ pos>=0.80": {
       "condition": "(bucket==MID_BAND) AND (pos_in_band>=0.80)",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539545829194,
+      "min": -0.31285385074966576,
       "min_n_required": 200,
       "n": 638,
-      "p10": -0.051862621705454436,
-      "p50": -0.015345299255974387
+      "p10": -0.05186260773845889,
+      "p50": -0.015345331030840625
     }
   },
   "fx_usdtwd": {
@@ -100,14 +166,15 @@
     },
     "used_policy": "NA"
   },
-  "generated_at_utc": "2026-02-20T03:56:36Z",
+  "generated_at_utc": "2026-02-20T04:15:43Z",
   "k": 2.0,
+  "min_n_required": 200,
   "module": "vt_bb_cache",
   "notes": [
     "BB computed on log(price_usd) where price_usd is adj_close when available.",
     "forward_mdd20 computed on linear price_usd (same series as BB).",
-    "forward_mdd20_slices are reading-only, do NOT replace bucket-conditioned stats.",
-    "forward_mdd20_slices_in_bucket are intersection slices with current bucket; reading-only.",
+    "forward_mdd20_slices and *_in_bucket are reading-only; do NOT replace bucket-conditioned stats.",
+    "band_width_observation is independent reading-only; does NOT affect bucket rules nor main forward_mdd stats.",
     "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
     "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated."
   ],

@@ -1,6 +1,6 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-02-20T03:56:36Z`
+- report_generated_at_utc: `2026-02-20T04:15:43Z`
 - data_date: `2026-02-19`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`
@@ -24,8 +24,9 @@
 - **forward_mdd(20D)**（bucket=MID_BAND）：p50=-1.637%、p10=-7.279%、min=-31.571%；n=2896（conf=HIGH；conf_decision=OK）
 
 ## pos vs dist_to_upper 一致性檢查（提示用；不改數值）
-- status: `OK`
-- reason: `within_tolerance`
+- status: `WARN`
+- reason: `outside_tolerance`
+- rel_err: `0.034204`; tolerance: `0.020000`
 
 ## forward_mdd(20D) 切片分布（閱讀用；不回填主欄位）
 
@@ -38,6 +39,21 @@
 - Slice A_inBucket（bucket=MID_BAND ∩ pos≥0.80）：p50=-1.535%、p10=-5.186%、min=-31.285% (n=638, conf=HIGH, conf_decision=OK, min_n_required=200)
 - Slice B_inBucket（bucket=MID_BAND ∩ dist_to_upper≤2.0%）：p50=-1.395%、p10=-5.322%、min=-31.285% (n=718, conf=HIGH, conf_decision=OK, min_n_required=200)
 - 說明：交集切片用於回答「在同一個 bucket/regime 內，貼上緣時的 forward_mdd 分布」；避免全樣本切片混入不同 regime。
+
+## band_width 分位數觀察（獨立項目；不改 bucket / 不回填主欄位）
+
+- band_width_current: 9.000%; percentile≈40.45
+- quantiles: p20=6.870%, p50=9.855%, p80=16.701% (n_bw_samples=4381)
+- streak: bw≤p20 streak=0; bw≥p80 streak=0
+
+### forward_mdd(20D) × band_width（全樣本切片；閱讀用）
+- BW_LOW（bw≤p20）：p50=-1.422%、p10=-6.028%、min=-11.751% (n=877, conf=HIGH, conf_decision=OK)
+- BW_HIGH（bw≥p80）：p50=-1.996%、p10=-10.218%、min=-31.574% (n=877, conf=HIGH, conf_decision=OK)
+
+### forward_mdd(20D) × band_width（bucket 內交集；閱讀用）
+- BW_LOW_inBucket（bucket=MID_BAND ∩ bw≤p20）：p50=-1.531%、p10=-6.397%、min=-11.751% (n=570, conf=HIGH, conf_decision=OK)
+- BW_HIGH_inBucket（bucket=MID_BAND ∩ bw≥p80）：p50=-1.613%、p10=-9.898%、min=-25.288% (n=618, conf=HIGH, conf_decision=OK)
+- 說明：這是「獨立觀察項」，用來觀察 band 寬窄是否改變 forward_mdd 的尾部形狀；不作為信號。
 
 ## 近 5 日（可計算 BB 的交易日；小表）
 
@@ -92,7 +108,6 @@
 ## Notes
 - bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。
 - Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。
-- forward_mdd20_slices 為閱讀用切片；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。
-- forward_mdd20_slices_in_bucket 為 bucket 內交集切片，用於避免全樣本切片混入不同 regime。
+- forward_mdd 切片（含 in-bucket / band_width）為閱讀用；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。
 - pos vs dist_to_upper 一致性檢查為提示用，避免 band_width 或資料異常造成誤讀。
 - FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。
