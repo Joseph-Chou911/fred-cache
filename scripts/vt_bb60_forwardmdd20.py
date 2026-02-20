@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VT BB(60,2) + forward_mdd(20D) monitor (independent module)
+BB(60,2) + forward_mdd(20D) monitor (independent module)
 
 Outputs (deterministic, audit-first):
 - <cache_dir>/latest.json
@@ -9,43 +9,32 @@ Outputs (deterministic, audit-first):
 - <cache_dir>/report.md
 
 Key design choices:
-- BB computed on log(adj_close) by default.
-- forward_mdd(20D) computed on linear price series (same as BB base series).
+- BB computed on log(price) by default (price = adj_close if available, else close).
+- forward_mdd(20D) computed on linear price series (same base series as BB).
 - FX (USD/TWD):
   (1) STRICT: only exact SAME-DATE match will populate main fields.
+      Strict match sources:
+        - fx_history.json (preferred)
+        - fx_latest.json (fallback) when it is same-date and parse OK
   (2) REFERENCE (optional): if strict missing, compute a *reference* TWD price
-      using the most recent FX date <= vt_date (from history and/or latest),
+      using the most recent FX date <= data_date (from history and/or latest),
       and explicitly annotate lag_days and source.
 
-NEW (2026-02-20):
-- Δ1D section (prev BB-computable trading day baseline)
-- last 5 BB-valid trading days mini table
-- streak metrics:
-    * bucket streak
-    * pos>=threshold streak (reading hint)
-    * dist_to_upper<=threshold streak (reading hint)
-- forward_mdd(20D) additional "slices" (reading-only; does NOT replace bucket-conditioned stats)
-    * pos>=pos_hint_threshold
-    * dist_to_upper<=dist_upper_hint_threshold
-- forward_mdd(20D) "in-bucket intersection slices" (reading-only):
-    * bucket ∩ pos>=threshold
-    * bucket ∩ dist_to_upper<=threshold
-- conf_decision + min_n_required for each forward_mdd summary
+PATCH set (2026-02-20, review pass):
+- _safe_float: reject bool with explicit comment (bool is subclass of int).
+- pick_fx_reference: rename vt_* variables to data_date_* (ticker-agnostic).
+- buckets_series: unify UNKNOWN semantics (no None/UNKNOWN split).
+- Add assert/guard that len(fwd_mdd) == len(bb) (audit alignment check).
+- Remove redundant float(last_close) wrappers (last_close already Optional[float]).
+- summarize_mdd: restore docstring clarifying conf vs conf_decision.
+- report.md: keep a minimal slice summary section (human-readable parity with JSON).
 
-NEW (2026-02-20, band_width quantile observation; independent item):
-- band_width quantile thresholds (p20/p50/p80) and current percentile
-- forward_mdd(20D) slices by band_width quantiles (global; reading-only)
-- forward_mdd(20D) slices by band_width quantiles within current bucket (reading-only)
-- These are stored under latest.json: band_width_observation
-  (does NOT affect bucket rules nor main forward_mdd stats)
-
-PATCH (2026-02-20):
-- Fix "pos vs dist_to_upper consistency check" to match *log-band geometry*.
-  Previous linear approximation can falsely WARN (your case is exactly that).
-  For log bands:
-      ratio = upper/lower = 1 + band_width_pct
-      expected_dist_to_upper = ratio^(1-pos) - 1
-  Compare actual dist_to_upper vs expected.
+PATCH set (2026-02-20, review pass #2):
+- Mask ops: explicitly convert pandas Series masks to numpy arrays to avoid implicit alignment.
+- Promote _safe_bucket() to module-level helper for reuse and readability.
+- upsert_history: rename lambda var from x -> item for lint friendliness.
+- report.md: add disclaimer to Forward MDD slices section.
+- (Optional note) load_fx_latest_mid still may be called twice (strict fallback + reference); kept as-is.
 """
 
 from __future__ import annotations
@@ -75,7 +64,11 @@ def utc_now_iso() -> str:
 
 
 def _safe_float(x: Any) -> Optional[float]:
+    """Parse to finite float; reject bool explicitly."""
     if x is None:
+        return None
+    # bool is subclass of int; must check BEFORE isinstance(x, (int, float))
+    if isinstance(x, bool):
         return None
     if isinstance(x, (int, float)):
         v = float(x)
@@ -108,8 +101,14 @@ def _read_json(path: str) -> Optional[Any]:
         return None
 
 
+def _ensure_parent_dir(path: str) -> None:
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+
+
 def _write_json(path: str, obj: Any) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _ensure_parent_dir(path)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=True)
@@ -118,7 +117,7 @@ def _write_json(path: str, obj: Any) -> None:
 
 
 def _write_text(path: str, text: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _ensure_parent_dir(path)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(text)
@@ -131,11 +130,38 @@ def _ymd_to_date(s: str) -> Optional[dt_date]:
     t = s.strip()
     if len(t) == 10 and t[4] == "-" and t[7] == "-":
         try:
-            y = int(t[0:4]); m = int(t[5:7]); d = int(t[8:10])
+            y = int(t[0:4])
+            m = int(t[5:7])
+            d = int(t[8:10])
             return dt_date(y, m, d)
         except Exception:
             return None
     return None
+
+
+# ----------------------------
+# Indicators
+# ----------------------------
+def bucket_from_z(z: float) -> str:
+    if not math.isfinite(z):
+        return "UNKNOWN"
+    if z <= -2.0:
+        return "BELOW_LOWER_BAND"
+    if z <= -1.5:
+        return "NEAR_LOWER_BAND"
+    if z >= 2.0:
+        return "ABOVE_UPPER_BAND"
+    if z >= 1.5:
+        return "NEAR_UPPER_BAND"
+    return "MID_BAND"
+
+
+def _safe_bucket(v: Any) -> str:
+    """Safe bucketization for pandas apply; never returns None."""
+    try:
+        return bucket_from_z(float(v))
+    except Exception:
+        return "UNKNOWN"
 
 
 # ----------------------------
@@ -245,9 +271,16 @@ def load_fx_latest_mid(fx_latest_path: str) -> Tuple[Optional[str], Optional[flo
 
     d = obj.get("data_date")
     usd = obj.get("usd_twd")
-    mid = None
+    mid: Optional[float] = None
+
     if isinstance(usd, dict):
         mid = _safe_float(usd.get("mid"))
+        if mid is None:
+            mid = _safe_float(usd.get("rate"))
+        if mid is None:
+            mid = _safe_float(usd.get("value"))
+    else:
+        mid = _safe_float(usd)
 
     d_str = str(d).strip() if d else None
     if d_str and len(d_str) == 8 and d_str.isdigit():
@@ -255,11 +288,13 @@ def load_fx_latest_mid(fx_latest_path: str) -> Tuple[Optional[str], Optional[flo
 
     if (not d_str) or (mid is None):
         return d_str, mid, "LATEST_KEYS_MISSING"
-    return d_str, mid, "OK"
+    if not (5.0 <= mid <= 100.0):
+        return d_str, None, "LATEST_RATE_OUT_OF_RANGE"
+    return d_str, float(mid), "OK"
 
 
 # ----------------------------
-# VT data fetch
+# Ticker data fetch
 # ----------------------------
 def fetch_daily_ohlc(ticker: str, retries: int = 3) -> pd.DataFrame:
     last_err = None
@@ -275,10 +310,15 @@ def fetch_daily_ohlc(ticker: str, retries: int = 3) -> pd.DataFrame:
             )
             if df is None or df.empty:
                 raise RuntimeError("empty dataframe from yfinance")
+
             if isinstance(df.columns, pd.MultiIndex):
+                if df.columns.get_level_values(1).nunique() != 1:
+                    raise RuntimeError("unexpected multi-ticker MultiIndex columns from yfinance")
                 df.columns = [c[0] for c in df.columns]
+
             if "Close" not in df.columns:
                 raise RuntimeError(f"missing Close column; columns={list(df.columns)}")
+
             df = df.copy()
             df.index = pd.to_datetime(df.index)
             df.sort_index(inplace=True)
@@ -289,7 +329,7 @@ def fetch_daily_ohlc(ticker: str, retries: int = 3) -> pd.DataFrame:
 
 
 # ----------------------------
-# Indicators
+# BB + forward MDD
 # ----------------------------
 def compute_bb_log(price: pd.Series, window: int, k: float) -> pd.DataFrame:
     logp = np.log(price.astype(float))
@@ -304,18 +344,6 @@ def compute_bb_log(price: pd.Series, window: int, k: float) -> pd.DataFrame:
     pos = pos.clip(lower=0.0, upper=1.0)
 
     return pd.DataFrame({"logp": logp, "ma": ma, "sd": sd, "upper": upper, "lower": lower, "z": z, "pos": pos})
-
-
-def bucket_from_z(z: float) -> str:
-    if z <= -2.0:
-        return "BELOW_LOWER_BAND"
-    if z <= -1.5:
-        return "NEAR_LOWER_BAND"
-    if z >= 2.0:
-        return "ABOVE_UPPER_BAND"
-    if z >= 1.5:
-        return "NEAR_UPPER_BAND"
-    return "MID_BAND"
 
 
 def compute_forward_mdd(prices: np.ndarray, forward_days: int) -> np.ndarray:
@@ -334,12 +362,15 @@ def compute_forward_mdd(prices: np.ndarray, forward_days: int) -> np.ndarray:
 
 def summarize_mdd(mdd: np.ndarray, min_n_required: int = 200) -> Dict[str, Any]:
     """
+    Summarize forward drawdown distribution.
+
     Returns:
-      n, p50, p10, min, conf, conf_decision, min_n_required
-    conf_decision:
-      - OK if n >= min_n_required
-      - LOW_FOR_DECISION if 0 < n < min_n_required
-      - NA if n == 0
+      - conf: statistical confidence tier based on sample size n only:
+          HIGH (n>=120), MED (n>=60), LOW (n>=20), else NA.
+      - conf_decision: decision sufficiency gate:
+          OK if n>=min_n_required;
+          LOW_FOR_DECISION if 0<n<min_n_required;
+          NA if n==0.
     """
     x = mdd[np.isfinite(mdd)]
     n = int(x.shape[0])
@@ -397,24 +428,25 @@ def upsert_history(history_path: str, rows: List[Dict[str, Any]], key: str = "da
         idx[dk] = r
 
     all_items = list(idx.values())
-    all_items.sort(key=lambda x: str(x.get(key)))
+    all_items.sort(key=lambda item: str(item.get(key)))
 
     if max_rows and len(all_items) > max_rows:
         all_items = all_items[-max_rows:]
 
-    return {"schema_version": "vt_bb_cache.v1", "items": all_items}
+    return {"schema_version": "bb_cache.v1", "items": all_items}
 
 
 # ----------------------------
 # FX reference selection
 # ----------------------------
-def pick_fx_reference(vt_date_str: str, fx_hist: FxSeries, fx_latest_path: str) -> Dict[str, Any]:
+def pick_fx_reference(data_date_str: str, fx_hist: FxSeries, fx_latest_path: str) -> Dict[str, Any]:
+    """Pick the most recent FX date <= data_date, with explicit lag and staleness gate."""
     stale_threshold_days = 30
-    vt_d = _ymd_to_date(vt_date_str)
-    if vt_d is None:
+    data_d = _ymd_to_date(data_date_str)
+    if data_d is None:
         return {
             "ref_rate": None, "ref_date": None, "ref_source": None,
-            "lag_days": None, "status": "VT_DATE_PARSE_FAIL",
+            "lag_days": None, "status": "DATE_PARSE_FAIL",
             "stale_threshold_days": stale_threshold_days
         }
 
@@ -425,13 +457,13 @@ def pick_fx_reference(vt_date_str: str, fx_hist: FxSeries, fx_latest_path: str) 
             d = _ymd_to_date(d_str)
             if d is None:
                 continue
-            if d <= vt_d and (hist_best_date is None or d > hist_best_date):
+            if d <= data_d and (hist_best_date is None or d > hist_best_date):
                 hist_best_date = d
                 hist_best_rate = rate
 
     latest_date_str, latest_mid, latest_status = load_fx_latest_mid(fx_latest_path)
     latest_d = _ymd_to_date(latest_date_str) if latest_date_str else None
-    latest_ok = (latest_status == "OK" and latest_d is not None and latest_mid is not None and latest_d <= vt_d)
+    latest_ok = (latest_status == "OK" and latest_d is not None and latest_mid is not None and latest_d <= data_d)
 
     ref_source = None
     ref_date = None
@@ -457,7 +489,7 @@ def pick_fx_reference(vt_date_str: str, fx_hist: FxSeries, fx_latest_path: str) 
             "history_status": fx_hist.parse_status,
         }
 
-    lag_days = (vt_d - ref_date).days
+    lag_days = (data_d - ref_date).days
     status = "OK" if lag_days <= stale_threshold_days else "TOO_STALE"
 
     return {
@@ -473,7 +505,7 @@ def pick_fx_reference(vt_date_str: str, fx_hist: FxSeries, fx_latest_path: str) 
 
 
 # ----------------------------
-# Small helpers (display + streak + series)
+# Small helpers
 # ----------------------------
 def _band_width_pct(lower_u: Optional[float], upper_u: Optional[float]) -> Optional[float]:
     if lower_u is None or upper_u is None:
@@ -500,7 +532,6 @@ def _dist_to_lower(p: Optional[float], lower_u: Optional[float]) -> Optional[flo
 
 
 def streak_from_tail(bool_series: pd.Series) -> int:
-    """Count consecutive True from the end of series."""
     n = 0
     for v in reversed(bool_series.tolist()):
         if bool(v):
@@ -510,75 +541,47 @@ def streak_from_tail(bool_series: pd.Series) -> int:
     return n
 
 
-def _percentile_of_score(sorted_vals: np.ndarray, x: float) -> Optional[float]:
-    """
-    Return percentile (0..100) of x within sorted_vals using right-inclusive rank.
-    Deterministic and simple; does not assume normality.
-    """
-    if sorted_vals.size == 0 or not np.isfinite(x):
-        return None
-    k = int(np.searchsorted(sorted_vals, x, side="right"))
-    return 100.0 * (k / sorted_vals.size)
-
-
-def _compute_band_width_series(bb: pd.DataFrame) -> pd.Series:
-    """band_width_pct series aligned to bb index: exp(upper)/exp(lower) - 1."""
-    upper_u = np.exp(bb["upper"])
-    lower_u = np.exp(bb["lower"])
-    bw = (upper_u / lower_u) - 1.0
-    bw = bw.replace([np.inf, -np.inf], np.nan)
-    return bw
-
-
 def _pos_dist_consistency_check_logband(
     pos: float,
     dist_to_upper: Optional[float],
     band_width_pct: Optional[float],
-    tolerance: float = 0.02,
+    rel_tolerance: float = 0.02,
+    abs_tol: float = 1e-4,
 ) -> Dict[str, Any]:
-    """
-    Consistency check for *log-band* BB.
-
-    Given:
-      pos = (logp - lower_log)/(upper_log - lower_log)
-      ratio = upper/lower = exp(upper_log - lower_log) = 1 + band_width_pct
-
-    Then the implied price at that pos (on log scale) is:
-      p = lower * ratio^pos
-    and implied dist_to_upper is:
-      (upper - p)/p = upper/p - 1 = ratio^(1-pos) - 1
-
-    We compare actual dist_to_upper vs implied_dist_to_upper.
-    """
     if dist_to_upper is None or band_width_pct is None:
-        return {"status": "NA", "reason": "missing_fields", "tolerance": float(tolerance), "model": "logband"}
+        return {"status": "NA", "reason": "missing_fields", "rel_tolerance": float(rel_tolerance), "abs_tol": float(abs_tol), "model": "logband"}
 
     if not (np.isfinite(dist_to_upper) and np.isfinite(band_width_pct) and np.isfinite(pos)):
-        return {"status": "NA", "reason": "non_finite", "tolerance": float(tolerance), "model": "logband"}
+        return {"status": "NA", "reason": "non_finite", "rel_tolerance": float(rel_tolerance), "abs_tol": float(abs_tol), "model": "logband"}
 
     ratio = 1.0 + float(band_width_pct)
     if ratio <= 0:
-        return {"status": "NA", "reason": "bad_ratio", "tolerance": float(tolerance), "model": "logband"}
+        return {"status": "NA", "reason": "bad_ratio", "rel_tolerance": float(rel_tolerance), "abs_tol": float(abs_tol), "model": "logband"}
 
     implied = (ratio ** (1.0 - float(pos))) - 1.0
+    abs_err = abs(float(dist_to_upper) - float(implied))
+    denom = max(1e-12, abs(float(implied)), abs(float(dist_to_upper)))
+    rel_err = abs_err / denom
 
-    denom = max(1e-12, abs(implied))
-    rel_err = abs(float(dist_to_upper) - implied) / denom
-
-    if rel_err <= tolerance:
+    if abs_err <= abs_tol or rel_err <= rel_tolerance:
         return {
             "status": "OK",
-            "reason": "within_tolerance",
+            "reason": "within_abs_or_rel_tolerance",
+            "abs_err": float(abs_err),
+            "abs_tol": float(abs_tol),
             "rel_err": float(rel_err),
-            "tolerance": float(tolerance),
+            "rel_tolerance": float(rel_tolerance),
             "expected_dist_to_upper": float(implied),
             "model": "logband",
         }
+
     return {
         "status": "WARN",
-        "reason": "outside_tolerance",
+        "reason": "outside_abs_and_rel_tolerance",
+        "abs_err": float(abs_err),
+        "abs_tol": float(abs_tol),
         "rel_err": float(rel_err),
-        "tolerance": float(tolerance),
+        "rel_tolerance": float(rel_tolerance),
         "expected_dist_to_upper": float(implied),
         "model": "logband",
     }
@@ -590,7 +593,7 @@ def _pos_dist_consistency_check_logband(
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ticker", default="VT")
-    ap.add_argument("--cache_dir", default="vt_bb_cache")
+    ap.add_argument("--cache_dir", default="bb_cache")
     ap.add_argument("--window", type=int, default=60)
     ap.add_argument("--k", type=float, default=2.0)
     ap.add_argument("--forward_days", type=int, default=20)
@@ -598,19 +601,12 @@ def main() -> int:
     ap.add_argument("--fx_history", default="fx_cache/history.json")
     ap.add_argument("--max_history_rows", type=int, default=2500)
 
-    # reading thresholds (do NOT change bucket rules)
     ap.add_argument("--pos_hint_threshold", type=float, default=0.80)
-    ap.add_argument("--dist_upper_hint_threshold", type=float, default=0.02)  # 2%
-
-    # decision guard
+    ap.add_argument("--dist_upper_hint_threshold", type=float, default=0.02)
     ap.add_argument("--min_n_required", type=int, default=200)
 
-    # band_width observation quantiles
-    ap.add_argument("--bw_low_q", type=float, default=20.0)   # p20
-    ap.add_argument("--bw_high_q", type=float, default=80.0)  # p80
-
-    # tolerance for consistency check
-    ap.add_argument("--consistency_tolerance", type=float, default=0.02)
+    ap.add_argument("--consistency_rel_tolerance", type=float, default=0.02)
+    ap.add_argument("--consistency_abs_tol", type=float, default=1e-4)
 
     args = ap.parse_args()
 
@@ -631,87 +627,83 @@ def main() -> int:
     base = base.where(base > 0)
 
     bb = compute_bb_log(base, window=args.window, k=args.k)
-
     bb_valid = bb.dropna()
     last_idx = bb_valid.index.max()
     if pd.isna(last_idx):
         raise SystemExit("FATAL: insufficient data to compute BB (need >= window valid points).")
 
+    # Alignment guard (audit)
+    prices = base.to_numpy(dtype=float)
+    fwd_mdd = compute_forward_mdd(prices, forward_days=args.forward_days)
+    if len(fwd_mdd) != len(bb):
+        raise SystemExit(f"FATAL: fwd_mdd/bb length mismatch: len(fwd_mdd)={len(fwd_mdd)} vs len(bb)={len(bb)}")
+
     last_date = pd.Timestamp(last_idx).date().isoformat()
     last_row = bb.loc[last_idx]
 
-    last_price = float(base.loc[last_idx])
-    last_close = float(close.loc[last_idx]) if pd.notna(close.loc[last_idx]) else None
+    last_price = _safe_float(base.loc[last_idx])
+    if last_price is None:
+        raise SystemExit(f"FATAL: last_price is NA at {last_date}; base series corrupted or misaligned.")
+    last_price = float(last_price)
 
-    z = float(last_row["z"])
+    last_close = _safe_float(close.loc[last_idx]) if pd.notna(close.loc[last_idx]) else None
+
+    z = _safe_float(last_row["z"])
+    if z is None:
+        raise SystemExit(f"FATAL: last z is non-finite at {last_date}; BB computation invalid.")
+    z = float(z)
+
     bucket = bucket_from_z(z)
+    if bucket == "UNKNOWN":
+        raise SystemExit(f"FATAL: bucket=UNKNOWN because z is non-finite (z={z}); data may be corrupted.")
 
     upper_lin = float(np.exp(last_row["upper"]))
     lower_lin = float(np.exp(last_row["lower"]))
-    dist_to_lower = (last_price - lower_lin) / last_price if last_price else None
-    dist_to_upper = (upper_lin - last_price) / last_price if last_price else None
-    pos_in_band = float(last_row["pos"])
+
+    dist_to_lower = _dist_to_lower(last_price, lower_lin)
+    dist_to_upper = _dist_to_upper(last_price, upper_lin)
+
+    pos_in_band = _safe_float(last_row["pos"])
+    if pos_in_band is None:
+        raise SystemExit(f"FATAL: pos_in_band is NA at {last_date}; BB computation invalid.")
+    pos_in_band = float(pos_in_band)
+
     band_width_pct = _band_width_pct(lower_lin, upper_lin)
 
-    # forward_mdd series (aligned to base index)
-    prices = base.to_numpy(dtype=float)
-    fwd_mdd = compute_forward_mdd(prices, forward_days=args.forward_days)
+    # bucket series (UNKNOWN semantics unified; never None)
+    buckets_series = bb["z"].apply(_safe_bucket)
 
-    # bucket-conditioned distribution (main stat)
-    buckets_series = bb["z"].apply(lambda v: bucket_from_z(float(v)) if pd.notna(v) else None)
-    mask_bucket = (buckets_series == bucket) & np.isfinite(fwd_mdd)
-    mdd_stats_bucket = summarize_mdd(fwd_mdd[mask_bucket.to_numpy()], min_n_required=args.min_n_required)
+    # ---- masks: explicit numpy (avoid implicit pandas alignment) ----
+    mask_bucket_np = (buckets_series == bucket).to_numpy() & np.isfinite(fwd_mdd)
+    mdd_stats_bucket = summarize_mdd(fwd_mdd[mask_bucket_np], min_n_required=args.min_n_required)
 
-    # slice-conditioned distributions (global; reading-only)
     pos_series = bb["pos"]
     upper_lin_series = np.exp(bb["upper"])
     dist_u_series = (upper_lin_series - base) / base
 
-    mask_pos = (pos_series >= args.pos_hint_threshold) & np.isfinite(fwd_mdd)
-    mdd_stats_pos = summarize_mdd(fwd_mdd[mask_pos.fillna(False).to_numpy()], min_n_required=args.min_n_required)
+    mask_pos_np = (pos_series >= args.pos_hint_threshold).fillna(False).to_numpy() & np.isfinite(fwd_mdd)
+    mdd_stats_pos = summarize_mdd(fwd_mdd[mask_pos_np], min_n_required=args.min_n_required)
 
-    mask_distu = (dist_u_series <= args.dist_upper_hint_threshold) & np.isfinite(fwd_mdd)
-    mdd_stats_distu = summarize_mdd(fwd_mdd[mask_distu.fillna(False).to_numpy()], min_n_required=args.min_n_required)
+    mask_distu_np = (dist_u_series <= args.dist_upper_hint_threshold).fillna(False).to_numpy() & np.isfinite(fwd_mdd)
+    mdd_stats_distu = summarize_mdd(fwd_mdd[mask_distu_np], min_n_required=args.min_n_required)
 
-    forward_mdd20_slices = {
-        f"pos>={args.pos_hint_threshold:.2f}": {
-            "condition": f"pos_in_band>={args.pos_hint_threshold:.2f}",
-            **mdd_stats_pos,
-        },
-        f"dist_to_upper<={args.dist_upper_hint_threshold*100:.1f}%": {
-            "condition": f"dist_to_upper<={args.dist_upper_hint_threshold:.4f}",
-            **mdd_stats_distu,
-        },
-    }
-
-    # in-bucket intersection slices (reading-only; avoid mixing regimes)
-    mask_pos_in_bucket = (buckets_series == bucket) & (pos_series >= args.pos_hint_threshold) & np.isfinite(fwd_mdd)
-    mdd_stats_pos_in_bucket = summarize_mdd(
-        fwd_mdd[mask_pos_in_bucket.fillna(False).to_numpy()],
-        min_n_required=args.min_n_required,
+    mask_pos_in_bucket_np = (
+        (buckets_series == bucket).to_numpy()
+        & (pos_series >= args.pos_hint_threshold).fillna(False).to_numpy()
+        & np.isfinite(fwd_mdd)
     )
+    mdd_stats_pos_in_bucket = summarize_mdd(fwd_mdd[mask_pos_in_bucket_np], min_n_required=args.min_n_required)
 
-    mask_distu_in_bucket = (buckets_series == bucket) & (dist_u_series <= args.dist_upper_hint_threshold) & np.isfinite(fwd_mdd)
-    mdd_stats_distu_in_bucket = summarize_mdd(
-        fwd_mdd[mask_distu_in_bucket.fillna(False).to_numpy()],
-        min_n_required=args.min_n_required,
+    mask_distu_in_bucket_np = (
+        (buckets_series == bucket).to_numpy()
+        & (dist_u_series <= args.dist_upper_hint_threshold).fillna(False).to_numpy()
+        & np.isfinite(fwd_mdd)
     )
+    mdd_stats_distu_in_bucket = summarize_mdd(fwd_mdd[mask_distu_in_bucket_np], min_n_required=args.min_n_required)
 
-    forward_mdd20_slices_in_bucket = {
-        f"bucket={bucket} ∩ pos>={args.pos_hint_threshold:.2f}": {
-            "condition": f"(bucket=={bucket}) AND (pos_in_band>={args.pos_hint_threshold:.2f})",
-            **mdd_stats_pos_in_bucket,
-        },
-        f"bucket={bucket} ∩ dist_to_upper<={args.dist_upper_hint_threshold*100:.1f}%": {
-            "condition": f"(bucket=={bucket}) AND (dist_to_upper<={args.dist_upper_hint_threshold:.4f})",
-            **mdd_stats_distu_in_bucket,
-        },
-    }
-
-    # streaks on BB-valid trading days
+    # streaks
     bbv = bb_valid.copy()
-    bbv_bucket = bbv["z"].apply(lambda vv: bucket_from_z(float(vv)) if pd.notna(vv) else None)
-
+    bbv_bucket = bbv["z"].apply(_safe_bucket)
     bucket_streak = streak_from_tail((bbv_bucket == bucket).astype(bool))
     pos_streak = streak_from_tail((bbv["pos"] >= args.pos_hint_threshold).fillna(False).astype(bool))
 
@@ -720,114 +712,37 @@ def main() -> int:
     bbv_dist_u = (bbv_upper - bbv_price) / bbv_price
     distu_streak = streak_from_tail((bbv_dist_u <= args.dist_upper_hint_threshold).fillna(False).astype(bool))
 
-    # --- FIXED consistency check (logband geometry)
     consistency_check = _pos_dist_consistency_check_logband(
         pos=pos_in_band,
         dist_to_upper=dist_to_upper,
         band_width_pct=band_width_pct,
-        tolerance=args.consistency_tolerance,
+        rel_tolerance=args.consistency_rel_tolerance,
+        abs_tol=args.consistency_abs_tol,
     )
 
     # ----------------------------
-    # band_width quantile observation (independent item)
-    # ----------------------------
-    bw_series = _compute_band_width_series(bb)
-    bw_valid = bw_series.reindex(bb_valid.index)
-    bw_vals = bw_valid.to_numpy(dtype=float)
-    bw_vals = bw_vals[np.isfinite(bw_vals)]
-    bw_vals_sorted = np.sort(bw_vals) if bw_vals.size > 0 else np.array([], dtype=float)
-
-    bw_p20 = float(np.percentile(bw_vals_sorted, args.bw_low_q)) if bw_vals_sorted.size > 0 else None
-    bw_p50 = float(np.percentile(bw_vals_sorted, 50.0)) if bw_vals_sorted.size > 0 else None
-    bw_p80 = float(np.percentile(bw_vals_sorted, args.bw_high_q)) if bw_vals_sorted.size > 0 else None
-    bw_pctl = _percentile_of_score(bw_vals_sorted, float(band_width_pct)) if (band_width_pct is not None and bw_vals_sorted.size > 0) else None
-
-    if bw_p20 is None or bw_p80 is None:
-        mask_bw_low = pd.Series(False, index=bb.index)
-        mask_bw_high = pd.Series(False, index=bb.index)
-    else:
-        mask_bw_low = (bw_series <= float(bw_p20))
-        mask_bw_high = (bw_series >= float(bw_p80))
-
-    mdd_bw_low = summarize_mdd(
-        fwd_mdd[(mask_bw_low.fillna(False).to_numpy()) & np.isfinite(fwd_mdd)],
-        min_n_required=args.min_n_required,
-    )
-    mdd_bw_high = summarize_mdd(
-        fwd_mdd[(mask_bw_high.fillna(False).to_numpy()) & np.isfinite(fwd_mdd)],
-        min_n_required=args.min_n_required,
-    )
-
-    mask_bw_low_in_bucket = (buckets_series == bucket) & mask_bw_low & np.isfinite(fwd_mdd)
-    mask_bw_high_in_bucket = (buckets_series == bucket) & mask_bw_high & np.isfinite(fwd_mdd)
-
-    mdd_bw_low_in_bucket = summarize_mdd(
-        fwd_mdd[mask_bw_low_in_bucket.fillna(False).to_numpy()],
-        min_n_required=args.min_n_required,
-    )
-    mdd_bw_high_in_bucket = summarize_mdd(
-        fwd_mdd[mask_bw_high_in_bucket.fillna(False).to_numpy()],
-        min_n_required=args.min_n_required,
-    )
-
-    bwv = bw_valid.copy()
-    bw_low_streak = 0
-    bw_high_streak = 0
-    if bw_p20 is not None:
-        bw_low_streak = streak_from_tail((bwv <= float(bw_p20)).fillna(False).astype(bool))
-    if bw_p80 is not None:
-        bw_high_streak = streak_from_tail((bwv >= float(bw_p80)).fillna(False).astype(bool))
-
-    band_width_observation = {
-        "note": "Independent observation only. Does NOT affect bucket rules nor main forward_mdd stats.",
-        "current": {
-            "band_width_pct": band_width_pct,
-            "percentile": bw_pctl,
-        },
-        "quantiles": {
-            "q_low": float(args.bw_low_q),
-            "q_high": float(args.bw_high_q),
-            "p_low": bw_p20,
-            "p50": bw_p50,
-            "p_high": bw_p80,
-            "n_bw_samples": int(bw_vals_sorted.size),
-        },
-        "streak": {
-            "bw_le_p_low_streak": int(bw_low_streak),
-            "bw_ge_p_high_streak": int(bw_high_streak),
-        },
-        "forward_mdd20_bw_slices": {
-            f"bw<=p{int(args.bw_low_q)}": {
-                "condition": f"band_width_pct <= p{int(args.bw_low_q)}",
-                **mdd_bw_low,
-            },
-            f"bw>=p{int(args.bw_high_q)}": {
-                "condition": f"band_width_pct >= p{int(args.bw_high_q)}",
-                **mdd_bw_high,
-            },
-        },
-        "forward_mdd20_bw_slices_in_bucket": {
-            f"bucket={bucket} ∩ bw<=p{int(args.bw_low_q)}": {
-                "condition": f"(bucket=={bucket}) AND (band_width_pct <= p{int(args.bw_low_q)})",
-                **mdd_bw_low_in_bucket,
-            },
-            f"bucket={bucket} ∩ bw>=p{int(args.bw_high_q)}": {
-                "condition": f"(bucket=={bucket}) AND (band_width_pct >= p{int(args.bw_high_q)})",
-                **mdd_bw_high_in_bucket,
-            },
-        },
-    }
-
-    # ----------------------------
-    # FX strict + reference
+    # FX strict: history date match, else latest same-date match
     # ----------------------------
     fx_series = load_fx_history(args.fx_history)
-    fx_rate_strict = fx_series.by_date.get(last_date) if fx_series.parse_status == "OK" else None
-    fx_used_policy = "HISTORY_DATE_MATCH" if fx_rate_strict is not None else "NA"
+
+    fx_rate_strict: Optional[float] = None
+    fx_used_policy = "NA"
+
+    if fx_series.parse_status == "OK":
+        fx_rate_strict = fx_series.by_date.get(last_date)
+        if fx_rate_strict is not None:
+            fx_used_policy = "HISTORY_DATE_MATCH"
+
+    if fx_rate_strict is None:
+        latest_date_str, latest_mid, latest_status = load_fx_latest_mid(args.fx_latest)
+        if latest_status == "OK" and latest_date_str == last_date and latest_mid is not None:
+            fx_rate_strict = float(latest_mid)
+            fx_used_policy = "LATEST_DATE_MATCH"
 
     price_twd = (last_price * fx_rate_strict) if fx_rate_strict is not None else None
     close_twd = (last_close * fx_rate_strict) if (fx_rate_strict is not None and last_close is not None) else None
 
+    # FX reference (only if strict missing)
     fx_ref = pick_fx_reference(last_date, fx_series, args.fx_latest)
     ref_rate = fx_ref.get("ref_rate")
     ref_date = fx_ref.get("ref_date")
@@ -839,11 +754,16 @@ def main() -> int:
     close_twd_ref = (last_close * ref_rate) if (fx_rate_strict is None and ref_rate is not None and last_close is not None) else None
 
     # ----------------------------
-    # Write latest.json / history.json / report.md
+    # Write latest/history/report
     # ----------------------------
+    cache_dir = args.cache_dir
+    latest_path = os.path.join(cache_dir, "latest.json")
+    history_path = os.path.join(cache_dir, "history.json")
+    report_path = os.path.join(cache_dir, "report.md")
+
     latest = {
-        "schema_version": "vt_bb_cache.v1",
-        "module": "vt_bb_cache",
+        "schema_version": "bb_cache.v1",
+        "module": "bb_cache",
         "ticker": args.ticker,
         "generated_at_utc": generated_at_utc,
         "price_mode": price_mode,
@@ -862,7 +782,7 @@ def main() -> int:
             "dist_to_lower": dist_to_lower,
             "dist_to_upper": dist_to_upper,
             "bucket": bucket,
-            "band_width_pct": band_width_pct,  # display-friendly; not used for signal
+            "band_width_pct": band_width_pct,
             "streak": {
                 "bucket_streak": int(bucket_streak),
                 "pos_ge_threshold_streak": int(pos_streak),
@@ -871,13 +791,22 @@ def main() -> int:
                 "dist_u_threshold": float(args.dist_upper_hint_threshold),
             },
         },
-        "consistency_check": {
-            "pos_vs_dist_to_upper": consistency_check,
-        },
+        "consistency_check": {"pos_vs_dist_to_upper": consistency_check},
         "forward_mdd20": mdd_stats_bucket,
-        "forward_mdd20_slices": forward_mdd20_slices,  # reading-only
-        "forward_mdd20_slices_in_bucket": forward_mdd20_slices_in_bucket,  # reading-only
-        "band_width_observation": band_width_observation,  # independent observation item
+        "forward_mdd20_slices": {
+            f"pos>={args.pos_hint_threshold:.2f}": {"condition": f"pos_in_band>={args.pos_hint_threshold:.2f}", **mdd_stats_pos},
+            f"dist_to_upper<={args.dist_upper_hint_threshold*100:.1f}%": {"condition": f"dist_to_upper<={args.dist_upper_hint_threshold:.4f}", **mdd_stats_distu},
+        },
+        "forward_mdd20_slices_in_bucket": {
+            f"bucket={bucket} ∩ pos>={args.pos_hint_threshold:.2f}": {
+                "condition": f"(bucket=={bucket}) AND (pos_in_band>={args.pos_hint_threshold:.2f})",
+                **mdd_stats_pos_in_bucket,
+            },
+            f"bucket={bucket} ∩ dist_to_upper<={args.dist_upper_hint_threshold*100:.1f}%": {
+                "condition": f"(bucket=={bucket}) AND (dist_to_upper<={args.dist_upper_hint_threshold:.4f})",
+                **mdd_stats_distu_in_bucket,
+            },
+        },
         "fx_usdtwd": {
             "rate": fx_rate_strict,
             "used_policy": fx_used_policy,
@@ -902,24 +831,15 @@ def main() -> int:
             "close_twd_ref": close_twd_ref,
         },
         "notes": [
-            "BB computed on log(price_usd) where price_usd is adj_close when available.",
-            "forward_mdd20 computed on linear price_usd (same series as BB).",
-            "forward_mdd20_slices and *_in_bucket are reading-only; do NOT replace bucket-conditioned stats.",
-            "band_width_observation is independent reading-only; does NOT affect bucket rules nor main forward_mdd stats.",
-            "Consistency check uses logband geometry: expected dist_to_upper = (1+band_width_pct)^(1-pos) - 1.",
-            "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
-            "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated.",
+            "conf is statistical sample confidence tier (HIGH/MED/LOW/NA) based on n only.",
+            "conf_decision is decision sufficiency: OK if n>=min_n_required; LOW_FOR_DECISION if 0<n<min_n_required; NA if n==0.",
+            "FX strict uses exact same-date match: fx_history preferred; fx_latest same-date fallback allowed.",
+            "FX reference is only used when strict is missing; reference never backfills strict fields.",
         ],
     }
 
-    cache_dir = args.cache_dir
-    latest_path = os.path.join(cache_dir, "latest.json")
-    history_path = os.path.join(cache_dir, "history.json")
-    report_path = os.path.join(cache_dir, "report.md")
-
     _write_json(latest_path, latest)
 
-    # history row (compact)
     hist_row = {
         "date": last_date,
         "price_usd": last_price,
@@ -927,38 +847,14 @@ def main() -> int:
         "z": z,
         "pos_in_band": pos_in_band,
         "bucket": bucket,
-
         "band_width_pct": band_width_pct,
         "dist_to_upper": dist_to_upper,
-
         "p50_mdd20": mdd_stats_bucket.get("p50"),
         "p10_mdd20": mdd_stats_bucket.get("p10"),
         "min_mdd20": mdd_stats_bucket.get("min"),
         "n_mdd20": mdd_stats_bucket.get("n"),
-
-        "p50_mdd20_pos_ge": mdd_stats_pos.get("p50"),
-        "n_mdd20_pos_ge": mdd_stats_pos.get("n"),
-        "p50_mdd20_dist_u_le": mdd_stats_distu.get("p50"),
-        "n_mdd20_dist_u_le": mdd_stats_distu.get("n"),
-
-        "p50_mdd20_pos_ge_in_bucket": mdd_stats_pos_in_bucket.get("p50"),
-        "n_mdd20_pos_ge_in_bucket": mdd_stats_pos_in_bucket.get("n"),
-        "p50_mdd20_dist_u_le_in_bucket": mdd_stats_distu_in_bucket.get("p50"),
-        "n_mdd20_dist_u_le_in_bucket": mdd_stats_distu_in_bucket.get("n"),
-
-        "p50_mdd20_bw_low": mdd_bw_low.get("p50"),
-        "n_mdd20_bw_low": mdd_bw_low.get("n"),
-        "p50_mdd20_bw_high": mdd_bw_high.get("p50"),
-        "n_mdd20_bw_high": mdd_bw_high.get("n"),
-
-        "p50_mdd20_bw_low_in_bucket": mdd_bw_low_in_bucket.get("p50"),
-        "n_mdd20_bw_low_in_bucket": mdd_bw_low_in_bucket.get("n"),
-        "p50_mdd20_bw_high_in_bucket": mdd_bw_high_in_bucket.get("p50"),
-        "n_mdd20_bw_high_in_bucket": mdd_bw_high_in_bucket.get("n"),
-
         "fx_usdtwd": fx_rate_strict,
         "price_twd": price_twd,
-
         "fx_ref_date": ref_date if fx_rate_strict is None else None,
         "fx_ref_rate": ref_rate if fx_rate_strict is None else None,
         "fx_ref_lag_days": ref_lag_days if fx_rate_strict is None else None,
@@ -990,21 +886,11 @@ def main() -> int:
             return "NA"
         return f"{v:.{nd}f}"
 
-    def fmt_int(x: Any) -> str:
-        if x is None:
-            return "NA"
-        try:
-            return str(int(x))
-        except Exception:
-            return "NA"
-
     # Δ1D vs previous BB-valid day
     prev_date = None
     d_price_1d = None
     d_z_1d = None
     d_pos_1d = None
-    d_bw_1d = None
-    d_dist_u_1d = None
 
     if len(bb_valid.index) >= 2:
         prev_idx = bb_valid.index[-2]
@@ -1014,30 +900,14 @@ def main() -> int:
         prev_z = _safe_float(bb.loc[prev_idx, "z"]) if prev_idx in bb.index else None
         prev_pos = _safe_float(bb.loc[prev_idx, "pos"]) if prev_idx in bb.index else None
 
-        prev_upper = None
-        prev_lower = None
-        try:
-            prev_upper = float(np.exp(bb.loc[prev_idx, "upper"]))
-            prev_lower = float(np.exp(bb.loc[prev_idx, "lower"]))
-        except Exception:
-            prev_upper = None
-            prev_lower = None
-
-        prev_bw = _band_width_pct(prev_lower, prev_upper)
-        prev_dist_u = _dist_to_upper(prev_price, prev_upper)
-
-        if prev_price is not None and last_price is not None and prev_price > 0:
-            d_price_1d = (last_price / prev_price) - 1.0
+        if prev_price is not None and prev_price > 0 and last_price is not None:
+            d_price_1d = (last_price / float(prev_price)) - 1.0
         if prev_z is not None:
             d_z_1d = z - float(prev_z)
         if prev_pos is not None:
             d_pos_1d = pos_in_band - float(prev_pos)
-        if prev_bw is not None and band_width_pct is not None:
-            d_bw_1d = band_width_pct - float(prev_bw)
-        if prev_dist_u is not None and dist_to_upper is not None:
-            d_dist_u_1d = dist_to_upper - float(prev_dist_u)
 
-    # last 5 BB-valid days table
+    # last 5 BB-valid days mini table
     tail_n = 5
     tail_idx = list(bb_valid.index[-tail_n:]) if len(bb_valid.index) > 0 else []
     tail_rows: List[Dict[str, Any]] = []
@@ -1051,12 +921,17 @@ def main() -> int:
         except Exception:
             uu = None
         dist_u = _dist_to_upper(p, uu)
-        bkt = bucket_from_z(float(zz)) if zz is not None else "NA"
+        bkt = _safe_bucket(zz) if zz is not None else "UNKNOWN"
         tail_rows.append({"date": d, "price_usd": p, "z": zz, "pos": pp, "bucket": bkt, "dist_to_upper": dist_u})
 
-    # build report
+    def _slice_line(name: str, s: Dict[str, Any]) -> str:
+        return (
+            f"- {name}: p50={fmt_pct(s.get('p50'))}, p10={fmt_pct(s.get('p10'))}, "
+            f"min={fmt_pct(s.get('min'))}, n={s.get('n')}, conf={s.get('conf')}, conf_decision={s.get('conf_decision')}"
+        )
+
     R: List[str] = []
-    R.append("# VT BB Monitor Report (VT + optional USD/TWD)")
+    R.append(f"# {args.ticker} BB Monitor Report ({args.ticker} + optional USD/TWD)")
     R.append("")
     R.append(f"- report_generated_at_utc: `{generated_at_utc}`")
     R.append(f"- data_date: `{last_date}`")
@@ -1066,14 +941,19 @@ def main() -> int:
 
     R.append("## 15秒摘要")
     R.append(
-        f"- **VT** ({last_date} price_usd={fmt_money(last_price, 4)}) → **{bucket}** "
-        f"(z={fmt_num(z, 4)}, pos={fmt_num(pos_in_band, 4)}); "
-        f"dist_to_lower={fmt_pct(dist_to_lower)}; dist_to_upper={fmt_pct(dist_to_upper)}; "
-        f"{args.forward_days}D forward_mdd: p50={fmt_pct(mdd_stats_bucket.get('p50'))}, "
-        f"p10={fmt_pct(mdd_stats_bucket.get('p10'))}, min={fmt_pct(mdd_stats_bucket.get('min'))} "
-        f"(n={mdd_stats_bucket.get('n')}, conf={mdd_stats_bucket.get('conf')}, "
-        f"conf_decision={mdd_stats_bucket.get('conf_decision')}, min_n_required={mdd_stats_bucket.get('min_n_required')})"
+        f"- **{args.ticker}** ({last_date} price_usd={fmt_money(last_price, 4)}) → **{bucket}** "
+        f"(z={fmt_num(z, 4)}, pos={fmt_num(pos_in_band, 4)}); dist_to_lower={fmt_pct(dist_to_lower)}; dist_to_upper={fmt_pct(dist_to_upper)}; "
+        f"{args.forward_days}D forward_mdd: p50={fmt_pct(mdd_stats_bucket.get('p50'))}, p10={fmt_pct(mdd_stats_bucket.get('p10'))}, min={fmt_pct(mdd_stats_bucket.get('min'))} "
+        f"(n={mdd_stats_bucket.get('n')}, conf={mdd_stats_bucket.get('conf')}, conf_decision={mdd_stats_bucket.get('conf_decision')}, min_n_required={mdd_stats_bucket.get('min_n_required')})"
     )
+    R.append("")
+
+    R.append("## Forward MDD slices（摘要）")
+    R.append("（閱讀用；不替換 bucket-conditioned 主統計。conf_decision 低於 OK 時，樣本數不足以作決策依據。）")
+    R.append(_slice_line(f"pos>={args.pos_hint_threshold:.2f}", mdd_stats_pos))
+    R.append(_slice_line(f"dist_to_upper<={args.dist_upper_hint_threshold*100:.1f}%", mdd_stats_distu))
+    R.append(_slice_line(f"bucket={bucket} ∩ pos>={args.pos_hint_threshold:.2f}", mdd_stats_pos_in_bucket))
+    R.append(_slice_line(f"bucket={bucket} ∩ dist_to_upper<={args.dist_upper_hint_threshold*100:.1f}%", mdd_stats_distu_in_bucket))
     R.append("")
 
     R.append("## Δ1D（一日變動；以前一個「可計算 BB 的交易日」為基準）")
@@ -1084,20 +964,6 @@ def main() -> int:
         R.append(f"- Δprice_1d: {fmt_pct(d_price_1d)}")
         R.append(f"- Δz_1d: {fmt_num(d_z_1d, 4)}")
         R.append(f"- Δpos_1d: {fmt_num(d_pos_1d, 4)}")
-        R.append(f"- Δband_width_1d: {fmt_pct(d_bw_1d)}")
-        R.append(f"- Δdist_to_upper_1d: {fmt_pct(d_dist_u_1d)}")
-    R.append("")
-
-    R.append("## 解讀重點（更詳盡）")
-    R.append(f"- **Band 位置**：pos={fmt_num(pos_in_band, 4)}（≥{args.pos_hint_threshold:.2f} 視為「靠近上緣」閱讀提示；此提示不改 bucket 規則）")
-    R.append(f"- **距離上下軌**：dist_to_upper={fmt_pct(dist_to_upper)}；dist_to_lower={fmt_pct(dist_to_lower)}")
-    R.append(f"- **波動區間寬度（閱讀用）**：band_width≈{fmt_pct(band_width_pct)}（= upper/lower - 1；用於直覺理解，不作信號）")
-    R.append(f"- **streak（連續天數）**：bucket_streak={bucket_streak}；pos≥{args.pos_hint_threshold:.2f} streak={pos_streak}；dist_to_upper≤{args.dist_upper_hint_threshold*100:.1f}% streak={distu_streak}")
-    R.append(
-        f"- **forward_mdd({args.forward_days}D)**（bucket={bucket}）："
-        f"p50={fmt_pct(mdd_stats_bucket.get('p50'))}、p10={fmt_pct(mdd_stats_bucket.get('p10'))}、min={fmt_pct(mdd_stats_bucket.get('min'))}；"
-        f"n={mdd_stats_bucket.get('n')}（conf={mdd_stats_bucket.get('conf')}；conf_decision={mdd_stats_bucket.get('conf_decision')}）"
-    )
     R.append("")
 
     R.append("## pos vs dist_to_upper 一致性檢查（提示用；不改數值）")
@@ -1105,84 +971,16 @@ def main() -> int:
     R.append(f"- reason: `{consistency_check.get('reason')}`")
     if "expected_dist_to_upper" in consistency_check:
         R.append(f"- expected_dist_to_upper(logband): `{fmt_pct(consistency_check.get('expected_dist_to_upper'))}`")
+    if "abs_err" in consistency_check:
+        R.append(f"- abs_err: `{fmt_num(consistency_check.get('abs_err'), 8)}`; abs_tol: `{fmt_num(consistency_check.get('abs_tol'), 8)}`")
     if "rel_err" in consistency_check:
-        R.append(f"- rel_err: `{fmt_num(consistency_check.get('rel_err'), 6)}`; tolerance: `{fmt_num(consistency_check.get('tolerance'), 6)}`")
-    R.append("")
-
-    R.append(f"## forward_mdd({args.forward_days}D) 切片分布（閱讀用；不回填主欄位）")
-    R.append("")
-    R.append(
-        f"- Slice A（pos≥{args.pos_hint_threshold:.2f}）："
-        f"p50={fmt_pct(mdd_stats_pos.get('p50'))}、p10={fmt_pct(mdd_stats_pos.get('p10'))}、min={fmt_pct(mdd_stats_pos.get('min'))} "
-        f"(n={mdd_stats_pos.get('n')}, conf={mdd_stats_pos.get('conf')}, conf_decision={mdd_stats_pos.get('conf_decision')}, min_n_required={mdd_stats_pos.get('min_n_required')})"
-    )
-    R.append(
-        f"- Slice B（dist_to_upper≤{args.dist_upper_hint_threshold*100:.1f}%）："
-        f"p50={fmt_pct(mdd_stats_distu.get('p50'))}、p10={fmt_pct(mdd_stats_distu.get('p10'))}、min={fmt_pct(mdd_stats_distu.get('min'))} "
-        f"(n={mdd_stats_distu.get('n')}, conf={mdd_stats_distu.get('conf')}, conf_decision={mdd_stats_distu.get('conf_decision')}, min_n_required={mdd_stats_distu.get('min_n_required')})"
-    )
-    R.append("- 注意：conf_decision 低於 OK 時，代表樣本數不足以支撐「拿來做決策」；仍可作為閱讀參考。")
-    R.append("")
-
-    R.append(f"## forward_mdd({args.forward_days}D) 交集切片（bucket 內；閱讀用；不回填主欄位）")
-    R.append("")
-    R.append(
-        f"- Slice A_inBucket（bucket={bucket} ∩ pos≥{args.pos_hint_threshold:.2f}）："
-        f"p50={fmt_pct(mdd_stats_pos_in_bucket.get('p50'))}、p10={fmt_pct(mdd_stats_pos_in_bucket.get('p10'))}、min={fmt_pct(mdd_stats_pos_in_bucket.get('min'))} "
-        f"(n={mdd_stats_pos_in_bucket.get('n')}, conf={mdd_stats_pos_in_bucket.get('conf')}, conf_decision={mdd_stats_pos_in_bucket.get('conf_decision')}, min_n_required={mdd_stats_pos_in_bucket.get('min_n_required')})"
-    )
-    R.append(
-        f"- Slice B_inBucket（bucket={bucket} ∩ dist_to_upper≤{args.dist_upper_hint_threshold*100:.1f}%）："
-        f"p50={fmt_pct(mdd_stats_distu_in_bucket.get('p50'))}、p10={fmt_pct(mdd_stats_distu_in_bucket.get('p10'))}、min={fmt_pct(mdd_stats_distu_in_bucket.get('min'))} "
-        f"(n={mdd_stats_distu_in_bucket.get('n')}, conf={mdd_stats_distu_in_bucket.get('conf')}, conf_decision={mdd_stats_distu_in_bucket.get('conf_decision')}, min_n_required={mdd_stats_distu_in_bucket.get('min_n_required')})"
-    )
-    R.append("- 說明：交集切片用於回答「在同一個 bucket/regime 內，貼上緣時的 forward_mdd 分布」；避免全樣本切片混入不同 regime。")
-    R.append("")
-
-    R.append("## band_width 分位數觀察（獨立項目；不改 bucket / 不回填主欄位）")
-    R.append("")
-    if bw_p20 is None or bw_p80 is None or bw_pctl is None:
-        R.append("- 狀態：`NA`（band_width 分位數樣本不足或計算失敗）")
-    else:
-        R.append(f"- band_width_current: {fmt_pct(band_width_pct)}; percentile≈{fmt_num(bw_pctl, 2)}")
-        R.append(
-            f"- quantiles: p{int(args.bw_low_q)}={fmt_pct(bw_p20)}, p50={fmt_pct(bw_p50)}, p{int(args.bw_high_q)}={fmt_pct(bw_p80)} "
-            f"(n_bw_samples={fmt_int(band_width_observation['quantiles']['n_bw_samples'])})"
-        )
-        R.append(f"- streak: bw≤p{int(args.bw_low_q)} streak={fmt_int(band_width_observation['streak']['bw_le_p_low_streak'])}; "
-                 f"bw≥p{int(args.bw_high_q)} streak={fmt_int(band_width_observation['streak']['bw_ge_p_high_streak'])}")
-        R.append("")
-        R.append(f"### forward_mdd({args.forward_days}D) × band_width（全樣本切片；閱讀用）")
-        R.append(
-            f"- BW_LOW（bw≤p{int(args.bw_low_q)}）："
-            f"p50={fmt_pct(mdd_bw_low.get('p50'))}、p10={fmt_pct(mdd_bw_low.get('p10'))}、min={fmt_pct(mdd_bw_low.get('min'))} "
-            f"(n={mdd_bw_low.get('n')}, conf={mdd_bw_low.get('conf')}, conf_decision={mdd_bw_low.get('conf_decision')})"
-        )
-        R.append(
-            f"- BW_HIGH（bw≥p{int(args.bw_high_q)}）："
-            f"p50={fmt_pct(mdd_bw_high.get('p50'))}、p10={fmt_pct(mdd_bw_high.get('p10'))}、min={fmt_pct(mdd_bw_high.get('min'))} "
-            f"(n={mdd_bw_high.get('n')}, conf={mdd_bw_high.get('conf')}, conf_decision={mdd_bw_high.get('conf_decision')})"
-        )
-        R.append("")
-        R.append(f"### forward_mdd({args.forward_days}D) × band_width（bucket 內交集；閱讀用）")
-        R.append(
-            f"- BW_LOW_inBucket（bucket={bucket} ∩ bw≤p{int(args.bw_low_q)}）："
-            f"p50={fmt_pct(mdd_bw_low_in_bucket.get('p50'))}、p10={fmt_pct(mdd_bw_low_in_bucket.get('p10'))}、min={fmt_pct(mdd_bw_low_in_bucket.get('min'))} "
-            f"(n={mdd_bw_low_in_bucket.get('n')}, conf={mdd_bw_low_in_bucket.get('conf')}, conf_decision={mdd_bw_low_in_bucket.get('conf_decision')})"
-        )
-        R.append(
-            f"- BW_HIGH_inBucket（bucket={bucket} ∩ bw≥p{int(args.bw_high_q)}）："
-            f"p50={fmt_pct(mdd_bw_high_in_bucket.get('p50'))}、p10={fmt_pct(mdd_bw_high_in_bucket.get('p10'))}、min={fmt_pct(mdd_bw_high_in_bucket.get('min'))} "
-            f"(n={mdd_bw_high_in_bucket.get('n')}, conf={mdd_bw_high_in_bucket.get('conf')}, conf_decision={mdd_bw_high_in_bucket.get('conf_decision')})"
-        )
-        R.append("- 說明：這是「獨立觀察項」，用來觀察 band 寬窄是否改變 forward_mdd 的尾部形狀；不作為信號。")
+        R.append(f"- rel_err: `{fmt_num(consistency_check.get('rel_err'), 6)}`; rel_tolerance: `{fmt_num(consistency_check.get('rel_tolerance'), 6)}`")
     R.append("")
 
     R.append("## 近 5 日（可計算 BB 的交易日；小表）")
     R.append("")
     if not tail_rows:
         R.append("- `NA`（無可計算 BB 的資料）")
-        R.append("")
     else:
         R.append("| date | price_usd | z | pos | bucket | dist_to_upper |")
         R.append("|---|---:|---:|---:|---|---:|")
@@ -1190,29 +988,6 @@ def main() -> int:
             R.append(
                 f"| {tr['date']} | {fmt_money(tr['price_usd'], 4)} | {fmt_num(tr['z'], 4)} | {fmt_num(tr['pos'], 4)} | {tr['bucket']} | {fmt_pct(tr['dist_to_upper'])} |"
             )
-        R.append("")
-
-    R.append("## BB 詳細（可稽核欄位）")
-    R.append("")
-    R.append("| field | value | note |")
-    R.append("|---|---:|---|")
-    R.append(f"| price_usd | {fmt_money(last_price, 4)} | {price_mode} |")
-    R.append(f"| close_usd | {fmt_money(last_close, 4) if last_close is not None else 'NA'} | raw close (for reference) |")
-    R.append(f"| z | {fmt_num(z, 4)} | log(price) z-score vs BB mean/stdev |")
-    R.append(f"| pos_in_band | {fmt_num(pos_in_band, 4)} | (logp-lower)/(upper-lower) clipped [0,1] |")
-    R.append(f"| lower_usd | {fmt_money(lower_lin, 4)} | exp(lower_log) |")
-    R.append(f"| upper_usd | {fmt_money(upper_lin, 4)} | exp(upper_log) |")
-    R.append(f"| dist_to_lower | {fmt_pct(dist_to_lower)} | (price-lower)/price |")
-    R.append(f"| dist_to_upper | {fmt_pct(dist_to_upper)} | (upper-price)/price |")
-    R.append(f"| band_width | {fmt_pct(band_width_pct)} | (upper/lower - 1) reading-only |")
-    R.append(f"| bucket | {bucket} | based on z thresholds |")
-    R.append("")
-
-    R.append(f"## forward_mdd({args.forward_days}D)（分布解讀）")
-    R.append("")
-    R.append("- 定義：對每一天 t，觀察未來 N 天（t+1..t+N）中的**最低價**相對於當日價的跌幅：min(future)/p0 - 1。")
-    R.append("- 理論限制：此值應永遠 <= 0；若 >0，代表對齊/定義錯誤（或資料異常）。")
-    R.append(f"- 你目前看到的是 **bucket={bucket}** 條件下的歷史樣本分布（不是預測）。")
     R.append("")
 
     R.append("## FX (USD/TWD)（嚴格同日對齊 + 落後參考值）")
@@ -1221,6 +996,7 @@ def main() -> int:
     R.append(f"- fx_rate_strict (for {last_date}): `{fmt_num(fx_rate_strict, 4)}`")
     R.append(f"- derived price_twd (strict): `{fmt_money(price_twd, 2)}`")
     R.append("")
+
     R.append("### Reference（僅供參考；使用落後 FX 且標註落後天數）")
     if fx_rate_strict is None and ref_rate is not None:
         R.append(f"- fx_ref_source: `{ref_source}`")
@@ -1234,20 +1010,11 @@ def main() -> int:
         R.append("- fx_ref: `NA` (strict match exists, or no usable reference rate)")
     R.append("")
 
-    R.append("## Data Quality / Staleness 提示（不改數值，只提示狀態）")
-    if fx_rate_strict is None and ref_lag_days is not None:
-        R.append(f"- FX strict 缺值，已提供 Reference；lag_days={ref_lag_days}。")
-    else:
-        R.append("- FX strict 有值（同日對齊成立）或無可用參考。")
-    R.append("- 若遇到長假/休市期間，FX strict 為 NA 屬於正常現象；Reference 會明確標註落後天數。")
-    R.append("")
-
     R.append("## Notes")
-    R.append("- bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。")
-    R.append("- Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。")
-    R.append("- forward_mdd 切片（含 in-bucket / band_width）為閱讀用；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。")
-    R.append("- pos vs dist_to_upper 一致性檢查已改為 logband 幾何一致性（避免線性近似誤判）。")
-    R.append("- FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。")
+    R.append("- conf 是「樣本數分級的統計信心」；conf_decision 是「是否足夠用於決策」的門檻判定。")
+    R.append("- conf_decision: OK 表示 n>=min_n_required；LOW_FOR_DECISION 表示樣本不足但可閱讀；NA 表示完全無樣本。")
+    R.append("- FX strict 只接受同日對齊；來源優先 fx_history，其次 fx_latest 同日 fallback。")
+    R.append("- FX reference 只在 strict 缺值時提供，且永不回填 strict 欄位。")
     R.append("")
 
     _write_text(report_path, "\n".join(R))
