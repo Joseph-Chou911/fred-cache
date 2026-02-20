@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v15"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v16"
 
 
 def utc_now_iso() -> str:
@@ -107,6 +107,12 @@ def safe_get(d: Any, k: str, default=None):
 def load_json(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def write_json(path: str, obj: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=True)
 
 
 def normalize_date_key(x: Any) -> Optional[str]:
@@ -751,6 +757,156 @@ def _best_price_used(latest: Dict[str, Any]) -> Optional[float]:
     return None
 
 
+# ---------------- NEW: forward_mdd_conditional stats_out builder ----------------
+
+def _conditional_bucket_policy() -> List[Dict[str, Any]]:
+    # User-specified bucket definitions (must be explicit and audit-friendly)
+    return [
+        {"id": "z_le_-2.0", "rule": "bb_z<=-2.0"},
+        {"id": "-2.0_to_-1.5", "rule": "-2.0<bb_z<=-1.5"},
+        {"id": "-1.5_to_1.5", "rule": "-1.5<bb_z<1.5"},
+        {"id": "1.5_to_2.0", "rule": "1.5<=bb_z<2.0"},
+        {"id": "z_ge_2.0", "rule": "bb_z>=2.0"},
+    ]
+
+
+def _ensure_forward_mdd_conditional_meta(
+    fwd_cond: Dict[str, Any],
+    *,
+    fwd_days: int,
+    fwd_days_short: int,
+    forward_mode_primary: str,
+) -> Dict[str, Any]:
+    """
+    Ensures meta exists and explicitly documents the bucket policy requested by user.
+    Does NOT attempt to recompute conditional stats here (audit-first: compute should happen upstream).
+    """
+    out = dict(fwd_cond) if isinstance(fwd_cond, dict) else {}
+    meta = safe_get(out, "meta", {}) or {}
+    if not isinstance(meta, dict):
+        meta = {}
+
+    # Keep upstream meta if present; only add/override policy documentation fields.
+    meta.setdefault("scheme", "bb_z_5bucket_v1")
+    meta.setdefault("thresholds", {"near": 1.5, "extreme": 2.0})
+    meta["bucket_policy"] = _conditional_bucket_policy()
+    meta["horizons"] = {"primary_days": int(fwd_days), "short_days": int(fwd_days_short)}
+    meta["modes"] = {"available": ["raw", "clean", "primary"], "primary": str(forward_mode_primary)}
+
+    out["meta"] = meta
+    return out
+
+
+def pick_forward_mdd_conditional_from_stats(s: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Locate forward_mdd_conditional in stats_latest.json.
+    We try multiple plausible locations to be robust to schema evolution.
+    """
+    cand = safe_get(s, "forward_mdd_conditional", None)
+    if isinstance(cand, dict) and cand:
+        return cand
+
+    # Some schemas may nest under break_detection or meta
+    meta = safe_get(s, "meta", {}) or {}
+    bd = safe_get(meta, "break_detection", {}) or {}
+    cand2 = safe_get(bd, "forward_mdd_conditional", None)
+    if isinstance(cand2, dict) and cand2:
+        return cand2
+
+    cand3 = safe_get(meta, "forward_mdd_conditional", None)
+    if isinstance(cand3, dict) and cand3:
+        return cand3
+
+    return None
+
+
+def build_stats_out(
+    *,
+    stats_path: str,
+    meta: Dict[str, Any],
+    latest: Dict[str, Any],
+    dq: Dict[str, Any],
+    forward_mode_primary: str,
+    fwd_days: int,
+    fwd_days_short: int,
+    forward_mdd_conditional: Optional[Dict[str, Any]],
+) -> Tuple[Dict[str, Any], List[str]]:
+    """
+    Build a lightweight stats_out object for downstream consumption.
+
+    Returns: (stats_out, extra_dq_flags)
+    """
+    extra_flags: List[str] = []
+
+    ticker = safe_get(meta, "ticker", "0050.TW")
+    last_date = safe_get(meta, "last_date", "N/A")
+    bb_window = safe_get(meta, "bb_window", 60)
+    bb_k = safe_get(meta, "bb_k", 2.0)
+    price_calc = safe_get(meta, "price_calc", "adjclose")
+    data_source = safe_get(meta, "data_source", "yfinance_yahoo_or_twse_fallback")
+
+    state = safe_get(latest, "state", "N/A")
+    bb_z = _to_float(safe_get(latest, "bb_z"))
+    price_used = _best_price_used(latest)
+
+    dist_to_lower = _to_float(safe_get(latest, "dist_to_lower_pct"))
+    dist_to_upper = _to_float(safe_get(latest, "dist_to_upper_pct"))
+
+    fwd_cond_out: Dict[str, Any]
+    if forward_mdd_conditional is None:
+        extra_flags.append("FWD_MDD_CONDITIONAL_MISSING")
+        fwd_cond_out = _ensure_forward_mdd_conditional_meta(
+            {"missing": True},
+            fwd_days=fwd_days,
+            fwd_days_short=fwd_days_short,
+            forward_mode_primary=forward_mode_primary,
+        )
+    else:
+        fwd_cond_out = _ensure_forward_mdd_conditional_meta(
+            forward_mdd_conditional,
+            fwd_days=fwd_days,
+            fwd_days_short=fwd_days_short,
+            forward_mode_primary=forward_mode_primary,
+        )
+
+    # Keep dq as-is; append extra flags locally (do not mutate stats_latest.json in-place)
+    dq_flags = safe_get(dq, "flags", []) or []
+    dq_notes = safe_get(dq, "notes", []) or []
+    if not isinstance(dq_flags, list):
+        dq_flags = []
+    if not isinstance(dq_notes, list):
+        dq_notes = []
+
+    dq_flags_out = [str(x) for x in dq_flags if isinstance(x, str) and x.strip()]
+    dq_flags_out.extend(extra_flags)
+
+    out: Dict[str, Any] = {
+        "module": "tw0050_bb_cache",
+        "stats_in_path": str(stats_path),
+        "generated_at_utc": utc_now_iso(),
+        "build_script_fingerprint": BUILD_SCRIPT_FINGERPRINT,
+        "ticker": ticker,
+        "last_date": last_date,
+        "bb_window": bb_window,
+        "bb_k": bb_k,
+        "price_calc": price_calc,
+        "data_source": data_source,
+        "forward_mode_primary": forward_mode_primary,
+        "latest": {
+            "state": state,
+            "bb_z": bb_z,
+            "price_used": price_used,
+            "dist_to_lower_pct": dist_to_lower,
+            "dist_to_upper_pct": dist_to_upper,
+        },
+        # >>> requested new field
+        "forward_mdd_conditional": fwd_cond_out,
+        # dq passthrough + extras for audit
+        "dq": {"flags": dq_flags_out, "notes": [str(x) for x in dq_notes if isinstance(x, str) and x.strip()]},
+    }
+    return out, extra_flags
+
+
 # ---------------- Pledge block extraction (from stats) ----------------
 
 def extract_pledge_from_stats(s: Dict[str, Any]) -> Dict[str, Any]:
@@ -1349,6 +1505,14 @@ def main() -> int:
     ap.add_argument("--accumulate_z", type=float, default=None, help="bb_z <= accumulate_z => ACCUMULATE_TRANCHE (override)")
     ap.add_argument("--no_chase_z", type=float, default=None, help="bb_z >= no_chase_z => NO_CHASE (override)")
 
+    # NEW: stats_out output
+    ap.add_argument(
+        "--stats_out",
+        default=None,
+        help="Write stats_out JSON to this path (default: <cache_dir>/stats_out.json). "
+             "Set to 'none' or empty to disable.",
+    )
+
     args = ap.parse_args()
 
     tail_n = args.tail_n if args.tail_n is not None else args.tail_days
@@ -1420,6 +1584,29 @@ def main() -> int:
         except Exception:
             margin_info = None
 
+    # NEW: forward_mdd_conditional picked from stats and written into stats_out
+    fwd_cond_in = pick_forward_mdd_conditional_from_stats(s)
+
+    stats_out_path = args.stats_out
+    if stats_out_path is None:
+        stats_out_path = os.path.join(args.cache_dir, "stats_out.json")
+    if isinstance(stats_out_path, str) and stats_out_path.strip().lower() in ("", "none", "null", "disable", "disabled"):
+        stats_out_path = None
+
+    if stats_out_path:
+        stats_out_obj, extra_flags = build_stats_out(
+            stats_path=stats_path,
+            meta=meta,
+            latest=latest,
+            dq=dq,
+            forward_mode_primary=forward_mode_primary,
+            fwd_days=fwd_days,
+            fwd_days_short=fwd_days_short,
+            forward_mdd_conditional=fwd_cond_in,
+        )
+        write_json(stats_out_path, stats_out_obj)
+        # Note: we do not mutate report dq flags; stats_out carries the extra flags
+
     lines: List[str] = []
     lines.append("# 0050 BB(60,2) + forward_mdd Report")
     lines.append("")
@@ -1439,6 +1626,9 @@ def main() -> int:
     if bool(safe_get(pledge_stats, "present", False)):
         lines.append(f"- pledge_version: `{safe_get(pledge_stats,'version','N/A')}`")
         lines.append(f"- pledge_scope: `{safe_get(pledge_stats,'scope','N/A')}`")
+    if stats_out_path:
+        lines.append(f"- stats_out_path: `{stats_out_path}`")
+        lines.append(f"- stats_out_contains_forward_mdd_conditional: `{str(bool(fwd_cond_in is not None)).lower()}`")
     lines.append("")
 
     lines.append("## 快速摘要（非預測，僅狀態）")
@@ -1758,12 +1948,15 @@ def main() -> int:
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被企業行動污染，DQ 會標示。")
     lines.append("- 融資 overlay 屬於市場整體槓桿 proxy；日期不對齊時 overlay 會標示 MISALIGNED。")
     lines.append("- Pledge Guidance v2 為報告層 sizing 提案：不改 stats，不構成投資建議。")
+    lines.append("- stats_out（若啟用）為下游消費用摘要；本腳本不在此重算 forward_mdd_conditional，只做「取用 + 明確 bucket policy 記錄」。")
     lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     print(f"Wrote report: {args.out}")
+    if stats_out_path:
+        print(f"Wrote stats_out: {stats_out_path}")
     return 0
 
 
