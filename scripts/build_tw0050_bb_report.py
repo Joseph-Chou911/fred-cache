@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v10"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v11"
 
 
 def utc_now_iso() -> str:
@@ -37,11 +37,29 @@ def fmt2(x: Any) -> str:
         return "N/A"
 
 
+def fmt_price2(x: Any) -> str:
+    try:
+        if x is None:
+            return "N/A"
+        return f"{float(x):.2f}"
+    except Exception:
+        return "N/A"
+
+
 def fmt_pct2(x: Any) -> str:
     try:
         if x is None:
             return "N/A"
         return f"{float(x):.2f}%"
+    except Exception:
+        return "N/A"
+
+
+def fmt_signed_pct2(x: Any) -> str:
+    try:
+        if x is None:
+            return "N/A"
+        return f"{float(x):+.2f}%"
     except Exception:
         return "N/A"
 
@@ -254,7 +272,6 @@ def _extract_fwd_outlier_days(dq_flags: List[str]) -> List[int]:
             continue
         if not f.endswith("D"):
             continue
-        # suffix pattern: _{N}D
         try:
             tail = f.split("_")[-1]  # e.g. "20D"
             if tail.endswith("D"):
@@ -393,19 +410,15 @@ def sum_chg(rows: List[Dict[str, Any]]) -> float:
     return float(s)
 
 
-def margin_overlay_block(
+def margin_overlay_struct(
     margin_json: Dict[str, Any],
     price_last_date: str,
     window_n: int,
     threshold_yi: float,
-) -> Tuple[List[str], Optional[str]]:
-    lines: List[str] = []
+) -> Dict[str, Any]:
     series = safe_get(margin_json, "series", {}) or {}
     twse = safe_get(series, "TWSE", {}) or {}
     tpex = safe_get(series, "TPEX", {}) or {}
-
-    gen_utc = safe_get(margin_json, "generated_at_utc", "N/A")
-    data_date = safe_get(twse, "data_date", None) or safe_get(tpex, "data_date", None) or "N/A"
 
     twse_rows = safe_get(twse, "rows", []) or []
     tpex_rows = safe_get(tpex, "rows", []) or []
@@ -427,6 +440,50 @@ def margin_overlay_block(
     twse_state = margin_state(twse_sum, threshold_yi)
     tpex_state = margin_state(tpex_sum, threshold_yi)
     total_state = margin_state(total_sum, threshold_yi)
+
+    data_date = safe_get(twse, "data_date", None) or safe_get(tpex, "data_date", None) or "N/A"
+    gen_utc = safe_get(margin_json, "generated_at_utc", "N/A")
+
+    return {
+        "generated_at_utc": gen_utc,
+        "data_date": data_date,
+        "margin_last_date": margin_last_date,
+        "align_tag": align_tag,
+        "aligned": aligned,
+        "window_n": window_n,
+        "threshold_yi": threshold_yi,
+        "twse_sum": twse_sum,
+        "tpex_sum": tpex_sum,
+        "total_sum": total_sum,
+        "twse_state": twse_state,
+        "tpex_state": tpex_state,
+        "total_state": total_state,
+    }
+
+
+def margin_overlay_block(
+    margin_json: Dict[str, Any],
+    price_last_date: str,
+    window_n: int,
+    threshold_yi: float,
+) -> Tuple[List[str], Optional[str]]:
+    lines: List[str] = []
+
+    info = margin_overlay_struct(
+        margin_json=margin_json,
+        price_last_date=price_last_date,
+        window_n=window_n,
+        threshold_yi=threshold_yi,
+    )
+
+    series = safe_get(margin_json, "series", {}) or {}
+    twse = safe_get(series, "TWSE", {}) or {}
+    tpex = safe_get(series, "TPEX", {}) or {}
+    twse_rows = safe_get(twse, "rows", []) or []
+    tpex_rows = safe_get(tpex, "rows", []) or []
+
+    twse_last = twse_rows[0]["date"] if (isinstance(twse_rows, list) and len(twse_rows) > 0) else None
+    tpex_last = tpex_rows[0]["date"] if (isinstance(tpex_rows, list) and len(tpex_rows) > 0) else None
 
     def latest_balance(rows: List[Dict[str, Any]]) -> Optional[float]:
         try:
@@ -452,18 +509,18 @@ def margin_overlay_block(
     tpex_chg_today = latest_chg(tpex_rows)
 
     quick = (
-        f"- margin({window_n}D,thr={threshold_yi:.2f}億): TOTAL {total_sum:.2f} 億 => **{total_state}**; "
-        f"TWSE {twse_sum:.2f} / TPEX {tpex_sum:.2f}; "
-        f"margin_date={margin_last_date}, price_last_date={price_last_date} ({align_tag}); data_date={data_date}"
+        f"- margin({window_n}D,thr={threshold_yi:.2f}億): TOTAL {info['total_sum']:.2f} 億 => **{info['total_state']}**; "
+        f"TWSE {info['twse_sum']:.2f} / TPEX {info['tpex_sum']:.2f}; "
+        f"margin_date={info['margin_last_date']}, price_last_date={price_last_date} ({info['align_tag']}); data_date={info['data_date']}"
     )
 
     lines.append("## Margin Overlay（融資）")
     lines.append("")
-    lines.append(f"- overlay_generated_at_utc: `{gen_utc}`")
-    lines.append(f"- data_date: `{data_date}`")
+    lines.append(f"- overlay_generated_at_utc: `{info['generated_at_utc']}`")
+    lines.append(f"- data_date: `{info['data_date']}`")
     lines.append(f"- params: window_n={window_n}, threshold_yi={threshold_yi:.2f}")
     lines.append(
-        f"- date_alignment: margin_latest_date=`{margin_last_date}` vs price_last_date=`{price_last_date}` => **{align_tag}**"
+        f"- date_alignment: margin_latest_date=`{info['margin_last_date']}` vs price_last_date=`{price_last_date}` => **{info['align_tag']}**"
     )
     lines.append("")
     lines.append("| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |")
@@ -478,13 +535,13 @@ def margin_overlay_block(
             return "N/A"
 
     lines.append(
-        f"| TWSE | {twse_last or 'N/A'} | {fmt_yi(twse_bal)} | {fmt_yi(twse_chg_today)} | {twse_sum:.1f} | {twse_state} | {len(twse_n)} |"
+        f"| TWSE | {twse_last or 'N/A'} | {fmt_yi(twse_bal)} | {fmt_yi(twse_chg_today)} | {info['twse_sum']:.1f} | {info['twse_state']} | {len(take_last_n_rows(twse_rows, window_n))} |"
     )
     lines.append(
-        f"| TPEX | {tpex_last or 'N/A'} | {fmt_yi(tpex_bal)} | {fmt_yi(tpex_chg_today)} | {tpex_sum:.1f} | {tpex_state} | {len(tpex_n)} |"
+        f"| TPEX | {tpex_last or 'N/A'} | {fmt_yi(tpex_bal)} | {fmt_yi(tpex_chg_today)} | {info['tpex_sum']:.1f} | {info['tpex_state']} | {len(take_last_n_rows(tpex_rows, window_n))} |"
     )
     lines.append(
-        f"| TOTAL | {margin_last_date} | {fmt_yi(total_bal)} | N/A | {total_sum:.1f} | {total_state} | N/A |"
+        f"| TOTAL | {info['margin_last_date']} | {fmt_yi(total_bal)} | N/A | {info['total_sum']:.1f} | {info['total_state']} | N/A |"
     )
     lines.append("")
     lines.append("### Margin Sources")
@@ -673,6 +730,196 @@ def _infer_forward_mode_primary(meta: Dict[str, Any], fwd20_label: str) -> str:
     return "N/A"
 
 
+def _to_float(x: Any) -> Optional[float]:
+    try:
+        if x is None:
+            return None
+        return float(x)
+    except Exception:
+        return None
+
+
+def _best_price_used(latest: Dict[str, Any]) -> Optional[float]:
+    for k in ["price_used", "adjclose", "close"]:
+        v = _to_float(safe_get(latest, k))
+        if v is not None:
+            return v
+    return None
+
+
+def _calc_level(price: Optional[float], mdd: Optional[float]) -> Optional[float]:
+    if price is None or mdd is None:
+        return None
+    try:
+        return float(price) * (1.0 + float(mdd))
+    except Exception:
+        return None
+
+
+def build_deterministic_action_block(
+    *,
+    meta: Dict[str, Any],
+    latest: Dict[str, Any],
+    trend: Dict[str, Any],
+    vol: Dict[str, Any],
+    regime: Dict[str, Any],
+    fwd20: Dict[str, Any],
+    fwd10: Dict[str, Any],
+    dq_flags: List[str],
+    margin_info: Optional[Dict[str, Any]],
+    accumulate_z: float,
+    no_chase_z: float,
+) -> List[str]:
+    """
+    Deterministic, report-only action guidance.
+    Uses:
+      - latest.state, latest.bb_z, latest.price_used
+      - regime.allowed, regime.inputs.rv_ann_pctl, regime.tag
+      - trend.state
+      - forward_mdd quantiles (unconditional)
+      - (optional) margin_info.total_state when aligned
+    """
+    lines: List[str] = []
+    lines.append("## Deterministic Action (report-only; non-predictive)")
+    lines.append("")
+    lines.append("- policy: deterministic rules on existing stats fields only (no forecast; no chip dependence)")
+    lines.append("")
+
+    last_date = safe_get(meta, "last_date", "N/A")
+    price = _best_price_used(latest)
+    state = str(safe_get(latest, "state", "N/A"))
+    bb_z = _to_float(safe_get(latest, "bb_z"))
+    trend_state = str(safe_get(trend, "state", "N/A"))
+
+    allowed = bool(safe_get(regime, "allowed", False))
+    tag = str(safe_get(regime, "tag", "N/A"))
+    inputs = safe_get(regime, "inputs", {}) or {}
+    rv_pctl = _to_float(safe_get(inputs, "rv_ann_pctl"))
+    params = safe_get(regime, "params", {}) or {}
+    rv_pctl_max = _to_float(safe_get(params, "rv_pctl_max"))
+    if rv_pctl_max is None:
+        rv_pctl_max = 60.0
+
+    # margin (optional, aligned only)
+    margin_state_use = "N/A"
+    margin_note = "margin: N/A"
+    if isinstance(margin_info, dict) and margin_info:
+        if bool(margin_info.get("aligned", False)):
+            margin_state_use = str(margin_info.get("total_state", "N/A"))
+            margin_note = f"margin(aligned): total_state={margin_state_use}, total_sum={margin_info.get('total_sum', 'N/A')}"
+        else:
+            margin_note = "margin: MISALIGNED (ignored in action)"
+            margin_state_use = "MISALIGNED"
+
+    # DQ core
+    flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
+    dq_core_str, _ = _dq_core_and_fwd_summary(flags_str)
+
+    # Determine bucket
+    state_upper = ("UPPER" in state)
+    state_lower = ("LOWER" in state)
+
+    decision_path: List[str] = []
+    if not allowed:
+        action_bucket = "HOLD_DEFENSIVE_ONLY"
+        decision_path.append("regime.allowed=false => gate_closed")
+    else:
+        decision_path.append("regime.allowed=true => gate_open")
+        if state_upper or (bb_z is not None and bb_z >= float(no_chase_z)):
+            action_bucket = "NO_CHASE"
+            decision_path.append(f"upper_stretch: state_has_UPPER={str(state_upper).lower()} or bb_z>={no_chase_z}")
+        elif state_lower or (bb_z is not None and bb_z <= float(accumulate_z)):
+            action_bucket = "ACCUMULATE_TRANCHE"
+            decision_path.append(f"accumulate_zone: state_has_LOWER={str(state_lower).lower()} or bb_z<={accumulate_z}")
+        else:
+            action_bucket = "BASE_DCA_ONLY"
+            decision_path.append("mid_band => base_dca_only")
+
+    # Conservative leverage/pledge policy (report-only)
+    # Default: disallow leverage when gate closed OR in upper stretch OR market deleveraging (aligned).
+    pledge_policy = "DISALLOW"
+    pledge_reason: List[str] = []
+    if not allowed:
+        pledge_reason.append("regime gate closed")
+    if action_bucket in ("NO_CHASE", "HOLD_DEFENSIVE_ONLY"):
+        pledge_reason.append(f"action_bucket={action_bucket}")
+    if margin_state_use == "DELEVERAGING":
+        pledge_reason.append("market deleveraging (margin 5D)")
+    if not pledge_reason:
+        pledge_policy = "CONSIDER_ONLY_WITH_OWN_RULES"
+        pledge_reason.append("no hard veto triggered (still risk-managed)")
+
+    # Build tranche levels from unconditional quantiles (reference only; not conditional on state)
+    tranche_rows: List[List[str]] = []
+    if price is not None:
+        # 10D
+        p10_10 = _to_float(safe_get(fwd10, "p10"))
+        p05_10 = _to_float(safe_get(fwd10, "p05"))
+        # 20D
+        p10_20 = _to_float(safe_get(fwd20, "p10"))
+        p05_20 = _to_float(safe_get(fwd20, "p05"))
+
+        def add_row(label: str, mdd: Optional[float]):
+            if mdd is None:
+                return
+            lvl = _calc_level(price, mdd)
+            tranche_rows.append(
+                [
+                    label,
+                    fmt_signed_pct2(float(mdd) * 100.0),
+                    fmt_price2(lvl),
+                ]
+            )
+
+        add_row("10D p10 (uncond)", p10_10)
+        add_row("10D p05 (uncond)", p05_10)
+        add_row("20D p10 (uncond)", p10_20)
+        add_row("20D p05 (uncond)", p05_20)
+
+    # Present inputs
+    lines.append(md_table_kv([
+        ["last_date", str(last_date)],
+        ["price_used", fmt_price2(price)],
+        ["bb_state", state],
+        ["bb_z", fmt4(bb_z)],
+        ["trend_state", trend_state],
+        ["regime_tag", f"**{tag}**"],
+        ["regime_allowed", str(allowed).lower()],
+        ["rv20_percentile", fmt2(rv_pctl)],
+        ["rv_pctl_max", fmt2(rv_pctl_max)],
+        ["dq_core", dq_core_str],
+        ["margin_note", margin_note],
+    ]))
+    lines.append("")
+
+    # Present bucket + path
+    lines.append(md_table_kv([
+        ["action_bucket", f"**{action_bucket}**"],
+        ["accumulate_z_threshold", fmt4(accumulate_z)],
+        ["no_chase_z_threshold", fmt4(no_chase_z)],
+        ["pledge_policy", f"**{pledge_policy}**"],
+        ["pledge_veto_reasons", "; ".join(pledge_reason) if pledge_reason else "(none)"],
+    ]))
+    lines.append("")
+    lines.append("### decision_path")
+    for p in decision_path:
+        lines.append(f"- {p}")
+    lines.append("")
+
+    if tranche_rows:
+        lines.append("### tranche_levels (reference; unconditional forward_mdd quantiles)")
+        lines.append("")
+        lines.append("| level | drawdown | price_level |")
+        lines.append("|---|---:|---:|")
+        for a, b, c in tranche_rows:
+            lines.append(f"| {a} | {b} | {c} |")
+        lines.append("")
+        lines.append("- note: tranche_levels are derived from *unconditional* forward_mdd quantiles; they are not conditioned on current bb_state.")
+        lines.append("")
+
+    return lines
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", default="tw0050_bb_cache")
@@ -686,6 +933,10 @@ def main() -> int:
 
     ap.add_argument("--chip_overlay_json", default=None)
     ap.add_argument("--chip_window_n", type=int, default=5)
+
+    # deterministic action params
+    ap.add_argument("--accumulate_z", type=float, default=-1.5, help="bb_z <= accumulate_z => ACCUMULATE_TRANCHE")
+    ap.add_argument("--no_chase_z", type=float, default=1.5, help="bb_z >= no_chase_z => NO_CHASE")
 
     args = ap.parse_args()
 
@@ -743,6 +994,20 @@ def main() -> int:
     if chip_path is None:
         chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
 
+    # optional margin struct (for deterministic action block)
+    margin_json = read_margin_latest(args.margin_json)
+    margin_info: Optional[Dict[str, Any]] = None
+    if margin_json is not None:
+        try:
+            margin_info = margin_overlay_struct(
+                margin_json=margin_json,
+                price_last_date=str(last_date),
+                window_n=int(args.margin_window_n),
+                threshold_yi=float(args.margin_threshold_yi),
+            )
+        except Exception:
+            margin_info = None
+
     # ===== report =====
     lines: List[str] = []
     lines.append("# 0050 BB(60,2) + forward_mdd Report")
@@ -761,7 +1026,7 @@ def main() -> int:
     lines.append(f"- chip_overlay_path: `{chip_path}`")
     lines.append("")
 
-    # ===== Quick summary (2 lines allowed) =====
+    # ===== Quick summary =====
     lines.append("## 快速摘要（非預測，僅狀態）")
     lines.append(
         f"- state: **{state}**; "
@@ -790,7 +1055,6 @@ def main() -> int:
     if reg_line:
         lines.append(reg_line)
 
-    margin_json = read_margin_latest(args.margin_json)
     if margin_json is not None:
         _, margin_quick = margin_overlay_block(
             margin_json=margin_json,
@@ -816,6 +1080,23 @@ def main() -> int:
         chip_dq_extra.append("CHIP_OVERLAY_MISSING")
 
     lines.append("")
+
+    # ===== Deterministic Action Block =====
+    lines.extend(
+        build_deterministic_action_block(
+            meta=meta,
+            latest=latest,
+            trend=trend,
+            vol=vol,
+            regime=regime,
+            fwd20=fwd20,
+            fwd10=fwd10,
+            dq_flags=dq_flags,
+            margin_info=margin_info,
+            accumulate_z=float(args.accumulate_z),
+            no_chase_z=float(args.no_chase_z),
+        )
+    )
 
     # ===== Latest snapshot =====
     lines.append("## Latest Snapshot")
@@ -1089,12 +1370,14 @@ def main() -> int:
     # ===== Caveats =====
     lines.append("## Caveats")
     lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
+    lines.append("- Deterministic Action 是規則輸出（report-only），不代表可獲利保證。")
+    lines.append("- tranche_levels 使用的是 *unconditional* forward_mdd 分位數（非條件化），僅作風險尺。")
     lines.append("- pos_in_band 會顯示 clipped 值（0..1）與 raw 值（可超界，用於稽核）。")
     lines.append("- dist_to_upper/lower 可能為負值（代表超出通道）；報表已額外提供 above_upper / below_lower 以避免符號誤讀。")
     lines.append("- band_width 同時提供兩種定義：geo=(upper/lower-1)、std=(upper-lower)/ma；請勿混用解讀。")
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被除權息/企業行動污染，DQ 會標示。")
     lines.append("- Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；資料不足會以 DQ 明示。")
-    lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊需降低解讀權重。")
+    lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊時 deterministic action 會忽略其狀態。")
     lines.append("- Chip overlay（T86/TWT72U）為籌碼/借券描述；ETF 申贖、避險行為可能影響解讀，建議只做輔助註記。")
     lines.append("")
 
