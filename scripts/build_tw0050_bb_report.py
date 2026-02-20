@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v13"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v14"
 
 
 def utc_now_iso() -> str:
@@ -854,6 +854,7 @@ def compute_renderer_action_bucket(
 ) -> Tuple[str, List[str]]:
     """
     Returns (action_bucket, decision_path_lines)
+    Note: This is the existing renderer logic (v1-style), gated by regime_allowed.
     """
     state_upper = ("UPPER" in latest_state)
     state_lower = ("LOWER" in latest_state)
@@ -883,7 +884,7 @@ def compute_renderer_pledge_policy(
     margin_info: Optional[Dict[str, Any]],
 ) -> Tuple[str, List[str]]:
     """
-    Renderer overlay policy:
+    Renderer overlay policy (v1):
       - DISALLOW when regime gate closed OR action bucket is NO_CHASE/HOLD_DEFENSIVE_ONLY
       - DISALLOW when margin aligned and DELEVERAGING
       - otherwise CONSIDER_ONLY_WITH_OWN_RULES
@@ -901,6 +902,220 @@ def compute_renderer_pledge_policy(
     if reasons:
         return "DISALLOW", reasons
     return "CONSIDER_ONLY_WITH_OWN_RULES", ["no hard veto triggered (still risk-managed)"]
+
+
+# ---------------- Pledge Guidance v2 (report-only sizing; NOT gated by regime.allowed) ----------------
+
+def compute_pledge_v2_zone(
+    *,
+    latest_state: str,
+    bb_z: Optional[float],
+    accumulate_z: float,
+    no_chase_z: float,
+) -> Tuple[str, List[str]]:
+    """
+    Zone decision independent of regime.allowed:
+      - NO_CHASE if state has UPPER or bb_z >= no_chase_z
+      - ACCUMULATE_ZONE if state has LOWER or bb_z <= accumulate_z
+      - MID otherwise
+    """
+    path: List[str] = []
+    state_upper = ("UPPER" in latest_state)
+    state_lower = ("LOWER" in latest_state)
+
+    if state_upper or (bb_z is not None and bb_z >= float(no_chase_z)):
+        path.append(f"no_chase: state_has_UPPER={str(state_upper).lower()} or bb_z>={no_chase_z}")
+        return "NO_CHASE", path
+
+    if state_lower or (bb_z is not None and bb_z <= float(accumulate_z)):
+        path.append(f"accumulate: state_has_LOWER={str(state_lower).lower()} or bb_z<={accumulate_z}")
+        return "ACCUMULATE_ZONE", path
+
+    path.append("mid => wait_or_dca_only")
+    return "MID", path
+
+
+def compute_pledge_v2_sizing(
+    *,
+    zone: str,
+    rv20_pctl: Optional[float],
+    margin_info: Optional[Dict[str, Any]],
+    dq_flags: List[str],
+) -> Dict[str, Any]:
+    """
+    Report-only sizing proposal.
+    Output keys:
+      policy: DISALLOW / ALLOW_REDUCED / ALLOW_FULL
+      size_factor: 0.0..1.0  (fraction of user's own max pledge capacity; max capacity is external)
+      reasons: list[str]
+      bands: dict
+      multipliers: dict
+      cooldown_sessions_hint: int
+    """
+    out: Dict[str, Any] = {
+        "policy": "DISALLOW",
+        "size_factor": 0.0,
+        "reasons": [],
+        "bands": {"pctl_full_le": 60.0, "pctl_half_le": 80.0, "pctl_quarter_le": 90.0},
+        "multipliers": {},
+        "cooldown_sessions_hint": 0,
+    }
+
+    # Hard prerequisite: only consider pledge sizing in ACCUMULATE_ZONE
+    if zone != "ACCUMULATE_ZONE":
+        out["reasons"].append(f"zone={zone} (require ACCUMULATE_ZONE)")
+        return out
+
+    # Base factor from rv20 percentile (deterministic bands)
+    base_factor = 0.0
+    if rv20_pctl is None:
+        base_factor = 0.25
+        out["reasons"].append("rv20_pctl missing => default conservative 0.25")
+    else:
+        p = float(rv20_pctl)
+        if p <= out["bands"]["pctl_full_le"]:
+            base_factor = 1.0
+        elif p <= out["bands"]["pctl_half_le"]:
+            base_factor = 0.5
+        elif p <= out["bands"]["pctl_quarter_le"]:
+            base_factor = 0.25
+        else:
+            base_factor = 0.0
+            out["reasons"].append(f"rv20_pctl>{out['bands']['pctl_quarter_le']} => DISALLOW")
+
+    factor = float(base_factor)
+    out["multipliers"]["base_from_rv20_pctl"] = factor
+
+    # Margin deleveraging: not a hard veto in v2, but reduces sizing and suggests cooldown
+    if isinstance(margin_info, dict) and margin_info and bool(margin_info.get("aligned", False)):
+        if str(margin_info.get("total_state", "")).upper() == "DELEVERAGING":
+            factor *= 0.5
+            out["multipliers"]["margin_deleveraging_x"] = 0.5
+            out["reasons"].append("margin aligned: DELEVERAGING => size_factor * 0.5 + cooldown hint")
+            out["cooldown_sessions_hint"] = 2
+
+    # Data quality: price series breaks can distort historical distribution; cap sizing
+    flags = set([str(x) for x in dq_flags if isinstance(x, str)])
+    if "PRICE_SERIES_BREAK_DETECTED" in flags:
+        # cap to 0.25 (still not forced DISALLOW, but very conservative)
+        factor = min(factor, 0.25)
+        out["multipliers"]["dq_price_break_cap"] = 0.25
+        out["reasons"].append("DQ: PRICE_SERIES_BREAK_DETECTED => cap size_factor at 0.25")
+
+    # If YF/TWSE issues exist, keep conservative (cap at 0.5)
+    if any(f.startswith("YF_") for f in flags) or any(f.startswith("TWSE_") for f in flags):
+        factor = min(factor, 0.5)
+        out["multipliers"]["dq_source_cap"] = 0.5
+        out["reasons"].append("DQ: YF_/TWSE_ flags present => cap size_factor at 0.5")
+
+    # Finalize
+    factor = max(0.0, min(1.0, float(factor)))
+    out["size_factor"] = round(factor, 4)
+
+    if factor <= 0.0:
+        out["policy"] = "DISALLOW"
+        if not out["reasons"]:
+            out["reasons"].append("size_factor<=0")
+    elif factor < 1.0:
+        out["policy"] = "ALLOW_REDUCED"
+        if not out["reasons"]:
+            out["reasons"].append("reduced sizing due to risk controls")
+    else:
+        out["policy"] = "ALLOW_FULL"
+        if not out["reasons"]:
+            out["reasons"].append("rv20_pctl in low band; no additional caps applied")
+
+    return out
+
+
+def build_tranche_plan_from_levels(
+    tranche_rows: List[List[str]],
+    size_factor: float,
+) -> Tuple[List[List[str]], str]:
+    """
+    tranche_rows: [[label, drawdown_str, price_level_str], ...]
+    returns:
+      plan_rows: [[tranche, level, target_frac_of_max, price_level], ...]
+      note: str
+    """
+    if not tranche_rows or size_factor <= 0:
+        return [], "no tranche plan (size_factor<=0 or levels missing)"
+
+    # Use up to 4 levels (deterministic)
+    m = min(len(tranche_rows), 4)
+    levels = tranche_rows[:m]
+
+    # Deterministic weights
+    if m == 1:
+        weights = [1.0]
+    elif m == 2:
+        weights = [0.5, 0.5]
+    elif m == 3:
+        weights = [0.4, 0.3, 0.3]
+    else:
+        weights = [0.4, 0.3, 0.2, 0.1]
+
+    plan: List[List[str]] = []
+    for i, (lvl, w) in enumerate(zip(levels, weights), start=1):
+        label = str(lvl[0])
+        price_level = str(lvl[2])
+        frac = size_factor * float(w)  # fraction of user's max pledge capacity
+        plan.append([f"T{i}", label, fmt_pct2(frac * 100.0), price_level])
+
+    note = "target_frac_of_max is fraction of your own max pledge capacity (defined outside this report)"
+    return plan, note
+
+
+def build_unconditional_tranche_rows(
+    *,
+    price: Optional[float],
+    fwd20: Dict[str, Any],
+    fwd10: Dict[str, Any],
+    pledge_stats: Dict[str, Any],
+) -> Tuple[List[List[str]], str]:
+    """
+    Returns tranche_rows: [[label, drawdown_str, price_level_str], ...]
+    and source_note.
+    """
+    tranche_rows: List[List[str]] = []
+    un_levels = safe_get(pledge_stats, "uncond_levels", []) or []
+    if isinstance(un_levels, list) and un_levels:
+        for it in un_levels:
+            if not isinstance(it, dict):
+                continue
+            lbl = str(safe_get(it, "label", "N/A"))
+            dd = _to_float(safe_get(it, "drawdown"))
+            pl = _to_float(safe_get(it, "price_level"))
+            tranche_rows.append([lbl, fmt_signed_pct2(None if dd is None else dd * 100.0), fmt_price2(pl)])
+        anchor = safe_get(pledge_stats, "price_anchor", None)
+        if anchor is not None:
+            return tranche_rows, f"source: stats (price_anchor={fmt_price2(anchor)})"
+        return tranche_rows, "source: stats"
+
+    # fallback compute from forward quantiles (unconditional)
+    if price is None:
+        return [], "source: none (price missing)"
+
+    def add_row(label: str, mdd: Optional[float]):
+        if mdd is None:
+            return
+        try:
+            lvl = float(price) * (1.0 + float(mdd))
+        except Exception:
+            lvl = None
+        tranche_rows.append([label, fmt_signed_pct2(float(mdd) * 100.0), fmt_price2(lvl)])
+
+    p10_10 = _to_float(safe_get(fwd10, "p10"))
+    p05_10 = _to_float(safe_get(fwd10, "p05"))
+    p10_20 = _to_float(safe_get(fwd20, "p10"))
+    p05_20 = _to_float(safe_get(fwd20, "p05"))
+
+    add_row("10D_p10_uncond", p10_10)
+    add_row("10D_p05_uncond", p05_10)
+    add_row("20D_p10_uncond", p10_20)
+    add_row("20D_p05_uncond", p05_20)
+
+    return tranche_rows, "source: renderer (computed from forward_mdd quantiles; unconditional reference only)"
 
 
 def build_deterministic_action_block(
@@ -926,12 +1141,8 @@ def build_deterministic_action_block(
       2) renderer overlay computes additional veto (e.g., margin deleveraging)
       3) final pledge_policy = DISALLOW if either baseline or overlay veto says DISALLOW
 
-    Output:
-      - pledge_source: stats / renderer
-      - pledge_overlay_applied: true/false
-      - pledge_policy_stats, pledge_policy_renderer
-      - pledge_policy (final)
-      - tranche_levels: prefer stats unconditional levels if present; else compute from fwd quantiles.
+    Adds:
+      - Pledge Guidance v2: report-only sizing proposal not gated by regime.allowed
     """
     lines: List[str] = []
     lines.append("## Deterministic Action (report-only; non-predictive)")
@@ -978,7 +1189,7 @@ def build_deterministic_action_block(
     flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
     dq_core_str, _ = _dq_core_and_fwd_summary(flags_str)
 
-    # renderer action bucket + policy
+    # renderer action bucket + policy (v1)
     action_bucket_renderer, decision_path = compute_renderer_action_bucket(
         latest_state=state, bb_z=bb_z, regime_allowed=regime_allowed, accumulate_z=acc_thr, no_chase_z=nc_thr
     )
@@ -1013,53 +1224,21 @@ def build_deterministic_action_block(
             overlay_applied = True
             final_policy = "DISALLOW"
             final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
-        else:
-            # still record overlay info, but do not change baseline
-            if pledge_veto_renderer and str(pledge_policy_renderer).upper() == "DISALLOW":
-                # optional: keep as note without mutating baseline
-                pass
     else:
         # baseline from renderer
         final_policy = pledge_policy_renderer
         final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
 
-    # mismatch flag: policy-only mismatch (to match your prior report style)
+    # mismatch flag
     pledge_mismatch = False
     if pledge_source == "stats":
         if str(pledge_policy_stats).upper() != str(pledge_policy_renderer).upper():
             pledge_mismatch = True
 
-    # tranche levels: prefer stats unconditional levels
-    tranche_rows: List[List[str]] = []
-    un_levels = safe_get(pledge_stats, "uncond_levels", []) or []
-    if isinstance(un_levels, list) and un_levels:
-        for it in un_levels:
-            if not isinstance(it, dict):
-                continue
-            lbl = str(safe_get(it, "label", "N/A"))
-            dd = _to_float(safe_get(it, "drawdown"))
-            pl = _to_float(safe_get(it, "price_level"))
-            tranche_rows.append([lbl, fmt_signed_pct2(None if dd is None else dd * 100.0), fmt_price2(pl)])
-    else:
-        # fallback compute from forward quantiles (unconditional)
-        if price is not None:
-            def add_row(label: str, mdd: Optional[float]):
-                if mdd is None:
-                    return
-                try:
-                    lvl = float(price) * (1.0 + float(mdd))
-                except Exception:
-                    lvl = None
-                tranche_rows.append([label, fmt_signed_pct2(float(mdd) * 100.0), fmt_price2(lvl)])
-
-            p10_10 = _to_float(safe_get(fwd10, "p10"))
-            p05_10 = _to_float(safe_get(fwd10, "p05"))
-            p10_20 = _to_float(safe_get(fwd20, "p10"))
-            p05_20 = _to_float(safe_get(fwd20, "p05"))
-            add_row("10D p10 (uncond)", p10_10)
-            add_row("10D p05 (uncond)", p05_10)
-            add_row("20D p10 (uncond)", p10_20)
-            add_row("20D p05 (uncond)", p05_20)
+    # tranche levels: unconditional reference
+    tranche_rows, tranche_source_note = build_unconditional_tranche_rows(
+        price=price, fwd20=fwd20, fwd10=fwd10, pledge_stats=pledge_stats
+    )
 
     # present inputs
     lines.append(md_table_kv([
@@ -1082,7 +1261,7 @@ def build_deterministic_action_block(
     ]))
     lines.append("")
 
-    # decisions
+    # decisions (v1)
     lines.append(md_table_kv([
         ["action_bucket_renderer", f"**{action_bucket_renderer}**"],
         ["pledge_policy_renderer", f"**{pledge_policy_renderer}**"],
@@ -1111,18 +1290,58 @@ def build_deterministic_action_block(
         for a, b, c in tranche_rows:
             lines.append(f"| {a} | {b} | {c} |")
         lines.append("")
-        if isinstance(un_levels, list) and un_levels:
-            anchor = safe_get(pledge_stats, "price_anchor", None)
-            note = safe_get(pledge_stats, "note", None)
-            if anchor is not None:
-                lines.append(f"- source: stats. price_anchor={fmt_price2(anchor)}")
-            else:
-                lines.append("- source: stats.")
-            if isinstance(note, str) and note.strip():
-                lines.append(f"- note: {note.strip()}")
-        else:
-            lines.append("- source: renderer (computed from forward_mdd quantiles).")
+        lines.append(f"- {tranche_source_note}")
         lines.append("")
+
+    # ---------------- Pledge Guidance v2 ----------------
+    lines.append("### Pledge Guidance v2 (report-only; sizing proposal)")
+    lines.append("")
+    lines.append("- Purpose: convert binary gate into deterministic size_factor (0..1) using rv20_percentile bands.")
+    lines.append("- Note: v2 is NOT gated by regime.allowed; it uses rv20_percentile directly and remains conservative under DQ/margin stress.")
+    lines.append("")
+
+    zone_v2, zone_path = compute_pledge_v2_zone(
+        latest_state=state, bb_z=bb_z, accumulate_z=acc_thr, no_chase_z=nc_thr
+    )
+    v2 = compute_pledge_v2_sizing(
+        zone=zone_v2, rv20_pctl=rv_pctl, margin_info=margin_info, dq_flags=dq_flags
+    )
+
+    lines.append(md_table_kv([
+        ["v2_zone", f"**{zone_v2}**"],
+        ["rv20_percentile", fmt2(rv_pctl)],
+        ["v2_policy", f"**{v2.get('policy','N/A')}**"],
+        ["size_factor(0..1)", fmt4(v2.get("size_factor"))],
+        ["cooldown_sessions_hint", str(int(v2.get("cooldown_sessions_hint", 0)))],
+        ["v2_reasons", _join_semicolon(_string_list(v2.get("reasons", [])))],
+    ]))
+    lines.append("")
+
+    lines.append("#### v2_zone_path (independent of regime.allowed)")
+    for p in zone_path:
+        lines.append(f"- {p}")
+    lines.append("")
+
+    # Tranche plan scaled by size_factor
+    try:
+        sf = float(v2.get("size_factor", 0.0) or 0.0)
+    except Exception:
+        sf = 0.0
+
+    plan_rows, plan_note = build_tranche_plan_from_levels(tranche_rows, sf)
+    lines.append("#### v2_tranche_plan (reference-only; scaled by size_factor)")
+    lines.append("")
+    if plan_rows:
+        lines.append("| tranche | level | target_frac_of_max | price_level |")
+        lines.append("|---|---|---:|---:|")
+        for t, lvl, frac, pl in plan_rows:
+            lines.append(f"| {t} | {lvl} | {frac} | {pl} |")
+        lines.append("")
+        lines.append(f"- note: {plan_note}")
+        lines.append("- note: tranche levels are unconditional references; do not treat them as guaranteed fills.")
+    else:
+        lines.append(f"- {plan_note}")
+    lines.append("")
 
     return lines
 
@@ -1294,7 +1513,7 @@ def main() -> int:
 
     lines.append("")
 
-    # ===== Deterministic Action Block (with pledge from stats + overlay) =====
+    # ===== Deterministic Action Block (with pledge from stats + overlay) + v2 sizing =====
     lines.extend(
         build_deterministic_action_block(
             meta=meta,
@@ -1568,6 +1787,7 @@ def main() -> int:
     lines.append("- dist_to_upper/lower 可能為負值（代表超出通道）；報表額外提供 above_upper / below_lower 以避免符號誤讀。")
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被企業行動污染，DQ 會標示。")
     lines.append("- 融資 overlay 屬於市場整體槓桿 proxy；日期不對齊時 overlay 會標示 MISALIGNED。")
+    lines.append("- Pledge Guidance v2 為報告層 sizing 提案：不改 stats，不構成投資建議。")
     lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as f:
