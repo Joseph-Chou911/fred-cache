@@ -33,9 +33,11 @@ Added blocks:
   - Trend filter: MA200 + slope20D (on MA200), threshold (default 0.50%)
   - Vol filter: RV20 annualized + ATR14 (Wilder ATR; fallback to close-only TR if OHLC missing)
   - Regime tag (simple): TREND_UP & RV20_percentile <= pctl_max & rv_hist_n >= min_samples
+  - Pledge guidance (compute-only): adds stats_out["pledge"] based on existing fields only; does NOT alter any logic.
 
 Changelog:
   - 2026-02-20: compute side added pos_raw/pos, band_width, forward_mdd10; TWSE throttling + warnings.
+  - 2026-02-20: add "pledge" block (compute-only; deterministic; non-predictive; no margin/chip inputs).
 """
 
 from __future__ import annotations
@@ -62,7 +64,7 @@ except Exception:
     yf = None
 
 
-SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-20.v7"
+SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-20.v8"
 TZ_LOCAL = "Asia/Taipei"
 TRADING_DAYS_PER_YEAR = 252
 
@@ -273,7 +275,7 @@ def _twse_fetch_month_with_retries(
 ) -> pd.DataFrame:
     """
     Retry policy (fallback-only):
-      - sleep (base + jitter) before each attempt (except first can also sleep if you want; we do small sleep too)
+      - sleep (base + jitter) before each attempt
       - on exception: exponential backoff = sleep_sec * (2**attempt) + jitter
       - max_retries counts total attempts (>=1)
     """
@@ -742,6 +744,137 @@ def upsert_history_row(hist: Dict[str, Any], day_key: str, latest: Dict[str, Any
 
 
 # -------------------------
+# Pledge guidance (compute-only; additive)
+# -------------------------
+
+def compute_pledge_guidance_block(
+    *,
+    latest_price: Optional[float],
+    bb_state: str,
+    bb_z: Optional[float],
+    regime: Dict[str, Any],
+    forward20_primary: Dict[str, Any],
+    forward10_primary: Dict[str, Any],
+    dq_flags: List[str],
+    forward_mode: str,
+) -> Dict[str, Any]:
+    """
+    Pledge guidance (compute-only; deterministic; non-predictive):
+    - DOES NOT change any existing logic/fields.
+    - Uses only already-computed fields: bb_state/bb_z/regime/forward_mdd + dq_flags.
+    - Intended as a conservative veto/guardrail for "pledge to add" decisions.
+
+    NOTE:
+      - This block does NOT include margin/chip overlays (not available in this compute script).
+      - Downstream report renderer may add additional veto layers.
+    """
+    # deterministic thresholds (align with report conventions)
+    ACCUM_Z = -1.5
+    NO_CHASE_Z = 1.5
+
+    # DQ veto flags: if present, refuse to advise pledge-add (contamination / source instability)
+    DQ_VETO = {
+        "DATA_SOURCE_TWSE_FALLBACK",
+        "TWSE_UNADJUSTED_PRICE_WARNING",
+        "FWD_MDD_CORP_ACTION_CONTAMINATION_RISK",
+        "YFINANCE_IMPORT_ERROR",
+        "YFINANCE_ERROR",
+        "TWSE_FETCH_FAILED_FINAL",
+    }
+
+    def _get_fwd_dd(d: Dict[str, Any], k: str) -> Optional[float]:
+        v = safe_get(d, k, None)
+        return _nan_to_none(v)
+
+    def _level(label: str, dd: Optional[float]) -> Dict[str, Any]:
+        if latest_price is None or (dd is None):
+            return {"label": label, "drawdown": dd, "price_level": None}
+        try:
+            return {"label": label, "drawdown": float(dd), "price_level": float(latest_price) * (1.0 + float(dd))}
+        except Exception:
+            return {"label": label, "drawdown": dd, "price_level": None}
+
+    veto_reasons: List[str] = []
+    regime_allowed = bool(safe_get(regime, "allowed", False))
+
+    # 1) Data quality veto
+    hit_dq = sorted([f for f in dq_flags if f in DQ_VETO])
+    if hit_dq:
+        veto_reasons.append("data_quality_veto:" + ",".join(hit_dq))
+
+    # 2) Regime gate veto
+    if not regime_allowed:
+        veto_reasons.append("regime_gate_closed")
+
+    # 3) No-chase veto (upper band / high z)
+    z = None
+    try:
+        z = float(bb_z) if bb_z is not None else None
+    except Exception:
+        z = None
+
+    if bb_state in ("EXTREME_UPPER_BAND", "NEAR_UPPER_BAND"):
+        veto_reasons.append(f"no_chase_state:{bb_state}")
+    if (z is not None) and np.isfinite(z) and (z >= NO_CHASE_Z):
+        veto_reasons.append(f"no_chase_z>= {NO_CHASE_Z:.2f}")
+
+    # Final policy decision (conservative, pledge-add only)
+    pledge_policy = "DISALLOW"
+    action_bucket = "HOLD_NO_PLEDGE"
+
+    if veto_reasons:
+        pledge_policy = "DISALLOW"
+        action_bucket = "DATA_QUALITY_VETO" if any(r.startswith("data_quality_veto") for r in veto_reasons) else "VETO"
+    else:
+        # Allow only when deeply stretched to downside AND regime gate is open
+        if (z is not None) and np.isfinite(z) and (z <= ACCUM_Z):
+            pledge_policy = "ALLOW"
+            action_bucket = "ACCUMULATE_OK"
+        else:
+            pledge_policy = "DISALLOW"
+            action_bucket = "HOLD_NO_PLEDGE"
+
+    # Unconditional tranche levels (explicitly labeled as unconditional)
+    dd_10_p10 = _get_fwd_dd(forward10_primary, "p10")
+    dd_10_p05 = _get_fwd_dd(forward10_primary, "p05")
+    dd_20_p10 = _get_fwd_dd(forward20_primary, "p10")
+    dd_20_p05 = _get_fwd_dd(forward20_primary, "p05")
+
+    tranche_levels = [
+        _level("10D_p10_uncond", dd_10_p10),
+        _level("10D_p05_uncond", dd_10_p05),
+        _level("20D_p10_uncond", dd_20_p10),
+        _level("20D_p05_uncond", dd_20_p05),
+    ]
+
+    return {
+        "version": "pledge_guidance_v1",
+        "scope": "compute_only_no_margin_no_chip",
+        "thresholds": {
+            "accumulate_z_threshold": ACCUM_Z,
+            "no_chase_z_threshold": NO_CHASE_Z,
+            "require_regime_allowed": True,
+        },
+        "inputs": {
+            "bb_state": bb_state,
+            "bb_z": _nan_to_none(z),
+            "regime_allowed": regime_allowed,
+            "forward_mode_primary": str(forward_mode),
+        },
+        "decision": {
+            "pledge_policy": pledge_policy,         # ALLOW / DISALLOW
+            "action_bucket": action_bucket,
+            "veto_reasons": veto_reasons,
+        },
+        "unconditional_tranche_levels": {
+            "price_anchor": _nan_to_none(latest_price),
+            "note": "levels derived from unconditional forward_mdd quantiles; not conditioned on current state",
+            "levels": tranche_levels,
+        },
+    }
+
+
+# -------------------------
 # Main
 # -------------------------
 
@@ -1127,6 +1260,18 @@ def main() -> int:
         "state": state,
     }
 
+    # --- NEW: pledge guidance block (additive; compute-only) ---
+    pledge_block = compute_pledge_guidance_block(
+        latest_price=_nan_to_none(latest_price),
+        bb_state=state,
+        bb_z=_nan_to_none(bb_z),
+        regime=regime,
+        forward20_primary=forward20_primary,
+        forward10_primary=forward10_primary,
+        dq_flags=dq_flags,
+        forward_mode=forward_mode,
+    )
+
     stats_out = {
         "meta": meta,
         "latest": latest,
@@ -1150,6 +1295,9 @@ def main() -> int:
         "vol": vol_rv,
         "atr": atr,
         "regime": regime,
+
+        # NEW (add-on only)
+        "pledge": pledge_block,
 
         "dq": {"flags": dq_flags, "notes": dq_notes},
     }
