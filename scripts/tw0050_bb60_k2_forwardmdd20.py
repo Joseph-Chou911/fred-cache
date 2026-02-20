@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
+tw0050_bb60_k2_forwardmdd20.py  (v10.shortcircuit)
+
 0050 BB(60,2) + forward_mdd(20D) compute script.
 
 Outputs (in --cache_dir):
@@ -10,34 +12,22 @@ Outputs (in --cache_dir):
   - history_lite.json
 
 Data source:
-  1) yfinance (preferred; long history)
-  2) TWSE fallback (recent-only; months_back default=6)
+  1) yfinance (preferred; long history; uses Adj Close if available)
+  2) TWSE fallback (recent-only; raw/unadjusted prices)
 
-Key features:
-  - Robust scalar parsing for ticker/price_col (prevents tuple->lower() crashes)
-  - Computes forward_mdd distributions:
-      * forward_mdd(20D): raw + clean, primary uses --forward_mode (default clean)
-      * forward_mdd(10D): raw + clean, sidecar block (primary uses --forward_mode, default clean)
-  - Cleaning uses "entry mask" excluding windows contaminated by detected price breaks (split-like artifacts)
-    NOTE: Break detection is ratio-based (day-to-day); it may NOT catch small corporate-action drops (e.g., dividends).
-  - Adds audit-friendly fields at compute side:
-      * pos_raw (unclipped) + pos (clipped 0..1)
-      * band_width_geo_pct  = (upper/lower - 1) * 100  (geometric width)
-      * band_width_std_pct  = ((upper-lower)/ma) * 100 (industry-common width)
-  - TWSE fallback protections:
-      * per-request sleep + jitter
-      * retries with exponential backoff
-      * force DQ flags warning about unadjusted prices
+v10.shortcircuit 핵심：
+  - 若進入「未還原價格模式」（unadjusted_price_mode=True），直接短路：
+      * 不做 BB / forward_mdd / trend / vol / atr / regime 等會被 NA 覆寫的運算
+      * 僅輸出 latest_price/date + 明確 DQ flags/notes + pledge=DISALLOW
+  - TWSE fallback 時，預設與強制限制 months_back 為小值（避免 14 個月 I/O 黑洞）
+  - 仍保留 yfinance + adjclose 正常路徑的完整計算（含 break-clean forward_mdd）
 
-Added blocks:
-  - Trend filter: MA200 + slope20D (on MA200), threshold (default 0.50%)
-  - Vol filter: RV20 annualized + ATR14 (Wilder ATR; fallback to close-only TR if OHLC missing)
-  - Regime tag (simple): TREND_UP & RV20_percentile <= pctl_max & rv_hist_n >= min_samples
-  - Pledge guidance (compute-only): adds stats_out["pledge"] based on existing fields only; does NOT alter any logic.
-
-Changelog:
-  - 2026-02-20: compute side added pos_raw/pos, band_width, forward_mdd10; TWSE throttling + warnings.
-  - 2026-02-20: add "pledge" block (compute-only; deterministic; non-predictive; no margin/chip inputs).
+安全策略：
+  - unadjusted_price_mode = used_fallback OR (price_col_used != "adjclose")
+  - 在 unadjusted_price_mode 下：
+      * latest 的 BB 欄位全 None，state="NA_DUE_TO_UNADJUSTED_PRICE"
+      * forward/trend/vol/atr/regime 全 NA（結構完整）
+      * pledge 永遠 DISALLOW（DQ veto）
 """
 
 from __future__ import annotations
@@ -47,6 +37,7 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -64,7 +55,7 @@ except Exception:
     yf = None
 
 
-SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-20.v8"
+SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-20.v10.shortcircuit"
 TZ_LOCAL = "Asia/Taipei"
 TRADING_DAYS_PER_YEAR = 252
 
@@ -151,6 +142,18 @@ def _clip01(x: float) -> float:
     return float(np.clip(x, 0.0, 1.0))
 
 
+def _ticker_to_twse_stock_no(ticker: str, default: str = "0050") -> str:
+    """
+    Convert possible yfinance ticker (e.g., '0050.TW', '0050') to TWSE stockNo ('0050').
+    Conservative: only accept 4-digit numeric; else fallback to default.
+    """
+    t = (ticker or "").strip().upper()
+    m = re.match(r"^(\d{4})", t)
+    if m:
+        return m.group(1)
+    return default
+
+
 # -------------------------
 # TWSE fallback (recent)
 # -------------------------
@@ -175,9 +178,10 @@ def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -
     """
     TWSE STOCK_DAY fields typically include:
       日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數
-    We map to: date, open, high, low, close, adjclose(=close), volume
 
-    NOTE: This endpoint is NOT adjusted for dividends/splits; it's raw day prices.
+    Map to: date, open, high, low, close, adjclose(=close), volume
+
+    NOTE: TWSE endpoint is raw/unadjusted (dividends/splits not adjusted).
     """
     url = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
     date_str = f"{year}{month:02d}01"
@@ -303,7 +307,8 @@ def _twse_fetch_month_with_retries(
     return pd.DataFrame()
 
 
-def fetch_twse_recent_0050(
+def fetch_twse_recent(
+    stock_no: str,
     months_back: int,
     dq_flags: List[str],
     dq_notes: List[str],
@@ -313,7 +318,6 @@ def fetch_twse_recent_0050(
     twse_sleep_sec: float,
     twse_sleep_jitter: float,
 ) -> pd.DataFrame:
-    stock_no = "0050"
     frames = []
     for (yy, mm) in _twse_months_back_list(months_back):
         dfm = _twse_fetch_month_with_retries(
@@ -456,25 +460,31 @@ def compute_forward_mdd(
     valid_entry_mask:
       - optional boolean mask length n; if provided, only compute out[t] when mask[t] is True.
       - This is how we "clean" windows contaminated by detected breaks, without altering price series.
+
+    Index bounds:
+      - last computable t satisfies t + fwd_days <= n-1  =>  t <= n - fwd_days - 1
+      - therefore loop is range(0, n - fwd_days)  (stop is exclusive)
     """
     n = len(prices)
     out = np.full(n, np.nan, dtype=float)
 
-    if n < (fwd_days + 2):
+    # minimal n to compute at least one entry (t=0) is fwd_days + 1
+    if n < (fwd_days + 1):
         stats = ForwardMDDStats(0, float("nan"), float("nan"), float("nan"), float("nan"), float("nan"), -1, -1)
         return out, stats
 
     if valid_entry_mask is None:
         valid_entry_mask = np.ones(n, dtype=bool)
 
-    # last computable entry index is n - fwd_days - 2 (because we use i+1..i+fwd_days)
-    for i in range(0, n - fwd_days - 1):
+    for i in range(0, n - fwd_days):
         if not valid_entry_mask[i]:
             continue
         base = prices[i]
         if not np.isfinite(base) or base <= 0:
             continue
         future = prices[i + 1: i + fwd_days + 1]
+        if future.size == 0:
+            continue
         rel = future / base - 1.0
         out[i] = np.nanmin(rel)
 
@@ -744,6 +754,86 @@ def upsert_history_row(hist: Dict[str, Any], day_key: str, latest: Dict[str, Any
 
 
 # -------------------------
+# NA packers (short-circuit path)
+# -------------------------
+
+def pack_fwd_na(label: str, fwd_days_used: int) -> Dict[str, Any]:
+    return {
+        "label": label,
+        "definition": f"min(price[t+1..t+{fwd_days_used}]/price[t]-1), level-price based",
+        "n": 0,
+        "p50": None,
+        "p25": None,
+        "p10": None,
+        "p05": None,
+        "min": None,
+        "min_entry_date": None,
+        "min_entry_price": None,
+        "min_future_date": None,
+        "min_future_price": None,
+    }
+
+
+def pack_trend_na(ma_days: int, slope_days: int, slope_thr_pct: float) -> Dict[str, Any]:
+    return {
+        "trend_ma_days": int(ma_days),
+        "trend_slope_days": int(slope_days),
+        "trend_slope_thr_pct": float(slope_thr_pct),
+        "trend_ma_last": None,
+        "trend_slope_pct": None,
+        "price_vs_trend_ma_pct": None,
+        "state": "TREND_NA",
+    }
+
+
+def pack_vol_na(rv_days: int) -> Dict[str, Any]:
+    return {
+        "rv_days": int(rv_days),
+        "rv_ann": None,
+        "rv_ann_pctl": None,
+        "rv_hist_n": 0,
+        "rv_hist_q20": None,
+        "rv_hist_q50": None,
+        "rv_hist_q80": None,
+    }
+
+
+def pack_atr_na(atr_days: int) -> Dict[str, Any]:
+    return {
+        "atr_days": int(atr_days),
+        "atr": None,
+        "atr_pct": None,
+        "tr_mode": "NA",
+    }
+
+
+def pack_regime_na(rv_pctl_max_100: float, min_samples: int, trend_required: str) -> Dict[str, Any]:
+    return {
+        "definition": "TREND_UP & RV20_percentile<=pctl_max & rv_hist_n>=min_samples => RISK_ON_ALLOWED",
+        "params": {
+            "rv_pctl_max": float(rv_pctl_max_100),
+            "min_samples": int(min_samples),
+            "trend_required": str(trend_required),
+        },
+        "inputs": {
+            "trend_state": "TREND_NA",
+            "rv_ann": None,
+            "rv_ann_pctl": None,
+            "rv_hist_n": 0,
+            "bb_state": "NA",
+        },
+        "passes": {
+            "trend_ok": False,
+            "rv_hist_ok": False,
+            "rv_ok": False,
+        },
+        "tag": "RISK_ON_UNKNOWN",
+        "allowed": False,
+        "reasons": ["unadjusted_price_mode_or_insufficient_history"],
+    }
+
+
+# -------------------------
 # Pledge guidance (compute-only; additive)
 # -------------------------
 
@@ -763,20 +853,17 @@ def compute_pledge_guidance_block(
     - DOES NOT change any existing logic/fields.
     - Uses only already-computed fields: bb_state/bb_z/regime/forward_mdd + dq_flags.
     - Intended as a conservative veto/guardrail for "pledge to add" decisions.
-
-    NOTE:
-      - This block does NOT include margin/chip overlays (not available in this compute script).
-      - Downstream report renderer may add additional veto layers.
     """
-    # deterministic thresholds (align with report conventions)
     ACCUM_Z = -1.5
     NO_CHASE_Z = 1.5
 
-    # DQ veto flags: if present, refuse to advise pledge-add (contamination / source instability)
+    # DQ veto flags: if present, refuse to advise pledge-add
     DQ_VETO = {
+        "UNADJUSTED_PRICE_MODE",
         "DATA_SOURCE_TWSE_FALLBACK",
         "TWSE_UNADJUSTED_PRICE_WARNING",
         "FWD_MDD_CORP_ACTION_CONTAMINATION_RISK",
+        "PRICE_COL_FALLBACK_UNADJUSTED",
         "YFINANCE_IMPORT_ERROR",
         "YFINANCE_ERROR",
         "TWSE_FETCH_FAILED_FINAL",
@@ -818,7 +905,6 @@ def compute_pledge_guidance_block(
     if (z is not None) and np.isfinite(z) and (z >= NO_CHASE_Z):
         veto_reasons.append(f"no_chase_z>= {NO_CHASE_Z:.2f}")
 
-    # Final policy decision (conservative, pledge-add only)
     pledge_policy = "DISALLOW"
     action_bucket = "HOLD_NO_PLEDGE"
 
@@ -826,7 +912,6 @@ def compute_pledge_guidance_block(
         pledge_policy = "DISALLOW"
         action_bucket = "DATA_QUALITY_VETO" if any(r.startswith("data_quality_veto") for r in veto_reasons) else "VETO"
     else:
-        # Allow only when deeply stretched to downside AND regime gate is open
         if (z is not None) and np.isfinite(z) and (z <= ACCUM_Z):
             pledge_policy = "ALLOW"
             action_bucket = "ACCUMULATE_OK"
@@ -834,7 +919,6 @@ def compute_pledge_guidance_block(
             pledge_policy = "DISALLOW"
             action_bucket = "HOLD_NO_PLEDGE"
 
-    # Unconditional tranche levels (explicitly labeled as unconditional)
     dd_10_p10 = _get_fwd_dd(forward10_primary, "p10")
     dd_10_p05 = _get_fwd_dd(forward10_primary, "p05")
     dd_20_p10 = _get_fwd_dd(forward20_primary, "p10")
@@ -895,7 +979,9 @@ def main() -> int:
     ap.add_argument("--price_col", default="adjclose")
     ap.add_argument("--price_col_requested", default=None)
 
-    ap.add_argument("--twse_months_back", type=int, default=6)
+    # v10: TWSE fallback is short-circuit mode (unadjusted), so default should be small
+    ap.add_argument("--twse_months_back", type=int, default=2)
+    ap.add_argument("--twse_months_back_unadjusted_cap", type=int, default=2)
 
     # TWSE fallback throttling / retries
     ap.add_argument("--twse_timeout", type=int, default=20)
@@ -943,13 +1029,26 @@ def main() -> int:
 
     df = fetch_yfinance(ticker=ticker, start=str(args.start), dq_flags=dq_flags, dq_notes=dq_notes)
     used_fallback = False
+    twse_months_eff = None
 
     if df is None or len(df) == 0:
         used_fallback = True
         dq_flags.append("DATA_SOURCE_TWSE_FALLBACK")
-        dq_notes.append(f"Used TWSE fallback (recent-only, months_back={int(args.twse_months_back)}).")
-        df = fetch_twse_recent_0050(
-            months_back=int(args.twse_months_back),
+        stock_no = _ticker_to_twse_stock_no(ticker, default="0050")
+
+        # v10 short-circuit: cap months_back in unadjusted mode to avoid I/O blackhole
+        req_mb = max(1, int(args.twse_months_back))
+        cap_mb = max(1, int(args.twse_months_back_unadjusted_cap))
+        twse_months_eff = min(req_mb, cap_mb)
+
+        dq_notes.append(
+            f"Used TWSE fallback (raw/unadjusted). months_back requested={req_mb}, cap_unadjusted={cap_mb}, "
+            f"effective={twse_months_eff}, stockNo={stock_no}."
+        )
+
+        df = fetch_twse_recent(
+            stock_no=stock_no,
+            months_back=twse_months_eff,
             dq_flags=dq_flags,
             dq_notes=dq_notes,
             twse_timeout=int(args.twse_timeout),
@@ -963,7 +1062,8 @@ def main() -> int:
         stats_path = os.path.join(args.cache_dir, "stats_latest.json")
         with open(stats_path, "w", encoding="utf-8") as f:
             json.dump(
-                {"meta": {"run_ts_utc": utc_now_iso_z(), "module": "tw0050_bb", "ticker": ticker},
+                {"meta": {"run_ts_utc": utc_now_iso_z(), "module": "tw0050_bb", "ticker": ticker,
+                          "script_fingerprint": SCRIPT_FINGERPRINT},
                  "dq": {"flags": dq_flags, "notes": dq_notes}},
                 f, ensure_ascii=False, indent=2
             )
@@ -973,25 +1073,212 @@ def main() -> int:
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 
+    last_idx = len(df) - 1
+    last_date = df.loc[last_idx, "date"].strftime("%Y-%m-%d")
+
     # choose price series
     if price_col_req in df.columns and df[price_col_req].notna().any():
         price_used = df[price_col_req].astype(float).copy()
         price_col_used = price_col_req
     else:
-        price_used = df["adjclose"].astype(float).copy() if "adjclose" in df.columns else df["close"].astype(float).copy()
-        price_col_used = "adjclose" if "adjclose" in df.columns else "close"
+        # fallback attempt
+        if "adjclose" in df.columns and df["adjclose"].notna().any():
+            price_used = df["adjclose"].astype(float).copy()
+            price_col_used = "adjclose"
+        else:
+            price_used = df["close"].astype(float).copy()
+            price_col_used = "close"
         dq_flags.append("PRICE_COL_FALLBACK")
         dq_notes.append(f"requested={price_col_req} not usable; used={price_col_used}.")
 
-    # BB
+    latest_price = float(price_used.iloc[last_idx]) if np.isfinite(price_used.iloc[last_idx]) else float("nan")
+
+    # unadjusted mode decision (v10)
+    unadjusted_price_mode = bool(used_fallback) or (str(price_col_used).lower() != "adjclose")
+    if unadjusted_price_mode:
+        dq_flags.append("UNADJUSTED_PRICE_MODE")
+        if used_fallback:
+            dq_flags.append("TWSE_UNADJUSTED_PRICE_WARNING")
+            dq_flags.append("FWD_MDD_CORP_ACTION_CONTAMINATION_RISK")
+            dq_notes.append("TWSE fallback uses raw (unadjusted) daily prices; all derived indicators are short-circuited to NA.")
+        if str(price_col_used).lower() != "adjclose":
+            dq_flags.append("PRICE_COL_FALLBACK_UNADJUSTED")
+            dq_notes.append(f"price_col_used={price_col_used} (not adjclose); indicators short-circuited to NA to avoid dividend/corp-action contamination.")
+
+    # --- common meta ---
+    run_ts_utc = utc_now_iso_z()
+    meta = {
+        "run_ts_utc": run_ts_utc,
+        "module": "tw0050_bb",
+        "script_fingerprint": SCRIPT_FINGERPRINT,
+        "ticker": ticker,
+        "start": str(args.start),
+        "fetch_start_effective": str(args.start) if not used_fallback else df["date"].min().strftime("%Y-%m-%d"),
+        "rows": int(len(df)),
+        "tz": TZ_LOCAL,
+        "data_source": "yfinance_yahoo_or_twse_fallback",
+        "reliability": "LOW" if unadjusted_price_mode else "HIGH",
+        "reliability_reason": (
+            ["unadjusted_price_mode"] if unadjusted_price_mode else ["yfinance_adjclose_ok"]
+        ),
+        "bb_window": int(args.bb_window),
+        "bb_k": float(args.bb_k),
+        "fwd_days": int(args.fwd_days),
+        "fwd_days_short": int(args.fwd_days_short),
+        "price_calc": str(price_col_used),
+        "price_col_requested": price_col_req,
+        "price_col_used": str(price_col_used),
+        "last_date": last_date,
+        "break_detection": {
+            "break_ratio_hi": float(args.break_ratio_hi),
+            "break_ratio_lo": float(args.break_ratio_lo),
+            "break_count": None,  # filled in normal path
+            "forward_mode_primary": str(args.forward_mode).lower(),
+        },
+        "twse_fallback_policy": {
+            "months_back_requested": int(args.twse_months_back),
+            "months_back_unadjusted_cap": int(args.twse_months_back_unadjusted_cap),
+            "months_back_effective": int(twse_months_eff) if twse_months_eff is not None else None,
+            "timeout_sec": int(args.twse_timeout),
+            "max_retries": int(args.twse_max_retries),
+            "sleep_sec": float(args.twse_sleep_sec),
+            "sleep_jitter_sec": float(args.twse_sleep_jitter),
+        },
+        "trend_params": {
+            "trend_ma_days": int(args.trend_ma_days),
+            "trend_slope_days": int(args.trend_slope_days),
+            "trend_slope_thr_pct": float(args.trend_slope_thr_pct),
+        },
+        "vol_params": {
+            "rv_days": int(args.rv_days),
+            "atr_days": int(args.atr_days),
+        },
+        "regime_params": {
+            "rv_pctl_max": float(args.regime_rv_pctl_max),
+            "min_samples": int(args.regime_min_samples),
+        },
+        "shortcircuit": {
+            "enabled": True,
+            "unadjusted_price_mode": bool(unadjusted_price_mode),
+            "skipped_compute_when_unadjusted": True,
+        },
+    }
+
+    # -------------------------
+    # v10 SHORT-CIRCUIT PATH
+    # -------------------------
+    if unadjusted_price_mode:
+        # official latest block: BB-related fields must be None to prevent dirty-data leakage
+        latest = {
+            "date": last_date,
+            "close": _nan_to_none(float(df.loc[last_idx, "close"])) if "close" in df.columns else None,
+            "adjclose": _nan_to_none(float(df.loc[last_idx, "adjclose"])) if "adjclose" in df.columns else None,
+            "price_used": _nan_to_none(latest_price),
+
+            "bb_ma": None,
+            "bb_sd": None,
+            "bb_upper": None,
+            "bb_lower": None,
+            "bb_z": None,
+            "bb_pos": None,
+            "bb_pos_raw": None,
+            "dist_to_lower_pct": None,
+            "dist_to_upper_pct": None,
+            "band_width_geo_pct": None,
+            "band_width_std_pct": None,
+
+            "state": "NA_DUE_TO_UNADJUSTED_PRICE",
+        }
+
+        fwd_days = int(args.fwd_days)
+        fwd_days_short = int(args.fwd_days_short)
+        forward_mode = str(args.forward_mode).lower()
+
+        forward20_primary = pack_fwd_na(f"forward_mdd_{forward_mode}_20D", fwd_days)
+        forward10_primary = pack_fwd_na(f"forward_mdd_{forward_mode}_10D", fwd_days_short)
+
+        # keep audit extra keys but NA to preserve schema stability
+        forward20_raw = pack_fwd_na("forward_mdd_raw_20D", fwd_days)
+        forward20_clean = pack_fwd_na("forward_mdd_clean_20D", fwd_days)
+        forward10_raw = pack_fwd_na("forward_mdd_raw_10D", fwd_days_short)
+        forward10_clean = pack_fwd_na("forward_mdd_clean_10D", fwd_days_short)
+
+        trend = pack_trend_na(int(args.trend_ma_days), int(args.trend_slope_days), float(args.trend_slope_thr_pct))
+        vol_rv = pack_vol_na(int(args.rv_days))
+        atr = pack_atr_na(int(args.atr_days))
+
+        pctl_max_100 = float(args.regime_rv_pctl_max) * 100.0
+        min_samples = int(args.regime_min_samples)
+        regime = pack_regime_na(pctl_max_100, min_samples, trend_required="TREND_UP")
+
+        # pledge: deterministic DISALLOW via DQ veto + regime gate closed
+        pledge_block = compute_pledge_guidance_block(
+            latest_price=_nan_to_none(latest_price),
+            bb_state=latest["state"],
+            bb_z=None,
+            regime=regime,
+            forward20_primary=forward20_primary,
+            forward10_primary=forward10_primary,
+            dq_flags=dq_flags,
+            forward_mode=forward_mode,
+        )
+
+        stats_out = {
+            "meta": meta,
+            "latest": latest,
+
+            "forward_mdd": forward20_primary,
+            "forward_mdd10": forward10_primary,
+
+            "forward_mdd_raw": forward20_raw,
+            "forward_mdd_clean": forward20_clean,
+
+            "forward_mdd10_raw": forward10_raw,
+            "forward_mdd10_clean": forward10_clean,
+
+            "trend": trend,
+            "vol": vol_rv,
+            "atr": atr,
+            "regime": regime,
+
+            "pledge": pledge_block,
+
+            "dq": {"flags": dq_flags, "notes": dq_notes},
+        }
+
+        # write stats_latest.json
+        stats_path = os.path.join(args.cache_dir, "stats_latest.json")
+        with open(stats_path, "w", encoding="utf-8") as f:
+            json.dump(stats_out, f, ensure_ascii=False, indent=2, sort_keys=True)
+
+        # write data.csv (keep minimal columns)
+        out_df = df.copy()
+        out_df["date"] = out_df["date"].dt.strftime("%Y-%m-%d")
+        out_csv = _df_to_csv_min(out_df)
+        out_csv_path = os.path.join(args.cache_dir, "data.csv")
+        out_csv.to_csv(out_csv_path, index=False)
+
+        # write history_lite.json
+        hist_path = os.path.join(args.cache_dir, "history_lite.json")
+        hist = load_history_lite(hist_path)
+        upsert_history_row(hist, day_key=_local_day_key_now(), latest=latest, meta=meta)
+        save_history_lite(hist_path, hist)
+
+        print(f"[OK][SHORTCIRCUIT] wrote: {stats_path}")
+        print(f"[OK][SHORTCIRCUIT] wrote: {out_csv_path}")
+        print(f"[OK][SHORTCIRCUIT] wrote: {hist_path}")
+        return 0
+
+    # -------------------------
+    # NORMAL COMPUTE PATH (adjusted / yfinance adjclose)
+    # -------------------------
+
     w = int(args.bb_window)
     k = float(args.bb_k)
+
+    # BB
     ma, sd, upper, lower = compute_bb(price_used, window=w, k=k)
 
-    last_idx = len(df) - 1
-    last_date = df.loc[last_idx, "date"].strftime("%Y-%m-%d")
-
-    latest_price = float(price_used.iloc[last_idx])
     latest_ma = float(ma.iloc[last_idx]) if np.isfinite(ma.iloc[last_idx]) else float("nan")
     latest_sd = float(sd.iloc[last_idx]) if np.isfinite(sd.iloc[last_idx]) else float("nan")
     latest_upper = float(upper.iloc[last_idx]) if np.isfinite(upper.iloc[last_idx]) else float("nan")
@@ -999,45 +1286,38 @@ def main() -> int:
 
     bb_z = float((latest_price - latest_ma) / latest_sd) if np.isfinite(latest_sd) and latest_sd > 0 else float("nan")
 
-    # pos_raw (unclipped), pos (clipped)
     denom = (latest_upper - latest_lower)
     pos_raw = float((latest_price - latest_lower) / denom) if np.isfinite(denom) and denom != 0 else float("nan")
     pos = _clip01(pos_raw)
 
-    # dist_to_{upper,lower} in % (VT-style: positive when inside band)
     dist_to_lower_pct = ((latest_price - latest_lower) / latest_price) * 100.0 if np.isfinite(latest_lower) and latest_price > 0 else float("nan")
     dist_to_upper_pct = ((latest_upper - latest_price) / latest_price) * 100.0 if np.isfinite(latest_upper) and latest_price > 0 else float("nan")
 
-    # band width (%): both definitions
     band_width_geo_pct = ((latest_upper / latest_lower) - 1.0) * 100.0 if (np.isfinite(latest_upper) and np.isfinite(latest_lower) and latest_lower > 0) else float("nan")
     band_width_std_pct = ((latest_upper - latest_lower) / latest_ma) * 100.0 if (np.isfinite(latest_upper) and np.isfinite(latest_lower) and np.isfinite(latest_ma) and latest_ma != 0) else float("nan")
 
-    state = classify_state(bb_z=bb_z, bb_pos=pos)  # use clipped for deterministic bucket thresholds
+    state = classify_state(bb_z=bb_z, bb_pos=pos)
 
     prices_np = price_used.to_numpy(dtype=float)
     n_prices = int(len(prices_np))
 
-    # -------------------------
     # forward_mdd(20D): raw + clean
-    # -------------------------
     fwd_days = int(args.fwd_days)
     fwd_raw_arr, fwd_raw_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days)
 
     breaks = detect_price_breaks(prices_np, ratio_hi=float(args.break_ratio_hi), ratio_lo=float(args.break_ratio_lo))
     break_idxs = np.where(breaks)[0].tolist()
+    meta["break_detection"]["break_count"] = int(len(break_idxs))
 
     clean_mask_20 = build_clean_entry_mask(n_prices, breaks, fwd_days=fwd_days)
     fwd_clean_arr, fwd_clean_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days, valid_entry_mask=clean_mask_20)
 
-    # -------------------------
-    # forward_mdd(10D): raw + clean (sidecar)
-    # -------------------------
+    # forward_mdd(10D): raw + clean
     fwd_days_short = int(args.fwd_days_short)
     fwd10_raw_arr, fwd10_raw_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days_short)
     clean_mask_10 = build_clean_entry_mask(n_prices, breaks, fwd_days=fwd_days_short)
     fwd10_clean_arr, fwd10_clean_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days_short, valid_entry_mask=clean_mask_10)
 
-    # DQ around breaks
     if len(break_idxs) > 0:
         dq_flags.append("PRICE_SERIES_BREAK_DETECTED")
         show = []
@@ -1053,8 +1333,6 @@ def main() -> int:
         )
         dq_flags.append("FWD_MDD_CLEAN_APPLIED")
         dq_notes.append("Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).")
-        dq_notes.append(f"Clean masks built per-window: clean20 excludes entries whose [t+1..t+{fwd_days}] includes break; "
-                        f"clean10 excludes entries whose [t+1..t+{fwd_days_short}] includes break.")
 
     # Raw outlier tagging (20D)
     thr = float(args.outlier_min_threshold)
@@ -1066,7 +1344,6 @@ def main() -> int:
             dq_flags.append("RAW_OUTLIER_EXCLUDED_BY_CLEAN")
             dq_notes.append("Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.")
 
-    # Choose primary mode for 20D / 10D
     forward_mode = str(args.forward_mode).lower()
     primary20_stats = fwd_clean_stats if forward_mode == "clean" else fwd_raw_stats
     primary10_stats = fwd10_clean_stats if forward_mode == "clean" else fwd10_raw_stats
@@ -1077,7 +1354,6 @@ def main() -> int:
         if stats.min_entry_idx >= len(df) or stats.min_future_idx >= len(df):
             return None, None, None, None
         if stats.min_future_idx <= stats.min_entry_idx or (stats.min_future_idx - stats.min_entry_idx) > fwd_days_used:
-            # alignment sanity check (should never happen unless bug)
             return None, None, None, None
         med = df.loc[stats.min_entry_idx, "date"].strftime("%Y-%m-%d")
         mfd = df.loc[stats.min_future_idx, "date"].strftime("%Y-%m-%d")
@@ -1171,67 +1447,10 @@ def main() -> int:
             regime["tag"] = "RISK_OFF_OR_DEFENSIVE"
             regime["allowed"] = False
 
-    # Context reasons (do not block allowed; just notes)
     if state == "EXTREME_UPPER_BAND":
         regime["reasons"].append("bb_extreme_upper_band_stretched")
     if state == "EXTREME_LOWER_BAND":
         regime["reasons"].append("bb_extreme_lower_band_stressed")
-
-    # Fallback warnings (forced)
-    if used_fallback:
-        dq_flags.append("TWSE_UNADJUSTED_PRICE_WARNING")
-        dq_flags.append("FWD_MDD_CORP_ACTION_CONTAMINATION_RISK")
-        dq_notes.append("TWSE fallback uses raw (unadjusted) daily prices; forward_mdd tail may be contaminated by dividends/corporate actions.")
-        dq_flags.append("REGIME_DQ_SHORT_HISTORY_RISK")
-        dq_notes.append("Using TWSE fallback recent-only data; RV percentile/regime should be down-weighted.")
-
-    # build outputs
-    run_ts_utc = utc_now_iso_z()
-    meta = {
-        "run_ts_utc": run_ts_utc,
-        "module": "tw0050_bb",
-        "script_fingerprint": SCRIPT_FINGERPRINT,
-        "ticker": ticker,
-        "start": str(args.start),
-        "fetch_start_effective": str(args.start) if not used_fallback else df["date"].min().strftime("%Y-%m-%d"),
-        "rows": int(len(df)),
-        "tz": TZ_LOCAL,
-        "data_source": "yfinance_yahoo_or_twse_fallback",
-        "bb_window": w,
-        "bb_k": k,
-        "fwd_days": fwd_days,
-        "fwd_days_short": fwd_days_short,
-        "price_calc": "adjclose" if price_col_used == "adjclose" else "close",
-        "price_col_requested": price_col_req,
-        "price_col_used": price_col_used,
-        "last_date": last_date,
-        "break_detection": {
-            "break_ratio_hi": float(args.break_ratio_hi),
-            "break_ratio_lo": float(args.break_ratio_lo),
-            "break_count": int(len(break_idxs)),
-            "forward_mode_primary": forward_mode,
-        },
-        "twse_fallback_policy": {
-            "months_back": int(args.twse_months_back),
-            "timeout_sec": int(args.twse_timeout),
-            "max_retries": int(args.twse_max_retries),
-            "sleep_sec": float(args.twse_sleep_sec),
-            "sleep_jitter_sec": float(args.twse_sleep_jitter),
-        },
-        "trend_params": {
-            "trend_ma_days": int(args.trend_ma_days),
-            "trend_slope_days": int(args.trend_slope_days),
-            "trend_slope_thr_pct": float(args.trend_slope_thr_pct),
-        },
-        "vol_params": {
-            "rv_days": int(args.rv_days),
-            "atr_days": int(args.atr_days),
-        },
-        "regime_params": {
-            "rv_pctl_max": float(args.regime_rv_pctl_max),
-            "min_samples": int(args.regime_min_samples),
-        },
-    }
 
     latest = {
         "date": last_date,
@@ -1245,22 +1464,18 @@ def main() -> int:
         "bb_lower": _nan_to_none(latest_lower),
         "bb_z": _nan_to_none(bb_z),
 
-        # pos fields (compute-side aligned with VT report style)
-        "bb_pos": _nan_to_none(pos),          # clipped 0..1
-        "bb_pos_raw": _nan_to_none(pos_raw),  # unclipped for audit
+        "bb_pos": _nan_to_none(pos),
+        "bb_pos_raw": _nan_to_none(pos_raw),
 
-        # distance fields (%), VT-style positive when inside band
         "dist_to_lower_pct": _nan_to_none(dist_to_lower_pct),
         "dist_to_upper_pct": _nan_to_none(dist_to_upper_pct),
 
-        # band width (%)
         "band_width_geo_pct": _nan_to_none(band_width_geo_pct),
         "band_width_std_pct": _nan_to_none(band_width_std_pct),
 
         "state": state,
     }
 
-    # --- NEW: pledge guidance block (additive; compute-only) ---
     pledge_block = compute_pledge_guidance_block(
         latest_price=_nan_to_none(latest_price),
         bb_state=state,
@@ -1276,45 +1491,35 @@ def main() -> int:
         "meta": meta,
         "latest": latest,
 
-        # Primary used by report (build script reads this)
-        "forward_mdd": forward20_primary,          # 20D primary
+        "forward_mdd": forward20_primary,
+        "forward_mdd10": forward10_primary,
 
-        # Sidecar (10D)
-        "forward_mdd10": forward10_primary,        # 10D primary
-
-        # Audit extras (20D)
         "forward_mdd_raw": forward20_raw,
         "forward_mdd_clean": forward20_clean,
 
-        # Audit extras (10D)
         "forward_mdd10_raw": forward10_raw,
         "forward_mdd10_clean": forward10_clean,
 
-        # Added blocks
         "trend": trend,
         "vol": vol_rv,
         "atr": atr,
         "regime": regime,
 
-        # NEW (add-on only)
         "pledge": pledge_block,
 
         "dq": {"flags": dq_flags, "notes": dq_notes},
     }
 
-    # write stats_latest.json
     stats_path = os.path.join(args.cache_dir, "stats_latest.json")
     with open(stats_path, "w", encoding="utf-8") as f:
         json.dump(stats_out, f, ensure_ascii=False, indent=2, sort_keys=True)
 
-    # write data.csv (keep minimal columns)
     out_df = df.copy()
     out_df["date"] = out_df["date"].dt.strftime("%Y-%m-%d")
     out_csv = _df_to_csv_min(out_df)
     out_csv_path = os.path.join(args.cache_dir, "data.csv")
     out_csv.to_csv(out_csv_path, index=False)
 
-    # write history_lite.json
     hist_path = os.path.join(args.cache_dir, "history_lite.json")
     hist = load_history_lite(hist_path)
     upsert_history_row(hist, day_key=_local_day_key_now(), latest=latest, meta=meta)
