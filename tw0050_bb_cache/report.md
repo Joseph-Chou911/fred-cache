@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T10:44:43Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v7`
+- report_generated_at_utc: `2026-02-20T11:05:42Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v8`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -9,14 +9,15 @@
 - bb_window,k: `60`, `2.0`
 - forward_window_days: `20`
 - forward_window_days_short: `10`
-- forward_mode_primary: `clean`
+- forward_mode_primary: `N/A`
 - price_calc: `adjclose`
 - chip_overlay_path: `tw0050_bb_cache/chip_overlay.json`
 
 ## 快速摘要（非預測，僅狀態）
-- state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos=1.0000 (raw=1.0136); bw_geo=37.61%; bw_std=31.66%; dist_to_lower=27.60%; dist_to_upper=-0.37%
-- forward_mdd_clean_20D distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED] [DQ:FWD_MDD_OUTLIER_MIN_RAW]
-- forward_mdd_clean_10D distribution (n=4171): p50=-0.0114; p10=-0.0480; p05=-0.0631; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED] [DQ:FWD_MDD_OUTLIER_MIN_RAW]
+- state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos=1.0000 (raw=1.0136); bw_geo=37.61%; bw_std=31.66%
+- dist_to_lower=27.60%; dist_to_upper=-0.37%; above_upper=0.37%; below_lower=0.00%; DQ=PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, FWD_MDD_OUTLIER_MIN_RAW_20D, RAW_OUTLIER_EXCLUDED_BY_CLEAN
+- forward_mdd_clean_20D distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
+- forward_mdd_clean_10D distribution (n=4171): p50=-0.0114; p10=-0.0480; p05=-0.0631; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
@@ -39,6 +40,8 @@
 | pos_in_band_raw (unclipped) | 1.0136 |
 | dist_to_lower | 27.60% |
 | dist_to_upper | -0.37% |
+| above_upper_pct | 0.37% |
+| below_lower_pct | 0.00% |
 | band_width_geo_pct (upper/lower-1) | 37.61% |
 | band_width_std_pct ((upper-lower)/ma) | 31.66% |
 
@@ -94,6 +97,7 @@
 
 ### forward_mdd (primary)
 
+- block_used: `forward_mdd_clean_20D`
 - definition: `min(price[t+1..t+20]/price[t]-1), level-price based`
 
 | quantile | value |
@@ -115,6 +119,7 @@
 
 ### forward_mdd10 (primary)
 
+- block_used: `forward_mdd_clean_10D`
 - definition: `min(price[t+1..t+10]/price[t]-1), level-price based`
 
 | quantile | value |
@@ -136,7 +141,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T10:44:43.309Z`
+- overlay_generated_at_utc: `2026-02-20T11:05:42.373Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -229,6 +234,7 @@
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
 - pos_in_band 會顯示 clipped 值（0..1）與 raw 值（可超界，用於稽核）。
+- dist_to_upper/lower 可能為負值（代表超出通道）；報表已額外提供 above_upper / below_lower 以避免符號誤讀。
 - band_width 同時提供兩種定義：geo=(upper/lower-1)、std=(upper-lower)/ma；請勿混用解讀。
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被除權息/企業行動污染，DQ 會標示。
 - Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；資料不足會以 DQ 明示。
