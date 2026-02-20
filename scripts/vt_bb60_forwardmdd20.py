@@ -38,6 +38,14 @@ NEW (2026-02-20, band_width quantile observation; independent item):
 - forward_mdd(20D) slices by band_width quantiles within current bucket (reading-only)
 - These are stored under latest.json: band_width_observation
   (does NOT affect bucket rules nor main forward_mdd stats)
+
+PATCH (2026-02-20):
+- Fix "pos vs dist_to_upper consistency check" to match *log-band geometry*.
+  Previous linear approximation can falsely WARN (your case is exactly that).
+  For log bands:
+      ratio = upper/lower = 1 + band_width_pct
+      expected_dist_to_upper = ratio^(1-pos) - 1
+  Compare actual dist_to_upper vs expected.
 """
 
 from __future__ import annotations
@@ -509,7 +517,6 @@ def _percentile_of_score(sorted_vals: np.ndarray, x: float) -> Optional[float]:
     """
     if sorted_vals.size == 0 or not np.isfinite(x):
         return None
-    # count <= x
     k = int(np.searchsorted(sorted_vals, x, side="right"))
     return 100.0 * (k / sorted_vals.size)
 
@@ -523,30 +530,58 @@ def _compute_band_width_series(bb: pd.DataFrame) -> pd.Series:
     return bw
 
 
-def _pos_dist_consistency_check(
+def _pos_dist_consistency_check_logband(
     pos: float,
     dist_to_upper: Optional[float],
     band_width_pct: Optional[float],
     tolerance: float = 0.02,
 ) -> Dict[str, Any]:
     """
-    Relationship (approximately, when consistent):
-      dist_to_upper ≈ (1 - pos) * band_width_pct   (derived under linear approx)
-    We only use this as a hint / sanity check, never as a signal.
+    Consistency check for *log-band* BB.
+
+    Given:
+      pos = (logp - lower_log)/(upper_log - lower_log)
+      ratio = upper/lower = exp(upper_log - lower_log) = 1 + band_width_pct
+
+    Then the implied price at that pos (on log scale) is:
+      p = lower * ratio^pos
+    and implied dist_to_upper is:
+      (upper - p)/p = upper/p - 1 = ratio^(1-pos) - 1
+
+    We compare actual dist_to_upper vs implied_dist_to_upper.
     """
     if dist_to_upper is None or band_width_pct is None:
-        return {"status": "NA", "reason": "missing_fields", "tolerance": tolerance}
+        return {"status": "NA", "reason": "missing_fields", "tolerance": float(tolerance), "model": "logband"}
 
-    if not (np.isfinite(dist_to_upper) and np.isfinite(band_width_pct)):
-        return {"status": "NA", "reason": "non_finite", "tolerance": tolerance}
+    if not (np.isfinite(dist_to_upper) and np.isfinite(band_width_pct) and np.isfinite(pos)):
+        return {"status": "NA", "reason": "non_finite", "tolerance": float(tolerance), "model": "logband"}
 
-    expected = (1.0 - float(pos)) * float(band_width_pct)
-    denom = max(1e-12, abs(expected))
-    rel_err = abs(float(dist_to_upper) - expected) / denom
+    ratio = 1.0 + float(band_width_pct)
+    if ratio <= 0:
+        return {"status": "NA", "reason": "bad_ratio", "tolerance": float(tolerance), "model": "logband"}
+
+    implied = (ratio ** (1.0 - float(pos))) - 1.0
+
+    denom = max(1e-12, abs(implied))
+    rel_err = abs(float(dist_to_upper) - implied) / denom
 
     if rel_err <= tolerance:
-        return {"status": "OK", "reason": "within_tolerance", "rel_err": float(rel_err), "tolerance": tolerance}
-    return {"status": "WARN", "reason": "outside_tolerance", "rel_err": float(rel_err), "tolerance": tolerance}
+        return {
+            "status": "OK",
+            "reason": "within_tolerance",
+            "rel_err": float(rel_err),
+            "tolerance": float(tolerance),
+            "expected_dist_to_upper": float(implied),
+            "model": "logband",
+        }
+    return {
+        "status": "WARN",
+        "reason": "outside_tolerance",
+        "rel_err": float(rel_err),
+        "tolerance": float(tolerance),
+        "expected_dist_to_upper": float(implied),
+        "model": "logband",
+    }
 
 
 # ----------------------------
@@ -573,7 +608,9 @@ def main() -> int:
     # band_width observation quantiles
     ap.add_argument("--bw_low_q", type=float, default=20.0)   # p20
     ap.add_argument("--bw_high_q", type=float, default=80.0)  # p80
-    ap.add_argument("--bw_consistency_tolerance", type=float, default=0.02)
+
+    # tolerance for consistency check
+    ap.add_argument("--consistency_tolerance", type=float, default=0.02)
 
     args = ap.parse_args()
 
@@ -683,12 +720,12 @@ def main() -> int:
     bbv_dist_u = (bbv_upper - bbv_price) / bbv_price
     distu_streak = streak_from_tail((bbv_dist_u <= args.dist_upper_hint_threshold).fillna(False).astype(bool))
 
-    # pos vs dist_to_upper consistency check (hint only)
-    consistency_check = _pos_dist_consistency_check(
+    # --- FIXED consistency check (logband geometry)
+    consistency_check = _pos_dist_consistency_check_logband(
         pos=pos_in_band,
         dist_to_upper=dist_to_upper,
         band_width_pct=band_width_pct,
-        tolerance=args.bw_consistency_tolerance,
+        tolerance=args.consistency_tolerance,
     )
 
     # ----------------------------
@@ -712,7 +749,6 @@ def main() -> int:
         mask_bw_low = (bw_series <= float(bw_p20))
         mask_bw_high = (bw_series >= float(bw_p80))
 
-    # global bw slices (reading-only)
     mdd_bw_low = summarize_mdd(
         fwd_mdd[(mask_bw_low.fillna(False).to_numpy()) & np.isfinite(fwd_mdd)],
         min_n_required=args.min_n_required,
@@ -722,7 +758,6 @@ def main() -> int:
         min_n_required=args.min_n_required,
     )
 
-    # in-bucket bw slices (reading-only)
     mask_bw_low_in_bucket = (buckets_series == bucket) & mask_bw_low & np.isfinite(fwd_mdd)
     mask_bw_high_in_bucket = (buckets_series == bucket) & mask_bw_high & np.isfinite(fwd_mdd)
 
@@ -735,7 +770,6 @@ def main() -> int:
         min_n_required=args.min_n_required,
     )
 
-    # bw streaks (BB-valid days)
     bwv = bw_valid.copy()
     bw_low_streak = 0
     bw_high_streak = 0
@@ -843,7 +877,7 @@ def main() -> int:
         "forward_mdd20": mdd_stats_bucket,
         "forward_mdd20_slices": forward_mdd20_slices,  # reading-only
         "forward_mdd20_slices_in_bucket": forward_mdd20_slices_in_bucket,  # reading-only
-        "band_width_observation": band_width_observation,  # NEW: independent observation item
+        "band_width_observation": band_width_observation,  # independent observation item
         "fx_usdtwd": {
             "rate": fx_rate_strict,
             "used_policy": fx_used_policy,
@@ -872,6 +906,7 @@ def main() -> int:
             "forward_mdd20 computed on linear price_usd (same series as BB).",
             "forward_mdd20_slices and *_in_bucket are reading-only; do NOT replace bucket-conditioned stats.",
             "band_width_observation is independent reading-only; does NOT affect bucket rules nor main forward_mdd stats.",
+            "Consistency check uses logband geometry: expected dist_to_upper = (1+band_width_pct)^(1-pos) - 1.",
             "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
             "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated.",
         ],
@@ -884,7 +919,7 @@ def main() -> int:
 
     _write_json(latest_path, latest)
 
-    # history row (compact; include key slice summaries and band_width current)
+    # history row (compact)
     hist_row = {
         "date": last_date,
         "price_usd": last_price,
@@ -896,41 +931,34 @@ def main() -> int:
         "band_width_pct": band_width_pct,
         "dist_to_upper": dist_to_upper,
 
-        # main
         "p50_mdd20": mdd_stats_bucket.get("p50"),
         "p10_mdd20": mdd_stats_bucket.get("p10"),
         "min_mdd20": mdd_stats_bucket.get("min"),
         "n_mdd20": mdd_stats_bucket.get("n"),
 
-        # reading-only slices (global)
         "p50_mdd20_pos_ge": mdd_stats_pos.get("p50"),
         "n_mdd20_pos_ge": mdd_stats_pos.get("n"),
         "p50_mdd20_dist_u_le": mdd_stats_distu.get("p50"),
         "n_mdd20_dist_u_le": mdd_stats_distu.get("n"),
 
-        # reading-only slices (in-bucket)
         "p50_mdd20_pos_ge_in_bucket": mdd_stats_pos_in_bucket.get("p50"),
         "n_mdd20_pos_ge_in_bucket": mdd_stats_pos_in_bucket.get("n"),
         "p50_mdd20_dist_u_le_in_bucket": mdd_stats_distu_in_bucket.get("p50"),
         "n_mdd20_dist_u_le_in_bucket": mdd_stats_distu_in_bucket.get("n"),
 
-        # band_width obs slices (global; compact p50/n)
         "p50_mdd20_bw_low": mdd_bw_low.get("p50"),
         "n_mdd20_bw_low": mdd_bw_low.get("n"),
         "p50_mdd20_bw_high": mdd_bw_high.get("p50"),
         "n_mdd20_bw_high": mdd_bw_high.get("n"),
 
-        # band_width obs slices (in-bucket; compact p50/n)
         "p50_mdd20_bw_low_in_bucket": mdd_bw_low_in_bucket.get("p50"),
         "n_mdd20_bw_low_in_bucket": mdd_bw_low_in_bucket.get("n"),
         "p50_mdd20_bw_high_in_bucket": mdd_bw_high_in_bucket.get("p50"),
         "n_mdd20_bw_high_in_bucket": mdd_bw_high_in_bucket.get("n"),
 
-        # strict fx
         "fx_usdtwd": fx_rate_strict,
         "price_twd": price_twd,
 
-        # reference fx (only if strict missing)
         "fx_ref_date": ref_date if fx_rate_strict is None else None,
         "fx_ref_rate": ref_rate if fx_rate_strict is None else None,
         "fx_ref_lag_days": ref_lag_days if fx_rate_strict is None else None,
@@ -1075,6 +1103,8 @@ def main() -> int:
     R.append("## pos vs dist_to_upper 一致性檢查（提示用；不改數值）")
     R.append(f"- status: `{consistency_check.get('status')}`")
     R.append(f"- reason: `{consistency_check.get('reason')}`")
+    if "expected_dist_to_upper" in consistency_check:
+        R.append(f"- expected_dist_to_upper(logband): `{fmt_pct(consistency_check.get('expected_dist_to_upper'))}`")
     if "rel_err" in consistency_check:
         R.append(f"- rel_err: `{fmt_num(consistency_check.get('rel_err'), 6)}`; tolerance: `{fmt_num(consistency_check.get('tolerance'), 6)}`")
     R.append("")
@@ -1109,7 +1139,6 @@ def main() -> int:
     R.append("- 說明：交集切片用於回答「在同一個 bucket/regime 內，貼上緣時的 forward_mdd 分布」；避免全樣本切片混入不同 regime。")
     R.append("")
 
-    # band_width observation section (independent)
     R.append("## band_width 分位數觀察（獨立項目；不改 bucket / 不回填主欄位）")
     R.append("")
     if bw_p20 is None or bw_p80 is None or bw_pctl is None:
@@ -1217,7 +1246,7 @@ def main() -> int:
     R.append("- bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。")
     R.append("- Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。")
     R.append("- forward_mdd 切片（含 in-bucket / band_width）為閱讀用；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。")
-    R.append("- pos vs dist_to_upper 一致性檢查為提示用，避免 band_width 或資料異常造成誤讀。")
+    R.append("- pos vs dist_to_upper 一致性檢查已改為 logband 幾何一致性（避免線性近似誤判）。")
     R.append("- FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。")
     R.append("")
 
