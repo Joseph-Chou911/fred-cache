@@ -1,7 +1,7 @@
 {
   "band_width_observation": {
     "current": {
-      "band_width_pct": 0.0900021984010444,
+      "band_width_pct": 0.09000219840131729,
       "percentile": 40.44738644145172
     },
     "forward_mdd20_bw_slices": {
@@ -9,21 +9,21 @@
         "condition": "band_width_pct <= p20",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.11750664643630004,
+        "min": -0.1175061893119208,
         "min_n_required": 200,
         "n": 877,
-        "p10": -0.060283526304825606,
-        "p50": -0.01421945519872414
+        "p10": -0.06028353619138349,
+        "p50": -0.01421926799594364
       },
       "bw>=p80": {
         "condition": "band_width_pct >= p80",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.3157404296577969,
+        "min": -0.31574045684105334,
         "min_n_required": 200,
         "n": 877,
-        "p10": -0.10218121330332872,
-        "p50": -0.01995513850320818
+        "p10": -0.10218130617194283,
+        "p50": -0.01995529146991959
       }
     },
     "forward_mdd20_bw_slices_in_bucket": {
@@ -31,29 +31,29 @@
         "condition": "(bucket==MID_BAND) AND (band_width_pct <= p20)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.11750664643630004,
+        "min": -0.1175061893119208,
         "min_n_required": 200,
         "n": 570,
-        "p10": -0.06396518308106924,
-        "p50": -0.015306473177693847
+        "p10": -0.06396518390472751,
+        "p50": -0.015306633958494908
       },
       "bucket=MID_BAND ∩ bw>=p80": {
         "condition": "(bucket==MID_BAND) AND (band_width_pct >= p80)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.252877014424152,
+        "min": -0.25287658738921037,
         "min_n_required": 200,
         "n": 618,
-        "p10": -0.09897531631868409,
-        "p50": -0.016128262274637706
+        "p10": -0.09897540460744386,
+        "p50": -0.016128349986397728
       }
     },
     "note": "Independent observation only. Does NOT affect bucket rules nor main forward_mdd stats.",
     "quantiles": {
       "n_bw_samples": 4381,
-      "p50": 0.09854920849599558,
-      "p_high": 0.16700591815845933,
-      "p_low": 0.06869601582690277,
+      "p50": 0.0985493565051696,
+      "p_high": 0.1670059797209127,
+      "p_low": 0.06869584445395871,
       "q_high": 80.0,
       "q_low": 20.0
     },
@@ -63,12 +63,13 @@
     }
   },
   "bb": {
-    "band_width_pct": 0.0900021984010444,
+    "band_width_pct": 0.09000219840131729,
     "bucket": "MID_BAND",
-    "dist_to_lower": 0.06668425486754097,
-    "dist_to_upper": 0.017316213996689162,
-    "lower_usd": 136.8987466602204,
-    "pos_in_band": 0.8007884183692382,
+    "dist_to_lower": 0.06668425486765703,
+    "dist_to_upper": 0.017316213996817435,
+    "lower_usd": 136.8987466602034,
+    "pos_in_band": 0.8007884183683537,
+    "pos_raw": 0.8007884183683537,
     "streak": {
       "bucket_streak": 5,
       "dist_u_le_threshold_streak": 2,
@@ -76,18 +77,18 @@
       "pos_ge_threshold_streak": 2,
       "pos_threshold": 0.8
     },
-    "upper_usd": 149.21993481798788,
-    "z": 1.2031536734769437
+    "upper_usd": 149.2199348180067,
+    "z": 1.2031536734734216
   },
   "close_usd": 146.67999267578125,
   "consistency_check": {
     "pos_vs_dist_to_upper": {
-      "abs_err": 4.614364446098307e-16,
+      "abs_err": 3.920475055707584e-16,
       "abs_tol": 0.0001,
-      "expected_dist_to_upper": 0.0173162139966887,
+      "expected_dist_to_upper": 0.017316213996817043,
       "model": "logband",
       "reason": "within_abs_or_rel_tolerance",
-      "rel_err": 2.664765200395749e-14,
+      "rel_err": 2.2640486288908953e-14,
       "rel_tolerance": 0.02,
       "status": "OK"
     }
@@ -103,32 +104,32 @@
   "forward_mdd20": {
     "conf": "HIGH",
     "conf_decision": "OK",
-    "min": -0.3157059033628461,
+    "min": -0.3157058701296732,
     "min_n_required": 200,
     "n": 2896,
-    "p10": -0.07279359005752856,
-    "p50": -0.016369331747207838
+    "p10": -0.07279347221493182,
+    "p50": -0.016369243757403895
   },
   "forward_mdd20_slices": {
     "dist_to_upper<=2.0%": {
       "condition": "dist_to_upper<=0.0200",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128538832343024,
+      "min": -0.3128539220982788,
       "min_n_required": 200,
       "n": 1743,
-      "p10": -0.054857063131025986,
-      "p50": -0.014434131871362443
+      "p10": -0.054857091467806436,
+      "p50": -0.014434132824503232
     },
     "pos>=0.80": {
       "condition": "pos_in_band>=0.80",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128538832343024,
+      "min": -0.3128539220982788,
       "min_n_required": 200,
       "n": 1704,
-      "p10": -0.054305686975865394,
-      "p50": -0.015082158867813444
+      "p10": -0.05430564960437488,
+      "p50": -0.015082351705474173
     }
   },
   "forward_mdd20_slices_in_bucket": {
@@ -136,21 +137,21 @@
       "condition": "(bucket==MID_BAND) AND (dist_to_upper<=0.0200)",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128538832343024,
+      "min": -0.3128539220982788,
       "min_n_required": 200,
       "n": 718,
-      "p10": -0.05322498797328808,
-      "p50": -0.013953679008393116
+      "p10": -0.05322466673348749,
+      "p50": -0.013953636417174675
     },
     "bucket=MID_BAND ∩ pos>=0.80": {
       "condition": "(bucket==MID_BAND) AND (pos_in_band>=0.80)",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128538832343024,
+      "min": -0.3128539220982788,
       "min_n_required": 200,
       "n": 638,
-      "p10": -0.051862649134872006,
-      "p50": -0.015345194227008918
+      "p10": -0.05186262098634618,
+      "p50": -0.015345267238772609
     }
   },
   "fx_usdtwd": {
@@ -170,16 +171,17 @@
     },
     "used_policy": "NA"
   },
-  "generated_at_utc": "2026-02-20T05:18:32Z",
+  "generated_at_utc": "2026-02-20T05:32:24Z",
   "k": 2.0,
   "min_n_required": 200,
   "module": "vt_bb_cache",
   "notes": [
     "BB computed on log(price_usd) where price_usd is adj_close when available.",
+    "pos_in_band is clipped [0,1] for readability; pos_raw is unclipped for audit/consistency check.",
     "forward_mdd20 computed on linear price_usd (same series as BB).",
     "forward_mdd20_slices and *_in_bucket are reading-only; do NOT replace bucket-conditioned stats.",
     "band_width_observation is independent reading-only; does NOT affect bucket rules nor main forward_mdd stats.",
-    "Consistency check uses logband geometry with abs+rel thresholds; expected dist_to_upper = (1+band_width_pct)^(1-pos) - 1.",
+    "Consistency check uses logband geometry with abs+rel thresholds; expected dist_to_upper = (1+band_width_pct)^(1-pos_raw) - 1.",
     "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
     "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated."
   ],
