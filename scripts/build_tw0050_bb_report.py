@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v9"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v10"
 
 
 def utc_now_iso() -> str:
@@ -240,13 +240,48 @@ def _dq_compact(dq_flags: List[str]) -> str:
     return ", ".join(ordered[:cap]) + f", ... (+{len(ordered) - cap})"
 
 
+def _extract_fwd_outlier_days(dq_flags: List[str]) -> List[int]:
+    """
+    Parse flags like:
+      FWD_MDD_OUTLIER_MIN_RAW_20D -> [20]
+      FWD_MDD_OUTLIER_MIN_RAW_10D -> [10]
+    """
+    days: List[int] = []
+    for f in dq_flags:
+        if not isinstance(f, str):
+            continue
+        if not f.startswith("FWD_MDD_OUTLIER_MIN_RAW_"):
+            continue
+        if not f.endswith("D"):
+            continue
+        # suffix pattern: _{N}D
+        try:
+            tail = f.split("_")[-1]  # e.g. "20D"
+            if tail.endswith("D"):
+                n = int(tail[:-1])
+                days.append(n)
+        except Exception:
+            continue
+    days = sorted(set(days))
+    return days
+
+
+def _dq_core_and_fwd_summary(dq_flags: List[str]) -> Tuple[str, str]:
+    """
+    For quick summary:
+      - core DQ excludes horizon-specific FWD outlier flags
+      - fwd_outlier shows parsed horizons, e.g. "20D" or "(none)"
+    """
+    flags = [str(x) for x in dq_flags if isinstance(x, str)]
+    core = [f for f in flags if not f.startswith("FWD_MDD_OUTLIER_MIN_RAW_")]
+    days = _extract_fwd_outlier_days(flags)
+    fwd = "(none)" if not days else ",".join([f"{d}D" for d in days])
+    return _dq_compact(core), fwd
+
+
 def _filter_fwd_outlier_flags_for_horizon(dq_flags: List[str], horizon_days: int) -> List[str]:
     """
     Only keep forward-outlier flags relevant to this horizon.
-    Examples:
-      - FWD_MDD_OUTLIER_MIN_RAW_20D -> horizon 20
-      - FWD_MDD_OUTLIER_MIN_RAW_10D -> horizon 10
-      - FWD_MDD_OUTLIER_MIN_RAW      -> generic (kept for any horizon if no suffixed flag exists)
     """
     flags = [f for f in dq_flags if isinstance(f, str)]
     suff = f"_{horizon_days}D"
@@ -276,7 +311,6 @@ def build_forward_line(label: str, fwd: Dict[str, Any], dq_flags: List[str], hor
     if med and mfd and mep is not None and mfp is not None:
         line += f" (min_window: {med}->{mfd}; {fmt4(mep)}->{fmt4(mfp)})"
 
-    # Horizon-safe DQ tags (avoid leaking 20D flags into 10D line)
     sflags = set([str(x) for x in (dq_flags or []) if isinstance(x, str)])
     if "RAW_OUTLIER_EXCLUDED_BY_CLEAN" in sflags:
         line += " [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]"
@@ -632,7 +666,6 @@ def _infer_forward_mode_primary(meta: Dict[str, Any], fwd20_label: str) -> str:
     v = safe_get(meta, "forward_mode_primary", None)
     if isinstance(v, str) and v.strip():
         return v.strip()
-    # fallback: infer from which block is used (audit-friendly)
     if isinstance(fwd20_label, str) and "clean" in fwd20_label:
         return "clean"
     if isinstance(fwd20_label, str) and fwd20_label.startswith("forward_mdd_"):
@@ -736,10 +769,12 @@ def main() -> int:
         f"pos={fmt4(bb_pos_clip)} (raw={fmt4(bb_pos_raw)}); "
         f"bw_geo={fmt_pct2(bw_geo)}; bw_std={fmt_pct2(bw_std)}"
     )
+
+    dq_core_str, fwd_outlier_str = _dq_core_and_fwd_summary([str(x) for x in dq_flags if isinstance(x, str)])
     lines.append(
         f"- dist_to_lower={fmt_pct2(dist_to_lower)}; dist_to_upper={fmt_pct2(dist_to_upper)}; "
         f"above_upper={above_upper_pct_str}; below_lower={below_lower_pct_str}; "
-        f"DQ={_dq_compact([str(x) for x in dq_flags if isinstance(x, str)])}"
+        f"DQ={dq_core_str}; FWD_OUTLIER={fwd_outlier_str}"
     )
 
     lines.append(build_forward_line(fwd20_label, fwd20, dq_flags, fwd_days))
@@ -1035,7 +1070,6 @@ def main() -> int:
         for fl in flags_str:
             lines.append(f"- {fl}")
 
-    # IMPORTANT: do NOT indent notes as sub-bullets (avoid accidental nesting)
     notes_str = [str(x) for x in dq_notes if isinstance(x, str) and str(x).strip()]
     if notes_str:
         lines.append("")
