@@ -1,6 +1,6 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-02-20T04:15:43Z`
+- report_generated_at_utc: `2026-02-20T04:24:30Z`
 - data_date: `2026-02-19`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`
@@ -24,9 +24,10 @@
 - **forward_mdd(20D)**（bucket=MID_BAND）：p50=-1.637%、p10=-7.279%、min=-31.571%；n=2896（conf=HIGH；conf_decision=OK）
 
 ## pos vs dist_to_upper 一致性檢查（提示用；不改數值）
-- status: `WARN`
-- reason: `outside_tolerance`
-- rel_err: `0.034204`; tolerance: `0.020000`
+- status: `OK`
+- reason: `within_tolerance`
+- expected_dist_to_upper(logband): `1.732%`
+- rel_err: `0.000000`; tolerance: `0.020000`
 
 ## forward_mdd(20D) 切片分布（閱讀用；不回填主欄位）
 
@@ -109,5 +110,5 @@
 - bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。
 - Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。
 - forward_mdd 切片（含 in-bucket / band_width）為閱讀用；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。
-- pos vs dist_to_upper 一致性檢查為提示用，避免 band_width 或資料異常造成誤讀。
+- pos vs dist_to_upper 一致性檢查已改為 logband 幾何一致性（避免線性近似誤判）。
 - FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。
