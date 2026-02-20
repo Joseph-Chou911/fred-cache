@@ -1,16 +1,16 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-20T16:05:26Z`
+- report_generated_at_utc: `2026-02-20T16:07:25Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-02-20 close=608.6600) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.384%; dist_to_upper=4.259%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
+- **QQQ** (2026-02-20 close=609.4700) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.508%; dist_to_upper=4.118%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
 - **VXN** (2026-02-19 close=25.6400) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.853)); z=1.5202; pos=0.853; bwΔ=-7.63%; Pos-WATCH (C) p90 runup=58.1% (n=78) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-20T16:05:25Z`
+- snippet.generated_at_utc: `2026-02-20T16:07:24Z`
 - data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
@@ -21,17 +21,17 @@
 | field | value |
 |---|---:|
 | date | `2026-02-20` |
-| close | `608.6600` |
-| bb_mid | `617.1704` |
-| bb_lower | `600.2385` |
-| bb_upper | `634.5800` |
-| z | `-0.9983` |
+| close | `609.4700` |
+| bb_mid | `617.1841` |
+| bb_lower | `600.2771` |
+| bb_upper | `634.5673` |
+| z | `-0.9056` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `1.384%` |
-| distance_to_upper_pct | `4.259%` |
-| position_in_band | `0.245` |
+| distance_to_lower_pct | `1.508%` |
+| distance_to_upper_pct | `4.118%` |
+| position_in_band | `0.268` |
 | bandwidth_pct | `5.56%` |
-| bandwidth_delta_pct | `-6.98%` |
+| bandwidth_delta_pct | `-7.12%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
@@ -58,7 +58,7 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-20T16:05:26Z`
+- snippet.generated_at_utc: `2026-02-20T16:07:24Z`
 - data_as_of (meta.max_date): `2026-02-19`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
