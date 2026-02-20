@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T18:26:24Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v16`
+- report_generated_at_utc: `2026-02-20T18:42:15Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v14`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -15,8 +15,6 @@
 - pledge_block_in_stats: `true`
 - pledge_version: `pledge_guidance_v1`
 - pledge_scope: `compute_only_no_margin_no_chip`
-- stats_out_path: `tw0050_bb_cache/stats_out.json`
-- stats_out_contains_forward_mdd_conditional: `true`
 
 ## 快速摘要（非預測，僅狀態）
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos=1.0000 (raw=1.0136); bw_geo=37.61%; bw_std=31.66%
@@ -218,7 +216,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T18:26:24.083Z`
+- overlay_generated_at_utc: `2026-02-20T18:42:15.186Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -318,4 +316,3 @@
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被企業行動污染，DQ 會標示。
 - 融資 overlay 屬於市場整體槓桿 proxy；日期不對齊時 overlay 會標示 MISALIGNED。
 - Pledge Guidance v2 為報告層 sizing 提案：不改 stats，不構成投資建議。
-- stats_out（若啟用）為下游消費用摘要；本腳本不在此重算 forward_mdd_conditional，只做「取用 + 明確 bucket policy 記錄」。
