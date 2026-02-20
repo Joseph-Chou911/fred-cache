@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp (use this to prove which script generated the report) =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-19.v6"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v7"
 
 
 def utc_now_iso() -> str:
@@ -66,7 +66,7 @@ def fmt_int(x: Any) -> str:
 
 def fmt_yi_from_ntd(x: Any, digits: int = 1) -> str:
     """
-    NTD -> 億 (1e8 NTD). Returns string like 104.5 億
+    NTD -> 億 (1e8 NTD). Returns string like 104.5
     """
     try:
         if x is None:
@@ -111,7 +111,6 @@ def normalize_date_key(x: Any) -> Optional[str]:
             return s[:10].replace("-", "")
         if len(s) == 8 and s.isdigit():
             return s
-        # try pandas parse
         dt = pd.to_datetime(s, errors="coerce")
         if pd.isna(dt):
             return None
@@ -193,15 +192,18 @@ def md_table_prices(df: pd.DataFrame) -> str:
     return "\n".join(out)
 
 
-def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) -> str:
+def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int, label_hint: str) -> str:
     n = safe_get(fwd, "n", 0)
     p50 = safe_get(fwd, "p50")
     p10 = safe_get(fwd, "p10")
     p05 = safe_get(fwd, "p05")
     mn = safe_get(fwd, "min")
 
+    label = safe_get(fwd, "label", None)
+    label = label if isinstance(label, str) and label.strip() else label_hint
+
     line = (
-        f"- forward_mdd({fwd_days}D) distribution (n={n}): "
+        f"- {label} distribution (n={n}): "
         f"p50={fmt4(p50)}; p10={fmt4(p10)}; p05={fmt4(p05)}; min={fmt4(mn)}"
     )
 
@@ -213,12 +215,14 @@ def build_forward_line(fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) 
     if med and mfd and mep is not None and mfp is not None:
         line += f" (min_window: {med}->{mfd}; {fmt4(mep)}->{fmt4(mfp)})"
 
-    # DQ tags (keep concise)
+    # DQ tags (keep concise; accept old+new names)
     sflags = set(dq_flags or [])
-    if "RAW_OUTLIER_EXCLUDED" in sflags:
+    if ("RAW_OUTLIER_EXCLUDED" in sflags) or ("RAW_OUTLIER_EXCLUDED_BY_CLEAN" in sflags):
         line += " [DQ:RAW_OUTLIER_EXCLUDED]"
-    elif "FWD_MDD_OUTLIER_MIN_RAW" in sflags:
+    if ("FWD_MDD_OUTLIER_MIN_RAW" in sflags) or ("FWD_MDD_OUTLIER_MIN_RAW_20D" in sflags):
         line += " [DQ:FWD_MDD_OUTLIER_MIN_RAW]"
+    if ("FWD_MDD_CORP_ACTION_CONTAMINATION_RISK" in sflags) or ("TWSE_UNADJUSTED_PRICE_WARNING" in sflags):
+        line += " [DQ:UNADJUSTED_PRICE_RISK]"
 
     return line
 
@@ -266,8 +270,7 @@ def margin_state(sum_chg_yi: float, threshold_yi: float) -> str:
 def take_last_n_rows(rows: List[Dict[str, Any]], n: int) -> List[Dict[str, Any]]:
     if not isinstance(rows, list) or n <= 0:
         return []
-    # rows in your latest.json are newest first; keep that assumption but be defensive
-    # We want the latest n trading days -> first n
+    # newest first assumption
     return rows[:n]
 
 
@@ -290,11 +293,6 @@ def margin_overlay_block(
     window_n: int,
     threshold_yi: float,
 ) -> Tuple[List[str], Optional[str]]:
-    """
-    Returns:
-      - markdown lines for the section
-      - quick summary line (or None)
-    """
     lines: List[str] = []
     series = safe_get(margin_json, "series", {}) or {}
     twse = safe_get(series, "TWSE", {}) or {}
@@ -324,7 +322,6 @@ def margin_overlay_block(
     tpex_state = margin_state(tpex_sum, threshold_yi)
     total_state = margin_state(total_sum, threshold_yi)
 
-    # balances (latest)
     def latest_balance(rows: List[Dict[str, Any]]) -> Optional[float]:
         try:
             if not rows:
@@ -337,7 +334,6 @@ def margin_overlay_block(
     tpex_bal = latest_balance(tpex_rows)
     total_bal = (twse_bal + tpex_bal) if (twse_bal is not None and tpex_bal is not None) else None
 
-    # today's change (latest)
     def latest_chg(rows: List[Dict[str, Any]]) -> Optional[float]:
         try:
             if not rows:
@@ -349,14 +345,12 @@ def margin_overlay_block(
     twse_chg_today = latest_chg(twse_rows)
     tpex_chg_today = latest_chg(tpex_rows)
 
-    # quick summary line
     quick = (
         f"- margin({window_n}D,thr={threshold_yi:.2f}億): TOTAL {total_sum:.2f} 億 => **{total_state}**; "
         f"TWSE {twse_sum:.2f} / TPEX {tpex_sum:.2f}; "
         f"margin_date={margin_last_date}, price_last_date={price_last_date} ({align_tag}); data_date={data_date}"
     )
 
-    # section lines
     lines.append("## Margin Overlay（融資）")
     lines.append("")
     lines.append(f"- overlay_generated_at_utc: `{gen_utc}`")
@@ -422,16 +416,6 @@ def chip_overlay_block(
     price_last_date: str,
     expect_window_n: int,
 ) -> Tuple[List[str], Optional[str], List[str]]:
-    """
-    Minimal-intrusion "chip overlay" section:
-      - if present: show a small table + alignment + sources
-      - if missing/misaligned/mismatch: emit DQ flags (returned to caller)
-
-    Returns:
-      - markdown lines for the section
-      - quick summary line (or None)
-      - dq_extra_flags (list)
-    """
     lines: List[str] = []
     dq_extra: List[str] = []
 
@@ -445,13 +429,11 @@ def chip_overlay_block(
     window_n = safe_get(meta, "window_n", None)
     aligned_last_date = safe_get(meta, "aligned_last_date", None)
 
-    # alignment
     aligned = (normalize_date_key(aligned_last_date) == normalize_date_key(price_last_date))
     align_tag = "ALIGNED" if aligned else "MISALIGNED"
     if not aligned:
         dq_extra.append("CHIP_OVERLAY_MISALIGNED")
 
-    # window mismatch (optional guard)
     try:
         if (window_n is not None) and (expect_window_n is not None) and (int(window_n) != int(expect_window_n)):
             dq_extra.append("CHIP_OVERLAY_WINDOW_MISMATCH")
@@ -463,7 +445,6 @@ def chip_overlay_block(
     etf_units = safe_get(data, "etf_units", {}) or {}
     etf_units_dq = safe_get(etf_units, "dq", []) or []
 
-    # Compose quick line (keep it short)
     total3_sum = safe_get(t86, "total3_net_shares_sum")
     foreign_sum = safe_get(t86, "foreign_net_shares_sum")
     trust_sum = safe_get(t86, "trust_net_shares_sum")
@@ -482,7 +463,6 @@ def chip_overlay_block(
         f"asof={b_asof}; price_last_date={price_last_date} ({align_tag})"
     )
 
-    # Section header
     lines.append("## Chip Overlay（籌碼：TWSE T86 + TWT72U）")
     lines.append("")
     lines.append(f"- overlay_generated_at_utc: `{run_ts_utc}`")
@@ -493,7 +473,6 @@ def chip_overlay_block(
     )
     lines.append("")
 
-    # Borrow summary (TWT72U)
     lines.append("### Borrow Summary（借券：TWT72U）")
     lines.append("")
     lines.append(
@@ -509,7 +488,6 @@ def chip_overlay_block(
     )
     lines.append("")
 
-    # T86 aggregate (5D)
     lines.append(f"### T86 Aggregate（法人：{expect_window_n}D sum）")
     lines.append("")
     days_used = safe_get(t86, "days_used", []) or []
@@ -526,7 +504,6 @@ def chip_overlay_block(
     )
     lines.append("")
 
-    # ETF units (currently may be NA)
     lines.append("### ETF Units（受益權單位）")
     lines.append("")
     lines.append(
@@ -540,14 +517,12 @@ def chip_overlay_block(
     )
     lines.append("")
 
-    # Sources and DQ
     lines.append("### Chip Overlay Sources")
     lines.append("")
     lines.append(f"- T86 template: `{safe_get(sources, 't86_tpl', 'N/A')}`")
     lines.append(f"- TWT72U template: `{safe_get(sources, 'twt72u_tpl', 'N/A')}`")
     lines.append("")
 
-    # Root dq flags (if any) and etf_units dq flags (if any)
     if root_dq or etf_units_dq:
         lines.append("### Chip Overlay DQ")
         lines.append("")
@@ -559,7 +534,6 @@ def chip_overlay_block(
                 lines.append(f"- {fl}")
         lines.append("")
 
-    # Propagate DQ flags to caller
     for fl in root_dq:
         if isinstance(fl, str) and fl.strip():
             dq_extra.append(f"CHIP_OVERLAY:{fl}")
@@ -582,7 +556,7 @@ def main() -> int:
     ap.add_argument("--margin_window_n", type=int, default=5)
     ap.add_argument("--margin_threshold_yi", type=float, default=100.0)
 
-    # chip overlay (minimal intrusion)
+    # chip overlay
     ap.add_argument("--chip_overlay_json", default=None)  # default resolved after args parsed
     ap.add_argument("--chip_window_n", type=int, default=5)
 
@@ -599,7 +573,12 @@ def main() -> int:
     s = load_json(stats_path)
     meta = s.get("meta", {}) or {}
     latest = s.get("latest", {}) or {}
-    fwd = s.get("forward_mdd", {}) or {}
+
+    # primary 20D
+    fwd20 = s.get("forward_mdd", {}) or {}
+    # primary 10D (new)
+    fwd10 = s.get("forward_mdd10", {}) or {}
+
     dq = s.get("dq", {"flags": [], "notes": []}) or {}
     dq_flags = dq.get("flags") or []
     dq_notes = dq.get("notes") or []
@@ -609,23 +588,29 @@ def main() -> int:
     atr = s.get("atr", {}) or {}
     regime = s.get("regime", {}) or {}
 
-    # Detect whether min audit fields exist
-    has_min_audit = all(k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"])
-    fwd_keys_sorted = sorted(list(fwd.keys())) if isinstance(fwd, dict) else []
-
     ticker = safe_get(meta, "ticker", "0050.TW")
     last_date = safe_get(meta, "last_date", "N/A")
     bb_window = safe_get(meta, "bb_window", 60)
     bb_k = safe_get(meta, "bb_k", 2.0)
-    fwd_days = int(safe_get(meta, "fwd_days", 20))
+
+    fwd_days_20 = int(safe_get(meta, "fwd_days", 20))
+    fwd_days_10 = int(safe_get(meta, "fwd_days_short", 10))  # backward compatible default
+
     price_calc = safe_get(meta, "price_calc", "adjclose")
     data_source = safe_get(meta, "data_source", "yfinance_yahoo_or_twse_fallback")
+
+    # new: forward_mode primary (if compute wrote it)
+    break_det = safe_get(meta, "break_detection", {}) or {}
+    forward_mode_primary = safe_get(break_det, "forward_mode_primary", "N/A")
 
     state = safe_get(latest, "state", "N/A")
     bb_z = safe_get(latest, "bb_z")
     bb_pos = safe_get(latest, "bb_pos")
+    bb_pos_raw = safe_get(latest, "bb_pos_raw")
     dist_to_lower = safe_get(latest, "dist_to_lower_pct")
     dist_to_upper = safe_get(latest, "dist_to_upper_pct")
+    bw_geo = safe_get(latest, "band_width_geo_pct")
+    bw_std = safe_get(latest, "band_width_std_pct")
 
     # Resolve chip overlay path default
     chip_path = args.chip_overlay_json
@@ -633,41 +618,44 @@ def main() -> int:
         chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
 
     lines: List[str] = []
-    lines.append("# 0050 BB(60,2) + forward_mdd(20D) Report")
+    lines.append("# 0050 BB(60,2) + forward_mdd Report")
     lines.append("")
     lines.append(f"- report_generated_at_utc: `{utc_now_iso()}`")
     lines.append(f"- build_script_fingerprint: `{BUILD_SCRIPT_FINGERPRINT}`")
     lines.append(f"- stats_path: `{stats_path}`")
-    lines.append(f"- stats_has_min_audit_fields: `{str(has_min_audit).lower()}`")
     lines.append(f"- data_source: `{data_source}`")
     lines.append(f"- ticker: `{ticker}`")
     lines.append(f"- last_date: `{last_date}`")
     lines.append(f"- bb_window,k: `{bb_window}`, `{bb_k}`")
-    lines.append(f"- forward_window_days: `{fwd_days}`")
+    lines.append(f"- forward_window_days: `{fwd_days_20}`")
+    lines.append(f"- forward_window_days_short: `{fwd_days_10}`")
+    lines.append(f"- forward_mode_primary: `{forward_mode_primary}`")
     lines.append(f"- price_calc: `{price_calc}`")
     lines.append(f"- chip_overlay_path: `{chip_path}`")
     lines.append("")
 
     # ===== Quick summary =====
     lines.append("## 快速摘要（非預測，僅狀態）")
+    # show both pos (clipped) and pos_raw (unclipped) + band width
     lines.append(
-        f"- state: **{state}**; bb_z={fmt4(bb_z)}; pos_in_band={fmt4(bb_pos)}; "
+        f"- state: **{state}**; bb_z={fmt4(bb_z)}; pos={fmt4(bb_pos)} (raw={fmt4(bb_pos_raw)}); "
+        f"bw_geo={fmt_pct2(bw_geo)}; bw_std={fmt_pct2(bw_std)}; "
         f"dist_to_lower={fmt_pct2(dist_to_lower)}; dist_to_upper={fmt_pct2(dist_to_upper)}"
     )
-    lines.append(build_forward_line(fwd, dq_flags, fwd_days))
+    lines.append(build_forward_line(fwd20, dq_flags, fwd_days_20, label_hint=f"forward_mdd({fwd_days_20}D)"))
+    if isinstance(fwd10, dict) and fwd10:
+        lines.append(build_forward_line(fwd10, dq_flags, fwd_days_10, label_hint=f"forward_mdd({fwd_days_10}D)"))
 
-    # trend/vol quick lines (only if present)
     if isinstance(trend, dict) and trend:
         lines.append(build_trend_line(trend))
     if isinstance(vol, dict) and vol and isinstance(atr, dict) and atr:
         lines.append(build_vol_line(vol, atr))
 
-    # regime quick line
     reg_line = build_regime_line(regime)
     if reg_line:
         lines.append(reg_line)
 
-    # margin quick line (if file exists)
+    # margin quick line
     margin_json = read_margin_latest(args.margin_json)
     if margin_json is not None:
         _, margin_quick = margin_overlay_block(
@@ -679,7 +667,7 @@ def main() -> int:
         if margin_quick:
             lines.append(margin_quick)
 
-    # chip quick line (if file exists; otherwise concise DQ)
+    # chip quick line
     chip_json = read_chip_overlay(chip_path)
     chip_dq_extra: List[str] = []
     if chip_json is not None:
@@ -691,7 +679,6 @@ def main() -> int:
         if chip_quick:
             lines.append(chip_quick)
     else:
-        # Minimal-intrusion behavior: N/A + DQ
         lines.append(f"- chip_overlay(T86+TWT72U): N/A (missing `{chip_path}`) [DQ:CHIP_OVERLAY_MISSING]")
         chip_dq_extra.append("CHIP_OVERLAY_MISSING")
 
@@ -711,9 +698,12 @@ def main() -> int:
                 ["bb_upper", fmt4(safe_get(latest, "bb_upper"))],
                 ["bb_lower", fmt4(safe_get(latest, "bb_lower"))],
                 ["bb_z", fmt4(safe_get(latest, "bb_z"))],
-                ["pos_in_band", fmt4(safe_get(latest, "bb_pos"))],
+                ["pos_in_band (clipped)", fmt4(safe_get(latest, "bb_pos"))],
+                ["pos_in_band_raw (unclipped)", fmt4(safe_get(latest, "bb_pos_raw"))],
                 ["dist_to_lower", fmt_pct2(safe_get(latest, "dist_to_lower_pct"))],
                 ["dist_to_upper", fmt_pct2(safe_get(latest, "dist_to_upper_pct"))],
+                ["band_width_geo_pct (upper/lower-1)", fmt_pct2(safe_get(latest, "band_width_geo_pct"))],
+                ["band_width_std_pct ((upper-lower)/ma)", fmt_pct2(safe_get(latest, "band_width_std_pct"))],
             ]
         )
     )
@@ -830,34 +820,64 @@ def main() -> int:
         lines.append("_No regime data in stats_latest.json._")
         lines.append("")
 
-    # ===== forward_mdd Distribution =====
+    # ===== forward_mdd Distributions =====
     lines.append("## forward_mdd Distribution")
     lines.append("")
-    lines.append(f"- definition: `{safe_get(fwd, 'definition', 'N/A')}`")
+    lines.append("### forward_mdd (primary)")
+    lines.append("")
+    lines.append(f"- definition: `{safe_get(fwd20, 'definition', 'N/A')}`")
     lines.append("")
     lines.append("| quantile | value |")
     lines.append("|---|---:|")
-    lines.append(f"| p50 | {fmt4(safe_get(fwd, 'p50'))} |")
-    lines.append(f"| p25 | {fmt4(safe_get(fwd, 'p25'))} |")
-    lines.append(f"| p10 | {fmt4(safe_get(fwd, 'p10'))} |")
-    lines.append(f"| p05 | {fmt4(safe_get(fwd, 'p05'))} |")
-    lines.append(f"| min | {fmt4(safe_get(fwd, 'min'))} |")
+    lines.append(f"| p50 | {fmt4(safe_get(fwd20, 'p50'))} |")
+    lines.append(f"| p25 | {fmt4(safe_get(fwd20, 'p25'))} |")
+    lines.append(f"| p10 | {fmt4(safe_get(fwd20, 'p10'))} |")
+    lines.append(f"| p05 | {fmt4(safe_get(fwd20, 'p05'))} |")
+    lines.append(f"| min | {fmt4(safe_get(fwd20, 'min'))} |")
     lines.append("")
 
-    # Min audit trail (or explicit missing-field message)
-    lines.append("### forward_mdd Min Audit Trail")
+    lines.append("#### forward_mdd Min Audit Trail")
     lines.append("")
-    if has_min_audit:
+    has_min_audit_20 = all(k in fwd20 for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"])
+    if has_min_audit_20:
         lines.append("| item | value |")
         lines.append("|---|---:|")
-        lines.append(f"| min_entry_date | {safe_get(fwd, 'min_entry_date')} |")
-        lines.append(f"| min_entry_price | {fmt4(safe_get(fwd, 'min_entry_price'))} |")
-        lines.append(f"| min_future_date | {safe_get(fwd, 'min_future_date')} |")
-        lines.append(f"| min_future_price | {fmt4(safe_get(fwd, 'min_future_price'))} |")
+        lines.append(f"| min_entry_date | {safe_get(fwd20, 'min_entry_date')} |")
+        lines.append(f"| min_entry_price | {fmt4(safe_get(fwd20, 'min_entry_price'))} |")
+        lines.append(f"| min_future_date | {safe_get(fwd20, 'min_future_date')} |")
+        lines.append(f"| min_future_price | {fmt4(safe_get(fwd20, 'min_future_price'))} |")
     else:
-        lines.append("- min audit fields are missing in stats_latest.json.")
-        lines.append(f"- forward_mdd keys: `{', '.join(fwd_keys_sorted)}`")
+        lines.append("- min audit fields are missing for forward_mdd (primary).")
     lines.append("")
+
+    # forward_mdd10 section (new)
+    if isinstance(fwd10, dict) and fwd10:
+        lines.append("### forward_mdd10 (primary)")
+        lines.append("")
+        lines.append(f"- definition: `{safe_get(fwd10, 'definition', 'N/A')}`")
+        lines.append("")
+        lines.append("| quantile | value |")
+        lines.append("|---|---:|")
+        lines.append(f"| p50 | {fmt4(safe_get(fwd10, 'p50'))} |")
+        lines.append(f"| p25 | {fmt4(safe_get(fwd10, 'p25'))} |")
+        lines.append(f"| p10 | {fmt4(safe_get(fwd10, 'p10'))} |")
+        lines.append(f"| p05 | {fmt4(safe_get(fwd10, 'p05'))} |")
+        lines.append(f"| min | {fmt4(safe_get(fwd10, 'min'))} |")
+        lines.append("")
+
+        lines.append("#### forward_mdd10 Min Audit Trail")
+        lines.append("")
+        has_min_audit_10 = all(k in fwd10 for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"])
+        if has_min_audit_10:
+            lines.append("| item | value |")
+            lines.append("|---|---:|")
+            lines.append(f"| min_entry_date | {safe_get(fwd10, 'min_entry_date')} |")
+            lines.append(f"| min_entry_price | {fmt4(safe_get(fwd10, 'min_entry_price'))} |")
+            lines.append(f"| min_future_date | {safe_get(fwd10, 'min_future_date')} |")
+            lines.append(f"| min_future_price | {fmt4(safe_get(fwd10, 'min_future_price'))} |")
+        else:
+            lines.append("- min audit fields are missing for forward_mdd10 (primary).")
+        lines.append("")
 
     # ===== Chip Overlay =====
     if chip_json is not None:
@@ -868,7 +888,6 @@ def main() -> int:
         )
         lines.extend(cb_lines)
     else:
-        # minimal section stub
         lines.append("## Chip Overlay（籌碼：TWSE T86 + TWT72U）")
         lines.append("")
         lines.append(f"- chip_overlay: `N/A` (missing `{chip_path}`)")
@@ -909,7 +928,6 @@ def main() -> int:
             for nt in dq_notes:
                 lines.append(f"  - note: {nt}")
 
-    # append chip DQ (minimal intrusion; explicit NA handling)
     if chip_dq_extra:
         lines.append("")
         lines.append("### Chip Overlay DQ (extra)")
@@ -921,10 +939,12 @@ def main() -> int:
     # ===== Caveats =====
     lines.append("## Caveats")
     lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
-    lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，adjclose=close 並會在 dq flags 留痕。")
-    lines.append("- Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；若資料不足會以 DQ 明示。")
-    lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；若日期不對齊應降低解讀權重。")
-    lines.append("- Chip overlay（T86/TWT72U）是籌碼/借券的描述資訊；ETF 申贖與避險行為可能影響解讀，建議視為輔助註記而非單一交易信號。")
+    lines.append("- pos_in_band 會顯示 clipped 值（0..1）與 raw 值（可超界，用於稽核）。")
+    lines.append("- band_width 同時提供兩種定義：geo=(upper/lower-1)、std=(upper-lower)/ma；請勿混用解讀。")
+    lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被除權息/企業行動污染，DQ 會標示。")
+    lines.append("- Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；資料不足會以 DQ 明示。")
+    lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊需降低解讀權重。")
+    lines.append("- Chip overlay（T86/TWT72U）為籌碼/借券描述；ETF 申贖、避險行為可能影響解讀，建議只做輔助註記。")
     lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as f:
