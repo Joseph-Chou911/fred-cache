@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v15.add_fwd_mdd_conditional_block"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v14"
 
 
 def utc_now_iso() -> str:
@@ -495,14 +495,6 @@ def margin_overlay_block(
     twse_chg_today = latest_chg(twse_rows)
     tpex_chg_today = latest_chg(tpex_rows)
 
-    def fmt_yi(x: Optional[float]) -> str:
-        try:
-            if x is None:
-                return "N/A"
-            return f"{float(x):,.1f}"
-        except Exception:
-            return "N/A"
-
     quick = (
         f"- margin({window_n}D,thr={threshold_yi:.2f}億): TOTAL {info['total_sum']:.2f} 億 => **{info['total_state']}**; "
         f"TWSE {info['twse_sum']:.2f} / TPEX {info['tpex_sum']:.2f}; "
@@ -520,6 +512,15 @@ def margin_overlay_block(
     lines.append("")
     lines.append("| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
+
+    def fmt_yi(x: Optional[float]) -> str:
+        try:
+            if x is None:
+                return "N/A"
+            return f"{float(x):,.1f}"
+        except Exception:
+            return "N/A"
+
     lines.append(
         f"| TWSE | {twse_last or 'N/A'} | {fmt_yi(twse_bal)} | {fmt_yi(twse_chg_today)} | {info['twse_sum']:.1f} | {info['twse_state']} | {len(take_last_n_rows(twse_rows, window_n))} |"
     )
@@ -740,194 +741,6 @@ def _best_price_used(latest: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-# ---------------- forward_mdd_conditional block ----------------
-
-def bucket_from_z(
-    bb_z: Optional[float],
-    *,
-    near: float,
-    extreme: float,
-) -> str:
-    """
-    Scheme: bb_z_5bucket_v1
-      z<=-extreme      => z_le_-2.0
-      -extreme<z<=-near=> -2.0_to_-1.5
-      -near<z<near     => -1.5_to_1.5
-      near<=z<extreme  => 1.5_to_2.0
-      z>=extreme       => z_ge_2.0
-    Note: boundary policy matches labels in your stats json.
-    """
-    if bb_z is None:
-        return "UNKNOWN"
-    z = float(bb_z)
-    if z <= -float(extreme):
-        return "z_le_-2.0"
-    if z <= -float(near):
-        return "-2.0_to_-1.5"
-    if z < float(near):
-        return "-1.5_to_1.5"
-    if z < float(extreme):
-        return "1.5_to_2.0"
-    return "z_ge_2.0"
-
-
-def build_forward_mdd_conditional_block(
-    *,
-    cond: Any,
-    bb_z: Optional[float],
-) -> List[str]:
-    """
-    Render stats_latest.json.forward_mdd_conditional into report.md.
-
-    Output:
-      - meta summary
-      - quick summary for current bucket (for each horizon under primary, fallback clean/raw)
-      - full table: horizon × mode × bucket rows
-    """
-    lines: List[str] = []
-    if not isinstance(cond, dict) or not cond:
-        lines.append("## Forward MDD Conditional (by bb_z bucket)")
-        lines.append("")
-        lines.append("- forward_mdd_conditional: N/A (missing in stats_latest.json)")
-        lines.append("")
-        return lines
-
-    meta = safe_get(cond, "meta", {}) or {}
-    scheme = str(safe_get(meta, "scheme", "N/A"))
-    fm_primary = str(safe_get(meta, "forward_mode_primary", "N/A"))
-
-    thr = safe_get(meta, "thresholds", {}) or {}
-    near = _to_float(safe_get(thr, "near"))
-    extreme = _to_float(safe_get(thr, "extreme"))
-    if near is None:
-        near = 1.5
-    if extreme is None:
-        extreme = 2.0
-
-    cur_bucket = bucket_from_z(bb_z, near=float(near), extreme=float(extreme))
-
-    lines.append("## Forward MDD Conditional (by bb_z bucket)")
-    lines.append("")
-    lines.append(
-        md_table_kv(
-            [
-                ["scheme", scheme],
-                ["thresholds.near", fmt4(near)],
-                ["thresholds.extreme", fmt4(extreme)],
-                ["forward_mode_primary(meta)", fm_primary],
-                ["current_bb_z", fmt4(bb_z)],
-                ["current_bucket_id", f"**{cur_bucket}**"],
-            ]
-        )
-    )
-    lines.append("")
-
-    # Horizons order: prefer 20D then 10D if present
-    horizons = []
-    for hk in ["20D", "10D"]:
-        if isinstance(safe_get(cond, hk), dict):
-            horizons.append(hk)
-
-    # Quick summary: for each horizon, pick mode order primary -> clean -> raw for current bucket
-    def pick_bucket_stat(hk: str) -> Tuple[str, Optional[Dict[str, Any]]]:
-        h = safe_get(cond, hk, {}) or {}
-        for mode in ["primary", "clean", "raw"]:
-            md = safe_get(h, mode, {}) or {}
-            if isinstance(md, dict) and cur_bucket in md and isinstance(md[cur_bucket], dict):
-                return mode, md[cur_bucket]
-        return "N/A", None
-
-    lines.append("### current_bucket quick summary")
-    lines.append("")
-    if not horizons:
-        lines.append("- (no horizons found in forward_mdd_conditional)")
-        lines.append("")
-    else:
-        for hk in horizons:
-            mode, st = pick_bucket_stat(hk)
-            if not isinstance(st, dict) or not st:
-                lines.append(f"- {hk}: bucket={cur_bucket} => N/A")
-                continue
-            n = safe_get(st, "n", None)
-            p50 = safe_get(st, "p50", None)
-            p10 = safe_get(st, "p10", None)
-            p05 = safe_get(st, "p05", None)
-            mn = safe_get(st, "min", None)
-            med = safe_get(st, "min_entry_date", None)
-            mfd = safe_get(st, "min_future_date", None)
-            lines.append(
-                f"- {hk} ({mode}, bucket={cur_bucket}): "
-                f"n={fmt_int(n)}; p50={fmt4(p50)}; p10={fmt4(p10)}; p05={fmt4(p05)}; min={fmt4(mn)}"
-                + (f" (min_window {med}->{mfd})" if med and mfd else "")
-            )
-        lines.append("")
-
-    # Full tables
-    lines.append("### full tables")
-    lines.append("")
-    for hk in horizons:
-        h = safe_get(cond, hk, {}) or {}
-        lines.append(f"#### {hk}")
-        lines.append("")
-        lines.append("| mode | bucket_id | bucket_label | n | p50 | p25 | p10 | p05 | min | min_window | min_price(entry→future) |")
-        lines.append("|---|---|---|---:|---:|---:|---:|---:|---:|---|---|")
-
-        any_row = False
-        for mode in ["primary", "clean", "raw"]:
-            md = safe_get(h, mode, {}) or {}
-            if not isinstance(md, dict) or not md:
-                continue
-
-            # Deterministic bucket order (5-bucket scheme)
-            bucket_order = ["z_le_-2.0", "-2.0_to_-1.5", "-1.5_to_1.5", "1.5_to_2.0", "z_ge_2.0"]
-            keys = [k for k in bucket_order if k in md] + [k for k in md.keys() if k not in bucket_order]
-
-            for bid in keys:
-                st = md.get(bid)
-                if not isinstance(st, dict):
-                    continue
-                any_row = True
-                label = str(safe_get(st, "bucket_label", "N/A"))
-                n = safe_get(st, "n", None)
-                p50 = safe_get(st, "p50", None)
-                p25 = safe_get(st, "p25", None)
-                p10 = safe_get(st, "p10", None)
-                p05 = safe_get(st, "p05", None)
-                mn = safe_get(st, "min", None)
-                med = safe_get(st, "min_entry_date", None)
-                mfd = safe_get(st, "min_future_date", None)
-                mep = safe_get(st, "min_entry_price", None)
-                mfp = safe_get(st, "min_future_price", None)
-
-                win = "N/A"
-                if med and mfd:
-                    win = f"{med}→{mfd}"
-
-                mp = "N/A"
-                if mep is not None and mfp is not None:
-                    mp = f"{fmt4(mep)}→{fmt4(mfp)}"
-
-                # mark current bucket
-                bid_disp = bid
-                if bid == cur_bucket:
-                    bid_disp = f"**{bid}**"
-
-                lines.append(
-                    f"| {mode} | {bid_disp} | {label} | {fmt_int(n)} | {fmt4(p50)} | {fmt4(p25)} | {fmt4(p10)} | {fmt4(p05)} | {fmt4(mn)} | {win} | {mp} |"
-                )
-
-        if not any_row:
-            lines.append("| (none) | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |")
-        lines.append("")
-
-    note = safe_get(meta, "note", None)
-    if isinstance(note, str) and note.strip():
-        lines.append(f"- note: {note.strip()}")
-        lines.append("")
-
-    return lines
-
-
 # ---------------- Pledge block extraction (from stats) ----------------
 
 def extract_pledge_from_stats(s: Dict[str, Any]) -> Dict[str, Any]:
@@ -1006,6 +819,7 @@ def pledge_decision_is_usable(p: Dict[str, Any]) -> bool:
     pol = safe_get(dec, "pledge_policy", None)
     if not isinstance(pol, str) or not pol.strip():
         return False
+    # action_bucket is nice-to-have but not mandatory
     return True
 
 
@@ -1147,10 +961,12 @@ def compute_pledge_v2_sizing(
         "cooldown_sessions_hint": 0,
     }
 
+    # Hard prerequisite: only consider pledge sizing in ACCUMULATE_ZONE
     if zone != "ACCUMULATE_ZONE":
         out["reasons"].append(f"zone={zone} (require ACCUMULATE_ZONE)")
         return out
 
+    # Base factor from rv20 percentile (deterministic bands)
     base_factor = 0.0
     if rv20_pctl is None:
         base_factor = 0.25
@@ -1170,6 +986,7 @@ def compute_pledge_v2_sizing(
     factor = float(base_factor)
     out["multipliers"]["base_from_rv20_pctl"] = factor
 
+    # Margin deleveraging: not a hard veto in v2, but reduces sizing and suggests cooldown
     if isinstance(margin_info, dict) and margin_info and bool(margin_info.get("aligned", False)):
         if str(margin_info.get("total_state", "")).upper() == "DELEVERAGING":
             factor *= 0.5
@@ -1177,17 +994,21 @@ def compute_pledge_v2_sizing(
             out["reasons"].append("margin aligned: DELEVERAGING => size_factor * 0.5 + cooldown hint")
             out["cooldown_sessions_hint"] = 2
 
+    # Data quality: price series breaks can distort historical distribution; cap sizing
     flags = set([str(x) for x in dq_flags if isinstance(x, str)])
     if "PRICE_SERIES_BREAK_DETECTED" in flags:
+        # cap to 0.25 (still not forced DISALLOW, but very conservative)
         factor = min(factor, 0.25)
         out["multipliers"]["dq_price_break_cap"] = 0.25
         out["reasons"].append("DQ: PRICE_SERIES_BREAK_DETECTED => cap size_factor at 0.25")
 
+    # If YF/TWSE issues exist, keep conservative (cap at 0.5)
     if any(f.startswith("YF_") for f in flags) or any(f.startswith("TWSE_") for f in flags):
         factor = min(factor, 0.5)
         out["multipliers"]["dq_source_cap"] = 0.5
         out["reasons"].append("DQ: YF_/TWSE_ flags present => cap size_factor at 0.5")
 
+    # Finalize
     factor = max(0.0, min(1.0, float(factor)))
     out["size_factor"] = round(factor, 4)
 
@@ -1211,12 +1032,20 @@ def build_tranche_plan_from_levels(
     tranche_rows: List[List[str]],
     size_factor: float,
 ) -> Tuple[List[List[str]], str]:
+    """
+    tranche_rows: [[label, drawdown_str, price_level_str], ...]
+    returns:
+      plan_rows: [[tranche, level, target_frac_of_max, price_level], ...]
+      note: str
+    """
     if not tranche_rows or size_factor <= 0:
         return [], "no tranche plan (size_factor<=0 or levels missing)"
 
+    # Use up to 4 levels (deterministic)
     m = min(len(tranche_rows), 4)
     levels = tranche_rows[:m]
 
+    # Deterministic weights
     if m == 1:
         weights = [1.0]
     elif m == 2:
@@ -1230,7 +1059,7 @@ def build_tranche_plan_from_levels(
     for i, (lvl, w) in enumerate(zip(levels, weights), start=1):
         label = str(lvl[0])
         price_level = str(lvl[2])
-        frac = size_factor * float(w)
+        frac = size_factor * float(w)  # fraction of user's max pledge capacity
         plan.append([f"T{i}", label, fmt_pct2(frac * 100.0), price_level])
 
     note = "target_frac_of_max is fraction of your own max pledge capacity (defined outside this report)"
@@ -1244,6 +1073,10 @@ def build_unconditional_tranche_rows(
     fwd10: Dict[str, Any],
     pledge_stats: Dict[str, Any],
 ) -> Tuple[List[List[str]], str]:
+    """
+    Returns tranche_rows: [[label, drawdown_str, price_level_str], ...]
+    and source_note.
+    """
     tranche_rows: List[List[str]] = []
     un_levels = safe_get(pledge_stats, "uncond_levels", []) or []
     if isinstance(un_levels, list) and un_levels:
@@ -1259,6 +1092,7 @@ def build_unconditional_tranche_rows(
             return tranche_rows, f"source: stats (price_anchor={fmt_price2(anchor)})"
         return tranche_rows, "source: stats"
 
+    # fallback compute from forward quantiles (unconditional)
     if price is None:
         return [], "source: none (price missing)"
 
@@ -1299,6 +1133,17 @@ def build_deterministic_action_block(
     accumulate_z_cli: Optional[float],
     no_chase_z_cli: Optional[float],
 ) -> List[str]:
+    """
+    Deterministic, report-only action guidance.
+
+    Priority:
+      1) pledge decision from stats (if usable) as baseline
+      2) renderer overlay computes additional veto (e.g., margin deleveraging)
+      3) final pledge_policy = DISALLOW if either baseline or overlay veto says DISALLOW
+
+    Adds:
+      - Pledge Guidance v2: report-only sizing proposal not gated by regime.allowed
+    """
     lines: List[str] = []
     lines.append("## Deterministic Action (report-only; non-predictive)")
     lines.append("")
@@ -1320,6 +1165,7 @@ def build_deterministic_action_block(
     if rv_pctl_max is None:
         rv_pctl_max = 60.0
 
+    # thresholds: prefer CLI override, else prefer stats pledge thresholds, else fallback
     acc_thr = accumulate_z_cli
     nc_thr = no_chase_z_cli
     if acc_thr is None:
@@ -1331,6 +1177,7 @@ def build_deterministic_action_block(
     if nc_thr is None:
         nc_thr = 1.5
 
+    # margin note
     margin_note = "margin: N/A"
     if isinstance(margin_info, dict) and margin_info:
         if bool(margin_info.get("aligned", False)):
@@ -1338,9 +1185,11 @@ def build_deterministic_action_block(
         else:
             margin_note = "margin: MISALIGNED (ignored in overlay)"
 
+    # DQ summary
     flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
     dq_core_str, _ = _dq_core_and_fwd_summary(flags_str)
 
+    # renderer action bucket + policy (v1)
     action_bucket_renderer, decision_path = compute_renderer_action_bucket(
         latest_state=state, bb_z=bb_z, regime_allowed=regime_allowed, accumulate_z=acc_thr, no_chase_z=nc_thr
     )
@@ -1348,6 +1197,7 @@ def build_deterministic_action_block(
         action_bucket=action_bucket_renderer, regime_allowed=regime_allowed, margin_info=margin_info
     )
 
+    # stats pledge baseline
     pledge_source = "renderer"
     pledge_policy_stats = "N/A"
     pledge_action_bucket_stats = "N/A"
@@ -1362,28 +1212,35 @@ def build_deterministic_action_block(
         pledge_action_bucket_stats = str(safe_get(dec, "action_bucket", "N/A"))
         pledge_veto_stats = _string_list(safe_get(dec, "veto_reasons", []))
 
+    # final policy merge
     overlay_applied = False
     final_reasons: List[str] = []
     if pledge_source == "stats":
+        # baseline from stats
         final_policy = pledge_policy_stats
         final_reasons.extend([f"stats:{x}" for x in pledge_veto_stats] if pledge_veto_stats else [])
+        # apply overlay only if it strengthens veto (i.e., renderer says DISALLOW but stats doesn't)
         if str(pledge_policy_renderer).upper() == "DISALLOW" and str(pledge_policy_stats).upper() != "DISALLOW":
             overlay_applied = True
             final_policy = "DISALLOW"
             final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
     else:
+        # baseline from renderer
         final_policy = pledge_policy_renderer
         final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
 
+    # mismatch flag
     pledge_mismatch = False
     if pledge_source == "stats":
         if str(pledge_policy_stats).upper() != str(pledge_policy_renderer).upper():
             pledge_mismatch = True
 
+    # tranche levels: unconditional reference
     tranche_rows, tranche_source_note = build_unconditional_tranche_rows(
         price=price, fwd20=fwd20, fwd10=fwd10, pledge_stats=pledge_stats
     )
 
+    # present inputs
     lines.append(md_table_kv([
         ["last_date", str(last_date)],
         ["price_used", fmt_price2(price)],
@@ -1404,6 +1261,7 @@ def build_deterministic_action_block(
     ]))
     lines.append("")
 
+    # decisions (v1)
     lines.append(md_table_kv([
         ["action_bucket_renderer", f"**{action_bucket_renderer}**"],
         ["pledge_policy_renderer", f"**{pledge_policy_renderer}**"],
@@ -1435,6 +1293,7 @@ def build_deterministic_action_block(
         lines.append(f"- {tranche_source_note}")
         lines.append("")
 
+    # ---------------- Pledge Guidance v2 ----------------
     lines.append("### Pledge Guidance v2 (report-only; sizing proposal)")
     lines.append("")
     lines.append("- Purpose: convert binary gate into deterministic size_factor (0..1) using rv20_percentile bands.")
@@ -1463,6 +1322,7 @@ def build_deterministic_action_block(
         lines.append(f"- {p}")
     lines.append("")
 
+    # Tranche plan scaled by size_factor
     try:
         sf = float(v2.get("size_factor", 0.0) or 0.0)
     except Exception:
@@ -1500,6 +1360,7 @@ def main() -> int:
     ap.add_argument("--chip_overlay_json", default=None)
     ap.add_argument("--chip_window_n", type=int, default=5)
 
+    # deterministic action params (CLI override; if None, prefer stats pledge thresholds)
     ap.add_argument("--accumulate_z", type=float, default=None, help="bb_z <= accumulate_z => ACCUMULATE_TRANCHE (override)")
     ap.add_argument("--no_chase_z", type=float, default=None, help="bb_z >= no_chase_z => NO_CHASE (override)")
 
@@ -1561,6 +1422,7 @@ def main() -> int:
     if chip_path is None:
         chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
 
+    # optional margin struct (for overlay use)
     margin_json = read_margin_latest(args.margin_json)
     margin_info: Optional[Dict[str, Any]] = None
     if margin_json is not None:
@@ -1651,11 +1513,7 @@ def main() -> int:
 
     lines.append("")
 
-    # ===== NEW: forward_mdd_conditional block =====
-    cond = safe_get(s, "forward_mdd_conditional", None)
-    lines.extend(build_forward_mdd_conditional_block(cond=cond, bb_z=_to_float(bb_z)))
-
-    # ===== Deterministic Action Block =====
+    # ===== Deterministic Action Block (with pledge from stats + overlay) + v2 sizing =====
     lines.extend(
         build_deterministic_action_block(
             meta=meta,
@@ -1718,21 +1576,25 @@ def main() -> int:
                 )
             )
             lines.append("")
+
         if isinstance(vol, dict) and vol:
+            rv_ann = safe_get(vol, "rv_ann")
+            rv_pct = None if rv_ann is None else float(rv_ann) * 100.0
             lines.append(
                 md_table_kv(
                     [
                         ["rv_days", str(safe_get(vol, "rv_days", "N/A"))],
-                        ["rv_ann", fmt4(safe_get(vol, "rv_ann"))],
-                        ["rv_ann_pctl", fmt2(safe_get(vol, "rv_ann_pctl"))],
-                        ["rv_hist_n", fmt_int(safe_get(vol, "rv_hist_n"))],
-                        ["rv_hist_q20", fmt4(safe_get(vol, "rv_hist_q20"))],
-                        ["rv_hist_q50", fmt4(safe_get(vol, "rv_hist_q50"))],
-                        ["rv_hist_q80", fmt4(safe_get(vol, "rv_hist_q80"))],
+                        ["rv_ann(%)", fmt_pct1(rv_pct)],
+                        ["rv20_percentile", fmt2(safe_get(vol, "rv_ann_pctl"))],
+                        ["rv_hist_n", str(safe_get(vol, "rv_hist_n", "N/A"))],
+                        ["rv_hist_q20(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q20") is None else float(safe_get(vol, "rv_hist_q20")) * 100.0)],
+                        ["rv_hist_q50(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q50") is None else float(safe_get(vol, "rv_hist_q50")) * 100.0)],
+                        ["rv_hist_q80(%)", fmt_pct1(None if safe_get(vol, "rv_hist_q80") is None else float(safe_get(vol, "rv_hist_q80")) * 100.0)],
                     ]
                 )
             )
             lines.append("")
+
         if isinstance(atr, dict) and atr:
             lines.append(
                 md_table_kv(
@@ -1746,63 +1608,192 @@ def main() -> int:
             )
             lines.append("")
 
-    # ===== Data Quality =====
-    lines.append("## Data Quality")
+    # ===== Regime =====
+    lines.append("## Regime Tag")
     lines.append("")
-    lines.append("### dq.flags")
-    if dq_flags:
-        for f in dq_flags:
-            lines.append(f"- {f}")
-    else:
-        lines.append("- (none)")
-    if chip_dq_extra:
+    if isinstance(regime, dict) and regime:
+        inputs = safe_get(regime, "inputs", {}) or {}
+        params = safe_get(regime, "params", {}) or {}
+        passes = safe_get(regime, "passes", {}) or {}
+        reasons = safe_get(regime, "reasons", []) or []
+
+        rv_ann = safe_get(inputs, "rv_ann")
+        rv_pct = None if rv_ann is None else float(rv_ann) * 100.0
+
+        lines.append(
+            md_table_kv(
+                [
+                    ["tag", f"**{safe_get(regime,'tag','N/A')}**"],
+                    ["allowed", str(bool(safe_get(regime,'allowed', False))).lower()],
+                    ["trend_state", str(safe_get(inputs, "trend_state", "N/A"))],
+                    ["rv_ann(%)", fmt_pct1(rv_pct)],
+                    ["rv20_percentile", fmt2(safe_get(inputs, "rv_ann_pctl"))],
+                    ["rv_hist_n", str(safe_get(inputs, "rv_hist_n", "N/A"))],
+                    ["rv_pctl_max", fmt2(safe_get(params, "rv_pctl_max"))],
+                    ["min_samples", str(safe_get(params, "min_samples", "N/A"))],
+                    ["pass_trend", str(bool(safe_get(passes, "trend_ok", False))).lower()],
+                    ["pass_rv_hist", str(bool(safe_get(passes, "rv_hist_ok", False))).lower()],
+                    ["pass_rv", str(bool(safe_get(passes, "rv_ok", False))).lower()],
+                    ["bb_state_note", str(safe_get(inputs, "bb_state", "N/A"))],
+                ]
+            )
+        )
+        if reasons:
+            lines.append("")
+            lines.append("### Regime Notes")
+            for r in reasons:
+                lines.append(f"- {r}")
         lines.append("")
-        lines.append("### dq.extra (chip overlay)")
-        for f in chip_dq_extra:
-            lines.append(f"- {f}")
-    lines.append("")
-    if dq_notes:
-        lines.append("### dq.notes")
-        for n in dq_notes:
-            lines.append(f"- {n}")
+    else:
+        lines.append("_No regime data in stats_latest.json._")
         lines.append("")
 
-    # ===== Detailed overlays =====
+    # ===== forward_mdd Distribution =====
+    lines.append("## forward_mdd Distribution")
+    lines.append("")
+
+    def has_min_audit_block(fwd: Dict[str, Any]) -> bool:
+        return isinstance(fwd, dict) and all(
+            k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
+        )
+
+    # 20D
+    lines.append("### forward_mdd (primary)")
+    lines.append("")
+    lines.append(f"- block_used: `{fwd20_label}`")
+    lines.append(f"- definition: `{safe_get(fwd20, 'definition', 'N/A')}`")
+    lines.append("")
+    lines.append("| quantile | value |")
+    lines.append("|---|---:|")
+    lines.append(f"| p50 | {fmt4(safe_get(fwd20, 'p50'))} |")
+    lines.append(f"| p25 | {fmt4(safe_get(fwd20, 'p25'))} |")
+    lines.append(f"| p10 | {fmt4(safe_get(fwd20, 'p10'))} |")
+    lines.append(f"| p05 | {fmt4(safe_get(fwd20, 'p05'))} |")
+    lines.append(f"| min | {fmt4(safe_get(fwd20, 'min'))} |")
+    lines.append("")
+    lines.append("#### forward_mdd Min Audit Trail")
+    lines.append("")
+    if has_min_audit_block(fwd20):
+        lines.append("| item | value |")
+        lines.append("|---|---:|")
+        lines.append(f"| min_entry_date | {safe_get(fwd20, 'min_entry_date')} |")
+        lines.append(f"| min_entry_price | {fmt4(safe_get(fwd20, 'min_entry_price'))} |")
+        lines.append(f"| min_future_date | {safe_get(fwd20, 'min_future_date')} |")
+        lines.append(f"| min_future_price | {fmt4(safe_get(fwd20, 'min_future_price'))} |")
+    else:
+        keys = sorted(list(fwd20.keys())) if isinstance(fwd20, dict) else []
+        lines.append("- min audit fields are missing in forward block.")
+        lines.append(f"- forward_mdd keys: `{', '.join(keys)}`")
+    lines.append("")
+
+    # 10D
+    lines.append("### forward_mdd10 (primary)")
+    lines.append("")
+    if isinstance(fwd10, dict) and fwd10:
+        lines.append(f"- block_used: `{fwd10_label}`")
+        lines.append(f"- definition: `{safe_get(fwd10, 'definition', 'N/A')}`")
+        lines.append("")
+        lines.append("| quantile | value |")
+        lines.append("|---|---:|")
+        lines.append(f"| p50 | {fmt4(safe_get(fwd10, 'p50'))} |")
+        lines.append(f"| p25 | {fmt4(safe_get(fwd10, 'p25'))} |")
+        lines.append(f"| p10 | {fmt4(safe_get(fwd10, 'p10'))} |")
+        lines.append(f"| p05 | {fmt4(safe_get(fwd10, 'p05'))} |")
+        lines.append(f"| min | {fmt4(safe_get(fwd10, 'min'))} |")
+        lines.append("")
+        lines.append("#### forward_mdd10 Min Audit Trail")
+        lines.append("")
+        if has_min_audit_block(fwd10):
+            lines.append("| item | value |")
+            lines.append("|---|---:|")
+            lines.append(f"| min_entry_date | {safe_get(fwd10, 'min_entry_date')} |")
+            lines.append(f"| min_entry_price | {fmt4(safe_get(fwd10, 'min_entry_price'))} |")
+            lines.append(f"| min_future_date | {safe_get(fwd10, 'min_future_date')} |")
+            lines.append(f"| min_future_price | {fmt4(safe_get(fwd10, 'min_future_price'))} |")
+        else:
+            keys = sorted(list(fwd10.keys())) if isinstance(fwd10, dict) else []
+            lines.append("- min audit fields are missing in forward block.")
+            lines.append(f"- forward_mdd10 keys: `{', '.join(keys)}`")
+        lines.append("")
+    else:
+        lines.append("- forward_mdd10 block is missing in stats_latest.json.")
+        lines.append("")
+
+    # ===== Chip overlay =====
+    if chip_json is not None:
+        cb_lines, _, _ = chip_overlay_block(
+            chip_json=chip_json,
+            price_last_date=str(last_date),
+            expect_window_n=int(args.chip_window_n),
+        )
+        lines.extend(cb_lines)
+    else:
+        lines.append("## Chip Overlay（籌碼：TWSE T86 + TWT72U）")
+        lines.append("")
+        lines.append(f"- chip_overlay: `N/A` (missing `{chip_path}`)")
+        lines.append("")
+
+    # ===== Margin overlay =====
     if margin_json is not None:
-        m_lines, _ = margin_overlay_block(
+        mb_lines, _ = margin_overlay_block(
             margin_json=margin_json,
             price_last_date=str(last_date),
             window_n=int(args.margin_window_n),
             threshold_yi=float(args.margin_threshold_yi),
         )
-        lines.extend(m_lines)
+        lines.extend(mb_lines)
 
-    if chip_json is not None:
-        c_lines, _, _ = chip_overlay_block(
-            chip_json=chip_json,
-            price_last_date=str(last_date),
-            expect_window_n=int(args.chip_window_n),
-        )
-        lines.extend(c_lines)
-
-    # ===== Price tail =====
-    lines.append("## Price Tail")
+    # ===== Prices tail =====
+    lines.append(f"## Recent Raw Prices (tail {tail_n})")
     lines.append("")
-    df_tail = load_prices_tail(args.cache_dir, tail_n)
-    if df_tail is None or df_tail.empty:
-        lines.append(f"- price_tail: N/A (missing data.csv/prices.csv under `{args.cache_dir}`)")
-        lines.append("")
+    tail_df = load_prices_tail(args.cache_dir, n=tail_n)
+    if tail_df is None:
+        lines.append("_No data.csv / prices.csv tail available._")
     else:
-        lines.append(f"- tail_n: {tail_n}")
-        lines.append("")
-        lines.append(md_table_prices(df_tail))
-        lines.append("")
+        lines.append(md_table_prices(tail_df))
+    lines.append("")
 
-    # ===== write =====
-    out_path = args.out
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines).rstrip() + "\n")
+    # ===== DQ =====
+    lines.append("## Data Quality Flags")
+    lines.append("")
+    flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
+    if not flags_str:
+        lines.append("- (none)")
+    else:
+        for fl in flags_str:
+            lines.append(f"- {fl}")
 
+    notes_str = [str(x) for x in dq_notes if isinstance(x, str) and str(x).strip()]
+    if notes_str:
+        lines.append("")
+        lines.append("### DQ Notes")
+        lines.append("")
+        for nt in notes_str:
+            lines.append(f"- note: {nt}")
+
+    if chip_dq_extra:
+        lines.append("")
+        lines.append("### Chip Overlay DQ (extra)")
+        for fl in chip_dq_extra:
+            lines.append(f"- {fl}")
+
+    lines.append("")
+
+    # ===== Caveats =====
+    lines.append("## Caveats")
+    lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
+    lines.append("- Deterministic Action 是規則輸出（report-only），不代表可獲利保證。")
+    lines.append("- tranche_levels 優先使用 stats 內 pledge.unconditional_tranche_levels.levels；若不存在才由 renderer 用分位數重算。")
+    lines.append("- dist_to_upper/lower 可能為負值（代表超出通道）；報表額外提供 above_upper / below_lower 以避免符號誤讀。")
+    lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被企業行動污染，DQ 會標示。")
+    lines.append("- 融資 overlay 屬於市場整體槓桿 proxy；日期不對齊時 overlay 會標示 MISALIGNED。")
+    lines.append("- Pledge Guidance v2 為報告層 sizing 提案：不改 stats，不構成投資建議。")
+    lines.append("")
+
+    with open(args.out, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    print(f"Wrote report: {args.out}")
     return 0
 
 
