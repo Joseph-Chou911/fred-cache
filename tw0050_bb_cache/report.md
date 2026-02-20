@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T13:21:10Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v12`
+- report_generated_at_utc: `2026-02-20T13:38:10Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v13`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -13,6 +13,8 @@
 - price_calc: `adjclose`
 - chip_overlay_path: `tw0050_bb_cache/chip_overlay.json`
 - pledge_block_in_stats: `true`
+- pledge_version: `pledge_guidance_v1`
+- pledge_scope: `compute_only_no_margin_no_chip`
 
 ## 快速摘要（非預測，僅狀態）
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos=1.0000 (raw=1.0136); bw_geo=37.61%; bw_std=31.66%
@@ -20,14 +22,14 @@
 - forward_mdd_clean_20D distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
 - forward_mdd_clean_10D distribution (n=4171): p50=-0.0114; p10=-0.0480; p05=-0.0631; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
-- vol_filter(RV20,ATR14): rv_ann_raw=0.2070; rv_ann_x100=20.70; atr=1.2304; atr_pct_raw=1.5938; atr_pct_display=1.59%
+- vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
 - margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
 - chip_overlay(T86+TWT72U,5D): total3_5D=-8,882,867; foreign=-14,398,187; trust=17,326,000; dealer=-11,810,680; borrow_shares=135,405,000 (Δ1D=-9,446,000); borrow_mv(億)=104.5 (Δ1D=-4.8); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
 
 ## Deterministic Action (report-only; non-predictive)
 
-- policy: deterministic rules on existing stats fields only (no forecast; no chip dependence)
+- policy: deterministic rules on existing stats fields only (no forecast)
 
 | item | value |
 |---|---:|
@@ -42,31 +44,40 @@
 | rv_pctl_max | 60.00 |
 | dq_core | PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN |
 | margin_note | margin(aligned): total_state=DELEVERAGING, total_sum=-197.7 |
+| pledge_block_in_stats | true |
+| pledge_version | pledge_guidance_v1 |
+| pledge_scope | compute_only_no_margin_no_chip |
+| pledge_source | stats |
+| pledge_overlay_applied | false |
 
 | item | value |
 |---|---:|
-| action_bucket | **HOLD_DEFENSIVE_ONLY** |
+| action_bucket_renderer | **HOLD_DEFENSIVE_ONLY** |
+| pledge_policy_renderer | **DISALLOW** |
+| pledge_veto_reasons_renderer | regime gate closed; action_bucket=HOLD_DEFENSIVE_ONLY; market deleveraging (margin 5D) |
+| action_bucket_stats | VETO |
+| pledge_policy_stats | DISALLOW |
+| pledge_veto_reasons_stats | regime_gate_closed; no_chase_state:EXTREME_UPPER_BAND; no_chase_z>= 1.50 |
+| pledge_policy(final) | **DISALLOW** |
+| pledge_veto_reasons(final) | stats:regime_gate_closed; stats:no_chase_state:EXTREME_UPPER_BAND; stats:no_chase_z>= 1.50 |
 | accumulate_z_threshold | -1.5000 |
 | no_chase_z_threshold | 1.5000 |
-| pledge_source | renderer |
-| pledge_policy | **DISALLOW** |
-| pledge_veto_reasons | regime gate closed; action_bucket=HOLD_DEFENSIVE_ONLY; market deleveraging (margin 5D) |
-| pledge_policy_renderer | DISALLOW |
 | pledge_mismatch(stats_vs_renderer) | false |
 
-### decision_path
+### decision_path (renderer)
 - regime.allowed=false => gate_closed
 
-### tranche_levels (reference)
+### tranche_levels (reference; unconditional)
 
 | level | drawdown | price_level |
 |---|---:|---:|
-| 10D p10 (uncond) | -4.80% | 73.50 |
-| 10D p05 (uncond) | -6.31% | 72.33 |
-| 20D p10 (uncond) | -6.87% | 71.90 |
-| 20D p05 (uncond) | -9.28% | 70.04 |
+| 10D_p10_uncond | -4.80% | 73.50 |
+| 10D_p05_uncond | -6.31% | 72.33 |
+| 20D_p10_uncond | -6.87% | 71.90 |
+| 20D_p05_uncond | -9.28% | 70.04 |
 
-- note: tranche_levels are derived from *unconditional* forward_mdd quantiles; not conditioned on current bb_state.
+- source: stats. price_anchor=77.20
+- note: levels derived from unconditional forward_mdd quantiles; not conditioned on current state
 
 ## Latest Snapshot
 
@@ -103,20 +114,18 @@
 | item | value |
 |---|---:|
 | rv_days | 20 |
-| rv_ann_raw | 0.2070 |
-| rv_ann_x100 | 20.70 |
+| rv_ann(%) | 20.7% |
 | rv20_percentile | 79.84 |
 | rv_hist_n | 4172 |
-| rv_hist_q20_raw | 0.1120 |
-| rv_hist_q50_raw | 0.1483 |
-| rv_hist_q80_raw | 0.2080 |
+| rv_hist_q20(%) | 11.2% |
+| rv_hist_q50(%) | 14.8% |
+| rv_hist_q80(%) | 20.8% |
 
 | item | value |
 |---|---:|
 | atr_days | 14 |
 | atr | 1.2304 |
-| atr_pct_raw | 1.5938 |
-| atr_pct_display | 1.59% |
+| atr_pct | 1.59% |
 | tr_mode | OHLC |
 
 ## Regime Tag
@@ -126,8 +135,7 @@
 | tag | **RISK_OFF_OR_DEFENSIVE** |
 | allowed | false |
 | trend_state | TREND_UP |
-| rv_ann_raw | 0.2070 |
-| rv_ann_x100 | 20.70 |
+| rv_ann(%) | 20.7% |
 | rv20_percentile | 79.84 |
 | rv_hist_n | 4172 |
 | rv_pctl_max | 60.00 |
@@ -188,7 +196,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T13:21:10.335Z`
+- overlay_generated_at_utc: `2026-02-20T13:38:10.148Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -284,12 +292,7 @@
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
 - Deterministic Action 是規則輸出（report-only），不代表可獲利保證。
-- tranche_levels 若 stats 提供 pledge 區塊則優先採用；否則使用 *unconditional* forward_mdd 分位數（非條件化）作風險尺。
-- pos_in_band 會顯示 clipped 值（0..1）與 raw 值（可超界，用於稽核）。
-- dist_to_upper/lower 可能為負值（代表超出通道）；報表已額外提供 above_upper / below_lower 以避免符號誤讀。
-- band_width 同時提供兩種定義：geo=(upper/lower-1)、std=(upper-lower)/ma；請勿混用解讀。
-- rv_ann / atr_pct 的單位由上游 stats 決定；本報表同時顯示 raw 與 display（加上 % 符號）以降低單位誤判風險。
-- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被除權息/企業行動污染，DQ 會標示。
-- Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；資料不足會以 DQ 明示。
-- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊時 deterministic action 會忽略其狀態。
-- Chip overlay（T86/TWT72U）為籌碼/借券描述；ETF 申贖、避險行為可能影響解讀，建議只做輔助註記。
+- tranche_levels 優先使用 stats 內 pledge.unconditional_tranche_levels.levels；若不存在才由 renderer 用分位數重算。
+- dist_to_upper/lower 可能為負值（代表超出通道）；報表額外提供 above_upper / below_lower 以避免符號誤讀。
+- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被企業行動污染，DQ 會標示。
+- 融資 overlay 屬於市場整體槓桿 proxy；日期不對齊時 overlay 會標示 MISALIGNED。
