@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T11:05:42Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v8`
+- report_generated_at_utc: `2026-02-20T11:20:43Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v9`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -9,7 +9,7 @@
 - bb_window,k: `60`, `2.0`
 - forward_window_days: `20`
 - forward_window_days_short: `10`
-- forward_mode_primary: `N/A`
+- forward_mode_primary: `clean`
 - price_calc: `adjclose`
 - chip_overlay_path: `tw0050_bb_cache/chip_overlay.json`
 
@@ -17,7 +17,7 @@
 - state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos=1.0000 (raw=1.0136); bw_geo=37.61%; bw_std=31.66%
 - dist_to_lower=27.60%; dist_to_upper=-0.37%; above_upper=0.37%; below_lower=0.00%; DQ=PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, FWD_MDD_OUTLIER_MIN_RAW_20D, RAW_OUTLIER_EXCLUDED_BY_CLEAN
 - forward_mdd_clean_20D distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
-- forward_mdd_clean_10D distribution (n=4171): p50=-0.0114; p10=-0.0480; p05=-0.0631; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
+- forward_mdd_clean_10D distribution (n=4171): p50=-0.0114; p10=-0.0480; p05=-0.0631; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
@@ -141,7 +141,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T11:05:42.373Z`
+- overlay_generated_at_utc: `2026-02-20T11:20:43.487Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -225,11 +225,14 @@
 - FWD_MDD_CLEAN_APPLIED
 - FWD_MDD_OUTLIER_MIN_RAW_20D
 - RAW_OUTLIER_EXCLUDED_BY_CLEAN
-  - note: Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
-  - note: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
-  - note: Clean masks built per-window: clean20 excludes entries whose [t+1..t+20] includes break; clean10 excludes entries whose [t+1..t+10] includes break.
-  - note: forward_mdd_raw_20D min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
-  - note: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
+
+### DQ Notes
+
+- note: Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
+- note: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
+- note: Clean masks built per-window: clean20 excludes entries whose [t+1..t+20] includes break; clean10 excludes entries whose [t+1..t+10] includes break.
+- note: forward_mdd_raw_20D min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
+- note: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
