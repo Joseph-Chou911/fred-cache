@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v14"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v15"
 
 
 def utc_now_iso() -> str:
@@ -260,19 +260,25 @@ def _dq_compact(dq_flags: List[str]) -> str:
 
 
 def _extract_fwd_outlier_days(dq_flags: List[str]) -> List[int]:
+    """
+    Supports patterns:
+      - FWD_MDD_OUTLIER_MIN_RAW_20D
+      - FWD_MDD_OUTLIER_MIN_RAW_20D_SOMETHING
+      - FWD_MDD_OUTLIER_MIN_RAW_20D|... (we only parse the *_20D part if present)
+    """
     days: List[int] = []
     for f in dq_flags:
         if not isinstance(f, str):
             continue
-        if not f.startswith("FWD_MDD_OUTLIER_MIN_RAW_"):
-            continue
-        if not f.endswith("D"):
+        if "FWD_MDD_OUTLIER_MIN_RAW_" not in f:
             continue
         try:
-            tail = f.split("_")[-1]  # e.g. "20D"
-            if tail.endswith("D"):
-                n = int(tail[:-1])
-                days.append(n)
+            # find token like "20D"
+            parts = f.split("_")
+            for tok in parts[::-1]:
+                if tok.endswith("D") and tok[:-1].isdigit():
+                    days.append(int(tok[:-1]))
+                    break
         except Exception:
             continue
     return sorted(set(days))
@@ -280,16 +286,21 @@ def _extract_fwd_outlier_days(dq_flags: List[str]) -> List[int]:
 
 def _dq_core_and_fwd_summary(dq_flags: List[str]) -> Tuple[str, str]:
     flags = [str(x) for x in dq_flags if isinstance(x, str)]
-    core = [f for f in flags if not f.startswith("FWD_MDD_OUTLIER_MIN_RAW_")]
+    core = [f for f in flags if "FWD_MDD_OUTLIER_MIN_RAW_" not in f]
     days = _extract_fwd_outlier_days(flags)
     fwd = "(none)" if not days else ",".join([f"{d}D" for d in days])
     return _dq_compact(core), fwd
 
 
 def _filter_fwd_outlier_flags_for_horizon(dq_flags: List[str], horizon_days: int) -> List[str]:
+    """
+    Accept both:
+      - exact suffix "_{horizon_days}D"
+      - any flag containing "_{horizon_days}D" (e.g., "_20D_SOMETHING")
+    """
     flags = [f for f in dq_flags if isinstance(f, str)]
-    suff = f"_{horizon_days}D"
-    specific = sorted([f for f in flags if f.startswith("FWD_MDD_OUTLIER_MIN_RAW") and f.endswith(suff)])
+    key = f"_{horizon_days}D"
+    specific = sorted([f for f in flags if ("FWD_MDD_OUTLIER_MIN_RAW" in f and key in f)])
     if specific:
         return specific
     generic = sorted([f for f in flags if f == "FWD_MDD_OUTLIER_MIN_RAW"])
@@ -707,7 +718,6 @@ def _pick_forward_blocks(s: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
 
 
 def _infer_forward_mode_primary(meta: Dict[str, Any], fwd20_label: str) -> str:
-    # prefer explicit meta.break_detection.forward_mode_primary
     bd = safe_get(meta, "break_detection", {}) or {}
     v = safe_get(bd, "forward_mode_primary", None)
     if isinstance(v, str) and v.strip():
@@ -819,7 +829,6 @@ def pledge_decision_is_usable(p: Dict[str, Any]) -> bool:
     pol = safe_get(dec, "pledge_policy", None)
     if not isinstance(pol, str) or not pol.strip():
         return False
-    # action_bucket is nice-to-have but not mandatory
     return True
 
 
@@ -961,12 +970,10 @@ def compute_pledge_v2_sizing(
         "cooldown_sessions_hint": 0,
     }
 
-    # Hard prerequisite: only consider pledge sizing in ACCUMULATE_ZONE
     if zone != "ACCUMULATE_ZONE":
         out["reasons"].append(f"zone={zone} (require ACCUMULATE_ZONE)")
         return out
 
-    # Base factor from rv20 percentile (deterministic bands)
     base_factor = 0.0
     if rv20_pctl is None:
         base_factor = 0.25
@@ -986,7 +993,6 @@ def compute_pledge_v2_sizing(
     factor = float(base_factor)
     out["multipliers"]["base_from_rv20_pctl"] = factor
 
-    # Margin deleveraging: not a hard veto in v2, but reduces sizing and suggests cooldown
     if isinstance(margin_info, dict) and margin_info and bool(margin_info.get("aligned", False)):
         if str(margin_info.get("total_state", "")).upper() == "DELEVERAGING":
             factor *= 0.5
@@ -994,21 +1000,17 @@ def compute_pledge_v2_sizing(
             out["reasons"].append("margin aligned: DELEVERAGING => size_factor * 0.5 + cooldown hint")
             out["cooldown_sessions_hint"] = 2
 
-    # Data quality: price series breaks can distort historical distribution; cap sizing
     flags = set([str(x) for x in dq_flags if isinstance(x, str)])
     if "PRICE_SERIES_BREAK_DETECTED" in flags:
-        # cap to 0.25 (still not forced DISALLOW, but very conservative)
         factor = min(factor, 0.25)
         out["multipliers"]["dq_price_break_cap"] = 0.25
         out["reasons"].append("DQ: PRICE_SERIES_BREAK_DETECTED => cap size_factor at 0.25")
 
-    # If YF/TWSE issues exist, keep conservative (cap at 0.5)
     if any(f.startswith("YF_") for f in flags) or any(f.startswith("TWSE_") for f in flags):
         factor = min(factor, 0.5)
         out["multipliers"]["dq_source_cap"] = 0.5
         out["reasons"].append("DQ: YF_/TWSE_ flags present => cap size_factor at 0.5")
 
-    # Finalize
     factor = max(0.0, min(1.0, float(factor)))
     out["size_factor"] = round(factor, 4)
 
@@ -1035,17 +1037,15 @@ def build_tranche_plan_from_levels(
     """
     tranche_rows: [[label, drawdown_str, price_level_str], ...]
     returns:
-      plan_rows: [[tranche, level, target_frac_of_max, price_level], ...]
+      plan_rows: [[tranche, level, target_frac_of_max_str, price_level], ...]
       note: str
     """
     if not tranche_rows or size_factor <= 0:
         return [], "no tranche plan (size_factor<=0 or levels missing)"
 
-    # Use up to 4 levels (deterministic)
     m = min(len(tranche_rows), 4)
     levels = tranche_rows[:m]
 
-    # Deterministic weights
     if m == 1:
         weights = [1.0]
     elif m == 2:
@@ -1059,8 +1059,10 @@ def build_tranche_plan_from_levels(
     for i, (lvl, w) in enumerate(zip(levels, weights), start=1):
         label = str(lvl[0])
         price_level = str(lvl[2])
-        frac = size_factor * float(w)  # fraction of user's max pledge capacity
-        plan.append([f"T{i}", label, fmt_pct2(frac * 100.0), price_level])
+        frac = size_factor * float(w)  # 0..1
+        # IMPORTANT: show fraction as percent
+        frac_str = fmt_pct2(frac * 100.0)
+        plan.append([f"T{i}", label, frac_str, price_level])
 
     note = "target_frac_of_max is fraction of your own max pledge capacity (defined outside this report)"
     return plan, note
@@ -1092,7 +1094,6 @@ def build_unconditional_tranche_rows(
             return tranche_rows, f"source: stats (price_anchor={fmt_price2(anchor)})"
         return tranche_rows, "source: stats"
 
-    # fallback compute from forward quantiles (unconditional)
     if price is None:
         return [], "source: none (price missing)"
 
@@ -1165,7 +1166,6 @@ def build_deterministic_action_block(
     if rv_pctl_max is None:
         rv_pctl_max = 60.0
 
-    # thresholds: prefer CLI override, else prefer stats pledge thresholds, else fallback
     acc_thr = accumulate_z_cli
     nc_thr = no_chase_z_cli
     if acc_thr is None:
@@ -1177,7 +1177,6 @@ def build_deterministic_action_block(
     if nc_thr is None:
         nc_thr = 1.5
 
-    # margin note
     margin_note = "margin: N/A"
     if isinstance(margin_info, dict) and margin_info:
         if bool(margin_info.get("aligned", False)):
@@ -1185,11 +1184,9 @@ def build_deterministic_action_block(
         else:
             margin_note = "margin: MISALIGNED (ignored in overlay)"
 
-    # DQ summary
     flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
     dq_core_str, _ = _dq_core_and_fwd_summary(flags_str)
 
-    # renderer action bucket + policy (v1)
     action_bucket_renderer, decision_path = compute_renderer_action_bucket(
         latest_state=state, bb_z=bb_z, regime_allowed=regime_allowed, accumulate_z=acc_thr, no_chase_z=nc_thr
     )
@@ -1197,7 +1194,6 @@ def build_deterministic_action_block(
         action_bucket=action_bucket_renderer, regime_allowed=regime_allowed, margin_info=margin_info
     )
 
-    # stats pledge baseline
     pledge_source = "renderer"
     pledge_policy_stats = "N/A"
     pledge_action_bucket_stats = "N/A"
@@ -1212,35 +1208,28 @@ def build_deterministic_action_block(
         pledge_action_bucket_stats = str(safe_get(dec, "action_bucket", "N/A"))
         pledge_veto_stats = _string_list(safe_get(dec, "veto_reasons", []))
 
-    # final policy merge
     overlay_applied = False
     final_reasons: List[str] = []
     if pledge_source == "stats":
-        # baseline from stats
         final_policy = pledge_policy_stats
         final_reasons.extend([f"stats:{x}" for x in pledge_veto_stats] if pledge_veto_stats else [])
-        # apply overlay only if it strengthens veto (i.e., renderer says DISALLOW but stats doesn't)
         if str(pledge_policy_renderer).upper() == "DISALLOW" and str(pledge_policy_stats).upper() != "DISALLOW":
             overlay_applied = True
             final_policy = "DISALLOW"
             final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
     else:
-        # baseline from renderer
         final_policy = pledge_policy_renderer
         final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
 
-    # mismatch flag
     pledge_mismatch = False
     if pledge_source == "stats":
         if str(pledge_policy_stats).upper() != str(pledge_policy_renderer).upper():
             pledge_mismatch = True
 
-    # tranche levels: unconditional reference
     tranche_rows, tranche_source_note = build_unconditional_tranche_rows(
         price=price, fwd20=fwd20, fwd10=fwd10, pledge_stats=pledge_stats
     )
 
-    # present inputs
     lines.append(md_table_kv([
         ["last_date", str(last_date)],
         ["price_used", fmt_price2(price)],
@@ -1253,7 +1242,7 @@ def build_deterministic_action_block(
         ["rv_pctl_max", fmt2(rv_pctl_max)],
         ["dq_core", dq_core_str],
         ["margin_note", margin_note],
-        ["pledge_block_in_stats", str(bool(safe_get(pledge_stats, "present", False))).lower()],
+        ["pledge_block_in_stats", str(bool(safe_get(pledge_stats,'present',False))).lower()],
         ["pledge_version", str(pledge_version)],
         ["pledge_scope", str(pledge_scope)],
         ["pledge_source", str(pledge_source)],
@@ -1261,7 +1250,6 @@ def build_deterministic_action_block(
     ]))
     lines.append("")
 
-    # decisions (v1)
     lines.append(md_table_kv([
         ["action_bucket_renderer", f"**{action_bucket_renderer}**"],
         ["pledge_policy_renderer", f"**{pledge_policy_renderer}**"],
@@ -1293,7 +1281,6 @@ def build_deterministic_action_block(
         lines.append(f"- {tranche_source_note}")
         lines.append("")
 
-    # ---------------- Pledge Guidance v2 ----------------
     lines.append("### Pledge Guidance v2 (report-only; sizing proposal)")
     lines.append("")
     lines.append("- Purpose: convert binary gate into deterministic size_factor (0..1) using rv20_percentile bands.")
@@ -1322,7 +1309,6 @@ def build_deterministic_action_block(
         lines.append(f"- {p}")
     lines.append("")
 
-    # Tranche plan scaled by size_factor
     try:
         sf = float(v2.get("size_factor", 0.0) or 0.0)
     except Exception:
@@ -1360,7 +1346,6 @@ def main() -> int:
     ap.add_argument("--chip_overlay_json", default=None)
     ap.add_argument("--chip_window_n", type=int, default=5)
 
-    # deterministic action params (CLI override; if None, prefer stats pledge thresholds)
     ap.add_argument("--accumulate_z", type=float, default=None, help="bb_z <= accumulate_z => ACCUMULATE_TRANCHE (override)")
     ap.add_argument("--no_chase_z", type=float, default=None, help="bb_z >= no_chase_z => NO_CHASE (override)")
 
@@ -1422,7 +1407,6 @@ def main() -> int:
     if chip_path is None:
         chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
 
-    # optional margin struct (for overlay use)
     margin_json = read_margin_latest(args.margin_json)
     margin_info: Optional[Dict[str, Any]] = None
     if margin_json is not None:
@@ -1436,7 +1420,6 @@ def main() -> int:
         except Exception:
             margin_info = None
 
-    # ===== report =====
     lines: List[str] = []
     lines.append("# 0050 BB(60,2) + forward_mdd Report")
     lines.append("")
@@ -1458,7 +1441,6 @@ def main() -> int:
         lines.append(f"- pledge_scope: `{safe_get(pledge_stats,'scope','N/A')}`")
     lines.append("")
 
-    # ===== Quick summary =====
     lines.append("## 快速摘要（非預測，僅狀態）")
     lines.append(
         f"- state: **{state}**; "
@@ -1513,7 +1495,6 @@ def main() -> int:
 
     lines.append("")
 
-    # ===== Deterministic Action Block (with pledge from stats + overlay) + v2 sizing =====
     lines.extend(
         build_deterministic_action_block(
             meta=meta,
@@ -1531,7 +1512,6 @@ def main() -> int:
         )
     )
 
-    # ===== Latest snapshot =====
     lines.append("## Latest Snapshot")
     lines.append("")
     lines.append(
@@ -1558,7 +1538,6 @@ def main() -> int:
     )
     lines.append("")
 
-    # ===== Trend & Vol =====
     if (isinstance(trend, dict) and trend) or (isinstance(vol, dict) and vol) or (isinstance(atr, dict) and atr):
         lines.append("## Trend & Vol Filters")
         lines.append("")
@@ -1608,7 +1587,6 @@ def main() -> int:
             )
             lines.append("")
 
-    # ===== Regime =====
     lines.append("## Regime Tag")
     lines.append("")
     if isinstance(regime, dict) and regime:
@@ -1648,7 +1626,6 @@ def main() -> int:
         lines.append("_No regime data in stats_latest.json._")
         lines.append("")
 
-    # ===== forward_mdd Distribution =====
     lines.append("## forward_mdd Distribution")
     lines.append("")
 
@@ -1657,7 +1634,6 @@ def main() -> int:
             k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
         )
 
-    # 20D
     lines.append("### forward_mdd (primary)")
     lines.append("")
     lines.append(f"- block_used: `{fwd20_label}`")
@@ -1686,7 +1662,6 @@ def main() -> int:
         lines.append(f"- forward_mdd keys: `{', '.join(keys)}`")
     lines.append("")
 
-    # 10D
     lines.append("### forward_mdd10 (primary)")
     lines.append("")
     if isinstance(fwd10, dict) and fwd10:
@@ -1719,7 +1694,6 @@ def main() -> int:
         lines.append("- forward_mdd10 block is missing in stats_latest.json.")
         lines.append("")
 
-    # ===== Chip overlay =====
     if chip_json is not None:
         cb_lines, _, _ = chip_overlay_block(
             chip_json=chip_json,
@@ -1733,7 +1707,6 @@ def main() -> int:
         lines.append(f"- chip_overlay: `N/A` (missing `{chip_path}`)")
         lines.append("")
 
-    # ===== Margin overlay =====
     if margin_json is not None:
         mb_lines, _ = margin_overlay_block(
             margin_json=margin_json,
@@ -1743,7 +1716,6 @@ def main() -> int:
         )
         lines.extend(mb_lines)
 
-    # ===== Prices tail =====
     lines.append(f"## Recent Raw Prices (tail {tail_n})")
     lines.append("")
     tail_df = load_prices_tail(args.cache_dir, n=tail_n)
@@ -1753,7 +1725,6 @@ def main() -> int:
         lines.append(md_table_prices(tail_df))
     lines.append("")
 
-    # ===== DQ =====
     lines.append("## Data Quality Flags")
     lines.append("")
     flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
@@ -1779,7 +1750,6 @@ def main() -> int:
 
     lines.append("")
 
-    # ===== Caveats =====
     lines.append("## Caveats")
     lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
     lines.append("- Deterministic Action 是規則輸出（report-only），不代表可獲利保證。")
