@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T12:19:08Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v10`
+- report_generated_at_utc: `2026-02-20T12:45:27Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v11`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -23,6 +23,46 @@
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
 - margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
 - chip_overlay(T86+TWT72U,5D): total3_5D=-8,882,867; foreign=-14,398,187; trust=17,326,000; dealer=-11,810,680; borrow_shares=135,405,000 (Δ1D=-9,446,000); borrow_mv(億)=104.5 (Δ1D=-4.8); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
+
+## Deterministic Action (report-only; non-predictive)
+
+- policy: deterministic rules on existing stats fields only (no forecast; no chip dependence)
+
+| item | value |
+|---|---:|
+| last_date | 2026-02-11 |
+| price_used | 77.20 |
+| bb_state | EXTREME_UPPER_BAND |
+| bb_z | 2.0543 |
+| trend_state | TREND_UP |
+| regime_tag | **RISK_OFF_OR_DEFENSIVE** |
+| regime_allowed | false |
+| rv20_percentile | 79.84 |
+| rv_pctl_max | 60.00 |
+| dq_core | PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN |
+| margin_note | margin(aligned): total_state=DELEVERAGING, total_sum=-197.7 |
+
+| item | value |
+|---|---:|
+| action_bucket | **HOLD_DEFENSIVE_ONLY** |
+| accumulate_z_threshold | -1.5000 |
+| no_chase_z_threshold | 1.5000 |
+| pledge_policy | **DISALLOW** |
+| pledge_veto_reasons | regime gate closed; action_bucket=HOLD_DEFENSIVE_ONLY; market deleveraging (margin 5D) |
+
+### decision_path
+- regime.allowed=false => gate_closed
+
+### tranche_levels (reference; unconditional forward_mdd quantiles)
+
+| level | drawdown | price_level |
+|---|---:|---:|
+| 10D p10 (uncond) | -4.80% | 73.50 |
+| 10D p05 (uncond) | -6.31% | 72.33 |
+| 20D p10 (uncond) | -6.87% | 71.90 |
+| 20D p05 (uncond) | -9.28% | 70.04 |
+
+- note: tranche_levels are derived from *unconditional* forward_mdd quantiles; they are not conditioned on current bb_state.
 
 ## Latest Snapshot
 
@@ -141,7 +181,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T12:19:08.296Z`
+- overlay_generated_at_utc: `2026-02-20T12:45:26.935Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -236,10 +276,12 @@
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
+- Deterministic Action 是規則輸出（report-only），不代表可獲利保證。
+- tranche_levels 使用的是 *unconditional* forward_mdd 分位數（非條件化），僅作風險尺。
 - pos_in_band 會顯示 clipped 值（0..1）與 raw 值（可超界，用於稽核）。
 - dist_to_upper/lower 可能為負值（代表超出通道）；報表已額外提供 above_upper / below_lower 以避免符號誤讀。
 - band_width 同時提供兩種定義：geo=(upper/lower-1)、std=(upper-lower)/ma；請勿混用解讀。
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被除權息/企業行動污染，DQ 會標示。
 - Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；資料不足會以 DQ 明示。
-- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊需降低解讀權重。
+- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊時 deterministic action 會忽略其狀態。
 - Chip overlay（T86/TWT72U）為籌碼/借券描述；ETF 申贖、避險行為可能影響解讀，建議只做輔助註記。
