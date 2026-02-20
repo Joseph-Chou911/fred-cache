@@ -1,19 +1,16 @@
 {
   "bb": {
-    "band_width_pct": 0.09000219840254298,
+    "band_width_pct": 0.09000219840526347,
     "bucket": "MID_BAND",
-    "consistency_check": {
-      "inputs": {
-        "dist_to_upper": 0.017316213997388464,
-        "pos": 0.8007884183644394
-      },
+    "dist_to_lower": 0.06668425486934726,
+    "dist_to_upper": 0.017316213998658025,
+    "lower_usd": 136.89874665995546,
+    "pos_dist_consistency": {
       "reason": "within_tolerance",
-      "status": "OK"
+      "status": "OK",
+      "tol": 0.05
     },
-    "dist_to_lower": 0.06668425486818252,
-    "dist_to_upper": 0.017316213997388464,
-    "lower_usd": 136.8987466601263,
-    "pos_in_band": 0.8007884183644394,
+    "pos_in_band": 0.8007884183557286,
     "streak": {
       "bucket_streak": 5,
       "dist_u_le_threshold_streak": 2,
@@ -21,8 +18,8 @@
       "pos_ge_threshold_streak": 2,
       "pos_threshold": 0.8
     },
-    "upper_usd": 149.21993481809045,
-    "z": 1.203153673457766
+    "upper_usd": 149.21993481827667,
+    "z": 1.203153673422902
   },
   "close_usd": 146.67999267578125,
   "data_date": "2026-02-19",
@@ -36,32 +33,54 @@
   "forward_mdd20": {
     "conf": "HIGH",
     "conf_decision": "OK",
-    "min": -0.3157060862288119,
+    "min": -0.3157060141957808,
     "min_n_required": 200,
     "n": 2896,
-    "p10": -0.07279359610558289,
-    "p50": -0.016369575960337113
+    "p10": -0.07279355503908103,
+    "p50": -0.01636918860932013
   },
   "forward_mdd20_slices": {
     "dist_to_upper<=2.0%": {
       "condition": "dist_to_upper<=0.0200",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128538832343024,
+      "min": -0.3128539545829194,
       "min_n_required": 200,
       "n": 1743,
-      "p10": -0.054857418251681646,
-      "p50": -0.014434199811460213
+      "p10": -0.0548569838338673,
+      "p50": -0.014434066790691369
     },
     "pos>=0.80": {
       "condition": "pos_in_band>=0.80",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128538832343024,
+      "min": -0.3128539545829194,
       "min_n_required": 200,
       "n": 1704,
-      "p10": -0.05430555055528797,
-      "p50": -0.015082088599062848
+      "p10": -0.05430565127751018,
+      "p50": -0.015082158867813444
+    }
+  },
+  "forward_mdd20_slices_in_bucket": {
+    "bucket=MID_BAND & dist_to_upper<=2.0%": {
+      "condition": "(bucket==MID_BAND) AND (dist_to_upper<=0.0200)",
+      "conf": "HIGH",
+      "conf_decision": "OK",
+      "min": -0.3128539545829194,
+      "min_n_required": 200,
+      "n": 718,
+      "p10": -0.05322477264701466,
+      "p50": -0.01395371541688123
+    },
+    "bucket=MID_BAND & pos>=0.80": {
+      "condition": "(bucket==MID_BAND) AND (pos_in_band>=0.80)",
+      "conf": "HIGH",
+      "conf_decision": "OK",
+      "min": -0.3128539545829194,
+      "min_n_required": 200,
+      "n": 638,
+      "p10": -0.051862621705454436,
+      "p50": -0.015345299255974387
     }
   },
   "fx_usdtwd": {
@@ -81,20 +100,14 @@
     },
     "used_policy": "NA"
   },
-  "generated_at_utc": "2026-02-20T03:28:31Z",
-  "hints": {
-    "min_n_required": 200,
-    "pos_dist_consistency_reason": "within_tolerance",
-    "pos_dist_consistency_status": "OK"
-  },
+  "generated_at_utc": "2026-02-20T03:56:36Z",
   "k": 2.0,
   "module": "vt_bb_cache",
   "notes": [
     "BB computed on log(price_usd) where price_usd is adj_close when available.",
     "forward_mdd20 computed on linear price_usd (same series as BB).",
     "forward_mdd20_slices are reading-only, do NOT replace bucket-conditioned stats.",
-    "Decision-guard: conf_decision='LOW_FOR_DECISION' when n < min_n_required (report hint only).",
-    "Consistency-check is a hint only; it does not alter any values or rules.",
+    "forward_mdd20_slices_in_bucket are intersection slices with current bucket; reading-only.",
     "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
     "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated."
   ],
