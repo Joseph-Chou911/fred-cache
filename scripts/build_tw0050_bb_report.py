@@ -11,8 +11,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-# ===== Audit stamp (use this to prove which script generated the report) =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v8"
+# ===== Audit stamp =====
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v9"
 
 
 def utc_now_iso() -> str:
@@ -66,7 +66,7 @@ def fmt_int(x: Any) -> str:
 
 def fmt_yi_from_ntd(x: Any, digits: int = 1) -> str:
     """
-    NTD -> 億 (1e8 NTD). Returns string like 104.5
+    NTD -> 億 (1e8 NTD)
     """
     try:
         if x is None:
@@ -93,11 +93,9 @@ def load_json(path: str) -> Dict[str, Any]:
 
 def normalize_date_key(x: Any) -> Optional[str]:
     """
-    Normalize dates like:
+    Normalize dates:
       - "2026-02-11" -> "20260211"
       - "20260211" -> "20260211"
-      - datetime -> "YYYYMMDD"
-    Return None if not parseable.
     """
     try:
         if x is None:
@@ -192,23 +190,7 @@ def md_table_prices(df: pd.DataFrame) -> str:
     return "\n".join(out)
 
 
-def _fmt_pct2_from_ratio(x: Any) -> str:
-    """
-    input: ratio (0.1234) -> "12.34%"
-    """
-    try:
-        if x is None:
-            return "N/A"
-        return f"{float(x) * 100.0:.2f}%"
-    except Exception:
-        return "N/A"
-
-
 def _pct(x: Any) -> Optional[float]:
-    """
-    Interpret input as percent (already *100) or ratio? Here we assume input is percent number.
-    This helper is only used when we need arithmetic on 'dist_to_*_pct' fields which are already percent.
-    """
     try:
         if x is None:
             return None
@@ -217,20 +199,14 @@ def _pct(x: Any) -> Optional[float]:
         return None
 
 
-def _clip_nonneg(x: Optional[float]) -> Optional[float]:
-    if x is None:
-        return None
-    return x if x >= 0 else 0.0
-
-
 def _above_upper_lower_from_dist(dist_to_upper_pct: Any, dist_to_lower_pct: Any) -> Tuple[str, str]:
     """
-    dist_to_upper_pct: percent number, can be negative when price is above upper.
-    dist_to_lower_pct: percent number, can be negative when price is below lower.
+    dist_to_upper_pct can be negative when above upper.
+    dist_to_lower_pct can be negative when below lower.
 
     Returns:
-      above_upper_pct_str: "0.37%" means above upper by 0.37%, else "0.00%" if not above
-      below_lower_pct_str: "0.81%" means below lower by 0.81%, else "0.00%" if not below
+      above_upper_pct_str: "0.37%" else "0.00%"
+      below_lower_pct_str: "0.81%" else "0.00%"
     """
     du = _pct(dist_to_upper_pct)
     dl = _pct(dist_to_lower_pct)
@@ -238,21 +214,14 @@ def _above_upper_lower_from_dist(dist_to_upper_pct: Any, dist_to_lower_pct: Any)
     above_upper = None if du is None else (-du if du < 0 else 0.0)
     below_lower = None if dl is None else (-dl if dl < 0 else 0.0)
 
-    # format with 2 decimals and trailing %
     au_s = "N/A" if above_upper is None else f"{above_upper:.2f}%"
     bl_s = "N/A" if below_lower is None else f"{below_lower:.2f}%"
     return au_s, bl_s
 
 
 def _dq_compact(dq_flags: List[str]) -> str:
-    """
-    Deterministic, concise DQ display for summary.
-    - Keep only "important" flags if list is long, but always deterministic.
-    - Never invent flags.
-    """
     if not dq_flags:
         return "(none)"
-    # prioritize a few categories
     priority_prefix = (
         "PRICE_",
         "FWD_MDD_",
@@ -265,17 +234,30 @@ def _dq_compact(dq_flags: List[str]) -> str:
     pri = [f for f in dq_flags if any(f.startswith(p) for p in priority_prefix)]
     rest = [f for f in dq_flags if f not in pri]
     ordered = pri + rest
-    # cap for readability, but show count
     cap = 6
     if len(ordered) <= cap:
         return ", ".join(ordered)
     return ", ".join(ordered[:cap]) + f", ... (+{len(ordered) - cap})"
 
 
-def build_forward_line(label: str, fwd: Dict[str, Any], dq_flags: List[str], fwd_days: int) -> str:
+def _filter_fwd_outlier_flags_for_horizon(dq_flags: List[str], horizon_days: int) -> List[str]:
     """
-    label: e.g. "forward_mdd_clean_20D" or "forward_mdd_clean_10D"
+    Only keep forward-outlier flags relevant to this horizon.
+    Examples:
+      - FWD_MDD_OUTLIER_MIN_RAW_20D -> horizon 20
+      - FWD_MDD_OUTLIER_MIN_RAW_10D -> horizon 10
+      - FWD_MDD_OUTLIER_MIN_RAW      -> generic (kept for any horizon if no suffixed flag exists)
     """
+    flags = [f for f in dq_flags if isinstance(f, str)]
+    suff = f"_{horizon_days}D"
+    specific = sorted([f for f in flags if f.startswith("FWD_MDD_OUTLIER_MIN_RAW") and f.endswith(suff)])
+    if specific:
+        return specific
+    generic = sorted([f for f in flags if f == "FWD_MDD_OUTLIER_MIN_RAW"])
+    return generic
+
+
+def build_forward_line(label: str, fwd: Dict[str, Any], dq_flags: List[str], horizon_days: int) -> str:
     n = safe_get(fwd, "n", 0)
     p50 = safe_get(fwd, "p50")
     p10 = safe_get(fwd, "p10")
@@ -294,19 +276,16 @@ def build_forward_line(label: str, fwd: Dict[str, Any], dq_flags: List[str], fwd
     if med and mfd and mep is not None and mfp is not None:
         line += f" (min_window: {med}->{mfd}; {fmt4(mep)}->{fmt4(mfp)})"
 
-    # Keep DQ tags concise but deterministic; do not remap to different names
+    # Horizon-safe DQ tags (avoid leaking 20D flags into 10D line)
     sflags = set([str(x) for x in (dq_flags or []) if isinstance(x, str)])
-    # show a couple common ones if present
     if "RAW_OUTLIER_EXCLUDED_BY_CLEAN" in sflags:
         line += " [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]"
-    if any(f.startswith("FWD_MDD_OUTLIER_MIN_RAW") for f in sflags):
-        # might be _20D etc.
-        # show the exact flags present (deterministic order)
-        raw_min_flags = sorted([f for f in sflags if f.startswith("FWD_MDD_OUTLIER_MIN_RAW")])
-        for f in raw_min_flags[:2]:
-            line += f" [DQ:{f}]"
-        if len(raw_min_flags) > 2:
-            line += f" [DQ:+{len(raw_min_flags)-2}]"
+
+    outlier_flags = _filter_fwd_outlier_flags_for_horizon(list(sflags), horizon_days)
+    for f in outlier_flags[:2]:
+        line += f" [DQ:{f}]"
+    if len(outlier_flags) > 2:
+        line += f" [DQ:+{len(outlier_flags) - 2}]"
 
     return line
 
@@ -334,6 +313,16 @@ def build_vol_line(vol: Dict[str, Any], atr: Dict[str, Any]) -> str:
     return f"- vol_filter(RV{rv_days},ATR{atr_days}): rv_ann={fmt_pct1(rv_pct)}; atr={fmt4(atr_v)} ({fmt_pct2(atr_pct)})"
 
 
+def build_regime_line(regime: Dict[str, Any]) -> Optional[str]:
+    if not isinstance(regime, dict) or not regime:
+        return None
+    tag = safe_get(regime, "tag", "N/A")
+    allowed = bool(safe_get(regime, "allowed", False))
+    inputs = safe_get(regime, "inputs", {}) or {}
+    rv_pctl = safe_get(inputs, "rv_ann_pctl", None)
+    return f"- regime(relative_pctl): **{tag}**; allowed={str(allowed).lower()}; rv20_pctl={fmt2(rv_pctl)}"
+
+
 def read_margin_latest(path: str) -> Optional[Dict[str, Any]]:
     if not path or (not os.path.exists(path)):
         return None
@@ -354,8 +343,7 @@ def margin_state(sum_chg_yi: float, threshold_yi: float) -> str:
 def take_last_n_rows(rows: List[Dict[str, Any]], n: int) -> List[Dict[str, Any]]:
     if not isinstance(rows, list) or n <= 0:
         return []
-    # newest first
-    return rows[:n]
+    return rows[:n]  # newest first
 
 
 def sum_chg(rows: List[Dict[str, Any]]) -> float:
@@ -414,10 +402,6 @@ def margin_overlay_block(
         except Exception:
             return None
 
-    twse_bal = latest_balance(twse_rows)
-    tpex_bal = latest_balance(tpex_rows)
-    total_bal = (twse_bal + tpex_bal) if (twse_bal is not None and tpex_bal is not None) else None
-
     def latest_chg(rows: List[Dict[str, Any]]) -> Optional[float]:
         try:
             if not rows:
@@ -425,6 +409,10 @@ def margin_overlay_block(
             return float(rows[0].get("chg_yi"))
         except Exception:
             return None
+
+    twse_bal = latest_balance(twse_rows)
+    tpex_bal = latest_balance(tpex_rows)
+    total_bal = (twse_bal + tpex_bal) if (twse_bal is not None and tpex_bal is not None) else None
 
     twse_chg_today = latest_chg(twse_rows)
     tpex_chg_today = latest_chg(tpex_rows)
@@ -474,16 +462,6 @@ def margin_overlay_block(
     lines.append("")
 
     return lines, quick
-
-
-def build_regime_line(regime: Dict[str, Any]) -> Optional[str]:
-    if not isinstance(regime, dict) or not regime:
-        return None
-    tag = safe_get(regime, "tag", "N/A")
-    allowed = bool(safe_get(regime, "allowed", False))
-    inputs = safe_get(regime, "inputs", {}) or {}
-    rv_pctl = safe_get(inputs, "rv_ann_pctl", None)
-    return f"- regime(relative_pctl): **{tag}**; allowed={str(allowed).lower()}; rv20_pctl={fmt2(rv_pctl)}"
 
 
 def read_chip_overlay(path: str) -> Optional[Dict[str, Any]]:
@@ -629,20 +607,6 @@ def chip_overlay_block(
 
 
 def _pick_forward_blocks(s: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any], str, str, int, int]:
-    """
-    Returns:
-      fwd20, fwd10, label20, label10, days20, days10
-
-    We try to read "forward_mdd_clean" blocks first if they exist, else fallback to "forward_mdd".
-    For 10D:
-      - if "forward_mdd10_clean" exists, use that
-      - else if "forward_mdd10" exists, use that
-      - else return empty dict
-
-    Meta days:
-      - meta.fwd_days for 20D (default 20)
-      - meta.fwd_days_short for 10D (default 10)
-    """
     meta = s.get("meta", {}) or {}
     days20 = int(safe_get(meta, "fwd_days", 20))
     days10 = int(safe_get(meta, "fwd_days_short", 10))
@@ -664,18 +628,30 @@ def _pick_forward_blocks(s: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
     return fwd20, fwd10, label20, label10, days20, days10
 
 
+def _infer_forward_mode_primary(meta: Dict[str, Any], fwd20_label: str) -> str:
+    v = safe_get(meta, "forward_mode_primary", None)
+    if isinstance(v, str) and v.strip():
+        return v.strip()
+    # fallback: infer from which block is used (audit-friendly)
+    if isinstance(fwd20_label, str) and "clean" in fwd20_label:
+        return "clean"
+    if isinstance(fwd20_label, str) and fwd20_label.startswith("forward_mdd_"):
+        return "raw"
+    return "N/A"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", default="tw0050_bb_cache")
     ap.add_argument("--out", default="report.md")
-    ap.add_argument("--tail_days", type=int, default=15)  # workflow compatibility
-    ap.add_argument("--tail_n", type=int, default=None)  # alias; overrides tail_days
+    ap.add_argument("--tail_days", type=int, default=15)
+    ap.add_argument("--tail_n", type=int, default=None)
 
     ap.add_argument("--margin_json", default="taiwan_margin_cache/latest.json")
     ap.add_argument("--margin_window_n", type=int, default=5)
     ap.add_argument("--margin_threshold_yi", type=float, default=100.0)
 
-    ap.add_argument("--chip_overlay_json", default=None)  # default resolved after args parsed
+    ap.add_argument("--chip_overlay_json", default=None)
     ap.add_argument("--chip_window_n", type=int, default=5)
 
     args = ap.parse_args()
@@ -692,10 +668,8 @@ def main() -> int:
     meta = s.get("meta", {}) or {}
     latest = s.get("latest", {}) or {}
 
-    # forward blocks (20D + 10D), labels reflect which block we ended up using
     fwd20, fwd10, fwd20_label, fwd10_label, fwd_days, fwd_days_short = _pick_forward_blocks(s)
 
-    # DQ
     dq = s.get("dq", {"flags": [], "notes": []}) or {}
     dq_flags = dq.get("flags") or []
     dq_notes = dq.get("notes") or []
@@ -705,15 +679,6 @@ def main() -> int:
     atr = s.get("atr", {}) or {}
     regime = s.get("regime", {}) or {}
 
-    # Audit fields existence (for both forward blocks)
-    def has_min_audit_block(fwd: Dict[str, Any]) -> bool:
-        return isinstance(fwd, dict) and all(
-            k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
-        )
-
-    has_min_audit_20 = has_min_audit_block(fwd20)
-    has_min_audit_10 = has_min_audit_block(fwd10)
-
     ticker = safe_get(meta, "ticker", "0050.TW")
     last_date = safe_get(meta, "last_date", "N/A")
     bb_window = safe_get(meta, "bb_window", 60)
@@ -721,30 +686,26 @@ def main() -> int:
     price_calc = safe_get(meta, "price_calc", "adjclose")
     data_source = safe_get(meta, "data_source", "yfinance_yahoo_or_twse_fallback")
 
+    forward_mode_primary = _infer_forward_mode_primary(meta, fwd20_label)
+
     state = safe_get(latest, "state", "N/A")
     bb_z = safe_get(latest, "bb_z")
 
-    # pos
-    bb_pos_clip = safe_get(latest, "bb_pos")  # clipped 0..1
-    bb_pos_raw = safe_get(latest, "bb_pos_raw")  # may exceed [0,1]
-    # some older stats might use different keys
+    bb_pos_clip = safe_get(latest, "bb_pos")
+    bb_pos_raw = safe_get(latest, "bb_pos_raw")
     if bb_pos_raw is None:
         bb_pos_raw = safe_get(latest, "pos_raw")
 
     dist_to_lower = safe_get(latest, "dist_to_lower_pct")
     dist_to_upper = safe_get(latest, "dist_to_upper_pct")
 
-    # New: friendly "above upper / below lower" derived fields (for summary readability)
     above_upper_pct_str, below_lower_pct_str = _above_upper_lower_from_dist(dist_to_upper, dist_to_lower)
 
-    # band width (two definitions)
     bw_geo = safe_get(latest, "band_width_geo_pct")
     if bw_geo is None:
-        bw_geo = safe_get(latest, "band_width_pct")  # legacy
-
+        bw_geo = safe_get(latest, "band_width_pct")
     bw_std = safe_get(latest, "band_width_std_pct")
 
-    # Resolve chip overlay path default
     chip_path = args.chip_overlay_json
     if chip_path is None:
         chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
@@ -762,33 +723,29 @@ def main() -> int:
     lines.append(f"- bb_window,k: `{bb_window}`, `{bb_k}`")
     lines.append(f"- forward_window_days: `{fwd_days}`")
     lines.append(f"- forward_window_days_short: `{fwd_days_short}`")
-    lines.append(f"- forward_mode_primary: `{safe_get(meta, 'forward_mode_primary', 'N/A')}`")
+    lines.append(f"- forward_mode_primary: `{forward_mode_primary}`")
     lines.append(f"- price_calc: `{price_calc}`")
     lines.append(f"- chip_overlay_path: `{chip_path}`")
     lines.append("")
 
-    # ===== Quick summary ===== (ALLOW 2 LINES)
+    # ===== Quick summary (2 lines allowed) =====
     lines.append("## 快速摘要（非預測，僅狀態）")
-    # line 1: BB status + band width + position
     lines.append(
         f"- state: **{state}**; "
         f"bb_z={fmt4(bb_z)}; "
         f"pos={fmt4(bb_pos_clip)} (raw={fmt4(bb_pos_raw)}); "
         f"bw_geo={fmt_pct2(bw_geo)}; bw_std={fmt_pct2(bw_std)}"
     )
-    # line 2: distances + explicit above/below (no sign confusion) + DQ raw flags compact
     lines.append(
         f"- dist_to_lower={fmt_pct2(dist_to_lower)}; dist_to_upper={fmt_pct2(dist_to_upper)}; "
         f"above_upper={above_upper_pct_str}; below_lower={below_lower_pct_str}; "
         f"DQ={_dq_compact([str(x) for x in dq_flags if isinstance(x, str)])}"
     )
 
-    # forward lines
     lines.append(build_forward_line(fwd20_label, fwd20, dq_flags, fwd_days))
     if isinstance(fwd10, dict) and fwd10:
         lines.append(build_forward_line(fwd10_label, fwd10, dq_flags, fwd_days_short))
 
-    # trend/vol quick lines
     if isinstance(trend, dict) and trend:
         lines.append(build_trend_line(trend))
     if isinstance(vol, dict) and vol and isinstance(atr, dict) and atr:
@@ -798,7 +755,6 @@ def main() -> int:
     if reg_line:
         lines.append(reg_line)
 
-    # margin quick line (if exists)
     margin_json = read_margin_latest(args.margin_json)
     if margin_json is not None:
         _, margin_quick = margin_overlay_block(
@@ -810,7 +766,6 @@ def main() -> int:
         if margin_quick:
             lines.append(margin_quick)
 
-    # chip quick line
     chip_json = read_chip_overlay(chip_path)
     chip_dq_extra: List[str] = []
     if chip_json is not None:
@@ -845,7 +800,6 @@ def main() -> int:
                 ["pos_in_band_raw (unclipped)", fmt4(bb_pos_raw)],
                 ["dist_to_lower", fmt_pct2(dist_to_lower)],
                 ["dist_to_upper", fmt_pct2(dist_to_upper)],
-                # New: explicit human-friendly above/below without sign confusion
                 ["above_upper_pct", above_upper_pct_str],
                 ["below_lower_pct", below_lower_pct_str],
                 ["band_width_geo_pct (upper/lower-1)", fmt_pct2(bw_geo)],
@@ -926,7 +880,7 @@ def main() -> int:
             )
             lines.append("")
 
-    # ===== Regime section =====
+    # ===== Regime =====
     lines.append("## Regime Tag")
     lines.append("")
     if isinstance(regime, dict) and regime:
@@ -970,7 +924,12 @@ def main() -> int:
     lines.append("## forward_mdd Distribution")
     lines.append("")
 
-    # forward 20 (primary)
+    def has_min_audit_block(fwd: Dict[str, Any]) -> bool:
+        return isinstance(fwd, dict) and all(
+            k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
+        )
+
+    # 20D
     lines.append("### forward_mdd (primary)")
     lines.append("")
     lines.append(f"- block_used: `{fwd20_label}`")
@@ -986,7 +945,7 @@ def main() -> int:
     lines.append("")
     lines.append("#### forward_mdd Min Audit Trail")
     lines.append("")
-    if has_min_audit_20:
+    if has_min_audit_block(fwd20):
         lines.append("| item | value |")
         lines.append("|---|---:|")
         lines.append(f"| min_entry_date | {safe_get(fwd20, 'min_entry_date')} |")
@@ -994,12 +953,12 @@ def main() -> int:
         lines.append(f"| min_future_date | {safe_get(fwd20, 'min_future_date')} |")
         lines.append(f"| min_future_price | {fmt4(safe_get(fwd20, 'min_future_price'))} |")
     else:
-        fwd_keys_sorted = sorted(list(fwd20.keys())) if isinstance(fwd20, dict) else []
+        keys = sorted(list(fwd20.keys())) if isinstance(fwd20, dict) else []
         lines.append("- min audit fields are missing in forward block.")
-        lines.append(f"- forward_mdd keys: `{', '.join(fwd_keys_sorted)}`")
+        lines.append(f"- forward_mdd keys: `{', '.join(keys)}`")
     lines.append("")
 
-    # forward 10
+    # 10D
     lines.append("### forward_mdd10 (primary)")
     lines.append("")
     if isinstance(fwd10, dict) and fwd10:
@@ -1016,7 +975,7 @@ def main() -> int:
         lines.append("")
         lines.append("#### forward_mdd10 Min Audit Trail")
         lines.append("")
-        if has_min_audit_10:
+        if has_min_audit_block(fwd10):
             lines.append("| item | value |")
             lines.append("|---|---:|")
             lines.append(f"| min_entry_date | {safe_get(fwd10, 'min_entry_date')} |")
@@ -1024,15 +983,15 @@ def main() -> int:
             lines.append(f"| min_future_date | {safe_get(fwd10, 'min_future_date')} |")
             lines.append(f"| min_future_price | {fmt4(safe_get(fwd10, 'min_future_price'))} |")
         else:
-            fwd10_keys_sorted = sorted(list(fwd10.keys())) if isinstance(fwd10, dict) else []
+            keys = sorted(list(fwd10.keys())) if isinstance(fwd10, dict) else []
             lines.append("- min audit fields are missing in forward block.")
-            lines.append(f"- forward_mdd10 keys: `{', '.join(fwd10_keys_sorted)}`")
+            lines.append(f"- forward_mdd10 keys: `{', '.join(keys)}`")
         lines.append("")
     else:
         lines.append("- forward_mdd10 block is missing in stats_latest.json.")
         lines.append("")
 
-    # ===== Chip Overlay =====
+    # ===== Chip overlay =====
     if chip_json is not None:
         cb_lines, _, _ = chip_overlay_block(
             chip_json=chip_json,
@@ -1046,7 +1005,7 @@ def main() -> int:
         lines.append(f"- chip_overlay: `N/A` (missing `{chip_path}`)")
         lines.append("")
 
-    # ===== Margin Overlay =====
+    # ===== Margin overlay =====
     if margin_json is not None:
         mb_lines, _ = margin_overlay_block(
             margin_json=margin_json,
@@ -1066,20 +1025,24 @@ def main() -> int:
         lines.append(md_table_prices(tail_df))
     lines.append("")
 
-    # ===== DQ ===== (print raw flags, keep auditability)
+    # ===== DQ =====
     lines.append("## Data Quality Flags")
     lines.append("")
-    if not dq_flags:
+    flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
+    if not flags_str:
         lines.append("- (none)")
     else:
-        if dq_notes and len(dq_notes) == len(dq_flags):
-            for fl, nt in zip(dq_flags, dq_notes):
-                lines.append(f"- {fl}: {nt}")
-        else:
-            for fl in dq_flags:
-                lines.append(f"- {fl}")
-            for nt in dq_notes:
-                lines.append(f"  - note: {nt}")
+        for fl in flags_str:
+            lines.append(f"- {fl}")
+
+    # IMPORTANT: do NOT indent notes as sub-bullets (avoid accidental nesting)
+    notes_str = [str(x) for x in dq_notes if isinstance(x, str) and str(x).strip()]
+    if notes_str:
+        lines.append("")
+        lines.append("### DQ Notes")
+        lines.append("")
+        for nt in notes_str:
+            lines.append(f"- note: {nt}")
 
     if chip_dq_extra:
         lines.append("")
