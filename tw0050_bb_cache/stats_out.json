@@ -1,10 +1,8 @@
 {
-  "atr": {
-    "atr": 1.2304300879000425,
-    "atr_days": 14,
-    "atr_pct": 1.5938214203880987,
-    "tr_mode": "OHLC"
-  },
+  "bb_k": 2.0,
+  "bb_window": 60,
+  "build_script_fingerprint": "build_tw0050_bb_report@2026-02-21.v16",
+  "data_source": "yfinance_yahoo_or_twse_fallback",
   "dq": {
     "flags": [
       "PRICE_SERIES_BREAK_DETECTED",
@@ -18,76 +16,6 @@
       "forward_mdd_raw_20D min=-0.7628 < threshold(-0.4); see raw min_audit_trail.",
       "Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask."
     ]
-  },
-  "forward_mdd": {
-    "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
-    "label": "forward_mdd_clean_20D",
-    "min": -0.2557003366113709,
-    "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.41792106628418,
-    "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
-    "n": 4152,
-    "p05": -0.09277669546526839,
-    "p10": -0.06866811902140099,
-    "p25": -0.040216989862531416,
-    "p50": -0.018267328335285715
-  },
-  "forward_mdd10": {
-    "definition": "min(price[t+1..t+10]/price[t]-1), level-price based",
-    "label": "forward_mdd_clean_10D",
-    "min": -0.24002202283964447,
-    "min_entry_date": "2020-03-05",
-    "min_entry_price": 19.017330169677734,
-    "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
-    "n": 4172,
-    "p05": -0.06312506844271426,
-    "p10": -0.04797974734831745,
-    "p25": -0.027102722894395664,
-    "p50": -0.0113855778519949
-  },
-  "forward_mdd10_clean": {
-    "definition": "min(price[t+1..t+10]/price[t]-1), level-price based",
-    "label": "forward_mdd_clean_10D",
-    "min": -0.24002202283964447,
-    "min_entry_date": "2020-03-05",
-    "min_entry_price": 19.017330169677734,
-    "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
-    "n": 4172,
-    "p05": -0.06312506844271426,
-    "p10": -0.04797974734831745,
-    "p25": -0.027102722894395664,
-    "p50": -0.0113855778519949
-  },
-  "forward_mdd10_raw": {
-    "definition": "min(price[t+1..t+10]/price[t]-1), level-price based",
-    "label": "forward_mdd_raw_10D",
-    "min": -0.7553146100754824,
-    "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.476139068603516,
-    "min_future_date": "2014-01-09",
-    "min_future_price": 9.1698637008667,
-    "n": 4182,
-    "p05": -0.06421946858289541,
-    "p10": -0.04832379977411513,
-    "p25": -0.027281315277046025,
-    "p50": -0.011423930885985256
-  },
-  "forward_mdd_clean": {
-    "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
-    "label": "forward_mdd_clean_20D",
-    "min": -0.2557003366113709,
-    "min_entry_date": "2020-02-19",
-    "min_entry_price": 19.41792106628418,
-    "min_future_date": "2020-03-19",
-    "min_future_price": 14.452752113342285,
-    "n": 4152,
-    "p05": -0.09277669546526839,
-    "p10": -0.06866811902140099,
-    "p25": -0.040216989862531416,
-    "p50": -0.018267328335285715
   },
   "forward_mdd_conditional": {
     "10D": {
@@ -527,7 +455,41 @@
       }
     },
     "meta": {
+      "bucket_policy": [
+        {
+          "id": "z_le_-2.0",
+          "rule": "bb_z<=-2.0"
+        },
+        {
+          "id": "-2.0_to_-1.5",
+          "rule": "-2.0<bb_z<=-1.5"
+        },
+        {
+          "id": "-1.5_to_1.5",
+          "rule": "-1.5<bb_z<1.5"
+        },
+        {
+          "id": "1.5_to_2.0",
+          "rule": "1.5<=bb_z<2.0"
+        },
+        {
+          "id": "z_ge_2.0",
+          "rule": "bb_z>=2.0"
+        }
+      ],
       "forward_mode_primary": "clean",
+      "horizons": {
+        "primary_days": 20,
+        "short_days": 10
+      },
+      "modes": {
+        "available": [
+          "raw",
+          "clean",
+          "primary"
+        ],
+        "primary": "clean"
+      },
       "note": "condition evaluated at entry t using bb_z[t]; stats computed on already-produced forward_mdd arrays (respecting raw/clean masks).",
       "scheme": "bb_z_5bucket_v1",
       "thresholds": {
@@ -536,185 +498,18 @@
       }
     }
   },
-  "forward_mdd_raw": {
-    "definition": "min(price[t+1..t+20]/price[t]-1), level-price based",
-    "label": "forward_mdd_raw_20D",
-    "min": -0.7627551048971691,
-    "min_entry_date": "2013-12-30",
-    "min_entry_price": 37.476139068603516,
-    "min_future_date": "2014-02-05",
-    "min_future_price": 8.891022682189941,
-    "n": 4172,
-    "p05": -0.0952357371278269,
-    "p10": -0.07015363927102307,
-    "p25": -0.04078498392198021,
-    "p50": -0.018457887317070376
-  },
+  "forward_mode_primary": "clean",
+  "generated_at_utc": "2026-02-20T18:26:24Z",
+  "last_date": "2026-02-11",
   "latest": {
-    "adjclose": 77.19999694824219,
-    "band_width_geo_pct": 37.60869372183926,
-    "band_width_std_pct": 31.65599131306746,
-    "bb_lower": 55.89385323010018,
-    "bb_ma": 66.40432726542154,
-    "bb_pos": 1.0,
-    "bb_pos_raw": 1.013567211456917,
-    "bb_sd": 5.255237017660681,
-    "bb_upper": 76.91480130074291,
     "bb_z": 2.0542688458276683,
-    "close": 77.19999694824219,
-    "date": "2026-02-11",
     "dist_to_lower_pct": 27.59863285024021,
     "dist_to_upper_pct": -0.36942442846271734,
     "price_used": 77.19999694824219,
     "state": "EXTREME_UPPER_BAND"
   },
-  "meta": {
-    "bb_k": 2.0,
-    "bb_window": 60,
-    "break_detection": {
-      "break_count": 1,
-      "break_ratio_hi": 1.8,
-      "break_ratio_lo": 0.5555555555555556,
-      "forward_mode_primary": "clean"
-    },
-    "data_source": "yfinance_yahoo_or_twse_fallback",
-    "fetch_start_effective": "2003-01-01",
-    "fwd_days": 20,
-    "fwd_days_short": 10,
-    "last_date": "2026-02-11",
-    "module": "tw0050_bb",
-    "price_calc": "adjclose",
-    "price_col_requested": "adjclose",
-    "price_col_used": "adjclose",
-    "regime_params": {
-      "min_samples": 252,
-      "rv_pctl_max": 0.6
-    },
-    "reliability": "HIGH",
-    "reliability_reason": [
-      "yfinance_adjclose_ok"
-    ],
-    "rows": 4192,
-    "run_ts_utc": "2026-02-20T18:25:54Z",
-    "script_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-21.v11.condfwd_additive",
-    "shortcircuit": {
-      "enabled": true,
-      "skipped_compute_when_unadjusted": true,
-      "unadjusted_price_mode": false
-    },
-    "start": "2003-01-01",
-    "ticker": "0050.TW",
-    "trend_params": {
-      "trend_ma_days": 200,
-      "trend_slope_days": 20,
-      "trend_slope_thr_pct": 0.5
-    },
-    "twse_fallback_policy": {
-      "max_retries": 3,
-      "months_back_effective": null,
-      "months_back_requested": 2,
-      "months_back_unadjusted_cap": 2,
-      "sleep_jitter_sec": 0.5,
-      "sleep_sec": 1.0,
-      "timeout_sec": 20
-    },
-    "tz": "Asia/Taipei",
-    "vol_params": {
-      "atr_days": 14,
-      "rv_days": 20
-    }
-  },
-  "pledge": {
-    "decision": {
-      "action_bucket": "VETO",
-      "pledge_policy": "DISALLOW",
-      "veto_reasons": [
-        "regime_gate_closed",
-        "no_chase_state:EXTREME_UPPER_BAND",
-        "no_chase_z>= 1.50"
-      ]
-    },
-    "inputs": {
-      "bb_state": "EXTREME_UPPER_BAND",
-      "bb_z": 2.0542688458276683,
-      "forward_mode_primary": "clean",
-      "regime_allowed": false
-    },
-    "scope": "compute_only_no_margin_no_chip",
-    "thresholds": {
-      "accumulate_z_threshold": -1.5,
-      "no_chase_z_threshold": 1.5,
-      "require_regime_allowed": true
-    },
-    "unconditional_tranche_levels": {
-      "levels": [
-        {
-          "drawdown": -0.04797974734831745,
-          "label": "10D_p10_uncond",
-          "price_level": 73.49596059937465
-        },
-        {
-          "drawdown": -0.06312506844271426,
-          "label": "10D_p05_uncond",
-          "price_level": 72.32674185710707
-        },
-        {
-          "drawdown": -0.06866811902140099,
-          "label": "20D_p10_uncond",
-          "price_level": 71.8988183693485
-        },
-        {
-          "drawdown": -0.09277669546526839,
-          "label": "20D_p05_uncond",
-          "price_level": 70.03763634145548
-        }
-      ],
-      "note": "levels derived from unconditional forward_mdd quantiles; not conditioned on current state",
-      "price_anchor": 77.19999694824219
-    },
-    "version": "pledge_guidance_v1"
-  },
-  "regime": {
-    "allowed": false,
-    "definition": "TREND_UP & RV20_percentile<=pctl_max & rv_hist_n>=min_samples => RISK_ON_ALLOWED",
-    "inputs": {
-      "bb_state": "EXTREME_UPPER_BAND",
-      "rv_ann": 0.2069566003876684,
-      "rv_ann_pctl": 79.8418024928092,
-      "rv_hist_n": 4172,
-      "trend_state": "TREND_UP"
-    },
-    "params": {
-      "min_samples": 252,
-      "rv_pctl_max": 60.0,
-      "trend_required": "TREND_UP"
-    },
-    "passes": {
-      "rv_hist_ok": true,
-      "rv_ok": false,
-      "trend_ok": true
-    },
-    "reasons": [
-      "bb_extreme_upper_band_stretched"
-    ],
-    "tag": "RISK_OFF_OR_DEFENSIVE"
-  },
-  "trend": {
-    "price_vs_trend_ma_pct": 37.689147063234515,
-    "state": "TREND_UP",
-    "trend_ma_days": 200,
-    "trend_ma_last": 56.06832389831543,
-    "trend_slope_days": 20,
-    "trend_slope_pct": 6.133171071143373,
-    "trend_slope_thr_pct": 0.5
-  },
-  "vol": {
-    "rv_ann": 0.2069566003876684,
-    "rv_ann_pctl": 79.8418024928092,
-    "rv_days": 20,
-    "rv_hist_n": 4172,
-    "rv_hist_q20": 0.11199399097785256,
-    "rv_hist_q50": 0.14829659865310407,
-    "rv_hist_q80": 0.20795996438275244
-  }
+  "module": "tw0050_bb_cache",
+  "price_calc": "adjclose",
+  "stats_in_path": "tw0050_bb_cache/stats_latest.json",
+  "ticker": "0050.TW"
 }
