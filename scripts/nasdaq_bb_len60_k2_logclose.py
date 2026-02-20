@@ -26,6 +26,11 @@ Notes:
     (A) low-vol regime (z <= z_thresh_low):  forward_max_runup (>= 0)
     (B) high-vol regime (z >= z_thresh_high): forward_max_runup (>= 0)
     (C) pos-watch (pos >= pos_watch_threshold): forward_max_runup (>= 0)
+
+A方案（相容輸出）：
+- 同時輸出新版固定檔名：snippet_price_qqq.json
+- 同時輸出 legacy 檔名（依 ticker）：snippet_price_<ticker>.json
+  例：price_ticker=qqq.us -> snippet_price_qqq.us.json
 """
 
 from __future__ import annotations
@@ -130,6 +135,21 @@ def _safe_float(x, default=None):
         return v
     except Exception:
         return default
+
+
+def _safe_legacy_tag(s: str) -> str:
+    """
+    Build a filename-safe-ish tag for legacy output.
+
+    We keep '.' because your legacy file is expected to look like: qqq.us -> snippet_price_qqq.us.json
+    We only replace path separators and whitespace that could break paths.
+    """
+    t = (s or "").strip().lower()
+    t = t.replace(os.sep, "_")
+    if os.altsep:
+        t = t.replace(os.altsep, "_")
+    t = t.replace(" ", "_")
+    return t
 
 
 # ---------------------------
@@ -776,8 +796,15 @@ def main() -> int:
         hist=price_hist,
     )
 
+    # New canonical filename (fixed)
     price_json_path = os.path.join(args.out_dir, "snippet_price_qqq.json")
     with open(price_json_path, "w", encoding="utf-8") as f:
+        json.dump(price_snippet, f, ensure_ascii=False, indent=2)
+
+    # A方案：legacy filename (by ticker; e.g., qqq.us -> snippet_price_qqq.us.json)
+    legacy_ticker = _safe_legacy_tag(args.price_ticker)
+    legacy_price_json_path = os.path.join(args.out_dir, f"snippet_price_{legacy_ticker}.json")
+    with open(legacy_price_json_path, "w", encoding="utf-8") as f:
         json.dump(price_snippet, f, ensure_ascii=False, indent=2)
 
     price_csv_path = os.path.join(args.out_dir, "tail_price_qqq.csv")
@@ -786,6 +813,8 @@ def main() -> int:
     if not args.quiet:
         print("=== PRICE SNIPPET (QQQ) ===")
         print(json.dumps(price_snippet, ensure_ascii=False, indent=2))
+        print(f"[wrote] {price_json_path}")
+        print(f"[wrote] {legacy_price_json_path}")
 
     # VOL: VXN (optional)
     if args.vxn_enable:
@@ -863,6 +892,7 @@ def main() -> int:
         if not args.quiet:
             print("\n=== VOL SNIPPET (VXN) ===")
             print(json.dumps(vxn_snippet, ensure_ascii=False, indent=2))
+            print(f"[wrote] {vxn_json_path}")
 
     return 0
 
