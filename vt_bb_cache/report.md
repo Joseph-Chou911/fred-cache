@@ -1,12 +1,12 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-02-20T03:08:07Z`
+- report_generated_at_utc: `2026-02-20T03:28:31Z`
 - data_date: `2026-02-19`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`
 
 ## 15秒摘要
-- **VT** (2026-02-19 price_usd=146.6800) → **MID_BAND** (z=1.2032, pos=0.8008); dist_to_lower=6.668%; dist_to_upper=1.732%; 20D forward_mdd: p50=-1.637%, p10=-7.279%, min=-31.571% (n=2896, conf=HIGH)
+- **VT** (2026-02-19 price_usd=146.6800) → **MID_BAND** (z=1.2032, pos=0.8008); dist_to_lower=6.668%; dist_to_upper=1.732%; 20D forward_mdd: p50=-1.637%, p10=-7.279%, min=-31.571% (n=2896, conf=HIGH, conf_decision=OK, min_n_required=200)
 
 ## Δ1D（一日變動；以前一個「可計算 BB 的交易日」為基準）
 - prev_bb_date: `2026-02-18`
@@ -21,13 +21,17 @@
 - **距離上下軌**：dist_to_upper=1.732%；dist_to_lower=6.668%
 - **波動區間寬度（閱讀用）**：band_width≈9.000%（= upper/lower - 1；用於直覺理解，不作信號）
 - **streak（連續天數）**：bucket_streak=5；pos≥0.80 streak=2；dist_to_upper≤2.0% streak=2
-- **forward_mdd(20D)**（bucket=MID_BAND）：p50=-1.637%、p10=-7.279%、min=-31.571%；n=2896（conf=HIGH）
+- **forward_mdd(20D)**（bucket=MID_BAND）：p50=-1.637%、p10=-7.279%、min=-31.571%；n=2896（conf=HIGH；conf_decision=OK）
+
+## pos vs dist_to_upper 一致性檢查（提示用；不改數值）
+- status: `OK`
+- reason: `within_tolerance`
 
 ## forward_mdd(20D) 切片分布（閱讀用；不回填主欄位）
 
-- Slice A（pos≥0.80）：p50=-1.508%、p10=-5.431%、min=-31.285% (n=1704, conf=HIGH)
-- Slice B（dist_to_upper≤2.0%）：p50=-1.443%、p10=-5.486%、min=-31.285% (n=1743, conf=HIGH)
-- 注意：切片樣本數通常較小，conf 下降是正常；切片僅用於「貼上緣時」的閱讀參考。
+- Slice A（pos≥0.80）：p50=-1.508%、p10=-5.431%、min=-31.285% (n=1704, conf=HIGH, conf_decision=OK, min_n_required=200)
+- Slice B（dist_to_upper≤2.0%）：p50=-1.443%、p10=-5.486%、min=-31.285% (n=1743, conf=HIGH, conf_decision=OK, min_n_required=200)
+- 注意：conf_decision 低於 OK 時，代表樣本數不足以支撐「拿來做決策」；仍可作為閱讀參考。
 
 ## 近 5 日（可計算 BB 的交易日；小表）
 
@@ -82,5 +86,6 @@
 ## Notes
 - bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。
 - Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。
-- forward_mdd20_slices 為閱讀用切片，樣本較少時 conf 降低屬正常現象。
+- forward_mdd20_slices 為閱讀用切片；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。
+- pos vs dist_to_upper 一致性檢查為提示用，避免 band_width 或資料異常造成誤讀。
 - FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。
