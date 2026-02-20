@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-19T10:50:59Z`
+- report_generated_at_utc: `2026-02-20T07:31:17Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v6`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
@@ -108,7 +108,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-19T10:50:59.567Z`
+- overlay_generated_at_utc: `2026-02-20T07:31:16.848Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -148,7 +148,7 @@
 
 ## Margin Overlay（融資）
 
-- overlay_generated_at_utc: `2026-02-18T15:13:18Z`
+- overlay_generated_at_utc: `2026-02-19T15:13:46Z`
 - data_date: `2026-02-11`
 - params: window_n=5, threshold_yi=100.00
 - date_alignment: margin_latest_date=`2026-02-11` vs price_last_date=`2026-02-11` => **ALIGNED**
