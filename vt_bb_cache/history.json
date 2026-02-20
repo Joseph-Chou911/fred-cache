@@ -1,42 +1,26 @@
 {
   "items": [
     {
-      "band_width_pct": 0.09000219840194879,
+      "band_width_pct": 0.09000219840477941,
       "bucket": "MID_BAND",
       "close_usd": 146.67999267578125,
       "date": "2026-02-19",
-      "dist_to_upper": 0.017316213997111186,
+      "dist_to_upper": 0.017316213998433062,
       "fx_ref_date": "2026-02-13",
       "fx_ref_lag_days": 6,
       "fx_ref_rate": 31.5,
       "fx_ref_source": "HISTORY",
       "fx_usdtwd": null,
-      "min_mdd20": -0.315705889529621,
+      "min_mdd20": -0.3157059227627924,
       "n_mdd20": 2896,
-      "n_mdd20_bw_high": 877,
-      "n_mdd20_bw_high_in_bucket": 618,
-      "n_mdd20_bw_low": 877,
-      "n_mdd20_bw_low_in_bucket": 570,
-      "n_mdd20_dist_u_le": 1743,
-      "n_mdd20_dist_u_le_in_bucket": 718,
-      "n_mdd20_pos_ge": 1704,
-      "n_mdd20_pos_ge_in_bucket": 638,
-      "p10_mdd20": -0.07279351986572352,
-      "p50_mdd20": -0.016369508787973996,
-      "p50_mdd20_bw_high": -0.019955367182448946,
-      "p50_mdd20_bw_high_in_bucket": -0.016128274839099677,
-      "p50_mdd20_bw_low": -0.014219732009934871,
-      "p50_mdd20_bw_low_in_bucket": -0.015306327155473198,
-      "p50_mdd20_dist_u_le": -0.01443433092593871,
-      "p50_mdd20_dist_u_le_in_bucket": -0.013953716471311939,
-      "p50_mdd20_pos_ge": -0.015082529206858486,
-      "p50_mdd20_pos_ge_in_bucket": -0.01534526914407136,
-      "pos_in_band": 0.8007884183663428,
+      "p10_mdd20": -0.07279359610558289,
+      "p50_mdd20": -0.016369331449173907,
+      "pos_in_band": 0.8007884183572682,
       "price_twd": null,
       "price_twd_ref": 4620.419769287109,
       "price_usd": 146.67999267578125,
-      "z": 1.2031536734653645
+      "z": 1.2031536734290604
     }
   ],
-  "schema_version": "vt_bb_cache.v1"
+  "schema_version": "bb_cache.v1"
 }
