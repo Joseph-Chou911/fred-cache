@@ -157,9 +157,7 @@ def _pick_keys(records: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[s
         "date", "data_date", "day", "ymd", "day_key", "UsedDate", "used_date", "d"
     ]
     rate_candidates = [
-        # include mid/spot_*
         "mid", "spot_buy", "spot_sell",
-        # legacy/other possibilities
         "usdtwd", "usd_twd", "USD_TWD", "USDTWD", "rate", "close", "value", "price"
     ]
 
@@ -218,7 +216,6 @@ def load_fx_history(fx_history_path: str) -> FxSeries:
         if v is None:
             continue
 
-        # sanity range (very wide but blocks nonsense)
         if not (5.0 <= v <= 100.0):
             continue
 
@@ -381,20 +378,11 @@ def pick_fx_reference(
     fx_latest_path: str,
 ) -> Dict[str, Any]:
     """
-    Returns a dict:
-      {
-        "ref_rate": float|None,
-        "ref_date": "YYYY-MM-DD"|None,
-        "ref_source": "HISTORY"|"LATEST"|None,
-        "lag_days": int|None,
-        "status": "OK"|"NO_REF"|"TOO_STALE"|...
-        "stale_threshold_days": int
-      }
-    Policy: choose the most recent FX date <= vt_date from:
+    Choose the most recent FX date <= vt_date from:
       - history by_date
       - latest.json (data_date, mid) if <= vt_date
     """
-    stale_threshold_days = 30  # audit guard; still returns info even if too stale but flags it
+    stale_threshold_days = 30
     vt_d = _ymd_to_date(vt_date_str)
     if vt_d is None:
         return {
@@ -403,7 +391,6 @@ def pick_fx_reference(
             "stale_threshold_days": stale_threshold_days
         }
 
-    # Candidate from history: max date <= vt_date
     hist_best_date = None
     hist_best_rate = None
     if fx_hist.parse_status == "OK" and fx_hist.by_date:
@@ -415,12 +402,10 @@ def pick_fx_reference(
                 hist_best_date = d
                 hist_best_rate = rate
 
-    # Candidate from latest
     latest_date_str, latest_mid, latest_status = load_fx_latest_mid(fx_latest_path)
     latest_d = _ymd_to_date(latest_date_str) if latest_date_str else None
     latest_ok = (latest_status == "OK" and latest_d is not None and latest_mid is not None and latest_d <= vt_d)
 
-    # Choose most recent
     ref_source = None
     ref_date = None
     ref_rate = None
@@ -446,9 +431,7 @@ def pick_fx_reference(
         }
 
     lag_days = (vt_d - ref_date).days
-    status = "OK"
-    if lag_days > stale_threshold_days:
-        status = "TOO_STALE"
+    status = "OK" if lag_days <= stale_threshold_days else "TOO_STALE"
 
     return {
         "ref_rate": float(ref_rate),
@@ -527,11 +510,9 @@ def main() -> int:
     fx_rate_strict = fx_series.by_date.get(last_date) if fx_series.parse_status == "OK" else None
     fx_used_policy = "HISTORY_DATE_MATCH" if fx_rate_strict is not None else "NA"
 
-    # strict derived
     price_twd = (last_price * fx_rate_strict) if fx_rate_strict is not None else None
     close_twd = (last_close * fx_rate_strict) if (fx_rate_strict is not None and last_close is not None) else None
 
-    # reference derived (if strict missing)
     fx_ref = pick_fx_reference(last_date, fx_series, args.fx_latest)
     ref_rate = fx_ref.get("ref_rate")
     ref_date = fx_ref.get("ref_date")
@@ -565,18 +546,16 @@ def main() -> int:
         },
         "forward_mdd20": mdd_stats,
         "fx_usdtwd": {
-            # strict fields (do NOT fill with lagged)
             "rate": fx_rate_strict,
             "used_policy": fx_used_policy,
             "parse_status": fx_series.parse_status,
             "detected_date_key": fx_series.detected_date_key,
             "detected_rate_key": fx_series.detected_rate_key,
-            # reference fields (only meaningful when strict is NA)
             "reference": {
                 "rate": ref_rate if fx_rate_strict is None else None,
                 "ref_date": ref_date if fx_rate_strict is None else None,
                 "lag_days": ref_lag_days if fx_rate_strict is None else None,
-                "ref_source": ref_source if fx_rate_strict is None else None,  # HISTORY or LATEST
+                "ref_source": ref_source if fx_rate_strict is None else None,
                 "status": ref_status if fx_rate_strict is None else None,
                 "stale_threshold_days": fx_ref.get("stale_threshold_days"),
                 "latest_status": fx_ref.get("latest_status"),
@@ -584,10 +563,8 @@ def main() -> int:
             },
         },
         "derived_twd": {
-            # strict derived
             "price_twd": price_twd,
             "close_twd": close_twd,
-            # reference derived (lagged FX) - only if strict missing
             "price_twd_ref": price_twd_ref,
             "close_twd_ref": close_twd_ref,
         },
@@ -606,7 +583,6 @@ def main() -> int:
 
     _write_json(latest_path, latest)
 
-    # history row (compact)
     hist_row = {
         "date": last_date,
         "price_usd": last_price,
@@ -618,10 +594,8 @@ def main() -> int:
         "p10_mdd20": mdd_stats.get("p10"),
         "min_mdd20": mdd_stats.get("min"),
         "n_mdd20": mdd_stats.get("n"),
-        # strict fx
         "fx_usdtwd": fx_rate_strict,
         "price_twd": price_twd,
-        # reference fx (only if strict missing)
         "fx_ref_date": ref_date if fx_rate_strict is None else None,
         "fx_ref_rate": ref_rate if fx_rate_strict is None else None,
         "fx_ref_lag_days": ref_lag_days if fx_rate_strict is None else None,
@@ -633,7 +607,7 @@ def main() -> int:
     _write_json(history_path, history_obj)
 
     # ----------------------------
-    # report.md (expanded, display-only)
+    # report.md (expanded + Δ1D + 近5日表; display-only)
     # ----------------------------
     def fmt_pct(x: Any) -> str:
         v = _safe_float(x)
@@ -653,18 +627,103 @@ def main() -> int:
             return "NA"
         return f"{v:.{nd}f}"
 
-    # Readability-only derived number (no impact to signals)
-    band_width_pct = None
-    try:
-        if lower_lin > 0 and upper_lin > 0:
-            band_width_pct = (upper_lin / lower_lin) - 1.0
-    except Exception:
-        band_width_pct = None
+    def _band_width_pct(lower_u: Optional[float], upper_u: Optional[float]) -> Optional[float]:
+        if lower_u is None or upper_u is None:
+            return None
+        if not (np.isfinite(lower_u) and np.isfinite(upper_u)) or lower_u <= 0 or upper_u <= 0:
+            return None
+        return (upper_u / lower_u) - 1.0
 
-    # Readability-only flags (do NOT change bucket)
+    def _dist_to_upper(p: Optional[float], upper_u: Optional[float]) -> Optional[float]:
+        if p is None or upper_u is None:
+            return None
+        if not (np.isfinite(p) and np.isfinite(upper_u)) or p <= 0:
+            return None
+        return (upper_u - p) / p
+
+    def _dist_to_lower(p: Optional[float], lower_u: Optional[float]) -> Optional[float]:
+        if p is None or lower_u is None:
+            return None
+        if not (np.isfinite(p) and np.isfinite(lower_u)) or p <= 0:
+            return None
+        return (p - lower_u) / p
+
+    # Readability-only
+    band_width_pct = _band_width_pct(lower_lin, upper_lin)
     near_upper_by_pos = (pos_in_band >= 0.80) if (pos_in_band is not None) else None
     near_lower_by_pos = (pos_in_band <= 0.20) if (pos_in_band is not None) else None
 
+    # ---------- Δ1D computation (audit-friendly, NA-safe)
+    # Choose "previous valid BB day" (bb.dropna()), not necessarily yesterday calendar day.
+    bb_valid = bb.dropna()
+    prev_date = None
+    d_price_1d = None
+    d_z_1d = None
+    d_pos_1d = None
+    d_bw_1d = None
+    d_dist_u_1d = None
+
+    if len(bb_valid.index) >= 2:
+        prev_idx = bb_valid.index[-2]
+        prev_date = pd.Timestamp(prev_idx).date().isoformat()
+
+        prev_price = _safe_float(base.loc[prev_idx]) if prev_idx in base.index else None
+        prev_z = _safe_float(bb.loc[prev_idx, "z"]) if prev_idx in bb.index else None
+        prev_pos = _safe_float(bb.loc[prev_idx, "pos"]) if prev_idx in bb.index else None
+
+        prev_upper = None
+        prev_lower = None
+        try:
+            prev_upper = float(np.exp(bb.loc[prev_idx, "upper"]))
+            prev_lower = float(np.exp(bb.loc[prev_idx, "lower"]))
+        except Exception:
+            prev_upper = None
+            prev_lower = None
+
+        prev_bw = _band_width_pct(prev_lower, prev_upper)
+        prev_dist_u = _dist_to_upper(prev_price, prev_upper)
+
+        # Δ definitions:
+        # - price: pct change
+        # - z/pos/bw/dist: absolute delta in their native units (pct shown for bw/dist)
+        if prev_price is not None and last_price is not None and prev_price > 0:
+            d_price_1d = (last_price / prev_price) - 1.0
+        if prev_z is not None:
+            d_z_1d = z - float(prev_z)
+        if prev_pos is not None:
+            d_pos_1d = pos_in_band - float(prev_pos)
+        if prev_bw is not None and band_width_pct is not None:
+            d_bw_1d = band_width_pct - float(prev_bw)
+        if prev_dist_u is not None and dist_to_upper is not None:
+            d_dist_u_1d = dist_to_upper - float(prev_dist_u)
+
+    # ---------- last 5 valid BB days table
+    tail_n = 5
+    tail_idx = list(bb_valid.index[-tail_n:]) if len(bb_valid.index) > 0 else []
+    tail_rows: List[Dict[str, Any]] = []
+    for ts in tail_idx:
+        d = pd.Timestamp(ts).date().isoformat()
+        p = _safe_float(base.loc[ts]) if ts in base.index else None
+        zz = _safe_float(bb.loc[ts, "z"]) if ts in bb.index else None
+        pp = _safe_float(bb.loc[ts, "pos"]) if ts in bb.index else None
+        try:
+            uu = float(np.exp(bb.loc[ts, "upper"]))
+            ll = float(np.exp(bb.loc[ts, "lower"]))
+        except Exception:
+            uu = None
+            ll = None
+        dist_u = _dist_to_upper(p, uu)
+        bkt = bucket_from_z(float(zz)) if zz is not None else "NA"
+        tail_rows.append({
+            "date": d,
+            "price_usd": p,
+            "z": zz,
+            "pos": pp,
+            "bucket": bkt,
+            "dist_to_upper": dist_u,
+        })
+
+    # ---------- Build report
     R: List[str] = []
     R.append("# VT BB Monitor Report (VT + optional USD/TWD)")
     R.append("")
@@ -683,6 +742,19 @@ def main() -> int:
         f"p10={fmt_pct(mdd_stats.get('p10'))}, min={fmt_pct(mdd_stats.get('min'))} "
         f"(n={mdd_stats.get('n')}, conf={mdd_stats.get('conf')})"
     )
+    R.append("")
+
+    # Δ1D block (NEW)
+    R.append("## Δ1D（一日變動；以前一個「可計算 BB 的交易日」為基準）")
+    if prev_date is None:
+        R.append("- Δ1D: `NA`（資料不足：至少需要 2 個可計算 BB 的交易日）")
+    else:
+        R.append(f"- prev_bb_date: `{prev_date}`")
+        R.append(f"- Δprice_1d: {fmt_pct(d_price_1d)}")
+        R.append(f"- Δz_1d: {fmt_num(d_z_1d, 4)}")
+        R.append(f"- Δpos_1d: {fmt_num(d_pos_1d, 4)}")
+        R.append(f"- Δband_width_1d: {fmt_pct(d_bw_1d)}")
+        R.append(f"- Δdist_to_upper_1d: {fmt_pct(d_dist_u_1d)}")
     R.append("")
 
     R.append("## 解讀重點（更詳盡）")
@@ -704,6 +776,21 @@ def main() -> int:
     if near_lower_by_pos is True:
         R.append("- **閱讀提示**：pos≤0.20 → 價格相對靠近下緣（但 z 未必達到 NEAR_LOWER 的門檻）")
     R.append("")
+
+    # last 5 days table (NEW)
+    R.append("## 近 5 日（可計算 BB 的交易日；小表）")
+    R.append("")
+    if not tail_rows:
+        R.append("- `NA`（無可計算 BB 的資料）")
+        R.append("")
+    else:
+        R.append("| date | price_usd | z | pos | bucket | dist_to_upper |")
+        R.append("|---|---:|---:|---:|---|---:|")
+        for tr in tail_rows:
+            R.append(
+                f"| {tr['date']} | {fmt_money(tr['price_usd'], 4)} | {fmt_num(tr['z'], 4)} | {fmt_num(tr['pos'], 4)} | {tr['bucket']} | {fmt_pct(tr['dist_to_upper'])} |"
+            )
+        R.append("")
 
     R.append("## BB 詳細（可稽核欄位）")
     R.append("")
@@ -764,6 +851,7 @@ def main() -> int:
     R.append("## Notes")
     R.append("- forward_mdd 理論上應永遠 <= 0；若你看到 >0，代表資料對齊或定義出錯。")
     R.append("- bucket 目前以 z 門檻定義；pos≥0.80/≤0.20 僅作閱讀提示，不改信號。")
+    R.append("- Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。")
     R.append("- FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。")
     R.append("")
 
