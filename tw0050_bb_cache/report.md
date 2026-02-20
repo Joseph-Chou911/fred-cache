@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T14:35:59Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v13`
+- report_generated_at_utc: `2026-02-20T17:11:22Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v14`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -76,8 +76,28 @@
 | 20D_p10_uncond | -6.87% | 71.90 |
 | 20D_p05_uncond | -9.28% | 70.04 |
 
-- source: stats. price_anchor=77.20
-- note: levels derived from unconditional forward_mdd quantiles; not conditioned on current state
+- source: stats (price_anchor=77.20)
+
+### Pledge Guidance v2 (report-only; sizing proposal)
+
+- Purpose: convert binary gate into deterministic size_factor (0..1) using rv20_percentile bands.
+- Note: v2 is NOT gated by regime.allowed; it uses rv20_percentile directly and remains conservative under DQ/margin stress.
+
+| item | value |
+|---|---:|
+| v2_zone | **NO_CHASE** |
+| rv20_percentile | 79.84 |
+| v2_policy | **DISALLOW** |
+| size_factor(0..1) | 0.0000 |
+| cooldown_sessions_hint | 0 |
+| v2_reasons | zone=NO_CHASE (require ACCUMULATE_ZONE) |
+
+#### v2_zone_path (independent of regime.allowed)
+- no_chase: state_has_UPPER=true or bb_z>=1.5
+
+#### v2_tranche_plan (reference-only; scaled by size_factor)
+
+- no tranche plan (size_factor<=0 or levels missing)
 
 ## Latest Snapshot
 
@@ -196,7 +216,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T14:35:59.056Z`
+- overlay_generated_at_utc: `2026-02-20T17:11:22.479Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -236,7 +256,7 @@
 
 ## Margin Overlay（融資）
 
-- overlay_generated_at_utc: `2026-02-19T15:13:46Z`
+- overlay_generated_at_utc: `2026-02-20T15:08:40Z`
 - data_date: `2026-02-11`
 - params: window_n=5, threshold_yi=100.00
 - date_alignment: margin_latest_date=`2026-02-11` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -295,3 +315,4 @@
 - dist_to_upper/lower 可能為負值（代表超出通道）；報表額外提供 above_upper / below_lower 以避免符號誤讀。
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被企業行動污染，DQ 會標示。
 - 融資 overlay 屬於市場整體槓桿 proxy；日期不對齊時 overlay 會標示 MISALIGNED。
+- Pledge Guidance v2 為報告層 sizing 提案：不改 stats，不構成投資建議。
