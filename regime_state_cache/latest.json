@@ -1,6 +1,6 @@
 [
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "NOMINAL_10Y",
     "data_date": "2026-02-19",
     "value": "4.08",
@@ -8,7 +8,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "REAL_10Y",
     "data_date": "2026-02-19",
     "value": "1.79",
@@ -16,7 +16,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "BE10Y_PROXY",
     "data_date": "2026-02-19",
     "value": "2.29",
@@ -24,15 +24,15 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "VIX_PROXY",
-    "data_date": "2026-02-18",
-    "value": "19.62",
+    "data_date": "2026-02-19",
+    "value": "20.23",
     "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "HYG_CLOSE",
     "data_date": "2026-02-19",
     "value": "80.94",
@@ -40,7 +40,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "IEF_CLOSE",
     "data_date": "2026-02-19",
     "value": "97.08",
@@ -48,7 +48,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "TIP_CLOSE",
     "data_date": "2026-02-19",
     "value": "111.25",
@@ -56,7 +56,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "HYG_IEF_RATIO",
     "data_date": "2026-02-19",
     "value": "0.8337453646477132",
@@ -64,7 +64,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "TIP_IEF_RATIO",
     "data_date": "2026-02-19",
     "value": "1.145962093119077",
@@ -72,7 +72,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "OFR_FSI",
     "data_date": "2026-02-17",
     "value": "-2.294",
@@ -80,7 +80,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "REGIME_STATE",
     "data_date": "2026-02-20",
     "value": "NEUTRAL_MIXED",
@@ -88,7 +88,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "REGIME_CONFIDENCE",
     "data_date": "2026-02-20",
     "value": "LOW",
@@ -96,10 +96,10 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-20T08:39:45.496563+08:00",
+    "as_of_ts": "2026-02-20T11:13:12.370966+08:00",
     "series_id": "REGIME_REASONS",
     "data_date": "2026-02-20",
-    "value": "[\"panic=LOW(VIX=19.62)\", \"inflation_expect=MID(BE10Y=2.29)\", \"credit_dev_unavailable(history_lt_60(31))\", \"OFR_FSI=OK(-2.294)\", \"confidence_cap=LOW(credit_unavailable)\"]",
+    "value": "[\"panic=MED(VIX=20.23)\", \"inflation_expect=MID(BE10Y=2.29)\", \"credit_dev_unavailable(history_lt_60(31))\", \"OFR_FSI=OK(-2.294)\", \"confidence_cap=LOW(credit_unavailable)\"]",
     "source_url": "NA",
     "notes": "NA"
   }
