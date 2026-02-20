@@ -1,75 +1,186 @@
 {
   "band_width_observation": {
     "current": {
-      "band_width_pct": 0.09000219840131729,
+      "band_width_pct": 0.09000219840743018,
+      "bin": "B3(p40-60]",
       "percentile": 40.44738644145172
+    },
+    "forward_mdd20_bw_5bin": {
+      "B1(<=p20)": {
+        "condition": "band_width_bin == B1(<=p20)",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.11750596550529535,
+        "min_n_required": 200,
+        "n": 877,
+        "p10": -0.060283558824753176,
+        "p50": -0.014219732009934871
+      },
+      "B2(p20-40]": {
+        "condition": "band_width_bin == B2(p20-40]",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.315706119461997,
+        "min_n_required": 200,
+        "n": 871,
+        "p10": -0.05414014519761612,
+        "p50": -0.012631939841968753
+      },
+      "B3(p40-60]": {
+        "condition": "band_width_bin == B3(p40-60]",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.2803191689639858,
+        "min_n_required": 200,
+        "n": 861,
+        "p10": -0.06395847339141891,
+        "p50": -0.018006256993609138
+      },
+      "B4(p60-80]": {
+        "condition": "band_width_bin == B4(p60-80]",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.3114647443829298,
+        "min_n_required": 200,
+        "n": 876,
+        "p10": -0.08095557201855896,
+        "p50": -0.019749587487243037
+      },
+      "B5(>p80)": {
+        "condition": "band_width_bin == B5(>p80)",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.3157405451415285,
+        "min_n_required": 200,
+        "n": 876,
+        "p10": -0.10218367417873386,
+        "p50": -0.019911946551594284
+      }
+    },
+    "forward_mdd20_bw_5bin_in_bucket": {
+      "B1(<=p20)": {
+        "condition": "(bucket==MID_BAND) AND (band_width_bin == B1(<=p20))",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.11750596550529535,
+        "min_n_required": 200,
+        "n": 570,
+        "p10": -0.06396515081151882,
+        "p50": -0.015306485974018458
+      },
+      "B2(p20-40]": {
+        "condition": "(bucket==MID_BAND) AND (band_width_bin == B2(p20-40])",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.315706119461997,
+        "min_n_required": 200,
+        "n": 575,
+        "p10": -0.053348683480529055,
+        "p50": -0.01204355969567883
+      },
+      "B3(p40-60]": {
+        "condition": "(bucket==MID_BAND) AND (band_width_bin == B3(p40-60])",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.18618434951113727,
+        "min_n_required": 200,
+        "n": 565,
+        "p10": -0.06446249025488052,
+        "p50": -0.01992422774302749
+      },
+      "B4(p60-80]": {
+        "condition": "(bucket==MID_BAND) AND (band_width_bin == B4(p60-80])",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.3114647443829298,
+        "min_n_required": 200,
+        "n": 568,
+        "p10": -0.08279864237674685,
+        "p50": -0.018997015496468816
+      },
+      "B5(>p80)": {
+        "condition": "(bucket==MID_BAND) AND (band_width_bin == B5(>p80))",
+        "conf": "HIGH",
+        "conf_decision": "OK",
+        "min": -0.2528768398503072,
+        "min_n_required": 200,
+        "n": 618,
+        "p10": -0.09897566989316287,
+        "p50": -0.016128500483601316
+      }
     },
     "forward_mdd20_bw_slices": {
       "bw<=p20": {
-        "condition": "band_width_pct <= p20",
+        "condition": "band_width_bin == B1(<=p20)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.1175061893119208,
+        "min": -0.11750596550529535,
         "min_n_required": 200,
         "n": 877,
-        "p10": -0.06028353619138349,
-        "p50": -0.01421926799594364
+        "p10": -0.060283558824753176,
+        "p50": -0.014219732009934871
       },
       "bw>=p80": {
-        "condition": "band_width_pct >= p80",
+        "condition": "band_width_bin == B5(>p80)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.31574045684105334,
+        "min": -0.3157405451415285,
         "min_n_required": 200,
-        "n": 877,
-        "p10": -0.10218130617194283,
-        "p50": -0.01995529146991959
+        "n": 876,
+        "p10": -0.10218367417873386,
+        "p50": -0.019911946551594284
       }
     },
     "forward_mdd20_bw_slices_in_bucket": {
       "bucket=MID_BAND ∩ bw<=p20": {
-        "condition": "(bucket==MID_BAND) AND (band_width_pct <= p20)",
+        "condition": "(bucket==MID_BAND) AND (band_width_bin == B1(<=p20))",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.1175061893119208,
+        "min": -0.11750596550529535,
         "min_n_required": 200,
         "n": 570,
-        "p10": -0.06396518390472751,
-        "p50": -0.015306633958494908
+        "p10": -0.06396515081151882,
+        "p50": -0.015306485974018458
       },
       "bucket=MID_BAND ∩ bw>=p80": {
-        "condition": "(bucket==MID_BAND) AND (band_width_pct >= p80)",
+        "condition": "(bucket==MID_BAND) AND (band_width_bin == B5(>p80))",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.25287658738921037,
+        "min": -0.2528768398503072,
         "min_n_required": 200,
         "n": 618,
-        "p10": -0.09897540460744386,
-        "p50": -0.016128349986397728
+        "p10": -0.09897566989316287,
+        "p50": -0.016128500483601316
       }
     },
     "note": "Independent observation only. Does NOT affect bucket rules nor main forward_mdd stats.",
     "quantiles": {
       "n_bw_samples": 4381,
-      "p50": 0.0985493565051696,
-      "p_high": 0.1670059797209127,
-      "p_low": 0.06869584445395871,
-      "q_high": 80.0,
-      "q_low": 20.0
+      "p20": 0.06869604143225994,
+      "p40": 0.08969767871863543,
+      "p50": 0.09854928223946402,
+      "p60": 0.11444898913582624,
+      "p80": 0.16700594562200344,
+      "q20": 20.0,
+      "q40": 40.0,
+      "q60": 60.0,
+      "q80": 80.0
     },
+    "status": "OK",
     "streak": {
-      "bw_ge_p_high_streak": 0,
-      "bw_le_p_low_streak": 0
+      "bw_current_bin_streak": 15,
+      "bw_gt_p80_streak": 0,
+      "bw_le_p20_streak": 0
     }
   },
   "bb": {
-    "band_width_pct": 0.09000219840131729,
+    "band_width_pct": 0.09000219840743018,
     "bucket": "MID_BAND",
-    "dist_to_lower": 0.06668425486765703,
-    "dist_to_upper": 0.017316213996817435,
-    "lower_usd": 136.8987466602034,
-    "pos_in_band": 0.8007884183683537,
-    "pos_raw": 0.8007884183683537,
+    "dist_to_lower": 0.06668425487027405,
+    "dist_to_upper": 0.01731621399967007,
+    "lower_usd": 136.89874665981952,
+    "pos_in_band": 0.8007884183487806,
+    "pos_raw": 0.8007884183487806,
     "streak": {
       "bucket_streak": 5,
       "dist_u_le_threshold_streak": 2,
@@ -77,18 +188,18 @@
       "pos_ge_threshold_streak": 2,
       "pos_threshold": 0.8
     },
-    "upper_usd": 149.2199348180067,
-    "z": 1.2031536734734216
+    "upper_usd": 149.21993481842512,
+    "z": 1.2031536733951254
   },
   "close_usd": 146.67999267578125,
   "consistency_check": {
     "pos_vs_dist_to_upper": {
-      "abs_err": 3.920475055707584e-16,
+      "abs_err": 4.198030811863873e-16,
       "abs_tol": 0.0001,
-      "expected_dist_to_upper": 0.017316213996817043,
+      "expected_dist_to_upper": 0.01731621399966965,
       "model": "logband",
       "reason": "within_abs_or_rel_tolerance",
-      "rel_err": 2.2640486288908953e-14,
+      "rel_err": 2.424335257085561e-14,
       "rel_tolerance": 0.02,
       "status": "OK"
     }
@@ -104,32 +215,32 @@
   "forward_mdd20": {
     "conf": "HIGH",
     "conf_decision": "OK",
-    "min": -0.3157058701296732,
+    "min": -0.315706119461997,
     "min_n_required": 200,
     "n": 2896,
-    "p10": -0.07279347221493182,
-    "p50": -0.016369243757403895
+    "p10": -0.0727934371964638,
+    "p50": -0.01636940956085514
   },
   "forward_mdd20_slices": {
     "dist_to_upper<=2.0%": {
       "condition": "dist_to_upper<=0.0200",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539220982788,
+      "min": -0.3128538313176701,
       "min_n_required": 200,
       "n": 1743,
-      "p10": -0.054857091467806436,
-      "p50": -0.014434132824503232
+      "p10": -0.054857006734226395,
+      "p50": -0.014434200764605554
     },
     "pos>=0.80": {
       "condition": "pos_in_band>=0.80",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539220982788,
+      "min": -0.3128538313176701,
       "min_n_required": 200,
       "n": 1704,
-      "p10": -0.05430564960437488,
-      "p50": -0.015082351705474173
+      "p10": -0.05430589856172149,
+      "p50": -0.015082323053154822
     }
   },
   "forward_mdd20_slices_in_bucket": {
@@ -137,21 +248,21 @@
       "condition": "(bucket==MID_BAND) AND (dist_to_upper<=0.0200)",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539220982788,
+      "min": -0.3128538313176701,
       "min_n_required": 200,
       "n": 718,
-      "p10": -0.05322466673348749,
-      "p50": -0.013953636417174675
+      "p10": -0.05322470867528088,
+      "p50": -0.01395382148828056
     },
     "bucket=MID_BAND ∩ pos>=0.80": {
       "condition": "(bucket==MID_BAND) AND (pos_in_band>=0.80)",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128539220982788,
+      "min": -0.3128538313176701,
       "min_n_required": 200,
       "n": 638,
-      "p10": -0.05186262098634618,
-      "p50": -0.015345267238772609
+      "p10": -0.05186253233483029,
+      "p50": -0.015345393159941711
     }
   },
   "fx_usdtwd": {
@@ -171,7 +282,7 @@
     },
     "used_policy": "NA"
   },
-  "generated_at_utc": "2026-02-20T05:32:24Z",
+  "generated_at_utc": "2026-02-20T05:52:52Z",
   "k": 2.0,
   "min_n_required": 200,
   "module": "vt_bb_cache",
@@ -181,6 +292,7 @@
     "forward_mdd20 computed on linear price_usd (same series as BB).",
     "forward_mdd20_slices and *_in_bucket are reading-only; do NOT replace bucket-conditioned stats.",
     "band_width_observation is independent reading-only; does NOT affect bucket rules nor main forward_mdd stats.",
+    "band_width_observation uses 5-bin (p20/p40/p60/p80) to remove mid-range blind spots; conf_decision guards sample insufficiency.",
     "Consistency check uses logband geometry with abs+rel thresholds; expected dist_to_upper = (1+band_width_pct)^(1-pos_raw) - 1.",
     "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
     "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated."

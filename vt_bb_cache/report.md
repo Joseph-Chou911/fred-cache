@@ -1,6 +1,6 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-02-20T05:32:24Z`
+- report_generated_at_utc: `2026-02-20T05:52:52Z`
 - data_date: `2026-02-19`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`
@@ -43,20 +43,33 @@
 - Slice B_inBucket（bucket=MID_BAND ∩ dist_to_upper≤2.0%）：p50=-1.395%、p10=-5.322%、min=-31.285% (n=718, conf=HIGH, conf_decision=OK, min_n_required=200)
 - 說明：交集切片用於回答「在同一個 bucket/regime 內，貼上緣時的 forward_mdd 分布」；避免全樣本切片混入不同 regime。
 
-## band_width 分位數觀察（獨立項目；不改 bucket / 不回填主欄位）
+## band_width 分位數觀察（5-bin；獨立項目；不改 bucket / 不回填主欄位）
 
-- band_width_current: 9.000%; percentile≈40.45
-- quantiles: p20=6.870%, p50=9.855%, p80=16.701% (n_bw_samples=4381)
-- streak: bw≤p20 streak=0; bw≥p80 streak=0
+- band_width_current: 9.000%; percentile≈40.45; current_bin=`B3(p40-60]`
+- quantiles: p20=6.870%, p40=8.970%, p50=9.855%, p60=11.445%, p80=16.701% (n_bw_samples=4381)
+- streak: bw≤p20 streak=0; bw>p80 streak=0; current_bin streak=15
 
-### forward_mdd(20D) × band_width（全樣本切片；閱讀用）
-- BW_LOW（bw≤p20）：p50=-1.422%、p10=-6.028%、min=-11.751% (n=877, conf=HIGH, conf_decision=OK)
-- BW_HIGH（bw≥p80）：p50=-1.996%、p10=-10.218%、min=-31.574% (n=877, conf=HIGH, conf_decision=OK)
+### forward_mdd(20D) × band_width（5-bin 全樣本；閱讀用）
 
-### forward_mdd(20D) × band_width（bucket 內交集；閱讀用）
-- BW_LOW_inBucket（bucket=MID_BAND ∩ bw≤p20）：p50=-1.531%、p10=-6.397%、min=-11.751% (n=570, conf=HIGH, conf_decision=OK)
-- BW_HIGH_inBucket（bucket=MID_BAND ∩ bw≥p80）：p50=-1.613%、p10=-9.898%、min=-25.288% (n=618, conf=HIGH, conf_decision=OK)
+| bw_bin | n | p50 | p10 | min | conf | conf_decision |
+|---|---:|---:|---:|---:|---|---|
+| B1(<=p20) | 877 | -1.422% | -6.028% | -11.751% | HIGH | OK |
+| B2(p20-40] | 871 | -1.263% | -5.414% | -31.571% | HIGH | OK |
+| B3(p40-60] | 861 | -1.801% | -6.396% | -28.032% | HIGH | OK |
+| B4(p60-80] | 876 | -1.975% | -8.096% | -31.146% | HIGH | OK |
+| B5(>p80) | 876 | -1.991% | -10.218% | -31.574% | HIGH | OK |
+
+### forward_mdd(20D) × band_width（5-bin × bucket=MID_BAND 交集；閱讀用）
+
+| bw_bin | n | p50 | p10 | min | conf | conf_decision |
+|---|---:|---:|---:|---:|---|---|
+| B1(<=p20) | 570 | -1.531% | -6.397% | -11.751% | HIGH | OK |
+| B2(p20-40] | 575 | -1.204% | -5.335% | -31.571% | HIGH | OK |
+| B3(p40-60] | 565 | -1.992% | -6.446% | -18.618% | HIGH | OK |
+| B4(p60-80] | 568 | -1.900% | -8.280% | -31.146% | HIGH | OK |
+| B5(>p80) | 618 | -1.613% | -9.898% | -25.288% | HIGH | OK |
 - 說明：這是「獨立觀察項」，用來觀察 band 寬窄是否改變 forward_mdd 的尾部形狀；不作為信號。
+- 注意：若某些 bin 的 conf_decision=LOW_FOR_DECISION，表示該 bin 樣本數不足，不宜用於下注/質押決策。
 
 ## 近 5 日（可計算 BB 的交易日；小表）
 
@@ -112,6 +125,6 @@
 ## Notes
 - bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。
 - Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。
-- forward_mdd 切片（含 in-bucket / band_width）為閱讀用；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。
+- forward_mdd 切片（含 in-bucket / band_width 5-bin）為閱讀用；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。
 - pos_raw vs dist_to_upper 一致性檢查採 logband 幾何一致性，並用 abs+rel 雙門檻避免 near-zero 相對誤差放大。
 - FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。
