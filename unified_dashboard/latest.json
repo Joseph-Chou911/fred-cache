@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-02-20T00:48:30Z",
+  "generated_at_utc": "2026-02-20T01:19:12Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -2896,11 +2896,11 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-02-20T00:48:29Z",
+        "generated_at_utc": "2026-02-20T01:19:10Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-13",
-        "quote_time_local": "2026-02-20T08:31:00+08:00",
+        "quote_time_local": "2026-02-20T08:51:00+08:00",
         "usd_twd": {
           "spot_buy": 31.425,
           "spot_sell": 31.575,
@@ -2930,7 +2930,7 @@
           "parse_dbg": {
             "format": "xrt_text_v4_dynamic_sanity",
             "reason": "ok",
-            "text_len": 2597,
+            "text_len": 2585,
             "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/13 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
             "text_has_usd": true,
             "text_has_zh_usd": true,
@@ -3294,15 +3294,15 @@
           "NDX": "NA"
         },
         "QQQ": {
-          "data_date": "2026-02-17",
-          "close": 601.3,
+          "data_date": "2026-02-19",
+          "close": 603.47,
           "value": "NA",
-          "close_or_value": 601.3,
-          "signal": "NEAR_LOWER_BAND (MONITOR)",
-          "z": -1.5206710938286117,
-          "position_in_band": 0.11641081069733705,
-          "dist_to_lower": 0.781,
-          "dist_to_upper": 5.927,
+          "close_or_value": 603.47,
+          "signal": "NORMAL_RANGE",
+          "z": -1.466735231445368,
+          "position_in_band": 0.1298861687903519,
+          "dist_to_lower": 0.794,
+          "dist_to_upper": 5.32,
           "kind": "QQQ"
         },
         "VXN": {
