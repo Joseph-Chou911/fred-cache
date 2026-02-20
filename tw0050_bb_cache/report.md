@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T19:11:16Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v15.add_fwd_mdd_conditional_block`
+- report_generated_at_utc: `2026-02-20T19:18:20Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v14`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -26,66 +26,6 @@
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
 - margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
 - chip_overlay(T86+TWT72U,5D): total3_5D=-8,882,867; foreign=-14,398,187; trust=17,326,000; dealer=-11,810,680; borrow_shares=135,405,000 (Δ1D=-9,446,000); borrow_mv(億)=104.5 (Δ1D=-4.8); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
-
-## Forward MDD Conditional (by bb_z bucket)
-
-| item | value |
-|---|---:|
-| scheme | bb_z_5bucket_v1 |
-| thresholds.near | 1.5000 |
-| thresholds.extreme | 2.0000 |
-| forward_mode_primary(meta) | clean |
-| current_bb_z | 2.0543 |
-| current_bucket_id | **z_ge_2.0** |
-
-### current_bucket quick summary
-
-- 20D (primary, bucket=z_ge_2.0): n=396; p50=-0.0123; p10=-0.0502; p05=-0.0666; min=-0.2130 (min_window 2024-07-11->2024-08-05)
-- 10D (primary, bucket=z_ge_2.0): n=406; p50=-0.0082; p10=-0.0316; p05=-0.0499; min=-0.1126 (min_window 2024-07-11->2024-07-26)
-
-### full tables
-
-#### 20D
-
-| mode | bucket_id | bucket_label | n | p50 | p25 | p10 | p05 | min | min_window | min_price(entry→future) |
-|---|---|---|---:|---:|---:|---:|---:|---:|---|---|
-| primary | z_le_-2.0 | bb_z<=-2.0 | 205 | -0.0329 | -0.0614 | -0.1265 | -0.1902 | -0.2152 | 2020-03-02→2020-03-19 | 18.4165→14.4528 |
-| primary | -2.0_to_-1.5 | -2.0<bb_z<=-1.5 | 205 | -0.0214 | -0.0513 | -0.0866 | -0.1137 | -0.2267 | 2020-02-27→2020-03-19 | 18.6905→14.4528 |
-| primary | -1.5_to_1.5 | -1.5<bb_z<1.5 | 2,632 | -0.0183 | -0.0406 | -0.0679 | -0.0913 | -0.2557 | 2020-02-19→2020-03-19 | 19.4179→14.4528 |
-| primary | 1.5_to_2.0 | 1.5<=bb_z<2.0 | 655 | -0.0168 | -0.0358 | -0.0600 | -0.0735 | -0.1935 | 2024-07-16→2024-08-05 | 47.5311→38.3315 |
-| primary | **z_ge_2.0** | bb_z>=2.0 | 396 | -0.0123 | -0.0282 | -0.0502 | -0.0666 | -0.2130 | 2024-07-11→2024-08-05 | 48.7068→38.3315 |
-| clean | z_le_-2.0 | bb_z<=-2.0 | 205 | -0.0329 | -0.0614 | -0.1265 | -0.1902 | -0.2152 | 2020-03-02→2020-03-19 | 18.4165→14.4528 |
-| clean | -2.0_to_-1.5 | -2.0<bb_z<=-1.5 | 205 | -0.0214 | -0.0513 | -0.0866 | -0.1137 | -0.2267 | 2020-02-27→2020-03-19 | 18.6905→14.4528 |
-| clean | -1.5_to_1.5 | -1.5<bb_z<1.5 | 2,632 | -0.0183 | -0.0406 | -0.0679 | -0.0913 | -0.2557 | 2020-02-19→2020-03-19 | 19.4179→14.4528 |
-| clean | 1.5_to_2.0 | 1.5<=bb_z<2.0 | 655 | -0.0168 | -0.0358 | -0.0600 | -0.0735 | -0.1935 | 2024-07-16→2024-08-05 | 47.5311→38.3315 |
-| clean | **z_ge_2.0** | bb_z>=2.0 | 396 | -0.0123 | -0.0282 | -0.0502 | -0.0666 | -0.2130 | 2024-07-11→2024-08-05 | 48.7068→38.3315 |
-| raw | z_le_-2.0 | bb_z<=-2.0 | 205 | -0.0329 | -0.0614 | -0.1265 | -0.1902 | -0.2152 | 2020-03-02→2020-03-19 | 18.4165→14.4528 |
-| raw | -2.0_to_-1.5 | -2.0<bb_z<=-1.5 | 205 | -0.0214 | -0.0513 | -0.0866 | -0.1137 | -0.2267 | 2020-02-27→2020-03-19 | 18.6905→14.4528 |
-| raw | -1.5_to_1.5 | -1.5<bb_z<1.5 | 2,648 | -0.0186 | -0.0412 | -0.0697 | -0.0933 | -0.7513 | 2013-12-23→2014-01-09 | 36.8707→9.1699 |
-| raw | 1.5_to_2.0 | 1.5<=bb_z<2.0 | 657 | -0.0170 | -0.0358 | -0.0608 | -0.0748 | -0.7532 | 2013-12-27→2014-01-09 | 37.1575→9.1699 |
-| raw | **z_ge_2.0** | bb_z>=2.0 | 398 | -0.0124 | -0.0288 | -0.0504 | -0.0673 | -0.7628 | 2013-12-30→2014-02-05 | 37.4761→8.8910 |
-
-#### 10D
-
-| mode | bucket_id | bucket_label | n | p50 | p25 | p10 | p05 | min | min_window | min_price(entry→future) |
-|---|---|---|---:|---:|---:|---:|---:|---:|---|---|
-| primary | z_le_-2.0 | bb_z<=-2.0 | 205 | -0.0222 | -0.0436 | -0.0721 | -0.1124 | -0.2057 | 2020-03-10→2020-03-19 | 18.1951→14.4528 |
-| primary | -2.0_to_-1.5 | -2.0<bb_z<=-1.5 | 205 | -0.0181 | -0.0426 | -0.0607 | -0.0785 | -0.2241 | 2020-03-06→2020-03-19 | 18.6273→14.4528 |
-| primary | -1.5_to_1.5 | -1.5<bb_z<1.5 | 2,641 | -0.0117 | -0.0272 | -0.0468 | -0.0595 | -0.2400 | 2020-03-05→2020-03-19 | 19.0173→14.4528 |
-| primary | 1.5_to_2.0 | 1.5<=bb_z<2.0 | 656 | -0.0095 | -0.0232 | -0.0388 | -0.0567 | -0.1009 | 2009-06-03→2009-06-17 | 29.7584→26.7570 |
-| primary | **z_ge_2.0** | bb_z>=2.0 | 406 | -0.0082 | -0.0183 | -0.0316 | -0.0499 | -0.1126 | 2024-07-11→2024-07-26 | 48.7068→43.2210 |
-| clean | z_le_-2.0 | bb_z<=-2.0 | 205 | -0.0222 | -0.0436 | -0.0721 | -0.1124 | -0.2057 | 2020-03-10→2020-03-19 | 18.1951→14.4528 |
-| clean | -2.0_to_-1.5 | -2.0<bb_z<=-1.5 | 205 | -0.0181 | -0.0426 | -0.0607 | -0.0785 | -0.2241 | 2020-03-06→2020-03-19 | 18.6273→14.4528 |
-| clean | -1.5_to_1.5 | -1.5<bb_z<1.5 | 2,641 | -0.0117 | -0.0272 | -0.0468 | -0.0595 | -0.2400 | 2020-03-05→2020-03-19 | 19.0173→14.4528 |
-| clean | 1.5_to_2.0 | 1.5<=bb_z<2.0 | 656 | -0.0095 | -0.0232 | -0.0388 | -0.0567 | -0.1009 | 2009-06-03→2009-06-17 | 29.7584→26.7570 |
-| clean | **z_ge_2.0** | bb_z>=2.0 | 406 | -0.0082 | -0.0183 | -0.0316 | -0.0499 | -0.1126 | 2024-07-11→2024-07-26 | 48.7068→43.2210 |
-| raw | z_le_-2.0 | bb_z<=-2.0 | 205 | -0.0222 | -0.0436 | -0.0721 | -0.1124 | -0.2057 | 2020-03-10→2020-03-19 | 18.1951→14.4528 |
-| raw | -2.0_to_-1.5 | -2.0<bb_z<=-1.5 | 205 | -0.0181 | -0.0426 | -0.0607 | -0.0785 | -0.2241 | 2020-03-06→2020-03-19 | 18.6273→14.4528 |
-| raw | -1.5_to_1.5 | -1.5<bb_z<1.5 | 2,648 | -0.0117 | -0.0274 | -0.0471 | -0.0600 | -0.7513 | 2013-12-25→2014-01-09 | 36.8707→9.1699 |
-| raw | 1.5_to_2.0 | 1.5<=bb_z<2.0 | 657 | -0.0095 | -0.0232 | -0.0391 | -0.0567 | -0.7532 | 2013-12-27→2014-01-09 | 37.1575→9.1699 |
-| raw | **z_ge_2.0** | bb_z>=2.0 | 408 | -0.0082 | -0.0184 | -0.0323 | -0.0515 | -0.7553 | 2013-12-30→2014-01-09 | 37.4761→9.1699 |
-
-- note: condition evaluated at entry t using bb_z[t]; stats computed on already-produced forward_mdd arrays (respecting raw/clean masks).
 
 ## Deterministic Action (report-only; non-predictive)
 
@@ -194,12 +134,12 @@
 | item | value |
 |---|---:|
 | rv_days | 20 |
-| rv_ann | 0.2070 |
-| rv_ann_pctl | 79.84 |
-| rv_hist_n | 4,172 |
-| rv_hist_q20 | 0.1120 |
-| rv_hist_q50 | 0.1483 |
-| rv_hist_q80 | 0.2080 |
+| rv_ann(%) | 20.7% |
+| rv20_percentile | 79.84 |
+| rv_hist_n | 4172 |
+| rv_hist_q20(%) | 11.2% |
+| rv_hist_q50(%) | 14.8% |
+| rv_hist_q80(%) | 20.8% |
 
 | item | value |
 |---|---:|
@@ -208,43 +148,75 @@
 | atr_pct | 1.59% |
 | tr_mode | OHLC |
 
-## Data Quality
+## Regime Tag
 
-### dq.flags
-- PRICE_SERIES_BREAK_DETECTED
-- FWD_MDD_CLEAN_APPLIED
-- FWD_MDD_OUTLIER_MIN_RAW_20D
-- RAW_OUTLIER_EXCLUDED_BY_CLEAN
+| item | value |
+|---|---:|
+| tag | **RISK_OFF_OR_DEFENSIVE** |
+| allowed | false |
+| trend_state | TREND_UP |
+| rv_ann(%) | 20.7% |
+| rv20_percentile | 79.84 |
+| rv_hist_n | 4172 |
+| rv_pctl_max | 60.00 |
+| min_samples | 252 |
+| pass_trend | true |
+| pass_rv_hist | true |
+| pass_rv | false |
+| bb_state_note | EXTREME_UPPER_BAND |
 
-### dq.notes
-- Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
-- Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
-- forward_mdd_raw_20D min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
-- Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
+### Regime Notes
+- bb_extreme_upper_band_stretched
 
-## Margin Overlay（融資）
+## forward_mdd Distribution
 
-- overlay_generated_at_utc: `2026-02-20T15:08:40Z`
-- data_date: `2026-02-11`
-- params: window_n=5, threshold_yi=100.00
-- date_alignment: margin_latest_date=`2026-02-11` vs price_last_date=`2026-02-11` => **ALIGNED**
+### forward_mdd (primary)
 
-| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |
-|---|---:|---:|---:|---:|---:|---:|
-| TWSE | 2026-02-11 | 3,680.5 | -45.4 | -160.0 | DELEVERAGING | 5 |
-| TPEX | 2026-02-11 | 1,313.3 | -9.0 | -37.7 | NEUTRAL | 5 |
-| TOTAL | 2026-02-11 | 4,993.8 | N/A | -197.7 | DELEVERAGING | N/A |
+- block_used: `forward_mdd_clean_20D`
+- definition: `min(price[t+1..t+20]/price[t]-1), level-price based`
 
-### Margin Sources
+| quantile | value |
+|---|---:|
+| p50 | -0.0183 |
+| p25 | -0.0402 |
+| p10 | -0.0687 |
+| p05 | -0.0928 |
+| min | -0.2557 |
 
-- TWSE source: `HiStock`
-- TWSE url: `https://histock.tw/stock/three.aspx?m=mg`
-- TPEX source: `HiStock`
-- TPEX url: `https://histock.tw/stock/three.aspx?m=mg&no=TWOI`
+#### forward_mdd Min Audit Trail
+
+| item | value |
+|---|---:|
+| min_entry_date | 2020-02-19 |
+| min_entry_price | 19.4179 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
+
+### forward_mdd10 (primary)
+
+- block_used: `forward_mdd_clean_10D`
+- definition: `min(price[t+1..t+10]/price[t]-1), level-price based`
+
+| quantile | value |
+|---|---:|
+| p50 | -0.0114 |
+| p25 | -0.0271 |
+| p10 | -0.0480 |
+| p05 | -0.0631 |
+| min | -0.2400 |
+
+#### forward_mdd10 Min Audit Trail
+
+| item | value |
+|---|---:|
+| min_entry_date | 2020-03-05 |
+| min_entry_price | 19.0173 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T19:11:16.653Z`
+- overlay_generated_at_utc: `2026-02-20T19:18:20.401Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -282,9 +254,27 @@
 - T86 template: `https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999`
 - TWT72U template: `https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB`
 
-## Price Tail
+## Margin Overlay（融資）
 
-- tail_n: 15
+- overlay_generated_at_utc: `2026-02-20T15:08:40Z`
+- data_date: `2026-02-11`
+- params: window_n=5, threshold_yi=100.00
+- date_alignment: margin_latest_date=`2026-02-11` vs price_last_date=`2026-02-11` => **ALIGNED**
+
+| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |
+|---|---:|---:|---:|---:|---:|---:|
+| TWSE | 2026-02-11 | 3,680.5 | -45.4 | -160.0 | DELEVERAGING | 5 |
+| TPEX | 2026-02-11 | 1,313.3 | -9.0 | -37.7 | NEUTRAL | 5 |
+| TOTAL | 2026-02-11 | 4,993.8 | N/A | -197.7 | DELEVERAGING | N/A |
+
+### Margin Sources
+
+- TWSE source: `HiStock`
+- TWSE url: `https://histock.tw/stock/three.aspx?m=mg`
+- TPEX source: `HiStock`
+- TPEX url: `https://histock.tw/stock/three.aspx?m=mg&no=TWOI`
+
+## Recent Raw Prices (tail 15)
 
 | date | close | adjclose | volume |
 |---|---:|---:|---:|
@@ -303,3 +293,26 @@
 | 2026-02-09 | 73.9500 | 73.9500 | 118533745 |
 | 2026-02-10 | 75.5000 | 75.5000 | 98559015 |
 | 2026-02-11 | 77.2000 | 77.2000 | 114028587 |
+
+## Data Quality Flags
+
+- PRICE_SERIES_BREAK_DETECTED
+- FWD_MDD_CLEAN_APPLIED
+- FWD_MDD_OUTLIER_MIN_RAW_20D
+- RAW_OUTLIER_EXCLUDED_BY_CLEAN
+
+### DQ Notes
+
+- note: Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
+- note: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
+- note: forward_mdd_raw_20D min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
+- note: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
+
+## Caveats
+- BB 與 forward_mdd 是描述性統計，不是方向預測。
+- Deterministic Action 是規則輸出（report-only），不代表可獲利保證。
+- tranche_levels 優先使用 stats 內 pledge.unconditional_tranche_levels.levels；若不存在才由 renderer 用分位數重算。
+- dist_to_upper/lower 可能為負值（代表超出通道）；報表額外提供 above_upper / below_lower 以避免符號誤讀。
+- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被企業行動污染，DQ 會標示。
+- 融資 overlay 屬於市場整體槓桿 proxy；日期不對齊時 overlay 會標示 MISALIGNED。
+- Pledge Guidance v2 為報告層 sizing 提案：不改 stats，不構成投資建議。
