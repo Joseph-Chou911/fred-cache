@@ -1,14 +1,14 @@
 {
-  "name": "PRICE_QQQ.US_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-02-18T04:38:27Z",
+  "name": "QQQ_BB(len=60,k=2.0,log=True)",
+  "generated_at_utc": "2026-02-20T01:17:16Z",
   "meta": {
     "source": "stooq",
     "url": "https://stooq.com/q/d/l/?s=qqq.us&i=d",
     "date_col": "Date",
     "value_col": "Close",
-    "rows": 6776,
+    "rows": 6778,
     "min_date": "1999-03-10",
-    "max_date": "2026-02-17"
+    "max_date": "2026-02-19"
   },
   "params": {
     "length": 60,
@@ -17,28 +17,46 @@
     "ddof": 0
   },
   "latest": {
-    "date": "2026-02-17",
-    "close": 601.3,
-    "bb_mid": 616.4428261435169,
-    "bb_lower": 596.6043901487819,
-    "bb_upper": 636.9409346938277,
-    "z": -1.5206710938286117,
-    "bandwidth_pct": 0.06543436444445669,
-    "bandwidth_delta_pct": -1.4714679227628813,
-    "walk_count": 0
+    "date": "2026-02-19",
+    "close": 603.47,
+    "bb_mid": 616.8514603542842,
+    "bb_lower": 598.6771573484989,
+    "bb_upper": 635.5774885857472,
+    "z": -1.466735231445368,
+    "trigger_z_le_-2": false,
+    "trigger_z_ge_2": false,
+    "distance_to_lower_pct": 0.7942139048338993,
+    "distance_to_upper_pct": 5.320477999858684,
+    "position_in_band": 0.1298861687903519,
+    "bandwidth_pct": 0.05982044885823063,
+    "walk_lower_count": 0,
+    "walk_upper_count": 0,
+    "bandwidth_delta_pct": -7.298281843992315
   },
   "historical_simulation": {
     "metric": "forward_mdd",
     "metric_interpretation": "<=0; closer to 0 is less pain; more negative is deeper drawdown",
-    "z_thresh": -2.0,
+    "z_thresh": -1.5,
     "horizon_days": 20,
     "cooldown_bars": 20,
-    "sample_size": 65,
-    "p50": -0.023771587762034363,
+    "sample_size": 87,
+    "p10": -0.144813337021166,
+    "p50": -0.03284179637517559,
     "p90": 0.0,
-    "mean": -0.049430303597037005,
-    "min": -0.25337677429028393,
-    "max": 0.0
+    "mean": -0.054391024160589975,
+    "min": -0.2499466667782133,
+    "max": 0.0,
+    "gate": {
+      "field": "z",
+      "op": "<=",
+      "value": -1.5
+    },
+    "condition": {
+      "field": "z",
+      "op": "<=",
+      "value": -1.5
+    }
   },
-  "action_output": "NEAR_LOWER_BAND (MONITOR)"
+  "action_output": "NORMAL_RANGE",
+  "trigger_reason": "default"
 }
