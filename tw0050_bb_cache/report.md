@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-20T11:59:55Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v11`
+- report_generated_at_utc: `2026-02-20T12:11:37Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-20.v12`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -21,6 +21,7 @@
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
+- chip_overlay(T86+TWT72U,5D): total3_5D=N/A; foreign=N/A; trust=N/A; dealer=N/A; borrow_shares=N/A (Δ1D=N/A); borrow_mv(億)=N/A (Δ1D=N/A); asof=N/A; price_last_date=2026-02-11 (ALIGNED)
 
 ## Latest Snapshot
 
@@ -137,6 +138,46 @@
 | min_future_date | 2020-03-19 |
 | min_future_price | 14.4528 |
 
+## Chip Overlay（籌碼：TWSE T86 + TWT72U）
+
+- overlay_generated_at_utc: `N/A`
+- stock_no: `0050`
+- overlay_window_n: `N/A` (expect=N/A)
+- date_alignment: overlay_aligned_last_date=`N/A` vs price_last_date=`2026-02-11` => **N/A**
+
+### Borrow Summary（借券：TWT72U）
+
+| item | value |
+|---|---:|
+| asof_date | N/A |
+| borrow_shares | N/A |
+| borrow_shares_chg_1d | N/A |
+| borrow_mv_ntd(億) | N/A |
+| borrow_mv_ntd_chg_1d(億) | N/A |
+
+### T86 Aggregate（法人：5D sum）
+
+| item | value |
+|---|---:|
+| days_used |  |
+| foreign_net_shares_sum | N/A |
+| trust_net_shares_sum | N/A |
+| dealer_net_shares_sum | N/A |
+| total3_net_shares_sum | N/A |
+
+### ETF Units（受益權單位）
+
+| item | value |
+|---|---:|
+| units_outstanding | N/A |
+| units_chg_1d | N/A |
+| dq | {'flags': []} |
+
+### Chip Overlay Sources
+
+- T86 template: `https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999`
+- TWT72U template: `https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date={ymd}&selectType=SLBNLB`
+
 ## Recent Raw Prices (tail 15)
 
 | date | close | adjclose | volume |
@@ -179,3 +220,5 @@
 - band_width 同時提供兩種定義：geo=(upper/lower-1)、std=(upper-lower)/ma；請勿混用解讀。
 - Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被除權息/企業行動污染，DQ 會標示。
 - Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；資料不足會以 DQ 明示。
+- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊需降低解讀權重。
+- Chip overlay（T86/TWT72U）為籌碼/借券描述；ETF 申贖、避險行為可能影響解讀，建議只做輔助註記。
