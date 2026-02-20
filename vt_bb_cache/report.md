@@ -1,6 +1,6 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-02-20T02:50:22Z`
+- report_generated_at_utc: `2026-02-20T03:08:07Z`
 - data_date: `2026-02-19`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`
@@ -17,11 +17,17 @@
 - Δdist_to_upper_1d: 0.106%
 
 ## 解讀重點（更詳盡）
-- **Band 位置**：pos=0.8008（>0.80 視為「靠近上緣」的閱讀提示；此提示不改 bucket 規則）
+- **Band 位置**：pos=0.8008（≥0.80 視為「靠近上緣」閱讀提示；此提示不改 bucket 規則）
 - **距離上下軌**：dist_to_upper=1.732%；dist_to_lower=6.668%
 - **波動區間寬度（閱讀用）**：band_width≈9.000%（= upper/lower - 1；用於直覺理解，不作信號）
-- **forward_mdd(20D)**：p50=-1.637%、p10=-7.279%、min=-31.571%；n=2896（conf=HIGH）
-- **閱讀提示**：pos≥0.80 → 價格相對靠近上緣（但 z 未必達到 NEAR_UPPER 的門檻）
+- **streak（連續天數）**：bucket_streak=5；pos≥0.80 streak=2；dist_to_upper≤2.0% streak=2
+- **forward_mdd(20D)**（bucket=MID_BAND）：p50=-1.637%、p10=-7.279%、min=-31.571%；n=2896（conf=HIGH）
+
+## forward_mdd(20D) 切片分布（閱讀用；不回填主欄位）
+
+- Slice A（pos≥0.80）：p50=-1.508%、p10=-5.431%、min=-31.285% (n=1704, conf=HIGH)
+- Slice B（dist_to_upper≤2.0%）：p50=-1.443%、p10=-5.486%、min=-31.285% (n=1743, conf=HIGH)
+- 注意：切片樣本數通常較小，conf 下降是正常；切片僅用於「貼上緣時」的閱讀參考。
 
 ## 近 5 日（可計算 BB 的交易日；小表）
 
@@ -45,17 +51,14 @@
 | upper_usd | 149.2199 | exp(upper_log) |
 | dist_to_lower | 6.668% | (price-lower)/price |
 | dist_to_upper | 1.732% | (upper-price)/price |
+| band_width | 9.000% | (upper/lower - 1) reading-only |
 | bucket | MID_BAND | based on z thresholds |
 
 ## forward_mdd(20D)（分布解讀）
 
 - 定義：對每一天 t，觀察未來 N 天（t+1..t+N）中的**最低價**相對於當日價的跌幅：min(future)/p0 - 1。
 - 理論限制：此值應永遠 <= 0；若 >0，代表對齊/定義錯誤（或資料異常）。
-- 你目前看到的是 **bucket=MID_BAND** 條件下的歷史樣本分布（不是預測）：
-  - p50=-1.637%（中位數回撤）
-  - p10=-7.279%（偏壞情境，約最差 10%）
-  - min=-31.571%（歷史最極端尾部）
-  - n=2896（樣本數）；conf=HIGH
+- 你目前看到的是 **bucket=MID_BAND** 條件下的歷史樣本分布（不是預測）。
 
 ## FX (USD/TWD)（嚴格同日對齊 + 落後參考值）
 - fx_history_parse_status: `OK`
@@ -77,7 +80,7 @@
 - 若遇到長假/休市期間，FX strict 為 NA 屬於正常現象；Reference 會明確標註落後天數。
 
 ## Notes
-- forward_mdd 理論上應永遠 <= 0；若你看到 >0，代表資料對齊或定義出錯。
-- bucket 目前以 z 門檻定義；pos≥0.80/≤0.20 僅作閱讀提示，不改信號。
+- bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。
 - Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。
+- forward_mdd20_slices 為閱讀用切片，樣本較少時 conf 降低屬正常現象。
 - FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。

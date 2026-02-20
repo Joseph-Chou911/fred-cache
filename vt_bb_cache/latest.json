@@ -1,12 +1,20 @@
 {
   "bb": {
+    "band_width_pct": 0.09000219840377843,
     "bucket": "MID_BAND",
-    "dist_to_lower": 0.06668425487046471,
-    "dist_to_upper": 0.017316213999876044,
-    "lower_usd": 136.89874665979156,
-    "pos_in_band": 0.800788418347371,
-    "upper_usd": 149.21993481845533,
-    "z": 1.2031536733894952
+    "dist_to_lower": 0.06668425486871152,
+    "dist_to_upper": 0.01731621399796492,
+    "lower_usd": 136.89874666004872,
+    "pos_in_band": 0.8007884183604839,
+    "streak": {
+      "bucket_streak": 5,
+      "dist_u_le_threshold_streak": 2,
+      "dist_u_threshold": 0.02,
+      "pos_ge_threshold_streak": 2,
+      "pos_threshold": 0.8
+    },
+    "upper_usd": 149.219934818175,
+    "z": 1.203153673441945
   },
   "close_usd": 146.67999267578125,
   "data_date": "2026-02-19",
@@ -19,10 +27,28 @@
   "forward_days": 20,
   "forward_mdd20": {
     "conf": "HIGH",
-    "min": -0.3157058701296732,
+    "min": -0.31570581749655413,
     "n": 2896,
-    "p10": -0.07279351017697178,
-    "p50": -0.016369319913750957
+    "p10": -0.07279355177971375,
+    "p50": -0.016369653392366734
+  },
+  "forward_mdd20_slices": {
+    "dist_to_upper<=2.0%": {
+      "condition": "dist_to_upper<=0.0200",
+      "conf": "HIGH",
+      "min": -0.3128539220982788,
+      "n": 1743,
+      "p10": -0.054857091467806436,
+      "p50": -0.014434197905169865
+    },
+    "pos>=0.80": {
+      "condition": "pos_in_band>=0.80",
+      "conf": "HIGH",
+      "min": -0.3128539220982788,
+      "n": 1704,
+      "p10": -0.05430566505422083,
+      "p50": -0.015082309532681248
+    }
   },
   "fx_usdtwd": {
     "detected_date_key": "date",
@@ -41,12 +67,13 @@
     },
     "used_policy": "NA"
   },
-  "generated_at_utc": "2026-02-20T02:50:22Z",
+  "generated_at_utc": "2026-02-20T03:08:07Z",
   "k": 2.0,
   "module": "vt_bb_cache",
   "notes": [
     "BB computed on log(price_usd) where price_usd is adj_close when available.",
     "forward_mdd20 computed on linear price_usd (same series as BB).",
+    "forward_mdd20_slices are reading-only, do NOT replace bucket-conditioned stats.",
     "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
     "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated."
   ],
