@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd(20D) Report
 
-- report_generated_at_utc: `2026-02-20T07:31:17Z`
+- report_generated_at_utc: `2026-02-20T10:35:11Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-19.v6`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - stats_has_min_audit_fields: `true`
@@ -13,8 +13,8 @@
 - chip_overlay_path: `tw0050_bb_cache/chip_overlay.json`
 
 ## 快速摘要（非預測，僅狀態）
-- state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0136; dist_to_lower=38.12%; dist_to_upper=0.37%
-- forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED]
+- state: **EXTREME_UPPER_BAND**; bb_z=2.0543; pos_in_band=1.0000; dist_to_lower=27.60%; dist_to_upper=-0.37%
+- forward_mdd(20D) distribution (n=4151): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528)
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
@@ -33,9 +33,9 @@
 | bb_upper | 76.9148 |
 | bb_lower | 55.8939 |
 | bb_z | 2.0543 |
-| pos_in_band | 1.0136 |
-| dist_to_lower | 38.12% |
-| dist_to_upper | 0.37% |
+| pos_in_band | 1.0000 |
+| dist_to_lower | 27.60% |
+| dist_to_upper | -0.37% |
 
 ## Trend & Vol Filters
 
@@ -108,7 +108,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-20T07:31:16.848Z`
+- overlay_generated_at_utc: `2026-02-20T10:35:10.659Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -188,10 +188,15 @@
 
 ## Data Quality Flags
 
-- PRICE_SERIES_BREAK_DETECTED: Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
-- FWD_MDD_CLEAN_APPLIED: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
-- FWD_MDD_OUTLIER_MIN_RAW: forward_mdd_raw min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
-- RAW_OUTLIER_EXCLUDED: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
+- PRICE_SERIES_BREAK_DETECTED
+- FWD_MDD_CLEAN_APPLIED
+- FWD_MDD_OUTLIER_MIN_RAW_20D
+- RAW_OUTLIER_EXCLUDED_BY_CLEAN
+  - note: Detected 1 break(s) by ratio thresholds; sample: 2014-01-02(r=0.249); hi=1.8, lo=0.555556.
+  - note: Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).
+  - note: Clean masks built per-window: clean20 excludes entries whose [t+1..t+20] includes break; clean10 excludes entries whose [t+1..t+10] includes break.
+  - note: forward_mdd_raw_20D min=-0.7628 < threshold(-0.4); see raw min_audit_trail.
+  - note: Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.
 
 ## Caveats
 - BB 與 forward_mdd 是描述性統計，不是方向預測。
