@@ -15,17 +15,27 @@ Data source:
 
 Key features:
   - Robust scalar parsing for ticker/price_col (prevents tuple->lower() crashes)
-  - Computes TWO forward_mdd distributions:
-      * forward_mdd_raw   : no filtering (may include split-like artifacts)
-      * forward_mdd_clean : excludes windows contaminated by detected price breaks
-    The primary field "forward_mdd" uses CLEAN by default (audit-grade usable).
-  - Keeps Min Audit Trail for both raw and clean.
-  - DQ flags disclose break detection and cleaning.
+  - Computes forward_mdd distributions:
+      * forward_mdd(20D): raw + clean, primary uses --forward_mode (default clean)
+      * forward_mdd(10D): raw + clean, sidecar block (primary uses --forward_mode, default clean)
+  - Cleaning uses "entry mask" excluding windows contaminated by detected price breaks (split-like artifacts)
+    NOTE: Break detection is ratio-based (day-to-day); it may NOT catch small corporate-action drops (e.g., dividends).
+  - Adds audit-friendly fields at compute side:
+      * pos_raw (unclipped) + pos (clipped 0..1)
+      * band_width_geo_pct  = (upper/lower - 1) * 100  (geometric width)
+      * band_width_std_pct  = ((upper-lower)/ma) * 100 (industry-common width)
+  - TWSE fallback protections:
+      * per-request sleep + jitter
+      * retries with exponential backoff
+      * force DQ flags warning about unadjusted prices
 
-Added features:
+Added blocks:
   - Trend filter: MA200 + slope20D (on MA200), threshold (default 0.50%)
   - Vol filter: RV20 annualized + ATR14 (Wilder ATR; fallback to close-only TR if OHLC missing)
   - Regime tag (simple): TREND_UP & RV20_percentile <= pctl_max & rv_hist_n >= min_samples
+
+Changelog:
+  - 2026-02-20: compute side added pos_raw/pos, band_width, forward_mdd10; TWSE throttling + warnings.
 """
 
 from __future__ import annotations
@@ -34,7 +44,9 @@ import argparse
 import json
 import math
 import os
+import random
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -50,7 +62,7 @@ except Exception:
     yf = None
 
 
-SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-19.v6"
+SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-20.v7"
 TZ_LOCAL = "Asia/Taipei"
 TRADING_DAYS_PER_YEAR = 252
 
@@ -131,6 +143,12 @@ def safe_get(d: Any, k: str, default=None):
         return default
 
 
+def _clip01(x: float) -> float:
+    if x is None or (not np.isfinite(x)):
+        return float("nan")
+    return float(np.clip(x, 0.0, 1.0))
+
+
 # -------------------------
 # TWSE fallback (recent)
 # -------------------------
@@ -156,6 +174,8 @@ def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -
     TWSE STOCK_DAY fields typically include:
       日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數
     We map to: date, open, high, low, close, adjclose(=close), volume
+
+    NOTE: This endpoint is NOT adjusted for dividends/splits; it's raw day prices.
     """
     url = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
     date_str = f"{year}{month:02d}01"
@@ -209,23 +229,10 @@ def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -
     out = pd.DataFrame()
     out["date"] = df[col_date].map(roc_to_date)
     out["close"] = df[col_close].astype(str).str.replace(",", "", regex=False)
-    if col_open:
-        out["open"] = df[col_open].astype(str).str.replace(",", "", regex=False)
-    else:
-        out["open"] = None
-    if col_high:
-        out["high"] = df[col_high].astype(str).str.replace(",", "", regex=False)
-    else:
-        out["high"] = None
-    if col_low:
-        out["low"] = df[col_low].astype(str).str.replace(",", "", regex=False)
-    else:
-        out["low"] = None
-
-    if col_vol:
-        out["volume"] = df[col_vol].astype(str).str.replace(",", "", regex=False)
-    else:
-        out["volume"] = None
+    out["open"] = df[col_open].astype(str).str.replace(",", "", regex=False) if col_open else None
+    out["high"] = df[col_high].astype(str).str.replace(",", "", regex=False) if col_high else None
+    out["low"] = df[col_low].astype(str).str.replace(",", "", regex=False) if col_low else None
+    out["volume"] = df[col_vol].astype(str).str.replace(",", "", regex=False) if col_vol else None
 
     out["date"] = pd.to_datetime(out["date"], errors="coerce")
     for c in ["open", "high", "low", "close", "volume"]:
@@ -244,17 +251,86 @@ def _twse_fetch_month(stock_no: str, year: int, month: int, timeout: int = 20) -
     return out[["date", "open", "high", "low", "close", "adjclose", "volume"]].reset_index(drop=True)
 
 
-def fetch_twse_recent_0050(months_back: int, dq_flags: List[str], dq_notes: List[str]) -> pd.DataFrame:
+def _sleep_with_jitter(base_sec: float, jitter_sec: float) -> None:
+    base = max(0.0, float(base_sec))
+    jitter = max(0.0, float(jitter_sec))
+    t = base + (random.random() * jitter if jitter > 0 else 0.0)
+    if t > 0:
+        time.sleep(t)
+
+
+def _twse_fetch_month_with_retries(
+    stock_no: str,
+    year: int,
+    month: int,
+    dq_flags: List[str],
+    dq_notes: List[str],
+    *,
+    timeout: int,
+    max_retries: int,
+    sleep_sec: float,
+    sleep_jitter: float,
+) -> pd.DataFrame:
+    """
+    Retry policy (fallback-only):
+      - sleep (base + jitter) before each attempt (except first can also sleep if you want; we do small sleep too)
+      - on exception: exponential backoff = sleep_sec * (2**attempt) + jitter
+      - max_retries counts total attempts (>=1)
+    """
+    tries = max(1, int(max_retries))
+    last_err = None
+
+    for attempt in range(tries):
+        try:
+            if attempt > 0:
+                backoff = float(sleep_sec) * (2 ** attempt)
+                _sleep_with_jitter(backoff, sleep_jitter)
+            else:
+                _sleep_with_jitter(sleep_sec, sleep_jitter)
+
+            df = _twse_fetch_month(stock_no, year, month, timeout=timeout)
+            return df
+
+        except Exception as e:
+            last_err = e
+            dq_flags.append("TWSE_FETCH_ERROR")
+            dq_notes.append(f"TWSE fetch failed (attempt={attempt+1}/{tries}) for {year}-{month:02d}: {repr(e)}")
+
+    dq_flags.append("TWSE_FETCH_FAILED_FINAL")
+    dq_notes.append(f"TWSE month fetch exhausted retries for {year}-{month:02d}; last_error={repr(last_err)}")
+    return pd.DataFrame()
+
+
+def fetch_twse_recent_0050(
+    months_back: int,
+    dq_flags: List[str],
+    dq_notes: List[str],
+    *,
+    twse_timeout: int,
+    twse_max_retries: int,
+    twse_sleep_sec: float,
+    twse_sleep_jitter: float,
+) -> pd.DataFrame:
     stock_no = "0050"
     frames = []
     for (yy, mm) in _twse_months_back_list(months_back):
-        try:
-            frames.append(_twse_fetch_month(stock_no, yy, mm))
-        except Exception as e:
-            dq_flags.append("TWSE_FETCH_ERROR")
-            dq_notes.append(f"TWSE month fetch failed: {yy}-{mm:02d}: {repr(e)}")
+        dfm = _twse_fetch_month_with_retries(
+            stock_no,
+            yy,
+            mm,
+            dq_flags,
+            dq_notes,
+            timeout=twse_timeout,
+            max_retries=twse_max_retries,
+            sleep_sec=twse_sleep_sec,
+            sleep_jitter=twse_sleep_jitter,
+        )
+        if dfm is not None and len(dfm) > 0:
+            frames.append(dfm)
+
     if not frames:
         return pd.DataFrame()
+
     df = pd.concat(frames, ignore_index=True)
     df = df.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
     return df
@@ -389,6 +465,7 @@ def compute_forward_mdd(
     if valid_entry_mask is None:
         valid_entry_mask = np.ones(n, dtype=bool)
 
+    # last computable entry index is n - fwd_days - 2 (because we use i+1..i+fwd_days)
     for i in range(0, n - fwd_days - 1):
         if not valid_entry_mask[i]:
             continue
@@ -490,7 +567,7 @@ def compute_rv20_ann(price: pd.Series, rv_days: int) -> Dict[str, Any]:
     """
     out: Dict[str, Any] = {
         "rv_days": int(rv_days),
-        "rv_ann": None,  # decimal (e.g. 0.207 for 20.7%)
+        "rv_ann": None,       # decimal (e.g. 0.207 for 20.7%)
         "rv_ann_pctl": None,  # 0..100
         "rv_hist_n": 0,
         "rv_hist_q20": None,
@@ -532,7 +609,7 @@ def compute_atr14(df_ohlc: pd.DataFrame, atr_days: int, price_for_pct: float) ->
     out: Dict[str, Any] = {
         "atr_days": int(atr_days),
         "atr": None,
-        "atr_pct": None,  # percent (0..100) stored as percent value? we store as percentage number (e.g. 1.66)
+        "atr_pct": None,  # percent value (e.g. 1.66 means 1.66%)
         "tr_mode": "OHLC"  # or "CLOSE_ONLY"
     }
 
@@ -558,20 +635,16 @@ def compute_atr14(df_ohlc: pd.DataFrame, atr_days: int, price_for_pct: float) ->
 
     tr = tr.replace([np.inf, -np.inf], np.nan)
 
-    # Need at least atr_days + 1 points (because prev_close)
     if tr.dropna().shape[0] < atr_days:
         return out
 
-    # Wilder ATR
     atr = pd.Series(index=tr.index, dtype=float)
     tr_sma = tr.rolling(window=atr_days, min_periods=atr_days).mean()
-    # Seed at first point where SMA valid
     first_valid = tr_sma.first_valid_index()
     if first_valid is None:
         return out
     atr.loc[first_valid] = tr_sma.loc[first_valid]
 
-    # Iterate forward
     idxs = list(tr.index)
     start_pos = idxs.index(first_valid)
     for i in range(start_pos + 1, len(idxs)):
@@ -658,7 +731,8 @@ def upsert_history_row(hist: Dict[str, Any], day_key: str, latest: Dict[str, Any
         "as_of_last_date": meta.get("last_date"),
         "state": latest.get("state"),
         "bb_z": latest.get("bb_z"),
-        "bb_pos": latest.get("bb_pos"),
+        "bb_pos": latest.get("bb_pos"),             # clipped
+        "bb_pos_raw": latest.get("bb_pos_raw"),     # unclipped
         "price_used": latest.get("price_used"),
         "run_ts_utc": meta.get("run_ts_utc"),
     })
@@ -681,13 +755,22 @@ def main() -> int:
     ap.add_argument("--bb_k", type=float, default=2.0)
     ap.add_argument("--fwd_days", type=int, default=20)
 
+    # Sidecar short forward window (default 10D)
+    ap.add_argument("--fwd_days_short", type=int, default=10)
+
     # Support both names to avoid yml mismatch
     ap.add_argument("--price_col", default="adjclose")
     ap.add_argument("--price_col_requested", default=None)
 
     ap.add_argument("--twse_months_back", type=int, default=6)
 
-    # Outlier tagging for raw
+    # TWSE fallback throttling / retries
+    ap.add_argument("--twse_timeout", type=int, default=20)
+    ap.add_argument("--twse_max_retries", type=int, default=3)
+    ap.add_argument("--twse_sleep_sec", type=float, default=1.0)
+    ap.add_argument("--twse_sleep_jitter", type=float, default=0.5)
+
+    # Outlier tagging for raw (20D)
     ap.add_argument("--outlier_min_threshold", type=float, default=-0.4)
 
     # Break detection thresholds (split-like)
@@ -732,7 +815,15 @@ def main() -> int:
         used_fallback = True
         dq_flags.append("DATA_SOURCE_TWSE_FALLBACK")
         dq_notes.append(f"Used TWSE fallback (recent-only, months_back={int(args.twse_months_back)}).")
-        df = fetch_twse_recent_0050(months_back=int(args.twse_months_back), dq_flags=dq_flags, dq_notes=dq_notes)
+        df = fetch_twse_recent_0050(
+            months_back=int(args.twse_months_back),
+            dq_flags=dq_flags,
+            dq_notes=dq_notes,
+            twse_timeout=int(args.twse_timeout),
+            twse_max_retries=int(args.twse_max_retries),
+            twse_sleep_sec=float(args.twse_sleep_sec),
+            twse_sleep_jitter=float(args.twse_sleep_jitter),
+        )
 
     if df is None or len(df) == 0:
         print("ERROR: no data from yfinance and TWSE fallback.", file=sys.stderr)
@@ -768,30 +859,52 @@ def main() -> int:
     last_date = df.loc[last_idx, "date"].strftime("%Y-%m-%d")
 
     latest_price = float(price_used.iloc[last_idx])
-    latest_ma = ma.iloc[last_idx]
-    latest_sd = sd.iloc[last_idx]
-    latest_upper = upper.iloc[last_idx]
-    latest_lower = lower.iloc[last_idx]
+    latest_ma = float(ma.iloc[last_idx]) if np.isfinite(ma.iloc[last_idx]) else float("nan")
+    latest_sd = float(sd.iloc[last_idx]) if np.isfinite(sd.iloc[last_idx]) else float("nan")
+    latest_upper = float(upper.iloc[last_idx]) if np.isfinite(upper.iloc[last_idx]) else float("nan")
+    latest_lower = float(lower.iloc[last_idx]) if np.isfinite(lower.iloc[last_idx]) else float("nan")
 
     bb_z = float((latest_price - latest_ma) / latest_sd) if np.isfinite(latest_sd) and latest_sd > 0 else float("nan")
-    bb_pos = float((latest_price - latest_lower) / (latest_upper - latest_lower)) if np.isfinite(latest_upper - latest_lower) and (latest_upper - latest_lower) != 0 else float("nan")
 
-    dist_to_lower_pct = (latest_price / latest_lower - 1.0) * 100.0 if np.isfinite(latest_lower) and latest_lower > 0 else float("nan")
-    dist_to_upper_pct = (latest_price / latest_upper - 1.0) * 100.0 if np.isfinite(latest_upper) and latest_upper > 0 else float("nan")
+    # pos_raw (unclipped), pos (clipped)
+    denom = (latest_upper - latest_lower)
+    pos_raw = float((latest_price - latest_lower) / denom) if np.isfinite(denom) and denom != 0 else float("nan")
+    pos = _clip01(pos_raw)
 
-    state = classify_state(bb_z=bb_z, bb_pos=bb_pos)
+    # dist_to_{upper,lower} in % (VT-style: positive when inside band)
+    dist_to_lower_pct = ((latest_price - latest_lower) / latest_price) * 100.0 if np.isfinite(latest_lower) and latest_price > 0 else float("nan")
+    dist_to_upper_pct = ((latest_upper - latest_price) / latest_price) * 100.0 if np.isfinite(latest_upper) and latest_price > 0 else float("nan")
 
-    # forward_mdd raw
+    # band width (%): both definitions
+    band_width_geo_pct = ((latest_upper / latest_lower) - 1.0) * 100.0 if (np.isfinite(latest_upper) and np.isfinite(latest_lower) and latest_lower > 0) else float("nan")
+    band_width_std_pct = ((latest_upper - latest_lower) / latest_ma) * 100.0 if (np.isfinite(latest_upper) and np.isfinite(latest_lower) and np.isfinite(latest_ma) and latest_ma != 0) else float("nan")
+
+    state = classify_state(bb_z=bb_z, bb_pos=pos)  # use clipped for deterministic bucket thresholds
+
     prices_np = price_used.to_numpy(dtype=float)
+    n_prices = int(len(prices_np))
+
+    # -------------------------
+    # forward_mdd(20D): raw + clean
+    # -------------------------
     fwd_days = int(args.fwd_days)
     fwd_raw_arr, fwd_raw_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days)
 
-    # detect breaks & clean
     breaks = detect_price_breaks(prices_np, ratio_hi=float(args.break_ratio_hi), ratio_lo=float(args.break_ratio_lo))
     break_idxs = np.where(breaks)[0].tolist()
-    clean_mask = build_clean_entry_mask(len(prices_np), breaks, fwd_days=fwd_days)
-    fwd_clean_arr, fwd_clean_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days, valid_entry_mask=clean_mask)
 
+    clean_mask_20 = build_clean_entry_mask(n_prices, breaks, fwd_days=fwd_days)
+    fwd_clean_arr, fwd_clean_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days, valid_entry_mask=clean_mask_20)
+
+    # -------------------------
+    # forward_mdd(10D): raw + clean (sidecar)
+    # -------------------------
+    fwd_days_short = int(args.fwd_days_short)
+    fwd10_raw_arr, fwd10_raw_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days_short)
+    clean_mask_10 = build_clean_entry_mask(n_prices, breaks, fwd_days=fwd_days_short)
+    fwd10_clean_arr, fwd10_clean_stats = compute_forward_mdd(prices_np, fwd_days=fwd_days_short, valid_entry_mask=clean_mask_10)
+
+    # DQ around breaks
     if len(break_idxs) > 0:
         dq_flags.append("PRICE_SERIES_BREAK_DETECTED")
         show = []
@@ -807,29 +920,62 @@ def main() -> int:
         )
         dq_flags.append("FWD_MDD_CLEAN_APPLIED")
         dq_notes.append("Computed forward_mdd_clean by excluding windows impacted by detected breaks (no price adjustment).")
+        dq_notes.append(f"Clean masks built per-window: clean20 excludes entries whose [t+1..t+{fwd_days}] includes break; "
+                        f"clean10 excludes entries whose [t+1..t+{fwd_days_short}] includes break.")
 
+    # Raw outlier tagging (20D)
     thr = float(args.outlier_min_threshold)
     raw_outlier = (fwd_raw_stats.n > 0 and np.isfinite(fwd_raw_stats.min) and fwd_raw_stats.min < thr)
     if raw_outlier:
-        dq_flags.append("FWD_MDD_OUTLIER_MIN_RAW")
-        dq_notes.append(f"forward_mdd_raw min={fwd_raw_stats.min:.4f} < threshold({thr}); see raw min_audit_trail.")
-        # If we are using clean as primary, explicitly tag that raw outlier got excluded by clean.
+        dq_flags.append("FWD_MDD_OUTLIER_MIN_RAW_20D")
+        dq_notes.append(f"forward_mdd_raw_20D min={fwd_raw_stats.min:.4f} < threshold({thr}); see raw min_audit_trail.")
         if str(args.forward_mode).lower() == "clean":
-            dq_flags.append("RAW_OUTLIER_EXCLUDED")
+            dq_flags.append("RAW_OUTLIER_EXCLUDED_BY_CLEAN")
             dq_notes.append("Primary forward_mdd uses CLEAN; raw outlier windows excluded by break mask.")
 
-    # choose primary forward_mdd
+    # Choose primary mode for 20D / 10D
     forward_mode = str(args.forward_mode).lower()
-    primary_stats = fwd_clean_stats if forward_mode == "clean" else fwd_raw_stats
+    primary20_stats = fwd_clean_stats if forward_mode == "clean" else fwd_raw_stats
+    primary10_stats = fwd10_clean_stats if forward_mode == "clean" else fwd10_raw_stats
 
-    def min_audit_from(stats: ForwardMDDStats) -> Tuple[Optional[str], Optional[float], Optional[str], Optional[float]]:
+    def min_audit_from(stats: ForwardMDDStats, fwd_days_used: int) -> Tuple[Optional[str], Optional[float], Optional[str], Optional[float]]:
         if stats.n <= 0 or stats.min_entry_idx < 0 or stats.min_future_idx < 0:
+            return None, None, None, None
+        if stats.min_entry_idx >= len(df) or stats.min_future_idx >= len(df):
+            return None, None, None, None
+        if stats.min_future_idx <= stats.min_entry_idx or (stats.min_future_idx - stats.min_entry_idx) > fwd_days_used:
+            # alignment sanity check (should never happen unless bug)
             return None, None, None, None
         med = df.loc[stats.min_entry_idx, "date"].strftime("%Y-%m-%d")
         mfd = df.loc[stats.min_future_idx, "date"].strftime("%Y-%m-%d")
         mep = float(prices_np[stats.min_entry_idx])
         mfp = float(prices_np[stats.min_future_idx])
         return med, mep, mfd, mfp
+
+    def pack_fwd(stats: ForwardMDDStats, label: str, fwd_days_used: int) -> Dict[str, Any]:
+        med, mep, mfd, mfp = min_audit_from(stats, fwd_days_used=fwd_days_used)
+        return {
+            "label": label,
+            "definition": f"min(price[t+1..t+{fwd_days_used}]/price[t]-1), level-price based",
+            "n": int(stats.n),
+            "p50": _nan_to_none(stats.p50),
+            "p25": _nan_to_none(stats.p25),
+            "p10": _nan_to_none(stats.p10),
+            "p05": _nan_to_none(stats.p05),
+            "min": _nan_to_none(stats.min),
+            "min_entry_date": med,
+            "min_entry_price": _nan_to_none(mep),
+            "min_future_date": mfd,
+            "min_future_price": _nan_to_none(mfp),
+        }
+
+    forward20_primary = pack_fwd(primary20_stats, f"forward_mdd_{forward_mode}_20D", fwd_days_used=fwd_days)
+    forward20_raw = pack_fwd(fwd_raw_stats, "forward_mdd_raw_20D", fwd_days_used=fwd_days)
+    forward20_clean = pack_fwd(fwd_clean_stats, "forward_mdd_clean_20D", fwd_days_used=fwd_days)
+
+    forward10_primary = pack_fwd(primary10_stats, f"forward_mdd_{forward_mode}_10D", fwd_days_used=fwd_days_short)
+    forward10_raw = pack_fwd(fwd10_raw_stats, "forward_mdd_raw_10D", fwd_days_used=fwd_days_short)
+    forward10_clean = pack_fwd(fwd10_clean_stats, "forward_mdd_clean_10D", fwd_days_used=fwd_days_short)
 
     # Trend/Vol/ATR
     trend = compute_trend_filter(
@@ -898,9 +1044,13 @@ def main() -> int:
     if state == "EXTREME_LOWER_BAND":
         regime["reasons"].append("bb_extreme_lower_band_stressed")
 
+    # Fallback warnings (forced)
     if used_fallback:
+        dq_flags.append("TWSE_UNADJUSTED_PRICE_WARNING")
+        dq_flags.append("FWD_MDD_CORP_ACTION_CONTAMINATION_RISK")
+        dq_notes.append("TWSE fallback uses raw (unadjusted) daily prices; forward_mdd tail may be contaminated by dividends/corporate actions.")
         dq_flags.append("REGIME_DQ_SHORT_HISTORY_RISK")
-        dq_notes.append("Using TWSE fallback recent-only data; rv percentile/regime should be down-weighted.")
+        dq_notes.append("Using TWSE fallback recent-only data; RV percentile/regime should be down-weighted.")
 
     # build outputs
     run_ts_utc = utc_now_iso_z()
@@ -917,6 +1067,7 @@ def main() -> int:
         "bb_window": w,
         "bb_k": k,
         "fwd_days": fwd_days,
+        "fwd_days_short": fwd_days_short,
         "price_calc": "adjclose" if price_col_used == "adjclose" else "close",
         "price_col_requested": price_col_req,
         "price_col_used": price_col_used,
@@ -926,6 +1077,13 @@ def main() -> int:
             "break_ratio_lo": float(args.break_ratio_lo),
             "break_count": int(len(break_idxs)),
             "forward_mode_primary": forward_mode,
+        },
+        "twse_fallback_policy": {
+            "months_back": int(args.twse_months_back),
+            "timeout_sec": int(args.twse_timeout),
+            "max_retries": int(args.twse_max_retries),
+            "sleep_sec": float(args.twse_sleep_sec),
+            "sleep_jitter_sec": float(args.twse_sleep_jitter),
         },
         "trend_params": {
             "trend_ma_days": int(args.trend_ma_days),
@@ -947,48 +1105,45 @@ def main() -> int:
         "close": _nan_to_none(float(df.loc[last_idx, "close"])) if "close" in df.columns else None,
         "adjclose": _nan_to_none(float(df.loc[last_idx, "adjclose"])) if "adjclose" in df.columns else None,
         "price_used": _nan_to_none(latest_price),
-        "bb_ma": _nan_to_none(float(latest_ma)),
-        "bb_sd": _nan_to_none(float(latest_sd)),
-        "bb_upper": _nan_to_none(float(latest_upper)),
-        "bb_lower": _nan_to_none(float(latest_lower)),
-        "bb_z": _nan_to_none(float(bb_z)),
-        "bb_pos": _nan_to_none(float(bb_pos)),
-        "dist_to_lower_pct": _nan_to_none(float(dist_to_lower_pct)),
-        "dist_to_upper_pct": _nan_to_none(float(dist_to_upper_pct)),
+
+        "bb_ma": _nan_to_none(latest_ma),
+        "bb_sd": _nan_to_none(latest_sd),
+        "bb_upper": _nan_to_none(latest_upper),
+        "bb_lower": _nan_to_none(latest_lower),
+        "bb_z": _nan_to_none(bb_z),
+
+        # pos fields (compute-side aligned with VT report style)
+        "bb_pos": _nan_to_none(pos),          # clipped 0..1
+        "bb_pos_raw": _nan_to_none(pos_raw),  # unclipped for audit
+
+        # distance fields (%), VT-style positive when inside band
+        "dist_to_lower_pct": _nan_to_none(dist_to_lower_pct),
+        "dist_to_upper_pct": _nan_to_none(dist_to_upper_pct),
+
+        # band width (%)
+        "band_width_geo_pct": _nan_to_none(band_width_geo_pct),
+        "band_width_std_pct": _nan_to_none(band_width_std_pct),
+
         "state": state,
     }
-
-    def pack_fwd(stats: ForwardMDDStats, label: str) -> Dict[str, Any]:
-        med, mep, mfd, mfp = min_audit_from(stats)
-        return {
-            "label": label,
-            "definition": f"min(price[t+1..t+{fwd_days}]/price[t]-1), level-price based",
-            "n": int(stats.n),
-            "p50": _nan_to_none(stats.p50),
-            "p25": _nan_to_none(stats.p25),
-            "p10": _nan_to_none(stats.p10),
-            "p05": _nan_to_none(stats.p05),
-            "min": _nan_to_none(stats.min),
-            "min_entry_date": med,
-            "min_entry_price": _nan_to_none(mep),
-            "min_future_date": mfd,
-            "min_future_price": _nan_to_none(mfp),
-        }
-
-    forward_primary = pack_fwd(primary_stats, f"forward_mdd_{forward_mode}")
-    forward_raw = pack_fwd(fwd_raw_stats, "forward_mdd_raw")
-    forward_clean = pack_fwd(fwd_clean_stats, "forward_mdd_clean")
 
     stats_out = {
         "meta": meta,
         "latest": latest,
 
         # Primary used by report (build script reads this)
-        "forward_mdd": forward_primary,
+        "forward_mdd": forward20_primary,          # 20D primary
 
-        # Audit extras
-        "forward_mdd_raw": forward_raw,
-        "forward_mdd_clean": forward_clean,
+        # Sidecar (10D)
+        "forward_mdd10": forward10_primary,        # 10D primary
+
+        # Audit extras (20D)
+        "forward_mdd_raw": forward20_raw,
+        "forward_mdd_clean": forward20_clean,
+
+        # Audit extras (10D)
+        "forward_mdd10_raw": forward10_raw,
+        "forward_mdd10_clean": forward10_clean,
 
         # Added blocks
         "trend": trend,
