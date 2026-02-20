@@ -96,4 +96,4 @@
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 - Check-12 OTC Guardrail（info-only）：⚠️（NOTE）（stage=NONE, label=NONE, prewatch_hit=False, otc_alert_hit=False）
 
-_generated_at_utc: 2026-02-19T15:13:46Z_
+_generated_at_utc: 2026-02-20T15:08:40Z_
