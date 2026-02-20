@@ -28,6 +28,19 @@ NEW (2026-02-20):
     * pos>=pos_hint_threshold
     * dist_to_upper<=dist_upper_hint_threshold
 Stored under latest.json field: forward_mdd20_slices
+
+NEW (2026-02-20.2) (based on your highlighted suggestions):
+- min_n_required guard (decision-confidence guardrail):
+    If n < min_n_required => conf_decision = "LOW_FOR_DECISION" (report hint only; no value changes)
+  Applied to:
+    - forward_mdd20 (bucket-conditioned)
+    - forward_mdd20_slices (pos/dist slices)
+- pos vs dist_to_upper consistency check (audit hint only):
+    Heuristic: pos and dist_to_upper should broadly agree (both imply "near upper" or "not near upper").
+    If mismatch is detected, emit a warning in report + latest.json (does NOT change any computed stats).
+
+Important:
+- All new guards are "report-only hints": they do NOT modify bucket rules or stats.
 """
 
 from __future__ import annotations
@@ -113,7 +126,9 @@ def _ymd_to_date(s: str) -> Optional[dt_date]:
     t = s.strip()
     if len(t) == 10 and t[4] == "-" and t[7] == "-":
         try:
-            y = int(t[0:4]); m = int(t[5:7]); d = int(t[8:10])
+            y = int(t[0:4])
+            m = int(t[5:7])
+            d = int(t[8:10])
             return dt_date(y, m, d)
         except Exception:
             return None
@@ -155,7 +170,11 @@ def _pick_keys(records: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[s
         return None, None, "EMPTY_RECORDS"
 
     date_candidates = ["date", "data_date", "day", "ymd", "day_key", "UsedDate", "used_date", "d"]
-    rate_candidates = ["mid", "spot_buy", "spot_sell", "usdtwd", "usd_twd", "USD_TWD", "USDTWD", "rate", "close", "value", "price"]
+    rate_candidates = [
+        "mid", "spot_buy", "spot_sell",
+        "usdtwd", "usd_twd", "USD_TWD", "USDTWD",
+        "rate", "close", "value", "price",
+    ]
 
     date_key = None
     for dk in date_candidates:
@@ -333,6 +352,20 @@ def summarize_mdd(mdd: np.ndarray) -> Dict[str, Any]:
     return {"n": n, "p50": p50, "p10": p10, "min": mn, "conf": conf}
 
 
+def conf_for_decision(n: Optional[int], min_n_required: int) -> str:
+    """
+    Decision-guard: independent of summarize_mdd.conf.
+    This is a "usage hint" to prevent over-trusting small samples.
+    """
+    if n is None:
+        return "LOW_FOR_DECISION"
+    try:
+        nn = int(n)
+    except Exception:
+        return "LOW_FOR_DECISION"
+    return "OK" if nn >= int(min_n_required) else "LOW_FOR_DECISION"
+
+
 # ----------------------------
 # History maintenance
 # ----------------------------
@@ -466,6 +499,67 @@ def streak_from_tail(bool_series: pd.Series) -> int:
     return n
 
 
+def pos_dist_consistency_check(
+    pos: Optional[float],
+    dist_to_upper: Optional[float],
+    pos_thr: float,
+    dist_thr: float,
+    mismatch_band: float = 0.10,
+    dist_mismatch_band: float = 0.01,
+) -> Dict[str, Any]:
+    """
+    Audit hint only.
+
+    Intuition:
+      - High pos (near upper in standardized band units) should often coincide with small dist_to_upper.
+      - Low pos should often coincide with large dist_to_upper.
+
+    But band width changes can break that relationship, so we only flag
+    "strong mismatch" with tolerance bands:
+      - pos_high if pos >= pos_thr
+      - pos_low  if pos <= (1 - pos_thr)  (symmetry)
+      - dist_near if dist_to_upper <= dist_thr
+      - dist_far  if dist_to_upper >= (dist_thr + dist_mismatch_band) (a bit beyond near)
+
+    Additionally:
+      - If pos is very high (>= pos_thr + mismatch_band) but dist isn't near ( > dist_thr + dist_mismatch_band) => mismatch.
+      - If pos is very low (<= (1-pos_thr) - mismatch_band) but dist is near => mismatch.
+
+    Returns:
+      {"status": "OK"|"MISMATCH"|"NA", "reason": "...", "inputs": {...}}
+    """
+    if pos is None or dist_to_upper is None:
+        return {"status": "NA", "reason": "pos_or_dist_missing", "inputs": {"pos": pos, "dist_to_upper": dist_to_upper}}
+
+    if not (np.isfinite(pos) and np.isfinite(dist_to_upper)):
+        return {"status": "NA", "reason": "pos_or_dist_nonfinite", "inputs": {"pos": pos, "dist_to_upper": dist_to_upper}}
+
+    pos_high = pos >= pos_thr
+    pos_low = pos <= (1.0 - pos_thr)
+    dist_near = dist_to_upper <= dist_thr
+    dist_far = dist_to_upper > (dist_thr + dist_mismatch_band)
+
+    # Strong mismatch rules (conservative)
+    if (pos >= (pos_thr + mismatch_band)) and dist_far:
+        return {
+            "status": "MISMATCH",
+            "reason": "pos_very_high_but_dist_not_near_upper",
+            "inputs": {"pos": float(pos), "dist_to_upper": float(dist_to_upper), "pos_thr": pos_thr, "dist_thr": dist_thr,
+                       "mismatch_band": mismatch_band, "dist_mismatch_band": dist_mismatch_band},
+        }
+    if (pos <= ((1.0 - pos_thr) - mismatch_band)) and dist_near:
+        return {
+            "status": "MISMATCH",
+            "reason": "pos_very_low_but_dist_near_upper",
+            "inputs": {"pos": float(pos), "dist_to_upper": float(dist_to_upper), "pos_thr": pos_thr, "dist_thr": dist_thr,
+                       "mismatch_band": mismatch_band, "dist_mismatch_band": dist_mismatch_band},
+        }
+
+    # Mild mismatch (optional) — we keep it as OK to avoid noisy flags
+    # e.g., pos_high but dist not near; could be band width large.
+    return {"status": "OK", "reason": "within_tolerance", "inputs": {"pos": float(pos), "dist_to_upper": float(dist_to_upper)}}
+
+
 # ----------------------------
 # Main
 # ----------------------------
@@ -483,6 +577,13 @@ def main() -> int:
     # reading thresholds (do NOT change bucket rules)
     ap.add_argument("--pos_hint_threshold", type=float, default=0.80)
     ap.add_argument("--dist_upper_hint_threshold", type=float, default=0.02)  # 2%
+
+    # decision guard (report hint only)
+    ap.add_argument("--min_n_required", type=int, default=200)
+
+    # consistency check tolerance
+    ap.add_argument("--pos_mismatch_band", type=float, default=0.10)        # extra margin above threshold
+    ap.add_argument("--dist_mismatch_band", type=float, default=0.01)       # extra margin beyond dist threshold
     args = ap.parse_args()
 
     generated_at_utc = utc_now_iso()
@@ -528,38 +629,46 @@ def main() -> int:
     prices = base.to_numpy(dtype=float)
     fwd_mdd = compute_forward_mdd(prices, forward_days=args.forward_days)
 
-    # bucket-conditioned distribution (original main stat)
+    # bucket-conditioned distribution (main stat)
     buckets_series = bb["z"].apply(lambda v: bucket_from_z(float(v)) if pd.notna(v) else None)
     mask_bucket = (buckets_series == bucket) & np.isfinite(fwd_mdd)
     mdd_stats_bucket = summarize_mdd(fwd_mdd[mask_bucket.to_numpy()])
+
+    mdd_bucket_conf_decision = conf_for_decision(mdd_stats_bucket.get("n"), args.min_n_required)
 
     # slice-conditioned distributions (reading-only; separate field)
     pos_series = bb["pos"]
     upper_lin_series = np.exp(bb["upper"])
     dist_u_series = (upper_lin_series - base) / base
 
-    mask_pos80 = (pos_series >= args.pos_hint_threshold) & np.isfinite(fwd_mdd)
-    mdd_stats_pos80 = summarize_mdd(fwd_mdd[mask_pos80.fillna(False).to_numpy()])
+    mask_pos = (pos_series >= args.pos_hint_threshold) & np.isfinite(fwd_mdd)
+    mdd_stats_pos = summarize_mdd(fwd_mdd[mask_pos.fillna(False).to_numpy()])
+    mdd_pos_conf_decision = conf_for_decision(mdd_stats_pos.get("n"), args.min_n_required)
 
-    mask_distu2 = (dist_u_series <= args.dist_upper_hint_threshold) & np.isfinite(fwd_mdd)
-    mdd_stats_distu2 = summarize_mdd(fwd_mdd[mask_distu2.fillna(False).to_numpy()])
+    mask_dist = (dist_u_series <= args.dist_upper_hint_threshold) & np.isfinite(fwd_mdd)
+    mdd_stats_dist = summarize_mdd(fwd_mdd[mask_dist.fillna(False).to_numpy()])
+    mdd_dist_conf_decision = conf_for_decision(mdd_stats_dist.get("n"), args.min_n_required)
 
     forward_mdd20_slices = {
         f"pos>={args.pos_hint_threshold:.2f}": {
             "condition": f"pos_in_band>={args.pos_hint_threshold:.2f}",
-            "n": mdd_stats_pos80.get("n"),
-            "p50": mdd_stats_pos80.get("p50"),
-            "p10": mdd_stats_pos80.get("p10"),
-            "min": mdd_stats_pos80.get("min"),
-            "conf": mdd_stats_pos80.get("conf"),
+            "n": mdd_stats_pos.get("n"),
+            "p50": mdd_stats_pos.get("p50"),
+            "p10": mdd_stats_pos.get("p10"),
+            "min": mdd_stats_pos.get("min"),
+            "conf": mdd_stats_pos.get("conf"),
+            "conf_decision": mdd_pos_conf_decision,
+            "min_n_required": args.min_n_required,
         },
         f"dist_to_upper<={args.dist_upper_hint_threshold*100:.1f}%": {
             "condition": f"dist_to_upper<={args.dist_upper_hint_threshold:.4f}",
-            "n": mdd_stats_distu2.get("n"),
-            "p50": mdd_stats_distu2.get("p50"),
-            "p10": mdd_stats_distu2.get("p10"),
-            "min": mdd_stats_distu2.get("min"),
-            "conf": mdd_stats_distu2.get("conf"),
+            "n": mdd_stats_dist.get("n"),
+            "p50": mdd_stats_dist.get("p50"),
+            "p10": mdd_stats_dist.get("p10"),
+            "min": mdd_stats_dist.get("min"),
+            "conf": mdd_stats_dist.get("conf"),
+            "conf_decision": mdd_dist_conf_decision,
+            "min_n_required": args.min_n_required,
         },
     }
 
@@ -570,11 +679,20 @@ def main() -> int:
 
     pos_streak = streak_from_tail((bbv["pos"] >= args.pos_hint_threshold).fillna(False).astype(bool))
 
-    # dist_to_upper streak on BB-valid days (need same index; compute from bbv + base)
     bbv_upper = np.exp(bbv["upper"])
     bbv_price = base.reindex(bbv.index)
     bbv_dist_u = (bbv_upper - bbv_price) / bbv_price
     distu_streak = streak_from_tail((bbv_dist_u <= args.dist_upper_hint_threshold).fillna(False).astype(bool))
+
+    # consistency check (audit hint only)
+    consistency = pos_dist_consistency_check(
+        pos=pos_in_band,
+        dist_to_upper=dist_to_upper,
+        pos_thr=args.pos_hint_threshold,
+        dist_thr=args.dist_upper_hint_threshold,
+        mismatch_band=args.pos_mismatch_band,
+        dist_mismatch_band=args.dist_mismatch_band,
+    )
 
     # FX strict + reference
     fx_series = load_fx_history(args.fx_history)
@@ -622,9 +740,14 @@ def main() -> int:
                 "pos_threshold": args.pos_hint_threshold,
                 "dist_u_threshold": args.dist_upper_hint_threshold,
             },
+            "consistency_check": consistency,
         },
-        "forward_mdd20": mdd_stats_bucket,
-        "forward_mdd20_slices": forward_mdd20_slices,  # NEW: separate field; reading-only
+        "forward_mdd20": {
+            **mdd_stats_bucket,
+            "conf_decision": mdd_bucket_conf_decision,
+            "min_n_required": args.min_n_required,
+        },
+        "forward_mdd20_slices": forward_mdd20_slices,
         "fx_usdtwd": {
             "rate": fx_rate_strict,
             "used_policy": fx_used_policy,
@@ -648,10 +771,17 @@ def main() -> int:
             "price_twd_ref": price_twd_ref,
             "close_twd_ref": close_twd_ref,
         },
+        "hints": {
+            "min_n_required": args.min_n_required,
+            "pos_dist_consistency_status": consistency.get("status"),
+            "pos_dist_consistency_reason": consistency.get("reason"),
+        },
         "notes": [
             "BB computed on log(price_usd) where price_usd is adj_close when available.",
             "forward_mdd20 computed on linear price_usd (same series as BB).",
             "forward_mdd20_slices are reading-only, do NOT replace bucket-conditioned stats.",
+            "Decision-guard: conf_decision='LOW_FOR_DECISION' when n < min_n_required (report hint only).",
+            "Consistency-check is a hint only; it does not alter any values or rules.",
             "FX strict: only same-date match populates fx_usdtwd.rate and derived_twd.price_twd.",
             "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated.",
         ],
@@ -676,12 +806,16 @@ def main() -> int:
         "p10_mdd20": mdd_stats_bucket.get("p10"),
         "min_mdd20": mdd_stats_bucket.get("min"),
         "n_mdd20": mdd_stats_bucket.get("n"),
+        "conf_decision_mdd20": mdd_bucket_conf_decision,
 
         # slice summaries (reading-only)
-        "p50_mdd20_pos_ge": mdd_stats_pos80.get("p50"),
-        "n_mdd20_pos_ge": mdd_stats_pos80.get("n"),
-        "p50_mdd20_dist_u_le": mdd_stats_distu2.get("p50"),
-        "n_mdd20_dist_u_le": mdd_stats_distu2.get("n"),
+        "p50_mdd20_pos_ge": mdd_stats_pos.get("p50"),
+        "n_mdd20_pos_ge": mdd_stats_pos.get("n"),
+        "conf_decision_pos_ge": mdd_pos_conf_decision,
+
+        "p50_mdd20_dist_u_le": mdd_stats_dist.get("p50"),
+        "n_mdd20_dist_u_le": mdd_stats_dist.get("n"),
+        "conf_decision_dist_u_le": mdd_dist_conf_decision,
 
         # strict fx
         "fx_usdtwd": fx_rate_strict,
@@ -693,6 +827,9 @@ def main() -> int:
         "fx_ref_lag_days": ref_lag_days if fx_rate_strict is None else None,
         "fx_ref_source": ref_source if fx_rate_strict is None else None,
         "price_twd_ref": price_twd_ref,
+
+        # consistency hint snapshot
+        "pos_dist_consistency": consistency.get("status"),
     }
 
     history_obj = upsert_history(history_path, [hist_row], max_rows=args.max_history_rows)
@@ -719,7 +856,7 @@ def main() -> int:
             return "NA"
         return f"{v:.{nd}f}"
 
-    # Δ1D vs previous BB-valid day (same as your current logic)
+    # Δ1D vs previous BB-valid day
     prev_date = None
     d_price_1d = None
     d_z_1d = None
@@ -794,7 +931,7 @@ def main() -> int:
         f"dist_to_lower={fmt_pct(dist_to_lower)}; dist_to_upper={fmt_pct(dist_to_upper)}; "
         f"{args.forward_days}D forward_mdd: p50={fmt_pct(mdd_stats_bucket.get('p50'))}, "
         f"p10={fmt_pct(mdd_stats_bucket.get('p10'))}, min={fmt_pct(mdd_stats_bucket.get('min'))} "
-        f"(n={mdd_stats_bucket.get('n')}, conf={mdd_stats_bucket.get('conf')})"
+        f"(n={mdd_stats_bucket.get('n')}, conf={mdd_stats_bucket.get('conf')}, conf_decision={mdd_bucket_conf_decision}, min_n_required={args.min_n_required})"
     )
     R.append("")
 
@@ -815,14 +952,29 @@ def main() -> int:
     R.append(f"- **距離上下軌**：dist_to_upper={fmt_pct(dist_to_upper)}；dist_to_lower={fmt_pct(dist_to_lower)}")
     R.append(f"- **波動區間寬度（閱讀用）**：band_width≈{fmt_pct(band_width_pct)}（= upper/lower - 1；用於直覺理解，不作信號）")
     R.append(f"- **streak（連續天數）**：bucket_streak={bucket_streak}；pos≥{args.pos_hint_threshold:.2f} streak={pos_streak}；dist_to_upper≤{args.dist_upper_hint_threshold*100:.1f}% streak={distu_streak}")
-    R.append(f"- **forward_mdd({args.forward_days}D)**（bucket={bucket}）：p50={fmt_pct(mdd_stats_bucket.get('p50'))}、p10={fmt_pct(mdd_stats_bucket.get('p10'))}、min={fmt_pct(mdd_stats_bucket.get('min'))}；n={mdd_stats_bucket.get('n')}（conf={mdd_stats_bucket.get('conf')}）")
+    R.append(f"- **forward_mdd({args.forward_days}D)**（bucket={bucket}）：p50={fmt_pct(mdd_stats_bucket.get('p50'))}、p10={fmt_pct(mdd_stats_bucket.get('p10'))}、min={fmt_pct(mdd_stats_bucket.get('min'))}；n={mdd_stats_bucket.get('n')}（conf={mdd_stats_bucket.get('conf')}；conf_decision={mdd_bucket_conf_decision}）")
+    R.append("")
+
+    R.append("## pos vs dist_to_upper 一致性檢查（提示用；不改數值）")
+    R.append(f"- status: `{consistency.get('status')}`")
+    R.append(f"- reason: `{consistency.get('reason')}`")
+    if consistency.get("status") == "MISMATCH":
+        R.append("- 提醒：pos 與 dist_to_upper 呈現「強不一致」。常見原因包含：band_width 異常擴大/縮小、資料缺口/對齊錯誤、或極端波動導致尺度失真。建議回看 BB 詳細欄位與近 5 日表確認是否合理。")
     R.append("")
 
     R.append("## forward_mdd(20D) 切片分布（閱讀用；不回填主欄位）")
     R.append("")
-    R.append(f"- Slice A（pos≥{args.pos_hint_threshold:.2f}）：p50={fmt_pct(mdd_stats_pos80.get('p50'))}、p10={fmt_pct(mdd_stats_pos80.get('p10'))}、min={fmt_pct(mdd_stats_pos80.get('min'))} (n={mdd_stats_pos80.get('n')}, conf={mdd_stats_pos80.get('conf')})")
-    R.append(f"- Slice B（dist_to_upper≤{args.dist_upper_hint_threshold*100:.1f}%）：p50={fmt_pct(mdd_stats_distu2.get('p50'))}、p10={fmt_pct(mdd_stats_distu2.get('p10'))}、min={fmt_pct(mdd_stats_distu2.get('min'))} (n={mdd_stats_distu2.get('n')}, conf={mdd_stats_distu2.get('conf')})")
-    R.append("- 注意：切片樣本數通常較小，conf 下降是正常；切片僅用於「貼上緣時」的閱讀參考。")
+    R.append(
+        f"- Slice A（pos≥{args.pos_hint_threshold:.2f}）：p50={fmt_pct(mdd_stats_pos.get('p50'))}、"
+        f"p10={fmt_pct(mdd_stats_pos.get('p10'))}、min={fmt_pct(mdd_stats_pos.get('min'))} "
+        f"(n={mdd_stats_pos.get('n')}, conf={mdd_stats_pos.get('conf')}, conf_decision={mdd_pos_conf_decision}, min_n_required={args.min_n_required})"
+    )
+    R.append(
+        f"- Slice B（dist_to_upper≤{args.dist_upper_hint_threshold*100:.1f}%）：p50={fmt_pct(mdd_stats_dist.get('p50'))}、"
+        f"p10={fmt_pct(mdd_stats_dist.get('p10'))}、min={fmt_pct(mdd_stats_dist.get('min'))} "
+        f"(n={mdd_stats_dist.get('n')}, conf={mdd_stats_dist.get('conf')}, conf_decision={mdd_dist_conf_decision}, min_n_required={args.min_n_required})"
+    )
+    R.append("- 注意：conf_decision 低於 OK 時，代表樣本數不足以支撐「拿來做決策」；仍可作為閱讀參考。")
     R.append("")
 
     R.append("## 近 5 日（可計算 BB 的交易日；小表）")
@@ -890,7 +1042,8 @@ def main() -> int:
     R.append("## Notes")
     R.append("- bucket 以 z 門檻定義；pos/dist_to_upper 的閾值僅作閱讀提示，不改信號。")
     R.append("- Δ1D 的基準是「前一個可計算 BB 的交易日」，不是日曆上的昨天。")
-    R.append("- forward_mdd20_slices 為閱讀用切片，樣本較少時 conf 降低屬正常現象。")
+    R.append("- forward_mdd20_slices 為閱讀用切片；conf_decision 會在樣本數不足時標示 LOW_FOR_DECISION。")
+    R.append("- pos vs dist_to_upper 一致性檢查為提示用，避免 band_width 或資料異常造成誤讀。")
     R.append("- FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。")
     R.append("")
 
