@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v10"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-20.v11"
 
 
 def utc_now_iso() -> str:
@@ -224,12 +224,12 @@ def _dq_compact(dq_flags: List[str]) -> str:
         return "(none)"
     priority_prefix = (
         "PRICE_",
-        "FWD_MDD_",
         "TWSE_",
         "YF_",
-        "RAW_",
         "CHIP_",
         "MARGIN_",
+        "RAW_",
+        "FWD_",
     )
     pri = [f for f in dq_flags if any(f.startswith(p) for p in priority_prefix)]
     rest = [f for f in dq_flags if f not in pri]
@@ -241,11 +241,6 @@ def _dq_compact(dq_flags: List[str]) -> str:
 
 
 def _extract_fwd_outlier_days(dq_flags: List[str]) -> List[int]:
-    """
-    Parse flags like:
-      FWD_MDD_OUTLIER_MIN_RAW_20D -> [20]
-      FWD_MDD_OUTLIER_MIN_RAW_10D -> [10]
-    """
     days: List[int] = []
     for f in dq_flags:
         if not isinstance(f, str):
@@ -254,7 +249,6 @@ def _extract_fwd_outlier_days(dq_flags: List[str]) -> List[int]:
             continue
         if not f.endswith("D"):
             continue
-        # suffix pattern: _{N}D
         try:
             tail = f.split("_")[-1]  # e.g. "20D"
             if tail.endswith("D"):
@@ -262,27 +256,30 @@ def _extract_fwd_outlier_days(dq_flags: List[str]) -> List[int]:
                 days.append(n)
         except Exception:
             continue
-    days = sorted(set(days))
-    return days
+    return sorted(set(days))
 
 
-def _dq_core_and_fwd_summary(dq_flags: List[str]) -> Tuple[str, str]:
+def _dq_core_fwd_fields(dq_flags: List[str]) -> Tuple[str, str, str, str]:
     """
-    For quick summary:
-      - core DQ excludes horizon-specific FWD outlier flags
-      - fwd_outlier shows parsed horizons, e.g. "20D" or "(none)"
+    v11 policy:
+      - core DQ: exclude ALL forward-related flags (FWD_MDD_*) and the clean mask flag RAW_OUTLIER_EXCLUDED_BY_CLEAN
+      - forward fields: expose them explicitly so摘要語意不混淆
     """
-    flags = [str(x) for x in dq_flags if isinstance(x, str)]
-    core = [f for f in flags if not f.startswith("FWD_MDD_OUTLIER_MIN_RAW_")]
+    flags = [str(x) for x in dq_flags if isinstance(x, str) and str(x).strip()]
+    core = [f for f in flags if not (f.startswith("FWD_MDD_") or f == "RAW_OUTLIER_EXCLUDED_BY_CLEAN")]
+
+    core_str = _dq_compact(core)
+
+    fwd_clean = "ON" if "FWD_MDD_CLEAN_APPLIED" in flags else "OFF"
+    fwd_mask = "ON" if "RAW_OUTLIER_EXCLUDED_BY_CLEAN" in flags else "OFF"
+
     days = _extract_fwd_outlier_days(flags)
-    fwd = "(none)" if not days else ",".join([f"{d}D" for d in days])
-    return _dq_compact(core), fwd
+    fwd_raw_outlier = "(none)" if not days else ",".join([f"{d}D" for d in days])
+
+    return core_str, fwd_clean, fwd_mask, fwd_raw_outlier
 
 
 def _filter_fwd_outlier_flags_for_horizon(dq_flags: List[str], horizon_days: int) -> List[str]:
-    """
-    Only keep forward-outlier flags relevant to this horizon.
-    """
     flags = [f for f in dq_flags if isinstance(f, str)]
     suff = f"_{horizon_days}D"
     specific = sorted([f for f in flags if f.startswith("FWD_MDD_OUTLIER_MIN_RAW") and f.endswith(suff)])
@@ -357,289 +354,6 @@ def build_regime_line(regime: Dict[str, Any]) -> Optional[str]:
     return f"- regime(relative_pctl): **{tag}**; allowed={str(allowed).lower()}; rv20_pctl={fmt2(rv_pctl)}"
 
 
-def read_margin_latest(path: str) -> Optional[Dict[str, Any]]:
-    if not path or (not os.path.exists(path)):
-        return None
-    try:
-        return load_json(path)
-    except Exception:
-        return None
-
-
-def margin_state(sum_chg_yi: float, threshold_yi: float) -> str:
-    if sum_chg_yi >= threshold_yi:
-        return "LEVERAGING"
-    if sum_chg_yi <= -threshold_yi:
-        return "DELEVERAGING"
-    return "NEUTRAL"
-
-
-def take_last_n_rows(rows: List[Dict[str, Any]], n: int) -> List[Dict[str, Any]]:
-    if not isinstance(rows, list) or n <= 0:
-        return []
-    return rows[:n]  # newest first
-
-
-def sum_chg(rows: List[Dict[str, Any]]) -> float:
-    s = 0.0
-    for r in rows:
-        try:
-            v = r.get("chg_yi", None)
-            if v is None:
-                continue
-            s += float(v)
-        except Exception:
-            continue
-    return float(s)
-
-
-def margin_overlay_block(
-    margin_json: Dict[str, Any],
-    price_last_date: str,
-    window_n: int,
-    threshold_yi: float,
-) -> Tuple[List[str], Optional[str]]:
-    lines: List[str] = []
-    series = safe_get(margin_json, "series", {}) or {}
-    twse = safe_get(series, "TWSE", {}) or {}
-    tpex = safe_get(series, "TPEX", {}) or {}
-
-    gen_utc = safe_get(margin_json, "generated_at_utc", "N/A")
-    data_date = safe_get(twse, "data_date", None) or safe_get(tpex, "data_date", None) or "N/A"
-
-    twse_rows = safe_get(twse, "rows", []) or []
-    tpex_rows = safe_get(tpex, "rows", []) or []
-
-    twse_last = twse_rows[0]["date"] if (isinstance(twse_rows, list) and len(twse_rows) > 0) else None
-    tpex_last = tpex_rows[0]["date"] if (isinstance(tpex_rows, list) and len(tpex_rows) > 0) else None
-    margin_last_date = twse_last or tpex_last or "N/A"
-
-    aligned = (normalize_date_key(margin_last_date) == normalize_date_key(price_last_date))
-    align_tag = "ALIGNED" if aligned else "MISALIGNED"
-
-    twse_n = take_last_n_rows(twse_rows, window_n)
-    tpex_n = take_last_n_rows(tpex_rows, window_n)
-
-    twse_sum = sum_chg(twse_n)
-    tpex_sum = sum_chg(tpex_n)
-    total_sum = twse_sum + tpex_sum
-
-    twse_state = margin_state(twse_sum, threshold_yi)
-    tpex_state = margin_state(tpex_sum, threshold_yi)
-    total_state = margin_state(total_sum, threshold_yi)
-
-    def latest_balance(rows: List[Dict[str, Any]]) -> Optional[float]:
-        try:
-            if not rows:
-                return None
-            return float(rows[0].get("balance_yi"))
-        except Exception:
-            return None
-
-    def latest_chg(rows: List[Dict[str, Any]]) -> Optional[float]:
-        try:
-            if not rows:
-                return None
-            return float(rows[0].get("chg_yi"))
-        except Exception:
-            return None
-
-    twse_bal = latest_balance(twse_rows)
-    tpex_bal = latest_balance(tpex_rows)
-    total_bal = (twse_bal + tpex_bal) if (twse_bal is not None and tpex_bal is not None) else None
-
-    twse_chg_today = latest_chg(twse_rows)
-    tpex_chg_today = latest_chg(tpex_rows)
-
-    quick = (
-        f"- margin({window_n}D,thr={threshold_yi:.2f}億): TOTAL {total_sum:.2f} 億 => **{total_state}**; "
-        f"TWSE {twse_sum:.2f} / TPEX {tpex_sum:.2f}; "
-        f"margin_date={margin_last_date}, price_last_date={price_last_date} ({align_tag}); data_date={data_date}"
-    )
-
-    lines.append("## Margin Overlay（融資）")
-    lines.append("")
-    lines.append(f"- overlay_generated_at_utc: `{gen_utc}`")
-    lines.append(f"- data_date: `{data_date}`")
-    lines.append(f"- params: window_n={window_n}, threshold_yi={threshold_yi:.2f}")
-    lines.append(
-        f"- date_alignment: margin_latest_date=`{margin_last_date}` vs price_last_date=`{price_last_date}` => **{align_tag}**"
-    )
-    lines.append("")
-    lines.append("| scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|")
-
-    def fmt_yi(x: Optional[float]) -> str:
-        try:
-            if x is None:
-                return "N/A"
-            return f"{float(x):,.1f}"
-        except Exception:
-            return "N/A"
-
-    lines.append(
-        f"| TWSE | {twse_last or 'N/A'} | {fmt_yi(twse_bal)} | {fmt_yi(twse_chg_today)} | {twse_sum:.1f} | {twse_state} | {len(twse_n)} |"
-    )
-    lines.append(
-        f"| TPEX | {tpex_last or 'N/A'} | {fmt_yi(tpex_bal)} | {fmt_yi(tpex_chg_today)} | {tpex_sum:.1f} | {tpex_state} | {len(tpex_n)} |"
-    )
-    lines.append(
-        f"| TOTAL | {margin_last_date} | {fmt_yi(total_bal)} | N/A | {total_sum:.1f} | {total_state} | N/A |"
-    )
-    lines.append("")
-    lines.append("### Margin Sources")
-    lines.append("")
-    lines.append(f"- TWSE source: `{safe_get(twse, 'source', 'N/A')}`")
-    lines.append(f"- TWSE url: `{safe_get(twse, 'source_url', 'N/A')}`")
-    lines.append(f"- TPEX source: `{safe_get(tpex, 'source', 'N/A')}`")
-    lines.append(f"- TPEX url: `{safe_get(tpex, 'source_url', 'N/A')}`")
-    lines.append("")
-
-    return lines, quick
-
-
-def read_chip_overlay(path: str) -> Optional[Dict[str, Any]]:
-    if not path or (not os.path.exists(path)):
-        return None
-    try:
-        return load_json(path)
-    except Exception:
-        return None
-
-
-def chip_overlay_block(
-    chip_json: Dict[str, Any],
-    price_last_date: str,
-    expect_window_n: int,
-) -> Tuple[List[str], Optional[str], List[str]]:
-    lines: List[str] = []
-    dq_extra: List[str] = []
-
-    meta = safe_get(chip_json, "meta", {}) or {}
-    data = safe_get(chip_json, "data", {}) or {}
-    sources = safe_get(chip_json, "sources", {}) or {}
-    root_dq = safe_get(safe_get(chip_json, "dq", {}) or {}, "flags", []) or []
-
-    run_ts_utc = safe_get(meta, "run_ts_utc", "N/A")
-    stock_no = safe_get(meta, "stock_no", "N/A")
-    window_n = safe_get(meta, "window_n", None)
-    aligned_last_date = safe_get(meta, "aligned_last_date", None)
-
-    aligned = (normalize_date_key(aligned_last_date) == normalize_date_key(price_last_date))
-    align_tag = "ALIGNED" if aligned else "MISALIGNED"
-    if not aligned:
-        dq_extra.append("CHIP_OVERLAY_MISALIGNED")
-
-    try:
-        if (window_n is not None) and (expect_window_n is not None) and (int(window_n) != int(expect_window_n)):
-            dq_extra.append("CHIP_OVERLAY_WINDOW_MISMATCH")
-    except Exception:
-        dq_extra.append("CHIP_OVERLAY_WINDOW_MISMATCH")
-
-    borrow = safe_get(data, "borrow_summary", {}) or {}
-    t86 = safe_get(data, "t86_agg", {}) or {}
-    etf_units = safe_get(data, "etf_units", {}) or {}
-    etf_units_dq = safe_get(etf_units, "dq", []) or []
-
-    total3_sum = safe_get(t86, "total3_net_shares_sum")
-    foreign_sum = safe_get(t86, "foreign_net_shares_sum")
-    trust_sum = safe_get(t86, "trust_net_shares_sum")
-    dealer_sum = safe_get(t86, "dealer_net_shares_sum")
-
-    b_asof = safe_get(borrow, "asof_date")
-    b_shares = safe_get(borrow, "borrow_shares")
-    b_shares_chg = safe_get(borrow, "borrow_shares_chg_1d")
-    b_mv = safe_get(borrow, "borrow_mv_ntd")
-    b_mv_chg = safe_get(borrow, "borrow_mv_ntd_chg_1d")
-
-    quick = (
-        f"- chip_overlay(T86+TWT72U,{expect_window_n}D): "
-        f"total3_5D={fmt_int(total3_sum)}; foreign={fmt_int(foreign_sum)}; trust={fmt_int(trust_sum)}; dealer={fmt_int(dealer_sum)}; "
-        f"borrow_shares={fmt_int(b_shares)} (Δ1D={fmt_int(b_shares_chg)}); borrow_mv(億)={fmt_yi_from_ntd(b_mv)} (Δ1D={fmt_yi_from_ntd(b_mv_chg)}); "
-        f"asof={b_asof}; price_last_date={price_last_date} ({align_tag})"
-    )
-
-    lines.append("## Chip Overlay（籌碼：TWSE T86 + TWT72U）")
-    lines.append("")
-    lines.append(f"- overlay_generated_at_utc: `{run_ts_utc}`")
-    lines.append(f"- stock_no: `{stock_no}`")
-    lines.append(f"- overlay_window_n: `{window_n if window_n is not None else 'N/A'}` (expect={expect_window_n})")
-    lines.append(
-        f"- date_alignment: overlay_aligned_last_date=`{aligned_last_date}` vs price_last_date=`{price_last_date}` => **{align_tag}**"
-    )
-    lines.append("")
-
-    lines.append("### Borrow Summary（借券：TWT72U）")
-    lines.append("")
-    lines.append(
-        md_table_kv(
-            [
-                ["asof_date", str(b_asof) if b_asof is not None else "N/A"],
-                ["borrow_shares", fmt_int(b_shares)],
-                ["borrow_shares_chg_1d", fmt_int(b_shares_chg)],
-                ["borrow_mv_ntd(億)", fmt_yi_from_ntd(b_mv)],
-                ["borrow_mv_ntd_chg_1d(億)", fmt_yi_from_ntd(b_mv_chg)],
-            ]
-        )
-    )
-    lines.append("")
-
-    lines.append(f"### T86 Aggregate（法人：{expect_window_n}D sum）")
-    lines.append("")
-    days_used = safe_get(t86, "days_used", []) or []
-    lines.append(
-        md_table_kv(
-            [
-                ["days_used", ", ".join([str(x) for x in days_used]) if days_used else "N/A"],
-                ["foreign_net_shares_sum", fmt_int(foreign_sum)],
-                ["trust_net_shares_sum", fmt_int(trust_sum)],
-                ["dealer_net_shares_sum", fmt_int(dealer_sum)],
-                ["total3_net_shares_sum", fmt_int(total3_sum)],
-            ]
-        )
-    )
-    lines.append("")
-
-    lines.append("### ETF Units（受益權單位）")
-    lines.append("")
-    lines.append(
-        md_table_kv(
-            [
-                ["units_outstanding", fmt_int(safe_get(etf_units, "units_outstanding"))],
-                ["units_chg_1d", fmt_int(safe_get(etf_units, "units_chg_1d"))],
-                ["dq", ", ".join([str(x) for x in etf_units_dq]) if etf_units_dq else "(none)"],
-            ]
-        )
-    )
-    lines.append("")
-
-    lines.append("### Chip Overlay Sources")
-    lines.append("")
-    lines.append(f"- T86 template: `{safe_get(sources, 't86_tpl', 'N/A')}`")
-    lines.append(f"- TWT72U template: `{safe_get(sources, 'twt72u_tpl', 'N/A')}`")
-    lines.append("")
-
-    if root_dq or etf_units_dq:
-        lines.append("### Chip Overlay DQ")
-        lines.append("")
-        if root_dq:
-            for fl in root_dq:
-                lines.append(f"- {fl}")
-        if etf_units_dq:
-            for fl in etf_units_dq:
-                lines.append(f"- {fl}")
-        lines.append("")
-
-    for fl in root_dq:
-        if isinstance(fl, str) and fl.strip():
-            dq_extra.append(f"CHIP_OVERLAY:{fl}")
-    for fl in etf_units_dq:
-        if isinstance(fl, str) and fl.strip():
-            dq_extra.append(f"CHIP_OVERLAY:{fl}")
-
-    return lines, quick, dq_extra
-
-
 def _pick_forward_blocks(s: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any], str, str, int, int]:
     meta = s.get("meta", {}) or {}
     days20 = int(safe_get(meta, "fwd_days", 20))
@@ -679,10 +393,6 @@ def main() -> int:
     ap.add_argument("--out", default="report.md")
     ap.add_argument("--tail_days", type=int, default=15)
     ap.add_argument("--tail_n", type=int, default=None)
-
-    ap.add_argument("--margin_json", default="taiwan_margin_cache/latest.json")
-    ap.add_argument("--margin_window_n", type=int, default=5)
-    ap.add_argument("--margin_threshold_yi", type=float, default=100.0)
 
     ap.add_argument("--chip_overlay_json", default=None)
     ap.add_argument("--chip_window_n", type=int, default=5)
@@ -743,7 +453,6 @@ def main() -> int:
     if chip_path is None:
         chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
 
-    # ===== report =====
     lines: List[str] = []
     lines.append("# 0050 BB(60,2) + forward_mdd Report")
     lines.append("")
@@ -770,11 +479,11 @@ def main() -> int:
         f"bw_geo={fmt_pct2(bw_geo)}; bw_std={fmt_pct2(bw_std)}"
     )
 
-    dq_core_str, fwd_outlier_str = _dq_core_and_fwd_summary([str(x) for x in dq_flags if isinstance(x, str)])
+    core_dq, fwd_clean, fwd_mask, fwd_raw_outlier = _dq_core_fwd_fields([str(x) for x in dq_flags if isinstance(x, str)])
     lines.append(
         f"- dist_to_lower={fmt_pct2(dist_to_lower)}; dist_to_upper={fmt_pct2(dist_to_upper)}; "
         f"above_upper={above_upper_pct_str}; below_lower={below_lower_pct_str}; "
-        f"DQ={dq_core_str}; FWD_OUTLIER={fwd_outlier_str}"
+        f"DQ={core_dq}; FWD_CLEAN={fwd_clean}; FWD_MASK={fwd_mask}; FWD_RAW_OUTLIER={fwd_raw_outlier}"
     )
 
     lines.append(build_forward_line(fwd20_label, fwd20, dq_flags, fwd_days))
@@ -789,31 +498,6 @@ def main() -> int:
     reg_line = build_regime_line(regime)
     if reg_line:
         lines.append(reg_line)
-
-    margin_json = read_margin_latest(args.margin_json)
-    if margin_json is not None:
-        _, margin_quick = margin_overlay_block(
-            margin_json=margin_json,
-            price_last_date=str(last_date),
-            window_n=int(args.margin_window_n),
-            threshold_yi=float(args.margin_threshold_yi),
-        )
-        if margin_quick:
-            lines.append(margin_quick)
-
-    chip_json = read_chip_overlay(chip_path)
-    chip_dq_extra: List[str] = []
-    if chip_json is not None:
-        _, chip_quick, chip_dq_extra = chip_overlay_block(
-            chip_json=chip_json,
-            price_last_date=str(last_date),
-            expect_window_n=int(args.chip_window_n),
-        )
-        if chip_quick:
-            lines.append(chip_quick)
-    else:
-        lines.append(f"- chip_overlay(T86+TWT72U): N/A (missing `{chip_path}`) [DQ:CHIP_OVERLAY_MISSING]")
-        chip_dq_extra.append("CHIP_OVERLAY_MISSING")
 
     lines.append("")
 
@@ -1026,30 +710,6 @@ def main() -> int:
         lines.append("- forward_mdd10 block is missing in stats_latest.json.")
         lines.append("")
 
-    # ===== Chip overlay =====
-    if chip_json is not None:
-        cb_lines, _, _ = chip_overlay_block(
-            chip_json=chip_json,
-            price_last_date=str(last_date),
-            expect_window_n=int(args.chip_window_n),
-        )
-        lines.extend(cb_lines)
-    else:
-        lines.append("## Chip Overlay（籌碼：TWSE T86 + TWT72U）")
-        lines.append("")
-        lines.append(f"- chip_overlay: `N/A` (missing `{chip_path}`)")
-        lines.append("")
-
-    # ===== Margin overlay =====
-    if margin_json is not None:
-        mb_lines, _ = margin_overlay_block(
-            margin_json=margin_json,
-            price_last_date=str(last_date),
-            window_n=int(args.margin_window_n),
-            threshold_yi=float(args.margin_threshold_yi),
-        )
-        lines.extend(mb_lines)
-
     # ===== Prices tail =====
     lines.append(f"## Recent Raw Prices (tail {tail_n})")
     lines.append("")
@@ -1078,15 +738,7 @@ def main() -> int:
         for nt in notes_str:
             lines.append(f"- note: {nt}")
 
-    if chip_dq_extra:
-        lines.append("")
-        lines.append("### Chip Overlay DQ (extra)")
-        for fl in chip_dq_extra:
-            lines.append(f"- {fl}")
-
     lines.append("")
-
-    # ===== Caveats =====
     lines.append("## Caveats")
     lines.append("- BB 與 forward_mdd 是描述性統計，不是方向預測。")
     lines.append("- pos_in_band 會顯示 clipped 值（0..1）與 raw 值（可超界，用於稽核）。")
@@ -1094,8 +746,6 @@ def main() -> int:
     lines.append("- band_width 同時提供兩種定義：geo=(upper/lower-1)、std=(upper-lower)/ma；請勿混用解讀。")
     lines.append("- Yahoo Finance 在 CI 可能被限流；若 fallback 到 TWSE，為未還原價格，forward_mdd 可能被除權息/企業行動污染，DQ 會標示。")
     lines.append("- Trend/Vol/ATR 是濾網與風險量級提示，不是進出場保證；資料不足會以 DQ 明示。")
-    lines.append("- 融資 overlay 屬於市場整體槓桿/風險偏好 proxy，不等同 0050 自身籌碼；日期不對齊需降低解讀權重。")
-    lines.append("- Chip overlay（T86/TWT72U）為籌碼/借券描述；ETF 申贖、避險行為可能影響解讀，建議只做輔助註記。")
     lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as f:
