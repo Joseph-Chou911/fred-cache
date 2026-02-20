@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-tw0050_bb60_k2_forwardmdd20.py  (v10.shortcircuit)
+tw0050_bb60_k2_forwardmdd20.py  (v11.condfwd_additive)
 
 0050 BB(60,2) + forward_mdd(20D) compute script.
 
@@ -21,6 +21,12 @@ v10.shortcircuit 핵심：
       * 僅輸出 latest_price/date + 明確 DQ flags/notes + pledge=DISALLOW
   - TWSE fallback 時，預設與強制限制 months_back 為小值（避免 14 個月 I/O 黑洞）
   - 仍保留 yfinance + adjclose 正常路徑的完整計算（含 break-clean forward_mdd）
+
+v11.condfwd_additive 新增（只加欄位，不改原有邏輯）：
+  - stats_latest.json 新增欄位 forward_mdd_conditional：
+      * 以 entry 時點 bb_z[t] 的 5 段 bucket（<=-2, (-2,-1.5], (-1.5,1.5), [1.5,2), >=2）
+      * 分別統計 10D/20D forward_mdd 的 raw/clean/primary 分佈分位數與 min audit trail
+  - short-circuit 模式下也輸出同 schema 的 NA 版本（不引入任何 dirty-data）
 
 安全策略：
   - unadjusted_price_mode = used_fallback OR (price_col_used != "adjclose")
@@ -55,7 +61,7 @@ except Exception:
     yf = None
 
 
-SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-20.v10.shortcircuit"
+SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-21.v11.condfwd_additive"
 TZ_LOCAL = "Asia/Taipei"
 TRADING_DAYS_PER_YEAR = 252
 
@@ -834,6 +840,218 @@ def pack_regime_na(rv_pctl_max_100: float, min_samples: int, trend_required: str
 
 
 # -------------------------
+# forward_mdd conditional (ADD-ONLY)
+# -------------------------
+
+def _bbz_bucket_masks_5(bbz: np.ndarray) -> List[Tuple[str, str, np.ndarray]]:
+    """
+    Mutually exclusive bb_z buckets aligned with classify_state thresholds.
+    """
+    z = bbz
+    finite = np.isfinite(z)
+
+    return [
+        ("z_le_-2.0", "bb_z<=-2.0", finite & (z <= -2.0)),
+        ("-2.0_to_-1.5", "-2.0<bb_z<=-1.5", finite & (z > -2.0) & (z <= -1.5)),
+        ("-1.5_to_1.5", "-1.5<bb_z<1.5", finite & (z > -1.5) & (z < 1.5)),
+        ("1.5_to_2.0", "1.5<=bb_z<2.0", finite & (z >= 1.5) & (z < 2.0)),
+        ("z_ge_2.0", "bb_z>=2.0", finite & (z >= 2.0)),
+    ]
+
+
+def _pack_fwd_bucket_stats(
+    *,
+    fwd_arr: np.ndarray,
+    prices_np: np.ndarray,
+    df_dates: pd.Series,
+    fwd_days_used: int,
+    bucket_mask: np.ndarray,
+    bucket_id: str,
+    bucket_label: str,
+) -> Dict[str, Any]:
+    """
+    Compute quantiles/min audit trail for forward_mdd values restricted to a bucket_mask on entry t.
+
+    IMPORTANT: This is additive analytics only; it does NOT alter fwd_arr or any existing outputs.
+    """
+    idx = np.where(bucket_mask & np.isfinite(fwd_arr))[0]
+    if idx.size == 0:
+        return {
+            "bucket_id": bucket_id,
+            "bucket_label": bucket_label,
+            "n": 0,
+            "p50": None,
+            "p25": None,
+            "p10": None,
+            "p05": None,
+            "min": None,
+            "min_entry_date": None,
+            "min_entry_price": None,
+            "min_future_date": None,
+            "min_future_price": None,
+        }
+
+    v = fwd_arr[idx].astype(float)
+    v = v[np.isfinite(v)]
+    if v.size == 0:
+        return {
+            "bucket_id": bucket_id,
+            "bucket_label": bucket_label,
+            "n": 0,
+            "p50": None,
+            "p25": None,
+            "p10": None,
+            "p05": None,
+            "min": None,
+            "min_entry_date": None,
+            "min_entry_price": None,
+            "min_future_date": None,
+            "min_future_price": None,
+        }
+
+    mn = float(np.min(v))
+
+    # map back to original entry index
+    vals_on_idx = fwd_arr[idx].astype(float)
+    entry_pos = int(np.nanargmin(vals_on_idx))
+    entry_idx = int(idx[entry_pos])
+
+    # audit trail for bucket-min entry
+    min_entry_date = None
+    min_future_date = None
+    min_entry_price = None
+    min_future_price = None
+
+    try:
+        if 0 <= entry_idx < len(prices_np):
+            base = float(prices_np[entry_idx])
+            future = prices_np[entry_idx + 1: entry_idx + fwd_days_used + 1]
+            if np.isfinite(base) and base > 0 and future.size > 0:
+                rel = future / base - 1.0
+                if np.isfinite(rel).any():
+                    off = int(np.nanargmin(rel))
+                    future_idx = entry_idx + 1 + off
+
+                    if 0 <= future_idx < len(prices_np):
+                        min_entry_date = pd.to_datetime(df_dates.iloc[entry_idx]).strftime("%Y-%m-%d")
+                        min_future_date = pd.to_datetime(df_dates.iloc[future_idx]).strftime("%Y-%m-%d")
+                        min_entry_price = _nan_to_none(base)
+                        min_future_price = _nan_to_none(float(prices_np[future_idx]))
+    except Exception:
+        pass
+
+    return {
+        "bucket_id": bucket_id,
+        "bucket_label": bucket_label,
+        "n": int(v.size),
+        "p50": _nan_to_none(float(np.quantile(v, 0.50))),
+        "p25": _nan_to_none(float(np.quantile(v, 0.25))),
+        "p10": _nan_to_none(float(np.quantile(v, 0.10))),
+        "p05": _nan_to_none(float(np.quantile(v, 0.05))),
+        "min": _nan_to_none(mn),
+        "min_entry_date": min_entry_date,
+        "min_entry_price": min_entry_price,
+        "min_future_date": min_future_date,
+        "min_future_price": min_future_price,
+    }
+
+
+def build_forward_mdd_conditional_block(
+    *,
+    bbz_np: np.ndarray,
+    prices_np: np.ndarray,
+    df_dates: pd.Series,
+    fwd_days_20: int,
+    fwd_days_10: int,
+    fwd_raw_20: np.ndarray,
+    fwd_clean_20: np.ndarray,
+    fwd_primary_20: np.ndarray,
+    fwd_raw_10: np.ndarray,
+    fwd_clean_10: np.ndarray,
+    fwd_primary_10: np.ndarray,
+    forward_mode_primary: str,
+) -> Dict[str, Any]:
+    buckets = _bbz_bucket_masks_5(bbz_np)
+
+    def _pack_one(arr: np.ndarray, fwd_days_used: int) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for (bid, blabel, bmask) in buckets:
+            out[bid] = _pack_fwd_bucket_stats(
+                fwd_arr=arr,
+                prices_np=prices_np,
+                df_dates=df_dates,
+                fwd_days_used=fwd_days_used,
+                bucket_mask=bmask,
+                bucket_id=bid,
+                bucket_label=blabel,
+            )
+        return out
+
+    return {
+        "meta": {
+            "scheme": "bb_z_5bucket_v1",
+            "note": "condition evaluated at entry t using bb_z[t]; stats computed on already-produced forward_mdd arrays (respecting raw/clean masks).",
+            "thresholds": {"near": 1.5, "extreme": 2.0},
+            "forward_mode_primary": str(forward_mode_primary),
+        },
+        "20D": {
+            "raw": _pack_one(fwd_raw_20, fwd_days_20),
+            "clean": _pack_one(fwd_clean_20, fwd_days_20),
+            "primary": _pack_one(fwd_primary_20, fwd_days_20),
+        },
+        "10D": {
+            "raw": _pack_one(fwd_raw_10, fwd_days_10),
+            "clean": _pack_one(fwd_clean_10, fwd_days_10),
+            "primary": _pack_one(fwd_primary_10, fwd_days_10),
+        },
+    }
+
+
+def pack_forward_mdd_conditional_na(*, forward_mode_primary: str) -> Dict[str, Any]:
+    """
+    NA packer for short-circuit (unadjusted price mode).
+    Keeps schema stable without altering existing logic.
+    """
+    dummy_buckets = [
+        ("z_le_-2.0", "bb_z<=-2.0"),
+        ("-2.0_to_-1.5", "-2.0<bb_z<=-1.5"),
+        ("-1.5_to_1.5", "-1.5<bb_z<1.5"),
+        ("1.5_to_2.0", "1.5<=bb_z<2.0"),
+        ("z_ge_2.0", "bb_z>=2.0"),
+    ]
+
+    def _empty_bucket_dict() -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for bid, blabel in dummy_buckets:
+            out[bid] = {
+                "bucket_id": bid,
+                "bucket_label": blabel,
+                "n": 0,
+                "p50": None,
+                "p25": None,
+                "p10": None,
+                "p05": None,
+                "min": None,
+                "min_entry_date": None,
+                "min_entry_price": None,
+                "min_future_date": None,
+                "min_future_price": None,
+            }
+        return out
+
+    return {
+        "meta": {
+            "scheme": "bb_z_5bucket_v1",
+            "note": "NA due to unadjusted_price_mode short-circuit.",
+            "thresholds": {"near": 1.5, "extreme": 2.0},
+            "forward_mode_primary": str(forward_mode_primary),
+        },
+        "20D": {"raw": _empty_bucket_dict(), "clean": _empty_bucket_dict(), "primary": _empty_bucket_dict()},
+        "10D": {"raw": _empty_bucket_dict(), "clean": _empty_bucket_dict(), "primary": _empty_bucket_dict()},
+    }
+
+
+# -------------------------
 # Pledge guidance (compute-only; additive)
 # -------------------------
 
@@ -1223,6 +1441,9 @@ def main() -> int:
             forward_mode=forward_mode,
         )
 
+        # ADD-ONLY: conditional forward_mdd schema in NA form (short-circuit)
+        fwd_conditional = pack_forward_mdd_conditional_na(forward_mode_primary=forward_mode)
+
         stats_out = {
             "meta": meta,
             "latest": latest,
@@ -1235,6 +1456,9 @@ def main() -> int:
 
             "forward_mdd10_raw": forward10_raw,
             "forward_mdd10_clean": forward10_clean,
+
+            # ADD-ONLY
+            "forward_mdd_conditional": fwd_conditional,
 
             "trend": trend,
             "vol": vol_rv,
@@ -1487,6 +1711,33 @@ def main() -> int:
         forward_mode=forward_mode,
     )
 
+    # -------------------------
+    # ADD-ONLY: forward_mdd_conditional (bb_z bucket conditioned distributions)
+    # -------------------------
+    # full-series bb_z for conditional analysis only (does NOT change any existing logic)
+    sd_safe = sd.replace(0.0, np.nan)
+    bbz_series = (price_used - ma) / sd_safe
+    bbz_np = bbz_series.to_numpy(dtype=float)
+
+    # primary arrays for conditional block follow the same forward_mode choice already used elsewhere
+    fwd_primary_20_arr = fwd_clean_arr if forward_mode == "clean" else fwd_raw_arr
+    fwd_primary_10_arr = fwd10_clean_arr if forward_mode == "clean" else fwd10_raw_arr
+
+    fwd_conditional = build_forward_mdd_conditional_block(
+        bbz_np=bbz_np,
+        prices_np=prices_np,
+        df_dates=df["date"],
+        fwd_days_20=fwd_days,
+        fwd_days_10=fwd_days_short,
+        fwd_raw_20=fwd_raw_arr,
+        fwd_clean_20=fwd_clean_arr,
+        fwd_primary_20=fwd_primary_20_arr,
+        fwd_raw_10=fwd10_raw_arr,
+        fwd_clean_10=fwd10_clean_arr,
+        fwd_primary_10=fwd_primary_10_arr,
+        forward_mode_primary=forward_mode,
+    )
+
     stats_out = {
         "meta": meta,
         "latest": latest,
@@ -1499,6 +1750,9 @@ def main() -> int:
 
         "forward_mdd10_raw": forward10_raw,
         "forward_mdd10_clean": forward10_clean,
+
+        # ADD-ONLY
+        "forward_mdd_conditional": fwd_conditional,
 
         "trend": trend,
         "vol": vol_rv,
