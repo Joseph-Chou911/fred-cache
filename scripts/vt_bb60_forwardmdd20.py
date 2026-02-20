@@ -157,7 +157,7 @@ def _pick_keys(records: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[s
         "date", "data_date", "day", "ymd", "day_key", "UsedDate", "used_date", "d"
     ]
     rate_candidates = [
-        # <<< critical fix: include mid/spot_*
+        # include mid/spot_*
         "mid", "spot_buy", "spot_sell",
         # legacy/other possibilities
         "usdtwd", "usd_twd", "USD_TWD", "USDTWD", "rate", "close", "value", "price"
@@ -407,7 +407,6 @@ def pick_fx_reference(
     hist_best_date = None
     hist_best_rate = None
     if fx_hist.parse_status == "OK" and fx_hist.by_date:
-        # iterate keys; keep <= vt_date
         for d_str, rate in fx_hist.by_date.items():
             d = _ymd_to_date(d_str)
             if d is None:
@@ -633,7 +632,9 @@ def main() -> int:
     history_obj = upsert_history(history_path, [hist_row], max_rows=args.max_history_rows)
     _write_json(history_path, history_obj)
 
-    # report.md (human readable)
+    # ----------------------------
+    # report.md (expanded, display-only)
+    # ----------------------------
     def fmt_pct(x: Any) -> str:
         v = _safe_float(x)
         if v is None:
@@ -646,45 +647,127 @@ def main() -> int:
             return "NA"
         return f"{v:.{nd}f}"
 
-    report: List[str] = []
-    report.append("# VT BB Monitor Report (VT + optional USD/TWD)")
-    report.append("")
-    report.append(f"- report_generated_at_utc: `{generated_at_utc}`")
-    report.append(f"- data_date: `{last_date}`")
-    report.append(f"- price_mode: `{price_mode}`")
-    report.append("")
-    report.append("## 15秒摘要")
-    report.append(
-        f"- **VT** ({last_date} price_usd={fmt_num(last_price, 4)}) → **{bucket}** "
+    def fmt_money(x: Any, nd: int = 2) -> str:
+        v = _safe_float(x)
+        if v is None:
+            return "NA"
+        return f"{v:.{nd}f}"
+
+    # Readability-only derived number (no impact to signals)
+    band_width_pct = None
+    try:
+        if lower_lin > 0 and upper_lin > 0:
+            band_width_pct = (upper_lin / lower_lin) - 1.0
+    except Exception:
+        band_width_pct = None
+
+    # Readability-only flags (do NOT change bucket)
+    near_upper_by_pos = (pos_in_band >= 0.80) if (pos_in_band is not None) else None
+    near_lower_by_pos = (pos_in_band <= 0.20) if (pos_in_band is not None) else None
+
+    R: List[str] = []
+    R.append("# VT BB Monitor Report (VT + optional USD/TWD)")
+    R.append("")
+    R.append(f"- report_generated_at_utc: `{generated_at_utc}`")
+    R.append(f"- data_date: `{last_date}`")
+    R.append(f"- price_mode: `{price_mode}`")
+    R.append(f"- params: `BB({args.window},{args.k}) on log(price)`, `forward_mdd({args.forward_days}D)`")
+    R.append("")
+
+    R.append("## 15秒摘要")
+    R.append(
+        f"- **VT** ({last_date} price_usd={fmt_money(last_price, 4)}) → **{bucket}** "
         f"(z={fmt_num(z, 4)}, pos={fmt_num(pos_in_band, 4)}); "
         f"dist_to_lower={fmt_pct(dist_to_lower)}; dist_to_upper={fmt_pct(dist_to_upper)}; "
-        f"20D forward_mdd: p50={fmt_pct(mdd_stats.get('p50'))}, p10={fmt_pct(mdd_stats.get('p10'))}, "
-        f"min={fmt_pct(mdd_stats.get('min'))} (n={mdd_stats.get('n')}, conf={mdd_stats.get('conf')})"
+        f"{args.forward_days}D forward_mdd: p50={fmt_pct(mdd_stats.get('p50'))}, "
+        f"p10={fmt_pct(mdd_stats.get('p10'))}, min={fmt_pct(mdd_stats.get('min'))} "
+        f"(n={mdd_stats.get('n')}, conf={mdd_stats.get('conf')})"
     )
-    report.append("")
-    report.append("## FX (USD/TWD)（嚴格同日對齊 + 落後參考值）")
-    report.append(f"- fx_history_parse_status: `{fx_series.parse_status}`")
-    report.append(f"- fx_strict_used_policy: `{fx_used_policy}`")
-    report.append(f"- fx_rate_strict (for {last_date}): `{fmt_num(fx_rate_strict, 4)}`")
-    report.append(f"- derived price_twd (strict): `{fmt_num(price_twd, 2)}`")
-    report.append("")
-    report.append("### Reference（僅供參考；使用落後 FX 且標註落後天數）")
-    if fx_rate_strict is None and ref_rate is not None:
-        report.append(f"- fx_ref_source: `{ref_source}`")
-        report.append(f"- fx_ref_date: `{ref_date}`")
-        report.append(f"- fx_ref_rate: `{fmt_num(ref_rate, 4)}`")
-        report.append(f"- fx_ref_lag_days: `{ref_lag_days}`")
-        report.append(f"- fx_ref_status: `{ref_status}` (stale_threshold_days={fx_ref.get('stale_threshold_days')})")
-        report.append(f"- derived price_twd_ref: `{fmt_num(price_twd_ref, 2)}`")
-    else:
-        report.append("- fx_ref: `NA` (strict match exists, or no usable reference rate)")
-    report.append("")
-    report.append("## Notes")
-    report.append("- forward_mdd20 理論上應永遠 <= 0；若你看到 >0，代表資料對齊或定義出錯。")
-    report.append("- FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。")
-    report.append("")
+    R.append("")
 
-    _write_text(report_path, "\n".join(report))
+    R.append("## 解讀重點（更詳盡）")
+    R.append(
+        f"- **Band 位置**：pos={fmt_num(pos_in_band, 4)}（>0.80 視為「靠近上緣」的閱讀提示；此提示不改 bucket 規則）"
+    )
+    R.append(
+        f"- **距離上下軌**：dist_to_upper={fmt_pct(dist_to_upper)}；dist_to_lower={fmt_pct(dist_to_lower)}"
+    )
+    R.append(
+        f"- **波動區間寬度（閱讀用）**：band_width≈{fmt_pct(band_width_pct)}（= upper/lower - 1；用於直覺理解，不作信號）"
+    )
+    R.append(
+        f"- **forward_mdd({args.forward_days}D)**：p50={fmt_pct(mdd_stats.get('p50'))}、p10={fmt_pct(mdd_stats.get('p10'))}、min={fmt_pct(mdd_stats.get('min'))}；"
+        f"n={mdd_stats.get('n')}（conf={mdd_stats.get('conf')}）"
+    )
+    if near_upper_by_pos is True:
+        R.append("- **閱讀提示**：pos≥0.80 → 價格相對靠近上緣（但 z 未必達到 NEAR_UPPER 的門檻）")
+    if near_lower_by_pos is True:
+        R.append("- **閱讀提示**：pos≤0.20 → 價格相對靠近下緣（但 z 未必達到 NEAR_LOWER 的門檻）")
+    R.append("")
+
+    R.append("## BB 詳細（可稽核欄位）")
+    R.append("")
+    R.append("| field | value | note |")
+    R.append("|---|---:|---|")
+    R.append(f"| price_usd | {fmt_money(last_price, 4)} | {price_mode} |")
+    if last_close is not None:
+        R.append(f"| close_usd | {fmt_money(last_close, 4)} | raw close (for reference) |")
+    else:
+        R.append("| close_usd | NA | raw close missing |")
+    R.append(f"| z | {fmt_num(z, 4)} | log(price) z-score vs BB mean/stdev |")
+    R.append(f"| pos_in_band | {fmt_num(pos_in_band, 4)} | (logp-lower)/(upper-lower) clipped [0,1] |")
+    R.append(f"| lower_usd | {fmt_money(lower_lin, 4)} | exp(lower_log) |")
+    R.append(f"| upper_usd | {fmt_money(upper_lin, 4)} | exp(upper_log) |")
+    R.append(f"| dist_to_lower | {fmt_pct(dist_to_lower)} | (price-lower)/price |")
+    R.append(f"| dist_to_upper | {fmt_pct(dist_to_upper)} | (upper-price)/price |")
+    R.append(f"| bucket | {bucket} | based on z thresholds |")
+    R.append("")
+
+    R.append(f"## forward_mdd({args.forward_days}D)（分布解讀）")
+    R.append("")
+    R.append("- 定義：對每一天 t，觀察未來 N 天（t+1..t+N）中的**最低價**相對於當日價的跌幅：min(future)/p0 - 1。")
+    R.append("- 理論限制：此值應永遠 <= 0；若 >0，代表對齊/定義錯誤（或資料異常）。")
+    R.append(f"- 你目前看到的是 **bucket={bucket}** 條件下的歷史樣本分布（不是預測）：")
+    R.append(f"  - p50={fmt_pct(mdd_stats.get('p50'))}（中位數回撤）")
+    R.append(f"  - p10={fmt_pct(mdd_stats.get('p10'))}（偏壞情境，約最差 10%）")
+    R.append(f"  - min={fmt_pct(mdd_stats.get('min'))}（歷史最極端尾部）")
+    R.append(f"  - n={mdd_stats.get('n')}（樣本數）；conf={mdd_stats.get('conf')}")
+    R.append("")
+
+    R.append("## FX (USD/TWD)（嚴格同日對齊 + 落後參考值）")
+    R.append(f"- fx_history_parse_status: `{fx_series.parse_status}`")
+    R.append(f"- fx_strict_used_policy: `{fx_used_policy}`")
+    R.append(f"- fx_rate_strict (for {last_date}): `{fmt_num(fx_rate_strict, 4)}`")
+    R.append(f"- derived price_twd (strict): `{fmt_money(price_twd, 2)}`")
+    R.append("")
+    R.append("### Reference（僅供參考；使用落後 FX 且標註落後天數）")
+    if fx_rate_strict is None and ref_rate is not None:
+        R.append(f"- fx_ref_source: `{ref_source}`")
+        R.append(f"- fx_ref_date: `{ref_date}`")
+        R.append(f"- fx_ref_rate: `{fmt_num(ref_rate, 4)}`")
+        R.append(f"- fx_ref_lag_days: `{ref_lag_days}`")
+        R.append(f"- fx_ref_status: `{ref_status}` (stale_threshold_days={fx_ref.get('stale_threshold_days')})")
+        R.append(f"- derived price_twd_ref: `{fmt_money(price_twd_ref, 2)}`")
+        R.append("- 說明：Reference 不會回填 strict 欄位；它只是一個「在 FX 滯後下的閱讀參考價」。")
+    else:
+        R.append("- fx_ref: `NA` (strict match exists, or no usable reference rate)")
+    R.append("")
+
+    R.append("## Data Quality / Staleness 提示（不改數值，只提示狀態）")
+    if fx_rate_strict is None and ref_lag_days is not None:
+        R.append(f"- FX strict 缺值，已提供 Reference；lag_days={ref_lag_days}。")
+    else:
+        R.append("- FX strict 有值（同日對齊成立）或無可用參考。")
+    R.append("- 若遇到長假/休市期間，FX strict 為 NA 屬於正常現象；Reference 會明確標註落後天數。")
+    R.append("")
+
+    R.append("## Notes")
+    R.append("- forward_mdd 理論上應永遠 <= 0；若你看到 >0，代表資料對齊或定義出錯。")
+    R.append("- bucket 目前以 z 門檻定義；pos≥0.80/≤0.20 僅作閱讀提示，不改信號。")
+    R.append("- FX strict 欄位不會用落後匯率填補；落後匯率只會出現在 Reference 區塊。")
+    R.append("")
+
+    _write_text(report_path, "\n".join(R))
 
     return 0
 
