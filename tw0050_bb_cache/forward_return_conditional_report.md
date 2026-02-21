@@ -2,14 +2,14 @@
 
 - renderer_fingerprint: `render_tw0050_forward_return_conditional_report@2026-02-21.v1`
 - input_json: `forward_return_conditional.json`
-- input_generated_at_utc: `2026-02-21T13:19:50Z`
+- input_generated_at_utc: `2026-02-21T13:23:48Z`
 - input_build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7`
 - decision_mode: `clean_only`
 - scheme: `bb_z_5bucket_v1`
 - bb_window,k,ddof: `60`, `2.0`, `0`
 
 ## Meta
-- generated_at_utc: `2026-02-21T13:19:50Z`
+- generated_at_utc: `2026-02-21T13:23:48Z`
 - build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7`
 - cache_dir: `tw0050_bb_cache`
 - price_calc: `adjclose`
