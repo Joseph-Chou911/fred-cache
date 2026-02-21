@@ -3,7 +3,6 @@ name: tw0050-forward-return-conditional
 on:
   workflow_dispatch:
   schedule:
-    # Runs after your main tw0050_bb build job (example: if main job is 06:35 UTC, run this at 06:50 UTC)
     - cron: "50 6 * * 1-5"
 
 permissions:
@@ -30,18 +29,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install numpy pandas
 
-      - name: Sanity check inputs
+      - name: Sanity check scripts and inputs
         run: |
           set -euo pipefail
-          ls -la tw0050_bb_cache || true
+          test -f scripts/build_tw0050_forward_return_conditional.py
+          test -f scripts/render_tw0050_forward_return_conditional_report.py
+          test -d tw0050_bb_cache
           test -f tw0050_bb_cache/data.csv
           test -f tw0050_bb_cache/stats_latest.json
-          echo "OK: inputs exist"
+          echo "OK: scripts and inputs exist"
+          ls -la scripts | sed -n '1,120p'
+          ls -la tw0050_bb_cache | sed -n '1,200p'
 
       - name: Build forward_return_conditional.json
         run: |
           set -euo pipefail
-          python build_tw0050_forward_return_conditional.py \
+          python scripts/build_tw0050_forward_return_conditional.py \
             --cache_dir tw0050_bb_cache \
             --price_csv data.csv \
             --stats_json stats_latest.json \
@@ -60,7 +63,7 @@ jobs:
       - name: Render report.md
         run: |
           set -euo pipefail
-          python render_tw0050_forward_return_conditional_report.py \
+          python scripts/render_tw0050_forward_return_conditional_report.py \
             --cache_dir tw0050_bb_cache \
             --in_json forward_return_conditional.json \
             --out_md forward_return_conditional_report.md \
