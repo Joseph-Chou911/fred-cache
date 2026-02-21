@@ -1,17 +1,17 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-20T16:07:25Z`
+- report_generated_at_utc: `2026-02-21T14:58:24Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-02-20 close=609.4700) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.508%; dist_to_upper=4.118%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
-- **VXN** (2026-02-19 close=25.6400) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.853)); z=1.5202; pos=0.853; bwΔ=-7.63%; Pos-WATCH (C) p90 runup=58.1% (n=78) (conf=MED)
+- **QQQ** (2026-02-20 close=608.8100) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.407%; dist_to_upper=4.232%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
+- **VXN** (2026-02-20 close=24.2300) → **NORMAL_RANGE** (reason=default); z=1.1288; pos=0.741; bwΔ=-4.59%; High-Vol tail (B) p90 runup=67.4% (n=54) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-20T16:07:24Z`
-- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `0`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-21T14:58:23Z`
+- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
 - trigger_reason: `default`
@@ -21,17 +21,17 @@
 | field | value |
 |---|---:|
 | date | `2026-02-20` |
-| close | `609.4700` |
-| bb_mid | `617.1841` |
-| bb_lower | `600.2771` |
-| bb_upper | `634.5673` |
-| z | `-0.9056` |
+| close | `608.8100` |
+| bb_mid | `617.1730` |
+| bb_lower | `600.2458` |
+| bb_upper | `634.5775` |
+| z | `-0.9812` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `1.508%` |
-| distance_to_upper_pct | `4.118%` |
-| position_in_band | `0.268` |
+| distance_to_lower_pct | `1.407%` |
+| distance_to_upper_pct | `4.232%` |
+| position_in_band | `0.249` |
 | bandwidth_pct | `5.56%` |
-| bandwidth_delta_pct | `-7.12%` |
+| bandwidth_delta_pct | `-7.01%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
@@ -58,30 +58,30 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-20T16:07:24Z`
-- data_as_of (meta.max_date): `2026-02-19`  | staleness_days: `1`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-21T14:58:23Z`
+- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
-- action_output: **`NEAR_UPPER_BAND (WATCH)`**
-- trigger_reason: `position_in_band>=0.8 (pos=0.853)`
+- action_output: **`NORMAL_RANGE`**
+- trigger_reason: `default`
 
 ### Latest
 
 | field | value |
 |---|---:|
-| date | `2026-02-19` |
-| close | `25.6400` |
-| bb_mid | `21.3261` |
-| bb_lower | `16.7361` |
-| bb_upper | `27.1749` |
-| z | `1.5202` |
+| date | `2026-02-20` |
+| close | `24.2300` |
+| bb_mid | `21.2629` |
+| bb_lower | `16.8698` |
+| bb_upper | `26.8000` |
+| z | `1.1288` |
 | trigger_z_le_-2 (A_lowvol) | `False` |
 | trigger_z_ge_2 (B_highvol) | `False` |
-| distance_to_lower_pct | `34.727%` |
-| distance_to_upper_pct | `5.986%` |
-| position_in_band | `0.853` |
-| bandwidth_pct | `48.95%` |
-| bandwidth_delta_pct | `-7.63%` |
+| distance_to_lower_pct | `30.376%` |
+| distance_to_upper_pct | `10.607%` |
+| position_in_band | `0.741` |
+| bandwidth_pct | `46.70%` |
+| bandwidth_delta_pct | `-4.59%` |
 | walk_upper_count | 0 |
 ### Historical simulation (conditional)
 
