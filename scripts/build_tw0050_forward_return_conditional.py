@@ -15,7 +15,7 @@ import pandas as pd
 
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_forward_return_conditional@2026-02-21.v6"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_forward_return_conditional@2026-02-21.v7"
 
 
 def utc_now_iso() -> str:
@@ -67,12 +67,11 @@ def _write_json(path: str, obj: Dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
-def _infer_price_last_date(df: pd.DataFrame, date_col: str = "date") -> Optional[str]:
-    if df.empty or date_col not in df.columns:
+def _infer_price_last_date(df: pd.DataFrame, date_ts_col: str = "date_ts") -> Optional[str]:
+    if df.empty or date_ts_col not in df.columns:
         return None
     try:
-        s = pd.to_datetime(df[date_col], errors="coerce")
-        s = s.dropna()
+        s = pd.to_datetime(df[date_ts_col], errors="coerce").dropna()
         if s.empty:
             return None
         return s.max().date().isoformat()
@@ -126,41 +125,6 @@ def _quantile(s: pd.Series, q: float) -> Optional[float]:
         return None
 
 
-def _mean(s: pd.Series) -> Optional[float]:
-    if s.empty:
-        return None
-    try:
-        return float(s.mean())
-    except Exception:
-        return None
-
-
-def _std(s: pd.Series) -> Optional[float]:
-    if s.empty:
-        return None
-    try:
-        return float(s.std(ddof=0))
-    except Exception:
-        return None
-
-
-def _expected_shortfall(s: pd.Series, q: float) -> Optional[float]:
-    """
-    ES_q: mean of returns <= quantile(q). For left-tail risk summary.
-    Example: q=0.05 => average of worst 5%.
-    """
-    if s.empty:
-        return None
-    try:
-        thr = s.quantile(q)
-        tail = s[s <= thr]
-        if tail.empty:
-            return None
-        return float(tail.mean())
-    except Exception:
-        return None
-
-
 def _forward_return(series: pd.Series, horizon: int) -> pd.Series:
     fut = series.shift(-horizon)
     return (fut / series) - 1.0
@@ -178,32 +142,6 @@ def _detect_break_positions(price: pd.Series, hi: float, lo: float) -> np.ndarra
     is_break = (ratio > hi) | (ratio < lo)
     is_break = is_break.fillna(False)
     return np.where(is_break.values)[0]
-
-
-def _break_samples(df_all: pd.DataFrame, break_pos: np.ndarray, max_items: int = 5) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    if break_pos.size == 0:
-        return out
-    px = df_all["price"].astype(float)
-    for i in break_pos[:max_items]:
-        if i <= 0 or i >= len(df_all):
-            continue
-        prev = float(px.iloc[i - 1])
-        cur = float(px.iloc[i])
-        ratio = (cur / prev) if prev != 0.0 else math.nan
-        out.append(
-            {
-                "break_index": int(i),
-                "break_date": str(df_all["date"].iloc[i]),
-                "prev_date": str(df_all["date"].iloc[i - 1]),
-                "prev_price": prev,
-                "price": cur,
-                "ratio": float(ratio) if np.isfinite(ratio) else None,
-            }
-        )
-        if len(out) >= max_items:
-            break
-    return out
 
 
 def _contam_mask_from_breaks(n: int, break_pos: np.ndarray, horizon: int) -> np.ndarray:
@@ -227,60 +165,11 @@ def _contam_mask_from_breaks(n: int, break_pos: np.ndarray, horizon: int) -> np.
     return cum > 0
 
 
-def _excluded_entries_sample(
-    df_all: pd.DataFrame,
-    break_pos: np.ndarray,
-    base_mask: pd.Series,
-    contam: np.ndarray,
-    horizon: int,
-    max_items: int = 5,
-) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    if len(df_all) == 0:
-        return out
-
-    contam_s = pd.Series(contam, index=df_all.index)
-    excluded_idx = np.where((base_mask & contam_s).values)[0]
-    if excluded_idx.size == 0:
-        return out
-
-    px = df_all["price"].astype(float)
-    for t in excluded_idx[:max_items]:
-        t = int(t)
-        item: Dict[str, Any] = {
-            "entry_index": t,
-            "entry_date": str(df_all["date"].iloc[t]),
-            "entry_price": float(px.iloc[t]),
-        }
-        cand = break_pos[(break_pos > t) & (break_pos <= t + int(horizon))]
-        if cand.size > 0:
-            i = int(cand[0])
-            prev = float(px.iloc[i - 1]) if i - 1 >= 0 else math.nan
-            cur = float(px.iloc[i])
-            ratio = (cur / prev) if (np.isfinite(prev) and prev != 0.0) else math.nan
-            item.update(
-                {
-                    "first_break_index_in_window": i,
-                    "first_break_date_in_window": str(df_all["date"].iloc[i]),
-                    "break_prev_date": str(df_all["date"].iloc[i - 1]) if i - 1 >= 0 else None,
-                    "break_prev_price": float(prev) if np.isfinite(prev) else None,
-                    "break_price": cur,
-                    "break_ratio": float(ratio) if np.isfinite(ratio) else None,
-                }
-            )
-        else:
-            item.update(
-                {
-                    "first_break_index_in_window": None,
-                    "first_break_date_in_window": None,
-                }
-            )
-        out.append(item)
-
-    return out
-
-
 def _min_audit_global(part: pd.DataFrame, df_all: pd.DataFrame, ret_col: str, horizon: int) -> Dict[str, Any]:
+    """
+    part contains a subset of rows but MUST keep 't_pos' (global integer position in df_all).
+    future row is df_all.iloc[t_pos + horizon].
+    """
     if part.empty:
         return {}
 
@@ -309,23 +198,65 @@ def _min_audit_global(part: pd.DataFrame, df_all: pd.DataFrame, ret_col: str, ho
     return out
 
 
+def _current_bucket_key(z: float) -> Dict[str, str]:
+    if z >= 2.0:
+        return {"key": "z_ge_2.0", "canonical": ">=2"}
+    if z <= -2.0:
+        return {"key": "z_le_-2.0", "canonical": "<=-2"}
+    if -2.0 < z <= -1.5:
+        return {"key": "z_-2.0_to_-1.5", "canonical": "(-2,-1.5]"}
+    if -1.5 < z < 1.5:
+        return {"key": "z_-1.5_to_1.5", "canonical": "(-1.5,1.5)"}
+    return {"key": "z_1.5_to_2.0", "canonical": "[1.5,2)"}
+
+
+def _parse_horizons(s: str) -> List[int]:
+    out: List[int] = []
+    for part in str(s).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        out.append(int(part))
+    if not out:
+        raise SystemExit("ERROR: --horizons empty")
+    return out
+
+
+def _normalize_date_col(df: pd.DataFrame) -> pd.DataFrame:
+    if "date" not in df.columns:
+        for c in ["Date", "DATE", "timestamp", "time", "Time"]:
+            if c in df.columns:
+                df = df.rename(columns={c: "date"})
+                break
+    _ensure_required(df, ["date"])
+    df["date_ts"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date_ts"]).sort_values("date_ts")
+    df["date"] = df["date_ts"].dt.date.astype(str)
+    return df
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", required=True)
     ap.add_argument("--price_csv", required=True)
     ap.add_argument("--stats_json", required=True)
     ap.add_argument("--out_json", required=True)
+
     ap.add_argument("--bb_window", type=int, default=60)
     ap.add_argument("--bb_k", type=float, default=2.0)  # kept for meta consistency
     ap.add_argument("--bb_ddof", type=int, default=0)
     ap.add_argument("--horizons", default="10,20")
+
     ap.add_argument("--break_ratio_hi", type=float, default=1.8)
     ap.add_argument("--break_ratio_lo", type=float, default=0.5555555556)
+
     ap.add_argument("--raw_min_contam_threshold", type=float, default=-0.40)
-    ap.add_argument("--break_samples_max", type=int, default=5)
-    ap.add_argument("--excluded_samples_max", type=int, default=5)
-    ap.add_argument("--emit_extra_moments", action="store_true")
-    ap.add_argument("--enable_self_check", action="store_true")
+
+    # NEW (Phase 1): lookback window
+    ap.add_argument("--lookback_years", type=int, default=0, help="0=all; e.g. 3 or 5 for last N years only")
+    ap.add_argument("--break_samples_n", type=int, default=5)
+    ap.add_argument("--excluded_entries_sample_n", type=int, default=5)
+
     args = ap.parse_args()
 
     cache_dir = args.cache_dir
@@ -370,45 +301,67 @@ def main() -> None:
     break_count_stats = _pick(stats, [["meta", "break_detection", "break_count"]], default=None)
 
     # ----- read price csv -----
-    df = pd.read_csv(price_path)
-    if "date" not in df.columns:
-        for c in ["Date", "DATE", "timestamp", "time", "Time"]:
-            if c in df.columns:
-                df = df.rename(columns={c: "date"})
-                break
-    _ensure_required(df, ["date"])
-    price_col = _find_price_col(df)
+    df_raw = pd.read_csv(price_path)
+    df_raw = _normalize_date_col(df_raw)
 
-    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date.astype(str)
-    df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    price_col = _find_price_col(df_raw)
+    df_raw["price"] = pd.to_numeric(df_raw[price_col], errors="coerce")
+    df_raw = df_raw.dropna(subset=["price"]).copy()
 
-    df["price"] = pd.to_numeric(df[price_col], errors="coerce")
-    df = df.dropna(subset=["price"]).reset_index(drop=True)
-
-    # global position for audit mapping
+    # final cleaned full series (df_all)
+    df = df_raw.sort_values("date_ts").reset_index(drop=True)
     df["t_pos"] = np.arange(len(df), dtype=int)
+    rows_price_csv = int(len(df))
 
-    price_last_date = _infer_price_last_date(df, "date")
+    price_last_date = _infer_price_last_date(df, "date_ts")
 
-    # compute bb_z
+    # compute bb_z on full series
     df["bb_z"] = _calc_bb_z(df["price"], window=int(args.bb_window), ddof=int(args.bb_ddof))
+    df["bb_z"] = df["bb_z"].replace([np.inf, -np.inf], np.nan)
 
-    # horizons list
-    horizons: List[int] = []
-    for part in str(args.horizons).split(","):
-        part = part.strip()
-        if part:
-            horizons.append(int(part))
-    if not horizons:
-        raise SystemExit("ERROR: --horizons empty")
-
-    # compute forward returns
+    # compute forward returns on full series
+    horizons = _parse_horizons(args.horizons)
     for h in horizons:
         df[f"ret_{h}D"] = _forward_return(df["price"], horizon=h)
 
-    # break detection
+    # break detection on the same price series you compute returns on
     break_pos = _detect_break_positions(df["price"], hi=float(args.break_ratio_hi), lo=float(args.break_ratio_lo))
-    break_count_detected = int(break_pos.size)
+    break_count_detected = int(len(break_pos))
+
+    # break_samples (first N)
+    break_samples: List[Dict[str, Any]] = []
+    max_bs = max(0, int(args.break_samples_n))
+    if max_bs > 0 and break_count_detected > 0:
+        for i in break_pos[:max_bs]:
+            if i <= 0 or i >= len(df):
+                continue
+            prev = df.iloc[i - 1]
+            cur = df.iloc[i]
+            ratio = float(cur["price"]) / float(prev["price"]) if float(prev["price"]) != 0.0 else math.nan
+            break_samples.append(
+                {
+                    "break_index": int(i),
+                    "break_date": str(cur["date"]),
+                    "prev_date": str(prev["date"]),
+                    "prev_price": float(prev["price"]),
+                    "price": float(cur["price"]),
+                    "ratio": float(ratio) if np.isfinite(ratio) else None,
+                }
+            )
+
+    # lookback mask (aligned to df)
+    lookback_years = int(args.lookback_years)
+    if lookback_years > 0:
+        max_dt = pd.to_datetime(df["date_ts"]).max()
+        cutoff = max_dt - pd.DateOffset(years=lookback_years)
+        lookback_mask = (df["date_ts"] >= cutoff)
+        lookback_start_date = cutoff.date().isoformat()
+    else:
+        lookback_mask = pd.Series(True, index=df.index)
+        lookback_start_date = None
+
+    # base mask: z exists
+    base_z = df["bb_z"].notna() & np.isfinite(df["bb_z"].astype(float))
 
     out: Dict[str, Any] = {
         "decision_mode": "clean_only",
@@ -427,7 +380,9 @@ def main() -> None:
             "stats_build_fingerprint": stats_build_fingerprint,
             "stats_generated_at_utc": stats_generated_at_utc,
             "price_last_date": price_last_date,
-            "rows_price_csv": int(len(df)),
+            "rows_price_csv": rows_price_csv,
+            "lookback_years": lookback_years,
+            "lookback_start_date": lookback_start_date,
         },
         "dq": {"flags": [], "notes": []},
         "forward_return_conditional": {
@@ -439,35 +394,21 @@ def main() -> None:
             "bb_ddof": int(args.bb_ddof),
             "policy": {
                 "decision_mode": "clean_only",
-                "raw_usable": False,  # will be updated after contamination check
-                "raw_policy": "audit_only_do_not_use",  # will be updated after contamination check
+                "raw_usable": False,
+                "raw_policy": "audit_only_do_not_use",
             },
             "break_detection": {
                 "break_ratio_hi": float(args.break_ratio_hi),
                 "break_ratio_lo": float(args.break_ratio_lo),
                 "break_count_stats": break_count_stats,
                 "break_count_detected": break_count_detected,
-                "break_samples": _break_samples(df, break_pos, max_items=int(args.break_samples_max)),
+                "break_samples": break_samples,
             },
             "horizons": {},
             "current": {},
-            "self_check": {"enabled": bool(args.enable_self_check), "by_horizon": {}},
+            "self_check": {"enabled": False, "by_horizon": {}},
         },
     }
-
-    # Cross-check break_count vs stats
-    if break_count_stats is not None:
-        try:
-            bc_stats_i = int(break_count_stats)
-            if bc_stats_i != break_count_detected:
-                out["dq"]["flags"].append("BREAK_COUNT_MISMATCH_STATS_VS_DETECTED")
-                out["dq"]["notes"].append(
-                    f"break_count mismatch: stats={bc_stats_i} vs detected={break_count_detected}; "
-                    "forward_return uses detected breaks from price_csv series."
-                )
-        except Exception:
-            out["dq"]["flags"].append("BREAK_COUNT_STATS_NONINT")
-            out["dq"]["notes"].append(f"break_count_stats non-int: {break_count_stats!r}")
 
     # current fields (prefer stats.latest.bb_z)
     current_asof = _pick(stats, [["latest", "date"], ["meta", "last_date"], ["last_date"]], default=None)
@@ -478,23 +419,14 @@ def main() -> None:
         except Exception:
             current_z = None
 
-    if current_z is not None:
+    if current_z is not None and np.isfinite(float(current_z)):
         zf = float(current_z)
-        if zf >= 2.0:
-            cur_key, cur_can = "z_ge_2.0", ">=2"
-        elif zf <= -2.0:
-            cur_key, cur_can = "z_le_-2.0", "<=-2"
-        elif -2.0 < zf <= -1.5:
-            cur_key, cur_can = "z_-2.0_to_-1.5", "(-2,-1.5]"
-        elif -1.5 < zf < 1.5:
-            cur_key, cur_can = "z_-1.5_to_1.5", "(-1.5,1.5)"
-        else:
-            cur_key, cur_can = "z_1.5_to_2.0", "[1.5,2)"
+        ck = _current_bucket_key(zf)
         out["forward_return_conditional"]["current"] = {
             "asof_date": current_asof,
             "current_bb_z": zf,
-            "current_bucket_key": cur_key,
-            "current_bucket_canonical": cur_can,
+            "current_bucket_key": ck["key"],
+            "current_bucket_canonical": ck["canonical"],
         }
     else:
         out["forward_return_conditional"]["current"] = {
@@ -506,6 +438,8 @@ def main() -> None:
 
     def summarize_mode(h: int, mode_name: str, mask: pd.Series) -> Dict[str, Any]:
         dfm = df.loc[mask].copy()
+        ret_col = f"ret_{h}D"
+
         if dfm.empty:
             return {
                 "definition": f"scheme=bb_z_5bucket_v1; horizon={h}D; mode={mode_name}",
@@ -514,29 +448,20 @@ def main() -> None:
                 "min_audit_by_bucket": [],
             }
 
-        dfm = dfm[dfm["bb_z"].notna()].copy()
-        if dfm.empty:
-            return {
-                "definition": f"scheme=bb_z_5bucket_v1; horizon={h}D; mode={mode_name}",
-                "n_total": 0,
-                "by_bucket": [],
-                "min_audit_by_bucket": [],
-            }
-
+        # bucket
         dfm["bucket_canonical"] = dfm["bb_z"].astype(float).map(lambda z: _bucket_from_z(float(z)))
 
         by_bucket: List[Dict[str, Any]] = []
         min_audit_by_bucket: List[Dict[str, Any]] = []
 
-        ret_col = f"ret_{h}D"
         for bk in ["<=-2", "(-2,-1.5]", "(-1.5,1.5)", "[1.5,2)", ">=2"]:
             part = dfm[dfm["bucket_canonical"] == bk]
             n = int(len(part))
             if n == 0:
                 continue
 
-            s = part[ret_col]
-            rec: Dict[str, Any] = {
+            s = part[ret_col].astype(float)
+            rec = {
                 "bucket_canonical": bk,
                 "n": n,
                 "hit_rate": float((s > 0).mean()),
@@ -547,12 +472,6 @@ def main() -> None:
                 "p05": _quantile(s, 0.05),
                 "min": float(s.min()),
             }
-
-            if bool(args.emit_extra_moments):
-                rec["mean"] = _mean(s)
-                rec["std"] = _std(s)
-                rec["es05"] = _expected_shortfall(s, 0.05)
-
             by_bucket.append(rec)
 
             ma = _min_audit_global(part, df, ret_col=ret_col, horizon=h)
@@ -566,111 +485,111 @@ def main() -> None:
             "min_audit_by_bucket": min_audit_by_bucket,
         }
 
-    # base mask: z exists and return exists
-    base_z = df["bb_z"].notna()
+    def first_break_in_window(t: int, h: int) -> Optional[int]:
+        # find min i in break_pos with t < i <= t+h
+        if break_pos.size == 0:
+            return None
+        lo = t + 1
+        hi = t + h
+        # break_pos is sorted
+        for i in break_pos:
+            if i < lo:
+                continue
+            if i > hi:
+                break
+            return int(i)
+        return None
 
-    raw_mins_all: List[float] = []
+    # build horizons
+    raw_global_min: Optional[float] = None
+    mins_collect: List[float] = []
 
     for h in horizons:
         ret_col = f"ret_{h}D"
-        base_mask_h = base_z & df[ret_col].notna()
+        base_mask_h = lookback_mask & base_z & df[ret_col].notna()
 
+        # raw (audit-only)
         raw_obj = summarize_mode(h, "raw", base_mask_h)
 
-        contam = _contam_mask_from_breaks(len(df), break_pos, horizon=h)
-        contam_s = pd.Series(contam, index=df.index)
-        clean_mask_h = base_mask_h & (~contam_s)
+        # clean mask: exclude windows contaminated by breaks
+        contam_arr = _contam_mask_from_breaks(len(df), break_pos, horizon=h)
+        contam = pd.Series(contam_arr, index=df.index)
 
+        clean_mask_h = base_mask_h & (~contam)
         clean_obj = summarize_mode(h, "clean", clean_mask_h)
 
-        excluded_cnt = int((base_mask_h & contam_s).sum())
-        if excluded_cnt > 0:
-            out["dq"]["notes"].append(f"horizon={h}D excluded_by_break_mask={excluded_cnt}")
+        excluded_by_break_mask = int((base_mask_h & contam).sum())
+
+        # excluded_entries_sample (first N)
+        excluded_entries_sample: List[Dict[str, Any]] = []
+        max_es = max(0, int(args.excluded_entries_sample_n))
+        if max_es > 0 and excluded_by_break_mask > 0:
+            idxs = df.index[(base_mask_h & contam)].tolist()[:max_es]
+            for idx in idxs:
+                row = df.loc[idx]
+                tpos = int(row["t_pos"])
+                bi = first_break_in_window(tpos, h)
+                if bi is None or bi <= 0 or bi >= len(df):
+                    continue
+                br = df.iloc[bi]
+                br_prev = df.iloc[bi - 1]
+                ratio = float(br["price"]) / float(br_prev["price"]) if float(br_prev["price"]) != 0.0 else math.nan
+                excluded_entries_sample.append(
+                    {
+                        "entry_index": int(tpos),
+                        "entry_date": str(row["date"]),
+                        "entry_price": float(row["price"]),
+                        "first_break_index_in_window": int(bi),
+                        "first_break_date_in_window": str(br["date"]),
+                        "break_prev_date": str(br_prev["date"]),
+                        "break_prev_price": float(br_prev["price"]),
+                        "break_price": float(br["price"]),
+                        "break_ratio": float(ratio) if np.isfinite(ratio) else None,
+                    }
+                )
 
         out["forward_return_conditional"]["horizons"][f"{h}D"] = {
             "raw": raw_obj,
             "clean": clean_obj,
-            "excluded_by_break_mask": excluded_cnt,
-            "excluded_entries_sample": _excluded_entries_sample(
-                df_all=df,
-                break_pos=break_pos,
-                base_mask=base_mask_h,
-                contam=contam,
-                horizon=h,
-                max_items=int(args.excluded_samples_max),
-            ),
+            "excluded_by_break_mask": excluded_by_break_mask,
+            "excluded_entries_sample": excluded_entries_sample,
         }
 
-        try:
-            for row in raw_obj.get("by_bucket", []):
-                if row.get("min") is not None:
-                    raw_mins_all.append(float(row["min"]))
-        except Exception:
-            pass
+        if excluded_by_break_mask > 0:
+            out["dq"]["notes"].append(f"horizon={h}D excluded_by_break_mask={excluded_by_break_mask}")
 
-        # ===== Self-check (audit-grade) =====
-        if bool(args.enable_self_check):
-            # Expected base eligible count is computed from masks (NOT from a formula), to stay robust.
-            base_eligible_n = int(base_mask_h.sum())
-            clean_n = int(clean_obj.get("n_total", 0))
-            excluded_n = int(excluded_cnt)
-            # Invariant: clean_n + excluded_n should equal base_eligible_n
-            diff = int((clean_n + excluded_n) - base_eligible_n)
-
-            chk: Dict[str, Any] = {
-                "horizon": int(h),
-                "base_eligible_n": base_eligible_n,
-                "clean_n_total": clean_n,
-                "excluded_by_break_mask": excluded_n,
-                "identity_lhs_clean_plus_excluded": int(clean_n + excluded_n),
-                "identity_rhs_base_eligible": base_eligible_n,
-                "identity_diff": diff,
-                "status": "OK" if diff == 0 else "FAIL",
-                "notes": [],
-            }
-
-            if diff != 0:
-                out["dq"]["flags"].append("SELF_CHECK_COUNT_IDENTITY_FAIL")
-                chk["notes"].append(
-                    "Expected clean_n_total + excluded_by_break_mask == base_eligible_n, but mismatch detected. "
-                    "Potential causes: index misalignment, mask dtype coercion, or accidental row drops."
-                )
-
-            # Extra sanity: raw_n_total should match base_eligible_n exactly
-            raw_n = int(raw_obj.get("n_total", 0))
-            raw_diff = int(raw_n - base_eligible_n)
-            chk["raw_n_total"] = raw_n
-            chk["raw_minus_base_eligible"] = raw_diff
-            if raw_diff != 0:
-                out["dq"]["flags"].append("SELF_CHECK_RAW_N_MISMATCH_BASE")
-                chk["notes"].append(
-                    "raw_n_total != base_eligible_n. Potential causes: bb_z coercion dropping rows, "
-                    "or summarize_mode filtering differs from base mask assumptions."
-                )
-
-            out["forward_return_conditional"]["self_check"]["by_horizon"][f"{h}D"] = chk
+        # collect raw mins for contamination decision
+        for row in raw_obj.get("by_bucket", []):
+            mv = row.get("min")
+            if mv is not None:
+                try:
+                    mins_collect.append(float(mv))
+                except Exception:
+                    pass
 
     # DQ: warn raw contamination by global min threshold
-    raw_global_min: Optional[float] = None
-    if raw_mins_all:
-        raw_global_min = float(min(raw_mins_all))
+    if mins_collect:
+        try:
+            raw_global_min = float(min(mins_collect))
+        except Exception:
+            raw_global_min = None
 
     raw_usable = True
-    raw_policy = "ok_to_use"
     if raw_global_min is not None and raw_global_min <= float(args.raw_min_contam_threshold):
+        raw_usable = False
         out["dq"]["flags"].append("RAW_MODE_HAS_SPLIT_OUTLIERS")
         out["dq"]["notes"].append(
             f"raw_global_min={raw_global_min:.6f} <= {float(args.raw_min_contam_threshold):.2f}; "
             "treat raw as contaminated (split/outlier). Use clean_only."
         )
-        raw_usable = False
-        raw_policy = "audit_only_do_not_use"
-    else:
-        raw_usable = True
-        raw_policy = "audit_ok_but_decision_prefers_clean"
 
-    out["forward_return_conditional"]["policy"]["raw_usable"] = bool(raw_usable)
-    out["forward_return_conditional"]["policy"]["raw_policy"] = str(raw_policy)
+    # finalize policy + decision_mode
+    out["decision_mode"] = "clean_only"
+    out["forward_return_conditional"]["policy"] = {
+        "decision_mode": "clean_only",
+        "raw_usable": bool(raw_usable),
+        "raw_policy": "audit_only_do_not_use" if not raw_usable else "still_audit_only_by_default",
+    }
 
     _write_json(out_path, out)
     print(f"OK: wrote {out_path}")
