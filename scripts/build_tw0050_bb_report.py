@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v14"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v15"
 
 
 def utc_now_iso() -> str:
@@ -741,6 +741,183 @@ def _best_price_used(latest: Dict[str, Any]) -> Optional[float]:
     return None
 
 
+# ---------------- forward_mdd_conditional (renderer-only display) ----------------
+
+_COND_BUCKET_ORDER = ["<=-2", "(-2,-1.5]", "(-1.5,1.5)", "[1.5,2)", ">=2"]
+
+
+def bucket_from_bb_z(z: Optional[float]) -> Optional[str]:
+    """
+    Canonical buckets:
+      <=-2
+      (-2,-1.5]
+      (-1.5,1.5)
+      [1.5,2)
+      >=2
+    """
+    if z is None:
+        return None
+    try:
+        v = float(z)
+    except Exception:
+        return None
+
+    if v <= -2.0:
+        return "<=-2"
+    if (-2.0 < v) and (v <= -1.5):
+        return "(-2,-1.5]"
+    if (-1.5 < v) and (v < 1.5):
+        return "(-1.5,1.5)"
+    if (1.5 <= v) and (v < 2.0):
+        return "[1.5,2)"
+    if v >= 2.0:
+        return ">=2"
+    return None
+
+
+def pick_forward_mdd_conditional(s: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], str]:
+    """
+    Try common locations (fallback order):
+      1) s["forward_mdd_conditional"]
+      2) s["stats_out"]["forward_mdd_conditional"]
+    Returns (block, path_used)
+    """
+    blk = safe_get(s, "forward_mdd_conditional", None)
+    if isinstance(blk, dict) and blk:
+        return blk, "forward_mdd_conditional"
+
+    so = safe_get(s, "stats_out", None)
+    if isinstance(so, dict):
+        blk2 = safe_get(so, "forward_mdd_conditional", None)
+        if isinstance(blk2, dict) and blk2:
+            return blk2, "stats_out.forward_mdd_conditional"
+
+    return None, "N/A"
+
+
+def _extract_min_audit_fields(d: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Accept either flat keys or nested min_audit_trail.
+    """
+    if not isinstance(d, dict):
+        return {}
+    # flat first
+    out = {
+        "min_entry_date": safe_get(d, "min_entry_date", None),
+        "min_entry_price": safe_get(d, "min_entry_price", None),
+        "min_future_date": safe_get(d, "min_future_date", None),
+        "min_future_price": safe_get(d, "min_future_price", None),
+    }
+    if any(out[k] is not None for k in out):
+        return out
+
+    # nested
+    mat = safe_get(d, "min_audit_trail", None) or safe_get(d, "min_audit", None)
+    if isinstance(mat, dict):
+        return {
+            "min_entry_date": safe_get(mat, "min_entry_date", None),
+            "min_entry_price": safe_get(mat, "min_entry_price", None),
+            "min_future_date": safe_get(mat, "min_future_date", None),
+            "min_future_price": safe_get(mat, "min_future_price", None),
+        }
+    return {}
+
+
+def normalize_forward_mdd_conditional_buckets(cond: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """
+    Normalize conditional buckets into list of dict entries:
+      {
+        "bucket": str,
+        "n": int|None,
+        "p50","p25","p10","p05","min": float|None,
+        "min_entry_date","min_entry_price","min_future_date","min_future_price": ...
+        "dq_flags": list[str] (optional)
+      }
+    Returns (entries, notes)
+    """
+    notes: List[str] = []
+    if not isinstance(cond, dict) or not cond:
+        return [], ["cond missing or not dict"]
+
+    buckets_obj = None
+    if isinstance(safe_get(cond, "buckets", None), (list, dict)):
+        buckets_obj = safe_get(cond, "buckets", None)
+    elif isinstance(safe_get(cond, "by_bucket", None), (list, dict)):
+        buckets_obj = safe_get(cond, "by_bucket", None)
+
+    entries: List[Dict[str, Any]] = []
+
+    def build_entry(bucket_label: str, obj: Dict[str, Any]) -> Dict[str, Any]:
+        e: Dict[str, Any] = {
+            "bucket": bucket_label,
+            "n": safe_get(obj, "n", None),
+            "p50": safe_get(obj, "p50", None),
+            "p25": safe_get(obj, "p25", None),
+            "p10": safe_get(obj, "p10", None),
+            "p05": safe_get(obj, "p05", None),
+            "min": safe_get(obj, "min", None),
+            "dq_flags": safe_get(obj, "dq_flags", []) or safe_get(obj, "dq", []) or [],
+        }
+        ma = _extract_min_audit_fields(obj)
+        e.update(ma)
+        return e
+
+    if isinstance(buckets_obj, dict):
+        for k, v in buckets_obj.items():
+            if not isinstance(v, dict):
+                continue
+            entries.append(build_entry(str(k), v))
+    elif isinstance(buckets_obj, list):
+        for it in buckets_obj:
+            if not isinstance(it, dict):
+                continue
+            lbl = (
+                safe_get(it, "bucket", None)
+                or safe_get(it, "label", None)
+                or safe_get(it, "bucket_label", None)
+                or safe_get(it, "bkt", None)
+            )
+            if lbl is None:
+                # try common key: "range"
+                lbl = safe_get(it, "range", None)
+            lbl_s = str(lbl) if lbl is not None else "UNKNOWN"
+            entries.append(build_entry(lbl_s, it))
+    else:
+        # As a fallback, if cond itself contains bucket keys
+        found_any = False
+        for k in _COND_BUCKET_ORDER:
+            v = safe_get(cond, k, None)
+            if isinstance(v, dict) and v:
+                entries.append(build_entry(k, v))
+                found_any = True
+        if not found_any:
+            notes.append("no buckets/by_bucket; and no direct bucket keys found")
+
+    # Sort in canonical order where possible, keep others after
+    order_index = {b: i for i, b in enumerate(_COND_BUCKET_ORDER)}
+    entries_sorted = sorted(entries, key=lambda x: order_index.get(str(x.get("bucket", "")), 999))
+    return entries_sorted, notes
+
+
+def _string_list(x: Any) -> List[str]:
+    if x is None:
+        return []
+    if isinstance(x, list):
+        out = []
+        for it in x:
+            if isinstance(it, str) and it.strip():
+                out.append(it.strip())
+        return out
+    if isinstance(x, str) and x.strip():
+        return [x.strip()]
+    return []
+
+
+def _join_semicolon(xs: List[str]) -> str:
+    ys = [x for x in xs if isinstance(x, str) and x.strip()]
+    return "; ".join(ys) if ys else "(none)"
+
+
 # ---------------- Pledge block extraction (from stats) ----------------
 
 def extract_pledge_from_stats(s: Dict[str, Any]) -> Dict[str, Any]:
@@ -821,25 +998,6 @@ def pledge_decision_is_usable(p: Dict[str, Any]) -> bool:
         return False
     # action_bucket is nice-to-have but not mandatory
     return True
-
-
-def _string_list(x: Any) -> List[str]:
-    if x is None:
-        return []
-    if isinstance(x, list):
-        out = []
-        for it in x:
-            if isinstance(it, str) and it.strip():
-                out.append(it.strip())
-        return out
-    if isinstance(x, str) and x.strip():
-        return [x.strip()]
-    return []
-
-
-def _join_semicolon(xs: List[str]) -> str:
-    ys = [x for x in xs if isinstance(x, str) and x.strip()]
-    return "; ".join(ys) if ys else "(none)"
 
 
 # ---------------- Deterministic action (renderer) + pledge merge ----------------
@@ -1391,6 +1549,13 @@ def main() -> int:
 
     pledge_stats = extract_pledge_from_stats(s)
 
+    # forward_mdd_conditional
+    fwd_cond, fwd_cond_path = pick_forward_mdd_conditional(s)
+    fwd_cond_entries: List[Dict[str, Any]] = []
+    fwd_cond_notes: List[str] = []
+    if isinstance(fwd_cond, dict) and fwd_cond:
+        fwd_cond_entries, fwd_cond_notes = normalize_forward_mdd_conditional_buckets(fwd_cond)
+
     ticker = safe_get(meta, "ticker", "0050.TW")
     last_date = safe_get(meta, "last_date", "N/A")
     bb_window = safe_get(meta, "bb_window", 60)
@@ -1456,6 +1621,9 @@ def main() -> int:
     if bool(safe_get(pledge_stats, "present", False)):
         lines.append(f"- pledge_version: `{safe_get(pledge_stats,'version','N/A')}`")
         lines.append(f"- pledge_scope: `{safe_get(pledge_stats,'scope','N/A')}`")
+    # expose forward_mdd_conditional presence + path
+    lines.append(f"- forward_mdd_conditional_in_stats: `{str(bool(isinstance(fwd_cond, dict) and bool(fwd_cond))).lower()}`")
+    lines.append(f"- forward_mdd_conditional_path: `{fwd_cond_path}`")
     lines.append("")
 
     # ===== Quick summary =====
@@ -1477,6 +1645,24 @@ def main() -> int:
     lines.append(build_forward_line(fwd20_label, fwd20, dq_flags, fwd_days))
     if isinstance(fwd10, dict) and fwd10:
         lines.append(build_forward_line(fwd10_label, fwd10, dq_flags, fwd_days_short))
+
+    # forward_mdd_conditional quick hint (current bb_z bucket)
+    cur_bucket = bucket_from_bb_z(_to_float(bb_z))
+    if cur_bucket and fwd_cond_entries:
+        m = {str(e.get("bucket")): e for e in fwd_cond_entries if isinstance(e, dict)}
+        e = m.get(cur_bucket, None)
+        if isinstance(e, dict):
+            lines.append(
+                f"- forward_mdd_conditional(bucket={cur_bucket}, n={safe_get(e,'n','N/A')}): "
+                f"p50={fmt4(safe_get(e,'p50'))}; p10={fmt4(safe_get(e,'p10'))}; p05={fmt4(safe_get(e,'p05'))}; min={fmt4(safe_get(e,'min'))}"
+            )
+        else:
+            lines.append(f"- forward_mdd_conditional: present=true; current_bucket={cur_bucket}; bucket_stats=N/A (bucket not found)")
+    else:
+        if isinstance(fwd_cond, dict) and fwd_cond:
+            lines.append(f"- forward_mdd_conditional: present=true; current_bucket={cur_bucket or 'N/A'}")
+        else:
+            lines.append("- forward_mdd_conditional: N/A (missing in stats_latest.json)")
 
     if isinstance(trend, dict) and trend:
         lines.append(build_trend_line(trend))
@@ -1512,6 +1698,101 @@ def main() -> int:
         chip_dq_extra.append("CHIP_OVERLAY_MISSING")
 
     lines.append("")
+
+    # ===== forward_mdd_conditional block (NEW) =====
+    lines.append("## forward_mdd_conditional (bb_z buckets)")
+    lines.append("")
+    if isinstance(fwd_cond, dict) and fwd_cond:
+        lines.append(f"- block_path_used: `{fwd_cond_path}`")
+        lines.append(f"- current_bb_z: `{fmt4(bb_z)}`")
+        lines.append(f"- current_bucket: `{cur_bucket or 'N/A'}`")
+        # meta/definition if present
+        lines.append(f"- definition: `{safe_get(fwd_cond, 'definition', 'N/A')}`")
+        lines.append(f"- horizon_days: `{safe_get(fwd_cond, 'horizon_days', safe_get(fwd_cond, 'forward_window_days', 'N/A'))}`")
+        lines.append("")
+
+        if fwd_cond_notes:
+            lines.append("### parse_notes")
+            for nt in fwd_cond_notes:
+                lines.append(f"- {nt}")
+            lines.append("")
+
+        if not fwd_cond_entries:
+            lines.append("- buckets: N/A (could not normalize)")
+            lines.append("")
+        else:
+            # summary table
+            lines.append("### conditional quantiles by bucket")
+            lines.append("")
+            lines.append("| bucket | n | p50 | p25 | p10 | p05 | min |")
+            lines.append("|---|---:|---:|---:|---:|---:|---:|")
+            # enforce canonical order first (even if missing)
+            entry_map = {str(e.get("bucket")): e for e in fwd_cond_entries if isinstance(e, dict)}
+            for b in _COND_BUCKET_ORDER:
+                e = entry_map.get(b, None)
+                if not isinstance(e, dict):
+                    lines.append(f"| {b} | N/A | N/A | N/A | N/A | N/A | N/A |")
+                    continue
+                n = safe_get(e, "n", None)
+                lines.append(
+                    f"| {b} | {fmt_int(n) if n is not None else 'N/A'} | {fmt4(safe_get(e,'p50'))} | {fmt4(safe_get(e,'p25'))} | "
+                    f"{fmt4(safe_get(e,'p10'))} | {fmt4(safe_get(e,'p05'))} | {fmt4(safe_get(e,'min'))} |"
+                )
+            # any extra buckets (non-canonical)
+            extra = [k for k in entry_map.keys() if k not in _COND_BUCKET_ORDER]
+            for b in sorted(extra):
+                e = entry_map.get(b, None)
+                if not isinstance(e, dict):
+                    continue
+                n = safe_get(e, "n", None)
+                lines.append(
+                    f"| {b} | {fmt_int(n) if n is not None else 'N/A'} | {fmt4(safe_get(e,'p50'))} | {fmt4(safe_get(e,'p25'))} | "
+                    f"{fmt4(safe_get(e,'p10'))} | {fmt4(safe_get(e,'p05'))} | {fmt4(safe_get(e,'min'))} |"
+                )
+            lines.append("")
+
+            # per-bucket min audit
+            lines.append("### min audit trail by bucket")
+            lines.append("")
+            for b in _COND_BUCKET_ORDER + sorted(extra):
+                e = entry_map.get(b, None)
+                if not isinstance(e, dict):
+                    continue
+                lines.append(f"#### bucket: {b}")
+                lines.append("")
+                lines.append("| item | value |")
+                lines.append("|---|---:|")
+                lines.append(f"| n | {fmt_int(safe_get(e,'n'))} |")
+                lines.append(f"| p50 | {fmt4(safe_get(e,'p50'))} |")
+                lines.append(f"| p10 | {fmt4(safe_get(e,'p10'))} |")
+                lines.append(f"| p05 | {fmt4(safe_get(e,'p05'))} |")
+                lines.append(f"| min | {fmt4(safe_get(e,'min'))} |")
+
+                med = safe_get(e, "min_entry_date", None)
+                mfd = safe_get(e, "min_future_date", None)
+                mep = safe_get(e, "min_entry_price", None)
+                mfp = safe_get(e, "min_future_price", None)
+
+                lines.append(f"| min_entry_date | {med if med is not None else 'N/A'} |")
+                lines.append(f"| min_entry_price | {fmt4(mep)} |")
+                lines.append(f"| min_future_date | {mfd if mfd is not None else 'N/A'} |")
+                lines.append(f"| min_future_price | {fmt4(mfp)} |")
+
+                # bucket-local dq flags if exist
+                dq_local = _string_list(safe_get(e, "dq_flags", []))
+                if dq_local:
+                    lines.append(f"| dq_flags | {', '.join(dq_local)} |")
+                else:
+                    lines.append("| dq_flags | (none) |")
+
+                # derived min_window line (if available)
+                if med and mfd and (mep is not None) and (mfp is not None):
+                    lines.append("")
+                    lines.append(f"- min_window: `{med}->{mfd}`; `{fmt4(mep)}->{fmt4(mfp)}`")
+                lines.append("")
+    else:
+        lines.append("- forward_mdd_conditional: N/A (missing in stats_latest.json)")
+        lines.append("")
 
     # ===== Deterministic Action Block (with pledge from stats + overlay) + v2 sizing =====
     lines.extend(
