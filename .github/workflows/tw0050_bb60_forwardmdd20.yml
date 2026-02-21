@@ -64,6 +64,55 @@ jobs:
           print("OK: min-audit fields present.")
           PY
 
+      # ✅ 新增：compute 後、chip overlay 前：產出 forward_return_conditional（勝率/期望值用）
+      - name: Build forward return conditional (hit-rate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f tw0050_bb_cache/price.csv
+          test -f tw0050_bb_cache/stats_latest.json
+          python scripts/build_tw0050_forward_return_conditional.py \
+            --cache_dir tw0050_bb_cache \
+            --price_csv price.csv \
+            --stats_json stats_latest.json \
+            --out_json forward_return_conditional.json \
+            --bb_window 60 \
+            --bb_k 2.0 \
+            --bb_ddof 0 \
+            --horizons 10,20 \
+            --break_ratio_hi 1.8 \
+            --break_ratio_lo 0.5555555556
+
+      - name: Debug forward return conditional
+        run: |
+          python - << 'PY'
+          import json
+          p="tw0050_bb_cache/forward_return_conditional.json"
+          j=json.load(open(p,"r",encoding="utf-8"))
+          meta=j.get("meta",{})
+          dq=j.get("dq",{}).get("flags",[])
+          fr=j.get("forward_return_conditional",{})
+          cur=fr.get("current",{})
+          hz=fr.get("horizons",{})
+
+          print("meta.generated_at_utc:", meta.get("generated_at_utc"))
+          print("dq.flags:", dq)
+          print("current:", cur)
+
+          # fail-fast structure checks
+          if not hz:
+            raise SystemExit("ERROR: forward_return_conditional.horizons missing/empty")
+
+          for k in ("10D","20D"):
+            if k not in hz:
+              raise SystemExit(f"ERROR: missing horizon {k}")
+            for mode in ("clean","raw"):
+              if mode not in hz[k]:
+                raise SystemExit(f"ERROR: missing {k}.{mode}")
+
+          print("OK: structure looks good.")
+          PY
+
       # ✅ compute 後、build report 前：抓 0050 籌碼 overlay（TWSE T86 + TWT72U）
       - name: Fetch 0050 chip overlay (TWSE T86 + TWT72U)
         shell: bash
@@ -120,7 +169,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add -A tw0050_bb_cache
-            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D)"
+            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + forward_return_conditional"
             git push
           else
             echo "No changes to commit."
