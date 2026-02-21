@@ -3,16 +3,41 @@
 """
 build_tw0050_forward_return_conditional.py
 
-Minimal, audit-first forward return + hit-rate conditional stats by bb_z buckets.
-- Reads cached prices (prefer cache_dir/price.csv) with adjclose.
-- Computes BB(60,2) z-score, maps into 5 buckets (same scheme as forward_mdd_conditional).
-- Computes forward_return for horizons (10D, 20D) and per-bucket:
-    n, hit_rate, p50/p25/p10/p05/min, and min audit trail.
-- Writes a single JSON: forward_return_conditional.json
+Purpose (audit-first):
+- Compute conditional forward returns (10D/20D) bucketed by BB z-score (BB(60,2) by default).
+- Output an audit-friendly JSON artifact: tw0050_bb_cache/forward_return_conditional.json
+
+Key updates in this version (per request):
+1) Meta alignment from stats_latest.json:
+   - meta.stats_last_date
+   - meta.bb_window_stats
+   - meta.bb_k_stats
+   - meta.stats_build_fingerprint (if present)
+   - meta.stats_generated_at_utc (if present)
+
+2) Enforce decision to use CLEAN only:
+   - top-level decision_mode = "clean_only"
+   - dq.flags includes "RAW_MODE_HAS_SPLIT_OUTLIERS" when raw mode exhibits split-like outliers
+     (e.g., extreme raw min <= -0.40)
 
 Notes:
-- This script does NOT modify existing stats_latest.json (keeps main pipeline stable).
-- Includes basic break detection (ratio hi/lo) to offer clean mode (exclude windows crossing breaks).
+- "raw" is still computed and emitted for diagnostics/audit, but decision_mode states clean-only.
+- "clean" excludes forward windows impacted by detected price breaks (ratio outside [lo, hi]).
+  For a break at index b, clean excludes entry indices t in [b-N, b-1] (exactly N rows per break),
+  matching your observed n_total differences (10/20).
+
+CLI used by your workflow:
+  python scripts/build_tw0050_forward_return_conditional.py \
+    --cache_dir tw0050_bb_cache \
+    --price_csv <csv> \
+    --stats_json stats_latest.json \
+    --out_json forward_return_conditional.json \
+    --bb_window 60 \
+    --bb_k 2.0 \
+    --bb_ddof 0 \
+    --horizons 10,20 \
+    --break_ratio_hi 1.8 \
+    --break_ratio_lo 0.5555555556
 """
 
 from __future__ import annotations
@@ -24,354 +49,452 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_forward_return_conditional@2026-02-21.v2"
 
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_forward_return_conditional@2026-02-21.v1"
 
-
+# -----------------------------
+# Helpers (audit-first, NA-safe)
+# -----------------------------
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _safe_float(x: Any) -> Optional[float]:
+def _read_json(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_json(path: str, obj: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=False)
+
+
+def _get_path(d: Dict[str, Any], path: List[str]) -> Any:
+    cur: Any = d
+    for k in path:
+        if not isinstance(cur, dict) or k not in cur:
+            return None
+        cur = cur[k]
+    return cur
+
+
+def _pick(d: Dict[str, Any], candidates: List[List[str]]) -> Any:
+    for p in candidates:
+        v = _get_path(d, p)
+        if v is not None:
+            return v
+    return None
+
+
+def _to_float(x: Any) -> Optional[float]:
     try:
         if x is None:
             return None
-        if isinstance(x, str) and x.strip().upper() in ("N/A", "NA", ""):
+        if isinstance(x, (int, float, np.floating, np.integer)):
+            return float(x)
+        s = str(x).strip()
+        if s == "" or s.upper() == "N/A":
             return None
-        return float(x)
+        return float(s)
     except Exception:
         return None
 
 
-def _quantiles(s: pd.Series, qs: List[float]) -> Dict[str, Optional[float]]:
+def _quantiles(arr: np.ndarray, qs: List[float]) -> Dict[str, Optional[float]]:
+    if arr.size == 0:
+        return {f"p{int(q*100):02d}": None for q in qs}
     out: Dict[str, Optional[float]] = {}
-    if s is None or len(s) == 0:
-        for q in qs:
-            out[f"p{int(q*100):02d}"] = None
-        return out
-    qv = s.quantile(qs, interpolation="linear")
     for q in qs:
-        out[f"p{int(q*100):02d}"] = float(qv.loc[q])
+        out[f"p{int(q*100):02d}"] = float(np.quantile(arr, q))
     return out
 
 
-def bucket_from_z(z: float) -> Tuple[str, str]:
-    # raw_key, canonical
-    if z <= -2.0:
-        return "z_le_-2.0", "<=-2"
-    if -2.0 < z <= -1.5:
-        return "-2.0_to_-1.5", "(-2,-1.5]"
-    if -1.5 < z < 1.5:
-        return "-1.5_to_1.5", "(-1.5,1.5)"
-    if 1.5 <= z < 2.0:
-        return "1.5_to_2.0", "[1.5,2)"
-    return "z_ge_2.0", ">=2"
+def _bucket_from_z(z: float, extreme: float = 2.0, near: float = 1.5) -> Tuple[str, str]:
+    """
+    Returns (bucket_key, bucket_canonical) using scheme bb_z_5bucket_v1:
+      <=-2, (-2,-1.5], (-1.5,1.5), [1.5,2), >=2
+    """
+    if z <= -extreme:
+        return ("z_le_-2.0", "<=-2")
+    if -extreme < z <= -near:
+        return ("-2.0_to_-1.5", "(-2,-1.5]")
+    if -near < z < near:
+        return ("-1.5_to_1.5", "(-1.5,1.5)")
+    if near <= z < extreme:
+        return ("1.5_to_2.0", "[1.5,2)")
+    return ("z_ge_2.0", ">=2")
 
 
-CANON_ORDER = ["<=-2", "(-2,-1.5]", "(-1.5,1.5)", "[1.5,2)", ">=2"]
+BUCKET_ORDER_CANON = ["<=-2", "(-2,-1.5]", "(-1.5,1.5)", "[1.5,2)", ">=2"]
 
 
-def load_prices(cache_dir: str, price_csv: str) -> Tuple[pd.DataFrame, List[str]]:
-    dq: List[str] = []
-    path = os.path.join(cache_dir, price_csv)
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"missing price csv: {path}")
-
-    df = pd.read_csv(path)
-    # Expect columns: date, close, adjclose, volume (your cache likely has these)
-    # Try common variants.
-    date_col = None
-    for c in ("date", "Date", "datetime"):
-        if c in df.columns:
-            date_col = c
-            break
-    if date_col is None:
-        raise ValueError("price csv missing date column (expected 'date' or 'Date')")
-
-    df[date_col] = pd.to_datetime(df[date_col])
-    df = df.sort_values(date_col).reset_index(drop=True)
-
-    # normalize column names
-    df.columns = [c.strip().lower() for c in df.columns]
-    if "adjclose" not in df.columns and "adj_close" in df.columns:
-        df = df.rename(columns={"adj_close": "adjclose"})
-    if "close" not in df.columns:
-        raise ValueError("price csv missing 'close' column")
-    if "adjclose" not in df.columns:
-        dq.append("ADJCLOSE_MISSING_FALLBACK_TO_CLOSE")
-        df["adjclose"] = df["close"]
-
-    df = df.rename(columns={date_col.lower(): "date"})
-    df["adjclose"] = pd.to_numeric(df["adjclose"], errors="coerce")
-    df = df.dropna(subset=["date", "adjclose"])
-    return df[["date", "adjclose"]].copy(), dq
+@dataclass
+class BreakDetection:
+    break_ratio_hi: float
+    break_ratio_lo: float
 
 
-def compute_break_flags(price: pd.Series, hi: float, lo: float) -> pd.Series:
-    # break at t if ratio price[t]/price[t-1] exceeds thresholds
-    ratio = price / price.shift(1)
-    flag = (ratio > hi) | (ratio < lo)
-    flag = flag.fillna(False)
-    return flag
+def detect_break_indices(price: np.ndarray, bd: BreakDetection) -> List[int]:
+    """
+    Detect break indices b where ratio = price[b]/price[b-1] is outside [lo, hi].
+    Returns list of indices b (0-based), b>=1.
+    """
+    breaks: List[int] = []
+    for i in range(1, len(price)):
+        p0 = price[i - 1]
+        p1 = price[i]
+        if not np.isfinite(p0) or not np.isfinite(p1) or p0 == 0:
+            continue
+        r = p1 / p0
+        if r > bd.break_ratio_hi or r < bd.break_ratio_lo:
+            breaks.append(i)
+    return breaks
 
 
-def windows_contaminated_by_breaks(break_flag: pd.Series, horizon: int) -> pd.Series:
-    # For entry t (index i), contaminated if any break occurs in (t, t+horizon]
-    # breaks_in_window = csum[i+h] - csum[i] > 0
-    csum = break_flag.astype(int).cumsum()
-    csum_h = csum.shift(-horizon)
-    w = (csum_h - csum) > 0
-    w = w.fillna(True)  # tail without full horizon -> treat as contaminated (will be dropped anyway)
-    return w
+def clean_valid_mask(n: int, horizon: int, break_indices: List[int]) -> np.ndarray:
+    """
+    For each break at index b, exclude entry indices t in [b-horizon, b-1] (exactly horizon rows),
+    so any forward window (t -> t+horizon) that crosses the break is excluded.
+    """
+    m = np.ones(n, dtype=bool)
+    for b in break_indices:
+        start = max(0, b - horizon)
+        end = b  # exclude [start, b-1]
+        m[start:end] = False
+    return m
 
 
-def build_forward_return_stats(
-    df: pd.DataFrame,
-    bb_window: int,
-    bb_k: float,
-    bb_ddof: int,
-    horizons: List[int],
-    break_hi: float,
-    break_lo: float,
-) -> Tuple[Dict[str, Any], List[str]]:
-    dq: List[str] = []
-    s = df["adjclose"].astype(float)
-    dates = df["date"]
+def load_price_csv(csv_path: str) -> pd.DataFrame:
+    df = pd.read_csv(csv_path)
+    # Date handling
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    else:
+        # Try first column as date if it looks like date-like
+        c0 = df.columns[0]
+        df[c0] = pd.to_datetime(df[c0], errors="coerce")
+        df = df.rename(columns={c0: "date"})
+    df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 
+    # Price column selection
+    cols = {c.lower(): c for c in df.columns}
+    if "adjclose" in cols:
+        price_col = cols["adjclose"]
+    elif "adj_close" in cols:
+        price_col = cols["adj_close"]
+    else:
+        raise SystemExit(f"ERROR: price csv missing adjclose/adj_close columns: {list(df.columns)}")
+
+    df["price"] = pd.to_numeric(df[price_col], errors="coerce")
+    df = df.dropna(subset=["price"]).reset_index(drop=True)
+
+    return df[["date", "price"]]
+
+
+def compute_bb_z(df: pd.DataFrame, bb_window: int, bb_k: float, bb_ddof: int) -> pd.DataFrame:
+    """
+    Compute BB mean/std and z-score on level price:
+      ma = rolling mean(window)
+      sd = rolling std(window, ddof)
+      z  = (price - ma) / sd
+    """
+    s = df["price"].astype(float)
     ma = s.rolling(bb_window, min_periods=bb_window).mean()
     sd = s.rolling(bb_window, min_periods=bb_window).std(ddof=bb_ddof)
-    z = (s - ma) / sd
+    z = (s - ma) / sd.replace(0.0, np.nan)
+    out = df.copy()
+    out["bb_ma"] = ma
+    out["bb_sd"] = sd
+    out["bb_z"] = z
+    return out
 
-    # bucket series
-    raw_keys: List[str] = []
-    canons: List[str] = []
-    for v in z.tolist():
-        if v is None or pd.isna(v):
-            raw_keys.append("UNKNOWN")
-            canons.append("UNKNOWN")
-        else:
-            rk, cn = bucket_from_z(float(v))
-            raw_keys.append(rk)
-            canons.append(cn)
 
-    break_flag = compute_break_flags(s, hi=break_hi, lo=break_lo)
+def summarize_mode(
+    df: pd.DataFrame,
+    horizon: int,
+    mode_name: str,
+    breaks: List[int],
+    bd: BreakDetection,
+    thresholds: Dict[str, float],
+) -> Dict[str, Any]:
+    """
+    Create summary for one horizon and one mode (raw/clean).
+    Output:
+      definition, n_total, by_bucket[], min_audit_by_bucket[]
+    """
+    extreme = float(thresholds["extreme"])
+    near = float(thresholds["near"])
 
-    out: Dict[str, Any] = {
-        "schema": "hier",
-        "scheme": "bb_z_5bucket_v1",
-        "thresholds": {"extreme": 2.0, "near": 1.5},
-        "bb_window": bb_window,
-        "bb_k": bb_k,
-        "bb_ddof": bb_ddof,
-        "break_detection": {"break_ratio_hi": break_hi, "break_ratio_lo": break_lo},
-        "horizons": {},
-        "current": {},
-    }
+    # forward return
+    price = df["price"].to_numpy(dtype=float)
+    fwd_price = np.roll(price, -horizon)
+    fwd_price[-horizon:] = np.nan
+    fwd_ret = (fwd_price / price) - 1.0
 
-    # current (last valid z)
-    last_valid_idx = z.last_valid_index()
-    if last_valid_idx is None:
-        dq.append("NO_VALID_BB_Z")
-    else:
-        cur_z = float(z.loc[last_valid_idx])
-        rk, cn = bucket_from_z(cur_z)
-        out["current"] = {
-            "asof_date": dates.loc[last_valid_idx].date().isoformat(),
-            "current_bb_z": cur_z,
-            "current_bucket_key": rk,
-            "current_bucket_canonical": cn,
-        }
+    z = df["bb_z"].to_numpy(dtype=float)
+    dates = df["date"].dt.strftime("%Y-%m-%d").to_numpy()
+    # base validity: have z and fwd_ret
+    valid = np.isfinite(z) & np.isfinite(fwd_ret)
 
-    qs = [0.50, 0.25, 0.10, 0.05]
+    if mode_name == "clean":
+        m_clean = clean_valid_mask(len(df), horizon, breaks)
+        valid = valid & m_clean
 
-    for h in horizons:
-        fwd_ret = s.shift(-h) / s - 1.0
-        contaminated = windows_contaminated_by_breaks(break_flag, horizon=h)
+    # bucket assignment
+    bucket_key = np.full(len(df), "", dtype=object)
+    bucket_canon = np.full(len(df), "", dtype=object)
+    for i in range(len(df)):
+        if not np.isfinite(z[i]):
+            continue
+        k, c = _bucket_from_z(float(z[i]), extreme=extreme, near=near)
+        bucket_key[i] = k
+        bucket_canon[i] = c
 
-        base = pd.DataFrame(
+    # aggregate by canonical bucket order
+    by_bucket: List[Dict[str, Any]] = []
+    min_audit: List[Dict[str, Any]] = []
+
+    n_total = int(np.sum(valid))
+
+    for canon in BUCKET_ORDER_CANON:
+        m = valid & (bucket_canon == canon)
+        vals = fwd_ret[m]
+        n = int(vals.size)
+
+        if n == 0:
+            by_bucket.append(
+                {
+                    "bucket_canonical": canon,
+                    "n": 0,
+                    "hit_rate": None,
+                    "p50": None,
+                    "p25": None,
+                    "p10": None,
+                    "p05": None,
+                    "min": None,
+                }
+            )
+            min_audit.append(
+                {
+                    "bucket_canonical": canon,
+                    "n": 0,
+                    "min": None,
+                    "min_entry_date": None,
+                    "min_entry_price": None,
+                    "min_future_date": None,
+                    "min_future_price": None,
+                }
+            )
+            continue
+
+        hit_rate = float(np.mean(vals > 0.0))
+
+        qs = _quantiles(vals, [0.50, 0.25, 0.10, 0.05])
+        vmin = float(np.min(vals))
+
+        # min audit trail
+        idxs = np.where(m)[0]
+        # find first idx achieving min (deterministic)
+        min_idx = int(idxs[np.argmin(fwd_ret[idxs])])
+
+        entry_date = str(dates[min_idx])
+        entry_price = float(price[min_idx])
+        future_idx = min_idx + horizon
+        future_date = str(dates[future_idx])
+        future_price = float(price[future_idx])
+
+        by_bucket.append(
             {
-                "date": dates,
-                "price": s,
-                "bb_z": z,
-                "bucket_key": raw_keys,
-                "bucket_canonical": canons,
-                "fwd_ret": fwd_ret,
+                "bucket_canonical": canon,
+                "n": n,
+                "hit_rate": hit_rate,
+                "p50": qs["p50"],
+                "p25": qs["p25"],
+                "p10": qs["p10"],
+                "p05": qs["p05"],
+                "min": vmin,
+            }
+        )
+        min_audit.append(
+            {
+                "bucket_canonical": canon,
+                "n": n,
+                "min": vmin,
+                "min_entry_date": entry_date,
+                "min_entry_price": entry_price,
+                "min_future_date": future_date,
+                "min_future_price": future_price,
             }
         )
 
-        # valid rows: have z and have forward return
-        base_valid = base.dropna(subset=["bb_z", "fwd_ret"]).copy()
-        base_valid = base_valid[base_valid["bucket_canonical"] != "UNKNOWN"]
-
-        # raw mode
-        mode_raw = base_valid.copy()
-
-        # clean mode: exclude windows impacted by breaks
-        clean_mask = (~contaminated).loc[mode_raw.index]
-        mode_clean = mode_raw[clean_mask].copy()
-
-        def summarize(mode_df: pd.DataFrame, mode_name: str) -> Dict[str, Any]:
-            block: Dict[str, Any] = {
-                "definition": f"scheme=bb_z_5bucket_v1; horizon={h}D; mode={mode_name}",
-                "n_total": int(len(mode_df)),
-                "by_bucket": [],
-                "min_audit_by_bucket": [],
-            }
-            for cn in CANON_ORDER:
-                sub = mode_df[mode_df["bucket_canonical"] == cn]
-                n = int(len(sub))
-                if n == 0:
-                    item = {
-                        "bucket_canonical": cn,
-                        "n": 0,
-                        "hit_rate": None,
-                        "p50": None,
-                        "p25": None,
-                        "p10": None,
-                        "p05": None,
-                        "min": None,
-                    }
-                    block["by_bucket"].append(item)
-                    block["min_audit_by_bucket"].append(
-                        {"bucket_canonical": cn, "n": 0, "min": None, "min_entry_date": None, "min_future_date": None}
-                    )
-                    continue
-
-                ret = sub["fwd_ret"].astype(float)
-                hit_rate = float((ret > 0).mean())
-
-                qd = _quantiles(ret, qs)
-                ret_min = float(ret.min())
-
-                # min audit trail
-                # find first idx of min
-                idx_min = ret.idxmin()
-                entry_date = mode_df.loc[idx_min, "date"]
-                entry_price = float(mode_df.loc[idx_min, "price"])
-                # future point at +h
-                # idx_min is index into original df; future index is idx_min + h (since df is contiguous by row)
-                fut_i = idx_min + h
-                if fut_i < len(df):
-                    future_date = df.loc[fut_i, "date"]
-                    future_price = float(df.loc[fut_i, "adjclose"])
-                else:
-                    future_date = None
-                    future_price = None
-
-                item = {
-                    "bucket_canonical": cn,
-                    "n": n,
-                    "hit_rate": hit_rate,
-                    "p50": qd["p50"],
-                    "p25": qd["p25"],
-                    "p10": qd["p10"],
-                    "p05": qd["p05"],
-                    "min": ret_min,
-                }
-                block["by_bucket"].append(item)
-
-                block["min_audit_by_bucket"].append(
-                    {
-                        "bucket_canonical": cn,
-                        "n": n,
-                        "min": ret_min,
-                        "min_entry_date": entry_date.date().isoformat() if entry_date is not None else None,
-                        "min_entry_price": entry_price,
-                        "min_future_date": future_date.date().isoformat() if future_date is not None else None,
-                        "min_future_price": future_price,
-                    }
-                )
-            return block
-
-        out["horizons"][f"{h}D"] = {
-            "raw": summarize(mode_raw, "raw"),
-            "clean": summarize(mode_clean, "clean"),
-        }
-
-    return out, dq
+    return {
+        "definition": f"scheme=bb_z_5bucket_v1; horizon={horizon}D; mode={mode_name}",
+        "n_total": n_total,
+        "by_bucket": by_bucket,
+        "min_audit_by_bucket": min_audit,
+    }
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cache_dir", default="tw0050_bb_cache")
-    ap.add_argument("--price_csv", default="price.csv")
-    ap.add_argument("--stats_json", default="stats_latest.json")
-    ap.add_argument("--out_json", default="forward_return_conditional.json")
+    ap.add_argument("--cache_dir", required=True)
+    ap.add_argument("--price_csv", required=True, help="filename inside cache_dir, e.g. price.csv")
+    ap.add_argument("--stats_json", required=True, help="filename inside cache_dir, e.g. stats_latest.json")
+    ap.add_argument("--out_json", required=True, help="filename inside cache_dir, e.g. forward_return_conditional.json")
+
     ap.add_argument("--bb_window", type=int, default=60)
     ap.add_argument("--bb_k", type=float, default=2.0)
-    ap.add_argument("--bb_ddof", type=int, default=0)  # set to 1 if your main script uses ddof=1
-    ap.add_argument("--horizons", default="10,20")
+    ap.add_argument("--bb_ddof", type=int, default=0)
+
+    ap.add_argument("--horizons", default="10,20", help="comma-separated, e.g. 10,20")
     ap.add_argument("--break_ratio_hi", type=float, default=1.8)
     ap.add_argument("--break_ratio_lo", type=float, default=0.5555555556)
-    ap.add_argument("--bb_z_eps", type=float, default=1e-3)  # tolerance for last bb_z check vs stats
+
     args = ap.parse_args()
 
-    meta: Dict[str, Any] = {
-        "generated_at_utc": utc_now_iso(),
-        "build_script_fingerprint": BUILD_SCRIPT_FINGERPRINT,
-        "cache_dir": args.cache_dir,
-        "price_calc": "adjclose",
-    }
-    dq: List[str] = []
+    cache_dir = args.cache_dir
+    price_csv_path = os.path.join(cache_dir, args.price_csv)
+    stats_path = os.path.join(cache_dir, args.stats_json)
+    out_path = os.path.join(cache_dir, args.out_json)
 
-    df, dq0 = load_prices(args.cache_dir, args.price_csv)
-    dq.extend(dq0)
+    # ---- Load inputs ----
+    if not os.path.isfile(price_csv_path):
+        raise SystemExit(f"ERROR: price csv not found: {price_csv_path}")
+    if not os.path.isfile(stats_path):
+        raise SystemExit(f"ERROR: stats json not found: {stats_path}")
 
-    # Optional: read stats_latest.json for alignment check & params
-    stats_path = os.path.join(args.cache_dir, args.stats_json)
-    stats = None
-    if os.path.exists(stats_path):
-        try:
-            with open(stats_path, "r", encoding="utf-8") as f:
-                stats = json.load(f)
-            meta["stats_path"] = stats_path
-            meta["stats_last_date"] = stats.get("last_date")
-            # If present, override bb params to match main pipeline
-            meta["bb_window_stats"] = stats.get("bb_window")
-            meta["bb_k_stats"] = stats.get("bb_k")
-        except Exception:
-            dq.append("STATS_JSON_READ_FAILED")
+    stats = _read_json(stats_path)
+    df_price = load_price_csv(price_csv_path)
 
-    horizons = [int(x.strip()) for x in args.horizons.split(",") if x.strip()]
+    # ---- Meta alignment from stats_latest.json ----
+    stats_last_date = _pick(stats, [["last_date"], ["meta", "last_date"], ["stats", "last_date"]])
+    bb_window_stats = _pick(stats, [["bb_window"], ["meta", "bb_window"], ["params", "bb_window"], ["bb", "window"]])
+    bb_k_stats = _pick(stats, [["bb_k"], ["meta", "bb_k"], ["params", "bb_k"], ["bb", "k"]])
 
-    fr_block, dq_fr = build_forward_return_stats(
-        df=df,
-        bb_window=args.bb_window,
-        bb_k=args.bb_k,
-        bb_ddof=args.bb_ddof,
-        horizons=horizons,
-        break_hi=args.break_ratio_hi,
-        break_lo=args.break_ratio_lo,
+    stats_build_fingerprint = _pick(
+        stats,
+        [["build_script_fingerprint"], ["meta", "build_script_fingerprint"], ["stats", "build_script_fingerprint"]],
     )
-    dq.extend(dq_fr)
+    stats_generated_at_utc = _pick(
+        stats,
+        [["generated_at_utc"], ["meta", "generated_at_utc"], ["stats", "generated_at_utc"], ["report_generated_at_utc"]],
+    )
 
-    # Consistency check: last bb_z vs stats_latest (if available)
-    if stats is not None:
-        stats_bb_z = _safe_float(stats.get("bb_z"))
-        cur_z = _safe_float(fr_block.get("current", {}).get("current_bb_z"))
-        if stats_bb_z is not None and cur_z is not None:
-            if abs(stats_bb_z - cur_z) > args.bb_z_eps:
-                dq.append("BB_Z_MISMATCH_VS_STATS")
-                meta["bb_z_stats"] = stats_bb_z
-                meta["bb_z_computed"] = cur_z
-                meta["bb_z_abs_diff"] = abs(stats_bb_z - cur_z)
+    # If stats_last_date is missing, fall back to price last date (but mark dq)
+    dq_flags: List[str] = []
+    dq_notes: List[str] = []
 
-    out = {
-        "meta": meta,
-        "dq": {"flags": dq, "notes": []},
-        "forward_return_conditional": fr_block,
+    price_last_date = df_price["date"].iloc[-1].strftime("%Y-%m-%d")
+
+    if stats_last_date is None:
+        dq_flags.append("STATS_META_MISSING_LAST_DATE")
+        dq_notes.append("stats_last_date not found in stats_latest.json; fell back to price_last_date for asof_date.")
+        asof_date = price_last_date
+    else:
+        asof_date = str(stats_last_date)
+
+    # Align bb_window_stats/bb_k_stats if missing (do NOT guess; just record missing)
+    if bb_window_stats is None:
+        dq_flags.append("STATS_META_MISSING_BB_WINDOW")
+        dq_notes.append("bb_window_stats not found in stats_latest.json (meta alignment incomplete).")
+    if bb_k_stats is None:
+        dq_flags.append("STATS_META_MISSING_BB_K")
+        dq_notes.append("bb_k_stats not found in stats_latest.json (meta alignment incomplete).")
+
+    # ---- Compute BB z & breaks ----
+    df_bb = compute_bb_z(df_price, bb_window=int(args.bb_window), bb_k=float(args.bb_k), bb_ddof=int(args.bb_ddof))
+    price_arr = df_bb["price"].to_numpy(dtype=float)
+
+    bd = BreakDetection(break_ratio_hi=float(args.break_ratio_hi), break_ratio_lo=float(args.break_ratio_lo))
+    breaks = detect_break_indices(price_arr, bd)
+
+    # ---- Compute horizons ----
+    horizons = []
+    for part in str(args.horizons).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        horizons.append(int(part))
+    horizons = sorted(set(horizons))
+    if not horizons:
+        raise SystemExit("ERROR: --horizons is empty after parsing")
+
+    thresholds = {"extreme": 2.0, "near": 1.5}
+
+    horizons_out: Dict[str, Any] = {}
+    raw_global_min: Optional[float] = None
+
+    for h in horizons:
+        raw = summarize_mode(df_bb, h, "raw", breaks, bd, thresholds)
+        clean = summarize_mode(df_bb, h, "clean", breaks, bd, thresholds)
+
+        # Track raw global min for split/outlier detection
+        for b in raw.get("by_bucket", []):
+            v = _to_float(b.get("min"))
+            if v is None:
+                continue
+            raw_global_min = v if raw_global_min is None else min(raw_global_min, v)
+
+        horizons_out[f"{h}D"] = {"raw": raw, "clean": clean}
+
+    # ---- Current snapshot (based on last available bb_z) ----
+    df_valid_z = df_bb.dropna(subset=["bb_z"])
+    if len(df_valid_z) == 0:
+        raise SystemExit("ERROR: bb_z is all NA; cannot compute current bucket (check bb_window vs data length).")
+
+    last_row = df_valid_z.iloc[-1]
+    current_bb_z = float(last_row["bb_z"])
+    current_bucket_key, current_bucket_canon = _bucket_from_z(current_bb_z, extreme=thresholds["extreme"], near=thresholds["near"])
+
+    # ---- Enforce decision_mode clean-only + dq flag for raw outliers ----
+    # Heuristic: raw min <= -0.40 indicates split-like contamination (your raw showed ~ -0.75).
+    if raw_global_min is not None and raw_global_min <= -0.40:
+        dq_flags.append("RAW_MODE_HAS_SPLIT_OUTLIERS")
+        dq_notes.append(f"raw_global_min={raw_global_min:.6f} <= -0.40; treat raw as contaminated (split/outlier). Use clean_only.")
+
+    out: Dict[str, Any] = {
+        "decision_mode": "clean_only",
+        "meta": {
+            "generated_at_utc": utc_now_iso(),
+            "build_script_fingerprint": BUILD_SCRIPT_FINGERPRINT,
+            "cache_dir": cache_dir,
+            "price_calc": "adjclose",
+            "stats_path": stats_path,
+            "stats_last_date": stats_last_date,
+            "bb_window_stats": bb_window_stats,
+            "bb_k_stats": bb_k_stats,
+            "stats_build_fingerprint": stats_build_fingerprint,
+            "stats_generated_at_utc": stats_generated_at_utc,
+            "price_last_date": price_last_date,
+        },
+        "dq": {"flags": dq_flags, "notes": dq_notes},
+        "forward_return_conditional": {
+            "schema": "hier",
+            "scheme": "bb_z_5bucket_v1",
+            "thresholds": thresholds,
+            "bb_window": int(args.bb_window),
+            "bb_k": float(args.bb_k),
+            "bb_ddof": int(args.bb_ddof),
+            "break_detection": {
+                "break_ratio_hi": bd.break_ratio_hi,
+                "break_ratio_lo": bd.break_ratio_lo,
+                "break_count": int(len(breaks)),
+            },
+            "horizons": horizons_out,
+            "current": {
+                "asof_date": asof_date,
+                "current_bb_z": current_bb_z,
+                "current_bucket_key": current_bucket_key,
+                "current_bucket_canonical": current_bucket_canon,
+            },
+        },
     }
 
-    out_path = os.path.join(args.cache_dir, args.out_json)
-    os.makedirs(args.cache_dir, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=2)
-
-    print(f"[OK] wrote: {out_path}")
-    if dq:
-        print("[DQ]", ", ".join(dq))
+    _write_json(out_path, out)
 
 
 if __name__ == "__main__":
