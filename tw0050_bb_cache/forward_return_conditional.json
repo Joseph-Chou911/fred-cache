@@ -1,8 +1,8 @@
 {
   "decision_mode": "clean_only",
   "meta": {
-    "generated_at_utc": "2026-02-21T13:46:43Z",
-    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v6",
+    "generated_at_utc": "2026-02-21T14:07:25Z",
+    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v7_2",
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
     "stats_json": "stats_latest.json",
@@ -15,7 +15,9 @@
     "stats_build_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit",
     "stats_generated_at_utc": "2026-02-21T11:56:58Z",
     "price_last_date": "2026-02-11",
-    "rows_price_csv": 4192
+    "rows_price_csv": 4192,
+    "lookback_years": 0,
+    "lookback_start_date": null
   },
   "dq": {
     "flags": [
