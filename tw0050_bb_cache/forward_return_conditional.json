@@ -1,8 +1,8 @@
 {
   "decision_mode": "clean_only",
   "meta": {
-    "generated_at_utc": "2026-02-21T14:30:28Z",
-    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v7_2",
+    "generated_at_utc": "2026-02-21T15:01:27Z",
+    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v7_5",
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
     "stats_json": "stats_latest.json",
@@ -49,6 +49,7 @@
       "break_ratio_lo": 0.5555555556,
       "break_count_stats": 1,
       "break_count_detected": 1,
+      "contam_mask_semantics": "exclude entries t where t < i <= t+h (t in [i-h, i-1])",
       "break_samples": [
         {
           "break_index": 1238,
@@ -168,7 +169,8 @@
               "min_future_date": "2014-01-14",
               "min_future_price": 9.209697723388672
             }
-          ]
+          ],
+          "unknown_bucket_n": 0
         },
         "clean": {
           "definition": "scheme=bb_z_5bucket_v1; horizon=10D; mode=clean",
@@ -276,7 +278,8 @@
               "min_future_date": "2024-07-29",
               "min_future_price": 43.60737991333008
             }
-          ]
+          ],
+          "unknown_bucket_n": 0
         },
         "excluded_by_break_mask": 10,
         "excluded_entries_sample": [
@@ -444,7 +447,8 @@
               "min_future_date": "2014-02-05",
               "min_future_price": 8.891021728515625
             }
-          ]
+          ],
+          "unknown_bucket_n": 0
         },
         "clean": {
           "definition": "scheme=bb_z_5bucket_v1; horizon=20D; mode=clean",
@@ -552,7 +556,8 @@
               "min_future_date": "2024-08-05",
               "min_future_price": 38.33150863647461
             }
-          ]
+          ],
+          "unknown_bucket_n": 0
         },
         "excluded_by_break_mask": 20,
         "excluded_entries_sample": [
