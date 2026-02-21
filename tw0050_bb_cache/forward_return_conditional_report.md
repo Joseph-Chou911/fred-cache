@@ -1,8 +1,8 @@
 # 0050 Forward Return Conditional Report
 
-- renderer_fingerprint: `render_tw0050_forward_return_conditional_report@2026-02-21.v2`
+- renderer_fingerprint: `render_tw0050_forward_return_conditional_report@2026-02-21.v3`
 - input_json: `forward_return_conditional.json`
-- input_generated_at_utc: `2026-02-21T15:10:57Z`
+- input_generated_at_utc: `2026-02-21T15:18:02Z`
 - input_build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7_5`
 - decision_mode: `clean_only`
 - scheme: `bb_z_5bucket_v1`
@@ -10,7 +10,7 @@
 - thresholds (near/extreme): `1.5` / `2.0`
 
 ## Meta
-- generated_at_utc: `2026-02-21T15:10:57Z`
+- generated_at_utc: `2026-02-21T15:18:02Z`
 - build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7_5`
 - cache_dir: `tw0050_bb_cache`
 - price_calc: `adjclose`
@@ -176,7 +176,37 @@ _Audit-only._
 ## Self-check (optional)
 - enabled: `True`
 ### 10D
+- ok: `True`
+- issues: (none)
+- extra (json):
+```json
+{
+  "metrics": {
+    "raw_n_total": 4123,
+    "clean_n_total": 4113,
+    "excluded_by_break_mask": 10,
+    "clean_bucket_n_sum": 4113,
+    "raw_bucket_n_sum": 4123
+  },
+  "eps": 1e-12
+}
+```
 ### 20D
+- ok: `True`
+- issues: (none)
+- extra (json):
+```json
+{
+  "metrics": {
+    "raw_n_total": 4113,
+    "clean_n_total": 4093,
+    "excluded_by_break_mask": 20,
+    "clean_bucket_n_sum": 4093,
+    "raw_bucket_n_sum": 4113
+  },
+  "eps": 1e-12
+}
+```
 
 ## Alignment hints (optional)
 - stats_last_date (from stats_json): `2026-02-11`
