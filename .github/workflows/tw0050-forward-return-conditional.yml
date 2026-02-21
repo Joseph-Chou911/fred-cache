@@ -49,8 +49,10 @@ jobs:
           PRICE_CSV="price.csv"
           if [ ! -f "tw0050_bb_cache/${PRICE_CSV}" ]; then
             echo "price.csv not found. Auto-detecting a CSV with adjclose/adj_close..."
-            PRICE_CSV="$(python - << 'PY'
-import glob, sys, pandas as pd
+            PRICE_CSV="$(python - <<'PY'
+import glob, sys
+import pandas as pd
+
 cands = sorted(glob.glob("tw0050_bb_cache/*.csv"))
 for p in cands:
     try:
@@ -61,6 +63,7 @@ for p in cands:
     if ("adjclose" in cols) or ("adj_close" in cols):
         print(p.split("/")[-1])
         sys.exit(0)
+
 print("")
 sys.exit(1)
 PY
@@ -87,7 +90,7 @@ PY
 
       - name: Debug forward return conditional
         run: |
-          python - << 'PY'
+          python - <<'PY'
           import json
           p="tw0050_bb_cache/forward_return_conditional.json"
           j=json.load(open(p,"r",encoding="utf-8"))
@@ -100,6 +103,7 @@ PY
           print("meta.generated_at_utc:", meta.get("generated_at_utc"))
           print("dq.flags:", dq)
           print("current:", cur)
+
           if not hz:
             raise SystemExit("ERROR: forward_return_conditional.horizons missing/empty")
           for k in ("10D","20D"):
@@ -108,6 +112,7 @@ PY
             for mode in ("clean","raw"):
               if mode not in hz[k]:
                 raise SystemExit(f"ERROR: missing {k}.{mode}")
+
           print("OK: structure looks good.")
           PY
 
