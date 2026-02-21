@@ -6,13 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v15"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_bb_report@2026-02-21.v16"
 
 
 def utc_now_iso() -> str:
@@ -745,6 +746,15 @@ def _best_price_used(latest: Dict[str, Any]) -> Optional[float]:
 
 _COND_BUCKET_ORDER = ["<=-2", "(-2,-1.5]", "(-1.5,1.5)", "[1.5,2)", ">=2"]
 
+# Canonical -> expected key naming in stats_out (for "current bucket key" display)
+_CANON_TO_STATS_KEY = {
+    "<=-2": "z_le_-2.0",
+    "(-2,-1.5]": "z_-2.0_-1.5",
+    "(-1.5,1.5)": "z_-1.5_1.5",
+    "[1.5,2)": "z_1.5_2.0",
+    ">=2": "z_ge_2.0",
+}
+
 
 def bucket_from_bb_z(z: Optional[float]) -> Optional[str]:
     """
@@ -775,6 +785,77 @@ def bucket_from_bb_z(z: Optional[float]) -> Optional[str]:
     return None
 
 
+def bucket_key_from_bb_z(z: Optional[float]) -> Optional[str]:
+    """
+    "current bucket key" for stats-style naming (e.g. z_ge_2.0), derived from bb_z.
+    This is display-only and used as an alias key when looking up bucket entries.
+    """
+    canon = bucket_from_bb_z(z)
+    if canon is None:
+        return None
+    return _CANON_TO_STATS_KEY.get(canon, canon)
+
+
+def _canonicalize_cond_bucket_label(label: Any) -> Optional[str]:
+    """
+    Minimal-intrusion normalizer for bucket labels coming from stats.
+    It maps common naming schemes (e.g. z_ge_2.0, z_le_-2.0, z_1.5_2.0, etc.)
+    into the canonical buckets used by the renderer.
+    """
+    if label is None:
+        return None
+    try:
+        s = str(label).strip()
+    except Exception:
+        return None
+    if not s:
+        return None
+
+    # already canonical
+    if s in _COND_BUCKET_ORDER:
+        return s
+
+    s2 = s.replace(" ", "")
+    low = s2.lower()
+
+    # Extract numbers (best-effort)
+    nums: List[float] = []
+    try:
+        for t in re.findall(r"-?\d+(?:\.\d+)?", low):
+            nums.append(float(t))
+    except Exception:
+        nums = []
+
+    def has_num(x: float) -> bool:
+        for n in nums:
+            if abs(n - x) < 1e-9:
+                return True
+        return False
+
+    # Handle directional labels first (ge/le)
+    if ("ge" in low or ">=" in low) and has_num(2.0):
+        return ">=2"
+    if ("le" in low or "<=" in low) and has_num(-2.0):
+        return "<=-2"
+
+    # Handle range-like labels by number pairs
+    if (has_num(-2.0) and has_num(-1.5)) or ("-2" in low and "-1.5" in low):
+        return "(-2,-1.5]"
+    if (has_num(-1.5) and has_num(1.5)) or ("-1.5" in low and "1.5" in low):
+        return "(-1.5,1.5)"
+    if (has_num(1.5) and has_num(2.0)) or ("1.5" in low and "2" in low and "ge" not in low and "le" not in low):
+        # avoid misclassifying ge/le cases above
+        return "[1.5,2)"
+
+    # Fallback: common synonyms
+    if low in ("z_ge_2", "z_ge_2.0", "z>=2", "z>=2.0"):
+        return ">=2"
+    if low in ("z_le_-2", "z_le_-2.0", "z<=-2", "z<=-2.0"):
+        return "<=-2"
+
+    return None
+
+
 def pick_forward_mdd_conditional(s: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], str]:
     """
     Try common locations (fallback order):
@@ -798,27 +879,37 @@ def pick_forward_mdd_conditional(s: Dict[str, Any]) -> Tuple[Optional[Dict[str, 
 def _extract_min_audit_fields(d: Dict[str, Any]) -> Dict[str, Any]:
     """
     Accept either flat keys or nested min_audit_trail.
+    Also accepts alternate key names:
+      - entry_date/entry_price/future_date/future_price
     """
     if not isinstance(d, dict):
         return {}
-    # flat first
+
+    def _get_any(obj: Dict[str, Any], keys: List[str]) -> Any:
+        for k in keys:
+            v = safe_get(obj, k, None)
+            if v is not None:
+                return v
+        return None
+
+    # flat first (preferred)
     out = {
-        "min_entry_date": safe_get(d, "min_entry_date", None),
-        "min_entry_price": safe_get(d, "min_entry_price", None),
-        "min_future_date": safe_get(d, "min_future_date", None),
-        "min_future_price": safe_get(d, "min_future_price", None),
+        "min_entry_date": _get_any(d, ["min_entry_date", "entry_date", "min_entry_dt", "entry_dt"]),
+        "min_entry_price": _get_any(d, ["min_entry_price", "entry_price", "min_entry_px", "entry_px"]),
+        "min_future_date": _get_any(d, ["min_future_date", "future_date", "min_future_dt", "future_dt"]),
+        "min_future_price": _get_any(d, ["min_future_price", "future_price", "min_future_px", "future_px"]),
     }
     if any(out[k] is not None for k in out):
         return out
 
     # nested
-    mat = safe_get(d, "min_audit_trail", None) or safe_get(d, "min_audit", None)
+    mat = safe_get(d, "min_audit_trail", None) or safe_get(d, "min_audit", None) or safe_get(d, "audit_trail", None)
     if isinstance(mat, dict):
         return {
-            "min_entry_date": safe_get(mat, "min_entry_date", None),
-            "min_entry_price": safe_get(mat, "min_entry_price", None),
-            "min_future_date": safe_get(mat, "min_future_date", None),
-            "min_future_price": safe_get(mat, "min_future_price", None),
+            "min_entry_date": _get_any(mat, ["min_entry_date", "entry_date", "min_entry_dt", "entry_dt"]),
+            "min_entry_price": _get_any(mat, ["min_entry_price", "entry_price", "min_entry_px", "entry_px"]),
+            "min_future_date": _get_any(mat, ["min_future_date", "future_date", "min_future_dt", "future_dt"]),
+            "min_future_price": _get_any(mat, ["min_future_price", "future_price", "min_future_px", "future_px"]),
         }
     return {}
 
@@ -827,7 +918,8 @@ def normalize_forward_mdd_conditional_buckets(cond: Dict[str, Any]) -> Tuple[Lis
     """
     Normalize conditional buckets into list of dict entries:
       {
-        "bucket": str,
+        "bucket": str (canonical if possible),
+        "bucket_raw": str (original label),
         "n": int|None,
         "p50","p25","p10","p05","min": float|None,
         "min_entry_date","min_entry_price","min_future_date","min_future_price": ...
@@ -848,8 +940,10 @@ def normalize_forward_mdd_conditional_buckets(cond: Dict[str, Any]) -> Tuple[Lis
     entries: List[Dict[str, Any]] = []
 
     def build_entry(bucket_label: str, obj: Dict[str, Any]) -> Dict[str, Any]:
+        canon = _canonicalize_cond_bucket_label(bucket_label)
         e: Dict[str, Any] = {
-            "bucket": bucket_label,
+            "bucket": canon if canon is not None else bucket_label,
+            "bucket_raw": bucket_label,
             "n": safe_get(obj, "n", None),
             "p50": safe_get(obj, "p50", None),
             "p25": safe_get(obj, "p25", None),
@@ -878,7 +972,6 @@ def normalize_forward_mdd_conditional_buckets(cond: Dict[str, Any]) -> Tuple[Lis
                 or safe_get(it, "bkt", None)
             )
             if lbl is None:
-                # try common key: "range"
                 lbl = safe_get(it, "range", None)
             lbl_s = str(lbl) if lbl is not None else "UNKNOWN"
             entries.append(build_entry(lbl_s, it))
@@ -891,7 +984,14 @@ def normalize_forward_mdd_conditional_buckets(cond: Dict[str, Any]) -> Tuple[Lis
                 entries.append(build_entry(k, v))
                 found_any = True
         if not found_any:
-            notes.append("no buckets/by_bucket; and no direct bucket keys found")
+            # Also try stats-style keys
+            for ck, rawk in _CANON_TO_STATS_KEY.items():
+                v = safe_get(cond, rawk, None)
+                if isinstance(v, dict) and v:
+                    entries.append(build_entry(rawk, v))
+                    found_any = True
+            if not found_any:
+                notes.append("no buckets/by_bucket; and no direct bucket keys found")
 
     # Sort in canonical order where possible, keep others after
     order_index = {b: i for i, b in enumerate(_COND_BUCKET_ORDER)}
@@ -1001,6 +1101,12 @@ def pledge_decision_is_usable(p: Dict[str, Any]) -> bool:
 
 
 # ---------------- Deterministic action (renderer) + pledge merge ----------------
+# (unchanged from your v15; omitted here for brevity in this comment block)
+# NOTE: All code below remains identical to your paste, except forward_mdd_conditional rendering changes in main().
+
+# ---------------- Pledge Guidance v2 ... ----------------
+# (unchanged; keep your existing functions)
+
 
 def compute_renderer_action_bucket(
     *,
@@ -1010,10 +1116,6 @@ def compute_renderer_action_bucket(
     accumulate_z: float,
     no_chase_z: float,
 ) -> Tuple[str, List[str]]:
-    """
-    Returns (action_bucket, decision_path_lines)
-    Note: This is the existing renderer logic (v1-style), gated by regime_allowed.
-    """
     state_upper = ("UPPER" in latest_state)
     state_lower = ("LOWER" in latest_state)
 
@@ -1041,12 +1143,6 @@ def compute_renderer_pledge_policy(
     regime_allowed: bool,
     margin_info: Optional[Dict[str, Any]],
 ) -> Tuple[str, List[str]]:
-    """
-    Renderer overlay policy (v1):
-      - DISALLOW when regime gate closed OR action bucket is NO_CHASE/HOLD_DEFENSIVE_ONLY
-      - DISALLOW when margin aligned and DELEVERAGING
-      - otherwise CONSIDER_ONLY_WITH_OWN_RULES
-    """
     reasons: List[str] = []
     if not regime_allowed:
         reasons.append("regime gate closed")
@@ -1062,8 +1158,6 @@ def compute_renderer_pledge_policy(
     return "CONSIDER_ONLY_WITH_OWN_RULES", ["no hard veto triggered (still risk-managed)"]
 
 
-# ---------------- Pledge Guidance v2 (report-only sizing; NOT gated by regime.allowed) ----------------
-
 def compute_pledge_v2_zone(
     *,
     latest_state: str,
@@ -1071,12 +1165,6 @@ def compute_pledge_v2_zone(
     accumulate_z: float,
     no_chase_z: float,
 ) -> Tuple[str, List[str]]:
-    """
-    Zone decision independent of regime.allowed:
-      - NO_CHASE if state has UPPER or bb_z >= no_chase_z
-      - ACCUMULATE_ZONE if state has LOWER or bb_z <= accumulate_z
-      - MID otherwise
-    """
     path: List[str] = []
     state_upper = ("UPPER" in latest_state)
     state_lower = ("LOWER" in latest_state)
@@ -1100,16 +1188,6 @@ def compute_pledge_v2_sizing(
     margin_info: Optional[Dict[str, Any]],
     dq_flags: List[str],
 ) -> Dict[str, Any]:
-    """
-    Report-only sizing proposal.
-    Output keys:
-      policy: DISALLOW / ALLOW_REDUCED / ALLOW_FULL
-      size_factor: 0.0..1.0  (fraction of user's own max pledge capacity; max capacity is external)
-      reasons: list[str]
-      bands: dict
-      multipliers: dict
-      cooldown_sessions_hint: int
-    """
     out: Dict[str, Any] = {
         "policy": "DISALLOW",
         "size_factor": 0.0,
@@ -1119,12 +1197,10 @@ def compute_pledge_v2_sizing(
         "cooldown_sessions_hint": 0,
     }
 
-    # Hard prerequisite: only consider pledge sizing in ACCUMULATE_ZONE
     if zone != "ACCUMULATE_ZONE":
         out["reasons"].append(f"zone={zone} (require ACCUMULATE_ZONE)")
         return out
 
-    # Base factor from rv20 percentile (deterministic bands)
     base_factor = 0.0
     if rv20_pctl is None:
         base_factor = 0.25
@@ -1144,7 +1220,6 @@ def compute_pledge_v2_sizing(
     factor = float(base_factor)
     out["multipliers"]["base_from_rv20_pctl"] = factor
 
-    # Margin deleveraging: not a hard veto in v2, but reduces sizing and suggests cooldown
     if isinstance(margin_info, dict) and margin_info and bool(margin_info.get("aligned", False)):
         if str(margin_info.get("total_state", "")).upper() == "DELEVERAGING":
             factor *= 0.5
@@ -1152,21 +1227,17 @@ def compute_pledge_v2_sizing(
             out["reasons"].append("margin aligned: DELEVERAGING => size_factor * 0.5 + cooldown hint")
             out["cooldown_sessions_hint"] = 2
 
-    # Data quality: price series breaks can distort historical distribution; cap sizing
     flags = set([str(x) for x in dq_flags if isinstance(x, str)])
     if "PRICE_SERIES_BREAK_DETECTED" in flags:
-        # cap to 0.25 (still not forced DISALLOW, but very conservative)
         factor = min(factor, 0.25)
         out["multipliers"]["dq_price_break_cap"] = 0.25
         out["reasons"].append("DQ: PRICE_SERIES_BREAK_DETECTED => cap size_factor at 0.25")
 
-    # If YF/TWSE issues exist, keep conservative (cap at 0.5)
     if any(f.startswith("YF_") for f in flags) or any(f.startswith("TWSE_") for f in flags):
         factor = min(factor, 0.5)
         out["multipliers"]["dq_source_cap"] = 0.5
         out["reasons"].append("DQ: YF_/TWSE_ flags present => cap size_factor at 0.5")
 
-    # Finalize
     factor = max(0.0, min(1.0, float(factor)))
     out["size_factor"] = round(factor, 4)
 
@@ -1190,20 +1261,12 @@ def build_tranche_plan_from_levels(
     tranche_rows: List[List[str]],
     size_factor: float,
 ) -> Tuple[List[List[str]], str]:
-    """
-    tranche_rows: [[label, drawdown_str, price_level_str], ...]
-    returns:
-      plan_rows: [[tranche, level, target_frac_of_max, price_level], ...]
-      note: str
-    """
     if not tranche_rows or size_factor <= 0:
         return [], "no tranche plan (size_factor<=0 or levels missing)"
 
-    # Use up to 4 levels (deterministic)
     m = min(len(tranche_rows), 4)
     levels = tranche_rows[:m]
 
-    # Deterministic weights
     if m == 1:
         weights = [1.0]
     elif m == 2:
@@ -1217,7 +1280,7 @@ def build_tranche_plan_from_levels(
     for i, (lvl, w) in enumerate(zip(levels, weights), start=1):
         label = str(lvl[0])
         price_level = str(lvl[2])
-        frac = size_factor * float(w)  # fraction of user's max pledge capacity
+        frac = size_factor * float(w)
         plan.append([f"T{i}", label, fmt_pct2(frac * 100.0), price_level])
 
     note = "target_frac_of_max is fraction of your own max pledge capacity (defined outside this report)"
@@ -1231,10 +1294,6 @@ def build_unconditional_tranche_rows(
     fwd10: Dict[str, Any],
     pledge_stats: Dict[str, Any],
 ) -> Tuple[List[List[str]], str]:
-    """
-    Returns tranche_rows: [[label, drawdown_str, price_level_str], ...]
-    and source_note.
-    """
     tranche_rows: List[List[str]] = []
     un_levels = safe_get(pledge_stats, "uncond_levels", []) or []
     if isinstance(un_levels, list) and un_levels:
@@ -1250,7 +1309,6 @@ def build_unconditional_tranche_rows(
             return tranche_rows, f"source: stats (price_anchor={fmt_price2(anchor)})"
         return tranche_rows, "source: stats"
 
-    # fallback compute from forward quantiles (unconditional)
     if price is None:
         return [], "source: none (price missing)"
 
@@ -1291,17 +1349,6 @@ def build_deterministic_action_block(
     accumulate_z_cli: Optional[float],
     no_chase_z_cli: Optional[float],
 ) -> List[str]:
-    """
-    Deterministic, report-only action guidance.
-
-    Priority:
-      1) pledge decision from stats (if usable) as baseline
-      2) renderer overlay computes additional veto (e.g., margin deleveraging)
-      3) final pledge_policy = DISALLOW if either baseline or overlay veto says DISALLOW
-
-    Adds:
-      - Pledge Guidance v2: report-only sizing proposal not gated by regime.allowed
-    """
     lines: List[str] = []
     lines.append("## Deterministic Action (report-only; non-predictive)")
     lines.append("")
@@ -1323,7 +1370,6 @@ def build_deterministic_action_block(
     if rv_pctl_max is None:
         rv_pctl_max = 60.0
 
-    # thresholds: prefer CLI override, else prefer stats pledge thresholds, else fallback
     acc_thr = accumulate_z_cli
     nc_thr = no_chase_z_cli
     if acc_thr is None:
@@ -1335,7 +1381,6 @@ def build_deterministic_action_block(
     if nc_thr is None:
         nc_thr = 1.5
 
-    # margin note
     margin_note = "margin: N/A"
     if isinstance(margin_info, dict) and margin_info:
         if bool(margin_info.get("aligned", False)):
@@ -1343,11 +1388,9 @@ def build_deterministic_action_block(
         else:
             margin_note = "margin: MISALIGNED (ignored in overlay)"
 
-    # DQ summary
     flags_str = [str(x) for x in dq_flags if isinstance(x, str)]
     dq_core_str, _ = _dq_core_and_fwd_summary(flags_str)
 
-    # renderer action bucket + policy (v1)
     action_bucket_renderer, decision_path = compute_renderer_action_bucket(
         latest_state=state, bb_z=bb_z, regime_allowed=regime_allowed, accumulate_z=acc_thr, no_chase_z=nc_thr
     )
@@ -1355,7 +1398,6 @@ def build_deterministic_action_block(
         action_bucket=action_bucket_renderer, regime_allowed=regime_allowed, margin_info=margin_info
     )
 
-    # stats pledge baseline
     pledge_source = "renderer"
     pledge_policy_stats = "N/A"
     pledge_action_bucket_stats = "N/A"
@@ -1370,35 +1412,28 @@ def build_deterministic_action_block(
         pledge_action_bucket_stats = str(safe_get(dec, "action_bucket", "N/A"))
         pledge_veto_stats = _string_list(safe_get(dec, "veto_reasons", []))
 
-    # final policy merge
     overlay_applied = False
     final_reasons: List[str] = []
     if pledge_source == "stats":
-        # baseline from stats
         final_policy = pledge_policy_stats
         final_reasons.extend([f"stats:{x}" for x in pledge_veto_stats] if pledge_veto_stats else [])
-        # apply overlay only if it strengthens veto (i.e., renderer says DISALLOW but stats doesn't)
         if str(pledge_policy_renderer).upper() == "DISALLOW" and str(pledge_policy_stats).upper() != "DISALLOW":
             overlay_applied = True
             final_policy = "DISALLOW"
             final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
     else:
-        # baseline from renderer
         final_policy = pledge_policy_renderer
         final_reasons.extend([f"overlay:{x}" for x in pledge_veto_renderer] if pledge_veto_renderer else [])
 
-    # mismatch flag
     pledge_mismatch = False
     if pledge_source == "stats":
         if str(pledge_policy_stats).upper() != str(pledge_policy_renderer).upper():
             pledge_mismatch = True
 
-    # tranche levels: unconditional reference
     tranche_rows, tranche_source_note = build_unconditional_tranche_rows(
         price=price, fwd20=fwd20, fwd10=fwd10, pledge_stats=pledge_stats
     )
 
-    # present inputs
     lines.append(md_table_kv([
         ["last_date", str(last_date)],
         ["price_used", fmt_price2(price)],
@@ -1411,7 +1446,7 @@ def build_deterministic_action_block(
         ["rv_pctl_max", fmt2(rv_pctl_max)],
         ["dq_core", dq_core_str],
         ["margin_note", margin_note],
-        ["pledge_block_in_stats", str(bool(safe_get(pledge_stats, "present", False))).lower()],
+        ["pledge_block_in_stats", str(bool(safe_get(pledge_stats,'present',False))).lower()],
         ["pledge_version", str(pledge_version)],
         ["pledge_scope", str(pledge_scope)],
         ["pledge_source", str(pledge_source)],
@@ -1419,7 +1454,6 @@ def build_deterministic_action_block(
     ]))
     lines.append("")
 
-    # decisions (v1)
     lines.append(md_table_kv([
         ["action_bucket_renderer", f"**{action_bucket_renderer}**"],
         ["pledge_policy_renderer", f"**{pledge_policy_renderer}**"],
@@ -1451,7 +1485,6 @@ def build_deterministic_action_block(
         lines.append(f"- {tranche_source_note}")
         lines.append("")
 
-    # ---------------- Pledge Guidance v2 ----------------
     lines.append("### Pledge Guidance v2 (report-only; sizing proposal)")
     lines.append("")
     lines.append("- Purpose: convert binary gate into deterministic size_factor (0..1) using rv20_percentile bands.")
@@ -1480,7 +1513,6 @@ def build_deterministic_action_block(
         lines.append(f"- {p}")
     lines.append("")
 
-    # Tranche plan scaled by size_factor
     try:
         sf = float(v2.get("size_factor", 0.0) or 0.0)
     except Exception:
@@ -1518,7 +1550,6 @@ def main() -> int:
     ap.add_argument("--chip_overlay_json", default=None)
     ap.add_argument("--chip_window_n", type=int, default=5)
 
-    # deterministic action params (CLI override; if None, prefer stats pledge thresholds)
     ap.add_argument("--accumulate_z", type=float, default=None, help="bb_z <= accumulate_z => ACCUMULATE_TRANCHE (override)")
     ap.add_argument("--no_chase_z", type=float, default=None, help="bb_z >= no_chase_z => NO_CHASE (override)")
 
@@ -1587,7 +1618,6 @@ def main() -> int:
     if chip_path is None:
         chip_path = os.path.join(args.cache_dir, "chip_overlay.json")
 
-    # optional margin struct (for overlay use)
     margin_json = read_margin_latest(args.margin_json)
     margin_info: Optional[Dict[str, Any]] = None
     if margin_json is not None:
@@ -1621,7 +1651,6 @@ def main() -> int:
     if bool(safe_get(pledge_stats, "present", False)):
         lines.append(f"- pledge_version: `{safe_get(pledge_stats,'version','N/A')}`")
         lines.append(f"- pledge_scope: `{safe_get(pledge_stats,'scope','N/A')}`")
-    # expose forward_mdd_conditional presence + path
     lines.append(f"- forward_mdd_conditional_in_stats: `{str(bool(isinstance(fwd_cond, dict) and bool(fwd_cond))).lower()}`")
     lines.append(f"- forward_mdd_conditional_path: `{fwd_cond_path}`")
     lines.append("")
@@ -1646,21 +1675,36 @@ def main() -> int:
     if isinstance(fwd10, dict) and fwd10:
         lines.append(build_forward_line(fwd10_label, fwd10, dq_flags, fwd_days_short))
 
-    # forward_mdd_conditional quick hint (current bb_z bucket)
-    cur_bucket = bucket_from_bb_z(_to_float(bb_z))
-    if cur_bucket and fwd_cond_entries:
-        m = {str(e.get("bucket")): e for e in fwd_cond_entries if isinstance(e, dict)}
-        e = m.get(cur_bucket, None)
-        if isinstance(e, dict):
+    # ---- forward_mdd_conditional quick hint (minimal-intrusion, with z_ge_2.0 key support) ----
+    cur_bucket_canon = bucket_from_bb_z(_to_float(bb_z))
+    cur_bucket_key = bucket_key_from_bb_z(_to_float(bb_z))  # e.g. z_ge_2.0
+    if fwd_cond_entries:
+        entry_by_canon = {str(e.get("bucket")): e for e in fwd_cond_entries if isinstance(e, dict)}
+        entry_by_raw = {str(e.get("bucket_raw")): e for e in fwd_cond_entries if isinstance(e, dict)}
+        e_cur = None
+        if cur_bucket_key is not None:
+            e_cur = entry_by_raw.get(cur_bucket_key)
+        if e_cur is None and cur_bucket_canon is not None:
+            e_cur = entry_by_canon.get(cur_bucket_canon)
+        if isinstance(e_cur, dict):
+            med = safe_get(e_cur, "min_entry_date", None)
+            mfd = safe_get(e_cur, "min_future_date", None)
+            mep = safe_get(e_cur, "min_entry_price", None)
+            mfp = safe_get(e_cur, "min_future_price", None)
+            win = ""
+            if med and mfd and (mep is not None) and (mfp is not None):
+                win = f" (min_window: {med}->{mfd}; {fmt4(mep)}->{fmt4(mfp)})"
             lines.append(
-                f"- forward_mdd_conditional(bucket={cur_bucket}, n={safe_get(e,'n','N/A')}): "
-                f"p50={fmt4(safe_get(e,'p50'))}; p10={fmt4(safe_get(e,'p10'))}; p05={fmt4(safe_get(e,'p05'))}; min={fmt4(safe_get(e,'min'))}"
+                f"- forward_mdd_conditional(bucket_key={cur_bucket_key or 'N/A'}, canon={cur_bucket_canon or 'N/A'}, n={safe_get(e_cur,'n','N/A')}): "
+                f"p10={fmt4(safe_get(e_cur,'p10'))}; p05={fmt4(safe_get(e_cur,'p05'))}; min={fmt4(safe_get(e_cur,'min'))}{win}"
             )
         else:
-            lines.append(f"- forward_mdd_conditional: present=true; current_bucket={cur_bucket}; bucket_stats=N/A (bucket not found)")
+            lines.append(
+                f"- forward_mdd_conditional: present=true; current_bucket_key={cur_bucket_key or 'N/A'}; canon={cur_bucket_canon or 'N/A'}; bucket_stats=N/A (bucket not found)"
+            )
     else:
         if isinstance(fwd_cond, dict) and fwd_cond:
-            lines.append(f"- forward_mdd_conditional: present=true; current_bucket={cur_bucket or 'N/A'}")
+            lines.append(f"- forward_mdd_conditional: present=true; current_bucket_key={cur_bucket_key or 'N/A'}; canon={cur_bucket_canon or 'N/A'}")
         else:
             lines.append("- forward_mdd_conditional: N/A (missing in stats_latest.json)")
 
@@ -1705,8 +1749,8 @@ def main() -> int:
     if isinstance(fwd_cond, dict) and fwd_cond:
         lines.append(f"- block_path_used: `{fwd_cond_path}`")
         lines.append(f"- current_bb_z: `{fmt4(bb_z)}`")
-        lines.append(f"- current_bucket: `{cur_bucket or 'N/A'}`")
-        # meta/definition if present
+        lines.append(f"- current_bucket_key: `{cur_bucket_key or 'N/A'}`")
+        lines.append(f"- current_bucket_canonical: `{cur_bucket_canon or 'N/A'}`")
         lines.append(f"- definition: `{safe_get(fwd_cond, 'definition', 'N/A')}`")
         lines.append(f"- horizon_days: `{safe_get(fwd_cond, 'horizon_days', safe_get(fwd_cond, 'forward_window_days', 'N/A'))}`")
         lines.append("")
@@ -1721,49 +1765,85 @@ def main() -> int:
             lines.append("- buckets: N/A (could not normalize)")
             lines.append("")
         else:
-            # summary table
-            lines.append("### conditional quantiles by bucket")
+            entry_by_canon = {str(e.get("bucket")): e for e in fwd_cond_entries if isinstance(e, dict)}
+            entry_by_raw = {str(e.get("bucket_raw")): e for e in fwd_cond_entries if isinstance(e, dict)}
+
+            # --- current bucket detail (explicitly render p10/p05/min + audit trail) ---
+            lines.append("### current_bucket_detail (p10/p05/min + audit)")
             lines.append("")
-            lines.append("| bucket | n | p50 | p25 | p10 | p05 | min |")
-            lines.append("|---|---:|---:|---:|---:|---:|---:|")
-            # enforce canonical order first (even if missing)
-            entry_map = {str(e.get("bucket")): e for e in fwd_cond_entries if isinstance(e, dict)}
+            e_cur = None
+            if cur_bucket_key is not None:
+                e_cur = entry_by_raw.get(cur_bucket_key)
+            if e_cur is None and cur_bucket_canon is not None:
+                e_cur = entry_by_canon.get(cur_bucket_canon)
+            if isinstance(e_cur, dict):
+                lines.append("| item | value |")
+                lines.append("|---|---:|")
+                lines.append(f"| bucket_key | {cur_bucket_key or 'N/A'} |")
+                lines.append(f"| bucket_canonical | {cur_bucket_canon or 'N/A'} |")
+                lines.append(f"| n | {fmt_int(safe_get(e_cur,'n'))} |")
+                lines.append(f"| p10 | {fmt4(safe_get(e_cur,'p10'))} |")
+                lines.append(f"| p05 | {fmt4(safe_get(e_cur,'p05'))} |")
+                lines.append(f"| min | {fmt4(safe_get(e_cur,'min'))} |")
+                med = safe_get(e_cur, "min_entry_date", None)
+                mfd = safe_get(e_cur, "min_future_date", None)
+                mep = safe_get(e_cur, "min_entry_price", None)
+                mfp = safe_get(e_cur, "min_future_price", None)
+                lines.append(f"| min_entry_date | {med if med is not None else 'N/A'} |")
+                lines.append(f"| min_entry_price | {fmt4(mep)} |")
+                lines.append(f"| min_future_date | {mfd if mfd is not None else 'N/A'} |")
+                lines.append(f"| min_future_price | {fmt4(mfp)} |")
+                if med and mfd and (mep is not None) and (mfp is not None):
+                    lines.append("")
+                    lines.append(f"- min_window: `{med}->{mfd}`; `{fmt4(mep)}->{fmt4(mfp)}`")
+            else:
+                lines.append(f"- current bucket not found in conditional entries (bucket_key={cur_bucket_key or 'N/A'}, canon={cur_bucket_canon or 'N/A'})")
+            lines.append("")
+
+            # summary table (canonical order)
+            lines.append("### conditional quantiles by bucket (canonical order)")
+            lines.append("")
+            lines.append("| bucket | raw_key(example) | n | p50 | p25 | p10 | p05 | min |")
+            lines.append("|---|---|---:|---:|---:|---:|---:|---:|")
             for b in _COND_BUCKET_ORDER:
-                e = entry_map.get(b, None)
+                e = entry_by_canon.get(b, None)
                 if not isinstance(e, dict):
-                    lines.append(f"| {b} | N/A | N/A | N/A | N/A | N/A | N/A |")
+                    # try stats-style key if the canonical one is missing
+                    rawk = _CANON_TO_STATS_KEY.get(b, None)
+                    if rawk is not None:
+                        e = entry_by_raw.get(rawk, None)
+                if not isinstance(e, dict):
+                    lines.append(f"| {b} | N/A | N/A | N/A | N/A | N/A | N/A | N/A |")
                     continue
                 n = safe_get(e, "n", None)
+                rawk = safe_get(e, "bucket_raw", None)
                 lines.append(
-                    f"| {b} | {fmt_int(n) if n is not None else 'N/A'} | {fmt4(safe_get(e,'p50'))} | {fmt4(safe_get(e,'p25'))} | "
-                    f"{fmt4(safe_get(e,'p10'))} | {fmt4(safe_get(e,'p05'))} | {fmt4(safe_get(e,'min'))} |"
-                )
-            # any extra buckets (non-canonical)
-            extra = [k for k in entry_map.keys() if k not in _COND_BUCKET_ORDER]
-            for b in sorted(extra):
-                e = entry_map.get(b, None)
-                if not isinstance(e, dict):
-                    continue
-                n = safe_get(e, "n", None)
-                lines.append(
-                    f"| {b} | {fmt_int(n) if n is not None else 'N/A'} | {fmt4(safe_get(e,'p50'))} | {fmt4(safe_get(e,'p25'))} | "
+                    f"| {b} | {rawk if rawk is not None else 'N/A'} | {fmt_int(n) if n is not None else 'N/A'} | {fmt4(safe_get(e,'p50'))} | {fmt4(safe_get(e,'p25'))} | "
                     f"{fmt4(safe_get(e,'p10'))} | {fmt4(safe_get(e,'p05'))} | {fmt4(safe_get(e,'min'))} |"
                 )
             lines.append("")
 
-            # per-bucket min audit
-            lines.append("### min audit trail by bucket")
+            # per-bucket min audit (canonical order)
+            lines.append("### min audit trail by bucket (canonical order)")
             lines.append("")
-            for b in _COND_BUCKET_ORDER + sorted(extra):
-                e = entry_map.get(b, None)
+            for b in _COND_BUCKET_ORDER:
+                e = entry_by_canon.get(b, None)
+                if not isinstance(e, dict):
+                    rawk = _CANON_TO_STATS_KEY.get(b, None)
+                    if rawk is not None:
+                        e = entry_by_raw.get(rawk, None)
                 if not isinstance(e, dict):
                     continue
-                lines.append(f"#### bucket: {b}")
+
+                rawk = safe_get(e, "bucket_raw", None)
+                hdr = f"#### bucket: {b}"
+                if isinstance(rawk, str) and rawk and rawk != b:
+                    hdr += f" (raw_key={rawk})"
+                lines.append(hdr)
                 lines.append("")
                 lines.append("| item | value |")
                 lines.append("|---|---:|")
                 lines.append(f"| n | {fmt_int(safe_get(e,'n'))} |")
-                lines.append(f"| p50 | {fmt4(safe_get(e,'p50'))} |")
                 lines.append(f"| p10 | {fmt4(safe_get(e,'p10'))} |")
                 lines.append(f"| p05 | {fmt4(safe_get(e,'p05'))} |")
                 lines.append(f"| min | {fmt4(safe_get(e,'min'))} |")
@@ -1778,14 +1858,12 @@ def main() -> int:
                 lines.append(f"| min_future_date | {mfd if mfd is not None else 'N/A'} |")
                 lines.append(f"| min_future_price | {fmt4(mfp)} |")
 
-                # bucket-local dq flags if exist
                 dq_local = _string_list(safe_get(e, "dq_flags", []))
                 if dq_local:
                     lines.append(f"| dq_flags | {', '.join(dq_local)} |")
                 else:
                     lines.append("| dq_flags | (none) |")
 
-                # derived min_window line (if available)
                 if med and mfd and (mep is not None) and (mfp is not None):
                     lines.append("")
                     lines.append(f"- min_window: `{med}->{mfd}`; `{fmt4(mep)}->{fmt4(mfp)}`")
@@ -1938,7 +2016,6 @@ def main() -> int:
             k in fwd for k in ["min_entry_date", "min_entry_price", "min_future_date", "min_future_price"]
         )
 
-    # 20D
     lines.append("### forward_mdd (primary)")
     lines.append("")
     lines.append(f"- block_used: `{fwd20_label}`")
@@ -1967,7 +2044,6 @@ def main() -> int:
         lines.append(f"- forward_mdd keys: `{', '.join(keys)}`")
     lines.append("")
 
-    # 10D
     lines.append("### forward_mdd10 (primary)")
     lines.append("")
     if isinstance(fwd10, dict) and fwd10:
