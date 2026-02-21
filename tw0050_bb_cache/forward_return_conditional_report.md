@@ -1,25 +1,29 @@
 # 0050 Forward Return Conditional Report
 
-- renderer_fingerprint: `render_tw0050_forward_return_conditional_report@2026-02-21.v1`
+- renderer_fingerprint: `render_tw0050_forward_return_conditional_report@2026-02-21.v2`
 - input_json: `forward_return_conditional.json`
-- input_generated_at_utc: `2026-02-21T14:07:25Z`
+- input_generated_at_utc: `2026-02-21T14:19:39Z`
 - input_build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7_2`
 - decision_mode: `clean_only`
 - scheme: `bb_z_5bucket_v1`
 - bb_window,k,ddof: `60`, `2.0`, `0`
+- thresholds (near/extreme): `1.5` / `2.0`
 
 ## Meta
-- generated_at_utc: `2026-02-21T14:07:25Z`
+- generated_at_utc: `2026-02-21T14:19:39Z`
 - build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7_2`
 - cache_dir: `tw0050_bb_cache`
 - price_calc: `adjclose`
 - stats_last_date: `2026-02-11`
 - price_last_date: `2026-02-11`
 - rows_price_csv: `4192`
+- lookback_years: `0`
 - price_csv: `data.csv`
 - stats_json: `stats_latest.json`
 - out_json: `forward_return_conditional.json`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
+- bb_window_stats: `60`
+- bb_k_stats: `2.0`
 - stats_build_fingerprint: `tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit`
 - stats_generated_at_utc: `2026-02-21T11:56:58Z`
 
@@ -40,6 +44,7 @@
 - thresholds: hi=1.800000, lo=0.5555555556
 - break_count_stats: `1`
 - break_count_detected: `1`
+- contam_mask_semantics: `exclude entries t where t < i <= t+h (t in [i-h, i-1])`
 
 ### break_samples (first up to 5)
 | idx | break_date | prev_date | prev_price | price | ratio |
@@ -69,7 +74,7 @@ _Primary for interpretation (per policy)._
 | [1.5,2) | 656 | 56.40% | 4.56% | 0.60% | -1.24% | -3.30% | -4.76% | -10.09% |
 | >=2 | 406 | 65.02% | 4.85% | 0.86% | -0.59% | -2.02% | -2.83% | -10.47% |
 
-### CLEAN — min_audit_by_bucket
+### CLEAN - min_audit_by_bucket
 | bucket | n | min | entry_date | entry_price | future_date | future_price |
 | --- | --- | --- | --- | --- | --- | --- |
 | <=-2 | 205 | -17.53% | 2020-03-09 | 18.100203 | 2020-03-23 | 14.927133 |
@@ -91,7 +96,7 @@ _Audit-only._
 | [1.5,2) | 657 | 56.32% | 4.56% | 0.59% | -1.24% | -3.32% | -4.82% | -75.17% |
 | >=2 | 408 | 64.71% | 4.84% | 0.85% | -0.63% | -2.06% | -3.15% | -75.43% |
 
-### RAW — min_audit_by_bucket
+### RAW - min_audit_by_bucket
 | bucket | n | min | entry_date | entry_price | future_date | future_price |
 | --- | --- | --- | --- | --- | --- | --- |
 | <=-2 | 205 | -17.53% | 2020-03-09 | 18.100203 | 2020-03-23 | 14.927133 |
@@ -127,7 +132,7 @@ _Primary for interpretation (per policy)._
 | [1.5,2) | 655 | 54.50% | 6.87% | 0.43% | -1.83% | -4.30% | -5.55% | -12.22% |
 | >=2 | 396 | 69.70% | 9.25% | 1.84% | -0.51% | -3.79% | -5.16% | -17.11% |
 
-### CLEAN — min_audit_by_bucket
+### CLEAN - min_audit_by_bucket
 | bucket | n | min | entry_date | entry_price | future_date | future_price |
 | --- | --- | --- | --- | --- | --- | --- |
 | <=-2 | 205 | -21.08% | 2025-03-10 | 45.348385 | 2025-04-09 | 35.789116 |
@@ -149,7 +154,7 @@ _Audit-only._
 | [1.5,2) | 657 | 54.34% | 6.86% | 0.42% | -1.83% | -4.36% | -5.60% | -75.30% |
 | >=2 | 398 | 69.35% | 9.24% | 1.83% | -0.67% | -3.86% | -5.65% | -76.28% |
 
-### RAW — min_audit_by_bucket
+### RAW - min_audit_by_bucket
 | bucket | n | min | entry_date | entry_price | future_date | future_price |
 | --- | --- | --- | --- | --- | --- | --- |
 | <=-2 | 205 | -21.08% | 2025-03-10 | 45.348385 | 2025-04-09 | 35.789116 |
@@ -167,6 +172,10 @@ _Audit-only._
 | 1220 | 2013-12-06 | 36.424519 | 1238 | 2014-01-02 | 0.249361097289 |
 | 1221 | 2013-12-09 | 36.743195 | 1238 | 2014-01-02 | 0.249361097289 |
 | 1222 | 2013-12-10 | 36.838791 | 1238 | 2014-01-02 | 0.249361097289 |
+
+## Self-check (optional)
+- enabled: `False`
+- by_horizon: (none)
 
 ## Alignment hints (optional)
 - stats_last_date (from stats_json): `2026-02-11`
