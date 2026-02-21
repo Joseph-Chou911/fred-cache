@@ -23,7 +23,6 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
-            # workflow_run payload path exists only for workflow_run events
             conclusion="$(python -c "import json; j=json.load(open('${GITHUB_EVENT_PATH}','r',encoding='utf-8')); print(j.get('workflow_run',{}).get('conclusion',''))")"
             echo "workflow_run.conclusion=${conclusion}"
             if [ "${conclusion}" != "success" ]; then
@@ -103,6 +102,27 @@ jobs:
           ls -al tw0050_bb_cache/forward_return_conditional.json
           python -c "import json; p='tw0050_bb_cache/forward_return_conditional.json'; j=json.load(open(p,'r',encoding='utf-8')); print('meta:', j.get('meta',{})); print('dq.flags:', j.get('dq',{}).get('flags',[]))"
 
+      - name: Render forward return conditional report (pure)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "tw0050_bb_cache/forward_return_conditional.json"
+          test -f "scripts/render_tw0050_forward_return_conditional_report.py"
+
+          python scripts/render_tw0050_forward_return_conditional_report.py \
+            --cache_dir tw0050_bb_cache \
+            --in_json forward_return_conditional.json \
+            --out_md forward_return_conditional_report.md \
+            --stats_json stats_latest.json
+
+      - name: Debug report (existence)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -al tw0050_bb_cache/forward_return_conditional_report.md
+          echo "=== report head ==="
+          head -n 80 tw0050_bb_cache/forward_return_conditional_report.md || true
+
       - name: Commit artifacts (if changed)
         shell: bash
         run: |
@@ -110,8 +130,10 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add tw0050_bb_cache/forward_return_conditional.json
-            git commit -m "Update forward_return_conditional (hit-rate)"
+            git add \
+              tw0050_bb_cache/forward_return_conditional.json \
+              tw0050_bb_cache/forward_return_conditional_report.md
+            git commit -m "Update forward_return_conditional + report"
             git push
           else
             echo "No changes to commit."
