@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-21T17:40:06.849374+08:00",
+  "generated_at": "2026-02-22T02:51:16.302127+08:00",
   "timezone": "Asia/Taipei",
   "summary": "今日為週末；UsedDate=2026-02-11：Mode=FULL；freshness_ok=False",
   "fetch": {
@@ -38,12 +38,12 @@
     "NewLowWin": 60
   },
   "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-02-11 | UsedDminus1=2026-02-10\nRunDayTag=WEEKEND | UsedDateStatus=OK_LATEST\nfreshness_ok=False | freshness_age_days=10\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).\nGUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).",
+  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-02-11 | UsedDminus1=2026-02-10\nRunDayTag=WEEKEND | UsedDateStatus=OK_LATEST\nfreshness_ok=False | freshness_age_days=11\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).\nGUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).",
   "run_day_tag": "WEEKEND",
   "used_date_status": "OK_LATEST",
   "tag": "WEEKEND",
   "freshness_ok": false,
-  "freshness_age_days": 10,
+  "freshness_age_days": 11,
   "mode": "FULL",
   "ohlc_status": "OK",
   "used_date": "2026-02-11",
