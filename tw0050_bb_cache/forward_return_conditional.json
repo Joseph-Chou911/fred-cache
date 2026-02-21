@@ -1,17 +1,25 @@
 {
+  "decision_mode": "clean_only",
   "meta": {
-    "generated_at_utc": "2026-02-21T11:57:50Z",
-    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v1",
+    "generated_at_utc": "2026-02-21T12:11:16Z",
+    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v2",
     "cache_dir": "tw0050_bb_cache",
     "price_calc": "adjclose",
     "stats_path": "tw0050_bb_cache/stats_latest.json",
-    "stats_last_date": null,
-    "bb_window_stats": null,
-    "bb_k_stats": null
+    "stats_last_date": "2026-02-11",
+    "bb_window_stats": 60,
+    "bb_k_stats": 2.0,
+    "stats_build_fingerprint": null,
+    "stats_generated_at_utc": null,
+    "price_last_date": "2026-02-11"
   },
   "dq": {
-    "flags": [],
-    "notes": []
+    "flags": [
+      "RAW_MODE_HAS_SPLIT_OUTLIERS"
+    ],
+    "notes": [
+      "raw_global_min=-0.762755 <= -0.40; treat raw as contaminated (split/outlier). Use clean_only."
+    ]
   },
   "forward_return_conditional": {
     "schema": "hier",
@@ -25,7 +33,8 @@
     "bb_ddof": 0,
     "break_detection": {
       "break_ratio_hi": 1.8,
-      "break_ratio_lo": 0.5555555556
+      "break_ratio_lo": 0.5555555556,
+      "break_count": 1
     },
     "horizons": {
       "10D": {
