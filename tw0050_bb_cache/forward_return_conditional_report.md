@@ -2,7 +2,7 @@
 
 - renderer_fingerprint: `render_tw0050_forward_return_conditional_report@2026-02-21.v2`
 - input_json: `forward_return_conditional.json`
-- input_generated_at_utc: `2026-02-21T15:01:27Z`
+- input_generated_at_utc: `2026-02-21T15:10:57Z`
 - input_build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7_5`
 - decision_mode: `clean_only`
 - scheme: `bb_z_5bucket_v1`
@@ -10,7 +10,7 @@
 - thresholds (near/extreme): `1.5` / `2.0`
 
 ## Meta
-- generated_at_utc: `2026-02-21T15:01:27Z`
+- generated_at_utc: `2026-02-21T15:10:57Z`
 - build_script_fingerprint: `build_tw0050_forward_return_conditional@2026-02-21.v7_5`
 - cache_dir: `tw0050_bb_cache`
 - price_calc: `adjclose`
@@ -174,8 +174,9 @@ _Audit-only._
 | 1222 | 2013-12-10 | 36.838791 | 1238 | 2014-01-02 | 0.249361097289 |
 
 ## Self-check (optional)
-- enabled: `False`
-- by_horizon: (none)
+- enabled: `True`
+### 10D
+### 20D
 
 ## Alignment hints (optional)
 - stats_last_date (from stats_json): `2026-02-11`

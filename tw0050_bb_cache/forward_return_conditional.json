@@ -1,7 +1,7 @@
 {
   "decision_mode": "clean_only",
   "meta": {
-    "generated_at_utc": "2026-02-21T15:01:27Z",
+    "generated_at_utc": "2026-02-21T15:10:57Z",
     "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v7_5",
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
@@ -626,8 +626,33 @@
       "current_bucket_canonical": ">=2"
     },
     "self_check": {
-      "enabled": false,
-      "by_horizon": {}
+      "enabled": true,
+      "by_horizon": {
+        "10D": {
+          "ok": true,
+          "issues": [],
+          "metrics": {
+            "raw_n_total": 4123,
+            "clean_n_total": 4113,
+            "excluded_by_break_mask": 10,
+            "clean_bucket_n_sum": 4113,
+            "raw_bucket_n_sum": 4123
+          },
+          "eps": 1e-12
+        },
+        "20D": {
+          "ok": true,
+          "issues": [],
+          "metrics": {
+            "raw_n_total": 4113,
+            "clean_n_total": 4093,
+            "excluded_by_break_mask": 20,
+            "clean_bucket_n_sum": 4093,
+            "raw_bucket_n_sum": 4113
+          },
+          "eps": 1e-12
+        }
+      }
     }
   }
 }
