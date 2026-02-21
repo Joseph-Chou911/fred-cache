@@ -43,11 +43,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps (minimal)
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           pip install pandas numpy
 
-      - name: Build forward return conditional (hit-rate)
+      - name: Build forward return conditional (hit-rate) — all/5y/3y
         shell: bash
         run: |
           set -euo pipefail
@@ -82,46 +84,100 @@ jobs:
           test -f "tw0050_bb_cache/stats_latest.json"
           test -f "scripts/build_tw0050_forward_return_conditional.py"
 
-          # 3) run
-          python scripts/build_tw0050_forward_return_conditional.py \
-            --cache_dir tw0050_bb_cache \
-            --price_csv "${PRICE_CSV}" \
-            --stats_json stats_latest.json \
-            --out_json forward_return_conditional.json \
-            --bb_window 60 \
-            --bb_k 2.0 \
-            --bb_ddof 0 \
-            --horizons 10,20 \
-            --break_ratio_hi 1.8 \
-            --break_ratio_lo 0.5555555556
+          run_build () {
+            local LOOKBACK="$1"
+            local OUTNAME="$2"
+            python scripts/build_tw0050_forward_return_conditional.py \
+              --cache_dir tw0050_bb_cache \
+              --price_csv "${PRICE_CSV}" \
+              --stats_json stats_latest.json \
+              --out_json "${OUTNAME}" \
+              --bb_window 60 \
+              --bb_k 2.0 \
+              --bb_ddof 0 \
+              --horizons 10,20 \
+              --break_ratio_hi 1.8 \
+              --break_ratio_lo 0.5555555556 \
+              --lookback_years "${LOOKBACK}"
+          }
 
-      - name: Debug output (existence)
+          # 3) run: ALL / 5Y / 3Y
+          run_build 0 forward_return_conditional.json
+          run_build 5 forward_return_conditional_5y.json
+          run_build 3 forward_return_conditional_3y.json
+
+      - name: Debug outputs (existence)
         shell: bash
         run: |
           set -euo pipefail
-          ls -al tw0050_bb_cache/forward_return_conditional.json
-          python -c "import json; p='tw0050_bb_cache/forward_return_conditional.json'; j=json.load(open(p,'r',encoding='utf-8')); print('meta:', j.get('meta',{})); print('dq.flags:', j.get('dq',{}).get('flags',[]))"
+          for f in \
+            tw0050_bb_cache/forward_return_conditional.json \
+            tw0050_bb_cache/forward_return_conditional_5y.json \
+            tw0050_bb_cache/forward_return_conditional_3y.json
+          do
+            echo "=== ${f} ==="
+            ls -al "${f}"
+            python -c "import json; j=json.load(open('${f}','r',encoding='utf-8')); print('meta.out_json:', j.get('meta',{}).get('out_json')); print('lookback_years:', j.get('meta',{}).get('lookback_years')); print('dq.flags:', j.get('dq',{}).get('flags',[]))"
+          done
 
-      - name: Render forward return conditional report (pure)
+      - name: Render reports (all/5y/3y) — backward compatible with render v1
         shell: bash
         run: |
           set -euo pipefail
-          test -f "tw0050_bb_cache/forward_return_conditional.json"
+          set -x
+
           test -f "scripts/render_tw0050_forward_return_conditional_report.py"
 
-          python scripts/render_tw0050_forward_return_conditional_report.py \
-            --cache_dir tw0050_bb_cache \
-            --in_json forward_return_conditional.json \
-            --out_md forward_return_conditional_report.md \
-            --stats_json stats_latest.json
+          render_one () {
+            local IN_JSON="$1"
+            local OUT_MD="$2"
 
-      - name: Debug report (existence)
-        shell: bash
-        run: |
-          set -euo pipefail
-          ls -al tw0050_bb_cache/forward_return_conditional_report.md
-          echo "=== report head ==="
-          head -n 80 tw0050_bb_cache/forward_return_conditional_report.md || true
+            # Preferred: try argument-driven render (if supported).
+            if python scripts/render_tw0050_forward_return_conditional_report.py --help 2>/dev/null | grep -q -- "--input_json"; then
+              python scripts/render_tw0050_forward_return_conditional_report.py \
+                --cache_dir tw0050_bb_cache \
+                --input_json "${IN_JSON}" \
+                --out_md "${OUT_MD}"
+              return 0
+            fi
+
+            # Fallback for old render v1 (no args): it likely reads fixed name and writes fixed report.
+            # We do a reversible swap so we can produce 3 reports without changing render.
+            local FIXED_IN="tw0050_bb_cache/forward_return_conditional.json"
+            local FIXED_OUT="tw0050_bb_cache/forward_return_conditional_report.md"
+            local BAK_IN="tw0050_bb_cache/__bak_forward_return_conditional.json"
+
+            # backup fixed input if it exists
+            if [ -f "${FIXED_IN}" ]; then
+              cp -f "${FIXED_IN}" "${BAK_IN}"
+            fi
+
+            # swap in requested json as the fixed input name
+            cp -f "tw0050_bb_cache/${IN_JSON}" "${FIXED_IN}"
+
+            # run old renderer (no args)
+            python scripts/render_tw0050_forward_return_conditional_report.py
+
+            # move produced report to desired name (if fixed out exists)
+            if [ -f "${FIXED_OUT}" ]; then
+              mv -f "${FIXED_OUT}" "tw0050_bb_cache/${OUT_MD}"
+            else
+              echo "ERROR: render v1 did not produce expected fixed output: ${FIXED_OUT}"
+              exit 1
+            fi
+
+            # restore fixed input if we backed it up
+            if [ -f "${BAK_IN}" ]; then
+              mv -f "${BAK_IN}" "${FIXED_IN}"
+            fi
+          }
+
+          render_one forward_return_conditional.json forward_return_conditional_report.md
+          render_one forward_return_conditional_5y.json forward_return_conditional_5y_report.md
+          render_one forward_return_conditional_3y.json forward_return_conditional_3y_report.md
+
+          echo "=== rendered reports ==="
+          ls -al tw0050_bb_cache/*report*.md || true
 
       - name: Commit artifacts (if changed)
         shell: bash
@@ -132,8 +188,12 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add \
               tw0050_bb_cache/forward_return_conditional.json \
-              tw0050_bb_cache/forward_return_conditional_report.md
-            git commit -m "Update forward_return_conditional + report"
+              tw0050_bb_cache/forward_return_conditional_5y.json \
+              tw0050_bb_cache/forward_return_conditional_3y.json \
+              tw0050_bb_cache/forward_return_conditional_report.md \
+              tw0050_bb_cache/forward_return_conditional_5y_report.md \
+              tw0050_bb_cache/forward_return_conditional_3y_report.md
+            git commit -m "Update forward_return_conditional (all/5y/3y) + reports"
             git push
           else
             echo "No changes to commit."
