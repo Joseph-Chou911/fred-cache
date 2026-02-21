@@ -15,7 +15,7 @@ import pandas as pd
 
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "build_tw0050_forward_return_conditional@2026-02-21.v7_2"
+BUILD_SCRIPT_FINGERPRINT = "build_tw0050_forward_return_conditional@2026-02-21.v7_5"
 
 
 def utc_now_iso() -> str:
@@ -105,6 +105,9 @@ def _calc_bb_z(series: pd.Series, window: int, ddof: int) -> pd.Series:
 
 
 def _bucket_from_z(z: float, thr_near: float = 1.5, thr_extreme: float = 2.0) -> str:
+    # Defensive: NaN should never be bucketed silently.
+    if z is None or (isinstance(z, float) and not math.isfinite(z)):
+        return "UNKNOWN"
     if z <= -thr_extreme:
         return "<=-2"
     if (-thr_extreme < z) and (z <= -thr_near):
@@ -237,6 +240,38 @@ def _normalize_date_col(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# --- self-check helpers ---
+_ALLOWED_BUCKETS = ["<=-2", "(-2,-1.5]", "(-1.5,1.5)", "[1.5,2)", ">=2"]
+
+
+def _by_bucket_map(obj: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    rows = obj.get("by_bucket")
+    if not isinstance(rows, list):
+        return {}
+    m: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        bk = r.get("bucket_canonical")
+        if isinstance(bk, str) and bk.strip():
+            m[bk] = r
+    return m
+
+
+def _min_audit_map(obj: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    rows = obj.get("min_audit_by_bucket")
+    if not isinstance(rows, list):
+        return {}
+    m: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        bk = r.get("bucket_canonical")
+        if isinstance(bk, str) and bk.strip():
+            m[bk] = r
+    return m
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache_dir", required=True)
@@ -254,10 +289,12 @@ def main() -> None:
 
     ap.add_argument("--raw_min_contam_threshold", type=float, default=-0.40)
 
-    # NEW (Phase 1): lookback window
     ap.add_argument("--lookback_years", type=int, default=0, help="0=all; e.g. 3 or 5 for last N years only")
     ap.add_argument("--break_samples_n", type=int, default=5)
     ap.add_argument("--excluded_entries_sample_n", type=int, default=5)
+
+    ap.add_argument("--enable_self_check", action="store_true", help="Enable internal consistency self-check")
+    ap.add_argument("--self_check_eps", type=float, default=1e-12, help="Tolerance for float comparisons in self-check")
 
     args = ap.parse_args()
 
@@ -273,7 +310,6 @@ def main() -> None:
 
     stats = _read_json(stats_path)
 
-    # ----- meta alignment from stats_latest.json -----
     stats_last_date = _pick(stats, [["meta", "last_date"], ["last_date"]], default=None)
     bb_window_stats = _pick(stats, [["meta", "bb_window"], ["bb_window"]], default=None)
     bb_k_stats = _pick(stats, [["meta", "bb_k"], ["bb_k"]], default=None)
@@ -302,7 +338,6 @@ def main() -> None:
     price_calc = _pick(stats, [["meta", "price_calc"], ["price_calc"]], default="adjclose")
     break_count_stats = _pick(stats, [["meta", "break_detection", "break_count"]], default=None)
 
-    # ----- read price csv -----
     df_raw = pd.read_csv(price_path)
     df_raw = _normalize_date_col(df_raw)
 
@@ -310,27 +345,22 @@ def main() -> None:
     df_raw["price"] = pd.to_numeric(df_raw[price_col], errors="coerce")
     df_raw = df_raw.dropna(subset=["price"]).copy()
 
-    # final cleaned full series (df_all)
     df = df_raw.sort_values("date_ts").reset_index(drop=True)
     df["t_pos"] = np.arange(len(df), dtype=int)
     rows_price_csv = int(len(df))
 
     price_last_date = _infer_price_last_date(df, "date_ts")
 
-    # compute bb_z on full series
     df["bb_z"] = _calc_bb_z(df["price"], window=int(args.bb_window), ddof=int(args.bb_ddof))
     df["bb_z"] = df["bb_z"].replace([np.inf, -np.inf], np.nan)
 
-    # compute forward returns on full series
     horizons = _parse_horizons(args.horizons)
     for h in horizons:
         df[f"ret_{h}D"] = _forward_return(df["price"], horizon=h)
 
-    # break detection on the same price series you compute returns on
     break_pos = _detect_break_positions(df["price"], hi=float(args.break_ratio_hi), lo=float(args.break_ratio_lo))
     break_count_detected = int(len(break_pos))
 
-    # break_samples (first N)
     break_samples: List[Dict[str, Any]] = []
     max_bs = max(0, int(args.break_samples_n))
     if max_bs > 0 and break_count_detected > 0:
@@ -351,7 +381,6 @@ def main() -> None:
                 }
             )
 
-    # lookback mask (aligned to df)
     lookback_years = int(args.lookback_years)
     if lookback_years > 0:
         max_dt = pd.to_datetime(df["date_ts"]).max()
@@ -362,7 +391,7 @@ def main() -> None:
         lookback_mask = pd.Series(True, index=df.index, dtype=bool)
         lookback_start_date = None
 
-    # base mask: z exists
+    # NOTE: df["bb_z"] already has +/-inf replaced to NaN above; isfinite is a belt-and-suspenders guard.
     base_z = df["bb_z"].notna() & np.isfinite(df["bb_z"].astype(float))
 
     out: Dict[str, Any] = {
@@ -404,44 +433,34 @@ def main() -> None:
                 "break_ratio_lo": float(args.break_ratio_lo),
                 "break_count_stats": break_count_stats,
                 "break_count_detected": break_count_detected,
+                "contam_mask_semantics": "exclude entries t where t < i <= t+h (t in [i-h, i-1])",
                 "break_samples": break_samples,
             },
             "horizons": {},
             "current": {},
-            "self_check": {"enabled": False, "by_horizon": {}},
+            "self_check": {"enabled": bool(args.enable_self_check), "by_horizon": {}},
         },
     }
 
-    # --- Audit cross-check: break_count from stats vs detected from price_csv series ---
-    if break_count_stats is not None:
-        try:
-            bc_stats_i = int(break_count_stats)
-            if bc_stats_i != break_count_detected:
-                out["dq"]["flags"].append("BREAK_COUNT_MISMATCH_STATS_VS_DETECTED")
-                out["dq"]["notes"].append(
-                    f"break_count mismatch: stats={bc_stats_i} vs detected={break_count_detected}; "
-                    "forward_return_conditional uses detected breaks from price_csv series."
-                )
-        except Exception:
-            out["dq"]["flags"].append("BREAK_COUNT_STATS_NONINT")
-            out["dq"]["notes"].append(f"break_count_stats non-int: {break_count_stats!r}")
+    hi = _to_float(args.break_ratio_hi)
+    lo = _to_float(args.break_ratio_lo)
+    if hi is not None and lo is not None and np.isfinite(hi) and np.isfinite(lo) and hi > 0.0 and lo > 0.0:
+        expected_lo = float(1.0 / hi)
+        if abs(float(lo) - expected_lo) > 1e-6:
+            out["dq"]["flags"].append("BREAK_RATIO_LO_ASYMMETRIC")
+            out["dq"]["notes"].append(f"break_ratio_lo={float(lo)} != 1/break_ratio_hi={expected_lo:.10f}")
+    else:
+        out["dq"]["notes"].append("break_ratio symmetry check skipped (hi/lo not finite positive floats)")
 
-    # --- Audit note: hi/lo symmetry check (lo should be approx 1/hi) ---
     try:
-        hi = float(args.break_ratio_hi)
-        lo = float(args.break_ratio_lo)
-        if np.isfinite(hi) and hi > 0.0 and np.isfinite(lo) and lo > 0.0:
-            expected_lo = 1.0 / hi
-            if abs(lo - expected_lo) > 1e-6:
-                out["dq"]["flags"].append("BREAK_RATIO_LO_ASYMMETRIC")
-                out["dq"]["notes"].append(
-                    f"break_ratio_lo={lo} != 1/break_ratio_hi={expected_lo}; "
-                    "this may be intentional, but can drift if only hi is adjusted."
-                )
+        if break_count_stats is not None and int(break_count_stats) != int(break_count_detected):
+            out["dq"]["flags"].append("BREAK_COUNT_MISMATCH_STATS_VS_DETECTED")
+            out["dq"]["notes"].append(
+                f"break_count_stats={int(break_count_stats)} != break_count_detected={int(break_count_detected)}"
+            )
     except Exception:
-        pass
+        out["dq"]["notes"].append("break_count cross-check skipped (non-int stats field)")
 
-    # current fields (prefer stats.latest.bb_z)
     current_asof = _pick(stats, [["latest", "date"], ["meta", "last_date"], ["last_date"]], default=None)
     current_z = _pick(stats, [["latest", "bb_z"]], default=None)
     if current_z is None:
@@ -468,9 +487,15 @@ def main() -> None:
         }
 
     def summarize_mode(h: int, mode_name: str, mask: pd.Series) -> Dict[str, Any]:
-        # Defensive: ensure bb_z is present (avoid NaN silently mapping to '>=2')
-        dfm = df.loc[mask & df["bb_z"].notna()].copy()
         ret_col = f"ret_{h}D"
+
+        # Defensive: ensure bb_z is present inside summarize_mode itself.
+        mask2 = mask & df["bb_z"].notna() & np.isfinite(df["bb_z"].astype(float))
+        dfm = df.loc[mask2].copy()
+
+        # v7_5 FIX: also ensure ret_col is valid here (do not rely on caller mask).
+        # This should be redundant in the current pipeline (base_mask_h already includes ret_col.notna()).
+        dfm = dfm[dfm[ret_col].notna()].copy()
 
         if dfm.empty:
             return {
@@ -478,15 +503,20 @@ def main() -> None:
                 "n_total": 0,
                 "by_bucket": [],
                 "min_audit_by_bucket": [],
+                "unknown_bucket_n": 0,
             }
 
-        # bucket
         dfm["bucket_canonical"] = dfm["bb_z"].astype(float).map(lambda z: _bucket_from_z(float(z)))
+        unknown_n = int((dfm["bucket_canonical"] == "UNKNOWN").sum())
+
+        if unknown_n > 0:
+            out["dq"]["flags"].append("BUCKET_UNKNOWN_IN_SUMMARIZE")
+            out["dq"]["notes"].append(f"horizon={h}D mode={mode_name}: unknown_bucket_n={unknown_n}")
 
         by_bucket: List[Dict[str, Any]] = []
         min_audit_by_bucket: List[Dict[str, Any]] = []
 
-        for bk in ["<=-2", "(-2,-1.5]", "(-1.5,1.5)", "[1.5,2)", ">=2"]:
+        for bk in _ALLOWED_BUCKETS:
             part = dfm[dfm["bucket_canonical"] == bk]
             n = int(len(part))
             if n == 0:
@@ -515,20 +545,18 @@ def main() -> None:
             "n_total": int(len(dfm)),
             "by_bucket": by_bucket,
             "min_audit_by_bucket": min_audit_by_bucket,
+            "unknown_bucket_n": unknown_n,
         }
 
     def first_break_in_window(t: int, h: int) -> Optional[int]:
-        # find min i in break_pos with t < i <= t+h
         if break_pos.size == 0:
             return None
-        lo = t + 1
-        hi = t + h
-        idx = int(np.searchsorted(break_pos, lo, side="left"))
-        if idx < len(break_pos) and int(break_pos[idx]) <= hi:
+        lo_ = t + 1
+        idx = int(np.searchsorted(break_pos, lo_, side="left"))
+        if idx < len(break_pos) and int(break_pos[idx]) <= (t + h):
             return int(break_pos[idx])
         return None
 
-    # build horizons
     raw_global_min: Optional[float] = None
     mins_collect: List[float] = []
 
@@ -536,23 +564,20 @@ def main() -> None:
         ret_col = f"ret_{h}D"
         base_mask_h = lookback_mask & base_z & df[ret_col].notna()
 
-        # raw (audit-only)
         raw_obj = summarize_mode(h, "raw", base_mask_h)
 
-        # clean mask: exclude windows contaminated by breaks
         contam_arr = _contam_mask_from_breaks(len(df), break_pos, horizon=h)
-        contam = pd.Series(contam_arr, index=df.index)
+        contam = pd.Series(contam_arr, index=df.index, dtype=bool)
 
         clean_mask_h = base_mask_h & (~contam)
         clean_obj = summarize_mode(h, "clean", clean_mask_h)
 
-        excluded_by_break_mask = int((base_mask_h & contam).sum())
+        excluded_by_break_mask = int((base_mask_h & contam & base_z).sum())
 
-        # excluded_entries_sample (first N)
         excluded_entries_sample: List[Dict[str, Any]] = []
         max_es = max(0, int(args.excluded_entries_sample_n))
         if max_es > 0 and excluded_by_break_mask > 0:
-            idxs = df.index[(base_mask_h & contam)].tolist()[:max_es]
+            idxs = df.index[(base_mask_h & contam & base_z)].tolist()[:max_es]
             for idx in idxs:
                 row = df.loc[idx]
                 tpos = int(row["t_pos"])
@@ -586,16 +611,83 @@ def main() -> None:
         if excluded_by_break_mask > 0:
             out["dq"]["notes"].append(f"horizon={h}D excluded_by_break_mask={excluded_by_break_mask}")
 
-        # collect raw mins for contamination decision
-        for row2 in raw_obj.get("by_bucket", []):
-            mv = row2.get("min")
+        for row in raw_obj.get("by_bucket", []):
+            mv = row.get("min")
             if mv is not None:
                 try:
                     mins_collect.append(float(mv))
                 except Exception:
                     pass
 
-    # DQ: warn raw contamination by global min threshold
+        if bool(args.enable_self_check):
+            issues: List[str] = []
+            metrics: Dict[str, Any] = {}
+
+            raw_n_total = int(raw_obj.get("n_total") or 0)
+            clean_n_total = int(clean_obj.get("n_total") or 0)
+            excluded_reported = int(excluded_by_break_mask or 0)
+
+            metrics["raw_n_total"] = raw_n_total
+            metrics["clean_n_total"] = clean_n_total
+            metrics["excluded_by_break_mask"] = excluded_reported
+
+            if raw_n_total < clean_n_total:
+                issues.append("raw_n_total < clean_n_total (unexpected)")
+            if (raw_n_total - clean_n_total) != excluded_reported:
+                issues.append(
+                    f"excluded_by_break_mask mismatch: raw-clean={raw_n_total-clean_n_total} vs reported={excluded_reported}"
+                )
+
+            for mode_name, obj in [("clean", clean_obj), ("raw", raw_obj)]:
+                by_map = _by_bucket_map(obj)
+                unknown = [bk for bk in by_map.keys() if bk not in _ALLOWED_BUCKETS]
+                if unknown:
+                    issues.append(f"{mode_name}: has unknown bucket(s): {unknown}")
+
+                ns: List[int] = []
+                for bk in _ALLOWED_BUCKETS:
+                    r = by_map.get(bk)
+                    if r is None:
+                        continue
+                    try:
+                        ns.append(int(r.get("n") or 0))
+                    except Exception:
+                        pass
+                n_sum = int(sum(ns))
+                n_total = int(obj.get("n_total") or 0)
+                metrics[f"{mode_name}_bucket_n_sum"] = n_sum
+                if n_total != n_sum:
+                    issues.append(f"{mode_name}: sum(bucket.n)={n_sum} != n_total={n_total}")
+
+            eps = float(args.self_check_eps)
+            for mode_name, obj in [("clean", clean_obj), ("raw", raw_obj)]:
+                by_map = _by_bucket_map(obj)
+                ma_map = _min_audit_map(obj)
+                for bk in _ALLOWED_BUCKETS:
+                    r = by_map.get(bk)
+                    ma = ma_map.get(bk)
+                    if r is None or ma is None:
+                        continue
+                    try:
+                        m1 = float(r.get("min"))
+                        m2 = float(ma.get("min"))
+                        if abs(m1 - m2) > eps:
+                            issues.append(f"{mode_name}:{bk} min mismatch by_bucket={m1} vs min_audit={m2}")
+                    except Exception:
+                        issues.append(f"{mode_name}:{bk} min check failed (non-float)")
+
+            sc_by_h = out["forward_return_conditional"]["self_check"].get("by_horizon")
+            if not isinstance(sc_by_h, dict):
+                out["forward_return_conditional"]["self_check"]["by_horizon"] = {}
+                sc_by_h = out["forward_return_conditional"]["self_check"]["by_horizon"]
+
+            sc_by_h[f"{h}D"] = {
+                "ok": (len(issues) == 0),
+                "issues": issues,
+                "metrics": metrics,
+                "eps": eps,
+            }
+
     if mins_collect:
         try:
             raw_global_min = float(min(mins_collect))
@@ -611,7 +703,6 @@ def main() -> None:
             "treat raw as contaminated (split/outlier). Use clean_only."
         )
 
-    # finalize policy + decision_mode
     out["decision_mode"] = "clean_only"
     out["forward_return_conditional"]["policy"] = {
         "decision_mode": "clean_only",
