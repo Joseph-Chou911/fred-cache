@@ -1,7 +1,7 @@
 {
   "decision_mode": "clean_only",
   "meta": {
-    "generated_at_utc": "2026-02-21T12:38:51Z",
+    "generated_at_utc": "2026-02-21T12:51:16Z",
     "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v6",
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
