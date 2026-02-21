@@ -15,10 +15,24 @@ concurrency:
 
 jobs:
   run:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
+      - name: Guard (only run after success on workflow_run)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
+            # workflow_run payload path exists only for workflow_run events
+            conclusion="$(python -c "import json; j=json.load(open('${GITHUB_EVENT_PATH}','r',encoding='utf-8')); print(j.get('workflow_run',{}).get('conclusion',''))")"
+            echo "workflow_run.conclusion=${conclusion}"
+            if [ "${conclusion}" != "success" ]; then
+              echo "Upstream workflow not successful; skip."
+              exit 0
+            fi
+          fi
+          echo "Proceed."
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -45,22 +59,22 @@ jobs:
           echo "=== csv candidates ==="
           ls -al tw0050_bb_cache/*.csv || true
 
-          # 1) pick price csv
+          # 1) pick price csv: prefer price.csv, else detect by header containing adjclose/adj_close
           PRICE_CSV="price.csv"
           if [ ! -f "tw0050_bb_cache/${PRICE_CSV}" ]; then
-            PRICE_CSV="$(python -c '
-import glob, sys
-cands = sorted(glob.glob("tw0050_bb_cache/*.csv"))
-for p in cands:
-    try:
-        h = open(p, "r", encoding="utf-8", errors="ignore").readline().lower()
-    except Exception:
-        continue
-    if "adjclose" in h or "adj_close" in h:
-        print(p.split("/")[-1])
-        sys.exit(0)
-sys.exit(1)
-')"
+            PRICE_CSV=""
+            for f in tw0050_bb_cache/*.csv; do
+              [ -f "$f" ] || continue
+              hdr="$(head -n 1 "$f" | tr 'A-Z' 'a-z' || true)"
+              if echo "$hdr" | grep -Eq '(adjclose|adj_close)'; then
+                PRICE_CSV="$(basename "$f")"
+                break
+              fi
+            done
+            if [ -z "${PRICE_CSV}" ]; then
+              echo "ERROR: no price-like CSV found (header must contain adjclose/adj_close)."
+              exit 1
+            fi
             echo "Auto-detected PRICE_CSV=${PRICE_CSV}"
           fi
 
@@ -82,12 +96,12 @@ sys.exit(1)
             --break_ratio_hi 1.8 \
             --break_ratio_lo 0.5555555556
 
-      - name: Debug forward_return_conditional.json (existence)
+      - name: Debug output (existence)
         shell: bash
         run: |
           set -euo pipefail
           ls -al tw0050_bb_cache/forward_return_conditional.json
-          python -c "import json; p='tw0050_bb_cache/forward_return_conditional.json'; j=json.load(open(p,'r',encoding='utf-8')); print('meta:', j.get('meta', {})); print('dq.flags:', j.get('dq', {}).get('flags', []))"
+          python -c "import json; p='tw0050_bb_cache/forward_return_conditional.json'; j=json.load(open(p,'r',encoding='utf-8')); print('meta:', j.get('meta',{})); print('dq.flags:', j.get('dq',{}).get('flags',[]))"
 
       - name: Commit artifacts (if changed)
         shell: bash
