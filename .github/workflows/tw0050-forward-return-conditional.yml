@@ -1,10 +1,10 @@
 name: tw0050-forward-return-conditional
 
 on:
-  workflow_run:
-    workflows: ["tw0050-bb60-forwardmdd20"]
-    types: [completed]
   workflow_dispatch:
+  schedule:
+    # Runs after your main tw0050_bb build job (example: if main job is 06:35 UTC, run this at 06:50 UTC)
+    - cron: "50 6 * * 1-5"
 
 permissions:
   contents: write
@@ -16,125 +16,75 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Guard (only run after success on workflow_run)
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
-            conclusion="$(python -c "import json; j=json.load(open('${GITHUB_EVENT_PATH}','r',encoding='utf-8')); print(j.get('workflow_run',{}).get('conclusion',''))")"
-            echo "workflow_run.conclusion=${conclusion}"
-            if [ "${conclusion}" != "success" ]; then
-              echo "Upstream workflow not successful; skip."
-              exit 0
-            fi
-          fi
-          echo "Proceed."
-
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps (minimal)
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy
+          pip install numpy pandas
 
-      - name: Build forward return conditional (hit-rate)
-        shell: bash
+      - name: Sanity check inputs
         run: |
           set -euo pipefail
-          set -x
+          ls -la tw0050_bb_cache || true
+          test -f tw0050_bb_cache/data.csv
+          test -f tw0050_bb_cache/stats_latest.json
+          echo "OK: inputs exist"
 
-          echo "=== list cache dir ==="
-          ls -al tw0050_bb_cache || true
-          echo "=== csv candidates ==="
-          ls -al tw0050_bb_cache/*.csv || true
-
-          # 1) pick price csv: prefer price.csv, else detect by header containing adjclose/adj_close
-          PRICE_CSV="price.csv"
-          if [ ! -f "tw0050_bb_cache/${PRICE_CSV}" ]; then
-            PRICE_CSV=""
-            for f in tw0050_bb_cache/*.csv; do
-              [ -f "$f" ] || continue
-              hdr="$(head -n 1 "$f" | tr 'A-Z' 'a-z' || true)"
-              if echo "$hdr" | grep -Eq '(adjclose|adj_close)'; then
-                PRICE_CSV="$(basename "$f")"
-                break
-              fi
-            done
-            if [ -z "${PRICE_CSV}" ]; then
-              echo "ERROR: no price-like CSV found (header must contain adjclose/adj_close)."
-              exit 1
-            fi
-            echo "Auto-detected PRICE_CSV=${PRICE_CSV}"
-          fi
-
-          # 2) required inputs
-          test -f "tw0050_bb_cache/${PRICE_CSV}"
-          test -f "tw0050_bb_cache/stats_latest.json"
-          test -f "scripts/build_tw0050_forward_return_conditional.py"
-
-          # 3) run
-          python scripts/build_tw0050_forward_return_conditional.py \
+      - name: Build forward_return_conditional.json
+        run: |
+          set -euo pipefail
+          python build_tw0050_forward_return_conditional.py \
             --cache_dir tw0050_bb_cache \
-            --price_csv "${PRICE_CSV}" \
+            --price_csv data.csv \
             --stats_json stats_latest.json \
             --out_json forward_return_conditional.json \
             --bb_window 60 \
             --bb_k 2.0 \
             --bb_ddof 0 \
-            --horizons 10,20 \
+            --horizons "10,20" \
             --break_ratio_hi 1.8 \
-            --break_ratio_lo 0.5555555556
+            --break_ratio_lo 0.5555555556 \
+            --raw_min_contam_threshold -0.40 \
+            --lookback_years 0 \
+            --break_samples_n 5 \
+            --excluded_entries_sample_n 5
 
-      - name: Debug output (existence)
-        shell: bash
+      - name: Render report.md
         run: |
           set -euo pipefail
-          ls -al tw0050_bb_cache/forward_return_conditional.json
-          python -c "import json; p='tw0050_bb_cache/forward_return_conditional.json'; j=json.load(open(p,'r',encoding='utf-8')); print('meta:', j.get('meta',{})); print('dq.flags:', j.get('dq',{}).get('flags',[]))"
-
-      - name: Render forward return conditional report (pure)
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f "tw0050_bb_cache/forward_return_conditional.json"
-          test -f "scripts/render_tw0050_forward_return_conditional_report.py"
-
-          python scripts/render_tw0050_forward_return_conditional_report.py \
+          python render_tw0050_forward_return_conditional_report.py \
             --cache_dir tw0050_bb_cache \
             --in_json forward_return_conditional.json \
             --out_md forward_return_conditional_report.md \
             --stats_json stats_latest.json
 
-      - name: Debug report (existence)
-        shell: bash
+      - name: Git status (debug)
         run: |
           set -euo pipefail
-          ls -al tw0050_bb_cache/forward_return_conditional_report.md
-          echo "=== report head ==="
-          head -n 80 tw0050_bb_cache/forward_return_conditional_report.md || true
+          git status --porcelain
+          ls -la tw0050_bb_cache/forward_return_conditional.json
+          ls -la tw0050_bb_cache/forward_return_conditional_report.md
 
-      - name: Commit artifacts (if changed)
-        shell: bash
+      - name: Commit and push (if changed)
         run: |
-          set -e
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add \
-              tw0050_bb_cache/forward_return_conditional.json \
-              tw0050_bb_cache/forward_return_conditional_report.md
-            git commit -m "Update forward_return_conditional + report"
-            git push
-          else
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A tw0050_bb_cache/forward_return_conditional.json tw0050_bb_cache/forward_return_conditional_report.md
+
+          if git diff --cached --quiet; then
             echo "No changes to commit."
+            exit 0
           fi
+
+          git commit -m "update tw0050 forward return conditional report"
+          git push
