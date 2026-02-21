@@ -1,7 +1,7 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-02-21T04:18:08Z`
-- build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v16`
+- report_generated_at_utc: `2026-02-21T04:48:49Z`
+- build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
 - ticker: `0050.TW`
@@ -23,26 +23,269 @@
 - dist_to_lower=27.60%; dist_to_upper=-0.37%; above_upper=0.37%; below_lower=0.00%; DQ=PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN; FWD_OUTLIER=20D
 - forward_mdd_clean_20D distribution (n=4152): p50=-0.0183; p10=-0.0687; p05=-0.0928; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
 - forward_mdd_clean_10D distribution (n=4172): p50=-0.0114; p10=-0.0480; p05=-0.0631; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]
-- forward_mdd_conditional: present=true; current_bucket_key=z_ge_2.0; canon=>=2
+- forward_mdd_conditional[20D/clean](bucket_key=z_ge_2.0, canon=>=2, n=396): p10=-0.0502; p05=-0.0666; min=-0.2130 (min_window: 2024-07-11->2024-08-05; 48.7068->38.3315)
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=37.69%; slope=6.13% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=20.7%; atr=1.2304 (1.59%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=79.84
 - margin(5D,thr=100.00億): TOTAL -197.70 億 => **DELEVERAGING**; TWSE -160.00 / TPEX -37.70; margin_date=2026-02-11, price_last_date=2026-02-11 (ALIGNED); data_date=2026-02-11
-- chip_overlay(T86+TWT72U,5D): total3_5D=-8,882,867; foreign=-14,398,187; trust=17,326,000; dealer=-11,810,680; borrow_shares=135,405,000 (Δ1D=-9,446,000); borrow_mv(億)=104.5 (Δ1D=-4.8); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
+- chip_overlay(T86+TWT72U,5D): total3_5D=-82,186,574; foreign=-67,066,476; trust=17,226,000; dealer=-32,346,098; borrow_shares=135,405,000 (Δ1D=-72,875,000); borrow_mv(億)=104.5 (Δ1D=-49.5); asof=20260211; price_last_date=2026-02-11 (ALIGNED)
 
 ## forward_mdd_conditional (bb_z buckets)
 
 - block_path_used: `forward_mdd_conditional`
+- schema_detected: `hier`
+- scheme: `bb_z_5bucket_v1`
+- thresholds: {"extreme": 2.0, "near": 1.5}
+- forward_mode_primary(meta): `clean`
+- horizons_available: `20D, 10D`
+
+### horizon=20D (days=20), mode=clean
+
+- schema: `hier`
+- block_path_used: `forward_mdd_conditional`
+- scheme: `bb_z_5bucket_v1`
+- definition: `scheme=bb_z_5bucket_v1; horizon=20D; mode=clean`
 - current_bb_z: `2.0543`
 - current_bucket_key: `z_ge_2.0`
 - current_bucket_canonical: `>=2`
-- definition: `N/A`
-- horizon_days: `N/A`
 
-### parse_notes
-- no buckets/by_bucket; and no direct bucket keys found
+#### parse_notes
+- mode_used=clean
+- available_modes=clean,primary,raw
 
-- buckets: N/A (could not normalize)
+#### current_bucket_detail (p10/p05/min + audit)
+
+| item | value |
+|---|---:|
+| bucket_key | z_ge_2.0 |
+| bucket_canonical | >=2 |
+| n | 396 |
+| p10 | -0.0502 |
+| p05 | -0.0666 |
+| min | -0.2130 |
+| min_entry_date | 2024-07-11 |
+| min_entry_price | 48.7068 |
+| min_future_date | 2024-08-05 |
+| min_future_price | 38.3315 |
+
+- min_window: `2024-07-11->2024-08-05`; `48.7068->38.3315`
+
+#### conditional quantiles by bucket (canonical order)
+
+| bucket | raw_key(example) | n | p50 | p25 | p10 | p05 | min |
+|---|---|---:|---:|---:|---:|---:|---:|
+| <=-2 | z_le_-2.0 | 205 | -0.0329 | -0.0614 | -0.1265 | -0.1902 | -0.2152 |
+| (-2,-1.5] | -2.0_to_-1.5 | 205 | -0.0214 | -0.0513 | -0.0866 | -0.1137 | -0.2267 |
+| (-1.5,1.5) | -1.5_to_1.5 | 2,632 | -0.0183 | -0.0406 | -0.0679 | -0.0913 | -0.2557 |
+| [1.5,2) | 1.5_to_2.0 | 655 | -0.0168 | -0.0358 | -0.0600 | -0.0735 | -0.1935 |
+| >=2 | z_ge_2.0 | 396 | -0.0123 | -0.0282 | -0.0502 | -0.0666 | -0.2130 |
+
+#### min audit trail by bucket (canonical order)
+
+##### bucket: <=-2 (raw_key=z_le_-2.0)
+
+| item | value |
+|---|---:|
+| n | 205 |
+| p10 | -0.1265 |
+| p05 | -0.1902 |
+| min | -0.2152 |
+| min_entry_date | 2020-03-02 |
+| min_entry_price | 18.4165 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
+| dq_flags | (none) |
+
+- min_window: `2020-03-02->2020-03-19`; `18.4165->14.4528`
+
+##### bucket: (-2,-1.5] (raw_key=-2.0_to_-1.5)
+
+| item | value |
+|---|---:|
+| n | 205 |
+| p10 | -0.0866 |
+| p05 | -0.1137 |
+| min | -0.2267 |
+| min_entry_date | 2020-02-27 |
+| min_entry_price | 18.6905 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
+| dq_flags | (none) |
+
+- min_window: `2020-02-27->2020-03-19`; `18.6905->14.4528`
+
+##### bucket: (-1.5,1.5) (raw_key=-1.5_to_1.5)
+
+| item | value |
+|---|---:|
+| n | 2,632 |
+| p10 | -0.0679 |
+| p05 | -0.0913 |
+| min | -0.2557 |
+| min_entry_date | 2020-02-19 |
+| min_entry_price | 19.4179 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
+| dq_flags | (none) |
+
+- min_window: `2020-02-19->2020-03-19`; `19.4179->14.4528`
+
+##### bucket: [1.5,2) (raw_key=1.5_to_2.0)
+
+| item | value |
+|---|---:|
+| n | 655 |
+| p10 | -0.0600 |
+| p05 | -0.0735 |
+| min | -0.1935 |
+| min_entry_date | 2024-07-16 |
+| min_entry_price | 47.5311 |
+| min_future_date | 2024-08-05 |
+| min_future_price | 38.3315 |
+| dq_flags | (none) |
+
+- min_window: `2024-07-16->2024-08-05`; `47.5311->38.3315`
+
+##### bucket: >=2 (raw_key=z_ge_2.0)
+
+| item | value |
+|---|---:|
+| n | 396 |
+| p10 | -0.0502 |
+| p05 | -0.0666 |
+| min | -0.2130 |
+| min_entry_date | 2024-07-11 |
+| min_entry_price | 48.7068 |
+| min_future_date | 2024-08-05 |
+| min_future_price | 38.3315 |
+| dq_flags | (none) |
+
+- min_window: `2024-07-11->2024-08-05`; `48.7068->38.3315`
+
+
+### horizon=10D (days=10), mode=clean
+
+- schema: `hier`
+- block_path_used: `forward_mdd_conditional`
+- scheme: `bb_z_5bucket_v1`
+- definition: `scheme=bb_z_5bucket_v1; horizon=10D; mode=clean`
+- current_bb_z: `2.0543`
+- current_bucket_key: `z_ge_2.0`
+- current_bucket_canonical: `>=2`
+
+#### parse_notes
+- mode_used=clean
+- available_modes=clean,primary,raw
+
+#### current_bucket_detail (p10/p05/min + audit)
+
+| item | value |
+|---|---:|
+| bucket_key | z_ge_2.0 |
+| bucket_canonical | >=2 |
+| n | 406 |
+| p10 | -0.0316 |
+| p05 | -0.0499 |
+| min | -0.1126 |
+| min_entry_date | 2024-07-11 |
+| min_entry_price | 48.7068 |
+| min_future_date | 2024-07-26 |
+| min_future_price | 43.2210 |
+
+- min_window: `2024-07-11->2024-07-26`; `48.7068->43.2210`
+
+#### conditional quantiles by bucket (canonical order)
+
+| bucket | raw_key(example) | n | p50 | p25 | p10 | p05 | min |
+|---|---|---:|---:|---:|---:|---:|---:|
+| <=-2 | z_le_-2.0 | 205 | -0.0222 | -0.0436 | -0.0721 | -0.1124 | -0.2057 |
+| (-2,-1.5] | -2.0_to_-1.5 | 205 | -0.0181 | -0.0426 | -0.0607 | -0.0785 | -0.2241 |
+| (-1.5,1.5) | -1.5_to_1.5 | 2,641 | -0.0117 | -0.0272 | -0.0468 | -0.0595 | -0.2400 |
+| [1.5,2) | 1.5_to_2.0 | 656 | -0.0095 | -0.0232 | -0.0388 | -0.0567 | -0.1009 |
+| >=2 | z_ge_2.0 | 406 | -0.0082 | -0.0183 | -0.0316 | -0.0499 | -0.1126 |
+
+#### min audit trail by bucket (canonical order)
+
+##### bucket: <=-2 (raw_key=z_le_-2.0)
+
+| item | value |
+|---|---:|
+| n | 205 |
+| p10 | -0.0721 |
+| p05 | -0.1124 |
+| min | -0.2057 |
+| min_entry_date | 2020-03-10 |
+| min_entry_price | 18.1951 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
+| dq_flags | (none) |
+
+- min_window: `2020-03-10->2020-03-19`; `18.1951->14.4528`
+
+##### bucket: (-2,-1.5] (raw_key=-2.0_to_-1.5)
+
+| item | value |
+|---|---:|
+| n | 205 |
+| p10 | -0.0607 |
+| p05 | -0.0785 |
+| min | -0.2241 |
+| min_entry_date | 2020-03-06 |
+| min_entry_price | 18.6273 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
+| dq_flags | (none) |
+
+- min_window: `2020-03-06->2020-03-19`; `18.6273->14.4528`
+
+##### bucket: (-1.5,1.5) (raw_key=-1.5_to_1.5)
+
+| item | value |
+|---|---:|
+| n | 2,641 |
+| p10 | -0.0468 |
+| p05 | -0.0595 |
+| min | -0.2400 |
+| min_entry_date | 2020-03-05 |
+| min_entry_price | 19.0173 |
+| min_future_date | 2020-03-19 |
+| min_future_price | 14.4528 |
+| dq_flags | (none) |
+
+- min_window: `2020-03-05->2020-03-19`; `19.0173->14.4528`
+
+##### bucket: [1.5,2) (raw_key=1.5_to_2.0)
+
+| item | value |
+|---|---:|
+| n | 656 |
+| p10 | -0.0388 |
+| p05 | -0.0567 |
+| min | -0.1009 |
+| min_entry_date | 2009-06-03 |
+| min_entry_price | 29.7584 |
+| min_future_date | 2009-06-17 |
+| min_future_price | 26.7571 |
+| dq_flags | (none) |
+
+- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7571`
+
+##### bucket: >=2 (raw_key=z_ge_2.0)
+
+| item | value |
+|---|---:|
+| n | 406 |
+| p10 | -0.0316 |
+| p05 | -0.0499 |
+| min | -0.1126 |
+| min_entry_date | 2024-07-11 |
+| min_entry_price | 48.7068 |
+| min_future_date | 2024-07-26 |
+| min_future_price | 43.2210 |
+| dq_flags | (none) |
+
+- min_window: `2024-07-11->2024-07-26`; `48.7068->43.2210`
+
 
 ## Deterministic Action (report-only; non-predictive)
 
@@ -233,7 +476,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-02-21T04:18:08.118Z`
+- overlay_generated_at_utc: `2026-02-21T04:48:49.405Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260211` vs price_last_date=`2026-02-11` => **ALIGNED**
@@ -244,19 +487,19 @@
 |---|---:|
 | asof_date | 20260211 |
 | borrow_shares | 135,405,000 |
-| borrow_shares_chg_1d | -9,446,000 |
+| borrow_shares_chg_1d | -72,875,000 |
 | borrow_mv_ntd(億) | 104.5 |
-| borrow_mv_ntd_chg_1d(億) | -4.8 |
+| borrow_mv_ntd_chg_1d(億) | -49.5 |
 
 ### T86 Aggregate（法人：5D sum）
 
 | item | value |
 |---|---:|
-| days_used | 20260205, 20260206, 20260209, 20260210, 20260211 |
-| foreign_net_shares_sum | -14,398,187 |
-| trust_net_shares_sum | 17,326,000 |
-| dealer_net_shares_sum | -11,810,680 |
-| total3_net_shares_sum | -8,882,867 |
+| days_used | 20260204, 20260205, 20260206, 20260210, 20260211 |
+| foreign_net_shares_sum | -67,066,476 |
+| trust_net_shares_sum | 17,226,000 |
+| dealer_net_shares_sum | -32,346,098 |
+| total3_net_shares_sum | -82,186,574 |
 
 ### ETF Units（受益權單位）
 
