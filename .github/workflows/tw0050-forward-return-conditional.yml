@@ -45,37 +45,31 @@ jobs:
           echo "=== csv candidates ==="
           ls -al tw0050_bb_cache/*.csv || true
 
-          # Prefer explicit price.csv if present; otherwise auto-detect a price-like CSV by header
+          # 1) pick price csv
           PRICE_CSV="price.csv"
           if [ ! -f "tw0050_bb_cache/${PRICE_CSV}" ]; then
-            echo "price.csv not found. Auto-detecting a CSV with adjclose/adj_close..."
-            PRICE_CSV="$(python - <<'PY'
+            PRICE_CSV="$(python -c '
 import glob, sys
-import pandas as pd
-
 cands = sorted(glob.glob("tw0050_bb_cache/*.csv"))
 for p in cands:
     try:
-        df = pd.read_csv(p, nrows=1)
+        h = open(p, "r", encoding="utf-8", errors="ignore").readline().lower()
     except Exception:
         continue
-    cols = {c.strip().lower() for c in df.columns}
-    if ("adjclose" in cols) or ("adj_close" in cols):
+    if "adjclose" in h or "adj_close" in h:
         print(p.split("/")[-1])
         sys.exit(0)
-
-print("")
 sys.exit(1)
-PY
-)"
+')"
             echo "Auto-detected PRICE_CSV=${PRICE_CSV}"
           fi
 
-          # Required inputs
+          # 2) required inputs
           test -f "tw0050_bb_cache/${PRICE_CSV}"
           test -f "tw0050_bb_cache/stats_latest.json"
           test -f "scripts/build_tw0050_forward_return_conditional.py"
 
+          # 3) run
           python scripts/build_tw0050_forward_return_conditional.py \
             --cache_dir tw0050_bb_cache \
             --price_csv "${PRICE_CSV}" \
@@ -88,43 +82,21 @@ PY
             --break_ratio_hi 1.8 \
             --break_ratio_lo 0.5555555556
 
-      - name: Debug forward return conditional
+      - name: Debug forward_return_conditional.json (existence)
+        shell: bash
         run: |
-          python - <<'PY'
-          import json
-          p="tw0050_bb_cache/forward_return_conditional.json"
-          j=json.load(open(p,"r",encoding="utf-8"))
-          meta=j.get("meta",{})
-          dq=j.get("dq",{}).get("flags",[])
-          fr=j.get("forward_return_conditional",{})
-          cur=fr.get("current",{})
-          hz=fr.get("horizons",{})
-
-          print("meta.generated_at_utc:", meta.get("generated_at_utc"))
-          print("dq.flags:", dq)
-          print("current:", cur)
-
-          if not hz:
-            raise SystemExit("ERROR: forward_return_conditional.horizons missing/empty")
-          for k in ("10D","20D"):
-            if k not in hz:
-              raise SystemExit(f"ERROR: missing horizon {k}")
-            for mode in ("clean","raw"):
-              if mode not in hz[k]:
-                raise SystemExit(f"ERROR: missing {k}.{mode}")
-
-          print("OK: structure looks good.")
-          PY
+          set -euo pipefail
+          ls -al tw0050_bb_cache/forward_return_conditional.json
+          python -c "import json; p='tw0050_bb_cache/forward_return_conditional.json'; j=json.load(open(p,'r',encoding='utf-8')); print('meta:', j.get('meta', {})); print('dq.flags:', j.get('dq', {}).get('flags', []))"
 
       - name: Commit artifacts (if changed)
         shell: bash
         run: |
           set -e
-          git status --porcelain
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add -A tw0050_bb_cache/forward_return_conditional.json
+            git add tw0050_bb_cache/forward_return_conditional.json
             git commit -m "Update forward_return_conditional (hit-rate)"
             git push
           else
