@@ -1,9 +1,12 @@
 {
   "decision_mode": "clean_only",
   "meta": {
-    "generated_at_utc": "2026-02-21T12:26:31Z",
-    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v4",
+    "generated_at_utc": "2026-02-21T12:38:51Z",
+    "build_script_fingerprint": "build_tw0050_forward_return_conditional@2026-02-21.v6",
     "cache_dir": "tw0050_bb_cache",
+    "price_csv": "data.csv",
+    "stats_json": "stats_latest.json",
+    "out_json": "forward_return_conditional.json",
     "price_calc": "adjclose",
     "stats_path": "tw0050_bb_cache/stats_latest.json",
     "stats_last_date": "2026-02-11",
@@ -11,7 +14,8 @@
     "bb_k_stats": 2.0,
     "stats_build_fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit",
     "stats_generated_at_utc": "2026-02-21T11:56:58Z",
-    "price_last_date": "2026-02-11"
+    "price_last_date": "2026-02-11",
+    "rows_price_csv": 4192
   },
   "dq": {
     "flags": [
@@ -33,10 +37,26 @@
     "bb_window": 60,
     "bb_k": 2.0,
     "bb_ddof": 0,
+    "policy": {
+      "decision_mode": "clean_only",
+      "raw_usable": false,
+      "raw_policy": "audit_only_do_not_use"
+    },
     "break_detection": {
       "break_ratio_hi": 1.8,
       "break_ratio_lo": 0.5555555556,
-      "break_count": 1
+      "break_count_stats": 1,
+      "break_count_detected": 1,
+      "break_samples": [
+        {
+          "break_index": 1238,
+          "break_date": "2014-01-02",
+          "prev_date": "2013-12-31",
+          "prev_price": 37.41241455078125,
+          "price": 9.329200744628906,
+          "ratio": 0.24936109728940478
+        }
+      ]
     },
     "horizons": {
       "10D": {
@@ -48,6 +68,7 @@
               "bucket_canonical": "<=-2",
               "n": 205,
               "hit_rate": 0.5365853658536586,
+              "p90": 0.05793498448315834,
               "p50": 0.0049504701269513784,
               "p25": -0.023299496958873123,
               "p10": -0.04709028040279579,
@@ -58,6 +79,7 @@
               "bucket_canonical": "(-2,-1.5]",
               "n": 205,
               "hit_rate": 0.6097560975609756,
+              "p90": 0.058716973684654124,
               "p50": 0.0141842671860124,
               "p25": -0.02198829121560042,
               "p10": -0.04637650917753537,
@@ -68,6 +90,7 @@
               "bucket_canonical": "(-1.5,1.5)",
               "n": 2648,
               "hit_rate": 0.5845921450151057,
+              "p90": 0.04607808340046372,
               "p50": 0.007000922177076152,
               "p25": -0.016054808433001694,
               "p10": -0.036637423218135165,
@@ -78,6 +101,7 @@
               "bucket_canonical": "[1.5,2)",
               "n": 657,
               "hit_rate": 0.563165905631659,
+              "p90": 0.04555818255106736,
               "p50": 0.005917109647441743,
               "p25": -0.012374662601033704,
               "p10": -0.03320437474250113,
@@ -88,6 +112,7 @@
               "bucket_canonical": ">=2",
               "n": 408,
               "hit_rate": 0.6470588235294118,
+              "p90": 0.048418648502097233,
               "p50": 0.008545352664207195,
               "p25": -0.006332274018956613,
               "p10": -0.020631249191493183,
@@ -151,6 +176,7 @@
               "bucket_canonical": "<=-2",
               "n": 205,
               "hit_rate": 0.5365853658536586,
+              "p90": 0.05793498448315834,
               "p50": 0.0049504701269513784,
               "p25": -0.023299496958873123,
               "p10": -0.04709028040279579,
@@ -161,6 +187,7 @@
               "bucket_canonical": "(-2,-1.5]",
               "n": 205,
               "hit_rate": 0.6097560975609756,
+              "p90": 0.058716973684654124,
               "p50": 0.0141842671860124,
               "p25": -0.02198829121560042,
               "p10": -0.04637650917753537,
@@ -171,6 +198,7 @@
               "bucket_canonical": "(-1.5,1.5)",
               "n": 2641,
               "hit_rate": 0.5861416130253692,
+              "p90": 0.04609580228335153,
               "p50": 0.0070964060171763155,
               "p25": -0.01576738848442305,
               "p10": -0.03607298224740496,
@@ -181,6 +209,7 @@
               "bucket_canonical": "[1.5,2)",
               "n": 656,
               "hit_rate": 0.5640243902439024,
+              "p90": 0.045566509932961075,
               "p50": 0.005957846143702983,
               "p25": -0.01236707295201353,
               "p10": -0.033034371103075055,
@@ -191,6 +220,7 @@
               "bucket_canonical": ">=2",
               "n": 406,
               "hit_rate": 0.6502463054187192,
+              "p90": 0.0485399061706383,
               "p50": 0.008589533684994266,
               "p25": -0.005867119623970879,
               "p10": -0.02020116152681417,
@@ -245,7 +275,65 @@
               "min_future_price": 43.60737991333008
             }
           ]
-        }
+        },
+        "excluded_by_break_mask": 10,
+        "excluded_entries_sample": [
+          {
+            "entry_index": 1228,
+            "entry_date": "2013-12-18",
+            "entry_price": 36.328914642333984,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1229,
+            "entry_date": "2013-12-19",
+            "entry_price": 36.55198669433594,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1230,
+            "entry_date": "2013-12-20",
+            "entry_price": 36.61572265625,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1231,
+            "entry_date": "2013-12-23",
+            "entry_price": 36.87065887451172,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1232,
+            "entry_date": "2013-12-24",
+            "entry_price": 36.83879089355469,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          }
+        ]
       },
       "20D": {
         "raw": {
@@ -256,6 +344,7 @@
               "bucket_canonical": "<=-2",
               "n": 205,
               "hit_rate": 0.6146341463414634,
+              "p90": 0.08449779405214412,
               "p50": 0.011222368914136194,
               "p25": -0.02774271399496575,
               "p10": -0.060703023154082644,
@@ -266,6 +355,7 @@
               "bucket_canonical": "(-2,-1.5]",
               "n": 205,
               "hit_rate": 0.6585365853658537,
+              "p90": 0.1031219749782371,
               "p50": 0.02837337466366341,
               "p25": -0.012866983765900897,
               "p10": -0.06295953787874371,
@@ -276,6 +366,7 @@
               "bucket_canonical": "(-1.5,1.5)",
               "n": 2648,
               "hit_rate": 0.618202416918429,
+              "p90": 0.06950365127717129,
               "p50": 0.015172708321025685,
               "p25": -0.01967639111838923,
               "p10": -0.0527722212703937,
@@ -286,6 +377,7 @@
               "bucket_canonical": "[1.5,2)",
               "n": 657,
               "hit_rate": 0.54337899543379,
+              "p90": 0.06860072658589587,
               "p50": 0.004209202843057813,
               "p25": -0.01829805746872215,
               "p10": -0.043586438977481955,
@@ -296,6 +388,7 @@
               "bucket_canonical": ">=2",
               "n": 398,
               "hit_rate": 0.6934673366834171,
+              "p90": 0.0923550459995314,
               "p50": 0.018282093364647256,
               "p25": -0.006723140000963024,
               "p10": -0.038632607051556925,
@@ -359,6 +452,7 @@
               "bucket_canonical": "<=-2",
               "n": 205,
               "hit_rate": 0.6146341463414634,
+              "p90": 0.08449779405214412,
               "p50": 0.011222368914136194,
               "p25": -0.02774271399496575,
               "p10": -0.060703023154082644,
@@ -369,6 +463,7 @@
               "bucket_canonical": "(-2,-1.5]",
               "n": 205,
               "hit_rate": 0.6585365853658537,
+              "p90": 0.1031219749782371,
               "p50": 0.02837337466366341,
               "p25": -0.012866983765900897,
               "p10": -0.06295953787874371,
@@ -379,6 +474,7 @@
               "bucket_canonical": "(-1.5,1.5)",
               "n": 2632,
               "hit_rate": 0.6219604863221885,
+              "p90": 0.06996914537748596,
               "p50": 0.015440437162798526,
               "p25": -0.019026654589078512,
               "p10": -0.05114137654452697,
@@ -389,6 +485,7 @@
               "bucket_canonical": "[1.5,2)",
               "n": 655,
               "hit_rate": 0.5450381679389313,
+              "p90": 0.06873579532184239,
               "p50": 0.004277085729114782,
               "p25": -0.01829012070614755,
               "p10": -0.04301851868570861,
@@ -399,6 +496,7 @@
               "bucket_canonical": ">=2",
               "n": 396,
               "hit_rate": 0.696969696969697,
+              "p90": 0.09245657279140196,
               "p50": 0.018416549139274263,
               "p25": -0.005106832815962442,
               "p10": -0.0379183388843678,
@@ -453,7 +551,65 @@
               "min_future_price": 38.33150863647461
             }
           ]
-        }
+        },
+        "excluded_by_break_mask": 20,
+        "excluded_entries_sample": [
+          {
+            "entry_index": 1218,
+            "entry_date": "2013-12-04",
+            "entry_price": 36.61572265625,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1219,
+            "entry_date": "2013-12-05",
+            "entry_price": 36.39264297485352,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1220,
+            "entry_date": "2013-12-06",
+            "entry_price": 36.42451858520508,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1221,
+            "entry_date": "2013-12-09",
+            "entry_price": 36.743194580078125,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          },
+          {
+            "entry_index": 1222,
+            "entry_date": "2013-12-10",
+            "entry_price": 36.83879089355469,
+            "first_break_index_in_window": 1238,
+            "first_break_date_in_window": "2014-01-02",
+            "break_prev_date": "2013-12-31",
+            "break_prev_price": 37.41241455078125,
+            "break_price": 9.329200744628906,
+            "break_ratio": 0.24936109728940478
+          }
+        ]
       }
     },
     "current": {
@@ -461,6 +617,10 @@
       "current_bb_z": 2.054268845827863,
       "current_bucket_key": "z_ge_2.0",
       "current_bucket_canonical": ">=2"
+    },
+    "self_check": {
+      "enabled": false,
+      "by_horizon": {}
     }
   }
 }
