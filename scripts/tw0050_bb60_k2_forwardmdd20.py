@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-tw0050_bb60_k2_forwardmdd20.py  (v11.condfwd_additive)
+tw0050_bb60_k2_forwardmdd20.py  (v12.adjclose_audit)
 
 0050 BB(60,2) + forward_mdd(20D) compute script.
 
@@ -15,7 +15,7 @@ Data source:
   1) yfinance (preferred; long history; uses Adj Close if available)
   2) TWSE fallback (recent-only; raw/unadjusted prices)
 
-v10.shortcircuit 핵심：
+v10.shortcircuit 核心：
   - 若進入「未還原價格模式」（unadjusted_price_mode=True），直接短路：
       * 不做 BB / forward_mdd / trend / vol / atr / regime 等會被 NA 覆寫的運算
       * 僅輸出 latest_price/date + 明確 DQ flags/notes + pledge=DISALLOW
@@ -27,6 +27,15 @@ v11.condfwd_additive 新增（只加欄位，不改原有邏輯）：
       * 以 entry 時點 bb_z[t] 的 5 段 bucket（<=-2, (-2,-1.5], (-1.5,1.5), [1.5,2), >=2）
       * 分別統計 10D/20D forward_mdd 的 raw/clean/primary 分佈分位數與 min audit trail
   - short-circuit 模式下也輸出同 schema 的 NA 版本（不引入任何 dirty-data）
+
+v12.adjclose_audit（只加審計證據，不改原有策略/短路規則）：
+  - 新增 adjclose vs close 的一致性審計（meta.adjclose_audit）：
+      * 計算 abs((adjclose-close)/close) 的 max/p99/非零比例
+      * 若在 yfinance 路徑下 adjclose 幾乎完全等於 close，標記 DQ：
+          ADJCLOSE_EQUALS_CLOSE_SUSPECT_UNADJUSTED
+      * 若 yfinance 回傳缺少 Adj Close 欄位而由程式用 close 補出，標記 DQ：
+          YFINANCE_ADJCLOSE_MISSING_SYNTHESIZED
+  - 注意：此審計不會強制 short-circuit（避免改動既有決策）；僅提供可驗證證據。
 
 安全策略：
   - unadjusted_price_mode = used_fallback OR (price_col_used != "adjclose")
@@ -61,9 +70,13 @@ except Exception:
     yf = None
 
 
-SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-21.v11.condfwd_additive"
+SCRIPT_FINGERPRINT = "tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit"
 TZ_LOCAL = "Asia/Taipei"
 TRADING_DAYS_PER_YEAR = 252
+
+# adjclose audit thresholds (evidence-only; does NOT alter short-circuit rules)
+ADJCLOSE_AUDIT_EPS_REL = 1e-8
+ADJCLOSE_AUDIT_MIN_N = 252
 
 
 # -------------------------
@@ -158,6 +171,88 @@ def _ticker_to_twse_stock_no(ticker: str, default: str = "0050") -> str:
     if m:
         return m.group(1)
     return default
+
+
+def adjclose_audit_vs_close(
+    df: pd.DataFrame,
+    *,
+    eps_rel: float = ADJCLOSE_AUDIT_EPS_REL,
+    top_k: int = 3,
+) -> Dict[str, Any]:
+    """
+    Evidence-only audit: quantify how different Adj Close is from Close.
+
+    Returns metrics on abs((adjclose-close)/close) where close != 0 and both finite.
+    Intended to detect the suspicious case where adjclose == close everywhere (likely unadjusted),
+    but it does NOT change strategy/short-circuit rules by itself.
+
+    Output keys are stable and JSON-friendly.
+    """
+    out: Dict[str, Any] = {
+        "available": False,
+        "n": 0,
+        "eps_rel": float(eps_rel),
+        "max_abs_rel_diff": None,
+        "p99_abs_rel_diff": None,
+        "nonzero_count": 0,
+        "nonzero_frac": None,
+        "top_abs_rel_diff": [],  # list of {date, close, adjclose, abs_rel_diff}
+    }
+
+    if df is None or df.empty:
+        return out
+    if "close" not in df.columns or "adjclose" not in df.columns or "date" not in df.columns:
+        return out
+
+    try:
+        close = pd.to_numeric(df["close"], errors="coerce").astype(float)
+        adj = pd.to_numeric(df["adjclose"], errors="coerce").astype(float)
+        dates = pd.to_datetime(df["date"], errors="coerce")
+        mask = np.isfinite(close.to_numpy()) & np.isfinite(adj.to_numpy()) & np.isfinite(dates.to_numpy())
+        mask = mask & (close.to_numpy() != 0.0)
+
+        if not np.any(mask):
+            return out
+
+        c = close.to_numpy()[mask]
+        a = adj.to_numpy()[mask]
+        d = dates.to_numpy()[mask]
+
+        abs_rel = np.abs((a - c) / c)
+        abs_rel = abs_rel[np.isfinite(abs_rel)]
+        if abs_rel.size == 0:
+            return out
+
+        out["available"] = True
+        out["n"] = int(abs_rel.size)
+        out["max_abs_rel_diff"] = _nan_to_none(float(np.max(abs_rel)))
+        out["p99_abs_rel_diff"] = _nan_to_none(float(np.quantile(abs_rel, 0.99)))
+        nz = int(np.sum(abs_rel > float(eps_rel)))
+        out["nonzero_count"] = nz
+        out["nonzero_frac"] = _nan_to_none(float(nz / abs_rel.size))
+
+        # Top-K rows by abs_rel
+        if top_k > 0:
+            idx_sorted = np.argsort(abs_rel)[::-1]
+            take = idx_sorted[: min(int(top_k), int(idx_sorted.size))]
+            top = []
+            # We need to map back: take indices correspond to filtered arrays; use those directly
+            for j in take:
+                try:
+                    dt = pd.to_datetime(d[j]).strftime("%Y-%m-%d")
+                except Exception:
+                    dt = None
+                top.append({
+                    "date": dt,
+                    "close": _nan_to_none(float(c[j])),
+                    "adjclose": _nan_to_none(float(a[j])),
+                    "abs_rel_diff": _nan_to_none(float(abs_rel[j])),
+                })
+            out["top_abs_rel_diff"] = top
+
+        return out
+    except Exception:
+        return out
 
 
 # -------------------------
@@ -390,8 +485,12 @@ def fetch_yfinance(ticker: str, start: str, dq_flags: List[str], dq_notes: List[
         if "date" not in df.columns or "close" not in df.columns:
             return pd.DataFrame()
 
+        # Evidence-only: detect if Adj Close was missing (we will synthesize = close)
         if "adjclose" not in df.columns:
+            dq_flags.append("YFINANCE_ADJCLOSE_MISSING_SYNTHESIZED")
+            dq_notes.append("yfinance did not provide 'Adj Close'; synthesized adjclose=close (may be unadjusted).")
             df["adjclose"] = df["close"]
+
         if "volume" not in df.columns:
             df["volume"] = pd.NA
 
@@ -692,6 +791,10 @@ def detect_price_breaks(prices: np.ndarray, ratio_hi: float, ratio_lo: float) ->
 
     breaks[t] = True means the transition from t-1 -> t is suspicious:
       prices[t] / prices[t-1] >= ratio_hi OR <= ratio_lo
+
+    Note:
+      - Cash dividends typically cause small drops (a few %) and will NOT trigger by default.
+      - Splits / reverse splits / severe data breaks are what this targets.
     """
     n = len(prices)
     breaks = np.zeros(n, dtype=bool)
@@ -1309,6 +1412,24 @@ def main() -> int:
         dq_flags.append("PRICE_COL_FALLBACK")
         dq_notes.append(f"requested={price_col_req} not usable; used={price_col_used}.")
 
+    # Evidence-only audit: adjclose vs close
+    adj_audit = adjclose_audit_vs_close(df, eps_rel=ADJCLOSE_AUDIT_EPS_REL, top_k=3)
+    if (not used_fallback) and bool(adj_audit.get("available")):
+        n_a = int(adj_audit.get("n") or 0)
+        max_abs_rel = adj_audit.get("max_abs_rel_diff", None)
+        try:
+            max_abs_rel_f = float(max_abs_rel) if max_abs_rel is not None else None
+        except Exception:
+            max_abs_rel_f = None
+
+        # Flag suspicious condition: adjclose ~= close everywhere
+        if (n_a >= ADJCLOSE_AUDIT_MIN_N) and (max_abs_rel_f is not None) and np.isfinite(max_abs_rel_f) and (max_abs_rel_f <= ADJCLOSE_AUDIT_EPS_REL):
+            dq_flags.append("ADJCLOSE_EQUALS_CLOSE_SUSPECT_UNADJUSTED")
+            dq_notes.append(
+                f"Adj Close equals Close within eps_rel={ADJCLOSE_AUDIT_EPS_REL} across n={n_a}; "
+                f"data may be effectively unadjusted despite 'adjclose' label. (evidence-only; no auto short-circuit)"
+            )
+
     latest_price = float(price_used.iloc[last_idx]) if np.isfinite(price_used.iloc[last_idx]) else float("nan")
 
     # unadjusted mode decision (v10)
@@ -1379,6 +1500,13 @@ def main() -> int:
             "enabled": True,
             "unadjusted_price_mode": bool(unadjusted_price_mode),
             "skipped_compute_when_unadjusted": True,
+        },
+        # ADD-ONLY: evidence about whether adjclose is meaningfully different from close
+        "adjclose_audit": adj_audit,
+        "adjclose_audit_policy": {
+            "eps_rel": float(ADJCLOSE_AUDIT_EPS_REL),
+            "min_n": int(ADJCLOSE_AUDIT_MIN_N),
+            "note": "Evidence-only; does not alter short-circuit rules. Use DQ flags/notes to interpret."
         },
     }
 
