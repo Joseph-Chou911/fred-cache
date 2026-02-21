@@ -11,7 +11,7 @@ Pure renderer (audit-first):
 - Optional: read stats_latest.json only to display alignment hints (no recompute).
 
 Example:
-  python render_tw0050_forward_return_conditional_report.py \
+  python scripts/render_tw0050_forward_return_conditional_report.py \
     --cache_dir tw0050_bb_cache \
     --in_json forward_return_conditional.json \
     --out_md forward_return_conditional_report.md \
@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 # ===== Audit stamp =====
-BUILD_SCRIPT_FINGERPRINT = "render_tw0050_forward_return_conditional_report@2026-02-21.v2"
+BUILD_SCRIPT_FINGERPRINT = "render_tw0050_forward_return_conditional_report@2026-02-21.v3"
 
 
 def _read_json(path: str) -> Dict[str, Any]:
@@ -109,7 +109,6 @@ def _table(headers: List[str], rows: List[List[str]]) -> str:
 def _render_meta(meta: Dict[str, Any]) -> str:
     lines = []
     lines.append("## Meta")
-
     kv = [
         ("generated_at_utc", _na(meta.get("generated_at_utc"))),
         ("build_script_fingerprint", _na(meta.get("build_script_fingerprint"))),
@@ -118,28 +117,20 @@ def _render_meta(meta: Dict[str, Any]) -> str:
         ("stats_last_date", _na(meta.get("stats_last_date"))),
         ("price_last_date", _na(meta.get("price_last_date"))),
         ("rows_price_csv", _na(meta.get("rows_price_csv"))),
-
-        # NEW: show lookback in report (v7+)
         ("lookback_years", _na(meta.get("lookback_years"))),
         ("lookback_start_date", _na(meta.get("lookback_start_date"))),
-
         ("price_csv", _na(meta.get("price_csv"))),
         ("stats_json", _na(meta.get("stats_json"))),
         ("out_json", _na(meta.get("out_json"))),
         ("stats_path", _na(meta.get("stats_path"))),
-
-        # NEW: surface stats alignment fields if present (some builders include these)
         ("bb_window_stats", _na(meta.get("bb_window_stats"))),
         ("bb_k_stats", _na(meta.get("bb_k_stats"))),
-
         ("stats_build_fingerprint", _na(meta.get("stats_build_fingerprint"))),
         ("stats_generated_at_utc", _na(meta.get("stats_generated_at_utc"))),
     ]
-
     for k, v in kv:
         if v != "N/A":
             lines.append(f"- {k}: `{v}`")
-
     if len(lines) == 2:
         lines.append("- (no meta fields)")
     return "\n".join(lines)
@@ -185,9 +176,8 @@ def _render_breaks(bd: Dict[str, Any]) -> str:
     )
     lines.append(f"- break_count_stats: `{_na(bd.get('break_count_stats'))}`")
     lines.append(f"- break_count_detected: `{_na(bd.get('break_count_detected'))}`")
-
-    # Display-only note about contamination semantics (does not recompute)
-    lines.append("- contam_mask_semantics: `exclude entries t where t < i <= t+h (t in [i-h, i-1])`")
+    if bd.get("contam_mask_semantics") is not None:
+        lines.append(f"- contam_mask_semantics: `{_na(bd.get('contam_mask_semantics'))}`")
 
     samples = bd.get("break_samples") if isinstance(bd.get("break_samples"), list) else []
     if not samples:
@@ -225,59 +215,106 @@ def _render_current(cur: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _render_self_check(frc: Dict[str, Any]) -> Optional[str]:
+def _render_self_check(frc: Dict[str, Any]) -> str:
     """
-    Display-only. If builder includes self_check, show it.
+    Render forward_return_conditional.self_check in a schema-tolerant way.
+
+    Expected (typical) shape:
+      self_check: {
+        "enabled": true,
+        "by_horizon": {
+          "10D": {"ok": true, "issues": [...], "checks": {...}, ...},
+          "20D": {...}
+        }
+      }
     """
-    sc = frc.get("self_check")
-    if not isinstance(sc, dict):
-        return None
-
-    enabled = sc.get("enabled")
-    by_h = sc.get("by_horizon")
-    if enabled is None and by_h is None:
-        return None
-
-    lines = []
+    lines: List[str] = []
     lines.append("## Self-check (optional)")
+
+    sc = frc.get("self_check") if isinstance(frc.get("self_check"), dict) else {}
+    enabled = sc.get("enabled")
     lines.append(f"- enabled: `{_na(enabled)}`")
 
-    if not isinstance(by_h, dict) or not by_h:
+    by_h = sc.get("by_horizon") if isinstance(sc.get("by_horizon"), dict) else {}
+    if not by_h:
         lines.append("- by_horizon: (none)")
         return "\n".join(lines)
 
-    # Deterministic order
     def _hkey(k: str) -> Tuple[int, str]:
         try:
-            return (int(str(k).replace("D", "")), str(k))
+            return (int(k.replace("D", "")), k)
         except Exception:
-            return (10**9, str(k))
+            return (10**9, k)
 
     for hk in sorted(by_h.keys(), key=_hkey):
-        chk = by_h.get(hk)
-        if not isinstance(chk, dict):
-            continue
+        hv = by_h.get(hk)
         lines.append(f"### {hk}")
-        # Print a compact set of fields, NA-safe
-        keys = [
-            "status",
-            "base_eligible_n",
-            "clean_n_total",
-            "excluded_by_break_mask",
-            "identity_lhs_clean_plus_excluded",
-            "identity_rhs_base_eligible",
-            "identity_diff",
+
+        if not isinstance(hv, dict):
+            lines.append(f"- value: `{_na(hv)}`")
+            continue
+
+        # Common fields (best-effort)
+        status = _pick(hv, [["ok"], ["passed"], ["pass"], ["status"]], default=None)
+        if status is not None:
+            lines.append(f"- ok: `{_na(status)}`")
+
+        # Common count keys (best-effort)
+        for k in [
             "raw_n_total",
-            "raw_minus_base_eligible",
-        ]
-        for k in keys:
-            if k in chk:
-                lines.append(f"- {k}: `{_na(chk.get(k))}`")
-        notes = chk.get("notes") if isinstance(chk.get("notes"), list) else []
-        if notes:
-            lines.append("- notes:")
-            for n in notes:
-                lines.append(f"  - {_na(n)}")
+            "clean_n_total",
+            "excluded_reported",
+            "excluded_expected",
+            "excluded_by_break_mask",
+            "unknown_bucket_n",
+            "unknown_bucket_rows",
+        ]:
+            if k in hv:
+                lines.append(f"- {k}: `{_na(hv.get(k))}`")
+
+        # checks dict (if any)
+        checks = hv.get("checks") if isinstance(hv.get("checks"), dict) else None
+        if checks is not None:
+            if checks:
+                lines.append("- checks:")
+                for ck in sorted(checks.keys()):
+                    lines.append(f"  - {ck}: `{_na(checks.get(ck))}`")
+            else:
+                lines.append("- checks: (none)")
+
+        # issues list (if any)
+        issues = hv.get("issues") if isinstance(hv.get("issues"), list) else None
+        if issues is not None:
+            if issues:
+                lines.append("- issues:")
+                for it in issues[:50]:
+                    # avoid huge spam; 50 is enough for audit
+                    lines.append(f"  - {_na(it)}")
+            else:
+                lines.append("- issues: (none)")
+
+        # If there are other keys not rendered above, show them as compact JSON for audit.
+        rendered_keys = {
+            "ok",
+            "passed",
+            "pass",
+            "status",
+            "raw_n_total",
+            "clean_n_total",
+            "excluded_reported",
+            "excluded_expected",
+            "excluded_by_break_mask",
+            "unknown_bucket_n",
+            "unknown_bucket_rows",
+            "checks",
+            "issues",
+        }
+        extra = {k: hv.get(k) for k in hv.keys() if k not in rendered_keys}
+        if extra:
+            lines.append("- extra (json):")
+            lines.append("```json")
+            lines.append(json.dumps(extra, ensure_ascii=False, indent=2))
+            lines.append("```")
 
     return "\n".join(lines)
 
@@ -289,6 +326,8 @@ def _render_horizon_block(hk: str, hv: Dict[str, Any]) -> str:
     ex = hv.get("excluded_by_break_mask")
     if ex is not None:
         lines.append(f"- excluded_by_break_mask: `{_na(ex)}`")
+    if hv.get("unknown_bucket_n") is not None:
+        lines.append(f"- unknown_bucket_n: `{_na(hv.get('unknown_bucket_n'))}`")
 
     clean = hv.get("clean") if isinstance(hv.get("clean"), dict) else {}
     raw = hv.get("raw") if isinstance(hv.get("raw"), dict) else {}
@@ -296,10 +335,8 @@ def _render_horizon_block(hk: str, hv: Dict[str, Any]) -> str:
     def _summary_table(obj: Dict[str, Any], title: str, is_primary: bool) -> str:
         sub = []
         sub.append(f"### {title}")
-        if is_primary:
-            sub.append("_Primary for interpretation (per policy)._")
-        else:
-            sub.append("_Audit-only._")
+        sub.append("_Primary for interpretation (per policy)._"
+                   if is_primary else "_Audit-only._")
 
         sub.append(f"- definition: `{_na(obj.get('definition'))}`")
         sub.append(f"- n_total: `{_na(obj.get('n_total'))}`")
@@ -340,15 +377,7 @@ def _render_horizon_block(hk: str, hv: Dict[str, Any]) -> str:
             sub.append("(none)")
             return "\n".join(sub)
 
-        headers = [
-            "bucket",
-            "n",
-            "min",
-            "entry_date",
-            "entry_price",
-            "future_date",
-            "future_price",
-        ]
+        headers = ["bucket", "n", "min", "entry_date", "entry_price", "future_date", "future_price"]
         rows = []
         for r in mab:
             if not isinstance(r, dict):
@@ -369,21 +398,13 @@ def _render_horizon_block(hk: str, hv: Dict[str, Any]) -> str:
 
     lines.append(_summary_table(clean, "CLEAN", is_primary=True))
     lines.append(_min_audit(clean, "CLEAN"))
-
     lines.append(_summary_table(raw, "RAW", is_primary=False))
     lines.append(_min_audit(raw, "RAW"))
 
     exs = hv.get("excluded_entries_sample")
     if isinstance(exs, list) and exs:
         lines.append("### excluded_entries_sample (first up to 5)")
-        headers = [
-            "entry_idx",
-            "entry_date",
-            "entry_price",
-            "first_break_idx",
-            "first_break_date",
-            "break_ratio",
-        ]
+        headers = ["entry_idx", "entry_date", "entry_price", "first_break_idx", "first_break_date", "break_ratio"]
         rows = []
         for r in exs[:5]:
             if not isinstance(r, dict):
@@ -471,19 +492,18 @@ def main() -> None:
         hdr.append(f"- input_build_script_fingerprint: `{_na(meta.get('build_script_fingerprint'))}`")
     hdr.append(f"- decision_mode: `{_na(decision_mode)}`")
 
-    # Top fields from forward_return_conditional
     scheme = frc.get("scheme")
     bb_window = frc.get("bb_window")
     bb_k = frc.get("bb_k")
     bb_ddof = frc.get("bb_ddof")
-    thresholds = frc.get("thresholds") if isinstance(frc.get("thresholds"), dict) else {}
-
     hdr.append(f"- scheme: `{_na(scheme)}`")
     hdr.append(f"- bb_window,k,ddof: `{_na(bb_window)}`, `{_na(bb_k)}`, `{_na(bb_ddof)}`")
-    if thresholds:
-        hdr.append(
-            f"- thresholds (near/extreme): `{_na(thresholds.get('near'))}` / `{_na(thresholds.get('extreme'))}`"
-        )
+
+    thr = frc.get("thresholds") if isinstance(frc.get("thresholds"), dict) else {}
+    near = thr.get("near")
+    extreme = thr.get("extreme")
+    if near is not None or extreme is not None:
+        hdr.append(f"- thresholds (near/extreme): `{_na(near)}` / `{_na(extreme)}`")
 
     sections: List[str] = []
     sections.append("\n".join(hdr))
@@ -497,14 +517,13 @@ def main() -> None:
     cur = frc.get("current") if isinstance(frc.get("current"), dict) else {}
     sections.append(_render_current(cur))
 
-    # Horizons
     horizons = frc.get("horizons") if isinstance(frc.get("horizons"), dict) else {}
     if horizons:
         def _hkey(k: str) -> Tuple[int, str]:
             try:
-                return (int(str(k).replace("D", "")), str(k))
+                return (int(k.replace("D", "")), k)
             except Exception:
-                return (10**9, str(k))
+                return (10**9, k)
 
         for hk in sorted(horizons.keys(), key=_hkey):
             hv = horizons.get(hk)
@@ -513,12 +532,9 @@ def main() -> None:
     else:
         sections.append("## Horizons\n(no horizons found)")
 
-    # Self-check (optional)
-    sc = _render_self_check(frc)
-    if sc:
-        sections.append(sc)
+    # Render self-check (now detailed)
+    sections.append(_render_self_check(frc))
 
-    # Optional alignment hints
     if stats_path and os.path.isfile(stats_path):
         try:
             stats = _read_json(stats_path)
