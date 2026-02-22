@@ -1,13 +1,13 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-22T11:23:41Z`
-- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync`
+- generated_at_utc: `2026-02-22T12:59:46Z`
+- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches`
 - renderer_fingerprint: `render_backtest_mvp@2026-02-22.v1.post_cols`
 - suite_ok: `True`
 
 ## Ranking (policy)
-- ranking_policy: `prefer post (calmar desc, sharpe0 desc) when post_ok=true; else fallback to full`
-- top3_by_policy: `trend_leverage_price_gt_ma60_1.5x, trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.2x`
+- ranking_policy: `prefer post (calmar desc, sharpe0 desc) when post_ok=true; else fallback to full; EXCLUDE hard_fail`
+- top3_by_policy: `trend_leverage_price_gt_ma60_1.2x, trend_leverage_price_gt_ma60_1.1x, always_leverage_1.1x`
 
 ## Strategies
 | id | ok | entry_mode | L | full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔSharpe | post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades |
