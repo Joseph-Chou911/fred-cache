@@ -6,25 +6,17 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
-v5 (2026-02-23):
-- FIX: Markdown tables could break if a list item line (e.g. "- note_full: ...") directly precedes a table.
-  Many renderers treat the table as part of a list; without indentation it won't parse as a table.
-  -> Change such notes to normal paragraph lines and insert blank lines before tables.
-
-v4 (2026-02-23):
-- Filtered ranking (renderer_rank_filter_v2):
-  * exclude(ok=false)
-  * exclude(hard_fail):
-      - full/post: equity_min<=0 OR equity_negative_days>0 OR mdd<=-100%
-      - basis_fail: (rank_basis segment) equity_min<=0.5  (asset equity down 50% from start => FAIL)
-  * exclude(post_gonogo=NO_GO)
-  * exclude(missing rank metrics on chosen basis)
-- Emit top3_recommended and exclusions summary
-- Add deterministic always-vs-trend comparison block
-- Add FULL segment caveat note (data singularity around 2014)
-- Keep NA-safe behavior; works with lite JSON
-- Escape Markdown table cells to avoid breaking tables (| and newlines)
-- Deterministic sorting tie-breaker by strategy_id
+v6 (2026-02-23):
+- Disable eq50 (basis_equity_min<=0.5) filter gate:
+  * We do NOT use equity_min as "NAV min" until its semantics are audited/aligned with MDD.
+  * Keep hard_fail gates only: equity_min<=0 OR equity_negative_days>0 OR mdd<=-100% on full/post.
+- Keep v5 report structure:
+  * Ranking (policy) + renderer_filter_policy + full_segment_note + top3_recommended + top3_raw_from_suite
+  * Strategies table (sorted by policy; shows ALL strategies)
+  * Exclusions (eligible/excluded + per-strategy reasons)
+  * Deterministic Always vs Trend compare table
+  * Post Go/No-Go Details (compact)
+- Keep Markdown table safety (escape | and newlines).
 """
 
 from __future__ import annotations
@@ -38,17 +30,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-23.v5.md_table_fix_v1"
-
-# === Deterministic thresholds (audit-grade) ===
-HARD_FAIL_MDD_LE_NEG_100 = -1.0  # -100%
-HARD_FAIL_EQUITY_MIN_LE = 0.0
-HARD_FAIL_NEG_DAYS_GT = 0
-
-# New: "asset equity down 50% from start => fail" on rank_basis segment
-BASIS_FAIL_EQUITY_MIN_LE_0_5 = 0.5  # equity_min <= 0.5
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-23.v6.disable_eq50_gate_v1"
 
 
+# =========================
+# utils
+# =========================
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -126,9 +113,14 @@ def _is_true(x: Any) -> bool:
     return x is True
 
 
+# =========================
+# parsing / extraction
+# =========================
 def _strategy_list(obj: Dict[str, Any]) -> List[Dict[str, Any]]:
+    # suite output: obj["strategies"] list
     if isinstance(obj.get("strategies"), list):
         return [s for s in obj["strategies"] if isinstance(s, dict)]
+    # single strategy output fallback: wrap the root
     if "strategy_id" in obj or "perf" in obj:
         return [obj]
     return []
@@ -147,6 +139,7 @@ def _extract_trades_n(audit: Any) -> Optional[int]:
     - trades_n: int
     - trades: list of trade records
     - trades: int (rare)
+    We convert into an int count when possible.
     """
     if not isinstance(audit, dict):
         return None
@@ -250,8 +243,6 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
     post = _extract_post_metrics(strat)
     gg = _extract_gonogo(strat)
 
-    basis = _rank_basis(bool(post.get("post_ok")))
-
     return {
         "id": sid,
         "ok": ok,
@@ -263,10 +254,13 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
         "post_gonogo_rule": gg.get("rule_id"),
         "post_gonogo_conditions": gg.get("conditions"),
         "post_gonogo_reasons": gg.get("reasons"),
-        "rank_basis": basis,
+        "rank_basis": _rank_basis(bool(post.get("post_ok"))),
     }
 
 
+# =========================
+# policy: sorting / filtering / exclusion reasons
+# =========================
 def _finite_or_neginf(x: Any) -> float:
     v = _to_float(x)
     return float(v) if v is not None else float("-inf")
@@ -274,8 +268,8 @@ def _finite_or_neginf(x: Any) -> float:
 
 def _sort_rows_like_policy(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Policy:
-    prefer post (calmar desc, sharpe0 desc) when post_ok=true; else fallback to full
+    Follow suite policy:
+    prefer post (calmar desc, sharpe0 desc) when post_ok=True; else fallback to full
     Deterministic tie-breaker by strategy_id.
     """
     def key(r: Dict[str, Any]) -> Tuple[float, float, str]:
@@ -287,187 +281,174 @@ def _sort_rows_like_policy(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(rows, key=key, reverse=True)
 
 
-def _has_rank_metrics(r: Dict[str, Any]) -> bool:
-    if r.get("rank_basis") == "post":
-        return _to_float(r.get("post_calmar")) is not None and _to_float(r.get("post_sharpe0")) is not None
-    return _to_float(r.get("full_calmar")) is not None and _to_float(r.get("full_sharpe0")) is not None
+def _hard_fail_reasons_for_segment(seg_name: str, mdd: Any, eq_min: Any, neg_days: Any) -> List[str]:
+    """
+    Hard fail:
+    - equity_min <= 0
+    - equity_negative_days > 0
+    - mdd <= -100% (<= -1.0)
+    """
+    out: List[str] = []
+
+    vmdd = _to_float(mdd)
+    veq = _to_float(eq_min)
+    vneg = _to_float(neg_days)
+
+    if vmdd is not None and vmdd <= -1.0:
+        out.append(f"HARD_FAIL_{seg_name}_MDD_LE_-100PCT")
+    if veq is not None and veq <= 0.0:
+        out.append(f"HARD_FAIL_{seg_name}_EQUITY_MIN_LE_0")
+    if vneg is not None and vneg > 0.0:
+        out.append(f"HARD_FAIL_{seg_name}_NEG_DAYS_GT_0")
+
+    return out
 
 
-def _hard_fail_full_post_reasons(r: Dict[str, Any]) -> List[str]:
+def _missing_rank_metrics_reason(basis: str) -> str:
+    return f"EXCLUDE_MISSING_RANK_METRICS_{basis.upper()}"
+
+
+def _is_missing_rank_metrics(r: Dict[str, Any], basis: str) -> bool:
+    if basis == "post":
+        return (_to_float(r.get("post_calmar")) is None) or (_to_float(r.get("post_sharpe0")) is None)
+    return (_to_float(r.get("full_calmar")) is None) or (_to_float(r.get("full_sharpe0")) is None)
+
+
+def _exclusion_reasons_renderer_filter_v3(r: Dict[str, Any]) -> List[str]:
+    """
+    Renderer filter policy v3 (eq50 gate disabled):
+    exclude(ok=false);
+    exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post);
+    exclude(post_gonogo=NO_GO);
+    exclude(missing rank metrics on chosen basis);
+    """
     reasons: List[str] = []
 
-    full_mdd = _to_float(r.get("full_mdd"))
-    if full_mdd is not None and full_mdd <= HARD_FAIL_MDD_LE_NEG_100:
-        reasons.append("HARD_FAIL_FULL_MDD_LE_-100PCT")
+    # ok=false
+    if not bool(r.get("ok")):
+        reasons.append("EXCLUDE_OK_FALSE")
 
-    full_eqmin = _to_float(r.get("full_equity_min"))
-    if full_eqmin is not None and full_eqmin <= HARD_FAIL_EQUITY_MIN_LE:
-        reasons.append("HARD_FAIL_FULL_EQUITY_MIN_LE_0")
+    # hard fails on full/post
+    reasons += _hard_fail_reasons_for_segment(
+        "FULL", r.get("full_mdd"), r.get("full_equity_min"), r.get("full_neg_days")
+    )
+    reasons += _hard_fail_reasons_for_segment(
+        "POST", r.get("post_mdd"), r.get("post_equity_min"), r.get("post_neg_days")
+    )
 
-    full_neg = _to_float(r.get("full_neg_days"))
-    if full_neg is not None and full_neg > HARD_FAIL_NEG_DAYS_GT:
-        reasons.append("HARD_FAIL_FULL_NEG_DAYS_GT_0")
+    # post gonogo
+    if _fmt_str(r.get("post_gonogo")) == "NO_GO":
+        reasons.append("EXCLUDE_POST_GONOGO_NO_GO")
 
-    post_mdd = _to_float(r.get("post_mdd"))
-    if post_mdd is not None and post_mdd <= HARD_FAIL_MDD_LE_NEG_100:
-        reasons.append("HARD_FAIL_POST_MDD_LE_-100PCT")
-
-    post_eqmin = _to_float(r.get("post_equity_min"))
-    if post_eqmin is not None and post_eqmin <= HARD_FAIL_EQUITY_MIN_LE:
-        reasons.append("HARD_FAIL_POST_EQUITY_MIN_LE_0")
-
-    post_neg = _to_float(r.get("post_neg_days"))
-    if post_neg is not None and post_neg > HARD_FAIL_NEG_DAYS_GT:
-        reasons.append("HARD_FAIL_POST_NEG_DAYS_GT_0")
-
-    return reasons
-
-
-def _basis_fail_reasons(r: Dict[str, Any]) -> List[str]:
-    reasons: List[str] = []
-    if r.get("rank_basis") == "post":
-        e = _to_float(r.get("post_equity_min"))
-        if e is not None and e <= BASIS_FAIL_EQUITY_MIN_LE_0_5:
-            reasons.append("HARD_FAIL_BASIS_POST_EQUITY_MIN_LE_0_5")
-    else:
-        e = _to_float(r.get("full_equity_min"))
-        if e is not None and e <= BASIS_FAIL_EQUITY_MIN_LE_0_5:
-            reasons.append("HARD_FAIL_BASIS_FULL_EQUITY_MIN_LE_0_5")
-    return reasons
-
-
-def _filter_rows(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]], Dict[str, int]]:
-    """
-    renderer_rank_filter_v2:
-    - exclude ok=false
-    - exclude hard_fail (full/post exploded) + basis_fail(equity_min<=0.5)
-    - exclude post_gonogo=NO_GO
-    - exclude missing rank metrics on chosen basis
-    """
-    excluded: Dict[str, List[str]] = {}
-    counters = {
-        "hard_fail_fullpost": 0,
-        "basis_fail_eq50": 0,
-        "post_NO_GO": 0,
-        "ok_false": 0,
-        "missing_rank_metrics": 0,
-    }
-
-    eligible: List[Dict[str, Any]] = []
-
-    for r in rows:
-        sid = _fmt_str(r.get("id"))
-        reasons: List[str] = []
-
-        if not _is_true(r.get("ok")):
-            reasons.append("EXCLUDE_OK_FALSE")
-            counters["ok_false"] += 1
-
-        hf = _hard_fail_full_post_reasons(r)
-        if hf:
-            reasons.extend(hf)
-            counters["hard_fail_fullpost"] += 1
-
-        bf = _basis_fail_reasons(r)
-        if bf:
-            reasons.extend(bf)
-            counters["basis_fail_eq50"] += 1
-
-        if _fmt_str(r.get("post_gonogo")) == "NO_GO":
-            reasons.append("EXCLUDE_POST_GONOGO_NO_GO")
-            counters["post_NO_GO"] += 1
-
-        if not _has_rank_metrics(r):
-            reasons.append("EXCLUDE_MISSING_RANK_METRICS")
-            counters["missing_rank_metrics"] += 1
-
-        if reasons:
-            excluded[sid] = reasons
-        else:
-            eligible.append(r)
-
-    return eligible, excluded, counters
-
-
-def _policy_compare_pair(trend_row: Dict[str, Any], always_row: Dict[str, Any]) -> Tuple[str, str]:
-    use_post = _is_true(trend_row.get("post_ok")) and _is_true(always_row.get("post_ok"))
-    if use_post:
-        basis = "post"
-        t_cal = _finite_or_neginf(trend_row.get("post_calmar"))
-        a_cal = _finite_or_neginf(always_row.get("post_calmar"))
-        t_sh = _finite_or_neginf(trend_row.get("post_sharpe0"))
-        a_sh = _finite_or_neginf(always_row.get("post_sharpe0"))
-    else:
+    # missing rank metrics on chosen basis
+    basis = _fmt_str(r.get("rank_basis"))
+    if basis not in ("post", "full"):
         basis = "full"
-        t_cal = _finite_or_neginf(trend_row.get("full_calmar"))
-        a_cal = _finite_or_neginf(always_row.get("full_calmar"))
-        t_sh = _finite_or_neginf(trend_row.get("full_sharpe0"))
-        a_sh = _finite_or_neginf(always_row.get("full_sharpe0"))
+    if _is_missing_rank_metrics(r, basis):
+        reasons.append(_missing_rank_metrics_reason(basis))
 
-    if t_cal > a_cal:
-        return basis, _fmt_str(trend_row.get("id"))
-    if a_cal > t_cal:
-        return basis, _fmt_str(always_row.get("id"))
-
-    if t_sh > a_sh:
-        return basis, _fmt_str(trend_row.get("id"))
-    if a_sh > t_sh:
-        return basis, _fmt_str(always_row.get("id"))
-
-    return basis, min(_fmt_str(trend_row.get("id")), _fmt_str(always_row.get("id")))
+    return reasons
 
 
-def _render_comparison_block(rows_all: List[Dict[str, Any]], excluded: Dict[str, List[str]]) -> List[str]:
-    by_id = {_fmt_str(r.get("id")): r for r in rows_all}
+def _is_eligible_for_recommendation(r: Dict[str, Any]) -> bool:
+    return len(_exclusion_reasons_renderer_filter_v3(r)) == 0
+
+
+def _rank_key_on_basis(r: Dict[str, Any], basis: str) -> Tuple[float, float, str]:
+    rid = _fmt_str(r.get("id"))
+    if basis == "post":
+        return (_finite_or_neginf(r.get("post_calmar")), _finite_or_neginf(r.get("post_sharpe0")), rid)
+    return (_finite_or_neginf(r.get("full_calmar")), _finite_or_neginf(r.get("full_sharpe0")), rid)
+
+
+def _topn_recommended(rows: List[Dict[str, Any]], n: int = 3) -> List[str]:
+    eligible = [r for r in rows if _is_eligible_for_recommendation(r)]
+    # recommended ranking uses the same basis rule as suite: post if post_ok else full (per-row rank_basis)
+    eligible_sorted = sorted(
+        eligible,
+        key=lambda r: _rank_key_on_basis(r, _fmt_str(r.get("rank_basis"))),
+        reverse=True,
+    )
+    return [str(r.get("id")) for r in eligible_sorted[:n]]
+
+
+# =========================
+# always vs trend compare
+# =========================
+def _find_strategy_by_id(rows: List[Dict[str, Any]], sid: str) -> Optional[Dict[str, Any]]:
+    for r in rows:
+        if _fmt_str(r.get("id")) == sid:
+            return r
+    return None
+
+
+def _compare_two_rows(r1: Dict[str, Any], r2: Dict[str, Any], basis: str) -> str:
+    """
+    winner=calmar desc, then sharpe0 desc, then id
+    returns winner id
+    """
+    k1 = _rank_key_on_basis(r1, basis)
+    k2 = _rank_key_on_basis(r2, basis)
+    if k1[0] > k2[0]:
+        return _fmt_str(r1.get("id"))
+    if k1[0] < k2[0]:
+        return _fmt_str(r2.get("id"))
+    # calmar tie -> sharpe
+    if k1[1] > k2[1]:
+        return _fmt_str(r1.get("id"))
+    if k1[1] < k2[1]:
+        return _fmt_str(r2.get("id"))
+    # tie -> id
+    return min(_fmt_str(r1.get("id")), _fmt_str(r2.get("id")))
+
+
+def _always_vs_trend_table(rows: List[Dict[str, Any]]) -> List[str]:
+    """
+    compare_v1: for same L, compare post if both post_ok else full;
+    winner=calmar desc, then sharpe0 desc, then id
+
+    If either side excluded by renderer filter v3, show N/A with exclusion notes.
+    """
     lines: List[str] = []
-    pairs: List[Tuple[str, str, str]] = []
-
-    for r in rows_all:
-        sid = _fmt_str(r.get("id"))
-        if sid.startswith("always_leverage_") and sid.endswith("x"):
-            suffix = sid[len("always_leverage_"):]  # e.g. "1.2x"
-            trend_id = f"trend_leverage_price_gt_ma60_{suffix}"
-            if trend_id in by_id:
-                pairs.append((suffix, trend_id, sid))
-
     lines.append("## Deterministic Always vs Trend (checkmarks)")
-    if not pairs:
-        lines.append("compare_policy: `N/A (no always/trend pairs detected by naming convention)`")
-        lines.append("")
-        return lines
-
-    pairs = sorted(set(pairs), key=lambda x: x[0])
-
-    # IMPORTANT: not a list item; keep table parsing robust across renderers.
     lines.append("compare_policy: `compare_v1: for same L, compare post if both post_ok else full; winner=calmar desc, then sharpe0 desc, then id`")
     lines.append("")
-
     lines.append("| L | basis | trend_id | always_id | winner | verdict |")
     lines.append("|---:|---|---|---|---|---|")
 
-    for suffix, trend_id, always_id in pairs:
-        trend_row = by_id[trend_id]
-        always_row = by_id[always_id]
+    for L in ["1.1x", "1.2x", "1.3x", "1.5x"]:
+        trend_id = f"trend_leverage_price_gt_ma60_{L}"
+        always_id = f"always_leverage_{L}"
 
-        if trend_id in excluded or always_id in excluded:
-            note = []
-            if trend_id in excluded:
-                note.append(f"trend excluded: {', '.join(excluded[trend_id])}")
-            if always_id in excluded:
-                note.append(f"always excluded: {', '.join(excluded[always_id])}")
-            msg = "; ".join(note)
-            msg = msg[:160]
-            lines.append(f"| {suffix} | N/A | {_escape_md_cell(trend_id)} | {_escape_md_cell(always_id)} | N/A | N/A ({_escape_md_cell(msg)}) |")
+        rt = _find_strategy_by_id(rows, trend_id)
+        ra = _find_strategy_by_id(rows, always_id)
+
+        if rt is None or ra is None:
+            lines.append(f"| {L} | N/A | {trend_id} | {always_id} | N/A | N/A (missing strategy) |")
             continue
 
-        basis, winner = _policy_compare_pair(trend_row, always_row)
-        verdict = "WIN:trend" if winner == trend_id else ("WIN:always" if winner == always_id else "WIN:tie")
-        lines.append(f"| {suffix} | {basis} | {_escape_md_cell(trend_id)} | {_escape_md_cell(always_id)} | {_escape_md_cell(winner)} | {verdict} |")
+        # eligibility check (same as recommendation gate)
+        ex_t = _exclusion_reasons_renderer_filter_v3(rt)
+        ex_a = _exclusion_reasons_renderer_filter_v3(ra)
+
+        if ex_t or ex_a:
+            t_note = f"trend excluded: {', '.join(ex_t)}" if ex_t else "trend OK"
+            a_note = f"always excluded: {', '.join(ex_a)}" if ex_a else "always OK"
+            lines.append(f"| {L} | N/A | {trend_id} | {always_id} | N/A | N/A ({t_note}; {a_note}) |")
+            continue
+
+        basis = "post" if (_is_true(rt.get("post_ok")) and _is_true(ra.get("post_ok"))) else "full"
+        winner = _compare_two_rows(rt, ra, basis)
+        verdict = "WIN:trend" if winner == trend_id else ("WIN:always" if winner == always_id else "WIN:tiebreak")
+        lines.append(f"| {L} | {basis} | {trend_id} | {always_id} | {winner} | {verdict} |")
 
     lines.append("")
     return lines
 
 
+# =========================
+# render md
+# =========================
 def _render_md(obj: Dict[str, Any]) -> str:
     gen_at = obj.get("generated_at_utc") or obj.get("generated_at") or obj.get("generated_at_ts")
     fp = obj.get("script_fingerprint") or obj.get("build_script_fingerprint")
@@ -479,6 +460,21 @@ def _render_md(obj: Dict[str, Any]) -> str:
     ranking_policy = compare.get("ranking_policy")
     top3_raw = compare.get("top3_by_policy")
 
+    # FULL singularity note
+    full_note = (
+        "FULL_* metrics may be impacted by data singularity around 2014 (price series anomaly/adjustment). "
+        "Treat FULL as audit-only; prefer POST for decision and ranking."
+    )
+
+    # renderer filter policy (eq50 gate disabled)
+    renderer_filter_policy = (
+        "renderer_rank_filter_v3: exclude(ok=false); "
+        "exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post); "
+        "exclude(post_gonogo=NO_GO); "
+        "exclude(missing rank metrics on chosen basis); "
+        "NOTE: eq50 gate disabled (basis_equity_min<=0.5 removed; equity_min semantics not aligned with MDD)."
+    )
+
     lines: List[str] = []
     lines.append("# Backtest MVP Summary")
     lines.append("")
@@ -489,49 +485,32 @@ def _render_md(obj: Dict[str, Any]) -> str:
         lines.append(f"- suite_ok: `{_fmt_str(suite_ok)}`")
     lines.append("")
 
+    # ranking block
     lines.append("## Ranking (policy)")
     lines.append(f"- ranking_policy: `{_fmt_str(ranking_policy)}`")
-    lines.append(
-        "- renderer_filter_policy: `renderer_rank_filter_v2: "
-        "exclude(ok=false); "
-        "exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post; "
-        "plus basis_equity_min<=0.5 (asset down 50%) on rank_basis segment); "
-        "exclude(post_gonogo=NO_GO); "
-        "exclude(missing rank metrics on chosen basis)`"
-    )
-    lines.append(
-        "- full_segment_note: `FULL_* metrics may be impacted by data singularity around 2014 (price series anomaly/adjustment). "
-        "Treat FULL as audit-only; prefer POST for decision and ranking.`"
-    )
+    lines.append(f"- renderer_filter_policy: `{renderer_filter_policy}`")
+    lines.append(f"- full_segment_note: `{full_note}`")
 
+    # build rows
     strategies = _strategy_list(obj)
-    rows_all = [_mk_row(s) for s in strategies]
+    rows = [_mk_row(s) for s in strategies]
+    rows_sorted = _sort_rows_like_policy(rows)
 
-    eligible, excluded, counters = _filter_rows(rows_all)
-    eligible_sorted = _sort_rows_like_policy(eligible)
+    # recommended top3 from renderer filtering
+    top3_rec = _topn_recommended(rows, n=3)
+    lines.append(f"- top3_recommended: `{', '.join(top3_rec) if top3_rec else 'N/A'}`")
 
-    if eligible_sorted:
-        top3_rec = [str(r.get("id")) for r in eligible_sorted[:3]]
-        lines.append(f"- top3_recommended: `{', '.join(top3_rec)}`")
-    else:
-        lines.append("- top3_recommended: `N/A`")
-
+    # raw top3 from suite
     if isinstance(top3_raw, list):
         lines.append(f"- top3_raw_from_suite: `{', '.join([str(x) for x in top3_raw])}`")
     else:
         lines.append(f"- top3_raw_from_suite: `{_fmt_str(top3_raw)}`")
     lines.append("")
 
-    rows_sorted_all = _sort_rows_like_policy(rows_all)
-
+    # strategies table (ALL rows, sorted by suite policy)
     lines.append("## Strategies")
-    # IMPORTANT: not a list item; keep table parsing robust across renderers.
-    lines.append(
-        "note_full: `FULL_* columns may be contaminated by a known data singularity issue. "
-        "Do not use FULL alone for go/no-go; use POST_* as primary.`"
-    )
-    lines.append("")  # <-- critical blank line before table
-
+    lines.append("note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`")
+    lines.append("")
     lines.append(
         "| id | ok | entry_mode | L | "
         "full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | "
@@ -539,10 +518,13 @@ def _render_md(obj: Dict[str, Any]) -> str:
         "post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades |"
     )
     lines.append(
-        "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|"
+        "|---|---:|---|---:|"
+        "---:|---:|---:|---:|---:|---:|---:|"
+        "---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+        "---|---|---:|---:|---:|---:|---:|"
     )
 
-    for r in rows_sorted_all:
+    for r in rows_sorted:
         lines.append(
             "| {id} | {ok} | {entry_mode} | {L} | "
             "{full_cagr} | {full_mdd} | {full_sh} | {full_calmar} | {dcagr} | {dmdd} | {dsh} | "
@@ -583,35 +565,57 @@ def _render_md(obj: Dict[str, Any]) -> str:
 
     lines.append("")
 
+    # exclusions summary
     lines.append("## Exclusions (not eligible for recommendation)")
-    total = len(rows_all)
-    elig = len(eligible)
-    excl = len(excluded)
+    total = len(rows)
+    eligible_rows = [r for r in rows if _is_eligible_for_recommendation(r)]
+    excluded_rows = [r for r in rows if not _is_eligible_for_recommendation(r)]
+
+    # counters
+    hard_fail = 0
+    post_no_go = 0
+    ok_false = 0
+    missing_rank = 0
+
+    for r in excluded_rows:
+        rs = _exclusion_reasons_renderer_filter_v3(r)
+        if any(s.startswith("HARD_FAIL_") for s in rs):
+            hard_fail += 1
+        if "EXCLUDE_POST_GONOGO_NO_GO" in rs:
+            post_no_go += 1
+        if "EXCLUDE_OK_FALSE" in rs:
+            ok_false += 1
+        if any(s.startswith("EXCLUDE_MISSING_RANK_METRICS_") for s in rs):
+            missing_rank += 1
+
     lines.append(f"- total_strategies: `{total}`")
-    lines.append(f"- eligible: `{elig}`")
+    lines.append(f"- eligible: `{len(eligible_rows)}`")
     lines.append(
-        f"- excluded: `{excl}` "
-        f"(hard_fail_fullpost={counters['hard_fail_fullpost']}, basis_fail_eq50={counters['basis_fail_eq50']}, "
-        f"post_NO_GO={counters['post_NO_GO']}, ok_false={counters['ok_false']}, missing_rank_metrics={counters['missing_rank_metrics']})"
+        f"- excluded: `{len(excluded_rows)}` "
+        f"(hard_fail_fullpost={hard_fail}, post_NO_GO={post_no_go}, ok_false={ok_false}, missing_rank_metrics={missing_rank})"
     )
     lines.append("")
 
-    if excluded:
-        for sid in sorted(excluded.keys()):
-            rs = ", ".join(excluded[sid])
-            lines.append(f"- {sid}: `{rs}`")
-        lines.append("")
+    for r in sorted(excluded_rows, key=lambda x: _fmt_str(x.get("id"))):
+        rid = _fmt_str(r.get("id"))
+        rs = _exclusion_reasons_renderer_filter_v3(r)
+        lines.append(f"- {rid}: `{', '.join(rs)}`")
 
-    lines.extend(_render_comparison_block(rows_all, excluded))
+    lines.append("")
 
+    # Always vs Trend compare section
+    lines.extend(_always_vs_trend_table(rows))
+
+    # Post go/no-go details
     lines.append("## Post Go/No-Go Details (compact)")
     any_details = False
-    for r in rows_sorted_all:
-        dec = r.get("post_gonogo")
-        if dec in ("NO_GO", "GO_OR_REVIEW") or _is_true(r.get("post_ok")):
+    for r in rows_sorted:
+        dec = _fmt_str(r.get("post_gonogo"))
+        # show all strategies with any gonogo signal for audit (as in your recent reports)
+        if dec != "N/A" or _is_true(r.get("post_ok")):
             any_details = True
             lines.append(f"### {_escape_md_cell(r.get('id'))}")
-            lines.append(f"- decision: `{_fmt_str(dec)}`")
+            lines.append(f"- decision: `{dec}`")
             rule_id = r.get("post_gonogo_rule")
             if rule_id is not None:
                 lines.append(f"- rule_id: `{_fmt_str(rule_id)}`")
