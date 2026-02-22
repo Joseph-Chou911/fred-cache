@@ -8,13 +8,11 @@ MVP backtest: "fixed base position + opportunistic leveraged add-on"
 - Leverage leg: when entry trigger fires, borrow (leverage_frac * equity) to buy extra shares.
   Exit when z >= exit_z OR max_hold_days reached.
 
-v5 FIX:
-- Add --cache_dir for workflow compatibility.
-- Default paths derived from cache_dir when explicit paths are not provided.
-
-Also includes:
-- robust max drawdown peak/trough detection (datetime-safe)
-- break_samples from stats_latest.json -> contamination entry skip mask
+v6 FIX:
+- Make path resolution consistent with the earlier working v3:
+  If --cache_dir is provided, then relative paths for --price_csv/--stats_json/--out_json/--out_*_csv
+  are resolved under cache_dir.
+- Keep break contamination forbid-entry mask support (best-effort) using stats_latest.json break info.
 
 """
 
@@ -31,7 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v5.cache_dir_compat"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v6.path_resolve"
 
 
 def utc_now_iso() -> str:
@@ -50,6 +48,32 @@ def _safe_float(x: Any) -> Optional[float]:
         return float(s)
     except Exception:
         return None
+
+
+def _resolve_path(cache_dir: Optional[str], p: Optional[str], default_name: str) -> str:
+    """
+    If cache_dir is provided:
+      - if p is None/empty -> cache_dir/default_name
+      - if p is absolute -> p
+      - if p is relative -> cache_dir/p
+    If cache_dir is not provided:
+      - if p is None/empty -> default_name
+      - else -> p
+    """
+    cd = cache_dir.strip() if isinstance(cache_dir, str) and cache_dir.strip() else None
+    pp = p.strip() if isinstance(p, str) and p.strip() else None
+
+    if cd:
+        if pp is None:
+            return os.path.join(cd, default_name)
+        if os.path.isabs(pp):
+            return pp
+        return os.path.join(cd, pp)
+
+    # no cache_dir
+    if pp is None:
+        return default_name
+    return pp
 
 
 def _pick_price_col(df: pd.DataFrame, requested: str) -> str:
@@ -85,7 +109,7 @@ def load_price_csv(path: str, price_col: str) -> pd.DataFrame:
     df = pd.read_csv(path)
 
     date_col = None
-    for c in ("date", "Date", "DATE"):
+    for c in ("date", "Date", "DATE", "timestamp", "time", "Time"):
         if c in df.columns:
             date_col = c
             break
@@ -96,7 +120,7 @@ def load_price_csv(path: str, price_col: str) -> pd.DataFrame:
             pd.to_datetime(df[c0].iloc[0])
             date_col = c0
         except Exception:
-            raise ValueError("Cannot find a date column. Expect a 'date'/'Date' column or date-like first column.")
+            raise ValueError("Cannot find a date column. Expect a 'date'/'Date'/time/timestamp column or date-like first column.")
 
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=False)
     df = df.dropna(subset=[date_col]).sort_values(date_col).reset_index(drop=True)
@@ -167,10 +191,11 @@ def load_break_info_from_stats(stats_json_path: Optional[str]) -> Tuple[Optional
     if isinstance(samples, list):
         for s in samples:
             if isinstance(s, dict):
-                if "break_date" in s or ("date" in s and "idx" in s):
-                    d = dict(s)
-                    if "break_date" not in d and "date" in d:
-                        d["break_date"] = d["date"]
+                d = dict(s)
+                if "break_date" not in d and "date" in d:
+                    d["break_date"] = d["date"]
+                # keep only plausible
+                if "break_date" in d or "idx" in d:
                     norm.append(d)
     return hi, lo, norm
 
@@ -415,13 +440,13 @@ def run_backtest(
 def main() -> None:
     ap = argparse.ArgumentParser(description="MVP backtest: base + leveraged add-on triggered by BB-z")
 
-    # compatibility: cache_dir
-    ap.add_argument("--cache_dir", default=None, help="Compatibility: base directory for data.csv/stats_latest.json and default outputs.")
+    ap.add_argument("--cache_dir", required=True, help="Cache directory (e.g., tw0050_bb_cache). Relative paths are resolved under this dir.")
 
-    # if not provided, will be derived from cache_dir (or fall back to defaults)
-    ap.add_argument("--price_csv", default=None, help="Path to price CSV (must include date column).")
+    # IMPORTANT: default values are relative names (v3 behavior); we will resolve under cache_dir
+    ap.add_argument("--price_csv", default="data.csv", help="Price CSV filename or path (default: data.csv)")
     ap.add_argument("--price_col", default="adjclose", help="Price column name (e.g., adjclose).")
-    ap.add_argument("--stats_json", default=None, help="stats_latest.json for break info (optional).")
+
+    ap.add_argument("--stats_json", default="stats_latest.json", help="stats_latest.json filename or path (optional).")
 
     ap.add_argument("--bb_window", type=int, default=60)
     ap.add_argument("--bb_ddof", type=int, default=0)
@@ -429,7 +454,7 @@ def main() -> None:
     ap.add_argument("--entry_z", type=float, default=-1.5)
     ap.add_argument("--exit_z", type=float, default=0.0)
 
-    # aliases
+    # aliases (compat)
     ap.add_argument("--enter_z", type=float, default=None, help="Alias for --entry_z")
     ap.add_argument("--leverage_frac", type=float, default=0.5)
     ap.add_argument("--leverage_add", type=float, default=None, help="Alias for --leverage_frac")
@@ -446,14 +471,14 @@ def main() -> None:
     ap.add_argument("--contam_horizon", type=int, default=None, help="Days before break to forbid entries (default=max_hold_days).")
     ap.add_argument("--z_clear_days", type=int, default=None, help="Days after break to forbid entries (default=bb_window).")
 
-    ap.add_argument("--out_json", default=None)
+    ap.add_argument("--out_json", default="backtest_mvp.json")
     ap.add_argument("--out_summary_json", default=None, help="Alias for --out_json")
-    ap.add_argument("--out_equity_csv", default=None)
-    ap.add_argument("--out_trades_csv", default=None)
+    ap.add_argument("--out_equity_csv", default="backtest_mvp_equity.csv")
+    ap.add_argument("--out_trades_csv", default="backtest_mvp_trades.csv")
 
     args = ap.parse_args()
 
-    # aliases
+    # alias normalization
     if args.enter_z is not None:
         args.entry_z = float(args.enter_z)
     if args.leverage_add is not None:
@@ -461,30 +486,21 @@ def main() -> None:
     if args.out_summary_json is not None:
         args.out_json = args.out_summary_json
 
-    # apply cache_dir defaults only when explicit paths are not provided
-    cache_dir = args.cache_dir.strip() if isinstance(args.cache_dir, str) and args.cache_dir.strip() else None
-    if cache_dir is not None:
-        if args.price_csv is None:
-            args.price_csv = os.path.join(cache_dir, "data.csv")
-        if args.stats_json is None:
-            args.stats_json = os.path.join(cache_dir, "stats_latest.json")
-        if args.out_json is None:
-            args.out_json = os.path.join(cache_dir, "backtest_summary.json")
-        # equity/trades outputs remain opt-in; if user provides, keep as-is
-    else:
-        if args.price_csv is None:
-            args.price_csv = "tw0050_bb_cache/data.csv"
-        if args.stats_json is None:
-            args.stats_json = "tw0050_bb_cache/stats_latest.json"
-        if args.out_json is None:
-            args.out_json = "backtest_summary.json"
+    cache_dir = args.cache_dir
+
+    # v3-compatible resolution: relative paths live under cache_dir
+    price_path = _resolve_path(cache_dir, args.price_csv, "data.csv")
+    stats_path = _resolve_path(cache_dir, args.stats_json, "stats_latest.json")
+    out_json_path = _resolve_path(cache_dir, args.out_json, "backtest_mvp.json")
+    out_eq_path = _resolve_path(cache_dir, args.out_equity_csv, "backtest_mvp_equity.csv")
+    out_tr_path = _resolve_path(cache_dir, args.out_trades_csv, "backtest_mvp_trades.csv")
 
     skip_contaminated = bool(args.skip_contaminated) and (not bool(args.no_skip_contaminated))
 
-    df = load_price_csv(args.price_csv, args.price_col)
+    df = load_price_csv(price_path, args.price_col)
     z = compute_bb_z(df["price"], window=int(args.bb_window), ddof=int(args.bb_ddof))
 
-    hi_s, lo_s, samples = load_break_info_from_stats(args.stats_json)
+    hi_s, lo_s, samples = load_break_info_from_stats(stats_path)
     ratio_hi = float(hi_s) if hi_s is not None else float(args.break_ratio_hi)
     ratio_lo = float(lo_s) if lo_s is not None else float(args.break_ratio_lo)
 
@@ -536,9 +552,11 @@ def main() -> None:
         "generated_at_utc": utc_now_iso(),
         "script_fingerprint": SCRIPT_FINGERPRINT,
         "params": {
-            "cache_dir": cache_dir if cache_dir is not None else "N/A",
+            "cache_dir": cache_dir,
             "price_csv": args.price_csv,
+            "price_csv_resolved": price_path,
             "stats_json": args.stats_json,
+            "stats_json_resolved": stats_path,
             "price_col": args.price_col,
             "bb_window": int(args.bb_window),
             "bb_ddof": int(args.bb_ddof),
@@ -571,20 +589,19 @@ def main() -> None:
         "trades": trades,
     }
 
-    with open(args.out_json, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(out_json_path) or ".", exist_ok=True)
+    with open(out_json_path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
 
-    if args.out_equity_csv:
-        df_bt[["price", "z", "eq_base", "eq_leverage", "forbid_entry"]].to_csv(args.out_equity_csv, index_label="date")
+    os.makedirs(os.path.dirname(out_eq_path) or ".", exist_ok=True)
+    df_bt[["price", "z", "eq_base", "eq_leverage", "forbid_entry"]].to_csv(out_eq_path, index_label="date")
 
-    if args.out_trades_csv:
-        pd.DataFrame(trades).to_csv(args.out_trades_csv, index=False)
+    os.makedirs(os.path.dirname(out_tr_path) or ".", exist_ok=True)
+    pd.DataFrame(trades).to_csv(out_tr_path, index=False)
 
-    print(f"OK: wrote {args.out_json}")
-    if args.out_equity_csv:
-        print(f"OK: wrote {args.out_equity_csv}")
-    if args.out_trades_csv:
-        print(f"OK: wrote {args.out_trades_csv}")
+    print(f"OK: wrote {out_json_path}")
+    print(f"OK: wrote {out_eq_path}")
+    print(f"OK: wrote {out_tr_path}")
 
 
 if __name__ == "__main__":
