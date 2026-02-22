@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-backtest_tw0050_leverage_mvp.py
-
-MVP backtest for:
-- Always hold a base position (1.0x).
-- Add one-shot leverage when bb_z <= entry_z.
-- Exit leverage when bb_z >= exit_z OR max_hold_days reached.
-- Borrow APR cost applied daily on outstanding principal (simple daily interest).
-
-Notes:
-- This is a close-to-close simulation using same-day close to trigger and fill.
-  If you want stricter "decide after close, execute next open", you must shift signals.
-- Designed to be robust to date index (string/Timestamp) in pandas Series.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -29,8 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v2"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v3"
 
 
 def utc_now_iso() -> str:
@@ -69,7 +53,6 @@ def _find_price_col(df: pd.DataFrame, user_col: Optional[str]) -> str:
         if k.lower() in cols_lc:
             return cols_lc[k.lower()]
 
-    # fallback: first numeric column (risky but better than failing silently)
     for c in df.columns:
         if pd.api.types.is_numeric_dtype(df[c]):
             return c
@@ -86,7 +69,6 @@ def _calc_bb_z(price: pd.Series, window: int, ddof: int) -> pd.Series:
 
 
 def _safe_label(x: Any) -> str:
-    # Convert Timestamp/date-like to ISO date string if possible
     try:
         if isinstance(x, pd.Timestamp):
             return x.date().isoformat()
@@ -96,13 +78,6 @@ def _safe_label(x: Any) -> str:
 
 
 def _max_drawdown(eq: pd.Series) -> Dict[str, Any]:
-    """
-    Robust max drawdown:
-    - Works with date index labels (string/Timestamp).
-    - Uses positional argmin/argmax on numpy array, not label casting.
-    Returns:
-      mdd (negative), peak_label, trough_label, peak_pos, trough_pos
-    """
     if eq is None or len(eq) == 0:
         return {"mdd": None, "peak": None, "trough": None}
 
@@ -110,12 +85,10 @@ def _max_drawdown(eq: pd.Series) -> Dict[str, Any]:
     if np.all(~np.isfinite(v)):
         return {"mdd": None, "peak": None, "trough": None}
 
-    # forward-fill small gaps for stability (still audit-worthy)
     s = pd.Series(v).replace([np.inf, -np.inf], np.nan).ffill()
     v2 = s.to_numpy(dtype=float)
 
     running_max = np.maximum.accumulate(v2)
-    # avoid division by zero
     running_max = np.where(running_max == 0.0, np.nan, running_max)
     dd = (v2 / running_max) - 1.0
 
@@ -125,7 +98,6 @@ def _max_drawdown(eq: pd.Series) -> Dict[str, Any]:
     trough_pos = int(np.nanargmin(dd))
     mdd = float(dd[trough_pos])
 
-    # peak is max equity before trough (inclusive)
     peak_slice = v2[: trough_pos + 1]
     peak_pos = int(np.nanargmax(peak_slice))
 
@@ -156,7 +128,11 @@ def _perf_summary(eq: pd.Series, trading_days: int = 252) -> Dict[str, Any]:
     rets = eq.pct_change().dropna()
 
     vol = float(rets.std(ddof=0) * math.sqrt(trading_days)) if len(rets) > 2 else None
-    sharpe = (float(rets.mean()) * trading_days) / (float(rets.std(ddof=0)) * math.sqrt(trading_days)) if (len(rets) > 2 and float(rets.std(ddof=0)) > 0) else None
+    sharpe = (
+        (float(rets.mean()) * trading_days) / (float(rets.std(ddof=0)) * math.sqrt(trading_days))
+        if (len(rets) > 2 and float(rets.std(ddof=0)) > 0)
+        else None
+    )
 
     mdd_info = _max_drawdown(eq)
 
@@ -197,11 +173,9 @@ def run_backtest(df: pd.DataFrame, params: Params) -> Tuple[pd.DataFrame, Dict[s
 
     df["bb_z"] = _calc_bb_z(df["price"], window=params.bb_window, ddof=params.bb_ddof)
 
-    # normalize base capital to 1.0 at start
     p0 = float(df["price"].iloc[0])
     base_shares = 1.0 / p0
 
-    # state
     lever_shares = 0.0
     borrow_principal = 0.0
     cash = 0.0
@@ -222,7 +196,6 @@ def run_backtest(df: pd.DataFrame, params: Params) -> Tuple[pd.DataFrame, Dict[s
         z = df.loc[i, "bb_z"]
         date = str(df.loc[i, "date"])
 
-        # daily interest on outstanding borrow
         if in_lever and borrow_principal > 0.0:
             daily_rate = float(params.borrow_apr) / float(params.trading_days)
             interest = borrow_principal * daily_rate
@@ -231,34 +204,28 @@ def run_backtest(df: pd.DataFrame, params: Params) -> Tuple[pd.DataFrame, Dict[s
             if cur_trade is not None:
                 cur_trade["interest_paid"] = float(cur_trade.get("interest_paid", 0.0) + interest)
 
-        # compute equity (assets - liabilities)
         total_shares = base_shares + lever_shares
         equity = total_shares * price + cash - borrow_principal
 
-        # record curve BEFORE possible trades today (close-to-close; trade happens at close)
         eq_list.append(float(equity))
         lev_flag.append(1 if in_lever else 0)
         borrow_list.append(float(borrow_principal))
         cash_list.append(float(cash))
 
-        # skip signal until bb_z exists
         if z is None or (isinstance(z, float) and not np.isfinite(z)):
             continue
-
         zf = float(z)
 
-        # exit condition
         if in_lever:
             hold_days += 1
             exit_by_z = (zf >= float(params.exit_z))
             exit_by_time = (params.max_hold_days > 0 and hold_days >= params.max_hold_days)
 
             if exit_by_z or exit_by_time:
-                # sell lever shares, repay borrow
                 proceeds = lever_shares * price
                 cash += proceeds
                 cash -= borrow_principal
-                # after repayment
+
                 borrow_principal = 0.0
                 lever_shares = 0.0
                 in_lever = False
@@ -268,9 +235,6 @@ def run_backtest(df: pd.DataFrame, params: Params) -> Tuple[pd.DataFrame, Dict[s
                     cur_trade["exit_price"] = price
                     cur_trade["hold_days"] = int(hold_days)
                     cur_trade["exit_reason"] = "exit_z" if exit_by_z else "max_hold_days"
-
-                    # compute trade PnL on lever leg (net of interest already debited in cash)
-                    # lever leg equity contribution at exit is just change in lever shares value (since principal repaid)
                     cur_trade["lever_leg_pnl"] = float((proceeds - cur_trade.get("borrow_principal", 0.0)))
                     trades.append(cur_trade)
 
@@ -278,15 +242,11 @@ def run_backtest(df: pd.DataFrame, params: Params) -> Tuple[pd.DataFrame, Dict[s
                 hold_days = 0
                 continue
 
-        # entry condition (one-shot)
         if (not in_lever) and (zf <= float(params.entry_z)):
-            # borrow a fixed fraction of current equity (using current equity estimate)
-            # equity already computed earlier this loop; use it.
             borrow = max(float(params.leverage_frac) * float(equity), 0.0)
             if borrow > 0.0:
                 borrow_principal = borrow
                 cash += borrow
-                # buy lever shares using borrowed cash
                 lever_shares = cash / price
                 cash = 0.0
                 in_lever = True
@@ -306,8 +266,6 @@ def run_backtest(df: pd.DataFrame, params: Params) -> Tuple[pd.DataFrame, Dict[s
     df_bt["lever_on"] = lev_flag
     df_bt["borrow_principal"] = borrow_list
     df_bt["cash"] = cash_list
-
-    # baseline: base only
     df_bt["equity_base_only"] = (base_shares * df_bt["price"]).astype(float)
 
     summary = {
@@ -335,7 +293,6 @@ def run_backtest(df: pd.DataFrame, params: Params) -> Tuple[pd.DataFrame, Dict[s
         "trades": trades,
     }
 
-    # add delta view (if both ok)
     if summary["perf_leverage"].get("ok") and summary["perf_base_only"].get("ok"):
         a = summary["perf_leverage"]
         b = summary["perf_base_only"]
@@ -364,16 +321,17 @@ def main() -> None:
     ap.add_argument("--bb_window", type=int, default=60)
     ap.add_argument("--bb_ddof", type=int, default=0)
 
-    ap.add_argument("--entry_z", type=float, default=-1.5)
+    # accept both new and old flags
+    ap.add_argument("--entry_z", "--enter_z", dest="entry_z", type=float, default=-1.5)
     ap.add_argument("--exit_z", type=float, default=0.0)
 
-    ap.add_argument("--leverage_frac", type=float, default=0.2, help="borrow as fraction of equity at entry (e.g. 0.2)")
-    ap.add_argument("--borrow_apr", type=float, default=0.035, help="annual borrow cost (APR), e.g. 0.035")
-    ap.add_argument("--max_hold_days", type=int, default=60, help="0 means no time exit")
-
+    ap.add_argument("--leverage_frac", "--leverage_add", dest="leverage_frac", type=float, default=0.2)
+    ap.add_argument("--borrow_apr", type=float, default=0.035)
+    ap.add_argument("--max_hold_days", type=int, default=60)
     ap.add_argument("--trading_days", type=int, default=252)
 
-    ap.add_argument("--out_json", default="backtest_mvp.json")
+    # accept both new and old output flag
+    ap.add_argument("--out_json", "--out_summary_json", dest="out_json", default="backtest_mvp.json")
     ap.add_argument("--out_equity_csv", default="backtest_mvp_equity.csv")
     ap.add_argument("--out_trades_csv", default="backtest_mvp_trades.csv")
 
@@ -415,7 +373,6 @@ def main() -> None:
     if isinstance(trades, list) and len(trades) > 0:
         pd.DataFrame(trades).to_csv(out_tr_path, index=False, encoding="utf-8")
     else:
-        # still write an empty file for workflow stability
         pd.DataFrame([]).to_csv(out_tr_path, index=False, encoding="utf-8")
 
     print(f"OK: wrote {out_json_path}")
