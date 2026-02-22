@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-22T11:13:47Z",
+  "generated_at_utc": "2026-02-22T11:23:41Z",
   "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
   "inputs": {
     "cache_dir": "tw0050_bb_cache",
@@ -50,7 +50,7 @@
   "strategies": [
     {
       "strategy_id": "bb_conditional",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -168,7 +168,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -284,7 +284,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -469,7 +469,7 @@
     },
     {
       "strategy_id": "always_leverage_1.1x",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -587,7 +587,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -703,7 +703,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -888,7 +888,7 @@
     },
     {
       "strategy_id": "always_leverage_1.2x",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -1006,7 +1006,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -1122,7 +1122,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -1307,7 +1307,7 @@
     },
     {
       "strategy_id": "always_leverage_1.3x",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -1425,7 +1425,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -1541,7 +1541,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -1726,7 +1726,7 @@
     },
     {
       "strategy_id": "always_leverage_1.5x",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -1844,7 +1844,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -1960,7 +1960,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -2145,7 +2145,7 @@
     },
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -2263,7 +2263,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -2379,7 +2379,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -2564,7 +2564,7 @@
     },
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -2682,7 +2682,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -2798,7 +2798,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:47Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -2983,7 +2983,7 @@
     },
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
-      "generated_at_utc": "2026-02-22T11:13:47Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -3101,7 +3101,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:48Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -3217,7 +3217,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:48Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -3402,7 +3402,7 @@
     },
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
-      "generated_at_utc": "2026-02-22T11:13:48Z",
+      "generated_at_utc": "2026-02-22T11:23:41Z",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
       "params": {
         "bb_window": 60,
@@ -3520,7 +3520,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:48Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
@@ -3636,7 +3636,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T11:13:48Z",
+              "generated_at_utc": "2026-02-22T11:23:41Z",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync",
               "params": {
                 "bb_window": 60,
