@@ -67,7 +67,7 @@ jobs:
           )
 
           OUT_EQ="equity_curve.${FP}.csv"
-          OUT_SUM="backtest_summary.${FP}.json"
+          OUT_SUM="backtest_mvp.${FP}.json"
 
           python scripts/backtest_tw0050_leverage_mvp.py \
             --cache_dir "${CACHE_DIR}" \
@@ -78,7 +78,7 @@ jobs:
             --exit_z "${EXIT_Z}" \
             --max_hold_days "${MAX_HOLD_DAYS}" \
             --out_equity_csv "${OUT_EQ}" \
-            --out_summary_json "${OUT_SUM}"
+            --out_json "${OUT_SUM}"
 
           echo "Wrote:"
           ls -l "${CACHE_DIR}/${OUT_EQ}" "${CACHE_DIR}/${OUT_SUM}"
@@ -89,7 +89,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add tw0050_bb_cache/equity_curve.*.csv tw0050_bb_cache/backtest_summary.*.json
+          git add tw0050_bb_cache/equity_curve.*.csv tw0050_bb_cache/backtest_mvp.*.json
 
           if git diff --cached --quiet; then
             echo "No changes."
