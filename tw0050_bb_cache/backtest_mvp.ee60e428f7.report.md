@@ -1,13 +1,13 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-22T23:37:29Z`
+- generated_at_utc: `2026-02-22T23:56:31Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-23.v5.md_table_fix_v1`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-23.v6.disable_eq50_gate_v1`
 - suite_ok: `True`
 
 ## Ranking (policy)
 - ranking_policy: `prefer post (calmar desc, sharpe0 desc) when post_ok=true; else fallback to full; EXCLUDE hard_fail`
-- renderer_filter_policy: `renderer_rank_filter_v2: exclude(ok=false); exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post; plus basis_equity_min<=0.5 (asset down 50%) on rank_basis segment); exclude(post_gonogo=NO_GO); exclude(missing rank metrics on chosen basis)`
+- renderer_filter_policy: `renderer_rank_filter_v3: exclude(ok=false); exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post); exclude(post_gonogo=NO_GO); exclude(missing rank metrics on chosen basis); NOTE: eq50 gate disabled (basis_equity_min<=0.5 removed; equity_min semantics not aligned with MDD).`
 - full_segment_note: `FULL_* metrics may be impacted by data singularity around 2014 (price series anomaly/adjustment). Treat FULL as audit-only; prefer POST for decision and ranking.`
 - top3_recommended: `trend_leverage_price_gt_ma60_1.2x, always_leverage_1.2x, always_leverage_1.3x`
 - top3_raw_from_suite: `trend_leverage_price_gt_ma60_1.2x, trend_leverage_price_gt_ma60_1.1x, always_leverage_1.1x`
@@ -30,7 +30,7 @@ note_full: `FULL_* columns may be contaminated by a known data singularity issue
 ## Exclusions (not eligible for recommendation)
 - total_strategies: `9`
 - eligible: `3`
-- excluded: `6` (hard_fail_fullpost=3, basis_fail_eq50=0, post_NO_GO=3, ok_false=0, missing_rank_metrics=0)
+- excluded: `6` (hard_fail_fullpost=3, post_NO_GO=3, ok_false=0, missing_rank_metrics=0)
 
 - always_leverage_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
 - always_leverage_1.5x: `HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0`
@@ -46,8 +46,8 @@ compare_policy: `compare_v1: for same L, compare post if both post_ok else full;
 |---:|---|---|---|---|---|
 | 1.1x | N/A | trend_leverage_price_gt_ma60_1.1x | always_leverage_1.1x | N/A | N/A (trend excluded: EXCLUDE_POST_GONOGO_NO_GO; always excluded: EXCLUDE_POST_GONOGO_NO_GO) |
 | 1.2x | post | trend_leverage_price_gt_ma60_1.2x | always_leverage_1.2x | trend_leverage_price_gt_ma60_1.2x | WIN:trend |
-| 1.3x | N/A | trend_leverage_price_gt_ma60_1.3x | always_leverage_1.3x | N/A | N/A (trend excluded: HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0) |
-| 1.5x | N/A | trend_leverage_price_gt_ma60_1.5x | always_leverage_1.5x | N/A | N/A (trend excluded: HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0; always excluded: HARD_FAIL_FULL_MDD_LE_-100PCT, HAR) |
+| 1.3x | N/A | trend_leverage_price_gt_ma60_1.3x | always_leverage_1.3x | N/A | N/A (trend excluded: HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0; always OK) |
+| 1.5x | N/A | trend_leverage_price_gt_ma60_1.5x | always_leverage_1.5x | N/A | N/A (trend excluded: HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0; always excluded: HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0) |
 
 ## Post Go/No-Go Details (compact)
 ### trend_leverage_price_gt_ma60_1.5x
