@@ -1,9 +1,10 @@
+
 name: tw0050-backtest-mvp
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "10 7 * * 1-5"  # 可自行調整；避免跟既有工作同時跑
+    - cron: "10 7 * * 1-5"
 
 permissions:
   contents: write
@@ -41,18 +42,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          python - << 'PY'
-          import hashlib, os
-          s = "|".join([
-            os.environ["BORROW_APR"],
-            os.environ["LEVERAGE_ADD"],
-            os.environ["ENTER_Z"],
-            os.environ["EXIT_Z"],
-            os.environ["MAX_HOLD_DAYS"],
-          ]).encode("utf-8")
-          print(hashlib.sha1(s).hexdigest()[:10])
-          PY
-
           FP=$(python - << 'PY'
           import hashlib, os
           s = "|".join([
@@ -67,7 +56,8 @@ jobs:
           )
 
           OUT_EQ="equity_curve.${FP}.csv"
-          OUT_SUM="backtest_mvp.${FP}.json"
+          OUT_JSON="backtest_mvp.${FP}.json"
+          OUT_JSON_LITE="backtest_mvp.${FP}.lite.json"
 
           python scripts/backtest_tw0050_leverage_mvp.py \
             --cache_dir "${CACHE_DIR}" \
@@ -78,23 +68,89 @@ jobs:
             --exit_z "${EXIT_Z}" \
             --max_hold_days "${MAX_HOLD_DAYS}" \
             --out_equity_csv "${OUT_EQ}" \
-            --out_json "${OUT_SUM}"
+            --out_json "${OUT_JSON}"
 
-          echo "Wrote:"
-          ls -l "${CACHE_DIR}/${OUT_EQ}" "${CACHE_DIR}/${OUT_SUM}"
+          echo "Wrote full outputs:"
+          ls -lh "${CACHE_DIR}/${OUT_EQ}" "${CACHE_DIR}/${OUT_JSON}"
 
-      - name: Commit outputs
+          # ---- produce lite JSON (strip trades everywhere) ----
+          python - << 'PY' "${CACHE_DIR}/${OUT_JSON}" "${CACHE_DIR}/${OUT_JSON_LITE}"
+          import json, os, sys
+
+          src = sys.argv[1]
+          dst = sys.argv[2]
+
+          with open(src, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+
+          def strip_trades_in_summary(summary_obj):
+            if isinstance(summary_obj, dict):
+              summary_obj.pop("trades", None)
+            return summary_obj
+
+          def strip_trades_in_segmentation(seg):
+            # seg: dict with segments.pre/segments.post.summary
+            if not isinstance(seg, dict):
+              return seg
+            segs = seg.get("segments")
+            if isinstance(segs, dict):
+              for _, segv in segs.items():
+                if isinstance(segv, dict):
+                  summ = segv.get("summary")
+                  if isinstance(summ, dict):
+                    strip_trades_in_summary(summ)
+            return seg
+
+          # top-level trades
+          obj.pop("trades", None)
+
+          # if this is a multi-strategy suite output:
+          if isinstance(obj.get("strategies"), list):
+            for s in obj["strategies"]:
+              if isinstance(s, dict):
+                s.pop("trades", None)
+                if isinstance(s.get("summary"), dict):
+                  strip_trades_in_summary(s["summary"])
+                if isinstance(s.get("segmentation"), dict):
+                  strip_trades_in_segmentation(s["segmentation"])
+
+          # if this is a single-strategy output:
+          if isinstance(obj.get("segmentation"), dict):
+            strip_trades_in_segmentation(obj["segmentation"])
+
+          with open(dst, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+
+          print("OK: wrote lite json:", dst)
+          print("full_bytes:", os.path.getsize(src), "lite_bytes:", os.path.getsize(dst))
+          PY
+
+          echo "Wrote lite outputs:"
+          ls -lh "${CACHE_DIR}/${OUT_JSON_LITE}"
+
+      # (Optional) keep the full JSON out of git, but available for download
+      - name: Upload artifacts (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tw0050-backtest-mvp
+          path: |
+            tw0050_bb_cache/equity_curve.*.csv
+            tw0050_bb_cache/backtest_mvp.*.json
+            tw0050_bb_cache/backtest_mvp.*.lite.json
+
+      - name: Commit outputs (lite json only)
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add tw0050_bb_cache/equity_curve.*.csv tw0050_bb_cache/backtest_mvp.*.json
+          # Commit equity + lite json only (avoid pushing oversized full json)
+          git add tw0050_bb_cache/equity_curve.*.csv tw0050_bb_cache/backtest_mvp.*.lite.json
 
           if git diff --cached --quiet; then
             echo "No changes."
             exit 0
           fi
 
-          git commit -m "tw0050 backtest mvp: update outputs"
+          git commit -m "tw0050 backtest mvp: update outputs (lite json)"
           git push
