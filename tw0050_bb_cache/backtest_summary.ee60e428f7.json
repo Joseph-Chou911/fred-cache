@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-02-22T06:22:22Z",
-  "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v14.no_third_run_post_csv_compare_error_prepare_df",
+  "generated_at_utc": "2026-02-22T06:51:07Z",
+  "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v15.add_costs_fee_tax_slippage",
   "params": {
     "bb_window": 60,
     "bb_ddof": 0,
@@ -13,6 +13,10 @@
     "skip_contaminated": true,
     "contam_horizon": 60,
     "z_clear_days": 60,
+    "fee_rate": 0.001425,
+    "tax_rate": 0.001,
+    "slip_bps": 5.0,
+    "cost_on": "lever",
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
     "price_csv_resolved": "tw0050_bb_cache/data.csv",
@@ -42,7 +46,13 @@
     "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
     "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
     "equity_csv_last_row_note": "if open_at_end=true, last equity value is mark-to-market while still in position; numerically equivalent to post-close equity at the same last_price, but trade record is added after loop",
-    "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net = lever_leg_pnl - interest_paid",
+    "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+    "costs_enabled": true,
+    "cost_on": "lever",
+    "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+    "entry_cost_total": 0.042062298922999855,
+    "exit_cost_total": 0.06508217259259737,
+    "cost_paid_total": 0.1071444715155972,
     "breaks_detected": 1,
     "break_samples_first5": [
       {
@@ -60,14 +70,14 @@
   "perf_leverage": {
     "ok": true,
     "start": 1.0,
-    "end": 4.094019248351743,
+    "end": 3.9868747768361468,
     "n_days": 4192,
     "years": 16.63095238095238,
-    "cagr": 0.08844845392561584,
-    "vol_ann": 0.29121443472709563,
-    "sharpe0": 0.49526333292229513,
+    "cagr": 0.0867142093878972,
+    "vol_ann": 0.29972282952111096,
+    "sharpe0": 0.49004955170883907,
     "sharpe_note": "rf=0 assumed",
-    "mdd": -0.732900649874189,
+    "mdd": -0.7518309267926276,
     "mdd_peak": "2011-06-01",
     "mdd_trough": "2014-02-05",
     "mdd_warning": null
@@ -94,12 +104,16 @@
       "entry_z": -1.6685420498950485,
       "borrow_principal": 0.7887131714983902,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001518272855134401,
+      "exit_cost": 0.002420444132390686,
+      "cost_paid": 0.003938716987525087,
       "interest_paid": 0.0027385874010360783,
       "exit_date": "2010-03-18",
       "exit_price": 33.874412536621094,
       "hold_days": 25,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.03878909598560509
+      "lever_leg_pnl": 0.03878909598560509,
+      "net_lever_pnl_after_costs": 0.03211179159704393
     },
     {
       "entry_date": "2010-05-17",
@@ -107,12 +121,16 @@
       "entry_z": -1.6265672832458542,
       "borrow_principal": 0.7894736744013194,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0015197368232225399,
+      "exit_cost": 0.002315884728317071,
+      "cost_paid": 0.003835621551539611,
       "interest_paid": 0.004057017493451224,
       "exit_date": "2010-07-08",
       "exit_price": 32.41109085083008,
       "hold_days": 37,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.002281788271183416
+      "lever_leg_pnl": 0.002281788271183416,
+      "net_lever_pnl_after_costs": -0.005610850773807419
     },
     {
       "entry_date": "2011-03-11",
@@ -120,12 +138,16 @@
       "entry_z": -1.6741482581516554,
       "borrow_principal": 0.8951932694048685,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001723247043604372,
+      "exit_cost": 0.0027207752460917875,
+      "cost_paid": 0.00444402228969616,
       "interest_paid": 0.0019893183764552636,
       "exit_date": "2011-04-06",
       "exit_price": 38.07758331298828,
       "hold_days": 16,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.03498630190856311
+      "lever_leg_pnl": 0.03498630190856311,
+      "net_lever_pnl_after_costs": 0.028552961242411683
     },
     {
       "entry_date": "2011-06-20",
@@ -133,12 +155,16 @@
       "entry_z": -2.029389781615215,
       "borrow_principal": 0.8913903821403614,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0017159264856201957,
+      "exit_cost": 0.002696303612030017,
+      "cost_paid": 0.004412230097650213,
       "interest_paid": 0.0028474970540594887,
       "exit_date": "2011-07-21",
       "exit_price": 37.73509979248047,
       "hold_days": 23,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.03042281855366158
+      "lever_leg_pnl": 0.03042281855366158,
+      "net_lever_pnl_after_costs": 0.023163091401951875
     },
     {
       "entry_date": "2011-08-04",
@@ -146,12 +172,16 @@
       "entry_z": -1.8732425900231764,
       "borrow_principal": 0.8799818135343052,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0016939649910535375,
+      "exit_cost": 0.0023848490530802326,
+      "cost_paid": 0.00407881404413377,
       "interest_paid": 0.0067220832978314975,
       "exit_date": "2011-10-24",
       "exit_price": 33.37625503540039,
       "hold_days": 55,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": -0.06464880393422567
+      "lever_leg_pnl": -0.06464880393422567,
+      "net_lever_pnl_after_costs": -0.07544970127619094
     },
     {
       "entry_date": "2011-11-10",
@@ -159,12 +189,16 @@
       "entry_z": -1.607051159619722,
       "borrow_principal": 0.7689382788666579,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0014802061868183164,
+      "exit_cost": 0.0022558186963781853,
+      "cost_paid": 0.0037360248831965017,
       "interest_paid": 0.004592270276564758,
       "exit_date": "2012-01-10",
       "exit_price": 31.570459365844727,
       "hold_days": 43,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.002281788271183194
+      "lever_leg_pnl": 0.002281788271183194,
+      "net_lever_pnl_after_costs": -0.006046506888578065
     },
     {
       "entry_date": "2012-04-26",
@@ -172,12 +206,16 @@
       "entry_z": -1.7852058116743814,
       "borrow_principal": 0.7955581635620796,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0015314494648570034,
+      "exit_cost": 0.0022780650417288813,
+      "cost_paid": 0.0038095145065858847,
       "interest_paid": 0.005193226901030245,
       "exit_date": "2012-07-03",
       "exit_price": 31.881799697875977,
       "hold_days": 47,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": -0.01673250827015449
+      "lever_leg_pnl": -0.01673250827015449,
+      "net_lever_pnl_after_costs": -0.02573524967777062
     },
     {
       "entry_date": "2012-10-24",
@@ -185,12 +223,16 @@
       "entry_z": -1.9688481859150715,
       "borrow_principal": 0.7757835970864753,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001493383424391465,
+      "exit_cost": 0.002362602707729537,
+      "cost_paid": 0.003855986132121002,
       "interest_paid": 0.0028014407672567157,
       "exit_date": "2012-11-29",
       "exit_price": 33.06491470336914,
       "hold_days": 26,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.031943824359520256
+      "lever_leg_pnl": 0.031943824359520256,
+      "net_lever_pnl_after_costs": 0.025286397460142537
     },
     {
       "entry_date": "2013-04-09",
@@ -198,12 +240,16 @@
       "entry_z": -1.5007660426834124,
       "borrow_principal": 0.8168544813432638,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0015724448765857828,
+      "exit_cost": 0.0024671626569498233,
+      "cost_paid": 0.004039607533535606,
       "interest_paid": 0.0009076160903814044,
       "exit_date": "2013-04-19",
       "exit_price": 34.52824401855469,
       "hold_days": 8,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.026619931289154408
+      "lever_leg_pnl": 0.026619931289154408,
+      "net_lever_pnl_after_costs": 0.0216727076652374
     },
     {
       "entry_date": "2013-06-21",
@@ -211,12 +257,16 @@
       "entry_z": -1.6414396149934336,
       "borrow_principal": 0.8153330096000795,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001569516043480153,
+      "exit_cost": 0.0024938584894293263,
+      "cost_paid": 0.004063374532909479,
       "interest_paid": 0.0011324069577778883,
       "exit_date": "2013-07-05",
       "exit_price": 34.90185546875,
       "hold_days": 10,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.037268183367211605
+      "lever_leg_pnl": 0.037268183367211605,
+      "net_lever_pnl_after_costs": 0.032072401876524236
     },
     {
       "entry_date": "2014-09-25",
@@ -224,12 +274,16 @@
       "entry_z": -1.6793820912795434,
       "borrow_principal": 0.25670229875770856,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.000494151925108589,
+      "exit_cost": 0.0007934632283893376,
+      "cost_paid": 0.0012876151534979266,
       "interest_paid": 0.0007130619409936348,
       "exit_date": "2014-10-24",
       "exit_price": 11.104615211486816,
       "hold_days": 20,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.01456718103351795
+      "lever_leg_pnl": 0.01456718103351795,
+      "net_lever_pnl_after_costs": 0.01256650393902639
     },
     {
       "entry_date": "2015-06-04",
@@ -237,12 +291,16 @@
       "entry_z": -1.5403905440917556,
       "borrow_principal": 0.295148068824907,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.000568160032487946,
+      "exit_cost": 0.0008865896801918023,
+      "cost_paid": 0.0014547497126797483,
       "interest_paid": 0.0005738990227150972,
       "exit_date": "2015-06-25",
       "exit_price": 12.407931327819824,
       "hold_days": 14,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.007959514146649305
+      "lever_leg_pnl": 0.007959514146649305,
+      "net_lever_pnl_after_costs": 0.005930865411254459
     },
     {
       "entry_date": "2015-07-08",
@@ -250,12 +308,16 @@
       "entry_z": -2.166200824698103,
       "borrow_principal": 0.29041538033019487,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0005590496071356251,
+      "exit_cost": 0.0008003847512411871,
+      "cost_paid": 0.0013594343583768122,
       "interest_paid": 0.002420128169418291,
       "exit_date": "2015-10-01",
       "exit_price": 11.201482772827148,
       "hold_days": 60,
       "exit_reason": "max_hold_days",
-      "lever_leg_pnl": -0.016779567940045426
+      "lever_leg_pnl": -0.016779567940045426,
+      "net_lever_pnl_after_costs": -0.020559130467840532
     },
     {
       "entry_date": "2015-12-10",
@@ -263,12 +325,16 @@
       "entry_z": -1.5883956161290145,
       "borrow_principal": 0.26866712663999454,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0005171842187819894,
+      "exit_cost": 0.0007819576353242743,
+      "cost_paid": 0.0012991418541062638,
       "interest_paid": 0.0014925951479999686,
       "exit_date": "2016-02-16",
       "exit_price": 10.94359302520752,
       "hold_days": 40,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": -0.0013311829393879426
+      "lever_leg_pnl": -0.0013311829393879426,
+      "net_lever_pnl_after_costs": -0.004122919941494175
     },
     {
       "entry_date": "2016-05-06",
@@ -276,12 +342,16 @@
       "entry_z": -1.6285628149730798,
       "borrow_principal": 0.26489552706690495,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.000509923889603792,
+      "exit_cost": 0.0008124574331307719,
+      "cost_paid": 0.001322381322734564,
       "interest_paid": 0.0005518656813893851,
       "exit_date": "2016-05-27",
       "exit_price": 11.370441436767578,
       "hold_days": 15,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.012867697935068312
+      "lever_leg_pnl": 0.012867697935068312,
+      "net_lever_pnl_after_costs": 0.010993450930944363
     },
     {
       "entry_date": "2017-09-26",
@@ -289,12 +359,16 @@
       "entry_z": -1.7238397602729654,
       "borrow_principal": 0.3724384746069283,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.000716944063618337,
+      "exit_cost": 0.0011138019063499525,
+      "cost_paid": 0.0018307459699682897,
       "interest_paid": 0.0003620929614234026,
       "exit_date": "2017-10-06",
       "exit_price": 15.587794303894045,
       "hold_days": 7,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.008348501922969986
+      "lever_leg_pnl": 0.008348501922969986,
+      "net_lever_pnl_after_costs": 0.006155662991578294
     },
     {
       "entry_date": "2017-12-06",
@@ -302,12 +376,16 @@
       "entry_z": -1.822103956257065,
       "borrow_principal": 0.37498931838680943,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0007218544378946082,
+      "exit_cost": 0.0011307597838451516,
+      "cost_paid": 0.0018526142217397598,
       "interest_paid": 0.000989555145742969,
       "exit_date": "2018-01-03",
       "exit_price": 15.825121879577637,
       "hold_days": 19,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.01159522309871247
+      "lever_leg_pnl": 0.01159522309871247,
+      "net_lever_pnl_after_costs": 0.008753053731229742
     },
     {
       "entry_date": "2018-04-23",
@@ -315,12 +393,16 @@
       "entry_z": -1.7435989615003442,
       "borrow_principal": 0.3803788853232259,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0007322293542472098,
+      "exit_cost": 0.0011480948346933577,
+      "cost_paid": 0.0018803241889405677,
       "interest_paid": 0.000739625610350717,
       "exit_date": "2018-05-14",
       "exit_price": 16.06772804260254,
       "hold_days": 14,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.012132169272793869
+      "lever_leg_pnl": 0.012132169272793869,
+      "net_lever_pnl_after_costs": 0.009512219473502585
     },
     {
       "entry_date": "2018-10-08",
@@ -328,12 +410,16 @@
       "entry_z": -1.745242805264589,
       "borrow_principal": 0.3981824903175894,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0007665012938613597,
+      "exit_cost": 0.001029272281262694,
+      "cost_paid": 0.0017957735751240537,
       "interest_paid": 0.003318187419313241,
       "exit_date": "2019-01-03",
       "exit_price": 14.404791831970217,
       "hold_days": 60,
       "exit_reason": "max_hold_days",
-      "lever_leg_pnl": -0.04629453091154018
+      "lever_leg_pnl": -0.04629453091154018,
+      "net_lever_pnl_after_costs": -0.051408491905977474
     },
     {
       "entry_date": "2019-01-04",
@@ -341,12 +427,16 @@
       "entry_z": -2.5568580360533693,
       "borrow_principal": 0.34637100520479946,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.000666764185019239,
+      "exit_cost": 0.0010734739317850982,
+      "cost_paid": 0.0017402381168043373,
       "interest_paid": 0.0005291779246184436,
       "exit_date": "2019-01-21",
       "exit_price": 15.023399353027344,
       "hold_days": 11,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.020628629593524683
+      "lever_leg_pnl": 0.020628629593524683,
+      "net_lever_pnl_after_costs": 0.0183592135521019
     },
     {
       "entry_date": "2020-02-27",
@@ -354,12 +444,16 @@
       "entry_z": -1.7157197942344515,
       "borrow_principal": 0.4565824224025649,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0008789211631249375,
+      "exit_cost": 0.0012609322909663046,
+      "cost_paid": 0.002139853454091242,
       "interest_paid": 0.0025999832386812724,
       "exit_date": "2020-04-29",
       "exit_price": 17.646902084350586,
       "hold_days": 41,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": -0.02549445967904196
+      "lever_leg_pnl": -0.02549445967904196,
+      "net_lever_pnl_after_costs": -0.030234296371814472
     },
     {
       "entry_date": "2021-05-12",
@@ -367,12 +461,16 @@
       "entry_z": -2.3544938113463183,
       "borrow_principal": 0.6859330353011822,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0013204210929547758,
+      "exit_cost": 0.0021055864953471036,
+      "cost_paid": 0.0034260075883018794,
       "interest_paid": 0.0011432217255019702,
       "exit_date": "2021-05-28",
       "exit_price": 29.467941284179688,
       "hold_days": 12,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.03392559558671637
+      "lever_leg_pnl": 0.03392559558671637,
+      "net_lever_pnl_after_costs": 0.02935636627291252
     },
     {
       "entry_date": "2021-08-17",
@@ -380,12 +478,16 @@
       "entry_z": -1.7432902955138538,
       "borrow_principal": 0.7139937845824508,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0013744380353212177,
+      "exit_cost": 0.0021475017325879456,
+      "cost_paid": 0.0035219397679091633,
       "interest_paid": 0.0007933264273138342,
       "exit_date": "2021-08-27",
       "exit_price": 30.05455017089844,
       "hold_days": 8,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.020194841943342645
+      "lever_leg_pnl": 0.020194841943342645,
+      "net_lever_pnl_after_costs": 0.01587957574811965
     },
     {
       "entry_date": "2021-10-01",
@@ -393,12 +495,16 @@
       "entry_z": -1.626446647241572,
       "borrow_principal": 0.7118681319090934,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0013703461539250048,
+      "exit_cost": 0.0021381752270535886,
+      "cost_paid": 0.0035085213809785934,
       "interest_paid": 0.0015819291820202074,
       "exit_date": "2021-10-26",
       "exit_price": 29.92402458190918,
       "hold_days": 16,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.019131945716065135
+      "lever_leg_pnl": 0.019131945716065135,
+      "net_lever_pnl_after_costs": 0.014041495153066335
     },
     {
       "entry_date": "2022-03-07",
@@ -406,12 +512,16 @@
       "entry_z": -2.4501808859685803,
       "borrow_principal": 0.7277528206214914,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0014009241796963709,
+      "exit_cost": 0.0020301860326992953,
+      "cost_paid": 0.0034311102123956664,
       "interest_paid": 0.006064606838512425,
       "exit_date": "2022-06-02",
       "exit_price": 28.412702560424805,
       "hold_days": 60,
       "exit_reason": "max_hold_days",
-      "lever_leg_pnl": -0.033672125681561416
+      "lever_leg_pnl": -0.033672125681561416,
+      "net_lever_pnl_after_costs": -0.04316784273246951
     },
     {
       "entry_date": "2022-06-17",
@@ -419,12 +529,16 @@
       "entry_z": -1.6255868077098894,
       "borrow_principal": 0.6563352519700529,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001263445360042352,
+      "exit_cost": 0.0019321652540844766,
+      "cost_paid": 0.0031956106141268286,
       "interest_paid": 0.0031905185859655333,
       "exit_date": "2022-08-05",
       "exit_price": 27.040889739990234,
       "hold_days": 35,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.004234065665665532
+      "lever_leg_pnl": 0.004234065665665532,
+      "net_lever_pnl_after_costs": -0.00215206353442683
     },
     {
       "entry_date": "2022-09-26",
@@ -432,12 +546,16 @@
       "entry_z": -1.9673149434251649,
       "borrow_principal": 0.5950651925527932,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001145500495664127,
+      "exit_cost": 0.0017623933609242782,
+      "cost_paid": 0.002907893856588405,
       "interest_paid": 0.0027273821325336377,
       "exit_date": "2022-11-11",
       "exit_price": 24.6649112701416,
       "hold_days": 33,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.007462452207643744
+      "lever_leg_pnl": 0.007462452207643744,
+      "net_lever_pnl_after_costs": 0.0018271762185217014
     },
     {
       "entry_date": "2023-04-25",
@@ -445,12 +563,16 @@
       "entry_z": -1.8137421590661964,
       "borrow_principal": 0.6590478458925341,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0012686671033431281,
+      "exit_cost": 0.001993019295536311,
+      "cost_paid": 0.003261686398879439,
       "interest_paid": 0.0013730163456094461,
       "exit_date": "2023-05-17",
       "exit_price": 27.892549514770508,
       "hold_days": 15,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.022326272239538092
+      "lever_leg_pnl": 0.022326272239538092,
+      "net_lever_pnl_after_costs": 0.017691569495049207
     },
     {
       "entry_date": "2023-08-21",
@@ -458,12 +580,16 @@
       "entry_z": -1.9132283383085271,
       "borrow_principal": 0.7053751089012015,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001357847084634813,
+      "exit_cost": 0.0021294801376509328,
+      "cost_paid": 0.0034873272222857455,
       "interest_paid": 0.0017634377722530045,
       "exit_date": "2023-09-14",
       "exit_price": 29.802335739135746,
       "hold_days": 18,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.022652288586296865
+      "lever_leg_pnl": 0.022652288586296865,
+      "net_lever_pnl_after_costs": 0.017401523591758117
     },
     {
       "entry_date": "2023-09-21",
@@ -471,12 +597,16 @@
       "entry_z": -2.0612126096580705,
       "borrow_principal": 0.7039414663439024,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001355087322712012,
+      "exit_cost": 0.002117738223503985,
+      "cost_paid": 0.003472825546215997,
       "interest_paid": 0.0010754661291365176,
       "exit_date": "2023-10-11",
       "exit_price": 29.63800621032715,
       "hold_days": 11,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.02007160152070775
+      "lever_leg_pnl": 0.02007160152070775,
+      "net_lever_pnl_after_costs": 0.015523309845355234
     },
     {
       "entry_date": "2023-10-26",
@@ -484,12 +614,16 @@
       "entry_z": -1.9675636573203665,
       "borrow_principal": 0.6982066631460442,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.001344047826556135,
+      "exit_cost": 0.002104318756763663,
+      "cost_paid": 0.0034483665833197983,
       "interest_paid": 0.0005818388859550369,
       "exit_date": "2023-11-03",
       "exit_price": 29.450199127197266,
       "hold_days": 6,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.021218552841532845
+      "lever_leg_pnl": 0.021218552841532845,
+      "net_lever_pnl_after_costs": 0.01718834737225801
     },
     {
       "entry_date": "2024-08-05",
@@ -497,12 +631,16 @@
       "entry_z": -1.8019407933185065,
       "borrow_principal": 0.9363825949298378,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0018025364952399378,
+      "exit_cost": 0.0031184861822092643,
+      "cost_paid": 0.004921022677449202,
       "interest_paid": 0.0009103719672928978,
       "exit_date": "2024-08-14",
       "exit_price": 43.64359664916992,
       "hold_days": 7,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.12976652719298765
+      "lever_leg_pnl": 0.12976652719298765,
+      "net_lever_pnl_after_costs": 0.12393513254824554
     },
     {
       "entry_date": "2024-09-04",
@@ -510,12 +648,16 @@
       "entry_z": -1.5316752846806228,
       "borrow_principal": 1.0101135424031389,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0019444685691260425,
+      "exit_cost": 0.0031478158908297663,
+      "cost_paid": 0.0050922844599558086,
       "interest_paid": 0.0015432290231159069,
       "exit_date": "2024-09-20",
       "exit_price": 44.05406951904297,
       "hold_days": 11,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": 0.06606283053011452
+      "lever_leg_pnl": 0.06606283053011452,
+      "net_lever_pnl_after_costs": 0.05942731704704281
     },
     {
       "entry_date": "2025-03-03",
@@ -523,18 +665,22 @@
       "entry_z": -1.751012083293161,
       "borrow_principal": 1.1245386172117062,
       "lever_shares": 0.024428534859147612,
+      "entry_cost": 0.0021647368381325347,
+      "exit_cost": 0.003128353882101269,
+      "cost_paid": 0.0052930907202338034,
       "interest_paid": 0.007496924114744713,
       "exit_date": "2025-05-13",
       "exit_price": 43.78169631958008,
       "hold_days": 48,
       "exit_reason": "exit_z",
-      "lever_leg_pnl": -0.05501592247622966
+      "lever_leg_pnl": -0.05501592247622966,
+      "net_lever_pnl_after_costs": -0.06780593731120818
     }
   ],
   "delta_vs_base": {
-    "cagr": 0.005352413104956266,
-    "mdd": 0.04045850401792961,
-    "sharpe0": -0.005235757096623106
+    "cagr": 0.003618168567237623,
+    "mdd": 0.021528227099490982,
+    "sharpe0": -0.010449538310079165
   },
   "segmentation": {
     "enabled": true,
@@ -554,8 +700,8 @@
         },
         "ok": true,
         "summary": {
-          "generated_at_utc": "2026-02-22T06:22:22Z",
-          "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v14.no_third_run_post_csv_compare_error_prepare_df",
+          "generated_at_utc": "2026-02-22T06:51:07Z",
+          "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v15.add_costs_fee_tax_slippage",
           "params": {
             "bb_window": 60,
             "bb_ddof": 0,
@@ -567,7 +713,11 @@
             "trading_days": 252,
             "skip_contaminated": true,
             "contam_horizon": 60,
-            "z_clear_days": 60
+            "z_clear_days": 60,
+            "fee_rate": 0.001425,
+            "tax_rate": 0.001,
+            "slip_bps": 5.0,
+            "cost_on": "lever"
           },
           "audit": {
             "rows": 1238,
@@ -588,7 +738,13 @@
             "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
             "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
             "equity_csv_last_row_note": "if open_at_end=true, last equity value is mark-to-market while still in position; numerically equivalent to post-close equity at the same last_price, but trade record is added after loop",
-            "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net = lever_leg_pnl - interest_paid",
+            "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+            "costs_enabled": true,
+            "cost_on": "lever",
+            "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+            "entry_cost_total": 0.015818148194767765,
+            "exit_cost_total": 0.024395764364125546,
+            "cost_paid_total": 0.040213912558893304,
             "breaks_detected": 0,
             "break_samples_first5": [],
             "break_samples_source": "detect_breaks_from_price(segment)",
@@ -597,14 +753,14 @@
           "perf_leverage": {
             "ok": true,
             "start": 1.0,
-            "end": 1.9180919012231399,
+            "end": 1.8778779886642467,
             "n_days": 1238,
             "years": 4.908730158730159,
-            "cagr": 0.14189397506516443,
-            "vol_ann": 0.2927152643357097,
-            "sharpe0": 0.5988022629534973,
+            "cagr": 0.13697562473651015,
+            "vol_ann": 0.2942049184407342,
+            "sharpe0": 0.5825778851432081,
             "sharpe_note": "rf=0 assumed",
-            "mdd": -0.29505856542513087,
+            "mdd": -0.30201396246965195,
             "mdd_peak": "2011-06-01",
             "mdd_trough": "2011-12-19",
             "mdd_warning": null
@@ -631,12 +787,16 @@
               "entry_z": -1.6685420498950485,
               "borrow_principal": 0.7887131714983902,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.001518272855134401,
+              "exit_cost": 0.002420444132390686,
+              "cost_paid": 0.003938716987525087,
               "interest_paid": 0.0027385874010360783,
               "exit_date": "2010-03-18",
               "exit_price": 33.874412536621094,
               "hold_days": 25,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.03878909598560509
+              "lever_leg_pnl": 0.03878909598560509,
+              "net_lever_pnl_after_costs": 0.03211179159704393
             },
             {
               "entry_date": "2010-05-17",
@@ -644,12 +804,16 @@
               "entry_z": -1.6265672832458542,
               "borrow_principal": 0.7894736744013194,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.0015197368232225399,
+              "exit_cost": 0.002315884728317071,
+              "cost_paid": 0.003835621551539611,
               "interest_paid": 0.004057017493451224,
               "exit_date": "2010-07-08",
               "exit_price": 32.41109085083008,
               "hold_days": 37,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.002281788271183416
+              "lever_leg_pnl": 0.002281788271183416,
+              "net_lever_pnl_after_costs": -0.005610850773807419
             },
             {
               "entry_date": "2011-03-11",
@@ -657,12 +821,16 @@
               "entry_z": -1.6741482581516554,
               "borrow_principal": 0.8951932694048685,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.001723247043604372,
+              "exit_cost": 0.0027207752460917875,
+              "cost_paid": 0.00444402228969616,
               "interest_paid": 0.0019893183764552636,
               "exit_date": "2011-04-06",
               "exit_price": 38.07758331298828,
               "hold_days": 16,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.03498630190856311
+              "lever_leg_pnl": 0.03498630190856311,
+              "net_lever_pnl_after_costs": 0.028552961242411683
             },
             {
               "entry_date": "2011-06-20",
@@ -670,12 +838,16 @@
               "entry_z": -2.029389781615215,
               "borrow_principal": 0.8913903821403614,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.0017159264856201957,
+              "exit_cost": 0.002696303612030017,
+              "cost_paid": 0.004412230097650213,
               "interest_paid": 0.0028474970540594887,
               "exit_date": "2011-07-21",
               "exit_price": 37.73509979248047,
               "hold_days": 23,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.03042281855366158
+              "lever_leg_pnl": 0.03042281855366158,
+              "net_lever_pnl_after_costs": 0.023163091401951875
             },
             {
               "entry_date": "2011-08-04",
@@ -683,12 +855,16 @@
               "entry_z": -1.8732425900231764,
               "borrow_principal": 0.8799818135343052,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.0016939649910535375,
+              "exit_cost": 0.0023848490530802326,
+              "cost_paid": 0.00407881404413377,
               "interest_paid": 0.0067220832978314975,
               "exit_date": "2011-10-24",
               "exit_price": 33.37625503540039,
               "hold_days": 55,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": -0.06464880393422567
+              "lever_leg_pnl": -0.06464880393422567,
+              "net_lever_pnl_after_costs": -0.07544970127619094
             },
             {
               "entry_date": "2011-11-10",
@@ -696,12 +872,16 @@
               "entry_z": -1.607051159619722,
               "borrow_principal": 0.7689382788666579,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.0014802061868183164,
+              "exit_cost": 0.0022558186963781853,
+              "cost_paid": 0.0037360248831965017,
               "interest_paid": 0.004592270276564758,
               "exit_date": "2012-01-10",
               "exit_price": 31.570459365844727,
               "hold_days": 43,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.002281788271183194
+              "lever_leg_pnl": 0.002281788271183194,
+              "net_lever_pnl_after_costs": -0.006046506888578065
             },
             {
               "entry_date": "2012-04-26",
@@ -709,12 +889,16 @@
               "entry_z": -1.7852058116743814,
               "borrow_principal": 0.7955581635620796,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.0015314494648570034,
+              "exit_cost": 0.0022780650417288813,
+              "cost_paid": 0.0038095145065858847,
               "interest_paid": 0.005193226901030245,
               "exit_date": "2012-07-03",
               "exit_price": 31.881799697875977,
               "hold_days": 47,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": -0.01673250827015449
+              "lever_leg_pnl": -0.01673250827015449,
+              "net_lever_pnl_after_costs": -0.02573524967777062
             },
             {
               "entry_date": "2012-10-24",
@@ -722,12 +906,16 @@
               "entry_z": -1.9688481859150715,
               "borrow_principal": 0.7757835970864753,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.001493383424391465,
+              "exit_cost": 0.002362602707729537,
+              "cost_paid": 0.003855986132121002,
               "interest_paid": 0.0028014407672567157,
               "exit_date": "2012-11-29",
               "exit_price": 33.06491470336914,
               "hold_days": 26,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.031943824359520256
+              "lever_leg_pnl": 0.031943824359520256,
+              "net_lever_pnl_after_costs": 0.025286397460142537
             },
             {
               "entry_date": "2013-04-09",
@@ -735,12 +923,16 @@
               "entry_z": -1.5007660426834124,
               "borrow_principal": 0.8168544813432638,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.0015724448765857828,
+              "exit_cost": 0.0024671626569498233,
+              "cost_paid": 0.004039607533535606,
               "interest_paid": 0.0009076160903814044,
               "exit_date": "2013-04-19",
               "exit_price": 34.52824401855469,
               "hold_days": 8,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.026619931289154408
+              "lever_leg_pnl": 0.026619931289154408,
+              "net_lever_pnl_after_costs": 0.0216727076652374
             },
             {
               "entry_date": "2013-06-21",
@@ -748,18 +940,22 @@
               "entry_z": -1.6414396149934336,
               "borrow_principal": 0.8153330096000795,
               "lever_shares": 0.024428534859147612,
+              "entry_cost": 0.001569516043480153,
+              "exit_cost": 0.0024938584894293263,
+              "cost_paid": 0.004063374532909479,
               "interest_paid": 0.0011324069577778883,
               "exit_date": "2013-07-05",
               "exit_price": 34.90185546875,
               "hold_days": 10,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.037268183367211605
+              "lever_leg_pnl": 0.037268183367211605,
+              "net_lever_pnl_after_costs": 0.032072401876524236
             }
           ],
           "delta_vs_base": {
-            "cagr": 0.011154088630416226,
-            "mdd": -0.03696323194172313,
-            "sharpe0": 0.008436408346237934
+            "cagr": 0.0062357383017619394,
+            "mdd": -0.04391862898624421,
+            "sharpe0": -0.007787969464051248
           }
         }
       },
@@ -773,8 +969,8 @@
         },
         "ok": true,
         "summary": {
-          "generated_at_utc": "2026-02-22T06:22:22Z",
-          "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v14.no_third_run_post_csv_compare_error_prepare_df",
+          "generated_at_utc": "2026-02-22T06:51:07Z",
+          "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v15.add_costs_fee_tax_slippage",
           "params": {
             "bb_window": 60,
             "bb_ddof": 0,
@@ -786,7 +982,11 @@
             "trading_days": 252,
             "skip_contaminated": true,
             "contam_horizon": 60,
-            "z_clear_days": 60
+            "z_clear_days": 60,
+            "fee_rate": 0.001425,
+            "tax_rate": 0.001,
+            "slip_bps": 5.0,
+            "cost_on": "lever"
           },
           "audit": {
             "rows": 2954,
@@ -807,7 +1007,13 @@
             "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
             "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
             "equity_csv_last_row_note": "if open_at_end=true, last equity value is mark-to-market while still in position; numerically equivalent to post-close equity at the same last_price, but trade record is added after loop",
-            "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net = lever_leg_pnl - interest_paid",
+            "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+            "costs_enabled": true,
+            "cost_on": "lever",
+            "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+            "entry_cost_total": 0.05757854275510367,
+            "exit_cost_total": 0.08926423720065556,
+            "cost_paid_total": 0.14684277995575923,
             "breaks_detected": 0,
             "break_samples_first5": [],
             "break_samples_source": "detect_breaks_from_price(segment)",
@@ -816,14 +1022,14 @@
           "perf_leverage": {
             "ok": true,
             "start": 1.0,
-            "end": 8.784140047345517,
+            "end": 8.63729726738976,
             "n_days": 2954,
             "years": 11.718253968253968,
-            "cagr": 0.2037392219180003,
-            "vol_ann": 0.21985119720723514,
-            "sharpe0": 0.953466134939051,
+            "cagr": 0.20200874406061642,
+            "vol_ann": 0.22439694110336336,
+            "sharpe0": 0.9322202862855463,
             "sharpe_note": "rf=0 assumed",
-            "mdd": -0.38783768640225713,
+            "mdd": -0.39929197199344824,
             "mdd_peak": "2022-01-17",
             "mdd_trough": "2022-10-25",
             "mdd_warning": null
@@ -850,12 +1056,16 @@
               "entry_z": -1.6793820913185435,
               "borrow_principal": 0.5631938498377081,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0010841481609375882,
+              "exit_cost": 0.0017408243419083464,
+              "cost_paid": 0.0028249725028459344,
               "interest_paid": 0.0015644273606603,
               "exit_date": "2014-10-24",
               "exit_price": 11.104615211486816,
               "hold_days": 20,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.031959771327538467
+              "lever_leg_pnl": 0.031959771327538467,
+              "net_lever_pnl_after_costs": 0.027570371464032233
             },
             {
               "entry_date": "2015-06-04",
@@ -863,12 +1073,16 @@
               "entry_z": -1.5403905441173553,
               "borrow_principal": 0.647542222871008,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0012465187790266904,
+              "exit_cost": 0.0019451397888917785,
+              "cost_paid": 0.003191658567918469,
               "interest_paid": 0.0012591098778047378,
               "exit_date": "2015-06-25",
               "exit_price": 12.407931327819824,
               "hold_days": 14,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.01746283316036923
+              "lever_leg_pnl": 0.01746283316036923,
+              "net_lever_pnl_after_costs": 0.013012064714646023
             },
             {
               "entry_date": "2015-07-08",
@@ -876,12 +1090,16 @@
               "entry_z": -2.1662008247261864,
               "borrow_principal": 0.6371589069976455,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0012265308959704677,
+              "exit_cost": 0.0017560098666213608,
+              "cost_paid": 0.0029825407625918288,
               "interest_paid": 0.005309657558313711,
               "exit_date": "2015-10-01",
               "exit_price": 11.201482772827148,
               "hold_days": 60,
               "exit_reason": "max_hold_days",
-              "lever_leg_pnl": -0.036813653451881145
+              "lever_leg_pnl": -0.036813653451881145,
+              "net_lever_pnl_after_costs": -0.045105851772786684
             },
             {
               "entry_date": "2015-12-10",
@@ -889,12 +1107,16 @@
               "entry_z": -1.5883956161479358,
               "borrow_principal": 0.5894441698008746,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0011346800268666835,
+              "exit_cost": 0.0017155815634667898,
+              "cost_paid": 0.0028502615903334733,
               "interest_paid": 0.003274689832227085,
               "exit_date": "2016-02-16",
               "exit_price": 10.94359302520752,
               "hold_days": 40,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": -0.002920558359236991
+              "lever_leg_pnl": -0.002920558359236991,
+              "net_lever_pnl_after_costs": -0.009045509781797549
             },
             {
               "entry_date": "2016-05-06",
@@ -902,12 +1124,16 @@
               "entry_z": -1.6285628149835778,
               "borrow_principal": 0.5811694418615683,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.001118751175583519,
+              "exit_cost": 0.001782496813657541,
+              "cost_paid": 0.0029012479892410598,
               "interest_paid": 0.0012107696705449338,
               "exit_date": "2016-05-27",
               "exit_price": 11.370441436767578,
               "hold_days": 15,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.028231178192291928
+              "lever_leg_pnl": 0.028231178192291928,
+              "net_lever_pnl_after_costs": 0.024119160532505936
             },
             {
               "entry_date": "2017-09-26",
@@ -915,12 +1141,16 @@
               "entry_z": -1.7238397602856368,
               "borrow_principal": 0.817114063086514,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0015729445714415394,
+              "exit_cost": 0.002443633682399859,
+              "cost_paid": 0.004016578253841398,
               "interest_paid": 0.0007944164502229998,
               "exit_date": "2017-10-06",
               "exit_price": 15.587794303894045,
               "hold_days": 7,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.018316255682668592
+              "lever_leg_pnl": 0.018316255682668592,
+              "net_lever_pnl_after_costs": 0.013505260978604192
             },
             {
               "entry_date": "2017-12-06",
@@ -928,12 +1158,16 @@
               "entry_z": -1.8221039562615375,
               "borrow_principal": 0.8227105050961034,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0015837177223099992,
+              "exit_cost": 0.0024808385393793905,
+              "cost_paid": 0.004064556261689389,
               "interest_paid": 0.002171041610670273,
               "exit_date": "2018-01-03",
               "exit_price": 15.825121879577637,
               "hold_days": 19,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.025439422896850528
+              "lever_leg_pnl": 0.025439422896850528,
+              "net_lever_pnl_after_costs": 0.019203825024490865
             },
             {
               "entry_date": "2018-04-23",
@@ -941,12 +1175,16 @@
               "entry_z": -1.7435989615028404,
               "borrow_principal": 0.8345349841388229,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.001606479844467234,
+              "exit_cost": 0.0025188708985424404,
+              "cost_paid": 0.0041253507430096745,
               "interest_paid": 0.0016227069136032668,
               "exit_date": "2018-05-14",
               "exit_price": 16.06772804260254,
               "hold_days": 14,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.02661745980731056
+              "lever_leg_pnl": 0.02661745980731056,
+              "net_lever_pnl_after_costs": 0.02086940215069762
             },
             {
               "entry_date": "2018-10-08",
@@ -954,12 +1192,16 @@
               "entry_z": -1.7452428052662947,
               "borrow_principal": 0.873595331032052,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0016816710122367002,
+              "exit_cost": 0.0022581793050584034,
+              "cost_paid": 0.003939850317295103,
               "interest_paid": 0.007279961091933765,
               "exit_date": "2019-01-03",
               "exit_price": 14.404791831970217,
               "hold_days": 60,
               "exit_reason": "max_hold_days",
-              "lever_leg_pnl": -0.10156821819157225
+              "lever_leg_pnl": -0.10156821819157225,
+              "net_lever_pnl_after_costs": -0.11278802960080112
             },
             {
               "entry_date": "2019-01-04",
@@ -967,12 +1209,16 @@
               "entry_z": -2.556858036059193,
               "borrow_principal": 0.7599231515942548,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0014628520668189405,
+              "exit_cost": 0.002355155833306755,
+              "cost_paid": 0.0038180079001256953,
               "interest_paid": 0.001160993703824556,
               "exit_date": "2019-01-21",
               "exit_price": 15.023399353027344,
               "hold_days": 11,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.04525832987814005
+              "lever_leg_pnl": 0.04525832987814005,
+              "net_lever_pnl_after_costs": 0.0402793282741898
             },
             {
               "entry_date": "2020-02-27",
@@ -980,12 +1226,16 @@
               "entry_z": -1.7157197942333113,
               "borrow_principal": 1.0017222809673236,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.001928315390862098,
+              "exit_cost": 0.002766431445182643,
+              "cost_paid": 0.004694746836044741,
               "interest_paid": 0.0057042518777305935,
               "exit_date": "2020-04-29",
               "exit_price": 17.646902084350586,
               "hold_days": 41,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": -0.055933752699753425
+              "lever_leg_pnl": -0.055933752699753425,
+              "net_lever_pnl_after_costs": -0.06633275141352876
             },
             {
               "entry_date": "2021-05-12",
@@ -993,12 +1243,16 @@
               "entry_z": -2.3544938113415546,
               "borrow_principal": 1.5049077034045715,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0028969473290538002,
+              "exit_cost": 0.004619566596090766,
+              "cost_paid": 0.007516513925144566,
               "interest_paid": 0.0025081795056742864,
               "exit_date": "2021-05-28",
               "exit_price": 29.467941284179688,
               "hold_days": 12,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.07443130380594676
+              "lever_leg_pnl": 0.07443130380594676,
+              "net_lever_pnl_after_costs": 0.06440661037512792
             },
             {
               "entry_date": "2021-08-17",
@@ -1006,12 +1260,16 @@
               "entry_z": -1.7432902955029277,
               "borrow_principal": 1.566471785586651,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.003015458187254303,
+              "exit_cost": 0.004711526831518233,
+              "cost_paid": 0.007726985018772536,
               "interest_paid": 0.0017405242062073902,
               "exit_date": "2021-08-27",
               "exit_price": 30.05455017089844,
               "hold_days": 8,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.04430661835120642
+              "lever_leg_pnl": 0.04430661835120642,
+              "net_lever_pnl_after_costs": 0.03483910912622649
             },
             {
               "entry_date": "2021-10-01",
@@ -1019,12 +1277,16 @@
               "entry_z": -1.626446647237189,
               "borrow_principal": 1.5618081946553681,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0030064807747115837,
+              "exit_cost": 0.00469106487779656,
+              "cost_paid": 0.007697545652508144,
               "interest_paid": 0.0034706848770119296,
               "exit_date": "2021-10-26",
               "exit_price": 29.92402458190918,
               "hold_days": 16,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.04197466954858409
+              "lever_leg_pnl": 0.04197466954858409,
+              "net_lever_pnl_after_costs": 0.030806439019064012
             },
             {
               "entry_date": "2022-03-07",
@@ -1032,12 +1294,16 @@
               "entry_z": -2.4501808859641985,
               "borrow_principal": 1.5966585214062514,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.003073567653707034,
+              "exit_cost": 0.004454141210172253,
+              "cost_paid": 0.007527708863879287,
               "interest_paid": 0.013305487678385441,
               "exit_date": "2022-06-02",
               "exit_price": 28.412702560424805,
               "hold_days": 60,
               "exit_reason": "max_hold_days",
-              "lever_leg_pnl": -0.07387520168924189
+              "lever_leg_pnl": -0.07387520168924189,
+              "net_lever_pnl_after_costs": -0.0947083982315066
             },
             {
               "entry_date": "2022-06-17",
@@ -1045,12 +1311,16 @@
               "entry_z": -1.6255868077089353,
               "borrow_principal": 1.4399714343427406,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0027719450111097755,
+              "exit_cost": 0.00423908781976894,
+              "cost_paid": 0.007011032830878715,
               "interest_paid": 0.006999861139166096,
               "exit_date": "2022-08-05",
               "exit_price": 27.040889739990234,
               "hold_days": 35,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.009289358740657727
+              "lever_leg_pnl": 0.009289358740657727,
+              "net_lever_pnl_after_costs": -0.004721535229387084
             },
             {
               "entry_date": "2022-09-26",
@@ -1058,12 +1328,16 @@
               "entry_z": -1.967314943423504,
               "borrow_principal": 1.3055475479576741,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0025131790298185226,
+              "exit_cost": 0.0038666155568953804,
+              "cost_paid": 0.0063797945867139026,
               "interest_paid": 0.0059837595948060065,
               "exit_date": "2022-11-11",
               "exit_price": 24.6649112701416,
               "hold_days": 33,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.016372300553566976
+              "lever_leg_pnl": 0.016372300553566976,
+              "net_lever_pnl_after_costs": 0.004008746372047067
             },
             {
               "entry_date": "2023-04-25",
@@ -1071,12 +1345,16 @@
               "entry_z": -1.813742159056521,
               "borrow_principal": 1.4459227492380173,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0027834012922831834,
+              "exit_cost": 0.004372598980554417,
+              "cost_paid": 0.007156000272837601,
               "interest_paid": 0.0030123390609125378,
               "exit_date": "2023-05-17",
               "exit_price": 27.892549514770508,
               "hold_days": 15,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.04898288513956128
+              "lever_leg_pnl": 0.04898288513956128,
+              "net_lever_pnl_after_costs": 0.038814545805811146
             },
             {
               "entry_date": "2023-08-21",
@@ -1084,12 +1362,16 @@
               "entry_z": -1.9132283383018023,
               "borrow_principal": 1.5475627802488885,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0029790583519791105,
+              "exit_cost": 0.004671988224026556,
+              "cost_paid": 0.007651046576005667,
               "interest_paid": 0.003868906950622223,
               "exit_date": "2023-09-14",
               "exit_price": 29.802335739135746,
               "hold_days": 18,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.049698151042241845
+              "lever_leg_pnl": 0.049698151042241845,
+              "net_lever_pnl_after_costs": 0.03817819751561395
             },
             {
               "entry_date": "2023-09-21",
@@ -1097,12 +1379,16 @@
               "entry_z": -2.0612126096490733,
               "borrow_principal": 1.544417429875932,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.002973003552511169,
+              "exit_cost": 0.004646226967252128,
+              "cost_paid": 0.007619230519763297,
               "interest_paid": 0.002359526628977118,
               "exit_date": "2023-10-11",
               "exit_price": 29.63800621032715,
               "hold_days": 11,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.04403623414188962
+              "lever_leg_pnl": 0.04403623414188962,
+              "net_lever_pnl_after_costs": 0.0340574769931492
             },
             {
               "entry_date": "2023-10-26",
@@ -1110,12 +1396,16 @@
               "entry_z": -1.9675636573103759,
               "borrow_principal": 1.5318355172608373,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.002948783370727112,
+              "exit_cost": 0.004616785231931385,
+              "cost_paid": 0.007565568602658497,
               "interest_paid": 0.0012765295977173645,
               "exit_date": "2023-11-03",
               "exit_price": 29.450199127197266,
               "hold_days": 6,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.04655259621997776
+              "lever_leg_pnl": 0.04655259621997776,
+              "net_lever_pnl_after_costs": 0.0377104980196019
             },
             {
               "entry_date": "2024-08-05",
@@ -1123,12 +1413,16 @@
               "entry_z": -1.8019407933181242,
               "borrow_principal": 2.054383311375478,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.003954687874397795,
+              "exit_cost": 0.006841825130213765,
+              "cost_paid": 0.01079651300461156,
               "interest_paid": 0.0019973171082817154,
               "exit_date": "2024-08-14",
               "exit_price": 43.64359664916992,
               "hold_days": 7,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.2847022032275186
+              "lever_leg_pnl": 0.2847022032275186,
+              "net_lever_pnl_after_costs": 0.27190837311462535
             },
             {
               "entry_date": "2024-09-04",
@@ -1136,12 +1430,16 @@
               "entry_z": -1.5316752846799355,
               "borrow_principal": 2.216145852500456,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.004266080766063378,
+              "exit_cost": 0.006906173254841156,
+              "cost_paid": 0.011172254020904535,
               "interest_paid": 0.003385778385764586,
               "exit_date": "2024-09-20",
               "exit_price": 44.05406951904297,
               "hold_days": 11,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": 0.14493902094951183
+              "lever_leg_pnl": 0.14493902094951183,
+              "net_lever_pnl_after_costs": 0.1303809885428427
             },
             {
               "entry_date": "2025-03-03",
@@ -1149,18 +1447,22 @@
               "entry_z": -1.7510120832893374,
               "borrow_principal": 2.4671895662158154,
               "lever_shares": 0.053595159294633536,
+              "entry_cost": 0.0047493399149654445,
+              "exit_cost": 0.006863474441178708,
+              "cost_paid": 0.011612814356144151,
               "interest_paid": 0.016447930441438767,
               "exit_date": "2025-05-13",
               "exit_price": 43.78169631958008,
               "hold_days": 48,
               "exit_reason": "exit_z",
-              "lever_leg_pnl": -0.12070257777865034
+              "lever_leg_pnl": -0.12070257777865034,
+              "net_lever_pnl_after_costs": -0.14876332257623326
             }
           ],
           "delta_vs_base": {
-            "cagr": 0.0061167643069464095,
-            "mdd": -0.049561290015256,
-            "sharpe0": -0.12008999427961209
+            "cagr": 0.004386286449562515,
+            "mdd": -0.0610155756064471,
+            "sharpe0": -0.14133584293311674
           }
         }
       }
@@ -1168,10 +1470,10 @@
     "compare": {
       "pre_perf_leverage_ok": true,
       "post_perf_leverage_ok": true,
-      "pre_cagr": 0.14189397506516443,
-      "post_cagr": 0.2037392219180003,
-      "pre_mdd": -0.29505856542513087,
-      "post_mdd": -0.38783768640225713,
+      "pre_cagr": 0.13697562473651015,
+      "post_cagr": 0.20200874406061642,
+      "pre_mdd": -0.30201396246965195,
+      "post_mdd": -0.39929197199344824,
       "pre_base_cagr": 0.1307398864347482,
       "post_base_cagr": 0.1976224576110539,
       "pre_base_mdd": -0.25809533348340774,
