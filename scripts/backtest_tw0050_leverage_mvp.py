@@ -6,18 +6,21 @@ backtest_tw0050_leverage_mvp.py
 
 Audit-first MVP backtest for "base hold + conditional leverage leg" using BB z-score.
 
-v19 (2026-02-22):
-- Fix out_post_equity_csv forbid_mask dead code:
-  * When entry_mode == 'bb' and skip_contaminated=true, rebuild breaks + forbid mask on the post slice.
-- Avoid n+1 extra backtest for first strategy CSV outputs:
-  * Reuse df_bt/summary captured in the first iteration of the main loop.
+v25 (2026-02-22):
+- FIX: compare ranking uses (post_ok is True) semantics; avoids bool(np.nan)==True silent branch.
+       Also fills missing/NaN post_ok as False in compare dataframe for audit clarity.
+- FIX: out_post_equity_csv wraps run_backtest + csv write in try/except; optional output failure won't crash the run.
+- AUDIT: suite_out["abort_reason"] synced from local abort_reason unconditionally (future-refactor safe).
+- CLEAN: Keep borrow_apr default 0.035 (3.5%) as pledge cost assumption.
 
-Carry-overs from v18:
-- end_of_data counters use += 1 (future-proof consistency)
-- segmentation compare block restored
-- always mode semantics NOTE if max_hold_days > 0
-- _write_json wrapped with try/except in main
-- _fmt_lever_mult trims trailing zeros (2.0 -> "2") intentionally
+v24 (2026-02-22):
+- FIX: out_post_equity_csv uses first successful strategy object/params (first_strat_obj/first_params),
+       not suite_out["strategies"][0] nor strategies[0].
+- FIX: Catch generic Exception per strategy so partial JSON is preserved; MemoryError is treated as critical abort.
+- DOC: Clarify semantic impact: exited_today blocks same-day re-entry; for entry_mode=always with max_hold_days>0,
+       effective holding interval becomes max_hold_days+1 (cannot re-enter on same exit day).
+- AUDIT: Add equity_negative_days and equity_min in audit.
+- CLEAN: Keep borrow_apr default 0.035 (3.5%) as pledge cost assumption.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v25.postok_is_true.postcsv_guard.abort_sync"
 
 TRADE_COLS = [
     "entry_date",
@@ -227,7 +230,7 @@ def _max_drawdown(eq: pd.Series) -> Dict[str, Any]:
     return out
 
 
-def _perf_summary(eq: pd.Series, trading_days: int = 252) -> Dict[str, Any]:
+def _perf_summary(eq: pd.Series, trading_days: int = 252, perf_ddof: int = 0) -> Dict[str, Any]:
     eq = pd.to_numeric(eq, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
     if eq.empty or len(eq) < 3:
         return {"ok": False}
@@ -249,10 +252,11 @@ def _perf_summary(eq: pd.Series, trading_days: int = 252) -> Dict[str, Any]:
             cagr_warning = "start <= 0; CAGR undefined"
 
     rets = eq.pct_change().dropna()
-    vol = float(rets.std(ddof=0) * math.sqrt(trading_days)) if len(rets) > 2 else None
+    dd = int(perf_ddof)
+    vol = float(rets.std(ddof=dd) * math.sqrt(trading_days)) if len(rets) > 2 else None
     sharpe = (
-        (float(rets.mean()) / float(rets.std(ddof=0))) * math.sqrt(trading_days)
-        if (len(rets) > 2 and float(rets.std(ddof=0)) > 0)
+        (float(rets.mean()) / float(rets.std(ddof=dd))) * math.sqrt(trading_days)
+        if (len(rets) > 2 and float(rets.std(ddof=dd)) > 0)
         else None
     )
 
@@ -268,6 +272,7 @@ def _perf_summary(eq: pd.Series, trading_days: int = 252) -> Dict[str, Any]:
         "vol_ann": vol,
         "sharpe0": sharpe,
         "sharpe_note": "rf=0 assumed",
+        "perf_ddof": dd,
         "mdd": mdd_info.get("mdd"),
         "mdd_peak": mdd_info.get("peak"),
         "mdd_trough": mdd_info.get("trough"),
@@ -477,9 +482,9 @@ def _turnover_from_lever_on(lever_on: pd.Series) -> Optional[float]:
     return float(changes) / float(len(s))
 
 
-def _post_gonogo_decision(segmentation: Dict[str, Any]) -> Dict[str, Any]:
+def _post_gonogo_decision(segmentation: Dict[str, Any], th: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {
-        "rule_id": "post_gonogo_v1",
+        "rule_id": "post_gonogo_v3",
         "applies": False,
         "ok": False,
         "decision": "N/A",
@@ -493,9 +498,10 @@ def _post_gonogo_decision(segmentation: Dict[str, Any]) -> Dict[str, Any]:
         "inputs": {},
         "reasons": [],
         "thresholds": {
-            "delta_sharpe0_lt": 0.0,
-            "delta_abs_mdd_gt": 0.0,
-            "delta_cagr_lt": 0.01,
+            "delta_sharpe0_lt": th.get("delta_sharpe0_lt"),
+            "delta_abs_mdd_gt": th.get("delta_abs_mdd_gt"),
+            "delta_cagr_lt": th.get("delta_cagr_lt"),
+            "rationale": th.get("rationale"),
         },
     }
 
@@ -538,11 +544,7 @@ def _post_gonogo_decision(segmentation: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     def _is_finite(v: Any) -> bool:
-        try:
-            x = float(v)
-        except Exception:
-            return False
-        return np.isfinite(x)
+        return _to_finite_float(v) is not None
 
     if not (_is_finite(ds) and _is_finite(dc) and _is_finite(delta_abs_mdd)):
         out["reasons"].append("missing/invalid numeric inputs for rule evaluation")
@@ -552,15 +554,19 @@ def _post_gonogo_decision(segmentation: Dict[str, Any]) -> Dict[str, Any]:
     dcf = float(dc)
     dam = float(delta_abs_mdd)
 
-    cond1 = dsf < 0.0
-    cond2 = dam > 0.0
-    cond3 = dcf < 0.01
+    t_sh = float(th.get("delta_sharpe0_lt", 0.0))
+    t_mdd = float(th.get("delta_abs_mdd_gt", 0.0))
+    t_cagr = float(th.get("delta_cagr_lt", 0.01))
+
+    cond1 = dsf < t_sh
+    cond2 = dam > t_mdd
+    cond3 = dcf < t_cagr
 
     out["ok"] = True
     out["conditions"] = {
-        "delta_sharpe0_lt_0": cond1,
-        "delta_abs_mdd_gt_0": cond2,
-        "delta_cagr_lt_1pct": cond3,
+        f"delta_sharpe0_lt_{t_sh}": cond1,
+        f"delta_abs_mdd_gt_{t_mdd}": cond2,
+        f"delta_cagr_lt_{t_cagr}": cond3,
     }
 
     if cond1 and cond2 and cond3:
@@ -569,11 +575,11 @@ def _post_gonogo_decision(segmentation: Dict[str, Any]) -> Dict[str, Any]:
     else:
         out["decision"] = "GO_OR_REVIEW"
         if not cond1:
-            out["reasons"].append("delta_sharpe0 not < 0")
+            out["reasons"].append("delta_sharpe0 not below threshold")
         if not cond2:
-            out["reasons"].append("delta_abs_mdd not > 0 (drawdown not worse)")
+            out["reasons"].append("delta_abs_mdd not above threshold (drawdown not worse enough)")
         if not cond3:
-            out["reasons"].append("delta_cagr not < 1%")
+            out["reasons"].append("delta_cagr not below threshold")
 
     return out
 
@@ -599,6 +605,7 @@ class Params:
     trend_rule: str  # "price_gt_ma60" or "ma20_gt_ma60"
     trend_ma_fast: int
     trend_ma_slow: int
+    perf_ddof: int
 
 
 def run_backtest(
@@ -610,7 +617,7 @@ def run_backtest(
 
     n = int(len(df))
     if n < params.bb_window + 5:
-        raise SystemExit("ERROR: not enough rows for bb window")
+        raise ValueError("not enough rows for bb window")
 
     df["bb_z"] = _calc_bb_z(df["price"], window=params.bb_window, ddof=params.bb_ddof)
 
@@ -621,7 +628,7 @@ def run_backtest(
 
     p0 = float(df["price"].iloc[0])
     if not np.isfinite(p0) or p0 <= 0.0:
-        raise SystemExit("ERROR: invalid first price")
+        raise ValueError("invalid first price")
 
     base_shares = 1.0 / p0
     lever_shares_target = max(float(base_shares) * float(params.leverage_frac), 0.0)
@@ -701,7 +708,11 @@ def run_backtest(
         by_z = (zf is not None and zf >= float(params.exit_z))
         return (by_z, ("exit_z" if by_z else "none"))
 
+    timing_assumption = "assume close-at-EOD on exit date; interest charged for that day before exit"
+
     for i in range(n):
+        exited_today = False  # blocks same-day re-entry after any exit
+
         price = float(prices[i])
         z_raw = float(zs[i]) if np.isfinite(zs[i]) else float("nan")
         date = str(dates[i])
@@ -713,13 +724,7 @@ def run_backtest(
             if cur_trade is not None:
                 cur_trade["interest_paid"] = float(cur_trade.get("interest_paid", 0.0) + interest)
 
-        total_shares = base_shares + lever_shares
-        equity_now = total_shares * price + cash - borrow_principal
         base_now = base_shares * price
-
-        eq_arr[i] = float(equity_now)
-        base_arr[i] = float(base_now)
-        lev_on_arr[i] = bool(in_lever)
 
         if in_lever:
             hold_days += 1
@@ -768,52 +773,55 @@ def run_backtest(
                 in_lever = False
                 cur_trade = None
                 hold_days = 0
-                continue
 
-        if (not in_lever) and _entry_signal(i):
+                exited_today = True
+
+        if (not in_lever) and (not exited_today):
             if forbid[i]:
-                skipped_entries_on_forbidden += 1
-                continue
-
-            if equity_now <= 0.0:
-                skipped_entries_on_nonpositive_equity += 1
-                continue
-
-            if lever_shares_target <= 0.0:
-                continue
-
-            borrow = float(lever_shares_target * price)
-            if borrow <= 0.0:
-                continue
-
-            if params.cost_on == "all":
-                notional_entry = (base_shares + lever_shares_target) * price
+                if _entry_signal(i):
+                    skipped_entries_on_forbidden += 1
             else:
-                notional_entry = lever_shares_target * price
+                if _entry_signal(i):
+                    equity_flat = (base_shares + lever_shares) * price + cash - borrow_principal
+                    if equity_flat <= 0.0:
+                        skipped_entries_on_nonpositive_equity += 1
+                    elif lever_shares_target > 0.0:
+                        borrow = float(lever_shares_target * price)
+                        if borrow > 0.0:
+                            if params.cost_on == "all":
+                                notional_entry = (base_shares + lever_shares_target) * price
+                            else:
+                                notional_entry = lever_shares_target * price
 
-            entry_cost = _entry_cost(notional_entry, params.fee_rate, slip_rate)
-            if entry_cost > 0.0:
-                cash -= entry_cost
-                entry_cost_total += entry_cost
-                cost_paid_total += entry_cost
+                            entry_cost = _entry_cost(notional_entry, params.fee_rate, slip_rate)
+                            if entry_cost > 0.0:
+                                cash -= entry_cost
+                                entry_cost_total += entry_cost
+                                cost_paid_total += entry_cost
 
-            borrow_principal = borrow
-            lever_shares = lever_shares_target
-            in_lever = True
-            hold_days = 0
+                            borrow_principal = borrow
+                            lever_shares = lever_shares_target
+                            in_lever = True
+                            hold_days = 0
 
-            zf_entry = _to_finite_float(z_raw)
-            cur_trade = {
-                "entry_date": date,
-                "entry_price": price,
-                "entry_z": zf_entry,
-                "borrow_principal": float(borrow_principal),
-                "lever_shares": float(lever_shares),
-                "entry_cost": float(entry_cost),
-                "exit_cost": 0.0,
-                "cost_paid": float(entry_cost),
-                "interest_paid": 0.0,
-            }
+                            zf_entry = _to_finite_float(z_raw)
+                            cur_trade = {
+                                "entry_date": date,
+                                "entry_price": price,
+                                "entry_z": zf_entry,
+                                "borrow_principal": float(borrow_principal),
+                                "lever_shares": float(lever_shares),
+                                "entry_cost": float(entry_cost),
+                                "exit_cost": 0.0,
+                                "cost_paid": float(entry_cost),
+                                "interest_paid": 0.0,
+                            }
+
+        total_shares_eod = base_shares + lever_shares
+        equity_eod = total_shares_eod * price + cash - borrow_principal
+        eq_arr[i] = float(equity_eod)
+        base_arr[i] = float(base_now)
+        lev_on_arr[i] = bool(in_lever)
 
     open_at_end = bool(in_lever)
     if in_lever and cur_trade is not None and n > 0:
@@ -832,12 +840,15 @@ def run_backtest(
             exit_cost_total += exit_cost
             cost_paid_total += exit_cost
 
+        cash += proceeds
+        cash -= borrow_principal
+
         cur_trade["exit_date"] = last_date
         cur_trade["exit_price"] = last_price
         cur_trade["hold_days"] = int(hold_days)
         cur_trade["exit_reason"] = "end_of_data"
         cur_trade["exit_cost"] = float(exit_cost)
-        cost_paid = float(cur_trade.get("entry_cost", 0.0) + cur_trade.get("exit_cost", 0.0))
+        cost_paid = float(cur_trade.get("entry_cost", 0.0) + float(cur_trade.get("exit_cost", 0.0)))
         cur_trade["cost_paid"] = float(cost_paid)
         cur_trade["lever_leg_pnl"] = float(proceeds - float(cur_trade.get("borrow_principal", 0.0)))
         net_after_costs = float(cur_trade["lever_leg_pnl"]) - float(cur_trade.get("interest_paid", 0.0)) - cost_paid
@@ -850,6 +861,11 @@ def run_backtest(
         in_lever = False
         borrow_principal = 0.0
         lever_shares = 0.0
+        cur_trade = None
+
+        equity_final = base_shares * last_price + cash
+        eq_arr[-1] = float(equity_final)
+        lev_on_arr[-1] = False
 
     df_out = df[["date", "date_ts", "price", "bb_z", "ma_fast", "ma_slow"]].copy()
     df_out["equity"] = eq_arr
@@ -866,8 +882,28 @@ def run_backtest(
         except Exception:
             z_first_valid_date = None
 
-    perf_leverage = _perf_summary(df_out.set_index("date")["equity"], trading_days=params.trading_days)
-    perf_base = _perf_summary(df_out.set_index("date")["equity_base_only"], trading_days=params.trading_days)
+    perf_leverage = _perf_summary(
+        df_out.set_index("date")["equity"],
+        trading_days=params.trading_days,
+        perf_ddof=params.perf_ddof,
+    )
+    perf_base = _perf_summary(
+        df_out.set_index("date")["equity_base_only"],
+        trading_days=params.trading_days,
+        perf_ddof=params.perf_ddof,
+    )
+
+    equity_min = None
+    equity_negative_days = 0
+    try:
+        eqv = pd.to_numeric(df_out["equity"], errors="coerce").to_numpy(dtype=float)
+        eqv2 = eqv[np.isfinite(eqv)]
+        if eqv2.size > 0:
+            equity_min = float(np.min(eqv2))
+        equity_negative_days = int(np.sum(np.isfinite(eqv) & (eqv < 0.0)))
+    except Exception:
+        equity_min = None
+        equity_negative_days = 0
 
     summary: Dict[str, Any] = {
         "generated_at_utc": utc_now_iso(),
@@ -892,6 +928,7 @@ def run_backtest(
             "trend_rule": str(params.trend_rule),
             "trend_ma_fast": int(params.trend_ma_fast),
             "trend_ma_slow": int(params.trend_ma_slow),
+            "perf_ddof": int(params.perf_ddof),
         },
         "audit": {
             "rows": int(len(df_out)),
@@ -903,6 +940,8 @@ def run_backtest(
             "trades": int(len(trades)),
             "skipped_entries_on_forbidden": int(skipped_entries_on_forbidden),
             "skipped_entries_on_nonpositive_equity": int(skipped_entries_on_nonpositive_equity),
+            "equity_negative_days": int(equity_negative_days),
+            "equity_min": equity_min,
             "open_at_end": bool(open_at_end),
             "forced_eod_close": int(forced_eod_close),
             "exit_count_by_exit_z": int(exit_count_by_exit_z),
@@ -910,12 +949,18 @@ def run_backtest(
             "exit_count_by_trend_off": int(exit_count_by_trend_off),
             "exit_count_by_end_of_data": int(exit_count_by_end_of_data),
             "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
-            "same_day_reentry": "not allowed; exit day is always flat",
-            "interest_semantics": (
-                "row-based accrual while in position; includes the first row after entry "
-                "(may be interpreted as entry-day accrual depending on timing assumption)"
+            "same_day_reentry": "blocked (exited_today flag); entry is skipped on the same bar after any exit",
+            "always_mode_max_hold_days_note": (
+                "If entry_mode=always and max_hold_days>0, same-day reentry is blocked, "
+                "so effective cycle is max_hold_days+1 bars between entries."
             ),
+            "interest_semantics": (
+                "row-based accrual while in position; charged before exit on the exit date; "
+                "timing assumption: close at end-of-day on exit date"
+            ),
+            "timing_assumption": timing_assumption,
             "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+            "end_of_data_equity_fix_v22": "last bar equity overwritten after forced close to reflect realized cash after exit costs",
             "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
             "costs_enabled": bool((params.fee_rate > 0.0) or (params.tax_rate > 0.0) or (params.slip_bps > 0.0)),
             "cost_on": str(params.cost_on),
@@ -923,6 +968,9 @@ def run_backtest(
             "entry_cost_total": float(entry_cost_total),
             "exit_cost_total": float(exit_cost_total),
             "cost_paid_total": float(cost_paid_total),
+            "leverage_definition": (
+                "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
+            ),
         },
         "perf_leverage": perf_leverage,
         "perf_base_only": perf_base,
@@ -1041,7 +1089,7 @@ def _segment_backtest(
             "break_samples_source": "detect_breaks_from_price(segment)",
             "forbid_mask_applied": bool(forbid_mask_seg is not None),
             "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
-            "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'",
+            "forbid_mask_scope_note": "v24 applies forbid mask ONLY when entry_mode == 'bb'",
         }
     )
 
@@ -1063,11 +1111,20 @@ def _add_skip_contaminated_flag(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--no_skip_contaminated", dest="skip_contaminated", action="store_false")
 
 
+def _add_fail_fast_flag(ap: argparse.ArgumentParser) -> None:
+    if hasattr(argparse, "BooleanOptionalAction"):
+        ap.add_argument(
+            "--fail_fast",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="Fail fast on first strategy error (default true). Use --no-fail-fast to continue and record errors.",
+        )
+    else:
+        ap.add_argument("--fail_fast", action="store_true", default=True)
+        ap.add_argument("--no_fail_fast", dest="fail_fast", action="store_false")
+
+
 def _fmt_lever_mult(L: float) -> str:
-    """
-    Format leverage multiplier for stable strategy_id.
-    Note: trailing zeros and dot are trimmed, so 2.0 -> "2" is intentional.
-    """
     try:
         v = round(float(L), 2)
     except Exception:
@@ -1097,6 +1154,7 @@ def _make_params_from_args(args: argparse.Namespace, leverage_frac: float, entry
         trend_rule=str(trend_rule),
         trend_ma_fast=int(args.trend_ma_fast),
         trend_ma_slow=int(args.trend_ma_slow),
+        perf_ddof=int(args.perf_ddof),
     )
 
 
@@ -1143,18 +1201,8 @@ def _seg_compare_block(seg_pre: Dict[str, Any], seg_post: Dict[str, Any]) -> Dic
         return float(b - a)
 
     out["metrics"] = {
-        "pre": {
-            "cagr": pre_cagr,
-            "sharpe0": pre_sh,
-            "mdd": pre_mdd,
-            "calmar": pre_calmar,
-        },
-        "post": {
-            "cagr": post_cagr,
-            "sharpe0": post_sh,
-            "mdd": post_mdd,
-            "calmar": post_calmar,
-        },
+        "pre": {"cagr": pre_cagr, "sharpe0": pre_sh, "mdd": pre_mdd, "calmar": pre_calmar},
+        "post": {"cagr": post_cagr, "sharpe0": post_sh, "mdd": post_mdd, "calmar": post_calmar},
         "delta_post_minus_pre": {
             "cagr": _delta(pre_cagr, post_cagr),
             "sharpe0": _delta(pre_sh, post_sh),
@@ -1177,12 +1225,12 @@ def _run_one_strategy(
     seg_spec: str,
     seg_raw: str,
     args: argparse.Namespace,
+    gonogo_th: Dict[str, Any],
 ) -> Tuple[Dict[str, Any], pd.DataFrame, Dict[str, Any], Optional[pd.DataFrame], Dict[str, Any]]:
     if params.entry_mode == "always" and int(params.max_hold_days) > 0:
         print(
             f"NOTE: strategy {strategy_id}: entry_mode=always with max_hold_days={params.max_hold_days} "
-            "will exit/reenter periodically (cost drag). "
-            "For true constant-leverage hold, set --max_hold_days=0."
+            "will exit/reenter periodically. With same-day reentry blocked, effective cycle is max_hold_days+1."
         )
 
     forbid_for_strategy = forbid_mask_full if (params.entry_mode == "bb") else None
@@ -1199,7 +1247,7 @@ def _run_one_strategy(
         "segments": {},
         "compare": None,
         "compare_error": None,
-        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19.",
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v24.",
     }
 
     post_df_bt: Optional[pd.DataFrame] = None
@@ -1266,7 +1314,7 @@ def _run_one_strategy(
             except Exception as e:
                 segmentation["compare_error"] = f"{type(e).__name__}: {e}"
 
-    gonogo = _post_gonogo_decision(segmentation)
+    gonogo = _post_gonogo_decision(segmentation, gonogo_th)
 
     out: Dict[str, Any] = {
         "strategy_id": str(strategy_id),
@@ -1310,14 +1358,19 @@ def main() -> None:
     ap.add_argument("--exit_z", type=float, default=0.0)
 
     ap.add_argument("--leverage_frac", "--leverage_add", dest="leverage_frac", type=float, default=0.5)
+
+    # Keep pledge cost assumption: 3.5% APR
     ap.add_argument("--borrow_apr", type=float, default=0.035)
-    ap.add_argument("--max_hold_days", type=int, default=60)
+
+    ap.add_argument("--max_hold_days", type=int, default=0)
     ap.add_argument("--trading_days", type=int, default=252)
 
     ap.add_argument("--fee_rate", type=float, default=0.001425)
     ap.add_argument("--tax_rate", type=float, default=0.0010)
     ap.add_argument("--slip_bps", type=float, default=5.0)
     ap.add_argument("--cost_on", type=str, default="lever", choices=["lever", "all"])
+
+    ap.add_argument("--perf_ddof", type=int, default=0, choices=[0, 1], help="ddof for vol/sharpe (0=pop, 1=sample)")
 
     ap.add_argument(
         "--strategy_suite",
@@ -1338,6 +1391,7 @@ def main() -> None:
     ap.add_argument("--trend_ma_slow", type=int, default=60)
 
     _add_skip_contaminated_flag(ap)
+    _add_fail_fast_flag(ap)
     ap.add_argument("--contam_horizon", type=int, default=60)
     ap.add_argument("--z_clear_days", type=int, default=60)
     ap.add_argument("--break_ratio_hi", type=float, default=None)
@@ -1348,6 +1402,15 @@ def main() -> None:
     ap.add_argument("--segment_post_start_date", default=None)
 
     ap.add_argument("--omit_trades", action="store_true", default=False, help="omit per-strategy trades list from JSON")
+
+    ap.add_argument("--gonogo_delta_sharpe0_lt", type=float, default=0.0)
+    ap.add_argument("--gonogo_delta_abs_mdd_gt", type=float, default=0.0)
+    ap.add_argument("--gonogo_delta_cagr_lt", type=float, default=0.01)
+    ap.add_argument(
+        "--gonogo_rationale",
+        type=str,
+        default="stop rule: leverage must not degrade sharpe, must not worsen drawdown, and must add >=1% CAGR vs base in post segment",
+    )
 
     ap.add_argument("--out_json", dest="out_json", default="backtest_mvp.json")
     ap.add_argument("--out_equity_csv", default="backtest_mvp_equity.csv")
@@ -1458,6 +1521,16 @@ def main() -> None:
     seg_raw = str(args.segment_split_date).strip()
     seg_spec = seg_raw.lower()
 
+    gonogo_th = {
+        "delta_sharpe0_lt": float(args.gonogo_delta_sharpe0_lt),
+        "delta_abs_mdd_gt": float(args.gonogo_delta_abs_mdd_gt),
+        "delta_cagr_lt": float(args.gonogo_delta_cagr_lt),
+        "rationale": str(args.gonogo_rationale),
+    }
+
+    out_json_path = os.path.join(cache_dir, str(args.out_json))
+    out_cmp_path = os.path.join(cache_dir, str(args.out_compare_csv))
+
     suite_out: Dict[str, Any] = {
         "generated_at_utc": utc_now_iso(),
         "script_fingerprint": SCRIPT_FINGERPRINT,
@@ -1475,7 +1548,8 @@ def main() -> None:
             "break_samples_first5": breaks_aligned[:5],
             "break_samples_source": (break_samples_source or "stats_json_unknown_path") if raw_samples else "detect_breaks_from_price",
             "forbid_mask_built": bool(forbid_mask is not None),
-            "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'",
+            "forbid_mask_scope_note": "v24 applies forbid mask ONLY when entry_mode == 'bb'",
+            "gonogo_thresholds": gonogo_th,
         },
         "strategy_suite": {
             "mode": suite,
@@ -1484,10 +1558,17 @@ def main() -> None:
             "trend_ma_fast": int(args.trend_ma_fast),
             "trend_ma_slow": int(args.trend_ma_slow),
             "omit_trades": bool(args.omit_trades),
-            "always_semantics_note": "For true constant-leverage hold, use --max_hold_days=0. Default >0 forces periodic exit/reentry.",
+            "always_semantics_note": (
+                "For true constant-leverage hold, use --max_hold_days=0. "
+                "If max_hold_days>0, same-day reentry is blocked, so effective cycle is max_hold_days+1."
+            ),
+            "fail_fast": bool(args.fail_fast),
         },
         "strategies": [],
         "compare": {},
+        "failed_strategies": [],
+        "suite_ok": True,
+        "abort_reason": None,
         "notes": [
             "All strategies share the same cost/interest model (fee/tax/slippage/borrow_apr).",
             "Turnover_proxy is state-change frequency, not dollar turnover.",
@@ -1500,26 +1581,63 @@ def main() -> None:
     first_df_bt: Optional[pd.DataFrame] = None
     first_summary_full: Optional[Dict[str, Any]] = None
     first_strategy_id: Optional[str] = None
+    first_strat_obj: Optional[Dict[str, Any]] = None
+    first_params: Optional[Params] = None
+
+    abort_reason: Optional[str] = None
 
     for (sid, params) in strategies:
-        strat_obj, df_bt, seg_obj, post_df_bt, summary_full = _run_one_strategy(
-            strategy_id=sid,
-            df_raw=df_raw,
-            params=params,
-            breaks_aligned=breaks_aligned,
-            ratio_hi=ratio_hi,
-            ratio_lo=ratio_lo,
-            forbid_mask_full=forbid_mask,
-            seg_spec=seg_spec,
-            seg_raw=seg_raw,
-            args=args,
-        )
+        try:
+            strat_obj, df_bt, seg_obj, post_df_bt, summary_full = _run_one_strategy(
+                strategy_id=sid,
+                df_raw=df_raw,
+                params=params,
+                breaks_aligned=breaks_aligned,
+                ratio_hi=ratio_hi,
+                ratio_lo=ratio_lo,
+                forbid_mask_full=forbid_mask,
+                seg_spec=seg_spec,
+                seg_raw=seg_raw,
+                args=args,
+                gonogo_th=gonogo_th,
+            )
+        except Exception as e:
+            err_type = type(e).__name__
+            err_msg = f"strategy {sid}: {err_type}: {e}"
+
+            suite_out["failed_strategies"].append(sid)
+            suite_out["suite_ok"] = False
+            suite_out["strategies"].append(
+                {"strategy_id": sid, "ok": False, "error": err_msg, "error_type": err_type}
+            )
+
+            # v25: include explicit post_ok=False to avoid NaN semantics in compare build
+            compare_rows.append(
+                {
+                    "strategy_id": sid,
+                    "ok": False,
+                    "post_ok": False,
+                    "rank_basis": "error",
+                    "error_type": err_type,
+                }
+            )
+
+            is_critical = isinstance(e, MemoryError)
+            if bool(args.fail_fast) or is_critical:
+                abort_reason = err_msg
+                break
+            else:
+                continue
+
+        strat_obj["ok"] = True
         suite_out["strategies"].append(strat_obj)
 
         if first_df_bt is None:
             first_df_bt = df_bt
             first_summary_full = summary_full
             first_strategy_id = sid
+            first_strat_obj = strat_obj
+            first_params = params
 
         perf = (strat_obj.get("perf") or {})
         pl = (perf.get("leverage") or {})
@@ -1575,119 +1693,184 @@ def main() -> None:
             "post_delta_sharpe0_vs_base": post_delta_sharpe0,
             "post_gonogo": (strat_obj.get("post_gonogo") or {}).get("decision"),
             "rank_basis": rank_basis,
+            "ok": True,
         }
         compare_rows.append(row)
 
+    # v25: sync abort_reason into suite_out unconditionally (future refactor safety)
+    suite_out["abort_reason"] = abort_reason
+    if abort_reason is not None:
+        suite_out["suite_ok"] = False
+
     df_cmp = pd.DataFrame(compare_rows)
+    compare_rows_sorted: List[Dict[str, Any]] = compare_rows
 
     def _finite_or_neginf(x: Any) -> float:
         v = _to_finite_float(x)
         return float(v) if v is not None else float("-inf")
 
-    if not df_cmp.empty:
-        df_cmp["_rank_calmar"] = df_cmp.apply(
-            lambda r: _finite_or_neginf(r["post_calmar"]) if bool(r.get("post_ok")) else _finite_or_neginf(r["full_calmar"]),
-            axis=1,
-        )
-        df_cmp["_rank_sharpe"] = df_cmp.apply(
-            lambda r: _finite_or_neginf(r["post_sharpe0"]) if bool(r.get("post_ok")) else _finite_or_neginf(r["full_sharpe0"]),
-            axis=1,
-        )
-        df_cmp = df_cmp.sort_values(by=["_rank_calmar", "_rank_sharpe"], ascending=[False, False]).reset_index(drop=True)
+    try:
+        if not df_cmp.empty:
+            # Ensure required columns exist, with sane defaults
+            if "post_calmar" not in df_cmp.columns:
+                df_cmp["post_calmar"] = np.nan
+            if "full_calmar" not in df_cmp.columns:
+                df_cmp["full_calmar"] = np.nan
+            if "post_sharpe0" not in df_cmp.columns:
+                df_cmp["post_sharpe0"] = np.nan
+            if "full_sharpe0" not in df_cmp.columns:
+                df_cmp["full_sharpe0"] = np.nan
+            if "post_ok" not in df_cmp.columns:
+                df_cmp["post_ok"] = False
+            if "ok" not in df_cmp.columns:
+                df_cmp["ok"] = False
 
-    suite_out["compare"] = {
-        "rows": compare_rows,
-        "ranking_policy": "prefer post (calmar desc, sharpe0 desc) when post_ok=true; else fallback to full",
-        "top3_by_policy": df_cmp["strategy_id"].head(3).tolist() if (not df_cmp.empty) else [],
-    }
+            # v25: fill NaN post_ok/ok as False for audit clarity (avoid bool(np.nan) surprises)
+            try:
+                df_cmp["post_ok"] = df_cmp["post_ok"].fillna(False)
+            except Exception:
+                pass
+            try:
+                df_cmp["ok"] = df_cmp["ok"].fillna(False)
+            except Exception:
+                pass
 
-    out_json_path = os.path.join(cache_dir, str(args.out_json))
+            # v25: strict bool check (post_ok is True) rather than bool(post_ok)
+            df_cmp["_rank_calmar"] = df_cmp.apply(
+                lambda r: _finite_or_neginf(r.get("post_calmar")) if (r.get("post_ok") is True) else _finite_or_neginf(r.get("full_calmar")),
+                axis=1,
+            )
+            df_cmp["_rank_sharpe"] = df_cmp.apply(
+                lambda r: _finite_or_neginf(r.get("post_sharpe0")) if (r.get("post_ok") is True) else _finite_or_neginf(r.get("full_sharpe0")),
+                axis=1,
+            )
+            df_cmp = df_cmp.sort_values(by=["_rank_calmar", "_rank_sharpe"], ascending=[False, False]).reset_index(drop=True)
+
+            compare_rows_sorted = (
+                df_cmp.drop(columns=[c for c in ["_rank_calmar", "_rank_sharpe"] if c in df_cmp.columns], errors="ignore")
+                .to_dict("records")
+            )
+
+        top3 = []
+        if (not df_cmp.empty) and ("strategy_id" in df_cmp.columns) and ("ok" in df_cmp.columns):
+            df_ok = df_cmp[df_cmp["ok"] == True]
+            top3 = df_ok["strategy_id"].head(3).tolist()
+
+        suite_out["compare"] = {
+            "rows": compare_rows_sorted,
+            "ranking_policy": "prefer post (calmar desc, sharpe0 desc) when post_ok=true; else fallback to full",
+            "top3_by_policy": top3,
+        }
+    except Exception as e:
+        suite_out["suite_ok"] = False
+        suite_out["compare"] = {
+            "error": f"{type(e).__name__}: {e}",
+            "rows": compare_rows_sorted,
+            "ranking_policy": "compare build failed; rows are unsorted",
+            "top3_by_policy": [],
+        }
+
+    # Always write JSON first (data preservation)
     try:
         _write_json(out_json_path, suite_out)
     except Exception as e:
         raise SystemExit(f"ERROR: failed to write json: {out_json_path} ({type(e).__name__}: {e})")
 
-    out_cmp_path = os.path.join(cache_dir, str(args.out_compare_csv))
-    _ensure_parent(out_cmp_path)
-    if not df_cmp.empty:
-        df_cmp.drop(columns=[c for c in ["_rank_calmar", "_rank_sharpe"] if c in df_cmp.columns]).to_csv(
-            out_cmp_path, index=False, encoding="utf-8"
-        )
-    else:
-        pd.DataFrame(columns=list(compare_rows[0].keys()) if compare_rows else []).to_csv(out_cmp_path, index=False, encoding="utf-8")
+    # Write compare CSV best-effort
+    try:
+        _ensure_parent(out_cmp_path)
+        if not df_cmp.empty:
+            df_cmp.drop(columns=[c for c in ["_rank_calmar", "_rank_sharpe"] if c in df_cmp.columns], errors="ignore").to_csv(
+                out_cmp_path, index=False, encoding="utf-8"
+            )
+        else:
+            pd.DataFrame(columns=list(compare_rows[0].keys()) if compare_rows else []).to_csv(out_cmp_path, index=False, encoding="utf-8")
+    except Exception as e:
+        print(f"WARNING: failed to write compare csv: {out_cmp_path} ({type(e).__name__}: {e})")
 
-    # CSV outputs for the FIRST strategy: reuse stored results (no extra rerun)
-    if first_df_bt is None or first_summary_full is None or first_strategy_id is None:
-        raise SystemExit("ERROR: internal: first strategy results missing (unexpected)")
+    # If no successful strategy, stop here (but JSON already written)
+    if first_df_bt is None or first_summary_full is None or first_strategy_id is None or first_strat_obj is None or first_params is None:
+        print(f"OK: wrote {out_json_path}")
+        print(f"OK: wrote {out_cmp_path} (best-effort)")
+        if abort_reason is not None:
+            raise SystemExit(f"ERROR: abort due to fail_fast/critical: {abort_reason}")
+        raise SystemExit("ERROR: no successful strategy results produced")
 
+    # Write first success equity/trades
     out_eq_path = os.path.join(cache_dir, str(args.out_equity_csv))
-    _ensure_parent(out_eq_path)
-    first_df_bt[["date", "price", "bb_z", "ma_fast", "ma_slow", "equity", "equity_base_only", "lever_on"]].to_csv(
-        out_eq_path, index=False, encoding="utf-8"
-    )
+    try:
+        _ensure_parent(out_eq_path)
+        first_df_bt[["date", "price", "bb_z", "ma_fast", "ma_slow", "equity", "equity_base_only", "lever_on"]].to_csv(
+            out_eq_path, index=False, encoding="utf-8"
+        )
+    except Exception as e:
+        print(f"WARNING: failed to write equity csv: {out_eq_path} ({type(e).__name__}: {e})")
 
     out_tr_path = os.path.join(cache_dir, str(args.out_trades_csv))
-    _ensure_parent(out_tr_path)
-    trades_first = first_summary_full.get("trades", []) if isinstance(first_summary_full.get("trades", []), list) else []
-    if len(trades_first) > 0:
-        df_tr = pd.DataFrame(trades_first)
-        for c in TRADE_COLS:
-            if c not in df_tr.columns:
-                df_tr[c] = np.nan
-        df_tr[TRADE_COLS].to_csv(out_tr_path, index=False, encoding="utf-8")
-    else:
-        pd.DataFrame(columns=TRADE_COLS).to_csv(out_tr_path, index=False, encoding="utf-8")
+    try:
+        _ensure_parent(out_tr_path)
+        trades_first = first_summary_full.get("trades", []) if isinstance(first_summary_full.get("trades", []), list) else []
+        if len(trades_first) > 0:
+            df_tr = pd.DataFrame(trades_first)
+            for c in TRADE_COLS:
+                if c not in df_tr.columns:
+                    df_tr[c] = np.nan
+            df_tr[TRADE_COLS].to_csv(out_tr_path, index=False, encoding="utf-8")
+        else:
+            pd.DataFrame(columns=TRADE_COLS).to_csv(out_tr_path, index=False, encoding="utf-8")
+    except Exception as e:
+        print(f"WARNING: failed to write trades csv: {out_tr_path} ({type(e).__name__}: {e})")
 
     print(f"OK: wrote {out_json_path}")
     print(f"OK: wrote {out_cmp_path} (strategy comparison; post-first ranking)")
-    print(f"OK: wrote {out_eq_path}  (equity for FIRST strategy: {first_strategy_id})")
-    print(f"OK: wrote {out_tr_path}  (trades CSV for FIRST strategy: {first_strategy_id})")
+    print(f"OK: wrote {out_eq_path}  (equity for FIRST successful strategy: {first_strategy_id})")
+    print(f"OK: wrote {out_tr_path}  (trades CSV for FIRST successful strategy: {first_strategy_id})")
 
-    # Optional: post equity CSV for FIRST strategy (recomputed on post slice with correct forbid logic)
+    # Optional: post equity CSV for FIRST successful strategy (v24 fix + v25 guard)
     if args.out_post_equity_csv:
-        first_obj = suite_out["strategies"][0]
-        seg = (first_obj.get("segmentation") or {})
+        seg = (first_strat_obj.get("segmentation") or {})
         if isinstance(seg, dict) and seg.get("enabled"):
             post_seg = (seg.get("segments", {}) or {}).get("post", {})
             if isinstance(post_seg, dict) and post_seg.get("ok"):
                 post_start_ts = _parse_ymd(seg.get("post_start_date"))
                 if post_start_ts is not None:
-                    df_post = df_raw.loc[df_raw["date_ts"] >= post_start_ts].copy().reset_index(drop=True)
+                    try:
+                        df_post = df_raw.loc[df_raw["date_ts"] >= post_start_ts].copy().reset_index(drop=True)
 
-                    p0 = strategies[0][1]  # first strategy params
-                    forbid_post = None
+                        forbid_post = None
+                        if first_params.entry_mode == "bb" and bool(args.skip_contaminated):
+                            raw_breaks_post = detect_breaks_from_price(df_post, ratio_hi, ratio_lo)
+                            breaks_post = align_break_indices(df_post, raw_breaks_post)
+                            if len(breaks_post) > 0:
+                                forbid_post = build_entry_forbidden_mask(
+                                    n=len(df_post),
+                                    breaks=breaks_post,
+                                    contam_horizon=int(args.contam_horizon),
+                                    z_clear_days=int(args.z_clear_days),
+                                )
 
-                    # v19: FIX dead code (rebuild forbid mask on post slice for bb mode)
-                    if p0.entry_mode == "bb" and bool(args.skip_contaminated):
-                        raw_breaks_post = detect_breaks_from_price(df_post, ratio_hi, ratio_lo)
-                        breaks_post = align_break_indices(df_post, raw_breaks_post)
-                        if len(breaks_post) > 0:
-                            forbid_post = build_entry_forbidden_mask(
-                                n=len(df_post),
-                                breaks=breaks_post,
-                                contam_horizon=int(args.contam_horizon),
-                                z_clear_days=int(args.z_clear_days),
-                            )
-                        else:
-                            forbid_post = None
+                        df_post_bt, _ = run_backtest(df_post, first_params, forbid_entry_mask=forbid_post)
 
-                    df_post_bt, _ = run_backtest(df_post, p0, forbid_entry_mask=forbid_post)
-
-                    out_post_eq = os.path.join(cache_dir, str(args.out_post_equity_csv))
-                    _ensure_parent(out_post_eq)
-                    df_post_bt[["date", "price", "bb_z", "ma_fast", "ma_slow", "equity", "equity_base_only", "lever_on"]].to_csv(
-                        out_post_eq, index=False, encoding="utf-8"
-                    )
-                    print(
-                        f"OK: wrote {out_post_eq} (post segment equity; FIRST strategy; "
-                        f"forbid_post={'applied' if forbid_post is not None else 'none'})"
-                    )
+                        out_post_eq = os.path.join(cache_dir, str(args.out_post_equity_csv))
+                        _ensure_parent(out_post_eq)
+                        df_post_bt[["date", "price", "bb_z", "ma_fast", "ma_slow", "equity", "equity_base_only", "lever_on"]].to_csv(
+                            out_post_eq, index=False, encoding="utf-8"
+                        )
+                        print(
+                            f"OK: wrote {out_post_eq} (post segment equity; FIRST successful strategy; "
+                            f"forbid_post={'applied' if forbid_post is not None else 'none'})"
+                        )
+                    except Exception as e:
+                        print(f"WARNING: post equity csv failed: {type(e).__name__}: {e}; skip writing.")
                 else:
                     print("WARNING: --out_post_equity_csv specified but could not parse post_start_date; skip writing.")
             else:
                 print("WARNING: --out_post_equity_csv specified but post segment is not ok; skip writing.")
         else:
             print("WARNING: --out_post_equity_csv specified but segmentation is disabled; skip writing.")
+
+    if abort_reason is not None:
+        raise SystemExit(f"ERROR: abort due to fail_fast/critical: {abort_reason}")
 
 
 if __name__ == "__main__":
