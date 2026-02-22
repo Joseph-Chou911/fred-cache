@@ -1,4 +1,3 @@
-
 name: tw0050-backtest-mvp
 
 on:
@@ -58,6 +57,7 @@ jobs:
           OUT_EQ="equity_curve.${FP}.csv"
           OUT_JSON="backtest_mvp.${FP}.json"
           OUT_JSON_LITE="backtest_mvp.${FP}.lite.json"
+          OUT_MD="backtest_mvp.${FP}.report.md"
 
           python scripts/backtest_tw0050_leverage_mvp.py \
             --cache_dir "${CACHE_DIR}" \
@@ -128,6 +128,14 @@ jobs:
           echo "Wrote lite outputs:"
           ls -lh "${CACHE_DIR}/${OUT_JSON_LITE}"
 
+          # ---- render report from lite JSON (preferred) ----
+          python scripts/render_backtest_mvp.py \
+            --in_json "${CACHE_DIR}/${OUT_JSON_LITE}" \
+            --out_md "${CACHE_DIR}/${OUT_MD}"
+
+          echo "Wrote report:"
+          ls -lh "${CACHE_DIR}/${OUT_MD}"
+
       # (Optional) keep the full JSON out of git, but available for download
       - name: Upload artifacts (optional)
         uses: actions/upload-artifact@v4
@@ -137,20 +145,24 @@ jobs:
             tw0050_bb_cache/equity_curve.*.csv
             tw0050_bb_cache/backtest_mvp.*.json
             tw0050_bb_cache/backtest_mvp.*.lite.json
+            tw0050_bb_cache/backtest_mvp.*.report.md
 
-      - name: Commit outputs (lite json only)
+      - name: Commit outputs (lite json + report)
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Commit equity + lite json only (avoid pushing oversized full json)
-          git add tw0050_bb_cache/equity_curve.*.csv tw0050_bb_cache/backtest_mvp.*.lite.json
+          # Commit equity + lite json + report only (avoid pushing oversized full json)
+          git add \
+            tw0050_bb_cache/equity_curve.*.csv \
+            tw0050_bb_cache/backtest_mvp.*.lite.json \
+            tw0050_bb_cache/backtest_mvp.*.report.md
 
           if git diff --cached --quiet; then
             echo "No changes."
             exit 0
           fi
 
-          git commit -m "tw0050 backtest mvp: update outputs (lite json)"
+          git commit -m "tw0050 backtest mvp: update outputs (lite json + report)"
           git push
