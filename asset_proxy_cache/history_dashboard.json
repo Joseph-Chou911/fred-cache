@@ -377,6 +377,19 @@
         "VNQ.US_CLOSE": "WATCH",
         "IYR.US_CLOSE": "WATCH"
       }
+    },
+    {
+      "run_ts_utc": "2026-02-22T16:50:49.976680+00:00",
+      "stats_as_of_ts": "2026-02-23T00:50:47+08:00",
+      "module": "asset_proxy_cache",
+      "ruleset_id": "signals_v8",
+      "script_fingerprint": "render_dashboard_py_signals_v8@a5c3893",
+      "series_signals": {
+        "GLD.US_CLOSE": "INFO",
+        "IAU.US_CLOSE": "INFO",
+        "VNQ.US_CLOSE": "WATCH",
+        "IYR.US_CLOSE": "WATCH"
+      }
     }
   ]
 }
