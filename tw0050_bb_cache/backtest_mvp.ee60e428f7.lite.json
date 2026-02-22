@@ -1,0 +1,3768 @@
+{
+  "generated_at_utc": "2026-02-22T08:41:19Z",
+  "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+  "inputs": {
+    "cache_dir": "tw0050_bb_cache",
+    "price_csv": "data.csv",
+    "price_csv_resolved": "tw0050_bb_cache/data.csv",
+    "stats_json": "stats_latest.json",
+    "stats_json_resolved": "tw0050_bb_cache/stats_latest.json",
+    "price_col": "adjclose",
+    "break_ratio_hi": 1.8,
+    "break_ratio_lo": 0.5555555556,
+    "break_ratio_policy": "ratio_lo defaults to 1/ratio_hi (symmetric inverse) unless overridden",
+    "breaks_detected": 1,
+    "break_samples_first5": [
+      {
+        "idx": 1238,
+        "break_date": "2014-01-02",
+        "prev_date": "2013-12-31",
+        "prev_price": 37.41241455078125,
+        "price": 9.329200744628906,
+        "ratio": 0.24936109728940478
+      }
+    ],
+    "break_samples_source": "detect_breaks_from_price",
+    "forbid_mask_built": true,
+    "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+  },
+  "strategy_suite": {
+    "mode": "all",
+    "bench_levels": [
+      1.1,
+      1.2,
+      1.3,
+      1.5
+    ],
+    "trend_rule": "price_gt_ma60",
+    "trend_ma_fast": 20,
+    "trend_ma_slow": 60,
+    "omit_trades": false,
+    "always_semantics_note": "For true constant-leverage hold, use --max_hold_days=0. Default >0 forces periodic exit/reentry."
+  },
+  "strategies": [
+    {
+      "strategy_id": "bb_conditional",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.5,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "bb",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.07751690600844562,
+        "trades": 34,
+        "skipped_entries_on_forbidden": 18,
+        "skipped_entries_on_nonpositive_equity": 0,
+        "open_at_end": false,
+        "forced_eod_close": 0,
+        "exit_count_by_exit_z": 31,
+        "exit_count_by_max_hold_days": 3,
+        "exit_count_by_trend_off": 0,
+        "exit_count_by_end_of_data": 0,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.042062298922999855,
+        "exit_cost_total": 0.06508217259259737,
+        "cost_paid_total": 0.1071444715155972
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.9868747768361468,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.0867142093878972,
+          "vol_ann": 0.29972282952111096,
+          "sharpe0": 0.49004955170883907,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7518309267926276,
+          "mdd_peak": "2011-06-01",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.1153373801179304,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.016221374045801526,
+        "delta_vs_base": {
+          "cagr": 0.003618168567237623,
+          "mdd": 0.021528227099490982,
+          "sharpe0": -0.010449538310079165
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.5,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "bb",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.03298146461584466,
+                "trades": 10,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": false,
+                "forced_eod_close": 0,
+                "exit_count_by_exit_z": 10,
+                "exit_count_by_max_hold_days": 0,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 0,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.015818148194767765,
+                "exit_cost_total": 0.024395764364125546,
+                "cost_paid_total": 0.040213912558893304,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8778779886642467,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.13697562473651015,
+                "vol_ann": 0.2942049184407342,
+                "sharpe0": 0.5825778851432081,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.30201396246965195,
+                "mdd_peak": "2011-06-01",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.45354070260998025,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.01615508885298869,
+              "delta_vs_base": {
+                "cagr": 0.0062357383017619394,
+                "mdd": -0.04391862898624421,
+                "sharpe0": -0.007787969464051248
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.5,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "bb",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.09770885112250138,
+                "trades": 24,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": false,
+                "forced_eod_close": 0,
+                "exit_count_by_exit_z": 21,
+                "exit_count_by_max_hold_days": 3,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 0,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.05757854275510367,
+                "exit_cost_total": 0.08926423720065556,
+                "cost_paid_total": 0.14684277995575923,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.63729726738976,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.20200874406061642,
+                "vol_ann": 0.22439694110336336,
+                "sharpe0": 0.9322202862855463,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.39929197199344824,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5059173693177359,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.016249153689911984,
+              "delta_vs_base": {
+                "cagr": 0.004386286449562515,
+                "mdd": -0.0610155756064471,
+                "sharpe0": -0.14133584293311674
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.13697562473651015,
+              "sharpe0": 0.5825778851432081,
+              "mdd": -0.30201396246965195,
+              "calmar": 0.45354070260998025
+            },
+            "post": {
+              "cagr": 0.20200874406061642,
+              "sharpe0": 0.9322202862855463,
+              "mdd": -0.39929197199344824,
+              "calmar": 0.5059173693177359
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.06503311932410627,
+              "sharpe0": 0.34964240114233824,
+              "mdd": -0.09727800952379628,
+              "calmar": 0.05237666670775565
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "NO_GO",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.20200874406061642,
+            "mdd": -0.39929197199344824,
+            "sharpe0": 0.9322202862855463
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.004386286449562515,
+            "sharpe0": -0.14133584293311674
+          },
+          "delta_abs_mdd": 0.0610155756064471
+        },
+        "reasons": [
+          "all 3 post conditions met => stop / do not deploy"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": true
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": true
+    },
+    {
+      "strategy_id": "always_leverage_1.1x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.10000000000000009,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "always",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.0736133721936453,
+        "trades": 69,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 0,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 68,
+        "exit_count_by_trend_off": 0,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.01717299051225803,
+        "exit_cost_total": 0.02682734108660035,
+        "cost_paid_total": 0.04400033159885839
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.9059616808932764,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08537526831015496,
+          "vol_ann": 0.315125236086713,
+          "sharpe0": 0.5186007545938375,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.8364447684315179,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.10206922385353513,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.032681297709923667,
+        "delta_vs_base": {
+          "cagr": 0.0022792274894953835,
+          "mdd": -0.06308561453939932,
+          "sharpe0": 0.01810166457491924
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.10000000000000009,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.027013834634370314,
+                "trades": 21,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 20,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.006485705794405907,
+                "exit_cost_total": 0.010068655728415206,
+                "cost_paid_total": 0.016554361522821113,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8579050466370648,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.134501602547479,
+                "vol_ann": 0.29326567440786977,
+                "sharpe0": 0.5756970982693513,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.2803310843589556,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.4797955348228658,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.033117932148626815,
+              "delta_vs_base": {
+                "cagr": 0.003761716112730795,
+                "mdd": -0.022235750875547855,
+                "sharpe0": -0.014668756337907984
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.10000000000000009,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.10067483500145777,
+                "trades": 49,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 48,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.024084940461550467,
+                "exit_cost_total": 0.03864776998042197,
+                "cost_paid_total": 0.06273271044197243,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.815360618213335,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.2041037291899146,
+                "vol_ann": 0.19613673115031235,
+                "sharpe0": 1.0454842922746608,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.35712357839944087,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5715212927263672,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.032836831415030465,
+              "delta_vs_base": {
+                "cagr": 0.006481271578860692,
+                "mdd": -0.018847182012439734,
+                "sharpe0": -0.028071836944002282
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.134501602547479,
+              "sharpe0": 0.5756970982693513,
+              "mdd": -0.2803310843589556,
+              "calmar": 0.4797955348228658
+            },
+            "post": {
+              "cagr": 0.2041037291899146,
+              "sharpe0": 1.0454842922746608,
+              "mdd": -0.35712357839944087,
+              "calmar": 0.5715212927263672
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.06960212664243559,
+              "sharpe0": 0.46978719400530944,
+              "mdd": -0.07679249404048527,
+              "calmar": 0.0917257579035014
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "NO_GO",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.2041037291899146,
+            "mdd": -0.35712357839944087,
+            "sharpe0": 1.0454842922746608
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.006481271578860692,
+            "sharpe0": -0.028071836944002282
+          },
+          "delta_abs_mdd": 0.018847182012439734
+        },
+        "reasons": [
+          "all 3 post conditions met => stop / do not deploy"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": true
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    },
+    {
+      "strategy_id": "always_leverage_1.2x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.19999999999999996,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "always",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.1472267443872906,
+        "trades": 69,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 0,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 68,
+        "exit_count_by_trend_off": 0,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.034345981024516026,
+        "exit_cost_total": 0.05365468217320065,
+        "cost_paid_total": 0.08800066319771668
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 4.040157728634104,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08758205247685669,
+          "vol_ann": 0.3568839714078398,
+          "sharpe0": 0.5488075890750923,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.8953442353157726,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.09781941852338838,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.032681297709923667,
+        "delta_vs_base": {
+          "cagr": 0.004486011656197109,
+          "mdd": -0.12198508142365394,
+          "sharpe0": 0.04830849905617407
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.19999999999999996,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.05402766926874063,
+                "trades": 21,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 20,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.012971411588811797,
+                "exit_cost_total": 0.020137311456830394,
+                "cost_paid_total": 0.0331087230456422,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8879491472368475,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.13821518804492094,
+                "vol_ann": 0.31736759927891256,
+                "sharpe0": 0.5650330945355236,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.30109134613817523,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.45904736159866905,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.033117932148626815,
+              "delta_vs_base": {
+                "cagr": 0.007475301610172735,
+                "mdd": -0.04299601265476749,
+                "sharpe0": -0.025332760071735683
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.19999999999999996,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.20134967000291548,
+                "trades": 49,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 48,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.04816988092310088,
+                "exit_cost_total": 0.07729553996084383,
+                "cost_paid_total": 0.12546542088394472,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 9.355628968454145,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.21023136123922948,
+                "vol_ann": 0.2079639561182079,
+                "sharpe0": 1.0219452998014105,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.37435182620043295,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5615876470351951,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.032836831415030465,
+              "delta_vs_base": {
+                "cagr": 0.012608903628175572,
+                "mdd": -0.036075429813431814,
+                "sharpe0": -0.05161082941725259
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.13821518804492094,
+              "sharpe0": 0.5650330945355236,
+              "mdd": -0.30109134613817523,
+              "calmar": 0.45904736159866905
+            },
+            "post": {
+              "cagr": 0.21023136123922948,
+              "sharpe0": 1.0219452998014105,
+              "mdd": -0.37435182620043295,
+              "calmar": 0.5615876470351951
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.07201617319430853,
+              "sharpe0": 0.45691220526588683,
+              "mdd": -0.07326048006225772,
+              "calmar": 0.1025402854365261
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "GO_OR_REVIEW",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.21023136123922948,
+            "mdd": -0.37435182620043295,
+            "sharpe0": 1.0219452998014105
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.012608903628175572,
+            "sharpe0": -0.05161082941725259
+          },
+          "delta_abs_mdd": 0.036075429813431814
+        },
+        "reasons": [
+          "delta_cagr not < 1%"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": false
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    },
+    {
+      "strategy_id": "always_leverage_1.3x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.30000000000000004,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "always",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.22084011658093936,
+        "trades": 69,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 0,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 68,
+        "exit_count_by_trend_off": 0,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.051518971536774066,
+        "exit_cost_total": 0.080482023259801,
+        "cost_paid_total": 0.13200099479657512
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 4.174353776374925,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08972099070446782,
+          "vol_ann": 0.42123265076795363,
+          "sharpe0": 0.5988822209690444,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.9504608420142165,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.09439735624913395,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.032681297709923667,
+        "delta_vs_base": {
+          "cagr": 0.00662494988380824,
+          "mdd": -0.17710168812209792,
+          "sharpe0": 0.09838313095012619
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.30000000000000004,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.08104150390311078,
+                "trades": 21,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 20,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.019457117383217707,
+                "exit_cost_total": 0.0302059671852456,
+                "cost_paid_total": 0.04966308456846329,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.9179932478366308,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1418820101919065,
+                "vol_ann": 0.3412939958493359,
+                "sharpe0": 0.5574389151123651,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.3205182653272842,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.4426643518959191,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.033117932148626815,
+              "delta_vs_base": {
+                "cagr": 0.011142123757158284,
+                "mdd": -0.062422931843876484,
+                "sharpe0": -0.032926939494894225
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.30000000000000004,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.30202450500436895,
+                "trades": 49,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 48,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.07225482138465134,
+                "exit_cost_total": 0.11594330994126584,
+                "cost_paid_total": 0.18819813132591726,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 9.89589731869495,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.2160434825414046,
+                "vol_ann": 0.21932267057879315,
+                "sharpe0": 1.0019416793376001,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.39016114447785066,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5537288517813166,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.032836831415030465,
+              "delta_vs_base": {
+                "cagr": 0.018421024930350693,
+                "mdd": -0.05188474809084953,
+                "sharpe0": -0.07161444988106291
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.1418820101919065,
+              "sharpe0": 0.5574389151123651,
+              "mdd": -0.3205182653272842,
+              "calmar": 0.4426643518959191
+            },
+            "post": {
+              "cagr": 0.2160434825414046,
+              "sharpe0": 1.0019416793376001,
+              "mdd": -0.39016114447785066,
+              "calmar": 0.5537288517813166
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.0741614723494981,
+              "sharpe0": 0.44450276422523505,
+              "mdd": -0.06964287915056644,
+              "calmar": 0.11106449988539752
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "GO_OR_REVIEW",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.2160434825414046,
+            "mdd": -0.39016114447785066,
+            "sharpe0": 1.0019416793376001
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.018421024930350693,
+            "sharpe0": -0.07161444988106291
+          },
+          "delta_abs_mdd": 0.05188474809084953
+        },
+        "reasons": [
+          "delta_cagr not < 1%"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": false
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    },
+    {
+      "strategy_id": "always_leverage_1.5x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.5,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "always",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.3586695857407081,
+        "trades": 65,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 272,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 64,
+        "exit_count_by_trend_off": 0,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.08535146144911449,
+        "exit_cost_total": 0.1334635405382247,
+        "cost_paid_total": 0.21881500198733916
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 4.489936588424494,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.09450676943747816,
+          "vol_ann": 49.18219296814542,
+          "sharpe0": -0.19760410017801822,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -1.0507152419176213,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": "equity went negative; mdd < -1.0 is arithmetically valid but may be misleading"
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.08994517797704862,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.030772900763358778,
+        "delta_vs_base": {
+          "cagr": 0.011410728616818577,
+          "mdd": -0.2773560880255027,
+          "sharpe0": -0.6981031901969365
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.5,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.13506917317185035,
+                "trades": 21,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 20,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.03242852897202951,
+                "exit_cost_total": 0.05034327864207599,
+                "cost_paid_total": 0.08277180761410549,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.9780814490361993,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.14908053934183885,
+                "vol_ann": 0.3887206933848248,
+                "sharpe0": 0.5489524879505281,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.355854876957458,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.41893633892689697,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.033117932148626815,
+              "delta_vs_base": {
+                "cagr": 0.018340652907090638,
+                "mdd": -0.09775954347405025,
+                "sharpe0": -0.04141336665673123
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.5,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "always",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.5033741750072819,
+                "trades": 49,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 48,
+                "exit_count_by_trend_off": 0,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.12042470230775223,
+                "exit_cost_total": 0.19323884990210966,
+                "cost_paid_total": 0.313663552209862,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 10.976434019176573,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.2268452527821636,
+                "vol_ann": 0.24080336618520956,
+                "sharpe0": 0.9698212779098208,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.41817082058881094,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.542470305466917,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.032836831415030465,
+              "delta_vs_base": {
+                "cagr": 0.029222795171109706,
+                "mdd": -0.07989442420180981,
+                "sharpe0": -0.1037348513088423
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.14908053934183885,
+              "sharpe0": 0.5489524879505281,
+              "mdd": -0.355854876957458,
+              "calmar": 0.41893633892689697
+            },
+            "post": {
+              "cagr": 0.2268452527821636,
+              "sharpe0": 0.9698212779098208,
+              "mdd": -0.41817082058881094,
+              "calmar": 0.542470305466917
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.07776471344032476,
+              "sharpe0": 0.42086878995929267,
+              "mdd": -0.062315943631352955,
+              "calmar": 0.12353396654002002
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "GO_OR_REVIEW",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.2268452527821636,
+            "mdd": -0.41817082058881094,
+            "sharpe0": 0.9698212779098208
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.029222795171109706,
+            "sharpe0": -0.1037348513088423
+          },
+          "delta_abs_mdd": 0.07989442420180981
+        },
+        "reasons": [
+          "delta_cagr not < 1%"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": false
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    },
+    {
+      "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.10000000000000009,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "trend",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.049346967416630104,
+        "trades": 139,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 0,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 18,
+        "exit_count_by_trend_off": 120,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.035646028681168146,
+        "exit_cost_total": 0.054668874470963164,
+        "cost_paid_total": 0.09031490315213138
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.806003001667033,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08368469445036553,
+          "vol_ann": 0.3193936598381107,
+          "sharpe0": 0.5307080092731065,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.8626257211672286,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.0970115919301952,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.06607824427480916,
+        "delta_vs_base": {
+          "cagr": 0.0005886536297059486,
+          "mdd": -0.08926656727510995,
+          "sharpe0": 0.030208919254188227
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.10000000000000009,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.016334516151474045,
+                "trades": 47,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 3,
+                "exit_count_by_trend_off": 43,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.015166095749934059,
+                "exit_cost_total": 0.02311870213717066,
+                "cost_paid_total": 0.038284797887104725,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.7991147731440724,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.12709430345621664,
+                "vol_ann": 0.2748025531754221,
+                "sharpe0": 0.5717913854670693,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.27545216473606304,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.4614024492346894,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.07512116316639741,
+              "delta_vs_base": {
+                "cagr": -0.0036455829785315697,
+                "mdd": -0.017356831252655303,
+                "sharpe0": -0.01857446914019001
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.10000000000000009,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.0723736296586395,
+                "trades": 92,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 15,
+                "exit_count_by_trend_off": 76,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.044932095769218076,
+                "exit_cost_total": 0.07010022464557698,
+                "cost_paid_total": 0.115032320414795,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.714647098564242,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.20292360279098443,
+                "vol_ann": 0.19008712398395478,
+                "sharpe0": 1.0674364471092561,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.3466079608866489,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5854556896843649,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.06194989844278944,
+              "delta_vs_base": {
+                "cagr": 0.005301145179930522,
+                "mdd": -0.008331564499647781,
+                "sharpe0": -0.006119682109406943
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.12709430345621664,
+              "sharpe0": 0.5717913854670693,
+              "mdd": -0.27545216473606304,
+              "calmar": 0.4614024492346894
+            },
+            "post": {
+              "cagr": 0.20292360279098443,
+              "sharpe0": 1.0674364471092561,
+              "mdd": -0.3466079608866489,
+              "calmar": 0.5854556896843649
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.07582929933476779,
+              "sharpe0": 0.4956450616421868,
+              "mdd": -0.07115579615058587,
+              "calmar": 0.12405324044967547
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "NO_GO",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.20292360279098443,
+            "mdd": -0.3466079608866489,
+            "sharpe0": 1.0674364471092561
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.005301145179930522,
+            "sharpe0": -0.006119682109406943
+          },
+          "delta_abs_mdd": 0.008331564499647781
+        },
+        "reasons": [
+          "all 3 post conditions met => stop / do not deploy"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": true
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    },
+    {
+      "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.19999999999999996,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "trend",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.09869393483326021,
+        "trades": 139,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 0,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 18,
+        "exit_count_by_trend_off": 120,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.07129205736233625,
+        "exit_cost_total": 0.10933774894192623,
+        "cost_paid_total": 0.18062980630426256
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.840240370181618,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08426839205672132,
+          "vol_ann": 0.3901704221685783,
+          "sharpe0": 0.602061627641484,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.948637696698981,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.08883095448341763,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.06607824427480916,
+        "delta_vs_base": {
+          "cagr": 0.0011723512360617416,
+          "mdd": -0.1752785428068624,
+          "sharpe0": 0.10156253762256573
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.19999999999999996,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.032669032302948084,
+                "trades": 47,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 3,
+                "exit_count_by_trend_off": 43,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.030332191499868093,
+                "exit_cost_total": 0.046237404274341275,
+                "cost_paid_total": 0.07656959577420935,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.7703686002508627,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.12340203880947609,
+                "vol_ann": 0.2809591571928623,
+                "sharpe0": 0.5536105125900176,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.2921761790068391,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.4223548929585651,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.07512116316639741,
+              "delta_vs_base": {
+                "cagr": -0.00733784762527212,
+                "mdd": -0.03408084552343138,
+                "sharpe0": -0.03675534201724173
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.19999999999999996,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.14474725931727883,
+                "trades": 92,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 15,
+                "exit_count_by_trend_off": 76,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.08986419153843606,
+                "exit_cost_total": 0.14020044929115374,
+                "cost_paid_total": 0.23006464082958972,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 9.154201929155958,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.2079855942533786,
+                "vol_ann": 0.19661661821695797,
+                "sharpe0": 1.0597783207902711,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.3545978830011376,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5865393004974916,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.06194989844278944,
+              "delta_vs_base": {
+                "cagr": 0.010363136642324688,
+                "mdd": -0.01632148661413646,
+                "sharpe0": -0.013777808428391936
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.12340203880947609,
+              "sharpe0": 0.5536105125900176,
+              "mdd": -0.2921761790068391,
+              "calmar": 0.4223548929585651
+            },
+            "post": {
+              "cagr": 0.2079855942533786,
+              "sharpe0": 1.0597783207902711,
+              "mdd": -0.3545978830011376,
+              "calmar": 0.5865393004974916
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.0845835554439025,
+              "sharpe0": 0.5061678082002535,
+              "mdd": -0.06242170399429847,
+              "calmar": 0.1641844075389265
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "GO_OR_REVIEW",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.2079855942533786,
+            "mdd": -0.3545978830011376,
+            "sharpe0": 1.0597783207902711
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.010363136642324688,
+            "sharpe0": -0.013777808428391936
+          },
+          "delta_abs_mdd": 0.01632148661413646
+        },
+        "reasons": [
+          "delta_cagr not < 1%"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": false
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    },
+    {
+      "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.30000000000000004,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "trend",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.1471913583376907,
+        "trades": 138,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 44,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 17,
+        "exit_count_by_trend_off": 120,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.10665036150283239,
+        "exit_cost_total": 0.16354825504246698,
+        "cost_paid_total": 0.2701986165452995
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.868833534187924,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08475212819269196,
+          "vol_ann": 5.89029878603412,
+          "sharpe0": -0.033486824844704915,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -1.0315698838302403,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": "equity went negative; mdd < -1.0 is arithmetically valid but may be misleading"
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.08215839713932473,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.06560114503816794,
+        "delta_vs_base": {
+          "cagr": 0.0016560873720323777,
+          "mdd": -0.25821072993812166,
+          "sharpe0": -0.5339859148636231
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.30000000000000004,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.04900354845442235,
+                "trades": 47,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 3,
+                "exit_count_by_trend_off": 43,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.04549828724980213,
+                "exit_cost_total": 0.06935610641151196,
+                "cost_paid_total": 0.11485439366131416,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.7416224273576535,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.11966172197301272,
+                "vol_ann": 0.287401366193982,
+                "sharpe0": 0.5358985442587829,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.3083013647442351,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.38813231356365663,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.07512116316639741,
+              "delta_vs_base": {
+                "cagr": -0.011078164461735485,
+                "mdd": -0.050206031260827344,
+                "sharpe0": -0.054467310348476405
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.30000000000000004,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.21712088897591564,
+                "trades": 92,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 15,
+                "exit_count_by_trend_off": 76,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.1347962873076541,
+                "exit_cost_total": 0.2103006739367307,
+                "cost_paid_total": 0.34509696124438505,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 9.59375675974767,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.21282995949325256,
+                "vol_ann": 0.20332636107177818,
+                "sharpe0": 1.0511018760539443,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.3622667545132139,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5874951450602666,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.06194989844278944,
+              "delta_vs_base": {
+                "cagr": 0.01520750188219866,
+                "mdd": -0.023990358126212752,
+                "sharpe0": -0.022454253164718718
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.11966172197301272,
+              "sharpe0": 0.5358985442587829,
+              "mdd": -0.3083013647442351,
+              "calmar": 0.38813231356365663
+            },
+            "post": {
+              "cagr": 0.21282995949325256,
+              "sharpe0": 1.0511018760539443,
+              "mdd": -0.3622667545132139,
+              "calmar": 0.5874951450602666
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.09316823752023984,
+              "sharpe0": 0.5152033317951614,
+              "mdd": -0.0539653897689788,
+              "calmar": 0.19936283149660994
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "GO_OR_REVIEW",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.21282995949325256,
+            "mdd": -0.3622667545132139,
+            "sharpe0": 1.0511018760539443
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.01520750188219866,
+            "sharpe0": -0.022454253164718718
+          },
+          "delta_abs_mdd": 0.023990358126212752
+        },
+        "reasons": [
+          "delta_cagr not < 1%"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": false
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    },
+    {
+      "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
+      "generated_at_utc": "2026-02-22T08:41:19Z",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+      "params": {
+        "bb_window": 60,
+        "bb_ddof": 0,
+        "entry_z": -1.5,
+        "exit_z": 0.0,
+        "leverage_frac": 0.5,
+        "borrow_apr": 0.035,
+        "max_hold_days": 60,
+        "trading_days": 252,
+        "skip_contaminated": true,
+        "contam_horizon": 60,
+        "z_clear_days": 60,
+        "fee_rate": 0.001425,
+        "tax_rate": 0.001,
+        "slip_bps": 5.0,
+        "cost_on": "lever",
+        "entry_mode": "trend",
+        "trend_rule": "price_gt_ma60",
+        "trend_ma_fast": 20,
+        "trend_ma_slow": 60
+      },
+      "audit": {
+        "rows": 4192,
+        "start_date": "2009-01-02",
+        "end_date": "2026-02-11",
+        "bb_z_non_nan": 4133,
+        "bb_z_first_valid_date": "2009-04-07",
+        "interest_paid_total": 0.20663505249555453,
+        "trades": 94,
+        "skipped_entries_on_forbidden": 0,
+        "skipped_entries_on_nonpositive_equity": 912,
+        "open_at_end": true,
+        "forced_eod_close": 1,
+        "exit_count_by_exit_z": 0,
+        "exit_count_by_max_hold_days": 12,
+        "exit_count_by_trend_off": 81,
+        "exit_count_by_end_of_data": 1,
+        "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+        "same_day_reentry": "not allowed; exit day is always flat",
+        "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+        "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+        "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+        "costs_enabled": true,
+        "cost_on": "lever",
+        "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+        "entry_cost_total": 0.14887395628058825,
+        "exit_cost_total": 0.2284363654099964,
+        "cost_paid_total": 0.37731032169058465
+      },
+      "perf": {
+        "leverage": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.9541190247169693,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08617527525351654,
+          "vol_ann": 8.787005793952813,
+          "sharpe0": -0.19073732039509259,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -1.188833678981475,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": "equity went negative; mdd < -1.0 is arithmetically valid but may be misleading"
+        },
+        "base_only": {
+          "ok": true,
+          "start": 1.0,
+          "end": 3.771765633152447,
+          "n_days": 4192,
+          "years": 16.63095238095238,
+          "cagr": 0.08309604082065958,
+          "vol_ann": 0.2812343046699346,
+          "sharpe0": 0.5004990900189182,
+          "sharpe_note": "rf=0 assumed",
+          "mdd": -0.7733591538921186,
+          "mdd_peak": "2011-01-28",
+          "mdd_trough": "2014-02-05",
+          "mdd_warning": null
+        },
+        "calmar_leverage": 0.07248724256142088,
+        "calmar_base_only": 0.10744818937289159,
+        "turnover_proxy": 0.0446087786259542,
+        "delta_vs_base": {
+          "cagr": 0.0030792344328569587,
+          "mdd": -0.41547452508935645,
+          "sharpe0": -0.6912364104140108
+        }
+      },
+      "segmentation": {
+        "enabled": true,
+        "mode": "auto_break_rank",
+        "split_date": "2014-01-02",
+        "post_start_date": "2014-01-02",
+        "break_rank": 0,
+        "notes": "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). Segment results are NOT chainable into a single continuous equity curve.",
+        "segments": {
+          "pre": {
+            "segment": {
+              "name": "pre",
+              "rows_raw": 1238,
+              "rows_clean": 1238,
+              "start_date": "2009-01-02",
+              "end_date": "2013-12-31"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.5,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 1238,
+                "start_date": "2009-01-02",
+                "end_date": "2013-12-31",
+                "bb_z_non_nan": 1179,
+                "bb_z_first_valid_date": "2009-04-07",
+                "interest_paid_total": 0.08167258075737029,
+                "trades": 47,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 3,
+                "exit_count_by_trend_off": 43,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.07583047874967025,
+                "exit_cost_total": 0.11559351068585322,
+                "cost_paid_total": 0.1914239894355235,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.6841300815712335,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.11203112716163877,
+                "vol_ann": 0.3010368908831812,
+                "sharpe0": 0.5020791516589458,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.3388794550406816,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 1.8278609460372823,
+                "n_days": 1238,
+                "years": 4.908730158730159,
+                "cagr": 0.1307398864347482,
+                "vol_ann": 0.2689622900611901,
+                "sharpe0": 0.5903658546072593,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.25809533348340774,
+                "mdd_peak": "2011-01-28",
+                "mdd_trough": "2011-12-19",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.3305928568263004,
+              "calmar_base_only": 0.5065565683431976,
+              "turnover_proxy": 0.07512116316639741,
+              "delta_vs_base": {
+                "cagr": -0.018708759273109443,
+                "mdd": -0.08078412155727388,
+                "sharpe0": -0.08828670294831353
+              }
+            }
+          },
+          "post": {
+            "segment": {
+              "name": "post",
+              "rows_raw": 2954,
+              "rows_clean": 2954,
+              "start_date": "2014-01-02",
+              "end_date": "2026-02-11"
+            },
+            "ok": true,
+            "summary": {
+              "generated_at_utc": "2026-02-22T08:41:19Z",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v19.post_forbid_fix_and_no_rerun",
+              "params": {
+                "bb_window": 60,
+                "bb_ddof": 0,
+                "entry_z": -1.5,
+                "exit_z": 0.0,
+                "leverage_frac": 0.5,
+                "borrow_apr": 0.035,
+                "max_hold_days": 60,
+                "trading_days": 252,
+                "skip_contaminated": true,
+                "contam_horizon": 60,
+                "z_clear_days": 60,
+                "fee_rate": 0.001425,
+                "tax_rate": 0.001,
+                "slip_bps": 5.0,
+                "cost_on": "lever",
+                "entry_mode": "trend",
+                "trend_rule": "price_gt_ma60",
+                "trend_ma_fast": 20,
+                "trend_ma_slow": 60
+              },
+              "audit": {
+                "rows": 2954,
+                "start_date": "2014-01-02",
+                "end_date": "2026-02-11",
+                "bb_z_non_nan": 2895,
+                "bb_z_first_valid_date": "2014-04-07",
+                "interest_paid_total": 0.3618681482931966,
+                "trades": 92,
+                "skipped_entries_on_forbidden": 0,
+                "skipped_entries_on_nonpositive_equity": 0,
+                "open_at_end": true,
+                "forced_eod_close": 1,
+                "exit_count_by_exit_z": 0,
+                "exit_count_by_max_hold_days": 15,
+                "exit_count_by_trend_off": 76,
+                "exit_count_by_end_of_data": 1,
+                "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
+                "same_day_reentry": "not allowed; exit day is always flat",
+                "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+                "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
+                "lever_leg_pnl_semantics": "gross PnL for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+                "costs_enabled": true,
+                "cost_on": "lever",
+                "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+                "entry_cost_total": 0.22466047884609017,
+                "exit_cost_total": 0.35050112322788457,
+                "cost_paid_total": 0.5751616020739744,
+                "breaks_detected": 0,
+                "break_samples_first5": [],
+                "break_samples_source": "detect_breaks_from_price(segment)",
+                "forbid_mask_applied": false,
+                "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+                "forbid_mask_scope_note": "v19 applies forbid mask ONLY when entry_mode == 'bb'"
+              },
+              "perf_leverage": {
+                "ok": true,
+                "start": 1.0,
+                "end": 10.472866420931087,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.22193830576731677,
+                "vol_ann": 0.2171272828186492,
+                "sharpe0": 1.0321423497870308,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.3767157583117765,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "perf_base_only": {
+                "ok": true,
+                "start": 1.0,
+                "end": 8.275092267972525,
+                "n_days": 2954,
+                "years": 11.718253968253968,
+                "cagr": 0.1976224576110539,
+                "vol_ann": 0.1837913081097499,
+                "sharpe0": 1.073556129218663,
+                "sharpe_note": "rf=0 assumed",
+                "mdd": -0.33827639638700113,
+                "mdd_peak": "2022-01-17",
+                "mdd_trough": "2022-10-25",
+                "mdd_warning": null
+              },
+              "calmar_leverage": 0.5891399573033969,
+              "calmar_base_only": 0.5842040997296373,
+              "turnover_proxy": 0.06194989844278944,
+              "delta_vs_base": {
+                "cagr": 0.024315848156262865,
+                "mdd": -0.03843936192477537,
+                "sharpe0": -0.04141377943163227
+              }
+            }
+          }
+        },
+        "compare": {
+          "ok": true,
+          "basis": "post_minus_pre",
+          "metrics": {
+            "pre": {
+              "cagr": 0.11203112716163877,
+              "sharpe0": 0.5020791516589458,
+              "mdd": -0.3388794550406816,
+              "calmar": 0.3305928568263004
+            },
+            "post": {
+              "cagr": 0.22193830576731677,
+              "sharpe0": 1.0321423497870308,
+              "mdd": -0.3767157583117765,
+              "calmar": 0.5891399573033969
+            },
+            "delta_post_minus_pre": {
+              "cagr": 0.109907178605678,
+              "sharpe0": 0.530063198128085,
+              "mdd": -0.037836303271094884,
+              "calmar": 0.25854710047709645
+            }
+          },
+          "notes": [
+            "Segments are normalized independently (equity starts at 1.0 in each segment).",
+            "Compare block is a summary delta, not a continuous equity backtest across split."
+          ]
+        },
+        "compare_error": null,
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v19."
+      },
+      "post_gonogo": {
+        "rule_id": "post_gonogo_v1",
+        "applies": true,
+        "ok": true,
+        "decision": "GO_OR_REVIEW",
+        "interpretation": {
+          "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
+          "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
+        },
+        "inputs": {
+          "post_leverage": {
+            "cagr": 0.22193830576731677,
+            "mdd": -0.3767157583117765,
+            "sharpe0": 1.0321423497870308
+          },
+          "post_base_only": {
+            "cagr": 0.1976224576110539,
+            "mdd": -0.33827639638700113,
+            "sharpe0": 1.073556129218663
+          },
+          "delta_vs_base": {
+            "cagr": 0.024315848156262865,
+            "sharpe0": -0.04141377943163227
+          },
+          "delta_abs_mdd": 0.03843936192477537
+        },
+        "reasons": [
+          "delta_cagr not < 1%"
+        ],
+        "thresholds": {
+          "delta_sharpe0_lt": 0.0,
+          "delta_abs_mdd_gt": 0.0,
+          "delta_cagr_lt": 0.01
+        },
+        "conditions": {
+          "delta_sharpe0_lt_0": true,
+          "delta_abs_mdd_gt_0": true,
+          "delta_cagr_lt_1pct": false
+        }
+      },
+      "forbid_mask_scope": "bb_only",
+      "forbid_mask_applied": false
+    }
+  ],
+  "compare": {
+    "rows": [
+      {
+        "strategy_id": "bb_conditional",
+        "entry_mode": "bb",
+        "leverage_multiplier": 1.5,
+        "full_cagr": 0.0867142093878972,
+        "full_mdd": -0.7518309267926276,
+        "full_sharpe0": 0.49004955170883907,
+        "full_calmar": 0.1153373801179304,
+        "full_turnover_proxy": 0.016221374045801526,
+        "full_delta_cagr_vs_base": 0.003618168567237623,
+        "full_delta_mdd_vs_base": 0.021528227099490982,
+        "full_delta_sharpe0_vs_base": -0.010449538310079165,
+        "post_ok": true,
+        "post_cagr": 0.20200874406061642,
+        "post_mdd": -0.39929197199344824,
+        "post_sharpe0": 0.9322202862855463,
+        "post_calmar": 0.5059173693177359,
+        "post_delta_cagr_vs_base": 0.004386286449562515,
+        "post_delta_sharpe0_vs_base": -0.14133584293311674,
+        "post_gonogo": "NO_GO",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "always_leverage_1.1x",
+        "entry_mode": "always",
+        "leverage_multiplier": 1.1,
+        "full_cagr": 0.08537526831015496,
+        "full_mdd": -0.8364447684315179,
+        "full_sharpe0": 0.5186007545938375,
+        "full_calmar": 0.10206922385353513,
+        "full_turnover_proxy": 0.032681297709923667,
+        "full_delta_cagr_vs_base": 0.0022792274894953835,
+        "full_delta_mdd_vs_base": -0.06308561453939932,
+        "full_delta_sharpe0_vs_base": 0.01810166457491924,
+        "post_ok": true,
+        "post_cagr": 0.2041037291899146,
+        "post_mdd": -0.35712357839944087,
+        "post_sharpe0": 1.0454842922746608,
+        "post_calmar": 0.5715212927263672,
+        "post_delta_cagr_vs_base": 0.006481271578860692,
+        "post_delta_sharpe0_vs_base": -0.028071836944002282,
+        "post_gonogo": "NO_GO",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "always_leverage_1.2x",
+        "entry_mode": "always",
+        "leverage_multiplier": 1.2,
+        "full_cagr": 0.08758205247685669,
+        "full_mdd": -0.8953442353157726,
+        "full_sharpe0": 0.5488075890750923,
+        "full_calmar": 0.09781941852338838,
+        "full_turnover_proxy": 0.032681297709923667,
+        "full_delta_cagr_vs_base": 0.004486011656197109,
+        "full_delta_mdd_vs_base": -0.12198508142365394,
+        "full_delta_sharpe0_vs_base": 0.04830849905617407,
+        "post_ok": true,
+        "post_cagr": 0.21023136123922948,
+        "post_mdd": -0.37435182620043295,
+        "post_sharpe0": 1.0219452998014105,
+        "post_calmar": 0.5615876470351951,
+        "post_delta_cagr_vs_base": 0.012608903628175572,
+        "post_delta_sharpe0_vs_base": -0.05161082941725259,
+        "post_gonogo": "GO_OR_REVIEW",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "always_leverage_1.3x",
+        "entry_mode": "always",
+        "leverage_multiplier": 1.3,
+        "full_cagr": 0.08972099070446782,
+        "full_mdd": -0.9504608420142165,
+        "full_sharpe0": 0.5988822209690444,
+        "full_calmar": 0.09439735624913395,
+        "full_turnover_proxy": 0.032681297709923667,
+        "full_delta_cagr_vs_base": 0.00662494988380824,
+        "full_delta_mdd_vs_base": -0.17710168812209792,
+        "full_delta_sharpe0_vs_base": 0.09838313095012619,
+        "post_ok": true,
+        "post_cagr": 0.2160434825414046,
+        "post_mdd": -0.39016114447785066,
+        "post_sharpe0": 1.0019416793376001,
+        "post_calmar": 0.5537288517813166,
+        "post_delta_cagr_vs_base": 0.018421024930350693,
+        "post_delta_sharpe0_vs_base": -0.07161444988106291,
+        "post_gonogo": "GO_OR_REVIEW",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "always_leverage_1.5x",
+        "entry_mode": "always",
+        "leverage_multiplier": 1.5,
+        "full_cagr": 0.09450676943747816,
+        "full_mdd": -1.0507152419176213,
+        "full_sharpe0": -0.19760410017801822,
+        "full_calmar": 0.08994517797704862,
+        "full_turnover_proxy": 0.030772900763358778,
+        "full_delta_cagr_vs_base": 0.011410728616818577,
+        "full_delta_mdd_vs_base": -0.2773560880255027,
+        "full_delta_sharpe0_vs_base": -0.6981031901969365,
+        "post_ok": true,
+        "post_cagr": 0.2268452527821636,
+        "post_mdd": -0.41817082058881094,
+        "post_sharpe0": 0.9698212779098208,
+        "post_calmar": 0.542470305466917,
+        "post_delta_cagr_vs_base": 0.029222795171109706,
+        "post_delta_sharpe0_vs_base": -0.1037348513088423,
+        "post_gonogo": "GO_OR_REVIEW",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
+        "entry_mode": "trend",
+        "leverage_multiplier": 1.1,
+        "full_cagr": 0.08368469445036553,
+        "full_mdd": -0.8626257211672286,
+        "full_sharpe0": 0.5307080092731065,
+        "full_calmar": 0.0970115919301952,
+        "full_turnover_proxy": 0.06607824427480916,
+        "full_delta_cagr_vs_base": 0.0005886536297059486,
+        "full_delta_mdd_vs_base": -0.08926656727510995,
+        "full_delta_sharpe0_vs_base": 0.030208919254188227,
+        "post_ok": true,
+        "post_cagr": 0.20292360279098443,
+        "post_mdd": -0.3466079608866489,
+        "post_sharpe0": 1.0674364471092561,
+        "post_calmar": 0.5854556896843649,
+        "post_delta_cagr_vs_base": 0.005301145179930522,
+        "post_delta_sharpe0_vs_base": -0.006119682109406943,
+        "post_gonogo": "NO_GO",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
+        "entry_mode": "trend",
+        "leverage_multiplier": 1.2,
+        "full_cagr": 0.08426839205672132,
+        "full_mdd": -0.948637696698981,
+        "full_sharpe0": 0.602061627641484,
+        "full_calmar": 0.08883095448341763,
+        "full_turnover_proxy": 0.06607824427480916,
+        "full_delta_cagr_vs_base": 0.0011723512360617416,
+        "full_delta_mdd_vs_base": -0.1752785428068624,
+        "full_delta_sharpe0_vs_base": 0.10156253762256573,
+        "post_ok": true,
+        "post_cagr": 0.2079855942533786,
+        "post_mdd": -0.3545978830011376,
+        "post_sharpe0": 1.0597783207902711,
+        "post_calmar": 0.5865393004974916,
+        "post_delta_cagr_vs_base": 0.010363136642324688,
+        "post_delta_sharpe0_vs_base": -0.013777808428391936,
+        "post_gonogo": "GO_OR_REVIEW",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
+        "entry_mode": "trend",
+        "leverage_multiplier": 1.3,
+        "full_cagr": 0.08475212819269196,
+        "full_mdd": -1.0315698838302403,
+        "full_sharpe0": -0.033486824844704915,
+        "full_calmar": 0.08215839713932473,
+        "full_turnover_proxy": 0.06560114503816794,
+        "full_delta_cagr_vs_base": 0.0016560873720323777,
+        "full_delta_mdd_vs_base": -0.25821072993812166,
+        "full_delta_sharpe0_vs_base": -0.5339859148636231,
+        "post_ok": true,
+        "post_cagr": 0.21282995949325256,
+        "post_mdd": -0.3622667545132139,
+        "post_sharpe0": 1.0511018760539443,
+        "post_calmar": 0.5874951450602666,
+        "post_delta_cagr_vs_base": 0.01520750188219866,
+        "post_delta_sharpe0_vs_base": -0.022454253164718718,
+        "post_gonogo": "GO_OR_REVIEW",
+        "rank_basis": "post"
+      },
+      {
+        "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
+        "entry_mode": "trend",
+        "leverage_multiplier": 1.5,
+        "full_cagr": 0.08617527525351654,
+        "full_mdd": -1.188833678981475,
+        "full_sharpe0": -0.19073732039509259,
+        "full_calmar": 0.07248724256142088,
+        "full_turnover_proxy": 0.0446087786259542,
+        "full_delta_cagr_vs_base": 0.0030792344328569587,
+        "full_delta_mdd_vs_base": -0.41547452508935645,
+        "full_delta_sharpe0_vs_base": -0.6912364104140108,
+        "post_ok": true,
+        "post_cagr": 0.22193830576731677,
+        "post_mdd": -0.3767157583117765,
+        "post_sharpe0": 1.0321423497870308,
+        "post_calmar": 0.5891399573033969,
+        "post_delta_cagr_vs_base": 0.024315848156262865,
+        "post_delta_sharpe0_vs_base": -0.04141377943163227,
+        "post_gonogo": "GO_OR_REVIEW",
+        "rank_basis": "post"
+      }
+    ],
+    "ranking_policy": "prefer post (calmar desc, sharpe0 desc) when post_ok=true; else fallback to full",
+    "top3_by_policy": [
+      "trend_leverage_price_gt_ma60_1.5x",
+      "trend_leverage_price_gt_ma60_1.3x",
+      "trend_leverage_price_gt_ma60_1.2x"
+    ]
+  },
+  "notes": [
+    "All strategies share the same cost/interest model (fee/tax/slippage/borrow_apr).",
+    "Turnover_proxy is state-change frequency, not dollar turnover.",
+    "Post Go/No-Go: GO_OR_REVIEW is NOT a pass; it only means the stop rule did not trigger."
+  ]
+}
