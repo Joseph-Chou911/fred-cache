@@ -6,6 +6,11 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
+v5 (2026-02-23):
+- FIX: Markdown tables could break if a list item line (e.g. "- note_full: ...") directly precedes a table.
+  Many renderers treat the table as part of a list; without indentation it won't parse as a table.
+  -> Change such notes to normal paragraph lines and insert blank lines before tables.
+
 v4 (2026-02-23):
 - Filtered ranking (renderer_rank_filter_v2):
   * exclude(ok=false)
@@ -15,10 +20,9 @@ v4 (2026-02-23):
   * exclude(post_gonogo=NO_GO)
   * exclude(missing rank metrics on chosen basis)
 - Emit top3_recommended and exclusions summary
-- Add deterministic always-vs-trend comparison block with checkmarks on POST basis when available
-- Add FULL segment caveat note: FULL_* metrics may be contaminated by known data singularity around 2014;
-  treat FULL as audit-only and prefer POST for decision.
-- Keep NA-safe behavior; still works with lite JSON (no trades details required)
+- Add deterministic always-vs-trend comparison block
+- Add FULL segment caveat note (data singularity around 2014)
+- Keep NA-safe behavior; works with lite JSON
 - Escape Markdown table cells to avoid breaking tables (| and newlines)
 - Deterministic sorting tie-breaker by strategy_id
 """
@@ -34,10 +38,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-23.v4.filtered_ranking_v2.fail_eq50.full_note.compare_v1"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-23.v5.md_table_fix_v1"
 
 # === Deterministic thresholds (audit-grade) ===
-# "Exploded / invalid" hard-fail on full/post (kept from prior renderer policy)
 HARD_FAIL_MDD_LE_NEG_100 = -1.0  # -100%
 HARD_FAIL_EQUITY_MIN_LE = 0.0
 HARD_FAIL_NEG_DAYS_GT = 0
@@ -291,9 +294,6 @@ def _has_rank_metrics(r: Dict[str, Any]) -> bool:
 
 
 def _hard_fail_full_post_reasons(r: Dict[str, Any]) -> List[str]:
-    """
-    Exploded/invalid conditions checked on BOTH full and post (kept from prior policy).
-    """
     reasons: List[str] = []
 
     full_mdd = _to_float(r.get("full_mdd"))
@@ -324,10 +324,6 @@ def _hard_fail_full_post_reasons(r: Dict[str, Any]) -> List[str]:
 
 
 def _basis_fail_reasons(r: Dict[str, Any]) -> List[str]:
-    """
-    New rule: asset equity down 50% from start => FAIL (equity_min <= 0.5) on rank_basis segment.
-    This matches a practical "I would stop / forced de-risk" threshold more directly than MDD.
-    """
     reasons: List[str] = []
     if r.get("rank_basis") == "post":
         e = _to_float(r.get("post_equity_min"))
@@ -394,12 +390,6 @@ def _filter_rows(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict
 
 
 def _policy_compare_pair(trend_row: Dict[str, Any], always_row: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Deterministic always vs trend comparison (compare_v1):
-    - Prefer POST if BOTH have post_ok=True, else use FULL.
-    - Winner = higher calmar; tie-breaker = higher sharpe0; final tie = strategy_id.
-    Returns (basis, winner_id).
-    """
     use_post = _is_true(trend_row.get("post_ok")) and _is_true(always_row.get("post_ok"))
     if use_post:
         basis = "post"
@@ -440,17 +430,18 @@ def _render_comparison_block(rows_all: List[Dict[str, Any]], excluded: Dict[str,
             if trend_id in by_id:
                 pairs.append((suffix, trend_id, sid))
 
+    lines.append("## Deterministic Always vs Trend (checkmarks)")
     if not pairs:
-        lines.append("## Deterministic Always vs Trend (checkmarks)")
-        lines.append("- N/A (no always/trend pairs detected by naming convention)")
+        lines.append("compare_policy: `N/A (no always/trend pairs detected by naming convention)`")
         lines.append("")
         return lines
 
     pairs = sorted(set(pairs), key=lambda x: x[0])
 
-    lines.append("## Deterministic Always vs Trend (checkmarks)")
-    lines.append("- compare_policy: `compare_v1: for same L, compare post if both post_ok else full; winner=calmar desc, then sharpe0 desc, then id`")
+    # IMPORTANT: not a list item; keep table parsing robust across renderers.
+    lines.append("compare_policy: `compare_v1: for same L, compare post if both post_ok else full; winner=calmar desc, then sharpe0 desc, then id`")
     lines.append("")
+
     lines.append("| L | basis | trend_id | always_id | winner | verdict |")
     lines.append("|---:|---|---|---|---|---|")
 
@@ -464,7 +455,8 @@ def _render_comparison_block(rows_all: List[Dict[str, Any]], excluded: Dict[str,
                 note.append(f"trend excluded: {', '.join(excluded[trend_id])}")
             if always_id in excluded:
                 note.append(f"always excluded: {', '.join(excluded[always_id])}")
-            msg = "; ".join(note)[:160]
+            msg = "; ".join(note)
+            msg = msg[:160]
             lines.append(f"| {suffix} | N/A | {_escape_md_cell(trend_id)} | {_escape_md_cell(always_id)} | N/A | N/A ({_escape_md_cell(msg)}) |")
             continue
 
@@ -533,10 +525,13 @@ def _render_md(obj: Dict[str, Any]) -> str:
     rows_sorted_all = _sort_rows_like_policy(rows_all)
 
     lines.append("## Strategies")
+    # IMPORTANT: not a list item; keep table parsing robust across renderers.
     lines.append(
-        "- note_full: `FULL_* columns may be contaminated by a known data singularity issue. "
+        "note_full: `FULL_* columns may be contaminated by a known data singularity issue. "
         "Do not use FULL alone for go/no-go; use POST_* as primary.`"
     )
+    lines.append("")  # <-- critical blank line before table
+
     lines.append(
         "| id | ok | entry_mode | L | "
         "full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | "
@@ -544,10 +539,7 @@ def _render_md(obj: Dict[str, Any]) -> str:
         "post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades |"
     )
     lines.append(
-        "|---|---:|---|---:|"
-        "---:|---:|---:|---:|---:|---:|---:|"
-        "---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
-        "---|---|---:|---:|---:|---:|---:|"
+        "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|"
     )
 
     for r in rows_sorted_all:
