@@ -1,6 +1,6 @@
 {
   "schema_version": "taiwan_margin_financing_latest_v1",
-  "generated_at_utc": "2026-02-21T14:53:22Z",
+  "generated_at_utc": "2026-02-22T14:52:49Z",
   "series": {
     "TWSE": {
       "source": "HiStock",
@@ -172,7 +172,7 @@
         "raw": "億",
         "source": "colname:融資增加(億)"
       },
-      "fetched_at_utc": "2026-02-21T14:53:22Z",
+      "fetched_at_utc": "2026-02-22T14:52:50Z",
       "http_error": null,
       "rows_count": 30
     },
@@ -346,7 +346,7 @@
         "raw": "億",
         "source": "colname:融資增加(億)"
       },
-      "fetched_at_utc": "2026-02-21T14:53:23Z",
+      "fetched_at_utc": "2026-02-22T14:52:51Z",
       "http_error": null,
       "rows_count": 30
     }
