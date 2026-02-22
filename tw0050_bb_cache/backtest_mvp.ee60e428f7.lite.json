@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-22T23:30:46Z",
+  "generated_at_utc": "2026-02-22T23:37:29Z",
   "schema_version": "v26.4",
   "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
   "inputs": {
@@ -60,7 +60,7 @@
     {
       "strategy_id": "bb_conditional",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -192,7 +192,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -324,7 +324,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -526,7 +526,7 @@
     {
       "strategy_id": "always_leverage_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -658,7 +658,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -790,7 +790,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -992,7 +992,7 @@
     {
       "strategy_id": "always_leverage_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -1124,7 +1124,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -1256,7 +1256,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -1458,7 +1458,7 @@
     {
       "strategy_id": "always_leverage_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -1590,7 +1590,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -1722,7 +1722,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -1924,7 +1924,7 @@
     {
       "strategy_id": "always_leverage_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -2056,7 +2056,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -2188,7 +2188,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -2393,7 +2393,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -2525,7 +2525,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -2657,7 +2657,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -2859,7 +2859,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -2991,7 +2991,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -3123,7 +3123,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -3325,7 +3325,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -3457,7 +3457,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -3589,7 +3589,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -3794,7 +3794,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-22T23:30:46Z",
+      "generated_at_utc": "2026-02-22T23:37:29Z",
       "schema_version": "v26.4",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
       "params": {
@@ -3926,7 +3926,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:29Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {
@@ -4058,7 +4058,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-22T23:30:46Z",
+              "generated_at_utc": "2026-02-22T23:37:30Z",
               "schema_version": "v26.4",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches",
               "params": {

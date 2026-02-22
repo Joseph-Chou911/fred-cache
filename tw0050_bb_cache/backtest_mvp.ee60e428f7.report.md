@@ -1,8 +1,8 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-22T23:30:46Z`
+- generated_at_utc: `2026-02-22T23:37:29Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-23.v4.filtered_ranking_v2.fail_eq50.full_note.compare_v1`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-23.v5.md_table_fix_v1`
 - suite_ok: `True`
 
 ## Ranking (policy)
@@ -13,7 +13,8 @@
 - top3_raw_from_suite: `trend_leverage_price_gt_ma60_1.2x, trend_leverage_price_gt_ma60_1.1x, always_leverage_1.1x`
 
 ## Strategies
-- note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`
+note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`
+
 | id | ok | entry_mode | L | full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades |
 |---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|
 | trend_leverage_price_gt_ma60_1.5x | True | trend | 1.50 | 8.61% | -118.88% | -0.194 | 0.072 | 0.30% | -41.55% | -0.694 | True | 2014-01-02 | 2014-01-02 | 2954 | 11.718 | 22.18% | -37.67% | 1.030 | 0.589 | 2.42% | -3.84% | -0.044 | GO_OR_REVIEW | post | 1422 | -0.40 | 0 | 0.95 | 94 |
@@ -39,7 +40,7 @@
 - trend_leverage_price_gt_ma60_1.5x: `HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0`
 
 ## Deterministic Always vs Trend (checkmarks)
-- compare_policy: `compare_v1: for same L, compare post if both post_ok else full; winner=calmar desc, then sharpe0 desc, then id`
+compare_policy: `compare_v1: for same L, compare post if both post_ok else full; winner=calmar desc, then sharpe0 desc, then id`
 
 | L | basis | trend_id | always_id | winner | verdict |
 |---:|---|---|---|---|---|
