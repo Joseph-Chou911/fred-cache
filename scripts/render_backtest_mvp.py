@@ -6,12 +6,19 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
-v2 (2026-02-22):
-- Harden trades_n extraction: if audit.trades is a list, use len(list)
-- Escape Markdown table cells to avoid breaking tables (| and newlines)
-- Add POST delta MDD column for symmetry with FULL deltas
-- Deterministic sorting tie-breaker by strategy_id
-- Keep NA-safe behavior; still works with lite JSON (no trades details required)
+v3 (2026-02-22):
+- Compute renderer-side recommendation using a strict, auditable filter:
+  * EXCLUDE ok=false
+  * EXCLUDE hard_fail (negative equity / MDD <= -100% / negative equity days)
+  * EXCLUDE post_go/no-go == NO_GO
+  * EXCLUDE missing rank metrics for the chosen rank_basis (post/full)
+- Sort table so eligible strategies come first (same policy order), then excluded ones.
+- Report both:
+  * top3_recommended (renderer computed)
+  * top3_raw_from_suite (if provided) for comparison
+- Add an Exclusions section with reasons (audit-friendly)
+- Keep NA-safe behavior; still works with lite JSON
+- Keep Markdown cell escaping for tables
 """
 
 from __future__ import annotations
@@ -25,7 +32,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-22.v2.harden_md_escape_post_dmdd"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-22.v3.filtered_ranking_v1"
+
+
+RENDERER_RANK_FILTER_POLICY = (
+    "renderer_rank_filter_v1: exclude(ok=false); exclude(hard_fail: equity_min<=0 or "
+    "equity_negative_days>0 or mdd<=-100% on full/post); exclude(post_gonogo=NO_GO); "
+    "exclude(missing rank metrics on chosen basis)"
+)
 
 
 def utc_now_iso() -> str:
@@ -216,7 +230,7 @@ def _extract_gonogo(strat: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _rank_basis(strat: Dict[str, Any], post_ok: bool) -> str:
+def _rank_basis(post_ok: bool) -> str:
     # keep the same policy label as your suite: post if post_ok else full
     return "post" if post_ok else "full"
 
@@ -233,6 +247,9 @@ def _mk_row(obj: Dict[str, Any], strat: Dict[str, Any]) -> Dict[str, Any]:
     post = _extract_post_metrics(strat)
     gg = _extract_gonogo(strat)
 
+    post_ok = bool(post.get("post_ok", False))
+    basis = _rank_basis(post_ok)
+
     return {
         "id": sid,
         "ok": ok,
@@ -244,23 +261,121 @@ def _mk_row(obj: Dict[str, Any], strat: Dict[str, Any]) -> Dict[str, Any]:
         "post_gonogo_rule": gg.get("rule_id"),
         "post_gonogo_conditions": gg.get("conditions"),
         "post_gonogo_reasons": gg.get("reasons"),
-        "rank_basis": _rank_basis(strat, post.get("post_ok", False)),
+        "rank_basis": basis,
+        # renderer annotations (filled later)
+        "hard_fail": False,
+        "excluded": False,
+        "excluded_reasons": [],
+        "eligible": False,
     }
 
 
-def _sort_rows_like_policy(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    # Follow suite policy:
-    # prefer post (calmar desc, sharpe0 desc) when post_ok=True; else fallback to full
-    def finite_or_neginf(x: Any) -> float:
-        v = _to_float(x)
-        return float(v) if v is not None else float("-inf")
+def _finite_or_neginf(x: Any) -> float:
+    v = _to_float(x)
+    return float(v) if v is not None else float("-inf")
 
+
+def _has_rank_metrics(r: Dict[str, Any]) -> bool:
+    """
+    Eligible for ranking requires at least one finite metric for the chosen basis:
+    - post basis: post_calmar or post_sharpe0
+    - full basis: full_calmar or full_sharpe0
+    """
+    basis = _fmt_str(r.get("rank_basis"))
+    if basis == "post":
+        c = _to_float(r.get("post_calmar"))
+        s = _to_float(r.get("post_sharpe0"))
+        return (c is not None) or (s is not None)
+    c = _to_float(r.get("full_calmar"))
+    s = _to_float(r.get("full_sharpe0"))
+    return (c is not None) or (s is not None)
+
+
+def _hard_fail_reasons(r: Dict[str, Any]) -> List[str]:
+    """
+    Hard-fail = survival impossible / not meaningful to recommend.
+    Uses only fields already present in suite JSON.
+    """
+    reasons: List[str] = []
+
+    # FULL hard-fail checks
+    mdd_full = _to_float(r.get("full_mdd"))   # expected fractional (e.g., -0.75)
+    if mdd_full is not None and mdd_full <= -1.0:
+        reasons.append("HARD_FAIL_FULL_MDD_LE_-100PCT")
+
+    eqmin_full = _to_float(r.get("full_equity_min"))
+    if eqmin_full is not None and eqmin_full <= 0.0:
+        reasons.append("HARD_FAIL_FULL_EQUITY_MIN_LE_0")
+
+    neg_full = None
+    try:
+        neg_full = int(r.get("full_neg_days")) if r.get("full_neg_days") is not None else None
+    except Exception:
+        neg_full = None
+    if neg_full is not None and neg_full > 0:
+        reasons.append("HARD_FAIL_FULL_NEG_DAYS_GT_0")
+
+    # POST hard-fail checks (if present)
+    mdd_post = _to_float(r.get("post_mdd"))
+    if mdd_post is not None and mdd_post <= -1.0:
+        reasons.append("HARD_FAIL_POST_MDD_LE_-100PCT")
+
+    eqmin_post = _to_float(r.get("post_equity_min"))
+    if eqmin_post is not None and eqmin_post <= 0.0:
+        reasons.append("HARD_FAIL_POST_EQUITY_MIN_LE_0")
+
+    neg_post = None
+    try:
+        neg_post = int(r.get("post_neg_days")) if r.get("post_neg_days") is not None else None
+    except Exception:
+        neg_post = None
+    if neg_post is not None and neg_post > 0:
+        reasons.append("HARD_FAIL_POST_NEG_DAYS_GT_0")
+
+    return reasons
+
+
+def _apply_renderer_filters(rows: List[Dict[str, Any]]) -> None:
+    """
+    Mutates rows with:
+    - hard_fail
+    - excluded / excluded_reasons
+    - eligible
+    """
+    for r in rows:
+        reasons: List[str] = []
+
+        ok = bool(r.get("ok"))
+        if not ok:
+            reasons.append("EXCLUDE_OK_FALSE")
+
+        hf = _hard_fail_reasons(r)
+        if hf:
+            reasons.extend(hf)
+
+        dec = _fmt_str(r.get("post_gonogo"))
+        if dec == "NO_GO":
+            reasons.append("EXCLUDE_POST_GONOGO_NO_GO")
+
+        if not _has_rank_metrics(r):
+            reasons.append("EXCLUDE_MISSING_RANK_METRICS")
+
+        hard_fail = any(x.startswith("HARD_FAIL_") for x in reasons)
+        excluded = len(reasons) > 0
+
+        r["hard_fail"] = hard_fail
+        r["excluded"] = excluded
+        r["excluded_reasons"] = reasons
+        r["eligible"] = (not excluded)
+
+
+def _sort_rows_like_policy(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    # prefer post (calmar desc, sharpe0 desc) when post_ok=True; else fallback to full
     def key(r: Dict[str, Any]) -> Tuple[float, float, str]:
-        # tie-breaker by id for deterministic output
-        rid = _fmt_str(r.get("id"))
+        rid = _fmt_str(r.get("id"))  # tie-breaker for deterministic output
         if _is_true(r.get("post_ok")):
-            return (finite_or_neginf(r.get("post_calmar")), finite_or_neginf(r.get("post_sharpe0")), rid)
-        return (finite_or_neginf(r.get("full_calmar")), finite_or_neginf(r.get("full_sharpe0")), rid)
+            return (_finite_or_neginf(r.get("post_calmar")), _finite_or_neginf(r.get("post_sharpe0")), rid)
+        return (_finite_or_neginf(r.get("full_calmar")), _finite_or_neginf(r.get("full_sharpe0")), rid)
 
     return sorted(rows, key=key, reverse=True)
 
@@ -274,7 +389,7 @@ def _render_md(obj: Dict[str, Any]) -> str:
 
     compare = obj.get("compare") or {}
     ranking_policy = compare.get("ranking_policy")
-    top3 = compare.get("top3_by_policy")
+    top3_raw = compare.get("top3_by_policy")
 
     lines: List[str] = []
     lines.append("# Backtest MVP Summary")
@@ -286,19 +401,36 @@ def _render_md(obj: Dict[str, Any]) -> str:
         lines.append(f"- suite_ok: `{_fmt_str(suite_ok)}`")
     lines.append("")
 
-    # ranking block
-    lines.append("## Ranking (policy)")
-    lines.append(f"- ranking_policy: `{_fmt_str(ranking_policy)}`")
-    if isinstance(top3, list):
-        lines.append(f"- top3_by_policy: `{', '.join([str(x) for x in top3])}`")
-    else:
-        lines.append(f"- top3_by_policy: `{_fmt_str(top3)}`")
-    lines.append("")
-
     # build rows
     strategies = _strategy_list(obj)
     rows = [_mk_row(obj, s) for s in strategies]
-    rows_sorted = _sort_rows_like_policy(rows)
+    _apply_renderer_filters(rows)
+
+    eligible = [r for r in rows if r.get("eligible") is True]
+    excluded = [r for r in rows if r.get("eligible") is not True]
+
+    eligible_sorted = _sort_rows_like_policy(eligible)
+    excluded_sorted = _sort_rows_like_policy(excluded)
+    rows_sorted = eligible_sorted + excluded_sorted
+
+    top3_recommended = [r.get("id") for r in eligible_sorted[:3] if r.get("id") is not None]
+
+    # ranking block
+    lines.append("## Ranking (policy)")
+    lines.append(f"- ranking_policy: `{_fmt_str(ranking_policy)}`")
+    lines.append(f"- renderer_filter_policy: `{RENDERER_RANK_FILTER_POLICY}`")
+
+    if top3_recommended:
+        lines.append(f"- top3_recommended: `{', '.join([str(x) for x in top3_recommended])}`")
+    else:
+        lines.append("- top3_recommended: `N/A (no eligible strategies after filters)`")
+
+    # keep raw top3 from suite for comparison (do not treat as recommendation)
+    if isinstance(top3_raw, list):
+        lines.append(f"- top3_raw_from_suite: `{', '.join([str(x) for x in top3_raw])}`")
+    else:
+        lines.append(f"- top3_raw_from_suite: `{_fmt_str(top3_raw)}`")
+    lines.append("")
 
     # table header
     lines.append("## Strategies")
@@ -355,6 +487,32 @@ def _render_md(obj: Dict[str, Any]) -> str:
         )
 
     lines.append("")
+
+    # exclusions summary (audit-friendly)
+    lines.append("## Exclusions (not eligible for recommendation)")
+    if excluded_sorted:
+        # simple counters
+        n_total = len(rows)
+        n_elig = len(eligible_sorted)
+        n_ex = len(excluded_sorted)
+        n_hf = sum(1 for r in excluded_sorted if r.get("hard_fail") is True)
+        n_nogo = sum(1 for r in excluded_sorted if "EXCLUDE_POST_GONOGO_NO_GO" in (r.get("excluded_reasons") or []))
+        n_okfalse = sum(1 for r in excluded_sorted if "EXCLUDE_OK_FALSE" in (r.get("excluded_reasons") or []))
+        n_miss = sum(1 for r in excluded_sorted if "EXCLUDE_MISSING_RANK_METRICS" in (r.get("excluded_reasons") or []))
+
+        lines.append(f"- total_strategies: `{n_total}`")
+        lines.append(f"- eligible: `{n_elig}`")
+        lines.append(f"- excluded: `{n_ex}` (hard_fail={n_hf}, post_NO_GO={n_nogo}, ok_false={n_okfalse}, missing_rank_metrics={n_miss})")
+        lines.append("")
+        for r in excluded_sorted:
+            rid = _escape_md_cell(r.get("id"))
+            rs = r.get("excluded_reasons") or []
+            rs_s = ", ".join([_escape_md_cell(x) for x in rs]) if rs else "N/A"
+            lines.append(f"- {rid}: `{rs_s}`")
+        lines.append("")
+    else:
+        lines.append("- N/A (no exclusions)")
+        lines.append("")
 
     # optional audit appendix: show NO_GO details (conditions/reasons) for transparency
     lines.append("## Post Go/No-Go Details (compact)")
