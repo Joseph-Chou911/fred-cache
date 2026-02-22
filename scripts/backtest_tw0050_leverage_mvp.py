@@ -8,30 +8,14 @@ MVP backtest: "fixed base position + opportunistic leveraged add-on"
 - Leverage leg: when entry trigger fires, borrow (leverage_frac * equity) to buy extra shares.
   Exit when z >= exit_z OR max_hold_days reached.
 
-CRITICAL FIX (v4):
-- Read break_samples (or thresholds) from stats_latest.json and build a contamination mask.
-- Skip entries that fall into contaminated windows to avoid trading on known broken segments
-  (e.g., 2014-01-02 ratio~0.249).
+v5 FIX:
+- Add --cache_dir for workflow compatibility.
+- Default paths derived from cache_dir when explicit paths are not provided.
 
-Contamination mask (conservative, deterministic):
-For each detected break at index b:
-- forbid entry indices in [b - contam_horizon,  b + z_clear_days - 1]
-  where contam_horizon defaults to max_hold_days,
-        z_clear_days defaults to bb_window (rolling window contamination after break).
+Also includes:
+- robust max drawdown peak/trough detection (datetime-safe)
+- break_samples from stats_latest.json -> contamination entry skip mask
 
-This aims to:
-(1) prevent opening trades that could include the break during the hold window
-(2) prevent using contaminated BB-z until the rolling window clears
-
-Notes:
-- This patch does NOT "heal" or adjust price levels; it only prevents contaminated entries.
-- If your price series is fundamentally mis-scaled across a long segment, you still need a clean source
-  for a truly valid backtest. This script will at least stop the most obvious false entries.
-
-Outputs:
-- JSON summary (out_json)
-- Optional equity CSV (out_equity_csv)
-- Optional trades CSV (out_trades_csv)
 """
 
 from __future__ import annotations
@@ -47,7 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v4.cleanmask"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v5.cache_dir_compat"
 
 
 def utc_now_iso() -> str:
@@ -73,14 +57,12 @@ def _pick_price_col(df: pd.DataFrame, requested: str) -> str:
     if req in df.columns:
         return req
 
-    # common aliases
     aliases = {
         "adjclose": ["adjclose", "adj_close", "adj close", "Adj Close", "AdjClose"],
         "close": ["close", "Close", "CLOSE"],
         "date": ["date", "Date", "DATE"],
     }
 
-    # if requested is "adjclose", try its aliases
     key = req.lower().replace("_", "").replace(" ", "")
     for k, opts in aliases.items():
         k2 = k.lower().replace("_", "").replace(" ", "")
@@ -89,7 +71,6 @@ def _pick_price_col(df: pd.DataFrame, requested: str) -> str:
                 if c in df.columns:
                     return c
 
-    # otherwise try exact-ish normalize match
     norm_cols = {c.lower().replace("_", "").replace(" ", ""): c for c in df.columns}
     if key in norm_cols:
         return norm_cols[key]
@@ -103,7 +84,6 @@ def load_price_csv(path: str, price_col: str) -> pd.DataFrame:
 
     df = pd.read_csv(path)
 
-    # find date column
     date_col = None
     for c in ("date", "Date", "DATE"):
         if c in df.columns:
@@ -111,7 +91,6 @@ def load_price_csv(path: str, price_col: str) -> pd.DataFrame:
             break
 
     if date_col is None:
-        # heuristic: if first column is date-like
         c0 = df.columns[0]
         try:
             pd.to_datetime(df[c0].iloc[0])
@@ -128,7 +107,6 @@ def load_price_csv(path: str, price_col: str) -> pd.DataFrame:
     df = df.assign(price=px).dropna(subset=["price"])
     df = df[df["price"] > 0].copy()
 
-    # normalize index to date (no tz) for cleaner JSON
     df.index = pd.to_datetime(df.index).tz_localize(None)
     return df[["price"]]
 
@@ -141,10 +119,7 @@ def compute_bb_z(price: pd.Series, window: int, ddof: int) -> pd.Series:
     return z
 
 
-def detect_breaks_from_price(
-    df: pd.DataFrame, ratio_hi: float, ratio_lo: float
-) -> List[Dict[str, Any]]:
-    """Detect breaks by consecutive price ratio thresholds."""
+def detect_breaks_from_price(df: pd.DataFrame, ratio_hi: float, ratio_lo: float) -> List[Dict[str, Any]]:
     p = df["price"].values
     idx = df.index
     out: List[Dict[str, Any]] = []
@@ -169,17 +144,9 @@ def detect_breaks_from_price(
 
 
 def load_break_info_from_stats(stats_json_path: Optional[str]) -> Tuple[Optional[float], Optional[float], List[Dict[str, Any]]]:
-    """
-    Try to read:
-      - break_ratio_hi / break_ratio_lo from stats_latest.json["break_detection"]
-      - break_samples from various likely locations
-    Returns (hi, lo, samples)
-    """
     if not stats_json_path:
         return None, None, []
-
     if not os.path.exists(stats_json_path):
-        # do not fail hard; allow fallback detection from price CSV
         return None, None, []
 
     with open(stats_json_path, "r", encoding="utf-8") as f:
@@ -189,7 +156,6 @@ def load_break_info_from_stats(stats_json_path: Optional[str]) -> Tuple[Optional
     hi = _safe_float(bd.get("break_ratio_hi"))
     lo = _safe_float(bd.get("break_ratio_lo"))
 
-    # common places to stash samples
     samples = (
         st.get("break_samples")
         or bd.get("break_samples")
@@ -197,12 +163,10 @@ def load_break_info_from_stats(stats_json_path: Optional[str]) -> Tuple[Optional
         or []
     )
 
-    # normalize samples shape if present
     norm: List[Dict[str, Any]] = []
     if isinstance(samples, list):
         for s in samples:
             if isinstance(s, dict):
-                # require at least break_date
                 if "break_date" in s or ("date" in s and "idx" in s):
                     d = dict(s)
                     if "break_date" not in d and "date" in d:
@@ -212,11 +176,6 @@ def load_break_info_from_stats(stats_json_path: Optional[str]) -> Tuple[Optional
 
 
 def align_break_indices(df: pd.DataFrame, samples: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Ensure each sample has a valid integer 'idx' aligned to df row positions.
-    If sample idx exists but date mismatches, re-align by date.
-    If sample idx missing, align by break_date.
-    """
     out: List[Dict[str, Any]] = []
     date_to_pos = {d.strftime("%Y-%m-%d"): i for i, d in enumerate(df.index)}
     for s in samples:
@@ -229,7 +188,6 @@ def align_break_indices(df: pd.DataFrame, samples: List[Dict[str, Any]]) -> List
             try:
                 idx_pos = int(s_idx)
                 if 0 <= idx_pos < len(df):
-                    # verify date
                     df_date = df.index[idx_pos].strftime("%Y-%m-%d")
                     if bdate and df_date != bdate and bdate in date_to_pos:
                         idx_pos = date_to_pos[bdate]
@@ -243,7 +201,6 @@ def align_break_indices(df: pd.DataFrame, samples: List[Dict[str, Any]]) -> List
                 idx_pos = date_to_pos[bdate]
 
         if idx_pos is None:
-            # skip unalignable
             continue
 
         d["idx"] = int(idx_pos)
@@ -253,16 +210,7 @@ def align_break_indices(df: pd.DataFrame, samples: List[Dict[str, Any]]) -> List
     return out
 
 
-def build_entry_forbidden_mask(
-    n: int,
-    breaks: List[Dict[str, Any]],
-    contam_horizon: int,
-    z_clear_days: int,
-) -> List[bool]:
-    """
-    forbid entry indices in [b - contam_horizon, b + z_clear_days - 1] for each break b
-    (inclusive range).
-    """
+def build_entry_forbidden_mask(n: int, breaks: List[Dict[str, Any]], contam_horizon: int, z_clear_days: int) -> List[bool]:
     forbid = [False] * n
     for b in breaks:
         bi = int(b["idx"])
@@ -274,11 +222,6 @@ def build_entry_forbidden_mask(
 
 
 def _max_drawdown(eq: pd.Series) -> Tuple[float, str, str]:
-    """
-    Return (mdd, peak_date, trough_date).
-    mdd is <= 0 (e.g., -0.25 means -25%).
-    Robust to datetime index (no int() casting of idxmin()).
-    """
     if eq.empty:
         return float("nan"), "N/A", "N/A"
 
@@ -363,30 +306,19 @@ def run_backtest(
     max_hold_days: int,
     trading_days: int,
 ) -> Tuple[pd.DataFrame, Dict[str, Any], List[Dict[str, Any]]]:
-    """
-    Returns:
-      df_bt: columns [price, z, eq_base, eq_leverage]
-      summary: perf + audit
-      trades: list of trade dicts
-    """
     price = df["price"]
     idx = df.index
     n = len(df)
 
-    # Base leg: always in the market
     base_shares = 1.0 / float(price.iloc[0])
     eq_base = base_shares * price
 
-    # Leverage leg state
     pos: Optional[Position] = None
     interest_paid_total = 0.0
     trades: List[Dict[str, Any]] = []
     skipped_entries = 0
 
-    # For "crossing" logic: only enter on first day crossing into <= entry_z
     prev_z = float("nan")
-
-    # Preallocate equity series for leverage
     eq_lev = pd.Series(index=idx, dtype=float)
 
     for i in range(n):
@@ -396,7 +328,6 @@ def run_backtest(
 
         base_val = float(eq_base.iloc[i])
 
-        # Compute equity under current position state (mark-to-market)
         if pos is None:
             eq_lev.iloc[i] = base_val
         else:
@@ -405,12 +336,10 @@ def run_backtest(
             lever_val = pos.lever_shares * p
             eq_lev.iloc[i] = base_val + lever_val - pos.borrow_principal - interest_accrued
 
-        # Decide exits/entries at end of day i (using today's z)
         if pos is not None:
             hold_days = i - pos.entry_i
             exit_reason = None
 
-            # If we ever step into a forbidden region while holding, force exit to avoid using broken segment
             if forbid_entry[i]:
                 exit_reason = "forced_exit_on_forbidden_day"
             elif pd.notna(zi) and zi_f >= exit_z:
@@ -419,15 +348,13 @@ def run_backtest(
                 exit_reason = "max_hold_days"
 
             if exit_reason is not None:
-                # realize trade
                 exit_date = idx[i].strftime("%Y-%m-%d")
                 exit_price = p
-                # interest paid over hold_days (trading days)
                 interest_paid = pos.borrow_principal * borrow_apr * (hold_days / float(trading_days))
                 interest_paid_total += interest_paid
 
                 exit_value = pos.lever_shares * exit_price
-                lever_leg_pnl_gross = exit_value - pos.borrow_principal  # before interest (matches v3-style)
+                lever_leg_pnl_gross = exit_value - pos.borrow_principal
 
                 trades.append(
                     {
@@ -446,19 +373,15 @@ def run_backtest(
                 )
                 pos = None
 
-        # Entry (only if flat)
         if pos is None:
-            # enter only when z crosses down into <= entry_z
             crossed = (pd.notna(zi) and zi_f <= entry_z and (pd.isna(prev_z) or float(prev_z) > entry_z))
             if crossed:
                 if forbid_entry[i]:
                     skipped_entries += 1
                 else:
-                    # borrow based on current equity (base-only because flat)
                     equity_now = float(eq_lev.iloc[i])
                     borrow_principal = max(0.0, equity_now * leverage_frac)
                     lever_shares = borrow_principal / p if p > 0 else 0.0
-
                     pos = Position(
                         entry_i=i,
                         entry_date=idx[i].strftime("%Y-%m-%d"),
@@ -492,10 +415,13 @@ def run_backtest(
 def main() -> None:
     ap = argparse.ArgumentParser(description="MVP backtest: base + leveraged add-on triggered by BB-z")
 
-    ap.add_argument("--price_csv", default="tw0050_bb_cache/data.csv", help="Path to price CSV (must include date column).")
-    ap.add_argument("--price_col", default="adjclose", help="Price column name (e.g., adjclose).")
+    # compatibility: cache_dir
+    ap.add_argument("--cache_dir", default=None, help="Compatibility: base directory for data.csv/stats_latest.json and default outputs.")
 
-    ap.add_argument("--stats_json", default="tw0050_bb_cache/stats_latest.json", help="stats_latest.json for break info (optional).")
+    # if not provided, will be derived from cache_dir (or fall back to defaults)
+    ap.add_argument("--price_csv", default=None, help="Path to price CSV (must include date column).")
+    ap.add_argument("--price_col", default="adjclose", help="Price column name (e.g., adjclose).")
+    ap.add_argument("--stats_json", default=None, help="stats_latest.json for break info (optional).")
 
     ap.add_argument("--bb_window", type=int, default=60)
     ap.add_argument("--bb_ddof", type=int, default=0)
@@ -503,7 +429,7 @@ def main() -> None:
     ap.add_argument("--entry_z", type=float, default=-1.5)
     ap.add_argument("--exit_z", type=float, default=0.0)
 
-    # aliases for your earlier CLI attempts
+    # aliases
     ap.add_argument("--enter_z", type=float, default=None, help="Alias for --entry_z")
     ap.add_argument("--leverage_frac", type=float, default=0.5)
     ap.add_argument("--leverage_add", type=float, default=None, help="Alias for --leverage_frac")
@@ -512,24 +438,22 @@ def main() -> None:
     ap.add_argument("--max_hold_days", type=int, default=60)
     ap.add_argument("--trading_days", type=int, default=252)
 
-    # break thresholds fallback if stats_json is missing
     ap.add_argument("--break_ratio_hi", type=float, default=1.8)
     ap.add_argument("--break_ratio_lo", type=float, default=0.5555555556)
 
-    # contamination policy
     ap.add_argument("--skip_contaminated", action="store_true", default=True)
     ap.add_argument("--no_skip_contaminated", action="store_true", default=False)
     ap.add_argument("--contam_horizon", type=int, default=None, help="Days before break to forbid entries (default=max_hold_days).")
     ap.add_argument("--z_clear_days", type=int, default=None, help="Days after break to forbid entries (default=bb_window).")
 
-    ap.add_argument("--out_json", default="backtest_summary.json")
+    ap.add_argument("--out_json", default=None)
     ap.add_argument("--out_summary_json", default=None, help="Alias for --out_json")
     ap.add_argument("--out_equity_csv", default=None)
     ap.add_argument("--out_trades_csv", default=None)
 
     args = ap.parse_args()
 
-    # apply aliases
+    # aliases
     if args.enter_z is not None:
         args.entry_z = float(args.enter_z)
     if args.leverage_add is not None:
@@ -537,12 +461,29 @@ def main() -> None:
     if args.out_summary_json is not None:
         args.out_json = args.out_summary_json
 
+    # apply cache_dir defaults only when explicit paths are not provided
+    cache_dir = args.cache_dir.strip() if isinstance(args.cache_dir, str) and args.cache_dir.strip() else None
+    if cache_dir is not None:
+        if args.price_csv is None:
+            args.price_csv = os.path.join(cache_dir, "data.csv")
+        if args.stats_json is None:
+            args.stats_json = os.path.join(cache_dir, "stats_latest.json")
+        if args.out_json is None:
+            args.out_json = os.path.join(cache_dir, "backtest_summary.json")
+        # equity/trades outputs remain opt-in; if user provides, keep as-is
+    else:
+        if args.price_csv is None:
+            args.price_csv = "tw0050_bb_cache/data.csv"
+        if args.stats_json is None:
+            args.stats_json = "tw0050_bb_cache/stats_latest.json"
+        if args.out_json is None:
+            args.out_json = "backtest_summary.json"
+
     skip_contaminated = bool(args.skip_contaminated) and (not bool(args.no_skip_contaminated))
 
     df = load_price_csv(args.price_csv, args.price_col)
     z = compute_bb_z(df["price"], window=int(args.bb_window), ddof=int(args.bb_ddof))
 
-    # breaks from stats_json if available; else detect from price
     hi_s, lo_s, samples = load_break_info_from_stats(args.stats_json)
     ratio_hi = float(hi_s) if hi_s is not None else float(args.break_ratio_hi)
     ratio_lo = float(lo_s) if lo_s is not None else float(args.break_ratio_lo)
@@ -555,10 +496,11 @@ def main() -> None:
     z_clear_days = int(args.z_clear_days) if args.z_clear_days is not None else int(args.bb_window)
 
     forbid = [False] * len(df)
-    if skip_contaminated and breaks:
+    if skip_contaminated and isinstance(breaks, list) and len(breaks) > 0:
+        breaks_aligned = align_break_indices(df, breaks)
         forbid = build_entry_forbidden_mask(
             n=len(df),
-            breaks=align_break_indices(df, breaks) if isinstance(breaks, list) else [],
+            breaks=breaks_aligned,
             contam_horizon=contam_horizon,
             z_clear_days=z_clear_days,
         )
@@ -594,6 +536,10 @@ def main() -> None:
         "generated_at_utc": utc_now_iso(),
         "script_fingerprint": SCRIPT_FINGERPRINT,
         "params": {
+            "cache_dir": cache_dir if cache_dir is not None else "N/A",
+            "price_csv": args.price_csv,
+            "stats_json": args.stats_json,
+            "price_col": args.price_col,
             "bb_window": int(args.bb_window),
             "bb_ddof": int(args.bb_ddof),
             "entry_z": float(args.entry_z),
@@ -625,7 +571,6 @@ def main() -> None:
         "trades": trades,
     }
 
-    # write outputs
     with open(args.out_json, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
 
