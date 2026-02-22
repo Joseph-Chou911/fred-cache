@@ -11,12 +11,25 @@ Stable semantics (explicit):
 - base_shares = 1 / first_price  (normalized base equity starts at 1.0)
 - leverage leg uses constant shares:
     lever_shares_target = base_shares * leverage_frac
+
   On entry:
     borrow_principal = lever_shares_target * entry_price
     lever_shares = lever_shares_target
     cash unchanged (0.0 at entry; later becomes negative due to interest accrual)
+
   Daily equity mark-to-market:
     equity = (base_shares + lever_shares) * price + cash - borrow_principal
+
+Cost model (NEW v15):
+- Optional trading frictions applied on leverage entries/exits (default: lever leg only):
+    * fee_rate: broker fee per side (e.g. 0.001425 = 0.1425%)
+    * tax_rate: sell-side tax (e.g. 0.001 = 0.1%) applied on exit
+    * slip_bps: slippage in bps per side (e.g. 5 bps = 0.05%) modeled as a cash penalty
+- Costs are deducted from cash at the time of the trade, so the equity curve includes them.
+- By default, costs apply to the leverage leg notional only (cost_on="lever").
+  cost_on="all" applies costs to (base_shares + lever_shares_target)*price on entry and
+  (base_shares + lever_shares)*price on exit; this is a conservative upper bound since the base leg
+  is not actually traded in this model.
 
 Critical policy decisions (documented for audit):
 - same-day reentry: NOT allowed. If we exit on day i, we do not re-enter on the same day.
@@ -27,13 +40,13 @@ Critical policy decisions (documented for audit):
 
 Trade semantics note:
 - lever_leg_pnl is GROSS P&L for the leverage leg (proceeds - principal), does NOT include interest.
-  net_lever_pnl = lever_leg_pnl - interest_paid
+  net_lever_pnl_after_costs = lever_leg_pnl - interest_paid - cost_paid
 
 Segmentation (same JSON output):
 - pre:  date < split_date
 - post: date >= post_start_date (defaults to split_date; can override)
 
-v14 hardening:
+v14 hardening (kept):
 - --out_post_equity_csv does NOT trigger an extra run_backtest.
   It reuses the post segment df_bt computed in _segment_backtest (in-memory only; not serialized to JSON).
 - _prepare_df() shared by run_backtest and segmentation to prevent maintenance drift.
@@ -55,7 +68,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v14.no_third_run_post_csv_compare_error_prepare_df"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v15.add_costs_fee_tax_slippage"
 
 TRADE_COLS = [
     "entry_date",
@@ -63,12 +76,16 @@ TRADE_COLS = [
     "entry_z",
     "borrow_principal",
     "lever_shares",
-    "interest_paid",
+    "entry_cost",
     "exit_date",
     "exit_price",
     "hold_days",
     "exit_reason",
+    "exit_cost",
+    "cost_paid",
+    "interest_paid",
     "lever_leg_pnl",
+    "net_lever_pnl_after_costs",
 ]
 
 _DEFAULT_RATIO_HI = 1.8
@@ -298,6 +315,40 @@ def _perf_summary(eq: pd.Series, trading_days: int = 252) -> Dict[str, Any]:
     return out
 
 
+# ---------- costs / slippage ----------
+
+def _slip_rate(slip_bps: float) -> float:
+    # 1 bps = 0.0001
+    try:
+        v = float(slip_bps)
+    except Exception:
+        return 0.0
+    if not np.isfinite(v) or v <= 0.0:
+        return 0.0
+    return v * 1e-4
+
+
+def _entry_cost(notional: float, fee_rate: float, slip_rate: float) -> float:
+    if not np.isfinite(notional) or not np.isfinite(fee_rate) or not np.isfinite(slip_rate):
+        return 0.0
+    if notional <= 0.0:
+        return 0.0
+    fr = max(float(fee_rate), 0.0)
+    sr = max(float(slip_rate), 0.0)
+    return float(notional) * (fr + sr)
+
+
+def _exit_cost(notional: float, fee_rate: float, tax_rate: float, slip_rate: float) -> float:
+    if not np.isfinite(notional) or not np.isfinite(fee_rate) or not np.isfinite(tax_rate) or not np.isfinite(slip_rate):
+        return 0.0
+    if notional <= 0.0:
+        return 0.0
+    fr = max(float(fee_rate), 0.0)
+    tr = max(float(tax_rate), 0.0)
+    sr = max(float(slip_rate), 0.0)
+    return float(notional) * (fr + tr + sr)
+
+
 # ---------- break detection / contamination ----------
 
 def detect_breaks_from_price(df: pd.DataFrame, ratio_hi: float, ratio_lo: float) -> List[Dict[str, Any]]:
@@ -445,6 +496,11 @@ class Params:
     skip_contaminated: bool
     contam_horizon: int
     z_clear_days: int
+    # costs
+    fee_rate: float
+    tax_rate: float
+    slip_bps: float
+    cost_on: str  # "lever" or "all"
 
 
 def run_backtest(
@@ -477,6 +533,13 @@ def run_backtest(
     in_lever = False
     hold_days = 0
     interest_paid_total = 0.0
+
+    # cost audit totals
+    entry_cost_total = 0.0
+    exit_cost_total = 0.0
+    cost_paid_total = 0.0
+
+    slip_rate = _slip_rate(params.slip_bps)
 
     trades: List[Dict[str, Any]] = []
     cur_trade: Optional[Dict[str, Any]] = None
@@ -522,6 +585,19 @@ def run_backtest(
 
             if exit_by_z or exit_by_time:
                 proceeds = lever_shares * price
+
+                # exit costs
+                if params.cost_on == "all":
+                    notional_exit = (base_shares + lever_shares) * price
+                else:
+                    notional_exit = lever_shares * price
+
+                exit_cost = _exit_cost(notional_exit, params.fee_rate, params.tax_rate, slip_rate)
+                if exit_cost > 0.0:
+                    cash -= exit_cost
+                    exit_cost_total += exit_cost
+                    cost_paid_total += exit_cost
+
                 cash += proceeds
                 cash -= borrow_principal
 
@@ -530,7 +606,13 @@ def run_backtest(
                     cur_trade["exit_price"] = price
                     cur_trade["hold_days"] = int(hold_days)
                     cur_trade["exit_reason"] = "exit_z" if exit_by_z else "max_hold_days"
-                    cur_trade["lever_leg_pnl"] = float(proceeds - float(cur_trade.get("borrow_principal", 0.0)))
+                    cur_trade["exit_cost"] = float(exit_cost)
+                    cost_paid = float(cur_trade.get("entry_cost", 0.0) + cur_trade.get("exit_cost", 0.0))
+                    cur_trade["cost_paid"] = float(cost_paid)
+                    lever_leg_pnl = float(proceeds - float(cur_trade.get("borrow_principal", 0.0)))
+                    cur_trade["lever_leg_pnl"] = float(lever_leg_pnl)
+                    net_after_costs = lever_leg_pnl - float(cur_trade.get("interest_paid", 0.0)) - cost_paid
+                    cur_trade["net_lever_pnl_after_costs"] = float(net_after_costs)
                     trades.append(cur_trade)
 
                 if exit_by_z:
@@ -565,6 +647,18 @@ def run_backtest(
             if borrow <= 0.0:
                 continue
 
+            # entry costs
+            if params.cost_on == "all":
+                notional_entry = (base_shares + lever_shares_target) * price
+            else:
+                notional_entry = lever_shares_target * price
+
+            entry_cost = _entry_cost(notional_entry, params.fee_rate, slip_rate)
+            if entry_cost > 0.0:
+                cash -= entry_cost
+                entry_cost_total += entry_cost
+                cost_paid_total += entry_cost
+
             borrow_principal = borrow
             lever_shares = lever_shares_target
             in_lever = True
@@ -576,6 +670,9 @@ def run_backtest(
                 "entry_z": zf_entry,
                 "borrow_principal": float(borrow_principal),
                 "lever_shares": float(lever_shares),
+                "entry_cost": float(entry_cost),
+                "exit_cost": 0.0,
+                "cost_paid": float(entry_cost),
                 "interest_paid": 0.0,
             }
 
@@ -585,11 +682,28 @@ def run_backtest(
         last_date = str(dates[-1])
         proceeds = lever_shares * last_price
 
+        # exit costs on forced close
+        if params.cost_on == "all":
+            notional_exit = (base_shares + lever_shares) * last_price
+        else:
+            notional_exit = lever_shares * last_price
+
+        exit_cost = _exit_cost(notional_exit, params.fee_rate, params.tax_rate, slip_rate)
+        if exit_cost > 0.0:
+            cash -= exit_cost
+            exit_cost_total += exit_cost
+            cost_paid_total += exit_cost
+
         cur_trade["exit_date"] = last_date
         cur_trade["exit_price"] = last_price
         cur_trade["hold_days"] = int(hold_days)
         cur_trade["exit_reason"] = "end_of_data"
+        cur_trade["exit_cost"] = float(exit_cost)
+        cost_paid = float(cur_trade.get("entry_cost", 0.0) + cur_trade.get("exit_cost", 0.0))
+        cur_trade["cost_paid"] = float(cost_paid)
         cur_trade["lever_leg_pnl"] = float(proceeds - float(cur_trade.get("borrow_principal", 0.0)))
+        net_after_costs = float(cur_trade["lever_leg_pnl"]) - float(cur_trade.get("interest_paid", 0.0)) - cost_paid
+        cur_trade["net_lever_pnl_after_costs"] = float(net_after_costs)
         trades.append(cur_trade)
         forced_eod_close = 1
 
@@ -627,6 +741,11 @@ def run_backtest(
             "skip_contaminated": bool(params.skip_contaminated),
             "contam_horizon": int(params.contam_horizon),
             "z_clear_days": int(params.z_clear_days),
+            # costs
+            "fee_rate": float(params.fee_rate),
+            "tax_rate": float(params.tax_rate),
+            "slip_bps": float(params.slip_bps),
+            "cost_on": str(params.cost_on),
         },
         "audit": {
             "rows": int(len(df_out)),
@@ -644,13 +763,23 @@ def run_backtest(
             "forced_eod_close": int(forced_eod_close),
             "hold_days_semantics": "entry day sets hold_days=0; increments by 1 each subsequent row while in position",
             "same_day_reentry": "not allowed; exit day is always flat",
-            "interest_semantics": "row-based accrual while in position; includes the first row after entry (may be interpreted as entry-day accrual depending on timing assumption)",
+            "interest_semantics": (
+                "row-based accrual while in position; includes the first row after entry "
+                "(may be interpreted as entry-day accrual depending on timing assumption)"
+            ),
             "end_of_data_policy": "if open position exists at end, force-close and record trade with exit_reason=end_of_data",
             "equity_csv_last_row_note": (
                 "if open_at_end=true, last equity value is mark-to-market while still in position; "
                 "numerically equivalent to post-close equity at the same last_price, but trade record is added after loop"
             ),
-            "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net = lever_leg_pnl - interest_paid",
+            "lever_leg_pnl_semantics": "gross P&L for leverage leg (proceeds - principal); net_after_costs = lever_leg_pnl - interest_paid - cost_paid",
+            # costs audit
+            "costs_enabled": bool((params.fee_rate > 0.0) or (params.tax_rate > 0.0) or (params.slip_bps > 0.0)),
+            "cost_on": str(params.cost_on),
+            "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
+            "entry_cost_total": float(entry_cost_total),
+            "exit_cost_total": float(exit_cost_total),
+            "cost_paid_total": float(cost_paid_total),
         },
         "perf_leverage": _perf_summary(df_out.set_index("date")["equity"], trading_days=params.trading_days),
         "perf_base_only": _perf_summary(df_out.set_index("date")["equity_base_only"], trading_days=params.trading_days),
@@ -806,6 +935,12 @@ def main() -> None:
     ap.add_argument("--max_hold_days", type=int, default=60)
     ap.add_argument("--trading_days", type=int, default=252)
 
+    # costs (NEW)
+    ap.add_argument("--fee_rate", type=float, default=0.001425, help="broker fee per side (e.g. 0.001425 = 0.1425%)")
+    ap.add_argument("--tax_rate", type=float, default=0.0010, help="sell-side tax rate (e.g. 0.001 = 0.1%)")
+    ap.add_argument("--slip_bps", type=float, default=5.0, help="slippage in bps per side (e.g. 5 = 0.05%)")
+    ap.add_argument("--cost_on", type=str, default="lever", choices=["lever", "all"], help="cost scope: lever (default) or all (conservative upper bound)")
+
     _add_skip_contaminated_flag(ap)
     ap.add_argument("--contam_horizon", type=int, default=60)
     ap.add_argument("--z_clear_days", type=int, default=60)
@@ -904,6 +1039,11 @@ def main() -> None:
         skip_contaminated=bool(args.skip_contaminated),
         contam_horizon=int(args.contam_horizon),
         z_clear_days=int(args.z_clear_days),
+        # costs
+        fee_rate=float(args.fee_rate),
+        tax_rate=float(args.tax_rate),
+        slip_bps=float(args.slip_bps),
+        cost_on=str(args.cost_on),
     )
 
     df_bt, summary = run_backtest(df_raw, params, forbid_entry_mask=forbid_mask)
@@ -1061,7 +1201,12 @@ def main() -> None:
     _ensure_parent(out_tr_path)
     trades = summary.get("trades", [])
     if isinstance(trades, list) and len(trades) > 0:
-        pd.DataFrame(trades)[TRADE_COLS].to_csv(out_tr_path, index=False, encoding="utf-8")
+        df_tr = pd.DataFrame(trades)
+        # ensure columns exist (older runs / partial trades)
+        for c in TRADE_COLS:
+            if c not in df_tr.columns:
+                df_tr[c] = np.nan
+        df_tr[TRADE_COLS].to_csv(out_tr_path, index=False, encoding="utf-8")
     else:
         pd.DataFrame(columns=TRADE_COLS).to_csv(out_tr_path, index=False, encoding="utf-8")
 
