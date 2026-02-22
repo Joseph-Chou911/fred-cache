@@ -1,6 +1,6 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-21T14:58:24Z`
+- report_generated_at_utc: `2026-02-22T14:58:51Z`
 
 ## 15秒摘要
 
@@ -10,8 +10,8 @@
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-21T14:58:23Z`
-- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `1`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-22T14:58:50Z`
+- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `2`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
 - trigger_reason: `default`
@@ -58,8 +58,8 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-21T14:58:23Z`
-- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `1`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-22T14:58:50Z`
+- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `2`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
 - action_output: **`NORMAL_RANGE`**
