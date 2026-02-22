@@ -28,6 +28,18 @@ Critical policy decisions (documented for audit):
 Trade semantics note:
 - lever_leg_pnl is GROSS P&L for the leverage leg (proceeds - principal), does NOT include interest.
   net_lever_pnl = lever_leg_pnl - interest_paid
+
+Segmentation (same JSON output):
+- pre:  date < split_date
+- post: date >= post_start_date (defaults to split_date; can override)
+
+v14 hardening:
+- --out_post_equity_csv does NOT trigger an extra run_backtest.
+  It reuses the post segment df_bt computed in _segment_backtest (in-memory only; not serialized to JSON).
+- _prepare_df() shared by run_backtest and segmentation to prevent maintenance drift.
+- segmentation.compare errors are captured into segmentation.compare_error.
+- manual split_date parse failure emits WARNING.
+- bb_z_first_valid_date uses first_valid_index (no index-type assumption).
 """
 
 from __future__ import annotations
@@ -43,7 +55,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v11.auditnotes_mddle0_pricecolwarn_grosspnl_note"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v14.no_third_run_post_csv_compare_error_prepare_df"
 
 TRADE_COLS = [
     "entry_date",
@@ -78,9 +90,17 @@ def _ensure_parent(path: str) -> None:
 def _write_json(path: str, obj: Dict[str, Any]) -> None:
     _ensure_parent(path)
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+        raise
 
 
 def _read_json(path: str) -> Optional[Dict[str, Any]]:
@@ -121,7 +141,6 @@ def _find_price_col(df: pd.DataFrame, user_col: Optional[str]) -> str:
         if k.lower() in cols_lc:
             return cols_lc[k.lower()]
 
-    # Fallback (best-effort): pick first numeric column (warn loudly).
     for c in df.columns:
         if pd.api.types.is_numeric_dtype(df[c]):
             print(f"WARNING: price_col not specified; falling back to first numeric column: {c!r}")
@@ -164,12 +183,19 @@ def _safe_label(x: Any) -> str:
     return str(x)
 
 
+def _prepare_df(df_in: pd.DataFrame) -> pd.DataFrame:
+    """
+    Shared cleaning logic used by run_backtest and segmentation pre-checks.
+    Keep this function aligned with run_backtest expectations.
+    """
+    df = df_in.copy()
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    df = df.dropna(subset=["price"]).copy()
+    df = df.sort_values("date_ts").reset_index(drop=True)
+    return df
+
+
 def _max_drawdown(eq: pd.Series) -> Dict[str, Any]:
-    """
-    Max drawdown on equity series.
-    NOTE: We DO NOT forward-fill NaN (to avoid masking real gaps).
-    We only convert non-finite to NaN and use nan-aware argmin/argmax.
-    """
     if eq is None or len(eq) == 0:
         return {"mdd": None, "peak": None, "trough": None}
 
@@ -181,7 +207,6 @@ def _max_drawdown(eq: pd.Series) -> Dict[str, Any]:
 
     running_max = np.maximum.accumulate(np.where(np.isnan(v2), -np.inf, v2))
     running_max = np.where(running_max == -np.inf, np.nan, running_max)
-    # v11: defensive guard — disallow non-positive running_max to avoid undefined/ambiguous ratios
     running_max = np.where(running_max <= 0.0, np.nan, running_max)
 
     dd = (v2 / running_max) - 1.0
@@ -223,8 +248,6 @@ def _max_drawdown(eq: pd.Series) -> Dict[str, Any]:
 
 
 def _perf_summary(eq: pd.Series, trading_days: int = 252) -> Dict[str, Any]:
-    # NOTE: equity series is mark-to-market; end-of-data force-close does NOT create a discontinuity
-    # because the last equity point already reflects lever_shares * last_price - borrow_principal + cash.
     eq = pd.to_numeric(eq, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
     if eq.empty or len(eq) < 3:
         return {"ok": False}
@@ -366,6 +389,7 @@ def align_break_indices(df: pd.DataFrame, raw_breaks: List[Dict[str, Any]]) -> L
         if p0 is not None and p1 is not None and p0 > 0:
             ratio = float(p1 / p0)
 
+        rr = b.get("ratio", ratio)
         out.append(
             {
                 "idx": int(idx),
@@ -373,7 +397,7 @@ def align_break_indices(df: pd.DataFrame, raw_breaks: List[Dict[str, Any]]) -> L
                 "prev_date": str(dates[prev_i]),
                 "prev_price": p0,
                 "price": p1,
-                "ratio": float(b.get("ratio", ratio)) if (b.get("ratio", ratio) is not None) else None,
+                "ratio": float(rr) if rr is not None else None,
             }
         )
 
@@ -428,10 +452,7 @@ def run_backtest(
     params: Params,
     forbid_entry_mask: Optional[List[bool]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    df = df.copy()
-    df["price"] = pd.to_numeric(df["price"], errors="coerce")
-    df = df.dropna(subset=["price"]).copy()
-    df = df.sort_values("date_ts").reset_index(drop=True)
+    df = _prepare_df(df)
 
     n = int(len(df))
     if n < params.bb_window + 5:
@@ -447,14 +468,14 @@ def run_backtest(
     lever_shares_target = max(float(base_shares) * float(params.leverage_frac), 0.0)
 
     prices = df["price"].to_numpy(dtype=float)
-    zs = df["bb_z"].to_numpy(dtype=float)  # NaN stays as np.nan
+    zs = df["bb_z"].to_numpy(dtype=float)
     dates = df["date"].astype(str).to_numpy()
 
     lever_shares = 0.0
     borrow_principal = 0.0
     cash = 0.0
     in_lever = False
-    hold_days = 0  # entry day sets 0; next row becomes 1
+    hold_days = 0
     interest_paid_total = 0.0
 
     trades: List[Dict[str, Any]] = []
@@ -474,10 +495,9 @@ def run_backtest(
 
     for i in range(n):
         price = float(prices[i])
-        z_raw = float(zs[i])  # may be nan
+        z_raw = float(zs[i])
         date = str(dates[i])
 
-        # 1) accrue interest (row-based)
         if in_lever and borrow_principal > 0.0:
             interest = _daily_interest(borrow_principal, params.borrow_apr, params.trading_days)
             cash -= interest
@@ -485,7 +505,6 @@ def run_backtest(
             if cur_trade is not None:
                 cur_trade["interest_paid"] = float(cur_trade.get("interest_paid", 0.0) + interest)
 
-        # 2) mark-to-market
         total_shares = base_shares + lever_shares
         equity_now = total_shares * price + cash - borrow_principal
         base_now = base_shares * price
@@ -494,7 +513,6 @@ def run_backtest(
         base_arr[i] = float(base_now)
         lev_on_arr[i] = bool(in_lever)
 
-        # 3) exit logic (even if z is NaN)
         if in_lever:
             hold_days += 1
             exit_by_time = (params.max_hold_days > 0 and hold_days >= params.max_hold_days)
@@ -512,7 +530,6 @@ def run_backtest(
                     cur_trade["exit_price"] = price
                     cur_trade["hold_days"] = int(hold_days)
                     cur_trade["exit_reason"] = "exit_z" if exit_by_z else "max_hold_days"
-                    # gross P&L (interest excluded; see module docstring)
                     cur_trade["lever_leg_pnl"] = float(proceeds - float(cur_trade.get("borrow_principal", 0.0)))
                     trades.append(cur_trade)
 
@@ -526,11 +543,8 @@ def run_backtest(
                 in_lever = False
                 cur_trade = None
                 hold_days = 0
-
-                # Policy: no same-day reentry
                 continue
 
-        # 4) entry logic needs finite z
         zf_entry = _to_finite_float(z_raw)
         if zf_entry is None:
             continue
@@ -565,7 +579,6 @@ def run_backtest(
                 "interest_paid": 0.0,
             }
 
-    # --- Force-close any open leveraged position at end of data ---
     open_at_end = bool(in_lever)
     if in_lever and cur_trade is not None and n > 0:
         last_price = float(prices[-1])
@@ -576,7 +589,6 @@ def run_backtest(
         cur_trade["exit_price"] = last_price
         cur_trade["hold_days"] = int(hold_days)
         cur_trade["exit_reason"] = "end_of_data"
-        # gross P&L (interest excluded)
         cur_trade["lever_leg_pnl"] = float(proceeds - float(cur_trade.get("borrow_principal", 0.0)))
         trades.append(cur_trade)
         forced_eod_close = 1
@@ -589,6 +601,16 @@ def run_backtest(
     df_out["equity"] = eq_arr
     df_out["equity_base_only"] = base_arr
     df_out["lever_on"] = lev_on_arr
+
+    z_ser = pd.to_numeric(df_out["bb_z"], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    z_non_nan = int(z_ser.notna().sum())
+    first_valid = z_ser.first_valid_index()
+    z_first_valid_date = None
+    if first_valid is not None:
+        try:
+            z_first_valid_date = str(df_out.at[first_valid, "date"])
+        except Exception:
+            z_first_valid_date = None
 
     summary: Dict[str, Any] = {
         "generated_at_utc": utc_now_iso(),
@@ -610,6 +632,8 @@ def run_backtest(
             "rows": int(len(df_out)),
             "start_date": str(df_out["date"].iloc[0]),
             "end_date": str(df_out["date"].iloc[-1]),
+            "bb_z_non_nan": z_non_nan,
+            "bb_z_first_valid_date": z_first_valid_date,
             "interest_paid_total": float(interest_paid_total),
             "trades": int(len(trades)),
             "skipped_entries_on_forbidden": int(skipped_entries_on_forbidden),
@@ -643,6 +667,109 @@ def run_backtest(
         }
 
     return df_out, summary
+
+
+# ---------- segmentation helpers ----------
+
+def _parse_ymd(s: str) -> Optional[pd.Timestamp]:
+    if s is None:
+        return None
+    ss = str(s).strip()
+    if not ss:
+        return None
+    try:
+        ts = pd.to_datetime(ss, errors="raise")
+        return pd.Timestamp(ts.date())
+    except Exception:
+        return None
+
+
+def _segment_backtest(
+    name: str,
+    df_seg: pd.DataFrame,
+    params: Params,
+    ratio_hi: float,
+    ratio_lo: float,
+) -> Tuple[Dict[str, Any], Optional[pd.DataFrame]]:
+    """
+    Returns (seg_out_jsonable, df_bt_or_none).
+    df_bt is kept in memory for optional CSV output; it is NOT inserted into JSON to avoid bloating.
+    """
+    seg_out: Dict[str, Any] = {
+        "segment": {
+            "name": name,
+            "rows_raw": int(len(df_seg)) if df_seg is not None else 0,
+            "rows_clean": 0,
+            "start_date": None,
+            "end_date": None,
+        }
+    }
+
+    if df_seg is None or df_seg.empty:
+        seg_out["ok"] = False
+        seg_out["error"] = "empty segment"
+        return seg_out, None
+
+    df_clean = _prepare_df(df_seg)
+    seg_out["segment"]["rows_clean"] = int(len(df_clean))
+
+    if df_clean.empty:
+        seg_out["ok"] = False
+        seg_out["error"] = "empty after cleaning (all prices NaN?)"
+        return seg_out, None
+
+    seg_out["segment"]["start_date"] = str(df_clean["date"].iloc[0])
+    seg_out["segment"]["end_date"] = str(df_clean["date"].iloc[-1])
+
+    min_rows = max(int(params.bb_window) * 3, int(params.bb_window) + 5)
+    if int(len(df_clean)) < min_rows:
+        seg_out["ok"] = False
+        seg_out["error"] = f"segment too short for reliable BB warmup: rows_clean={len(df_clean)} min_rows={min_rows} (bb_window={params.bb_window})"
+        return seg_out, None
+
+    p0 = float(df_clean["price"].iloc[0])
+    if (not np.isfinite(p0)) or p0 <= 0.0:
+        seg_out["ok"] = False
+        seg_out["error"] = "invalid first price in segment after cleaning"
+        return seg_out, None
+
+    raw_breaks_seg = detect_breaks_from_price(df_clean, ratio_hi, ratio_lo)
+    breaks_aligned_seg = align_break_indices(df_clean, raw_breaks_seg)
+
+    forbid_mask_seg = None
+    if bool(params.skip_contaminated) and len(breaks_aligned_seg) > 0:
+        forbid_mask_seg = build_entry_forbidden_mask(
+            n=len(df_clean),
+            breaks=breaks_aligned_seg,
+            contam_horizon=int(params.contam_horizon),
+            z_clear_days=int(params.z_clear_days),
+        )
+
+    try:
+        df_bt, seg_sum = run_backtest(df_clean, params, forbid_entry_mask=forbid_mask_seg)
+    except Exception as e:
+        seg_out["ok"] = False
+        seg_out["error"] = f"exception: {type(e).__name__}: {e}"
+        seg_out["breaks"] = {
+            "breaks_detected": int(len(breaks_aligned_seg)),
+            "break_samples_first5": breaks_aligned_seg[:5],
+            "break_samples_source": "detect_breaks_from_price(segment)",
+        }
+        return seg_out, None
+
+    seg_sum.setdefault("audit", {})
+    seg_sum["audit"].update(
+        {
+            "breaks_detected": int(len(breaks_aligned_seg)),
+            "break_samples_first5": breaks_aligned_seg[:5],
+            "break_samples_source": "detect_breaks_from_price(segment)",
+            "forbid_mask_semantics": "for each break idx b: forbid entry i in [b-contam_horizon, b+z_clear_days-1]",
+        }
+    )
+
+    seg_out["ok"] = True
+    seg_out["summary"] = seg_sum
+    return seg_out, df_bt
 
 
 # ---------- main ----------
@@ -685,9 +812,33 @@ def main() -> None:
     ap.add_argument("--break_ratio_hi", type=float, default=None)
     ap.add_argument("--break_ratio_lo", type=float, default=None)
 
+    ap.add_argument(
+        "--segment_split_date",
+        default="auto",
+        help="Segmentation split date YYYY-MM-DD. 'auto' uses detected break_date. "
+             "'none' disables segmentation output.",
+    )
+    ap.add_argument(
+        "--segment_break_rank",
+        type=int,
+        default=0,
+        help="When --segment_split_date=auto, choose which detected break to use (0=earliest).",
+    )
+    ap.add_argument(
+        "--segment_post_start_date",
+        default=None,
+        help="Optional post segment start date YYYY-MM-DD (>=). Default: same as split_date.",
+    )
+
     ap.add_argument("--out_json", "--out_summary_json", dest="out_json", default="backtest_mvp.json")
     ap.add_argument("--out_equity_csv", default="backtest_mvp_equity.csv")
     ap.add_argument("--out_trades_csv", default="backtest_mvp_trades.csv")
+
+    ap.add_argument(
+        "--out_post_equity_csv",
+        default=None,
+        help="If set and post segment is ok, output post segment equity CSV (from segmentation run; no recompute).",
+    )
 
     args = ap.parse_args()
 
@@ -780,11 +931,127 @@ def main() -> None:
         }
     )
 
+    # ---------- segmented backtests embedded in the same JSON ----------
+    seg_raw = str(args.segment_split_date).strip()
+    seg_spec = seg_raw.lower()
+
+    segmentation: Dict[str, Any] = {
+        "enabled": False,
+        "mode": None,
+        "split_date": None,
+        "post_start_date": None,
+        "break_rank": int(args.segment_break_rank),
+        "notes": None,
+        "segments": {},
+    }
+
+    post_df_bt: Optional[pd.DataFrame] = None  # in-memory only (not serialized)
+    disable_tokens = ["none", "off", "disable", "disabled", "0", "false"]
+
+    if seg_spec in disable_tokens:
+        segmentation["enabled"] = False
+        segmentation["mode"] = "none"
+        segmentation["notes"] = "segmentation disabled by --segment_split_date=none/off"
+    else:
+        split_ts: Optional[pd.Timestamp] = None
+
+        if seg_spec == "auto":
+            rk = int(args.segment_break_rank)
+            if len(breaks_aligned) > 0 and 0 <= rk < len(breaks_aligned):
+                split_ts = _parse_ymd(str(breaks_aligned[rk].get("break_date")))
+                segmentation["mode"] = "auto_break_rank"
+            else:
+                msg = f"segment_break_rank={rk} out of range (breaks_detected={len(breaks_aligned)}); segmentation disabled"
+                print(f"WARNING: {msg}")
+                segmentation["enabled"] = False
+                segmentation["mode"] = "auto_break_rank"
+                segmentation["notes"] = msg
+                split_ts = None
+        else:
+            segmentation["mode"] = "manual"
+            split_ts = _parse_ymd(seg_raw)
+            if split_ts is None:
+                print(f"WARNING: could not parse --segment_split_date={seg_raw!r} as YYYY-MM-DD; segmentation disabled")
+
+        if split_ts is None:
+            if segmentation.get("notes") is None:
+                segmentation["enabled"] = False
+                segmentation["notes"] = "no valid split_date (auto had no breaks, or manual date parse failed)"
+        else:
+            post_start_ts = _parse_ymd(args.segment_post_start_date) if args.segment_post_start_date else split_ts
+            if post_start_ts is None:
+                if args.segment_post_start_date:
+                    print(f"WARNING: could not parse --segment_post_start_date={args.segment_post_start_date!r}; fallback to split_date")
+                post_start_ts = split_ts
+
+            segmentation["enabled"] = True
+            segmentation["split_date"] = split_ts.date().isoformat()
+            segmentation["post_start_date"] = post_start_ts.date().isoformat()
+
+            segmentation["notes"] = (
+                "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). "
+                "Segment results are NOT chainable into a single continuous equity curve. "
+                "If --out_post_equity_csv is used, the CSV is produced from the SAME post segment run (no recompute)."
+            )
+
+            df_pre = df_raw.loc[df_raw["date_ts"] < split_ts].copy().reset_index(drop=True)
+            df_post = df_raw.loc[df_raw["date_ts"] >= post_start_ts].copy().reset_index(drop=True)
+
+            seg_pre, pre_df_bt = _segment_backtest(
+                name="pre",
+                df_seg=df_pre,
+                params=params,
+                ratio_hi=ratio_hi,
+                ratio_lo=ratio_lo,
+            )
+            seg_post, post_df_bt = _segment_backtest(
+                name="post",
+                df_seg=df_post,
+                params=params,
+                ratio_hi=ratio_hi,
+                ratio_lo=ratio_lo,
+            )
+
+            segmentation["segments"]["pre"] = seg_pre
+            segmentation["segments"]["post"] = seg_post
+
+            # compare leverage + base-only, never silent-fail
+            try:
+                pre_ok = bool(seg_pre.get("ok"))
+                post_ok = bool(seg_post.get("ok"))
+                if pre_ok and post_ok:
+                    pre_sum = seg_pre.get("summary", {}) or {}
+                    post_sum = seg_post.get("summary", {}) or {}
+                    pre_p = (pre_sum.get("perf_leverage") or {})
+                    post_p = (post_sum.get("perf_leverage") or {})
+                    pre_b = (pre_sum.get("perf_base_only") or {})
+                    post_b = (post_sum.get("perf_base_only") or {})
+                    segmentation["compare"] = {
+                        "pre_perf_leverage_ok": bool(pre_p.get("ok")),
+                        "post_perf_leverage_ok": bool(post_p.get("ok")),
+                        "pre_cagr": pre_p.get("cagr"),
+                        "post_cagr": post_p.get("cagr"),
+                        "pre_mdd": pre_p.get("mdd"),
+                        "post_mdd": post_p.get("mdd"),
+                        "pre_base_cagr": pre_b.get("cagr"),
+                        "post_base_cagr": post_b.get("cagr"),
+                        "pre_base_mdd": pre_b.get("mdd"),
+                        "post_base_mdd": post_b.get("mdd"),
+                    }
+            except Exception as e:
+                segmentation["compare_error"] = f"{type(e).__name__}: {e}"
+
+    summary["segmentation"] = segmentation
+
+    # ---------- write outputs ----------
     out_json_path = os.path.join(cache_dir, str(args.out_json))
     out_eq_path = os.path.join(cache_dir, str(args.out_equity_csv))
     out_tr_path = os.path.join(cache_dir, str(args.out_trades_csv))
 
-    _write_json(out_json_path, summary)
+    try:
+        _write_json(out_json_path, summary)
+    except Exception as e:
+        raise SystemExit(f"ERROR: failed to write json: {out_json_path} ({type(e).__name__}: {e})")
 
     _ensure_parent(out_eq_path)
     df_bt[["date", "price", "bb_z", "equity", "equity_base_only", "lever_on"]].to_csv(
@@ -799,8 +1066,33 @@ def main() -> None:
         pd.DataFrame(columns=TRADE_COLS).to_csv(out_tr_path, index=False, encoding="utf-8")
 
     print(f"OK: wrote {out_json_path}")
-    print(f"OK: wrote {out_eq_path}")
-    print(f"OK: wrote {out_tr_path}")
+    print(f"OK: wrote {out_eq_path}  (NOTE: full-period equity, not segmented)")
+    print(f"OK: wrote {out_tr_path}  (NOTE: full-period trades, not segmented)")
+
+    if args.out_post_equity_csv:
+        if isinstance(segmentation, dict) and segmentation.get("enabled"):
+            seg_post = (segmentation.get("segments", {}) or {}).get("post", {})
+            if isinstance(seg_post, dict) and seg_post.get("ok") and isinstance(post_df_bt, pd.DataFrame):
+                out_post_eq = os.path.join(cache_dir, str(args.out_post_equity_csv))
+                _ensure_parent(out_post_eq)
+                post_df_bt[["date", "price", "bb_z", "equity", "equity_base_only", "lever_on"]].to_csv(
+                    out_post_eq, index=False, encoding="utf-8"
+                )
+                print(f"OK: wrote {out_post_eq}  (post segment equity; from segmentation run; no recompute)")
+            else:
+                print("WARNING: --out_post_equity_csv specified but post segment is not ok; skip writing post equity.")
+        else:
+            print("WARNING: --out_post_equity_csv specified but segmentation is disabled; skip writing post equity.")
+
+    if isinstance(segmentation, dict) and segmentation.get("enabled"):
+        print(
+            "SEGMENTATION: enabled"
+            f" split_date={segmentation.get('split_date')}"
+            f" post_start_date={segmentation.get('post_start_date')}"
+        )
+    else:
+        if isinstance(segmentation, dict):
+            print(f"SEGMENTATION: disabled ({segmentation.get('notes')})")
 
 
 if __name__ == "__main__":
