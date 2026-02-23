@@ -1,13 +1,13 @@
 {
   "meta": {
-    "run_ts_utc": "2026-02-21T11:57:28.495Z",
+    "run_ts_utc": "2026-02-23T01:50:42.520Z",
     "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v6",
     "stock_no": "0050",
     "window_n": 5,
     "timeout": 15.0,
     "retries": 3,
     "backoff": 1.5,
-    "aligned_last_date": "20260211"
+    "aligned_last_date": "20260223"
   },
   "sources": {
     "t86_tpl": "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999",
@@ -19,11 +19,11 @@
   },
   "data": {
     "borrow_summary": {
-      "asof_date": "20260211",
-      "borrow_shares": 135405000,
-      "borrow_shares_chg_1d": -9446000,
-      "borrow_mv_ntd": 10453266000.0,
-      "borrow_mv_ntd_chg_1d": -482984500.0
+      "asof_date": "20260212",
+      "borrow_shares": 136905000,
+      "borrow_shares_chg_1d": 1500000,
+      "borrow_mv_ntd": 10569066000.0,
+      "borrow_mv_ntd_chg_1d": 115800000.0
     },
     "etf_units": {
       "source": "yuanta_pcf",
@@ -35,6 +35,341 @@
       "dq": []
     },
     "per_day": [
+      {
+        "date": "20260223",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260223&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260223&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260222",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260222&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260222&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260221",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260221&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260221&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260220",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260220&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260220&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260219",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260219&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260219&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260218",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260218&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260218&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260217",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260217&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260217&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260216",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260216&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260216&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260215",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260215&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260215&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260214",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260214&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260214&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260213",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260213&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260213&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260212",
+        "dq": [],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260212&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260212&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [],
+          "fields": [
+            "證券代號",
+            "證券名稱",
+            "前日借券餘額(1)股",
+            "本日異動股借券(2)",
+            "本日異動股還券(3)",
+            "本日借券餘額股(4)=(1)+(2)-(3)",
+            "本日收盤價(5)單位：元",
+            "借券餘額市值單位：元(6)=(4)*(5)",
+            "市場別"
+          ],
+          "raw_row": [
+            "0050",
+            "元大台灣50",
+            "135,405,000",
+            "1,500,000",
+            "0",
+            "136,905,000",
+            "77.20",
+            "10,569,066,000",
+            "集中市場"
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "close": 6,
+            "mv": 7
+          },
+          "borrow_shares": 136905000,
+          "close": 77.2,
+          "borrow_mv_ntd": 10569066000.0
+        }
+      },
       {
         "date": "20260211",
         "dq": [],
