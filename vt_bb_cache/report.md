@@ -1,6 +1,6 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-02-20T23:44:14Z`
+- report_generated_at_utc: `2026-02-23T01:51:24Z`
 - data_date: `2026-02-20`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`, sidecar=`forward_mdd(10D)`
@@ -69,7 +69,7 @@
 
 | bw_bin | n | p50 | p10 | p5 | min | conf | conf_decision |
 |---|---:|---:|---:|---:|---:|---|---|
-| B1(<=p20) | 151 | -0.938% | -5.871% | -6.871% | -10.064% | HIGH | LOW_FOR_DECISION |
+| B1(<=p20) | 151 | -0.939% | -5.871% | -6.871% | -10.064% | HIGH | LOW_FOR_DECISION |
 | B2(p20-40] | 185 | -1.086% | -3.843% | -5.602% | -27.390% | HIGH | LOW_FOR_DECISION |
 | B3(p40-60] | 195 | -1.433% | -4.641% | -6.600% | -10.738% | HIGH | LOW_FOR_DECISION |
 | B4(p60-80] | 180 | -1.744% | -6.660% | -8.295% | -11.802% | HIGH | LOW_FOR_DECISION |
@@ -91,7 +91,7 @@
 |---|---:|---:|---:|---:|---:|---|---|
 | B1(<=p20) | 151 | -0.668% | -3.295% | -4.000% | -7.069% | HIGH | LOW_FOR_DECISION |
 | B2(p20-40] | 188 | -0.734% | -2.844% | -3.755% | -10.773% | HIGH | LOW_FOR_DECISION |
-| B3(p40-60] | 197 | -0.829% | -3.231% | -3.793% | -8.524% | HIGH | LOW_FOR_DECISION |
+| B3(p40-60] | 197 | -0.829% | -3.231% | -3.793% | -8.523% | HIGH | LOW_FOR_DECISION |
 | B4(p60-80] | 180 | -0.932% | -3.942% | -5.095% | -9.131% | HIGH | LOW_FOR_DECISION |
 | B5(>p80) | 117 | -1.699% | -4.636% | -5.616% | -7.459% | MED | LOW_FOR_DECISION |
 
