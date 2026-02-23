@@ -1,6 +1,6 @@
 {
   "schema_version": "unified_dashboard_latest_v1",
-  "generated_at_utc": "2026-02-23T23:09:38Z",
+  "generated_at_utc": "2026-02-23T23:27:44Z",
   "run_day_tag": "TRADING_DAY",
   "inputs": {
     "market_in": "dashboard/dashboard_latest.json",
@@ -2896,11 +2896,11 @@
       "status": "OK",
       "latest": {
         "schema_version": "fx_usdtwd_latest_v1",
-        "generated_at_utc": "2026-02-23T23:09:37Z",
+        "generated_at_utc": "2026-02-23T23:27:43Z",
         "source": "BOT",
         "source_url": "https://rate.bot.com.tw/xrt?Lang=zh-TW",
         "data_date": "2026-02-23",
-        "quote_time_local": "2026-02-24T06:31:00+08:00",
+        "quote_time_local": "2026-02-24T07:11:00+08:00",
         "usd_twd": {
           "spot_buy": 31.375,
           "spot_sell": 31.525,
@@ -2930,7 +2930,7 @@
           "parse_dbg": {
             "format": "xrt_text_v4_dynamic_sanity",
             "reason": "ok",
-            "text_len": 2585,
+            "text_len": 2583,
             "text_head": "臺灣銀行牌告匯率 跳至主要內容 您的瀏覽器不支援JavaScript功能，若網頁功能無法正常使用時，請開啟瀏覽器JavaScript狀態。 關鍵字查詢 查詢 正體中文 简体中文 English 日本語 --> 正體中文 中 正體中文 简体中文 English 首頁 / 牌告匯率 2026/02/23 本行 非營業時間 牌告匯率 | 網站導覽 | 臺銀首頁 | 本行匯率利率黃金牌價服務僅支援下列瀏覽器，若您使用IE10 (含) 以下版本瀏",
             "text_has_usd": true,
             "text_has_zh_usd": true,
@@ -3295,26 +3295,26 @@
         },
         "QQQ": {
           "data_date": "2026-02-23",
-          "close": 603.95,
+          "close": 601.45,
           "value": "NA",
-          "close_or_value": 603.95,
+          "close_or_value": 601.45,
           "signal": "NEAR_LOWER_BAND (MONITOR)",
-          "z": -1.5496516854549822,
-          "position_in_band": 0.10981883315306018,
-          "dist_to_lower": 0.626,
-          "dist_to_upper": 5.078,
+          "z": -1.8266678554710283,
+          "position_in_band": 0.04217639151739122,
+          "dist_to_lower": 0.244,
+          "dist_to_upper": 5.532,
           "kind": "QQQ"
         },
         "VXN": {
-          "data_date": "2026-02-20",
+          "data_date": "2026-02-23",
           "close": "NA",
-          "value": 24.23,
-          "close_or_value": 24.23,
-          "signal": "NORMAL_RANGE",
-          "z": 1.128832532439048,
-          "position_in_band": 0.7411923191144334,
-          "dist_to_lower": 30.376,
-          "dist_to_upper": 10.607,
+          "value": 26.36,
+          "close_or_value": 26.36,
+          "signal": "NEAR_UPPER_BAND (WATCH)",
+          "z": 1.8387231229212908,
+          "position_in_band": 0.9500223570247393,
+          "dist_to_lower": 36.081,
+          "dist_to_upper": 1.898,
           "kind": "VXN"
         },
         "NDX": {
