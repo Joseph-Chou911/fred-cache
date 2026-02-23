@@ -1,6 +1,6 @@
 {
   "name": "QQQ_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-02-23T15:30:34Z",
+  "generated_at_utc": "2026-02-23T23:26:58Z",
   "meta": {
     "source": "stooq",
     "url": "https://stooq.com/q/d/l/?s=qqq.us&i=d",
@@ -18,20 +18,20 @@
   },
   "latest": {
     "date": "2026-02-23",
-    "close": 603.95,
-    "bb_mid": 617.15238849024,
-    "bb_lower": 600.1664553666973,
-    "bb_upper": 634.6190581186264,
-    "z": -1.5496516854549822,
+    "close": 601.45,
+    "bb_mid": 617.1097240952317,
+    "bb_lower": 599.9848545814928,
+    "bb_upper": 634.7233745400612,
+    "z": -1.8266678554710283,
     "trigger_z_le_-2": false,
     "trigger_z_ge_2": false,
-    "distance_to_lower_pct": 0.6264665342003092,
-    "distance_to_upper_pct": 5.07807899968977,
-    "position_in_band": 0.10981883315306018,
-    "bandwidth_pct": 0.05582511450083125,
+    "distance_to_lower_pct": 0.24360219777326306,
+    "distance_to_upper_pct": 5.532192957030697,
+    "position_in_band": 0.04217639151739122,
+    "bandwidth_pct": 0.056292290661113624,
     "walk_lower_count": 0,
     "walk_upper_count": 0,
-    "bandwidth_delta_pct": 0.35556230051803084
+    "bandwidth_delta_pct": 1.1953944563094288
   },
   "historical_simulation": {
     "metric": "forward_mdd",

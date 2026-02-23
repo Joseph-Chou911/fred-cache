@@ -1,16 +1,16 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-23T15:30:34Z`
+- report_generated_at_utc: `2026-02-23T23:26:59Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-02-23 close=603.9500) → **NEAR_LOWER_BAND (MONITOR)** (reason=z<=-1.5); dist_to_lower=0.626%; dist_to_upper=5.078%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
-- **VXN** (2026-02-20 close=24.2300) → **NORMAL_RANGE** (reason=default); z=1.1288; pos=0.741; bwΔ=-4.59%; High-Vol tail (B) p90 runup=67.4% (n=54) (conf=LOW)
+- **QQQ** (2026-02-23 close=601.4500) → **NEAR_LOWER_BAND (MONITOR)** (reason=z<=-1.5); dist_to_lower=0.244%; dist_to_upper=5.532%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
+- **VXN** (2026-02-23 close=26.3600) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.950)); z=1.8387; pos=0.950; bwΔ=0.77%; Pos-WATCH (C) p90 runup=58.1% (n=78) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-23T15:30:34Z`
+- snippet.generated_at_utc: `2026-02-23T23:26:58Z`
 - data_as_of (meta.max_date): `2026-02-23`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NEAR_LOWER_BAND (MONITOR)`**
@@ -21,17 +21,17 @@
 | field | value |
 |---|---:|
 | date | `2026-02-23` |
-| close | `603.9500` |
-| bb_mid | `617.1524` |
-| bb_lower | `600.1665` |
-| bb_upper | `634.6191` |
-| z | `-1.5497` |
+| close | `601.4500` |
+| bb_mid | `617.1097` |
+| bb_lower | `599.9849` |
+| bb_upper | `634.7234` |
+| z | `-1.8267` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `0.626%` |
-| distance_to_upper_pct | `5.078%` |
-| position_in_band | `0.110` |
-| bandwidth_pct | `5.58%` |
-| bandwidth_delta_pct | `0.36%` |
+| distance_to_lower_pct | `0.244%` |
+| distance_to_upper_pct | `5.532%` |
+| position_in_band | `0.042` |
+| bandwidth_pct | `5.63%` |
+| bandwidth_delta_pct | `1.20%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
@@ -58,36 +58,36 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-23T15:30:34Z`
-- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `3`  | staleness_flag: **`HIGH`**
+- snippet.generated_at_utc: `2026-02-23T23:26:58Z`
+- data_as_of (meta.max_date): `2026-02-23`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
-- action_output: **`NORMAL_RANGE`**
-- trigger_reason: `default`
+- action_output: **`NEAR_UPPER_BAND (WATCH)`**
+- trigger_reason: `position_in_band>=0.8 (pos=0.950)`
 
 ### Latest
 
 | field | value |
 |---|---:|
-| date | `2026-02-20` |
-| close | `24.2300` |
-| bb_mid | `21.2629` |
-| bb_lower | `16.8698` |
-| bb_upper | `26.8000` |
-| z | `1.1288` |
+| date | `2026-02-23` |
+| close | `26.3600` |
+| bb_mid | `21.2737` |
+| bb_lower | `16.8490` |
+| bb_upper | `26.8603` |
+| z | `1.8387` |
 | trigger_z_le_-2 (A_lowvol) | `False` |
 | trigger_z_ge_2 (B_highvol) | `False` |
-| distance_to_lower_pct | `30.376%` |
-| distance_to_upper_pct | `10.607%` |
-| position_in_band | `0.741` |
-| bandwidth_pct | `46.70%` |
-| bandwidth_delta_pct | `-4.59%` |
+| distance_to_lower_pct | `36.081%` |
+| distance_to_upper_pct | `1.898%` |
+| position_in_band | `0.950` |
+| bandwidth_pct | `47.06%` |
+| bandwidth_delta_pct | `0.77%` |
 | walk_upper_count | 0 |
 ### Historical simulation (conditional)
 
 #### C) Position-based WATCH (pos >= threshold)
 
-- confidence: **`LOW`** (staleness_flag=HIGH)
+- confidence: **`MED`** (sample_size=78 (30-79))
 
 | field | value |
 |---|---:|
@@ -108,7 +108,7 @@
 
 #### A) Low-Vol / Complacency (z <= threshold)
 
-- confidence: **`LOW`** (staleness_flag=HIGH)
+- confidence: **`LOW`** (sample_size=29 (<30))
 
 | field | value |
 |---|---:|
@@ -129,7 +129,7 @@
 
 #### B) High-Vol / Stress (z >= threshold)
 
-- confidence: **`LOW`** (staleness_flag=HIGH)
+- confidence: **`MED`** (sample_size=54 (30-79))
 
 | field | value |
 |---|---:|
