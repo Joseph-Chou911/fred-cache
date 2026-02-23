@@ -1,6 +1,6 @@
 {
   "name": "QQQ_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-02-22T14:58:50Z",
+  "generated_at_utc": "2026-02-23T01:52:17Z",
   "meta": {
     "source": "stooq",
     "url": "https://stooq.com/q/d/l/?s=qqq.us&i=d",
@@ -31,7 +31,7 @@
     "bandwidth_pct": 0.05562732470539212,
     "walk_lower_count": 0,
     "walk_upper_count": 0,
-    "bandwidth_delta_pct": -7.00951636584316
+    "bandwidth_delta_pct": -7.009516365843227
   },
   "historical_simulation": {
     "metric": "forward_mdd",

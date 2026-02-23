@@ -1,17 +1,17 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-22T14:58:51Z`
+- report_generated_at_utc: `2026-02-23T01:52:18Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-02-20 close=608.8100) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.407%; dist_to_upper=4.232%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
-- **VXN** (2026-02-20 close=24.2300) → **NORMAL_RANGE** (reason=default); z=1.1288; pos=0.741; bwΔ=-4.59%; High-Vol tail (B) p90 runup=67.4% (n=54) (conf=MED)
+- **QQQ** (2026-02-20 close=608.8100) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.407%; dist_to_upper=4.232%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=LOW)
+- **VXN** (2026-02-20 close=24.2300) → **NORMAL_RANGE** (reason=default); z=1.1288; pos=0.741; bwΔ=-4.59%; High-Vol tail (B) p90 runup=67.4% (n=54) (conf=LOW)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-22T14:58:50Z`
-- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `2`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-23T01:52:17Z`
+- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `3`  | staleness_flag: **`HIGH`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
 - trigger_reason: `default`
@@ -36,7 +36,7 @@
 
 ### Historical simulation (conditional)
 
-- confidence: **`HIGH`** (sample_size=87 (>=80))
+- confidence: **`LOW`** (staleness_flag=HIGH)
 
 | field | value |
 |---|---:|
@@ -58,8 +58,8 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-22T14:58:50Z`
-- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `2`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-23T01:52:18Z`
+- data_as_of (meta.max_date): `2026-02-20`  | staleness_days: `3`  | staleness_flag: **`HIGH`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
 - action_output: **`NORMAL_RANGE`**
@@ -87,7 +87,7 @@
 
 #### C) Position-based WATCH (pos >= threshold)
 
-- confidence: **`MED`** (sample_size=78 (30-79))
+- confidence: **`LOW`** (staleness_flag=HIGH)
 
 | field | value |
 |---|---:|
@@ -108,7 +108,7 @@
 
 #### A) Low-Vol / Complacency (z <= threshold)
 
-- confidence: **`LOW`** (sample_size=29 (<30))
+- confidence: **`LOW`** (staleness_flag=HIGH)
 
 | field | value |
 |---|---:|
@@ -129,7 +129,7 @@
 
 #### B) High-Vol / Stress (z >= threshold)
 
-- confidence: **`MED`** (sample_size=54 (30-79))
+- confidence: **`LOW`** (staleness_flag=HIGH)
 
 | field | value |
 |---|---:|
