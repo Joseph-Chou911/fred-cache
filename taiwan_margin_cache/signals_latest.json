@@ -1,7 +1,7 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-02-22T14:52:49Z",
+  "generated_at_utc": "2026-02-23T01:54:58Z",
   "generated_at_local": null,
   "data_date": "2026-02-11",
   "state": "中性",
@@ -10,9 +10,9 @@
   "rationale": "no rule triggered",
   "resonance": "QUIET",
   "resonance_display": "QUIET",
-  "resonance_confidence": "OK",
-  "resonance_code": null,
-  "resonance_note": null,
+  "resonance_confidence": "DOWNGRADED",
+  "resonance_code": "ROLL25_STALE",
+  "resonance_note": "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）",
   "thresholds": {
     "policy": "percentile",
     "calib_min_n": 60,
@@ -203,15 +203,15 @@
     "ok": true,
     "error": null,
     "used_date": "2026-02-11",
-    "used_date_status": "OK_LATEST",
-    "risk_level_display": "低(derived)",
+    "used_date_status": "DATA_NOT_UPDATED",
+    "risk_level_display": "低(derived)（stale）",
     "risk_level_raw": "NA",
-    "tag": "WEEKEND",
+    "tag": "WEEKDAY",
     "is_heated": false,
     "lookback_note": null,
     "strict_same_day": true,
-    "strict_not_stale": true,
-    "strict_roll_match": true
+    "strict_not_stale": false,
+    "strict_roll_match": false
   },
   "maint_ratio": {
     "policy": "PROXY_TREND_ONLY",
