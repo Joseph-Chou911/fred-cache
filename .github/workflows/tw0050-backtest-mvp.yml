@@ -1,4 +1,4 @@
-name: tw0050-backtest-mvp
+name: tw0050-backtest-mvp-and-tactical-cash
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: tw0050-backtest-mvp
+  group: tw0050-backtest-mvp-and-tactical-cash
   cancel-in-progress: true
 
 jobs:
@@ -29,6 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas numpy
 
+      # =========================
+      # (A) Run backtest (MVP) — your original pipeline
+      # =========================
       - name: Run backtest (MVP)
         env:
           CACHE_DIR: tw0050_bb_cache
@@ -70,10 +73,10 @@ jobs:
             --out_equity_csv "${OUT_EQ}" \
             --out_json "${OUT_JSON}"
 
-          echo "Wrote full outputs:"
+          echo "Wrote MVP full outputs:"
           ls -lh "${CACHE_DIR}/${OUT_EQ}" "${CACHE_DIR}/${OUT_JSON}"
 
-          # ---- produce lite JSON (strip trades everywhere) ----
+          # ---- produce MVP lite JSON (strip trades everywhere) ----
           python - << 'PY' "${CACHE_DIR}/${OUT_JSON}" "${CACHE_DIR}/${OUT_JSON_LITE}"
           import json, os, sys
 
@@ -89,7 +92,6 @@ jobs:
             return summary_obj
 
           def strip_trades_in_segmentation(seg):
-            # seg: dict with segments.pre/segments.post.summary
             if not isinstance(seg, dict):
               return seg
             segs = seg.get("segments")
@@ -101,10 +103,8 @@ jobs:
                     strip_trades_in_summary(summ)
             return seg
 
-          # top-level trades
           obj.pop("trades", None)
 
-          # if this is a multi-strategy suite output:
           if isinstance(obj.get("strategies"), list):
             for s in obj["strategies"]:
               if isinstance(s, dict):
@@ -114,55 +114,218 @@ jobs:
                 if isinstance(s.get("segmentation"), dict):
                   strip_trades_in_segmentation(s["segmentation"])
 
-          # if this is a single-strategy output:
           if isinstance(obj.get("segmentation"), dict):
             strip_trades_in_segmentation(obj["segmentation"])
 
           with open(dst, "w", encoding="utf-8") as f:
             json.dump(obj, f, ensure_ascii=False, indent=2)
 
-          print("OK: wrote lite json:", dst)
+          print("OK: wrote MVP lite json:", dst)
           print("full_bytes:", os.path.getsize(src), "lite_bytes:", os.path.getsize(dst))
           PY
 
-          echo "Wrote lite outputs:"
+          echo "Wrote MVP lite outputs:"
           ls -lh "${CACHE_DIR}/${OUT_JSON_LITE}"
 
-          # ---- render report from lite JSON (preferred) ----
+          # ---- render MVP report from lite JSON (preferred) ----
           python scripts/render_backtest_mvp.py \
             --in_json "${CACHE_DIR}/${OUT_JSON_LITE}" \
             --out_md "${CACHE_DIR}/${OUT_MD}"
 
-          echo "Wrote report:"
+          echo "Wrote MVP report:"
           ls -lh "${CACHE_DIR}/${OUT_MD}"
 
-      # (Optional) keep the full JSON out of git, but available for download
+      # =========================
+      # (B) Run backtest (tactical cash overlay) — new pipeline
+      # =========================
+      - name: Run backtest (tactical cash overlay)
+        env:
+          CACHE_DIR: tw0050_bb_cache
+          PRICE_CSV: data.csv
+
+          MA_WINDOW: "60"
+          CORE_FRAC: "0.90"
+          PERF_DDOF: "0"
+
+          FEE_RATE: "0.001425"
+          TAX_RATE: "0.0010"
+          SLIP_BPS: "5.0"
+        run: |
+          set -euo pipefail
+
+          FP2=$(python - << 'PY'
+          import hashlib, os
+          s = "|".join([
+            os.environ["MA_WINDOW"],
+            os.environ["CORE_FRAC"],
+            os.environ["PERF_DDOF"],
+            os.environ["FEE_RATE"],
+            os.environ["TAX_RATE"],
+            os.environ["SLIP_BPS"],
+          ]).encode("utf-8")
+          print(hashlib.sha1(s).hexdigest()[:10])
+          PY
+          )
+
+          OUT_EQ2="tactical_cash_equity.${FP2}.csv"
+          OUT_TR2="tactical_cash_trades.${FP2}.csv"
+          OUT_JSON2="tactical_cash_backtest.${FP2}.json"
+          OUT_JSON2_LITE="tactical_cash_backtest.${FP2}.lite.json"
+          OUT_MD2="tactical_cash_backtest.${FP2}.report.md"
+
+          python scripts/backtest_tw0050_tactical_cash.py \
+            --cache_dir "${CACHE_DIR}" \
+            --price_csv "${PRICE_CSV}" \
+            --ma_window "${MA_WINDOW}" \
+            --core_frac "${CORE_FRAC}" \
+            --perf_ddof "${PERF_DDOF}" \
+            --fee_rate "${FEE_RATE}" \
+            --tax_rate "${TAX_RATE}" \
+            --slip_bps "${SLIP_BPS}" \
+            --out_equity_csv "${OUT_EQ2}" \
+            --out_trades_csv "${OUT_TR2}" \
+            --out_json "${OUT_JSON2}"
+
+          echo "Wrote tactical full outputs:"
+          ls -lh "${CACHE_DIR}/${OUT_EQ2}" "${CACHE_DIR}/${OUT_TR2}" "${CACHE_DIR}/${OUT_JSON2}"
+
+          # ---- produce tactical lite JSON (strip trades) ----
+          python - << 'PY' "${CACHE_DIR}/${OUT_JSON2}" "${CACHE_DIR}/${OUT_JSON2_LITE}"
+          import json, os, sys
+          src = sys.argv[1]
+          dst = sys.argv[2]
+          with open(src, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+          obj.pop("trades", None)
+          with open(dst, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+          print("OK: wrote tactical lite json:", dst)
+          print("full_bytes:", os.path.getsize(src), "lite_bytes:", os.path.getsize(dst))
+          PY
+
+          echo "Wrote tactical lite outputs:"
+          ls -lh "${CACHE_DIR}/${OUT_JSON2_LITE}"
+
+          # ---- render tactical report from lite JSON (simple renderer inline) ----
+          python - << 'PY' "${CACHE_DIR}/${OUT_JSON2_LITE}" "${CACHE_DIR}/${OUT_MD2}"
+          import json, sys
+
+          src = sys.argv[1]
+          out_md = sys.argv[2]
+
+          with open(src, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+
+          inputs = obj.get("inputs", {}) or {}
+          perf = obj.get("perf", {}) or {}
+          audit = obj.get("audit", {}) or {}
+          trade_kpis = obj.get("trade_kpis", {}) or {}
+          delta = (perf.get("delta_vs_base") or {})
+
+          def fmt_pct(x):
+            try:
+              if x is None:
+                return "N/A"
+              return f"{float(x)*100:.2f}%"
+            except Exception:
+              return "N/A"
+
+          def fmt_num(x, nd=4):
+            try:
+              if x is None:
+                return "N/A"
+              return f"{float(x):.{nd}f}"
+            except Exception:
+              return "N/A"
+
+          overlay = perf.get("overlay", {}) or {}
+          base = perf.get("base_only", {}) or {}
+
+          lines = []
+          lines.append("# 0050 Tactical Cash Overlay Backtest")
+          lines.append("")
+          lines.append(f"- generated_at_utc: `{obj.get('generated_at_utc','N/A')}`")
+          lines.append(f"- script_fingerprint: `{obj.get('script_fingerprint','N/A')}`")
+          lines.append(f"- price_csv: `{inputs.get('price_csv_resolved', inputs.get('price_csv','N/A'))}`")
+          lines.append("")
+          lines.append("## Strategy")
+          lines.append(f"- MA window: `{inputs.get('ma_window','N/A')}`")
+          lines.append(f"- core_frac: `{inputs.get('core_frac','N/A')}` (tactical_cash = 1-core)")
+          lines.append(f"- costs: fee_rate={inputs.get('fee_rate','N/A')}, tax_rate={inputs.get('tax_rate','N/A')}, slip_bps={inputs.get('slip_bps','N/A')}")
+          lines.append("")
+          lines.append("## Snapshot (audit)")
+          lines.append(f"- rows: `{audit.get('rows','N/A')}`")
+          lines.append(f"- date_range: `{audit.get('start_date','N/A')}` ~ `{audit.get('end_date','N/A')}`")
+          lines.append(f"- time_in_market_pct (tactical leg): `{fmt_num(audit.get('time_in_market_pct'), nd=4)}`")
+          lines.append("")
+          lines.append("## Performance (overlay vs base-only)")
+          lines.append("")
+          lines.append("| metric | overlay | base_only | delta_vs_base |")
+          lines.append("|---|---:|---:|---:|")
+          lines.append(f"| CAGR | {fmt_pct(overlay.get('cagr'))} | {fmt_pct(base.get('cagr'))} | {fmt_pct(delta.get('cagr'))} |")
+          lines.append(f"| MDD | {fmt_pct(overlay.get('mdd'))} | {fmt_pct(base.get('mdd'))} | {fmt_pct(delta.get('mdd'))} |")
+          lines.append(f"| Sharpe0 | {fmt_num(overlay.get('sharpe0'), nd=3)} | {fmt_num(base.get('sharpe0'), nd=3)} | {fmt_num(delta.get('sharpe0'), nd=3)} |")
+          lines.append("")
+          lines.append("## Trade KPIs (tactical leg)")
+          lines.append(f"- n_trades: `{trade_kpis.get('n_trades','N/A')}`")
+          lines.append(f"- win_rate: `{fmt_num(trade_kpis.get('win_rate'), nd=4)}`")
+          lines.append(f"- avg_net_pnl (per trade, equity units): `{fmt_num(trade_kpis.get('avg_net_pnl'), nd=6)}`")
+          lines.append(f"- profit_factor: `{fmt_num(trade_kpis.get('profit_factor'), nd=4)}`")
+          lines.append(f"- avg_hold_days: `{fmt_num(trade_kpis.get('avg_hold_days'), nd=2)}`")
+          lines.append("")
+          lines.append("## Notes")
+          lines.append("- base_only = core shares buy&hold + idle tactical cash (no trading).")
+          lines.append("- overlay = base_only + tactical leg switching (MA filter), with costs applied.")
+          lines.append("- This report is non-predictive; it is a backtest summary for audit and comparison.")
+
+          with open(out_md, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+          print("OK: wrote tactical report:", out_md)
+          PY
+
+          echo "Wrote tactical report:"
+          ls -lh "${CACHE_DIR}/${OUT_MD2}"
+
+      # =========================
+      # Artifacts
+      # =========================
       - name: Upload artifacts (optional)
         uses: actions/upload-artifact@v4
         with:
-          name: tw0050-backtest-mvp
+          name: tw0050-backtests
           path: |
             tw0050_bb_cache/equity_curve.*.csv
             tw0050_bb_cache/backtest_mvp.*.json
             tw0050_bb_cache/backtest_mvp.*.lite.json
             tw0050_bb_cache/backtest_mvp.*.report.md
+            tw0050_bb_cache/tactical_cash_equity.*.csv
+            tw0050_bb_cache/tactical_cash_trades.*.csv
+            tw0050_bb_cache/tactical_cash_backtest.*.json
+            tw0050_bb_cache/tactical_cash_backtest.*.lite.json
+            tw0050_bb_cache/tactical_cash_backtest.*.report.md
 
-      - name: Commit outputs (lite json + report)
+      # =========================
+      # Commit (lite + report + equity only)
+      # =========================
+      - name: Commit outputs (lite json + report + equity)
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Commit equity + lite json + report only (avoid pushing oversized full json)
           git add \
             tw0050_bb_cache/equity_curve.*.csv \
             tw0050_bb_cache/backtest_mvp.*.lite.json \
-            tw0050_bb_cache/backtest_mvp.*.report.md
+            tw0050_bb_cache/backtest_mvp.*.report.md \
+            tw0050_bb_cache/tactical_cash_equity.*.csv \
+            tw0050_bb_cache/tactical_cash_backtest.*.lite.json \
+            tw0050_bb_cache/tactical_cash_backtest.*.report.md
 
           if git diff --cached --quiet; then
             echo "No changes."
             exit 0
           fi
 
-          git commit -m "tw0050 backtest mvp: update outputs (lite json + report)"
+          git commit -m "tw0050 backtests: update outputs (mvp + tactical cash)"
           git push
