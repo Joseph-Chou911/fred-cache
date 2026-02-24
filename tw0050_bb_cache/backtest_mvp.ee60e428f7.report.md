@@ -1,7 +1,7 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T10:53:13Z`
-- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.8.exclude_split_day_post_start_next_row`
+- generated_at_utc: `2026-02-24T11:26:40Z`
+- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs`
 - renderer_fingerprint: `render_backtest_mvp@2026-02-24.v12.post_only_semantic1_no_renderer_v4_gate`
 - suite_ok: `True`
 
@@ -88,7 +88,7 @@ post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (p
   - full: equity_negative_days>0 (neg_days=1422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.3b2c793f64__trend_leverage_price_gt_ma60_1.5x.csv`
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.0d3098298f__trend_leverage_price_gt_ma60_1.5x.csv`
   - FULL:
     - equity_min_date: `2014-02-05`
     - neg_days_first_date: `2014-01-02`
@@ -112,7 +112,7 @@ post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (p
   - full: equity_negative_days>0 (neg_days=124)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.3b2c793f64__trend_leverage_price_gt_ma60_1.3x.csv`
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.0d3098298f__trend_leverage_price_gt_ma60_1.3x.csv`
   - FULL:
     - equity_min_date: `2014-02-05`
     - neg_days_first_date: `2014-01-02`
@@ -166,7 +166,7 @@ post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (p
   - full: equity_negative_days>0 (neg_days=422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.3b2c793f64__always_leverage_1.5x.csv`
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.0d3098298f__always_leverage_1.5x.csv`
   - FULL:
     - equity_min_date: `2014-02-05`
     - neg_days_first_date: `2014-01-02`
