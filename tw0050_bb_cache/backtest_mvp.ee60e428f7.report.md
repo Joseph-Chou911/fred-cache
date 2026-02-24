@@ -1,8 +1,8 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T07:58:16Z`
+- generated_at_utc: `2026-02-24T08:27:44Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v10.post_only_pass_watch_v1`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v11.suite_hard_fail_date_evidence`
 - suite_ok: `True`
 
 ## Ranking (policy)
@@ -61,7 +61,7 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
 | id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |
 |---|---:|---:|---:|---:|---:|---|
 | trend_leverage_price_gt_ma60_1.3x | 21.59% | -36.23% | 1.062 | 0.596 | -0.024 | excluded_by_renderer_v4: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0 |
-| trend_leverage_price_gt_ma60_1.2x | 21.10% | -35.46% | 1.071 | 0.595 | -0.015 |  |
+| trend_leverage_price_gt_ma60_1.2x | 21.10% | -35.46% | 1.071 | 0.595 | -0.015 |   |
 
 ### WATCH (research-grade, not for deploy)
 | id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |
@@ -70,10 +70,10 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
 
 ### Post-only Exclusions (reasons)
 - always_leverage_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
-- always_leverage_1.2x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.03`
-- always_leverage_1.3x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.03`
-- always_leverage_1.5x: `EXCLUDE_POST_MDD_LT_-0.4`
-- bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO`
+- always_leverage_1.2x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
+- always_leverage_1.3x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
+- always_leverage_1.5x: `EXCLUDE_POST_MDD_LT_-0.4, EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
+- bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO, EXCLUDE_POST_MDD_LT_-0.4, EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
 - trend_leverage_price_gt_ma60_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
 
 ## Post Go/No-Go Details (compact)
@@ -87,6 +87,9 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
   - full: equity_min<= 0.0 (equity_min=-0.39616459186496916)
   - full: equity_negative_days>0 (neg_days=1422)
 
+- suite_hard_fail_evidence (from equity CSV, best-effort):
+  - status: `N/A` (equity csv not found)
+
 ### trend_leverage_price_gt_ma60_1.3x
 - decision: `GO_OR_REVIEW`
 - rule_id: `post_gonogo_v3`
@@ -96,6 +99,9 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
 - suite_hard_fail: `true`
   - full: equity_min<= 0.0 (equity_min=-0.0639430290987017)
   - full: equity_negative_days>0 (neg_days=124)
+
+- suite_hard_fail_evidence (from equity CSV, best-effort):
+  - status: `N/A` (equity csv not found)
 
 ### trend_leverage_price_gt_ma60_1.2x
 - decision: `GO_OR_REVIEW`
@@ -136,6 +142,9 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
 - suite_hard_fail: `true`
   - full: equity_min<= 0.0 (equity_min=-0.11447548296733157)
   - full: equity_negative_days>0 (neg_days=422)
+
+- suite_hard_fail_evidence (from equity CSV, best-effort):
+  - status: `N/A` (equity csv not found)
 
 ### bb_conditional
 - decision: `NO_GO`
