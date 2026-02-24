@@ -1,75 +1,104 @@
 {
-  "generated_at_utc": "2026-02-24T13:57:45Z",
-  "schema_version": "v1",
-  "script_fingerprint": "backtest_tw0050_tactical_cash@2026-02-24.v1",
+  "generated_at_utc": "2026-02-24T14:04:38Z",
+  "schema_version": "v2",
+  "script_fingerprint": "backtest_tw0050_tactical_cash@2026-02-24.v2.post_only_segmentation",
   "inputs": {
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
     "price_csv_resolved": "tw0050_bb_cache/data.csv",
+    "stats_json": "stats_latest.json",
+    "stats_json_resolved": "tw0050_bb_cache/stats_latest.json",
     "price_col": "adjclose",
     "ma_window": 60,
     "core_frac": 0.9,
     "fee_rate": 0.001425,
     "tax_rate": 0.001,
     "slip_bps": 5.0,
-    "slip_rate": 0.0005
+    "slip_rate": 0.0005,
+    "break_ratio_hi": 1.8,
+    "break_ratio_lo": 0.5555555556,
+    "segment_split_date": "auto",
+    "segment_break_rank": 0,
+    "segment_post_start_date": null
+  },
+  "segmentation": {
+    "enabled": true,
+    "mode": "auto_break_rank",
+    "split_date": "2014-01-02",
+    "post_start_date": "2014-01-03",
+    "post_start_policy": "next_row_after_split_date (exclude split day)",
+    "break_rank": 0,
+    "breaks_detected": 1,
+    "break_samples_first5": [
+      {
+        "idx": 1238,
+        "break_date": "2014-01-02",
+        "prev_date": "2013-12-31",
+        "prev_price": 37.41241455078125,
+        "price": 9.329200744628906,
+        "ratio": 0.24936109728940478
+      }
+    ],
+    "break_samples_source": "detect_breaks_from_price",
+    "notes": "post-only evaluation: equity is normalized to 1.0 at post_start_date. split_date is excluded from post by default (post starts at next trading row)."
   },
   "audit": {
-    "rows": 4193,
-    "start_date": "2009-01-02",
+    "rows": 2954,
+    "start_date": "2014-01-03",
     "end_date": "2026-02-24",
-    "p0": 20.467866897583008,
-    "core_shares": 0.0439713627464657,
+    "p0": 9.217665672302246,
+    "core_shares": 0.09763860309062522,
     "cash0": 0.09999999999999998,
-    "n_trades": 121,
-    "time_in_market_days": 2800,
-    "time_in_market_pct": 0.667779632721202
+    "n_trades": 77,
+    "time_in_market_days": 2058,
+    "time_in_market_pct": 0.6966824644549763,
+    "normalization_note": "equity is normalized to 1.0 at analysis period start (default: post). not chainable to full period."
   },
   "perf": {
     "overlay": {
       "ok": true,
       "start": 1.0,
-      "end": 3.588586000958948,
-      "n_days": 4193,
-      "years": 16.634920634920636,
-      "cagr": 0.07983883526660707,
-      "vol_ann": 0.274532890669019,
-      "sharpe0": 0.49504151527752366,
+      "end": 8.141018278386538,
+      "n_days": 2954,
+      "years": 11.718253968253968,
+      "cagr": 0.19595418015099675,
+      "vol_ann": 0.17823125493231926,
+      "sharpe0": 1.093569570806899,
       "sharpe_note": "rf=0 assumed",
       "perf_ddof": 0,
-      "mdd": -0.7764897356045054,
-      "mdd_peak": "2011-01-28",
-      "mdd_trough": "2014-02-05"
+      "mdd": -0.32931989983709686,
+      "mdd_peak": "2022-01-17",
+      "mdd_trough": "2022-10-25"
     },
     "base_only": {
       "ok": true,
       "start": 1.0,
-      "end": 3.5913262691643517,
-      "n_days": 4193,
-      "years": 16.634920634920636,
-      "cagr": 0.07988838623244154,
-      "vol_ann": 0.25996753131132755,
-      "sharpe0": 0.48835881176471035,
+      "end": 7.852505234380327,
+      "n_days": 2954,
+      "years": 11.718253968253968,
+      "cagr": 0.19227728215716344,
+      "vol_ann": 0.1756059530230542,
+      "sharpe0": 1.0897280942264795,
       "sharpe_note": "rf=0 assumed",
       "perf_ddof": 0,
-      "mdd": -0.7309827377949465,
-      "mdd_peak": "2011-01-28",
-      "mdd_trough": "2014-02-05"
+      "mdd": -0.328113905946369,
+      "mdd_peak": "2022-01-17",
+      "mdd_trough": "2022-10-25"
     },
-    "calmar_overlay": 0.10282020689488149,
-    "calmar_base_only": 0.10928901888084208,
+    "calmar_overlay": 0.5950268424347526,
+    "calmar_base_only": 0.5860077207108424,
     "delta_vs_base": {
-      "cagr": -4.955096583447727e-05,
-      "mdd": -0.04550699780955891,
-      "sharpe0": 0.006682703512813304
+      "cagr": 0.0036768979938333057,
+      "mdd": -0.0012059938907278411,
+      "sharpe0": 0.003841476580419556
     }
   },
   "trade_kpis": {
-    "n_trades": 121,
-    "win_rate": 0.2644628099173554,
-    "avg_net_pnl": -2.264684467275646e-05,
-    "profit_factor": 0.9832593599507484,
-    "avg_hold_days": 23.14876033057851,
-    "time_in_market_pct": null
+    "n_trades": 77,
+    "win_rate": 0.2857142857142857,
+    "avg_net_pnl": 0.0037469226494312932,
+    "profit_factor": 3.3018648796853,
+    "avg_hold_days": 26.74025974025974,
+    "time_in_market_pct": 0.6966824644549763
   }
 }
