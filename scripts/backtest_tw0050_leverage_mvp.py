@@ -6,6 +6,20 @@ backtest_tw0050_leverage_mvp.py
 
 Audit-first MVP backtest for "base hold + conditional leverage leg" using BB z-score.
 
+v26.7 (2026-02-24):
+- ADD(audit/evidence): write per-strategy equity CSVs so renderer can attach "hard-fail date evidence".
+  * In addition to the exported strategy equity CSV (--out_equity_csv), we write:
+      {out_equity_csv_stem}__{strategy_id_sanitized}.csv
+    for EVERY successfully computed strategy.
+  * Also write per-strategy POST equity CSV (best-effort):
+      backtest_mvp_post_equity__{strategy_id_sanitized}.csv
+  * Add suite_out.outputs.equity_csv_by_strategy / post_equity_csv_by_strategy mappings.
+
+- ADD(audit): suite_hard_fail flag (FULL-floor breach) independent of hard_fail_scope:
+  * suite_hard_fail is evaluated on FULL only with the same thresholds:
+      equity_min <= hard_fail_equity_le OR (any_negative_days & equity_negative_days>0)
+  * hard_fail remains the policy-driven flag (scope=full/post/any).
+
 v26.6 (2026-02-24):
 - FIX(safety): _hard_fail_eval scope="post" now applies a FULL-period floor check ("full_floor")
   so post-good cannot hide full-period blowups (equity_min / negative_days).
@@ -53,6 +67,7 @@ import argparse
 import json
 import math
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone, date as _date
 from typing import Any, Dict, List, Optional, Tuple
@@ -60,8 +75,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-SCHEMA_VERSION = "v26.6"
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard"
+SCHEMA_VERSION = "v26.7"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail"
 
 # ===== RV20 Filter Policy (fixed for v26.5+; no CLI knobs) =====
 _RV20_WINDOW = 20
@@ -111,6 +126,20 @@ def _ensure_parent(path: str) -> None:
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
+
+
+def _safe_filename(s: str, max_len: int = 160) -> str:
+    """
+    Convert strategy_id into a filesystem-safe token.
+    Keep [A-Za-z0-9._-], replace others with '_', and truncate.
+    """
+    ss = str(s)
+    ss = re.sub(r"[^A-Za-z0-9._-]+", "_", ss).strip("_")
+    if not ss:
+        ss = "NA"
+    if len(ss) > int(max_len):
+        ss = ss[: int(max_len)]
+    return ss
 
 
 def _json_sanitize(obj: Any, _depth: int = 0, _max_depth: int = 60) -> Any:
@@ -1565,10 +1594,6 @@ def _hard_fail_eval(
     return (len(reasons) > 0), reasons
 
 
-# ======= The rest of the script (strategy runner + main) is unchanged from your v26.5 =======
-# NOTE: Your pasted v26.5 file continues beyond this point. To avoid accidental truncation,
-# I am including it as-is below. (No logic changes other than the two patches above.)
-
 def _run_one_strategy(
     *,
     strategy_id: str,
@@ -1706,6 +1731,24 @@ def _run_one_strategy(
         out["trades"] = summary.get("trades", []) if isinstance(summary.get("trades", []), list) else []
 
     return out, df_bt, segmentation, post_df_bt, summary
+
+
+def _write_equity_csv_best_effort(path: str, df_bt: pd.DataFrame) -> Optional[str]:
+    """
+    Best-effort write for per-strategy equity CSV.
+    Returns resolved path if successful, else None.
+    """
+    if df_bt is None or not isinstance(df_bt, pd.DataFrame) or df_bt.empty:
+        return None
+    try:
+        _ensure_parent(path)
+        df_bt[["date", "price", "bb_z", "ma_fast", "ma_slow", "equity", "equity_base_only", "lever_on"]].to_csv(
+            path, index=False, encoding="utf-8"
+        )
+        return path
+    except Exception as e:
+        print(f"WARNING: failed to write per-strategy equity csv: {path}: {e}")
+        return None
 
 
 def main() -> None:
@@ -1969,6 +2012,12 @@ def main() -> None:
                 "q": float(_RV20_Q),
                 "q_min_periods": int(_RV20_Q_MIN_PERIODS),
             },
+            "per_strategy_equity_csv_policy": {
+                "enabled": True,
+                "filename_pattern": "{out_equity_csv_stem}__{strategy_id_sanitized}{ext}",
+                "post_filename_pattern": "backtest_mvp_post_equity__{strategy_id_sanitized}.csv",
+                "note": "Written for ALL successful strategies to support renderer evidence.",
+            },
         },
         "strategy_suite": {
             "mode": str(args.strategy_suite),
@@ -1984,7 +2033,10 @@ def main() -> None:
         "failed_strategies": [],
         "suite_ok": True,
         "abort_reason": None,
-        "outputs": {},
+        "outputs": {
+            "equity_csv_by_strategy": {},       # v26.7
+            "post_equity_csv_by_strategy": {},  # v26.7
+        },
         "notes": [
             "Hard-fail strategies are excluded from ranking.",
             "Maintenance margin forced close approximates margin call at EOD on trigger bar; intraday is not modeled.",
@@ -1992,6 +2044,7 @@ def main() -> None:
             "JSON output is sanitized: NaN/Inf are converted to null; allow_nan=False enforced.",
             "v26.5+: RV20 entry filter is enabled for BB mode (defensive).",
             "v26.6: hard_fail scope='post' still enforces full_floor.",
+            "v26.7: per-strategy equity csvs are written for renderer evidence.",
         ],
     }
 
@@ -1999,6 +2052,12 @@ def main() -> None:
     abort_reason: Optional[str] = None
 
     results_by_sid: Dict[str, Dict[str, Any]] = {}
+
+    # per-strategy equity filename base
+    out_eq_name = str(args.out_equity_csv)
+    eq_stem, eq_ext = os.path.splitext(out_eq_name)
+    if not eq_ext:
+        eq_ext = ".csv"
 
     for (sid, params) in strategies:
         try:
@@ -2035,6 +2094,8 @@ def main() -> None:
                     "error_type": err_type,
                     "hard_fail": True,
                     "hard_fail_reason": "strategy_error",
+                    "suite_hard_fail": True,
+                    "suite_hard_fail_reason": "strategy_error",
                 }
             )
 
@@ -2059,6 +2120,19 @@ def main() -> None:
                 post_audit = (post_sum.get("audit") or {})
 
         full_audit = (strat_obj.get("audit") or {})
+
+        # v26.7: suite_hard_fail is FULL-only "floor" breach, independent of scope policy.
+        suite_hf, suite_hf_reasons = _hard_fail_eval(
+            full_audit=full_audit,
+            post_audit=None,
+            scope="full",
+            equity_le=float(args.hard_fail_equity_le),
+            any_negative_days=bool(getattr(args, "hard_fail_any_negative_days")),
+        )
+        strat_obj["suite_hard_fail"] = bool(suite_hf)
+        strat_obj["suite_hard_fail_reasons"] = suite_hf_reasons
+
+        # policy-driven hard_fail
         hard_fail, hard_reasons = _hard_fail_eval(
             full_audit=full_audit,
             post_audit=post_audit if isinstance(post_audit, dict) else None,
@@ -2068,6 +2142,31 @@ def main() -> None:
         )
         strat_obj["hard_fail"] = bool(hard_fail)
         strat_obj["hard_fail_reasons"] = hard_reasons
+
+        # v26.7: write per-strategy equity CSV for evidence (best-effort)
+        sid_safe = _safe_filename(sid)
+        per_eq_name = f"{eq_stem}__{sid_safe}{eq_ext}"
+        per_eq_path = os.path.join(cache_dir, per_eq_name)
+        resolved_eq = _write_equity_csv_best_effort(per_eq_path, df_bt)
+        if isinstance(suite_out.get("outputs"), dict):
+            suite_out["outputs"].setdefault("equity_csv_by_strategy", {})
+            if resolved_eq is not None:
+                suite_out["outputs"]["equity_csv_by_strategy"][str(sid)] = per_eq_name
+            else:
+                suite_out["outputs"]["equity_csv_by_strategy"][str(sid)] = None
+
+        # v26.7: per-strategy POST equity (best-effort)
+        per_post_name = f"backtest_mvp_post_equity__{sid_safe}.csv"
+        per_post_path = os.path.join(cache_dir, per_post_name)
+        resolved_post = None
+        if post_df_bt is not None and isinstance(post_df_bt, pd.DataFrame) and (not post_df_bt.empty):
+            resolved_post = _write_equity_csv_best_effort(per_post_path, post_df_bt)
+        if isinstance(suite_out.get("outputs"), dict):
+            suite_out["outputs"].setdefault("post_equity_csv_by_strategy", {})
+            if resolved_post is not None:
+                suite_out["outputs"]["post_equity_csv_by_strategy"][str(sid)] = per_post_name
+            else:
+                suite_out["outputs"]["post_equity_csv_by_strategy"][str(sid)] = None
 
         suite_out["strategies"].append(strat_obj)
 
@@ -2140,6 +2239,8 @@ def main() -> None:
             "rank_basis": rank_basis,
             "hard_fail": bool(hard_fail),
             "hard_fail_reason": "; ".join(hard_reasons) if hard_reasons else None,
+            "suite_hard_fail": bool(suite_hf),
+            "suite_hard_fail_reason": "; ".join(suite_hf_reasons) if suite_hf_reasons else None,
             "ok": True,
         }
         compare_rows.append(row)
@@ -2160,6 +2261,7 @@ def main() -> None:
         ("full_calmar", np.nan),
         ("post_sharpe0", np.nan),
         ("full_sharpe0", np.nan),
+        ("suite_hard_fail", False),  # v26.7
     ]:
         if col not in df_cmp.columns:
             df_cmp[col] = default
@@ -2167,11 +2269,13 @@ def main() -> None:
     df_cmp["ok"] = df_cmp["ok"].fillna(False)
     df_cmp["hard_fail"] = df_cmp["hard_fail"].fillna(False)
     df_cmp["post_ok"] = df_cmp["post_ok"].fillna(False)
+    df_cmp["suite_hard_fail"] = df_cmp["suite_hard_fail"].fillna(False)
 
     # Cast to bool dtype after fillna to avoid NaN->True pitfalls
     df_cmp["ok"] = df_cmp["ok"].astype(bool)
     df_cmp["hard_fail"] = df_cmp["hard_fail"].astype(bool)
     df_cmp["post_ok"] = df_cmp["post_ok"].astype(bool)
+    df_cmp["suite_hard_fail"] = df_cmp["suite_hard_fail"].astype(bool)
 
     def _to_finite_float_local(x: Any) -> Optional[float]:
         return _to_finite_float(x)
@@ -2217,10 +2321,15 @@ def main() -> None:
 
     export_sid: Optional[str] = top3[0] if top3 else (next(iter(results_by_sid.keys()), None))
 
-    suite_out["outputs"] = {
-        "export_strategy_id": export_sid,
-        "export_policy": "top1_by_compare_policy else first_success",
-    }
+    suite_out["outputs"].update(
+        {
+            "export_strategy_id": export_sid,
+            "export_policy": "top1_by_compare_policy else first_success",
+            "export_equity_csv": str(args.out_equity_csv),
+            "export_trades_csv": str(args.out_trades_csv),
+            "export_compare_csv": str(args.out_compare_csv),
+        }
+    )
 
     # write JSON and compare CSV (v26.4: compare CSV guarded)
     _write_json(out_json_path, suite_out)
@@ -2284,6 +2393,8 @@ def main() -> None:
     print(f"OK: wrote {out_cmp_path} (strategy comparison; post-first ranking; hard_fail excluded)")
     print(f"OK: wrote {out_eq_path}  (equity for EXPORTED strategy: {export_sid})")
     print(f"OK: wrote {out_tr_path}  (trades CSV for EXPORTED strategy: {export_sid})")
+    print("OK: wrote per-strategy equity CSVs (for renderer evidence): "
+          f"{eq_stem}__<strategy_id>.csv")
 
     if args.out_post_equity_csv:
         out_post_eq = os.path.join(cache_dir, str(args.out_post_equity_csv))
