@@ -6,32 +6,25 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
-v11 (2026-02-24):
-- ADD(evidence): For strategies with suite_hard_fail=true, try to locate per-strategy equity CSV and print:
-  * full_equity_min_date
-  * full_neg_days_first_date / full_neg_days_last_date
-  * post_equity_min_date / post_neg_days_first_date / post_neg_days_last_date (post_start_date-based)
-- Robust file lookup:
-  * If suite JSON provides any equity csv mapping, use it.
-  * Else search cache_dir for files containing both "<strategy_id>" and "equity" and ending with ".csv".
-  * Fallback: if strategy_id == export_strategy_id, also try "backtest_mvp_equity.csv" in cache_dir.
-- Keep v10 structure:
-  * Ranking (policy) + renderer_filter_policy_v4 + full_segment_note
-  * Strategies table (ALL strategies, sorted by suite policy)
-  * Exclusions (eligible/excluded + per-strategy reasons)
-  * Deterministic Always vs Trend compare table (trend_rule from suite)
-  * Post-only View: PASS/WATCH (post_only_policy_v3)
-  * Post Go/No-Go Details (compact) + suite_hard_fail reasons + NEW evidence dates when available
+v12 (2026-02-24):
+- Semantic1 ("new start") for Post-only View:
+  * Post-only PASS/WATCH eligibility is decided ONLY by Post-only rules.
+  * Do NOT let renderer_filter_v4 (suite_hard_fail / FULL hard fails) exclude Post-only PASS/WATCH rows.
+  * Still annotate PASS/WATCH rows with a note if suite_hard_fail=true (FULL period blowup risk), but keep them listed.
+  * Keep the rest of v11 structure: ranking policy block, strategies table, exclusions, always-vs-trend,
+    post-only PASS/WATCH tables, and suite_hard_fail date evidence (best-effort from per-strategy equity CSV).
 
-Notes:
-- This renderer is best-effort on equity evidence: if per-strategy equity CSV is not available, prints N/A.
-- Equity CSV expected columns: "date" and "equity" (as produced by backtest script export). Extra columns ignored.
+Assumptions:
+- Suite JSON is produced by backtest_tw0050_leverage_mvp.py v26.7+ (per-strategy equity CSV enabled).
+- Equity curve CSV pattern (best-effort):
+    equity_curve.*__<strategy_id>.csv  (located in the same directory as --in_json)
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import json
 import os
 from datetime import datetime, timezone
@@ -40,7 +33,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v11.suite_hard_fail_date_evidence"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v12.post_only_semantic1_no_renderer_v4_gate"
 
 
 # =========================
@@ -119,8 +112,11 @@ def _get(d: Any, path: List[str], default=None):
     return cur
 
 
-def _is_true(x: Any) -> bool:
-    return x is True
+def _bool_flag(x: Any) -> bool:
+    # avoid treating "False" as True
+    if isinstance(x, (bool, np.bool_)):
+        return bool(x)
+    return False
 
 
 # =========================
@@ -171,56 +167,13 @@ def _extract_trades_n(audit: Any) -> Optional[int]:
         return None
 
 
-def _extract_suite_hard_fail(strat: Dict[str, Any]) -> Tuple[bool, List[str]]:
-    """
-    backtest side may emit:
-      - suite_hard_fail: bool
-      - hard_fail: bool (legacy)
-      - hard_fail_reasons: list[str]
-    """
-    shf = None
-    if "suite_hard_fail" in strat:
-        shf = bool(strat.get("suite_hard_fail"))
-    elif "hard_fail" in strat:
-        shf = bool(strat.get("hard_fail"))
-    else:
-        shf = False
-
-    reasons: List[str] = []
-    r = strat.get("suite_hard_fail_reasons")
-    if isinstance(r, list):
-        reasons = [str(x) for x in r if x is not None]
-    else:
-        r2 = strat.get("hard_fail_reasons")
-        if isinstance(r2, list):
-            reasons = [str(x) for x in r2 if x is not None]
-    return bool(shf), reasons
-
-
-def _extract_rv20_skipped(audit: Any) -> Optional[int]:
-    if not isinstance(audit, dict):
-        return None
-    # v26.5+ suggests this key
-    for k in ["skipped_entries_on_rv20", "rv20_skipped", "skipped_rv20"]:
-        if k in audit:
-            try:
-                return int(audit.get(k))
-            except Exception:
-                return None
-    return None
-
-
 def _extract_full_metrics(strat: Dict[str, Any]) -> Dict[str, Any]:
     perf = strat.get("perf") or {}
     lev = perf.get("leverage") or {}
     delta = perf.get("delta_vs_base") or {}
     audit = strat.get("audit") or {}
 
-    suite_hf, suite_hf_reasons = _extract_suite_hard_fail(strat)
-
     return {
-        "suite_hard_fail": suite_hf,
-        "suite_hard_fail_reasons": suite_hf_reasons,
         "full_cagr": lev.get("cagr"),
         "full_mdd": lev.get("mdd"),
         "full_sharpe0": lev.get("sharpe0"),
@@ -232,7 +185,7 @@ def _extract_full_metrics(strat: Dict[str, Any]) -> Dict[str, Any]:
         "full_equity_min": (audit.get("equity_min") if isinstance(audit, dict) else None),
         "full_neg_days": (audit.get("equity_negative_days") if isinstance(audit, dict) else None),
         "trades_n": _extract_trades_n(audit),
-        "rv20_skipped": _extract_rv20_skipped(audit),
+        "rv20_skipped": (audit.get("skipped_entries_on_rv20") if isinstance(audit, dict) else None),
     }
 
 
@@ -297,9 +250,13 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
     post = _extract_post_metrics(strat)
     gg = _extract_gonogo(strat)
 
+    suite_hf = strat.get("suite_hard_fail")
+    suite_hard_fail = _bool_flag(suite_hf)
+
     return {
         "id": sid,
         "ok": ok,
+        "suite_hard_fail": suite_hard_fail,
         "entry_mode": entry_mode,
         "L": L,
         **full,
@@ -309,6 +266,7 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
         "post_gonogo_conditions": gg.get("conditions"),
         "post_gonogo_reasons": gg.get("reasons"),
         "rank_basis": _rank_basis(bool(post.get("post_ok"))),
+        "hard_fail_reasons_from_suite": strat.get("hard_fail_reasons"),
     }
 
 
@@ -328,7 +286,7 @@ def _sort_rows_like_policy(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     def key(r: Dict[str, Any]) -> Tuple[float, float, str]:
         rid = _fmt_str(r.get("id"))
-        if _is_true(r.get("post_ok")):
+        if _bool_flag(r.get("post_ok")):
             return (_finite_or_neginf(r.get("post_calmar")), _finite_or_neginf(r.get("post_sharpe0")), rid)
         return (_finite_or_neginf(r.get("full_calmar")), _finite_or_neginf(r.get("full_sharpe0")), rid)
 
@@ -379,10 +337,12 @@ def _exclusion_reasons_renderer_filter_v4(r: Dict[str, Any]) -> List[str]:
     """
     reasons: List[str] = []
 
+    # ok=false
     if not bool(r.get("ok")):
         reasons.append("EXCLUDE_OK_FALSE")
 
-    if bool(r.get("suite_hard_fail")):
+    # suite_hard_fail=true
+    if _bool_flag(r.get("suite_hard_fail")):
         reasons.append("EXCLUDE_SUITE_HARD_FAIL_TRUE")
 
     # hard fails on full/post
@@ -407,7 +367,7 @@ def _exclusion_reasons_renderer_filter_v4(r: Dict[str, Any]) -> List[str]:
     return reasons
 
 
-def _is_eligible_for_recommendation_v4(r: Dict[str, Any]) -> bool:
+def _is_eligible_for_recommendation_renderer_v4(r: Dict[str, Any]) -> bool:
     return len(_exclusion_reasons_renderer_filter_v4(r)) == 0
 
 
@@ -418,8 +378,8 @@ def _rank_key_on_basis(r: Dict[str, Any], basis: str) -> Tuple[float, float, str
     return (_finite_or_neginf(r.get("full_calmar")), _finite_or_neginf(r.get("full_sharpe0")), rid)
 
 
-def _topn_recommended_v4(rows: List[Dict[str, Any]], n: int = 3) -> List[str]:
-    eligible = [r for r in rows if _is_eligible_for_recommendation_v4(r)]
+def _topn_recommended_renderer_v4(rows: List[Dict[str, Any]], n: int = 3) -> List[str]:
+    eligible = [r for r in rows if _is_eligible_for_recommendation_renderer_v4(r)]
     eligible_sorted = sorted(
         eligible,
         key=lambda r: _rank_key_on_basis(r, _fmt_str(r.get("rank_basis"))),
@@ -456,23 +416,25 @@ def _compare_two_rows(r1: Dict[str, Any], r2: Dict[str, Any], basis: str) -> str
     return min(_fmt_str(r1.get("id")), _fmt_str(r2.get("id")))
 
 
-def _always_vs_trend_table_v2(rows: List[Dict[str, Any]], trend_rule: str) -> List[str]:
+def _always_vs_trend_table(rows: List[Dict[str, Any]], trend_rule: str) -> List[str]:
     """
     compare_v2: for same L, compare post if both post_ok else full;
     winner=calmar desc, then sharpe0 desc, then id
-    trend_id uses suite trend_rule.
+
     If either side excluded by renderer filter v4, show N/A with exclusion notes.
     """
+    tr = str(trend_rule or "price_gt_ma60").strip() or "price_gt_ma60"
+
     lines: List[str] = []
     lines.append("## Deterministic Always vs Trend (checkmarks)")
     lines.append("compare_policy: `compare_v2: for same L, compare post if both post_ok else full; winner=calmar desc, then sharpe0 desc, then id; trend_id uses suite trend_rule`")
-    lines.append(f"trend_rule: `{_fmt_str(trend_rule)}`")
+    lines.append(f"trend_rule: `{tr}`")
     lines.append("")
     lines.append("| L | basis | trend_id | always_id | winner | verdict |")
     lines.append("|---:|---|---|---|---|---|")
 
     for L in ["1.1x", "1.2x", "1.3x", "1.5x"]:
-        trend_id = f"trend_leverage_{trend_rule}_{L}"
+        trend_id = f"trend_leverage_{tr}_{L}"
         always_id = f"always_leverage_{L}"
 
         rt = _find_strategy_by_id(rows, trend_id)
@@ -491,7 +453,7 @@ def _always_vs_trend_table_v2(rows: List[Dict[str, Any]], trend_rule: str) -> Li
             lines.append(f"| {L} | N/A | {trend_id} | {always_id} | N/A | N/A ({t_note}; {a_note}) |")
             continue
 
-        basis = "post" if (_is_true(rt.get("post_ok")) and _is_true(ra.get("post_ok"))) else "full"
+        basis = "post" if (_bool_flag(rt.get("post_ok")) and _bool_flag(ra.get("post_ok"))) else "full"
         winner = _compare_two_rows(rt, ra, basis)
         verdict = "WIN:trend" if winner == trend_id else ("WIN:always" if winner == always_id else "WIN:tiebreak")
         lines.append(f"| {L} | {basis} | {trend_id} | {always_id} | {winner} | {verdict} |")
@@ -501,305 +463,314 @@ def _always_vs_trend_table_v2(rows: List[Dict[str, Any]], trend_rule: str) -> Li
 
 
 # =========================
-# post-only view PASS/WATCH
+# suite_hard_fail evidence from equity CSV (best-effort)
 # =========================
-_POST_ONLY_PASS_DELTA_SHARPE_GE = -0.03
-_POST_ONLY_WATCH_DELTA_SHARPE_LO = -0.05
-_POST_ONLY_WATCH_DELTA_SHARPE_HI = -0.03
-_POST_ONLY_POST_MDD_FLOOR = -0.40
-
-
-def _post_only_reasons_v3(r: Dict[str, Any]) -> List[str]:
-    """
-    post_only_policy_v3:
-      require post_ok=true;
-      exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%);
-      exclude post_gonogo=NO_GO;
-      exclude missing post rank metrics;
-      PASS gate: require post_ΔSharpe >= -0.03;
-      WATCH gate: require -0.05 <= post_ΔSharpe < -0.03 (not excluded, but classified as WATCH);
-      post_MDD floor: require post_MDD >= -0.4;
-      ignore FULL and ignore suite_hard_fail.
-    This function returns exclusion reasons only (WATCH is not excluded).
-    """
-    reasons: List[str] = []
-
-    if not bool(r.get("ok")):
-        reasons.append("EXCLUDE_OK_FALSE")
-
-    if not bool(r.get("post_ok")):
-        reasons.append("EXCLUDE_POST_OK_FALSE")
-        return reasons
-
-    # post hard fails
-    reasons += _hard_fail_reasons_for_segment(
-        "POST", r.get("post_mdd"), r.get("post_equity_min"), r.get("post_neg_days")
-    )
-
-    if _fmt_str(r.get("post_gonogo")) == "NO_GO":
-        reasons.append("EXCLUDE_POST_GONOGO_NO_GO")
-
-    if (_to_float(r.get("post_calmar")) is None) or (_to_float(r.get("post_sharpe0")) is None):
-        reasons.append("EXCLUDE_MISSING_RANK_METRICS_POST")
-
-    # MDD floor
-    pmdd = _to_float(r.get("post_mdd"))
-    if pmdd is not None and pmdd < float(_POST_ONLY_POST_MDD_FLOOR):
-        reasons.append("EXCLUDE_POST_MDD_LT_-0.4")
-
-    # delta sharpe gates
-    dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
-    if dsh is None:
-        reasons.append("EXCLUDE_POST_DELTA_SHARPE_MISSING")
-    else:
-        # Exclude only if below WATCH lower bound
-        if dsh < float(_POST_ONLY_WATCH_DELTA_SHARPE_LO):
-            reasons.append("EXCLUDE_POST_DELTA_SHARPE_LT_-0.05")
-
-    return reasons
-
-
-def _post_only_class_v3(r: Dict[str, Any]) -> str:
-    """
-    Returns one of: PASS, WATCH, EXCLUDED.
-    """
-    ex = _post_only_reasons_v3(r)
-    if ex:
-        return "EXCLUDED"
-
-    dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
-    if dsh is None:
-        return "EXCLUDED"
-
-    if dsh >= float(_POST_ONLY_PASS_DELTA_SHARPE_GE):
-        return "PASS"
-    if float(_POST_ONLY_WATCH_DELTA_SHARPE_LO) <= dsh < float(_POST_ONLY_WATCH_DELTA_SHARPE_HI):
-        return "WATCH"
-    # between -0.05 and -0.03 is already WATCH; below -0.05 excluded; above -0.03 PASS
-    return "EXCLUDED"
-
-
-def _post_only_rank_key(r: Dict[str, Any]) -> Tuple[float, float, str]:
-    rid = _fmt_str(r.get("id"))
-    return (_finite_or_neginf(r.get("post_calmar")), _finite_or_neginf(r.get("post_sharpe0")), rid)
-
-
-# =========================
-# equity evidence (CSV)
-# =========================
-def _default_cache_dir(obj: Dict[str, Any], in_json_path: str) -> str:
-    # prefer suite inputs.cache_dir if present
-    cd = _get(obj, ["inputs", "cache_dir"], default=None)
-    if isinstance(cd, str) and cd.strip():
-        return cd.strip()
-    # else, directory of input json
-    return os.path.dirname(os.path.abspath(in_json_path)) or "."
-
-
-def _equity_csv_map_from_obj(obj: Dict[str, Any]) -> Optional[Dict[str, str]]:
-    """
-    Optional mapping from suite json, if present:
-      - obj["outputs"]["equity_csv_by_strategy"]
-      - obj["equity_csv_by_strategy"]
-    """
-    cand1 = _get(obj, ["outputs", "equity_csv_by_strategy"], default=None)
-    if isinstance(cand1, dict):
-        out = {}
-        for k, v in cand1.items():
-            if k is None or v is None:
-                continue
-            out[str(k)] = str(v)
-        return out or None
-
-    cand2 = obj.get("equity_csv_by_strategy")
-    if isinstance(cand2, dict):
-        out = {}
-        for k, v in cand2.items():
-            if k is None or v is None:
-                continue
-            out[str(k)] = str(v)
-        return out or None
-
-    return None
-
-
-def _find_equity_csv_for_strategy(
-    *,
-    cache_dir: str,
-    sid: str,
-    export_sid: Optional[str],
-    equity_map: Optional[Dict[str, str]],
-) -> Optional[str]:
-    """
-    Best-effort search order:
-    1) equity_map[sid] if provided and exists
-    2) scan cache_dir for "*<sid>*equity*.csv"
-    3) if sid == export_sid, also try "backtest_mvp_equity.csv"
-    Returns absolute path if found.
-    """
-    if equity_map and sid in equity_map:
-        p = equity_map[sid]
-        # allow relative paths relative to cache_dir
-        p2 = p
-        if not os.path.isabs(p2):
-            p2 = os.path.join(cache_dir, p2)
-        if os.path.isfile(p2):
-            return os.path.abspath(p2)
-
-    if os.path.isdir(cache_dir):
-        try:
-            files = sorted(os.listdir(cache_dir))
-        except Exception:
-            files = []
-        sid_lc = sid.lower()
-        cands: List[str] = []
-        for fn in files:
-            fn_lc = fn.lower()
-            if not fn_lc.endswith(".csv"):
-                continue
-            if "equity" not in fn_lc:
-                continue
-            if sid_lc in fn_lc:
-                cands.append(fn)
-        if cands:
-            # choose shortest name then lexicographic
-            cands_sorted = sorted(cands, key=lambda x: (len(x), x))
-            p3 = os.path.join(cache_dir, cands_sorted[0])
-            if os.path.isfile(p3):
-                return os.path.abspath(p3)
-
-        # fallback for exported strategy
-        if export_sid is not None and sid == export_sid:
-            p4 = os.path.join(cache_dir, "backtest_mvp_equity.csv")
-            if os.path.isfile(p4):
-                return os.path.abspath(p4)
-
-    return None
-
-
-def _load_equity_series(csv_path: str) -> Optional[List[Tuple[str, float]]]:
-    """
-    Load (date_str, equity_float) list.
-    Expected columns: date, equity
-    Dates assumed ISO-like; we keep first 10 chars (YYYY-MM-DD).
-    """
-    if not csv_path or (not os.path.isfile(csv_path)):
+def _find_equity_csv(in_json_path: str, strategy_id: str) -> Optional[str]:
+    base_dir = os.path.dirname(os.path.abspath(in_json_path)) or "."
+    sid = str(strategy_id)
+    pats = [
+        os.path.join(base_dir, f"equity_curve.*__{sid}.csv"),
+        os.path.join(base_dir, f"*equity_curve*__{sid}.csv"),
+    ]
+    cands: List[str] = []
+    for p in pats:
+        cands.extend(glob.glob(p))
+    cands = [c for c in cands if os.path.isfile(c)]
+    if not cands:
         return None
-
-    out: List[Tuple[str, float]] = []
-    try:
-        with open(csv_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            if not reader.fieldnames:
-                return None
-            # column name normalization
-            cols = {c.lower(): c for c in reader.fieldnames if isinstance(c, str)}
-            date_col = cols.get("date") or cols.get("date_ts") or cols.get("date_time") or cols.get("datetime")
-            eq_col = cols.get("equity")
-            if date_col is None or eq_col is None:
-                return None
-
-            for row in reader:
-                ds = row.get(date_col)
-                ev = row.get(eq_col)
-                if ds is None or ev is None:
-                    continue
-                ds2 = str(ds).strip()
-                if len(ds2) >= 10:
-                    ds2 = ds2[:10]
-                v = _to_float(ev)
-                if v is None:
-                    continue
-                out.append((ds2, float(v)))
-    except Exception:
-        return None
-
-    return out or None
+    # stable selection: shortest path then lexicographic
+    cands = sorted(cands, key=lambda x: (len(x), x))
+    return cands[0]
 
 
-def _equity_evidence_from_series(
-    ser: List[Tuple[str, float]],
-    *,
-    start_date_inclusive: Optional[str] = None
-) -> Dict[str, Any]:
+def _read_equity_csv_dates_and_equity(path: str) -> Tuple[List[str], List[float]]:
+    dates: List[str] = []
+    eqs: List[float] = []
+    with open(path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            return [], []
+        if "date" not in reader.fieldnames or "equity" not in reader.fieldnames:
+            return [], []
+        for row in reader:
+            d = row.get("date")
+            e = row.get("equity")
+            if d is None:
+                continue
+            v = _to_float(e)
+            if v is None:
+                continue
+            dates.append(str(d))
+            eqs.append(float(v))
+    return dates, eqs
+
+
+def _equity_evidence_from_series(dates: List[str], eqs: List[float], date_ge: Optional[str] = None) -> Dict[str, Any]:
     """
     Compute:
-      - equity_min, equity_min_date
-      - neg_days_count, neg_first_date, neg_last_date
-    If start_date_inclusive provided, filter to date >= start_date.
+    - equity_min_date (date of min equity)
+    - neg_days_count, neg_days_first_date, neg_days_last_date
+    Optionally filter to dates >= date_ge (ISO string compare).
     """
-    if not ser:
-        return {"ok": False}
+    if not dates or not eqs or len(dates) != len(eqs):
+        return {"ok": False, "error": "empty series"}
 
-    filt: List[Tuple[str, float]] = []
-    if start_date_inclusive and isinstance(start_date_inclusive, str) and start_date_inclusive.strip():
-        sd = start_date_inclusive.strip()[:10]
-        for d, e in ser:
-            if isinstance(d, str) and d[:10] >= sd:
-                filt.append((d[:10], e))
-    else:
-        filt = [(d[:10], e) for d, e in ser if isinstance(d, str)]
+    idxs = list(range(len(dates)))
+    if date_ge:
+        dge = str(date_ge)
+        idxs = [i for i in idxs if str(dates[i]) >= dge]
 
-    if not filt:
-        return {"ok": False, "note": "empty after start_date filter"}
+    if not idxs:
+        return {"ok": False, "error": "no rows after date_ge filter"}
 
-    # equity min
-    emin = None
-    emin_date = None
-    for d, e in filt:
-        if not np.isfinite(e):
-            continue
-        if emin is None or e < float(emin):
-            emin = float(e)
-            emin_date = d
+    # min equity
+    min_i = min(idxs, key=lambda i: eqs[i])
+    equity_min_date = dates[min_i]
 
-    # neg days range
-    neg_dates = [d for d, e in filt if np.isfinite(e) and float(e) < 0.0]
-    neg_cnt = len(neg_dates)
+    # negative days
+    neg_idxs = [i for i in idxs if eqs[i] < 0.0]
+    neg_count = int(len(neg_idxs))
+    neg_first = dates[neg_idxs[0]] if neg_idxs else None
+    neg_last = dates[neg_idxs[-1]] if neg_idxs else None
 
-    out = {
+    return {
         "ok": True,
-        "equity_min": emin,
-        "equity_min_date": emin_date,
-        "neg_days_count": neg_cnt,
-        "neg_first_date": (min(neg_dates) if neg_dates else None),
-        "neg_last_date": (max(neg_dates) if neg_dates else None),
+        "equity_min_date": equity_min_date,
+        "neg_days_first_date": neg_first,
+        "neg_days_last_date": neg_last,
+        "neg_days_count": neg_count,
     }
-    return out
 
 
-def _evidence_block_for_strategy(
-    *,
-    obj: Dict[str, Any],
-    in_json_path: str,
-    sid: str,
-    post_start_date: Optional[str],
-) -> Dict[str, Any]:
+def _suite_hard_fail_evidence_block(in_json_path: str, r: Dict[str, Any]) -> List[str]:
     """
-    Returns evidence dict with keys:
-      - full: {...}
-      - post: {...}
-      - csv_path: str|None
-      - ok: bool
+    Best-effort evidence for suite_hard_fail strategies.
     """
-    cache_dir = _default_cache_dir(obj, in_json_path)
-    export_sid = _get(obj, ["outputs", "export_strategy_id"], default=None)
-    if not isinstance(export_sid, str):
-        export_sid = None
+    lines: List[str] = []
+    sid = _fmt_str(r.get("id"))
+    post_start = _fmt_str(r.get("post_start_date"))
+    csv_path = _find_equity_csv(in_json_path, sid)
 
-    eq_map = _equity_csv_map_from_obj(obj)
-    p = _find_equity_csv_for_strategy(cache_dir=cache_dir, sid=sid, export_sid=export_sid, equity_map=eq_map)
-    if p is None:
-        return {"ok": False, "csv_path": None, "note": "equity csv not found"}
+    if not csv_path:
+        lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
+        lines.append("  - status: `N/A` (equity csv not found)")
+        return lines
 
-    ser = _load_equity_series(p)
-    if not ser:
-        return {"ok": False, "csv_path": p, "note": "failed to load equity series"}
+    dates, eqs = _read_equity_csv_dates_and_equity(csv_path)
+    if not dates:
+        lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
+        lines.append(f"  - equity_csv: `{csv_path}`")
+        lines.append("  - status: `N/A` (could not read date/equity columns)")
+        return lines
 
-    full = _equity_evidence_from_series(ser, start_date_inclusive=None)
-    post = _equity_evidence_from_series(ser, start_date_inclusive=post_start_date)
+    full_ev = _equity_evidence_from_series(dates, eqs, date_ge=None)
+    post_ev = _equity_evidence_from_series(dates, eqs, date_ge=post_start if post_start != "N/A" else None)
 
-    return {"ok": True, "csv_path": p, "full": full, "post": post}
+    lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
+    lines.append(f"  - equity_csv: `{csv_path}`")
+
+    lines.append("  - FULL:")
+    if full_ev.get("ok"):
+        lines.append(f"    - equity_min_date: `{_fmt_str(full_ev.get('equity_min_date'))}`")
+        lines.append(f"    - neg_days_first_date: `{_fmt_str(full_ev.get('neg_days_first_date'))}`")
+        lines.append(f"    - neg_days_last_date: `{_fmt_str(full_ev.get('neg_days_last_date'))}`")
+        lines.append(f"    - neg_days_count: `{_fmt_int(full_ev.get('neg_days_count'))}`")
+    else:
+        lines.append(f"    - status: `N/A` ({_fmt_str(full_ev.get('error'))})")
+
+    lines.append("  - POST (date >= post_start_date):")
+    lines.append(f"    - post_start_date: `{post_start}`")
+    if post_ev.get("ok"):
+        lines.append(f"    - equity_min_date: `{_fmt_str(post_ev.get('equity_min_date'))}`")
+        lines.append(f"    - neg_days_first_date: `{_fmt_str(post_ev.get('neg_days_first_date'))}`")
+        lines.append(f"    - neg_days_last_date: `{_fmt_str(post_ev.get('neg_days_last_date'))}`")
+        lines.append(f"    - neg_days_count: `{_fmt_int(post_ev.get('neg_days_count'))}`")
+    else:
+        lines.append(f"    - status: `N/A` ({_fmt_str(post_ev.get('error'))})")
+
+    return lines
+
+
+# =========================
+# Post-only view (Semantic1)
+# =========================
+def _post_only_policy_v3_reasons(r: Dict[str, Any], pass_th: float, watch_lo: float, watch_hi: float, mdd_floor: float) -> List[str]:
+    """
+    Post-only policy v3:
+    require post_ok=true;
+    exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%);
+    exclude post_gonogo=NO_GO;
+    exclude missing post rank metrics;
+    PASS gate: post_delta_sharpe >= pass_th
+    WATCH gate: watch_lo <= post_delta_sharpe < watch_hi
+    post_MDD floor: post_mdd >= mdd_floor
+    (FULL and suite_hard_fail are ignored for eligibility in Semantic1)
+    """
+    rs: List[str] = []
+
+    if not _bool_flag(r.get("post_ok")):
+        rs.append("EXCLUDE_POST_OK_FALSE")
+        return rs
+
+    rs += _hard_fail_reasons_for_segment("POST", r.get("post_mdd"), r.get("post_equity_min"), r.get("post_neg_days"))
+
+    if _fmt_str(r.get("post_gonogo")) == "NO_GO":
+        rs.append("EXCLUDE_POST_GONOGO_NO_GO")
+
+    if _to_float(r.get("post_calmar")) is None or _to_float(r.get("post_sharpe0")) is None:
+        rs.append("EXCLUDE_MISSING_RANK_METRICS_POST")
+
+    dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
+    if dsh is None:
+        rs.append("EXCLUDE_POST_DELTA_SHARPE_MISSING")
+    else:
+        if dsh < float(watch_lo):
+            rs.append(f"EXCLUDE_POST_DELTA_SHARPE_LT_{watch_lo}")
+        elif dsh < float(pass_th):
+            # between [watch_lo, pass_th) -> WATCH band, not PASS, but still eligible for WATCH if other gates pass
+            pass
+
+    pmdd = _to_float(r.get("post_mdd"))
+    if pmdd is not None and pmdd < float(mdd_floor):
+        rs.append(f"EXCLUDE_POST_MDD_LT_{mdd_floor}")
+
+    return rs
+
+
+def _post_only_bucket(r: Dict[str, Any], pass_th: float, watch_lo: float, watch_hi: float) -> str:
+    """
+    Return PASS / WATCH / EXCLUDE based on post_delta_sharpe, assuming other excludes already checked separately.
+    """
+    dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
+    if dsh is None:
+        return "EXCLUDE"
+    if dsh >= float(pass_th):
+        return "PASS"
+    if float(watch_lo) <= dsh < float(watch_hi):
+        return "WATCH"
+    return "EXCLUDE"
+
+
+def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
+    """
+    v12: Semantic1 - Post-only PASS/WATCH lists are not filtered by renderer_v4 at all.
+    Still annotate rows with suite_hard_fail=true as a warning note.
+    """
+    # thresholds (keep v11 defaults)
+    pass_th = -0.03
+    watch_lo = -0.05
+    watch_hi = -0.03
+    mdd_floor = -0.4
+
+    lines: List[str] = []
+    lines.append("## Post-only View (After Singularity / Ignore FULL)")
+    lines.append(
+        "post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); "
+        "exclude post_gonogo=NO_GO; exclude missing post rank metrics; "
+        f"PASS gate: require post_ΔSharpe>= {pass_th}; "
+        f"WATCH gate: require {watch_lo}<=post_ΔSharpe<{watch_hi}; "
+        f"post_MDD floor: require post_MDD>= {mdd_floor} (i.e. not worse than -40%); "
+        "ignore FULL and ignore suite_hard_fail for eligibility (Semantic1=new start).`"
+    )
+
+    # classify
+    excluded: List[Tuple[str, List[str]]] = []
+    pass_rows: List[Dict[str, Any]] = []
+    watch_rows: List[Dict[str, Any]] = []
+
+    for r in rows:
+        rs = _post_only_policy_v3_reasons(r, pass_th=pass_th, watch_lo=watch_lo, watch_hi=watch_hi, mdd_floor=mdd_floor)
+
+        # If ANY hard fail / missing / gonogo / mdd floor / too-bad sharpe => exclude
+        # But allow WATCH band (delta_sharpe in [watch_lo, pass_th)) if it didn't trip "LT_watch_lo".
+        # We detect LT_watch_lo by the explicit reason.
+        if rs:
+            # special case: if the ONLY delta-sharpe-related "issue" is being in WATCH band (i.e. no LT_watch_lo, no missing),
+            # then it's not an exclusion reason. We keep rs as-is because we didn't add an "EXCLUDE" marker for WATCH band.
+            # Here we exclude only if rs contains a real excluding token.
+            excluding = True
+            # If rs contains ONLY post_delta_sharpe_in_watch_band (we don't store such token), nothing to do.
+            # So this stays True.
+            excluded.append((_fmt_str(r.get("id")), rs))
+            continue
+
+        bucket = _post_only_bucket(r, pass_th=pass_th, watch_lo=watch_lo, watch_hi=watch_hi)
+        if bucket == "PASS":
+            pass_rows.append(r)
+        elif bucket == "WATCH":
+            watch_rows.append(r)
+        else:
+            # should be rare (already handled by rs)
+            excluded.append((_fmt_str(r.get("id")), ["EXCLUDE_POST_DELTA_SHARPE_LT_-0.05"]))
+
+    # sort within buckets by post calmar/sharpe
+    pass_rows = sorted(pass_rows, key=lambda r: _rank_key_on_basis(r, "post"), reverse=True)
+    watch_rows = sorted(watch_rows, key=lambda r: _rank_key_on_basis(r, "post"), reverse=True)
+
+    top3_pass = [str(r.get("id")) for r in pass_rows[:3]]
+    top3_watch = [str(r.get("id")) for r in watch_rows[:3]]
+
+    # list those that are PASS/WATCH but suite_hard_fail=true (warn only)
+    warn_full = [str(r.get("id")) for r in (pass_rows + watch_rows) if _bool_flag(r.get("suite_hard_fail"))]
+
+    lines.append(f"- top3_post_only_PASS: `{', '.join(top3_pass) if top3_pass else 'N/A'}`")
+    lines.append(f"- top3_post_only_WATCH: `{', '.join(top3_watch) if top3_watch else 'N/A'}`")
+    lines.append(f"- post_only_total: `{len(rows)}`; pass: `{len(pass_rows)}`; watch: `{len(watch_rows)}`; excluded: `{len(excluded)}`")
+    lines.append(f"- post_only_warn_full_blowup (suite_hard_fail=true): `{', '.join(warn_full) if warn_full else 'N/A'}`")
+    lines.append("")
+
+    def _note_for_post_only(r: Dict[str, Any]) -> str:
+        notes: List[str] = []
+        if _bool_flag(r.get("suite_hard_fail")):
+            notes.append("WARNING: suite_hard_fail=true (FULL period floor violated; Semantic2 risk)")
+        return "; ".join(notes) if notes else ""
+
+    # PASS table
+    lines.append("### PASS (deploy-grade, strict; Semantic1=new start)")
+    lines.append("| id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |")
+    lines.append("|---|---:|---:|---:|---:|---:|---|")
+    for r in pass_rows[:10]:
+        lines.append(
+            "| {id} | {cagr} | {mdd} | {sh} | {cal} | {dsh} | {note} |".format(
+                id=_escape_md_cell(r.get("id")),
+                cagr=_fmt_pct(r.get("post_cagr")),
+                mdd=_fmt_pct(r.get("post_mdd")),
+                sh=_fmt_num(r.get("post_sharpe0"), nd=3),
+                cal=_fmt_num(r.get("post_calmar"), nd=3),
+                dsh=_fmt_num(r.get("post_delta_sharpe0_vs_base"), nd=3),
+                note=_escape_md_cell(_note_for_post_only(r)) or " ",
+            )
+        )
+    lines.append("")
+
+    # WATCH table
+    lines.append("### WATCH (research-grade, not for deploy; Semantic1=new start)")
+    lines.append("| id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |")
+    lines.append("|---|---:|---:|---:|---:|---:|---|")
+    for r in watch_rows[:10]:
+        lines.append(
+            "| {id} | {cagr} | {mdd} | {sh} | {cal} | {dsh} | {note} |".format(
+                id=_escape_md_cell(r.get("id")),
+                cagr=_fmt_pct(r.get("post_cagr")),
+                mdd=_fmt_pct(r.get("post_mdd")),
+                sh=_fmt_num(r.get("post_sharpe0"), nd=3),
+                cal=_fmt_num(r.get("post_calmar"), nd=3),
+                dsh=_fmt_num(r.get("post_delta_sharpe0_vs_base"), nd=3),
+                note=_escape_md_cell(_note_for_post_only(r)) or " ",
+            )
+        )
+    lines.append("")
+
+    # exclusions list
+    lines.append("### Post-only Exclusions (reasons)")
+    if excluded:
+        for sid, rs in sorted(excluded, key=lambda x: x[0]):
+            lines.append(f"- {sid}: `{', '.join(rs)}`")
+    else:
+        lines.append("- N/A (no exclusions)")
+    lines.append("")
+
+    return lines
 
 
 # =========================
@@ -816,20 +787,20 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
     ranking_policy = compare.get("ranking_policy")
     top3_raw = compare.get("top3_by_policy")
 
-    # trend_rule (for compare table naming)
     trend_rule = _get(obj, ["strategy_suite", "trend_rule"], default="price_gt_ma60")
-    if not isinstance(trend_rule, str) or not trend_rule.strip():
-        trend_rule = "price_gt_ma60"
 
+    # FULL singularity note
     full_note = (
         "FULL_* metrics may be impacted by data singularity around 2014 (price series anomaly/adjustment). "
         "Treat FULL as audit-only; prefer POST for decision and ranking."
     )
 
     renderer_filter_policy = (
-        "renderer_rank_filter_v4: exclude(ok=false); exclude(suite_hard_fail=true); "
+        "renderer_rank_filter_v4: exclude(ok=false); "
+        "exclude(suite_hard_fail=true); "
         "exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post); "
-        "exclude(post_gonogo=NO_GO); exclude(missing rank metrics on chosen basis); "
+        "exclude(post_gonogo=NO_GO); "
+        "exclude(missing rank metrics on chosen basis); "
         "NOTE: eq50 gate disabled (basis_equity_min<=0.5 removed; equity_min semantics not aligned with MDD)."
     )
 
@@ -849,12 +820,11 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
     lines.append(f"- renderer_filter_policy: `{renderer_filter_policy}`")
     lines.append(f"- full_segment_note: `{full_note}`")
 
-    # build rows
     strategies = _strategy_list(obj)
     rows = [_mk_row(s) for s in strategies]
     rows_sorted = _sort_rows_like_policy(rows)
 
-    top3_rec = _topn_recommended_v4(rows, n=3)
+    top3_rec = _topn_recommended_renderer_v4(rows, n=3)
     lines.append(f"- top3_recommended: `{', '.join(top3_rec) if top3_rec else 'N/A'}`")
 
     if isinstance(top3_raw, list):
@@ -923,13 +893,13 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
 
     lines.append("")
 
-    # exclusions summary (renderer filter v4)
+    # exclusions summary (renderer v4)
     lines.append("## Exclusions (not eligible for recommendation)")
     total = len(rows)
-    eligible_rows = [r for r in rows if _is_eligible_for_recommendation_v4(r)]
-    excluded_rows = [r for r in rows if not _is_eligible_for_recommendation_v4(r)]
+    eligible_rows = [r for r in rows if _is_eligible_for_recommendation_renderer_v4(r)]
+    excluded_rows = [r for r in rows if not _is_eligible_for_recommendation_renderer_v4(r)]
 
-    suite_hf = 0
+    suite_hf_n = 0
     hard_fail = 0
     post_no_go = 0
     ok_false = 0
@@ -938,7 +908,7 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
     for r in excluded_rows:
         rs = _exclusion_reasons_renderer_filter_v4(r)
         if "EXCLUDE_SUITE_HARD_FAIL_TRUE" in rs:
-            suite_hf += 1
+            suite_hf_n += 1
         if any(s.startswith("HARD_FAIL_") for s in rs):
             hard_fail += 1
         if "EXCLUDE_POST_GONOGO_NO_GO" in rs:
@@ -952,7 +922,7 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
     lines.append(f"- eligible: `{len(eligible_rows)}`")
     lines.append(
         f"- excluded: `{len(excluded_rows)}` "
-        f"(suite_hard_fail={suite_hf}, hard_fail_fullpost={hard_fail}, post_NO_GO={post_no_go}, ok_false={ok_false}, missing_rank_metrics={missing_rank})"
+        f"(suite_hard_fail={suite_hf_n}, hard_fail_fullpost={hard_fail}, post_NO_GO={post_no_go}, ok_false={ok_false}, missing_rank_metrics={missing_rank})"
     )
     lines.append("")
 
@@ -964,103 +934,19 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
     lines.append("")
 
     # Always vs Trend compare section
-    lines.extend(_always_vs_trend_table_v2(rows, trend_rule=trend_rule))
+    lines.extend(_always_vs_trend_table(rows, trend_rule=str(trend_rule)))
 
-    # Post-only View (PASS/WATCH)
-    lines.append("## Post-only View (After Singularity / Ignore FULL)")
-    lines.append(
-        "post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); "
-        "exclude post_gonogo=NO_GO; exclude missing post rank metrics; "
-        f"PASS gate: require post_ΔSharpe>= {_POST_ONLY_PASS_DELTA_SHARPE_GE}; "
-        f"WATCH gate: require {_POST_ONLY_WATCH_DELTA_SHARPE_LO}<=post_ΔSharpe<{_POST_ONLY_WATCH_DELTA_SHARPE_HI}; "
-        f"post_MDD floor: require post_MDD>= {_POST_ONLY_POST_MDD_FLOOR} (i.e. not worse than -40%); "
-        "ignore FULL and ignore suite_hard_fail.`"
-    )
-
-    cls_map = {r["id"]: _post_only_class_v3(r) for r in rows}
-    pass_rows = [r for r in rows if cls_map.get(r["id"]) == "PASS"]
-    watch_rows = [r for r in rows if cls_map.get(r["id"]) == "WATCH"]
-    excl_rows_po = [r for r in rows if cls_map.get(r["id"]) == "EXCLUDED"]
-
-    pass_sorted = sorted(pass_rows, key=_post_only_rank_key, reverse=True)
-    watch_sorted = sorted(watch_rows, key=_post_only_rank_key, reverse=True)
-
-    top3_pass = [str(r["id"]) for r in pass_sorted[:3]]
-    top3_watch = [str(r["id"]) for r in watch_sorted[:3]]
-
-    # would-be pass/watch but excluded by renderer v4
-    would_be = []
-    for r in pass_sorted + watch_sorted:
-        if not _is_eligible_for_recommendation_v4(r):
-            would_be.append(str(r.get("id")))
-
-    lines.append(f"- top3_post_only_PASS: `{', '.join(top3_pass) if top3_pass else 'N/A'}`")
-    lines.append(f"- top3_post_only_WATCH: `{', '.join(top3_watch) if top3_watch else 'N/A'}`")
-    lines.append(f"- post_only_total: `{len(rows)}`; pass: `{len(pass_rows)}`; watch: `{len(watch_rows)}`; excluded: `{len(excl_rows_po)}`")
-    lines.append(f"- would_be_pass_or_watch_post_only_but_excluded_by_renderer_v4: `{', '.join(would_be) if would_be else 'N/A'}`")
-    lines.append("")
-
-    # PASS table
-    lines.append("### PASS (deploy-grade, strict)")
-    lines.append("| id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |")
-    lines.append("|---|---:|---:|---:|---:|---:|---|")
-    for r in pass_sorted:
-        note = ""
-        exv4 = _exclusion_reasons_renderer_filter_v4(r)
-        if exv4:
-            note = f"excluded_by_renderer_v4: {', '.join(exv4)}"
-        lines.append(
-            "| {id} | {cagr} | {mdd} | {sh} | {cal} | {dsh} | {note} |".format(
-                id=_escape_md_cell(r.get("id")),
-                cagr=_fmt_pct(r.get("post_cagr")),
-                mdd=_fmt_pct(r.get("post_mdd")),
-                sh=_fmt_num(r.get("post_sharpe0"), nd=3),
-                cal=_fmt_num(r.get("post_calmar"), nd=3),
-                dsh=_fmt_num(r.get("post_delta_sharpe0_vs_base"), nd=3),
-                note=_escape_md_cell(note) if note else " ",
-            )
-        )
-    lines.append("")
-
-    # WATCH table
-    lines.append("### WATCH (research-grade, not for deploy)")
-    lines.append("| id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |")
-    lines.append("|---|---:|---:|---:|---:|---:|---|")
-    for r in watch_sorted:
-        note = ""
-        exv4 = _exclusion_reasons_renderer_filter_v4(r)
-        if exv4:
-            note = f"excluded_by_renderer_v4: {', '.join(exv4)}"
-        lines.append(
-            "| {id} | {cagr} | {mdd} | {sh} | {cal} | {dsh} | {note} |".format(
-                id=_escape_md_cell(r.get("id")),
-                cagr=_fmt_pct(r.get("post_cagr")),
-                mdd=_fmt_pct(r.get("post_mdd")),
-                sh=_fmt_num(r.get("post_sharpe0"), nd=3),
-                cal=_fmt_num(r.get("post_calmar"), nd=3),
-                dsh=_fmt_num(r.get("post_delta_sharpe0_vs_base"), nd=3),
-                note=_escape_md_cell(note) if note else " ",
-            )
-        )
-    lines.append("")
-
-    # Post-only Exclusions list
-    lines.append("### Post-only Exclusions (reasons)")
-    for r in sorted(excl_rows_po, key=lambda x: _fmt_str(x.get("id"))):
-        rid = _fmt_str(r.get("id"))
-        rs = _post_only_reasons_v3(r)
-        lines.append(f"- {rid}: `{', '.join(rs)}`")
-    lines.append("")
+    # Post-only view (Semantic1)
+    lines.extend(_post_only_section_semantic1(rows))
 
     # Post go/no-go details + suite_hard_fail evidence
     lines.append("## Post Go/No-Go Details (compact)")
     any_details = False
     for r in rows_sorted:
         dec = _fmt_str(r.get("post_gonogo"))
-        if dec != "N/A" or _is_true(r.get("post_ok")):
+        if dec != "N/A" or _bool_flag(r.get("post_ok")):
             any_details = True
-            rid = _escape_md_cell(r.get("id"))
-            lines.append(f"### {rid}")
+            lines.append(f"### {_escape_md_cell(r.get('id'))}")
             lines.append(f"- decision: `{dec}`")
             rule_id = r.get("post_gonogo_rule")
             if rule_id is not None:
@@ -1075,52 +961,17 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
                     lines.append(f"  - {str(msg)}")
             lines.append("")
 
-            # suite_hard_fail info if present
-            if bool(r.get("suite_hard_fail")):
-                lines.append("- suite_hard_fail: `true`")
-                shr = r.get("suite_hard_fail_reasons")
-                if isinstance(shr, list) and shr:
-                    for msg in shr[:8]:
+            # suite_hard_fail evidence
+            if _bool_flag(r.get("suite_hard_fail")):
+                lines.append(f"- suite_hard_fail: `true`")
+                # if suite stored hard_fail_reasons, show them
+                hfr = r.get("hard_fail_reasons_from_suite")
+                if isinstance(hfr, list) and hfr:
+                    for msg in hfr[:5]:
                         lines.append(f"  - {str(msg)}")
-                else:
-                    lines.append("  - N/A (no suite hard fail reasons in JSON)")
                 lines.append("")
-
-                # NEW: evidence dates via equity csv (best-effort)
-                ev = _evidence_block_for_strategy(
-                    obj=obj,
-                    in_json_path=in_json_path,
-                    sid=_fmt_str(r.get("id")),
-                    post_start_date=_fmt_str(r.get("post_start_date")) if r.get("post_start_date") is not None else None,
-                )
-                lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
-                if not ev.get("ok"):
-                    lines.append(f"  - status: `N/A` ({_fmt_str(ev.get('note'))})")
-                else:
-                    lines.append(f"  - equity_csv: `{_escape_md_cell(ev.get('csv_path'))}`")
-
-                    full_ev = ev.get("full") or {}
-                    if isinstance(full_ev, dict) and full_ev.get("ok"):
-                        lines.append("  - FULL:")
-                        lines.append(f"    - equity_min_date: `{_fmt_str(full_ev.get('equity_min_date'))}`")
-                        lines.append(f"    - neg_days_first_date: `{_fmt_str(full_ev.get('neg_first_date'))}`")
-                        lines.append(f"    - neg_days_last_date: `{_fmt_str(full_ev.get('neg_last_date'))}`")
-                        lines.append(f"    - neg_days_count: `{_fmt_str(full_ev.get('neg_days_count'))}`")
-                    else:
-                        lines.append("  - FULL: `N/A`")
-
-                    post_ev = ev.get("post") or {}
-                    if isinstance(post_ev, dict) and post_ev.get("ok"):
-                        lines.append("  - POST (date >= post_start_date):")
-                        lines.append(f"    - post_start_date: `{_fmt_str(r.get('post_start_date'))}`")
-                        lines.append(f"    - equity_min_date: `{_fmt_str(post_ev.get('equity_min_date'))}`")
-                        lines.append(f"    - neg_days_first_date: `{_fmt_str(post_ev.get('neg_first_date'))}`")
-                        lines.append(f"    - neg_days_last_date: `{_fmt_str(post_ev.get('neg_last_date'))}`")
-                        lines.append(f"    - neg_days_count: `{_fmt_str(post_ev.get('neg_days_count'))}`")
-                    else:
-                        lines.append("  - POST: `N/A`")
+                lines.extend(_suite_hard_fail_evidence_block(in_json_path, r))
                 lines.append("")
-
     if not any_details:
         lines.append("- N/A (no post_gonogo details found in JSON)")
         lines.append("")
@@ -1132,21 +983,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in_json", required=True, help="input json path (lite or full)")
     ap.add_argument("--out_md", required=True, help="output markdown path")
-    # Optional hint: in case suite inputs.cache_dir is relative / not resolvable in your runtime.
-    # This script will still default to obj.inputs.cache_dir, else directory of in_json.
-    # We keep this arg for flexibility without breaking existing callers.
-    ap.add_argument("--cache_dir", default=None, help="optional cache dir override for equity csv search")
     args = ap.parse_args()
 
-    obj = _read_json(str(args.in_json))
-
-    # If user passes --cache_dir, override obj.inputs.cache_dir in-memory (renderer-only).
-    if args.cache_dir:
-        if "inputs" not in obj or not isinstance(obj.get("inputs"), dict):
-            obj["inputs"] = {}
-        obj["inputs"]["cache_dir"] = str(args.cache_dir)
-
-    md = _render_md(obj, in_json_path=str(args.in_json))
+    in_json = str(args.in_json)
+    obj = _read_json(in_json)
+    md = _render_md(obj, in_json_path=in_json)
 
     out_md = str(args.out_md)
     os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
