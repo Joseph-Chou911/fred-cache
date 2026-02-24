@@ -5,17 +5,17 @@
 - source_vendor: `statementdog` (THIRD_PARTY)
 - source_url: `https://statementdog.com/taiex`
 - fetch_status: `OK` / confidence: `OK` / dq_reason: `None`
-- data_date: `2026-02-23`
-- series_len_pbr: `12`
+- data_date: `2026-02-24`
+- series_len_pbr: `13`
 
 ## 2) Latest
-- date: `2026-02-23`
-- PBR: `3.5500`
-- Close: `33773.26`
+- date: `2026-02-24`
+- PBR: `3.6500`
+- Close: `34700.82`
 
 ## 3) Stats (z / percentile)
-- z60: `None` / p60: `None` / na_reason_60: `INSUFFICIENT_HISTORY:12/60`
-- z252: `None` / p252: `None` / na_reason_252: `INSUFFICIENT_HISTORY:12/252`
+- z60: `None` / p60: `None` / na_reason_60: `INSUFFICIENT_HISTORY:13/60`
+- z252: `None` / p252: `None` / na_reason_252: `INSUFFICIENT_HISTORY:13/252`
 
 ## 4) Historical Context (non-trigger)
 - label: `HISTORICAL_ANCHOR (USER_PROVIDED_SCREENSHOT)`
@@ -25,10 +25,10 @@
 - note: Context-only; NOT used for deterministic signals (triggers rely on p60/p252 once available).
 
 ### 4.1) Anchor comparison (context only)
-- latest_pb: `3.5500`
+- latest_pb: `3.6500`
 - compare_to_anchor: `GT` (GT/LT/EQ/NA)
-- delta_vs_anchor: `0.4700`
-- ratio_vs_anchor: `1.1526`
+- delta_vs_anchor: `0.5700`
+- ratio_vs_anchor: `1.1851`
 
 ## 5) Caveats
 - History builds forward only (NO historical backfill; NO inferred dates).
