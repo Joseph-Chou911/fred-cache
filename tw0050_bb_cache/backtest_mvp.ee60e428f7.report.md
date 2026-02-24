@@ -1,8 +1,8 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T07:20:06Z`
+- generated_at_utc: `2026-02-24T07:32:21Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v8.post_only_view_v1`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v9.post_only_b2_and_mdd40`
 - suite_ok: `True`
 
 ## Ranking (policy)
@@ -51,14 +51,19 @@ trend_rule: `price_gt_ma60`
 | 1.5x | N/A | trend_leverage_price_gt_ma60_1.5x | always_leverage_1.5x | N/A | N/A (trend excluded: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0; always excluded: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0) |
 
 ## Post-only View (After Singularity / Ignore FULL)
-post_only_policy_v1: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); exclude post_gonogo=NO_GO; exclude missing post rank metrics; ignore FULL and ignore suite_hard_fail.`
-- top3_post_only: `trend_leverage_price_gt_ma60_1.5x, trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.2x`
-- would_be_eligible_post_only_but_excluded_by_full_floor: `trend_leverage_price_gt_ma60_1.5x, trend_leverage_price_gt_ma60_1.3x, always_leverage_1.5x`
-- post_only_total: `9`; post_only_eligible: `6`; post_only_excluded: `3`
+post_only_policy_v2: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); exclude post_gonogo=NO_GO; exclude missing post rank metrics; B2 gate: require post_ΔSharpe>= -0.03; post_MDD floor: require post_MDD>= -0.4 (i.e. not worse than -40%); ignore FULL and ignore suite_hard_fail.`
+- top3_post_only: `trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.2x`
+- would_be_eligible_post_only_but_excluded_by_full_floor: `trend_leverage_price_gt_ma60_1.3x`
+- post_only_total: `9`; post_only_eligible: `2`; post_only_excluded: `7`
+- post_only_exclusion_counters: `ok_false=0, post_ok_false=0, post_hard_fail=0, post_NO_GO=3, missing_rank_post=0, delta_sharpe_missing=0, b2_fail=5, post_mdd_floor_fail=2`
 
 - always_leverage_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
-- bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO`
+- always_leverage_1.2x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.03`
+- always_leverage_1.3x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.03`
+- always_leverage_1.5x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.03, EXCLUDE_POST_MDD_LT_-0.4`
+- bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO, EXCLUDE_POST_DELTA_SHARPE_LT_-0.03, EXCLUDE_POST_MDD_LT_-0.4`
 - trend_leverage_price_gt_ma60_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
+- trend_leverage_price_gt_ma60_1.5x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.03`
 
 ## Post Go/No-Go Details (compact)
 ### trend_leverage_price_gt_ma60_1.5x
