@@ -6,19 +6,14 @@ backtest_tw0050_leverage_mvp.py
 
 Audit-first MVP backtest for "base hold + conditional leverage leg" using BB z-score.
 
-v26.7 (2026-02-24):
-- ADD(audit/evidence): write per-strategy equity CSVs so renderer can attach "hard-fail date evidence".
-  * In addition to the exported strategy equity CSV (--out_equity_csv), we write:
-      {out_equity_csv_stem}__{strategy_id_sanitized}.csv
-    for EVERY successfully computed strategy.
-  * Also write per-strategy POST equity CSV (best-effort):
-      backtest_mvp_post_equity__{strategy_id_sanitized}.csv
-  * Add suite_out.outputs.equity_csv_by_strategy / post_equity_csv_by_strategy mappings.
+v26.8 (2026-02-24):
+- FIX(segmentation): default post_start_date now EXCLUDES split_date (sularity day).
+  If --segment_post_start_date is NOT provided, post_start_date becomes the NEXT available trading row
+  strictly after split_date. The split_date row is excluded from BOTH pre and post segments.
 
-- ADD(audit): suite_hard_fail flag (FULL-floor breach) independent of hard_fail_scope:
-  * suite_hard_fail is evaluated on FULL only with the same thresholds:
-      equity_min <= hard_fail_equity_le OR (any_negative_days & equity_negative_days>0)
-  * hard_fail remains the policy-driven flag (scope=full/post/any).
+v26.7:
+- ADD(audit): per-strategy equity curve csv output (for renderer evidence).
+- ADD(audit): suite_hard_fail (explicit flag) + reasons copied from hard_fail evaluation.
 
 v26.6 (2026-02-24):
 - FIX(safety): _hard_fail_eval scope="post" now applies a FULL-period floor check ("full_floor")
@@ -49,14 +44,6 @@ v26.2 (2026-02-22):
 - FIX: _add_boolopt sets dest consistently for both positive and negative flags.
 - FIX: _segment_backtest guard order: validate first_price before min_rows check.
 
-v26.1:
-- maint_ratio_mode
-- sanity checks
-- segment_min_rows_mult
-- vectorized break detection core
-- export top-ranked strategy outputs
-- out_post_equity_csv reuses cached post segment df
-
 v26:
 - maintenance margin / margin_call forced close at EOD.
 """
@@ -64,10 +51,10 @@ v26:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone, date as _date
 from typing import Any, Dict, List, Optional, Tuple
@@ -75,8 +62,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-SCHEMA_VERSION = "v26.7"
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail"
+
+SCHEMA_VERSION = "v26.8"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.8.exclude_split_day_post_start_next_row"
+
+# Tag used for per-strategy equity curve csv naming (stable per script fingerprint)
+_EQUITY_CURVE_TAG = hashlib.sha1(SCRIPT_FINGERPRINT.encode("utf-8")).hexdigest()[:10]
 
 # ===== RV20 Filter Policy (fixed for v26.5+; no CLI knobs) =====
 _RV20_WINDOW = 20
@@ -128,20 +119,6 @@ def _ensure_parent(path: str) -> None:
         os.makedirs(parent, exist_ok=True)
 
 
-def _safe_filename(s: str, max_len: int = 160) -> str:
-    """
-    Convert strategy_id into a filesystem-safe token.
-    Keep [A-Za-z0-9._-], replace others with '_', and truncate.
-    """
-    ss = str(s)
-    ss = re.sub(r"[^A-Za-z0-9._-]+", "_", ss).strip("_")
-    if not ss:
-        ss = "NA"
-    if len(ss) > int(max_len):
-        ss = ss[: int(max_len)]
-    return ss
-
-
 def _json_sanitize(obj: Any, _depth: int = 0, _max_depth: int = 60) -> Any:
     """
     Make obj JSON-safe:
@@ -163,6 +140,12 @@ def _json_sanitize(obj: Any, _depth: int = 0, _max_depth: int = 60) -> Any:
         if not math.isfinite(obj):
             return None
         return obj
+
+    if isinstance(obj, np.ndarray):
+        try:
+            return [_json_sanitize(x, _depth=_depth + 1, _max_depth=_max_depth) for x in obj.tolist()]
+        except Exception:
+            return None
 
     # numpy scalar -> python
     if isinstance(obj, np.generic):
@@ -214,8 +197,6 @@ def _json_sanitize(obj: Any, _depth: int = 0, _max_depth: int = 60) -> Any:
 def _write_json(path: str, obj: Dict[str, Any]) -> None:
     _ensure_parent(path)
     tmp = path + ".tmp"
-
-    # v26.4+: sanitize NaN/Inf and enforce allow_nan=False => strict JSON
     obj_clean = _json_sanitize(obj)
 
     try:
@@ -862,8 +843,6 @@ def run_backtest(
         return f > s
 
     def _entry_signal(i: int) -> bool:
-        # NOTE: RV20 filter is NOT applied here (to avoid double-counting across branches).
-        # It is applied in the entry logic only when (a) not exited_today, (b) not forbidden, and (c) raw signal is true.
         if params.entry_mode == "always":
             return True
         if params.entry_mode == "trend":
@@ -872,7 +851,6 @@ def run_backtest(
         return (zf_entry is not None) and (zf_entry <= float(params.entry_z))
 
     def _rv20_block(i: int) -> bool:
-        # BB mode only; if insufficient rv20 history, do not block.
         if str(params.entry_mode) != "bb":
             return False
         r = rv20[i]
@@ -1219,8 +1197,8 @@ def run_backtest(
             "trades": int(len(trades)),
             "skipped_entries_on_forbidden": int(skipped_entries_on_forbidden),
             "skipped_entries_on_nonpositive_equity": int(skipped_entries_on_nonpositive_equity),
-            "skipped_entries_same_day_exit": int(skipped_entries_same_day_exit),  # v26.4 audit
-            "skipped_entries_on_rv20": int(skipped_entries_on_rv20),              # v26.5 audit
+            "skipped_entries_same_day_exit": int(skipped_entries_same_day_exit),
+            "skipped_entries_on_rv20": int(skipped_entries_on_rv20),
             "rv20_filter": {
                 "enabled": True,
                 "scope": "bb_entry_only",
@@ -1496,19 +1474,16 @@ def _add_fail_fast_flag(ap: argparse.ArgumentParser) -> None:
 
 def _add_boolopt(ap: argparse.ArgumentParser, name: str, default: bool, help_text: str) -> None:
     """
-    v26.4: keep explicit dest and add hyphen/underscore aliases for robustness.
+    keep explicit dest and add hyphen/underscore aliases for robustness.
     Avoid BooleanOptionalAction here to keep CLI stable across Python versions.
     """
     flag = name.lstrip("-").replace("-", "_")
-    # positive flags
     ap.add_argument(name, dest=flag, action="store_true", default=default, help=help_text)
-    # add hyphen alias (suppressed)
     if "_" in flag:
         hy = "--" + flag.replace("_", "-")
         if hy != name:
             ap.add_argument(hy, dest=flag, action="store_true", default=default, help=argparse.SUPPRESS)
 
-    # negative flags
     ap.add_argument(f"--no-{flag}", dest=flag, action="store_false", help=argparse.SUPPRESS)
     if "_" in flag:
         ap.add_argument(f"--no-{flag.replace('_', '-')}", dest=flag, action="store_false", help=argparse.SUPPRESS)
@@ -1579,7 +1554,6 @@ def _hard_fail_eval(
     if sc not in ["full", "post", "any"]:
         sc = "any"
 
-    # v26.6: scope="post" still enforces a FULL-period "floor" check (no silent blowups).
     if sc == "post":
         _check(full_audit, "full_floor")
         if post_audit is not None:
@@ -1592,6 +1566,21 @@ def _hard_fail_eval(
         _check(post_audit, "post")
 
     return (len(reasons) > 0), reasons
+
+
+def _default_post_start_next_row(df_raw_in: pd.DataFrame, split_ts: pd.Timestamp) -> Tuple[pd.Timestamp, str]:
+    """
+    v26.8: exclude split day from post by default.
+    Choose the next available trading row strictly AFTER split_ts.
+    """
+    try:
+        cand = df_raw_in.loc[df_raw_in["date_ts"] > split_ts, "date_ts"]
+        if cand is None or cand.empty:
+            return split_ts, "fallback_split_date_no_later_row"
+        ts = pd.Timestamp(cand.iloc[0])
+        return pd.Timestamp(ts.date()), "next_row_after_split_date (exclude split day)"
+    except Exception:
+        return split_ts, "fallback_split_date_exception"
 
 
 def _run_one_strategy(
@@ -1626,12 +1615,13 @@ def _run_one_strategy(
         "mode": None,
         "split_date": None,
         "post_start_date": None,
+        "post_start_policy": None,  # v26.8
         "break_rank": int(segment_break_rank),
         "notes": None,
         "segments": {},
         "compare": None,
         "compare_error": None,
-        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized in v26.2.",
+        "compute_cost_note": "Per strategy: full + pre + post backtests (3x). Not optimized.",
     }
 
     post_df_bt: Optional[pd.DataFrame] = None
@@ -1666,22 +1656,33 @@ def _run_one_strategy(
                 segmentation["enabled"] = False
                 segmentation["notes"] = "no valid split_date (auto had no breaks, or manual date parse failed)"
         else:
-            post_start_ts = _parse_ymd(segment_post_start_date) if segment_post_start_date else split_ts
-            if post_start_ts is None:
-                if segment_post_start_date:
-                    print(
-                        f"WARNING: could not parse --segment_post_start_date={segment_post_start_date!r}; fallback to split_date"
-                    )
-                post_start_ts = split_ts
+            # v26.8: default post_start excludes split day (use next row)
+            if segment_post_start_date:
+                post_start_ts = _parse_ymd(segment_post_start_date)
+                if post_start_ts is None:
+                    print(f"WARNING: could not parse --segment_post_start_date={segment_post_start_date!r}; fallback to split_date")
+                    post_start_ts = split_ts
+                    post_policy = "manual_override_parse_failed_fallback_split_date"
+                else:
+                    post_policy = "manual_override"
+            else:
+                post_start_ts, post_policy = _default_post_start_next_row(df_raw_in, split_ts)
 
             segmentation["enabled"] = True
             segmentation["split_date"] = split_ts.date().isoformat()
             segmentation["post_start_date"] = post_start_ts.date().isoformat()
+            segmentation["post_start_policy"] = str(post_policy)
+
             segmentation["notes"] = (
                 "Each segment equity is normalized to 1.0 at its own start (base_shares=1/segment_first_price). "
-                "Segment results are NOT chainable into a single continuous equity curve."
+                "Segment results are NOT chainable into a single continuous equity curve. "
+                "v26.8 default: split_date is excluded from BOTH pre and post (post starts at next trading row), "
+                "unless you override --segment_post_start_date."
             )
 
+            # IMPORTANT:
+            # pre: < split_ts
+            # post: >= post_start_ts (usually next row, so split day is excluded)
             df_pre = df_raw_in.loc[df_raw_in["date_ts"] < split_ts].copy().reset_index(drop=True)
             df_post = df_raw_in.loc[df_raw_in["date_ts"] >= post_start_ts].copy().reset_index(drop=True)
 
@@ -1731,24 +1732,6 @@ def _run_one_strategy(
         out["trades"] = summary.get("trades", []) if isinstance(summary.get("trades", []), list) else []
 
     return out, df_bt, segmentation, post_df_bt, summary
-
-
-def _write_equity_csv_best_effort(path: str, df_bt: pd.DataFrame) -> Optional[str]:
-    """
-    Best-effort write for per-strategy equity CSV.
-    Returns resolved path if successful, else None.
-    """
-    if df_bt is None or not isinstance(df_bt, pd.DataFrame) or df_bt.empty:
-        return None
-    try:
-        _ensure_parent(path)
-        df_bt[["date", "price", "bb_z", "ma_fast", "ma_slow", "equity", "equity_base_only", "lever_on"]].to_csv(
-            path, index=False, encoding="utf-8"
-        )
-        return path
-    except Exception as e:
-        print(f"WARNING: failed to write per-strategy equity csv: {path}: {e}")
-        return None
 
 
 def main() -> None:
@@ -1809,7 +1792,7 @@ def main() -> None:
         "--segment_min_rows_mult",
         type=float,
         default=3.0,
-        help="Segment min rows = max(bb_window*mult, bb_window+5). Default 3.0 keeps v26 behavior; set 2.0 to relax.",
+        help="Segment min rows = max(bb_window*mult, bb_window+5). Default 3.0 keeps behavior; set 2.0 to relax.",
     )
 
     ap.add_argument("--omit_trades", action="store_true", default=False)
@@ -2004,6 +1987,7 @@ def main() -> None:
                 "any_negative_days": bool(getattr(args, "hard_fail_any_negative_days")),
             },
             "segment_min_rows_mult": float(args.segment_min_rows_mult),
+            "segment_post_start_default_policy": "exclude_split_day_next_row (v26.8) unless --segment_post_start_date is provided",
             "rv20_filter_policy": {
                 "enabled": True,
                 "scope": "bb_entry_only",
@@ -2012,12 +1996,7 @@ def main() -> None:
                 "q": float(_RV20_Q),
                 "q_min_periods": int(_RV20_Q_MIN_PERIODS),
             },
-            "per_strategy_equity_csv_policy": {
-                "enabled": True,
-                "filename_pattern": "{out_equity_csv_stem}__{strategy_id_sanitized}{ext}",
-                "post_filename_pattern": "backtest_mvp_post_equity__{strategy_id_sanitized}.csv",
-                "note": "Written for ALL successful strategies to support renderer evidence.",
-            },
+            "equity_curve_tag": _EQUITY_CURVE_TAG,
         },
         "strategy_suite": {
             "mode": str(args.strategy_suite),
@@ -2033,10 +2012,7 @@ def main() -> None:
         "failed_strategies": [],
         "suite_ok": True,
         "abort_reason": None,
-        "outputs": {
-            "equity_csv_by_strategy": {},       # v26.7
-            "post_equity_csv_by_strategy": {},  # v26.7
-        },
+        "outputs": {},
         "notes": [
             "Hard-fail strategies are excluded from ranking.",
             "Maintenance margin forced close approximates margin call at EOD on trigger bar; intraday is not modeled.",
@@ -2044,7 +2020,8 @@ def main() -> None:
             "JSON output is sanitized: NaN/Inf are converted to null; allow_nan=False enforced.",
             "v26.5+: RV20 entry filter is enabled for BB mode (defensive).",
             "v26.6: hard_fail scope='post' still enforces full_floor.",
-            "v26.7: per-strategy equity csvs are written for renderer evidence.",
+            "v26.7+: write per-strategy equity curve CSV for renderer evidence.",
+            "v26.8: default post_start_date excludes split_date (cut singularity day from segment stats).",
         ],
     }
 
@@ -2052,12 +2029,6 @@ def main() -> None:
     abort_reason: Optional[str] = None
 
     results_by_sid: Dict[str, Dict[str, Any]] = {}
-
-    # per-strategy equity filename base
-    out_eq_name = str(args.out_equity_csv)
-    eq_stem, eq_ext = os.path.splitext(out_eq_name)
-    if not eq_ext:
-        eq_ext = ".csv"
 
     for (sid, params) in strategies:
         try:
@@ -2093,13 +2064,12 @@ def main() -> None:
                     "rank_basis": "error",
                     "error_type": err_type,
                     "hard_fail": True,
-                    "hard_fail_reason": "strategy_error",
                     "suite_hard_fail": True,
-                    "suite_hard_fail_reason": "strategy_error",
+                    "hard_fail_reason": "strategy_error",
                 }
             )
 
-            is_critical = isinstance(e, MemoryError)  # v26.4 safety
+            is_critical = isinstance(e, MemoryError)
             if bool(args.fail_fast) or is_critical:
                 abort_reason = err_msg
                 if is_critical and (not bool(args.fail_fast)):
@@ -2120,19 +2090,6 @@ def main() -> None:
                 post_audit = (post_sum.get("audit") or {})
 
         full_audit = (strat_obj.get("audit") or {})
-
-        # v26.7: suite_hard_fail is FULL-only "floor" breach, independent of scope policy.
-        suite_hf, suite_hf_reasons = _hard_fail_eval(
-            full_audit=full_audit,
-            post_audit=None,
-            scope="full",
-            equity_le=float(args.hard_fail_equity_le),
-            any_negative_days=bool(getattr(args, "hard_fail_any_negative_days")),
-        )
-        strat_obj["suite_hard_fail"] = bool(suite_hf)
-        strat_obj["suite_hard_fail_reasons"] = suite_hf_reasons
-
-        # policy-driven hard_fail
         hard_fail, hard_reasons = _hard_fail_eval(
             full_audit=full_audit,
             post_audit=post_audit if isinstance(post_audit, dict) else None,
@@ -2143,30 +2100,24 @@ def main() -> None:
         strat_obj["hard_fail"] = bool(hard_fail)
         strat_obj["hard_fail_reasons"] = hard_reasons
 
-        # v26.7: write per-strategy equity CSV for evidence (best-effort)
-        sid_safe = _safe_filename(sid)
-        per_eq_name = f"{eq_stem}__{sid_safe}{eq_ext}"
-        per_eq_path = os.path.join(cache_dir, per_eq_name)
-        resolved_eq = _write_equity_csv_best_effort(per_eq_path, df_bt)
-        if isinstance(suite_out.get("outputs"), dict):
-            suite_out["outputs"].setdefault("equity_csv_by_strategy", {})
-            if resolved_eq is not None:
-                suite_out["outputs"]["equity_csv_by_strategy"][str(sid)] = per_eq_name
-            else:
-                suite_out["outputs"]["equity_csv_by_strategy"][str(sid)] = None
+        # v26.7+: explicit suite_hard_fail (renderer v4 uses this field)
+        strat_obj["suite_hard_fail"] = bool(hard_fail)
+        strat_obj["suite_hard_fail_reasons"] = hard_reasons
 
-        # v26.7: per-strategy POST equity (best-effort)
-        per_post_name = f"backtest_mvp_post_equity__{sid_safe}.csv"
-        per_post_path = os.path.join(cache_dir, per_post_name)
-        resolved_post = None
-        if post_df_bt is not None and isinstance(post_df_bt, pd.DataFrame) and (not post_df_bt.empty):
-            resolved_post = _write_equity_csv_best_effort(per_post_path, post_df_bt)
-        if isinstance(suite_out.get("outputs"), dict):
-            suite_out["outputs"].setdefault("post_equity_csv_by_strategy", {})
-            if resolved_post is not None:
-                suite_out["outputs"]["post_equity_csv_by_strategy"][str(sid)] = per_post_name
-            else:
-                suite_out["outputs"]["post_equity_csv_by_strategy"][str(sid)] = None
+        # v26.7+: write per-strategy equity curve csv (best-effort)
+        eq_curve_name = f"equity_curve.{_EQUITY_CURVE_TAG}__{sid}.csv"
+        eq_curve_path = os.path.join(cache_dir, eq_curve_name)
+        _ensure_parent(eq_curve_path)
+        try:
+            df_bt[["date", "price", "bb_z", "ma_fast", "ma_slow", "equity", "equity_base_only", "lever_on"]].to_csv(
+                eq_curve_path, index=False, encoding="utf-8"
+            )
+            strat_obj["equity_curve_csv"] = eq_curve_name
+            strat_obj["equity_curve_csv_resolved"] = eq_curve_path
+        except Exception as e:
+            strat_obj["equity_curve_csv"] = None
+            strat_obj["equity_curve_csv_resolved"] = None
+            strat_obj["equity_curve_csv_error"] = f"{type(e).__name__}: {e}"
 
         suite_out["strategies"].append(strat_obj)
 
@@ -2218,7 +2169,7 @@ def main() -> None:
             ),
             "maint_ratio_mode": (strat_obj.get("params") or {}).get("maint_ratio_mode"),
             "maintenance_margin": (strat_obj.get("params") or {}).get("maintenance_margin"),
-            "full_base_price_t0": (full_audit or {}).get("base_price_t0"),  # v26.4 audit
+            "full_base_price_t0": (full_audit or {}).get("base_price_t0"),
             "full_cagr": pl.get("cagr"),
             "full_mdd": pl.get("mdd"),
             "full_sharpe0": pl.get("sharpe0"),
@@ -2238,9 +2189,8 @@ def main() -> None:
             "post_gonogo": (strat_obj.get("post_gonogo") or {}).get("decision"),
             "rank_basis": rank_basis,
             "hard_fail": bool(hard_fail),
+            "suite_hard_fail": bool(strat_obj.get("suite_hard_fail")),
             "hard_fail_reason": "; ".join(hard_reasons) if hard_reasons else None,
-            "suite_hard_fail": bool(suite_hf),
-            "suite_hard_fail_reason": "; ".join(suite_hf_reasons) if suite_hf_reasons else None,
             "ok": True,
         }
         compare_rows.append(row)
@@ -2261,7 +2211,6 @@ def main() -> None:
         ("full_calmar", np.nan),
         ("post_sharpe0", np.nan),
         ("full_sharpe0", np.nan),
-        ("suite_hard_fail", False),  # v26.7
     ]:
         if col not in df_cmp.columns:
             df_cmp[col] = default
@@ -2269,23 +2218,16 @@ def main() -> None:
     df_cmp["ok"] = df_cmp["ok"].fillna(False)
     df_cmp["hard_fail"] = df_cmp["hard_fail"].fillna(False)
     df_cmp["post_ok"] = df_cmp["post_ok"].fillna(False)
-    df_cmp["suite_hard_fail"] = df_cmp["suite_hard_fail"].fillna(False)
 
-    # Cast to bool dtype after fillna to avoid NaN->True pitfalls
     df_cmp["ok"] = df_cmp["ok"].astype(bool)
     df_cmp["hard_fail"] = df_cmp["hard_fail"].astype(bool)
     df_cmp["post_ok"] = df_cmp["post_ok"].astype(bool)
-    df_cmp["suite_hard_fail"] = df_cmp["suite_hard_fail"].astype(bool)
-
-    def _to_finite_float_local(x: Any) -> Optional[float]:
-        return _to_finite_float(x)
 
     def _finite_or_neginf(x: Any) -> float:
-        v = _to_finite_float_local(x)
+        v = _to_finite_float(x)
         return float(v) if v is not None else float("-inf")
 
     def _rank_calmar_row(r: pd.Series) -> float:
-        # v26.4 critical fix: avoid identity checks (numpy.bool_ safe)
         if (not bool(r["ok"])) or bool(r["hard_fail"]):
             return float("-inf")
         if bool(r["post_ok"]):
@@ -2304,7 +2246,6 @@ def main() -> None:
         df_cmp["_rank_sharpe"] = df_cmp.apply(_rank_sharpe_row, axis=1)
         df_cmp = df_cmp.sort_values(by=["_rank_calmar", "_rank_sharpe"], ascending=[False, False]).reset_index(drop=True)
 
-    # v26.4: safer boolean filter
     df_ok = df_cmp[df_cmp["ok"] & (~df_cmp["hard_fail"])]
     top3 = df_ok["strategy_id"].head(3).tolist() if (not df_ok.empty and "strategy_id" in df_ok.columns) else []
 
@@ -2321,17 +2262,11 @@ def main() -> None:
 
     export_sid: Optional[str] = top3[0] if top3 else (next(iter(results_by_sid.keys()), None))
 
-    suite_out["outputs"].update(
-        {
-            "export_strategy_id": export_sid,
-            "export_policy": "top1_by_compare_policy else first_success",
-            "export_equity_csv": str(args.out_equity_csv),
-            "export_trades_csv": str(args.out_trades_csv),
-            "export_compare_csv": str(args.out_compare_csv),
-        }
-    )
+    suite_out["outputs"] = {
+        "export_strategy_id": export_sid,
+        "export_policy": "top1_by_compare_policy else first_success",
+    }
 
-    # write JSON and compare CSV (v26.4: compare CSV guarded)
     _write_json(out_json_path, suite_out)
 
     _ensure_parent(out_cmp_path)
@@ -2393,8 +2328,6 @@ def main() -> None:
     print(f"OK: wrote {out_cmp_path} (strategy comparison; post-first ranking; hard_fail excluded)")
     print(f"OK: wrote {out_eq_path}  (equity for EXPORTED strategy: {export_sid})")
     print(f"OK: wrote {out_tr_path}  (trades CSV for EXPORTED strategy: {export_sid})")
-    print("OK: wrote per-strategy equity CSVs (for renderer evidence): "
-          f"{eq_stem}__<strategy_id>.csv")
 
     if args.out_post_equity_csv:
         out_post_eq = os.path.join(cache_dir, str(args.out_post_equity_csv))
