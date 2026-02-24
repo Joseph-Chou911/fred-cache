@@ -1,7 +1,7 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T08:27:44Z`
-- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard`
+- generated_at_utc: `2026-02-24T08:55:44Z`
+- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail`
 - renderer_fingerprint: `render_backtest_mvp@2026-02-24.v11.suite_hard_fail_date_evidence`
 - suite_ok: `True`
 
@@ -88,7 +88,18 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
   - full: equity_negative_days>0 (neg_days=1422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - status: `N/A` (equity csv not found)
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.5x.csv`
+  - FULL:
+    - equity_min_date: `2014-02-05`
+    - neg_days_first_date: `2014-01-02`
+    - neg_days_last_date: `2020-04-24`
+    - neg_days_count: `1422`
+  - POST (date >= post_start_date):
+    - post_start_date: `2014-01-02`
+    - equity_min_date: `2014-02-05`
+    - neg_days_first_date: `2014-01-02`
+    - neg_days_last_date: `2020-04-24`
+    - neg_days_count: `1422`
 
 ### trend_leverage_price_gt_ma60_1.3x
 - decision: `GO_OR_REVIEW`
@@ -101,7 +112,18 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
   - full: equity_negative_days>0 (neg_days=124)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - status: `N/A` (equity csv not found)
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.3x.csv`
+  - FULL:
+    - equity_min_date: `2014-02-05`
+    - neg_days_first_date: `2014-01-02`
+    - neg_days_last_date: `2016-01-28`
+    - neg_days_count: `124`
+  - POST (date >= post_start_date):
+    - post_start_date: `2014-01-02`
+    - equity_min_date: `2014-02-05`
+    - neg_days_first_date: `2014-01-02`
+    - neg_days_last_date: `2016-01-28`
+    - neg_days_count: `124`
 
 ### trend_leverage_price_gt_ma60_1.2x
 - decision: `GO_OR_REVIEW`
@@ -144,7 +166,18 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
   - full: equity_negative_days>0 (neg_days=422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - status: `N/A` (equity csv not found)
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.ee60e428f7__always_leverage_1.5x.csv`
+  - FULL:
+    - equity_min_date: `2014-02-05`
+    - neg_days_first_date: `2014-01-02`
+    - neg_days_last_date: `2016-07-14`
+    - neg_days_count: `422`
+  - POST (date >= post_start_date):
+    - post_start_date: `2014-01-02`
+    - equity_min_date: `2014-02-05`
+    - neg_days_first_date: `2014-01-02`
+    - neg_days_last_date: `2016-07-14`
+    - neg_days_count: `422`
 
 ### bb_conditional
 - decision: `NO_GO`

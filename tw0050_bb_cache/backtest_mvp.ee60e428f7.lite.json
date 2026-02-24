@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-02-24T08:27:44Z",
-  "schema_version": "v26.6",
-  "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+  "generated_at_utc": "2026-02-24T08:55:44Z",
+  "schema_version": "v26.7",
+  "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
   "inputs": {
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
@@ -48,6 +48,12 @@
       "q_lookback": 252,
       "q": 0.6,
       "q_min_periods": 100
+    },
+    "per_strategy_equity_csv_policy": {
+      "enabled": true,
+      "filename_pattern": "{out_equity_csv_stem}__{strategy_id_sanitized}{ext}",
+      "post_filename_pattern": "backtest_mvp_post_equity__{strategy_id_sanitized}.csv",
+      "note": "Written for ALL successful strategies to support renderer evidence."
     }
   },
   "strategy_suite": {
@@ -68,9 +74,9 @@
     {
       "strategy_id": "bb_conditional",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:44Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:44Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -212,9 +218,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -356,9 +362,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -564,15 +570,17 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": true,
+      "suite_hard_fail": false,
+      "suite_hard_fail_reasons": [],
       "hard_fail": false,
       "hard_fail_reasons": []
     },
     {
       "strategy_id": "always_leverage_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:44Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:44Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -714,9 +722,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -858,9 +866,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -1066,15 +1074,17 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": false,
+      "suite_hard_fail_reasons": [],
       "hard_fail": false,
       "hard_fail_reasons": []
     },
     {
       "strategy_id": "always_leverage_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:44Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:44Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -1216,9 +1226,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -1360,9 +1370,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -1568,15 +1578,17 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": false,
+      "suite_hard_fail_reasons": [],
       "hard_fail": false,
       "hard_fail_reasons": []
     },
     {
       "strategy_id": "always_leverage_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:44Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:44Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -1718,9 +1730,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -1862,9 +1874,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -2070,15 +2082,17 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": false,
+      "suite_hard_fail_reasons": [],
       "hard_fail": false,
       "hard_fail_reasons": []
     },
     {
       "strategy_id": "always_leverage_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:44Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:44Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -2220,9 +2234,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -2364,9 +2378,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:44Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -2572,6 +2586,11 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": true,
+      "suite_hard_fail_reasons": [
+        "full: equity_min<= 0.0 (equity_min=-0.11447548296733157)",
+        "full: equity_negative_days>0 (neg_days=422)"
+      ],
       "hard_fail": true,
       "hard_fail_reasons": [
         "full: equity_min<= 0.0 (equity_min=-0.11447548296733157)",
@@ -2581,9 +2600,9 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:45Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:44Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -2725,9 +2744,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -2869,9 +2888,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:44Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -3077,15 +3096,17 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": false,
+      "suite_hard_fail_reasons": [],
       "hard_fail": false,
       "hard_fail_reasons": []
     },
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:45Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:45Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -3227,9 +3248,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:45Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -3371,9 +3392,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:45Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -3579,15 +3600,17 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": false,
+      "suite_hard_fail_reasons": [],
       "hard_fail": false,
       "hard_fail_reasons": []
     },
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:45Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:45Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -3729,9 +3752,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:45Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -3873,9 +3896,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:45Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -4081,6 +4104,11 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": true,
+      "suite_hard_fail_reasons": [
+        "full: equity_min<= 0.0 (equity_min=-0.0639430290987017)",
+        "full: equity_negative_days>0 (neg_days=124)"
+      ],
       "hard_fail": true,
       "hard_fail_reasons": [
         "full: equity_min<= 0.0 (equity_min=-0.0639430290987017)",
@@ -4090,9 +4118,9 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T08:27:45Z",
-      "schema_version": "v26.6",
-      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+      "generated_at_utc": "2026-02-24T08:55:45Z",
+      "schema_version": "v26.7",
+      "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
       "params": {
         "bb_window": 60,
         "bb_ddof": 0,
@@ -4234,9 +4262,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:45Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -4378,9 +4406,9 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T08:27:45Z",
-              "schema_version": "v26.6",
-              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
+              "generated_at_utc": "2026-02-24T08:55:45Z",
+              "schema_version": "v26.7",
+              "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail",
               "params": {
                 "bb_window": 60,
                 "bb_ddof": 0,
@@ -4586,6 +4614,11 @@
       },
       "forbid_mask_scope": "bb_only",
       "forbid_mask_applied": false,
+      "suite_hard_fail": true,
+      "suite_hard_fail_reasons": [
+        "full: equity_min<= 0.0 (equity_min=-0.39616459186496916)",
+        "full: equity_negative_days>0 (neg_days=1422)"
+      ],
       "hard_fail": true,
       "hard_fail_reasons": [
         "full: equity_min<= 0.0 (equity_min=-0.39616459186496916)",
@@ -4622,6 +4655,8 @@
         "rank_basis": "post",
         "hard_fail": false,
         "hard_fail_reason": null,
+        "suite_hard_fail": false,
+        "suite_hard_fail_reason": null,
         "ok": true
       },
       {
@@ -4651,6 +4686,8 @@
         "rank_basis": "post",
         "hard_fail": false,
         "hard_fail_reason": null,
+        "suite_hard_fail": false,
+        "suite_hard_fail_reason": null,
         "ok": true
       },
       {
@@ -4680,6 +4717,8 @@
         "rank_basis": "post",
         "hard_fail": false,
         "hard_fail_reason": null,
+        "suite_hard_fail": false,
+        "suite_hard_fail_reason": null,
         "ok": true
       },
       {
@@ -4709,6 +4748,8 @@
         "rank_basis": "post",
         "hard_fail": false,
         "hard_fail_reason": null,
+        "suite_hard_fail": false,
+        "suite_hard_fail_reason": null,
         "ok": true
       },
       {
@@ -4738,6 +4779,8 @@
         "rank_basis": "post",
         "hard_fail": false,
         "hard_fail_reason": null,
+        "suite_hard_fail": false,
+        "suite_hard_fail_reason": null,
         "ok": true
       },
       {
@@ -4767,6 +4810,8 @@
         "rank_basis": "post",
         "hard_fail": false,
         "hard_fail_reason": null,
+        "suite_hard_fail": false,
+        "suite_hard_fail_reason": null,
         "ok": true
       },
       {
@@ -4796,6 +4841,8 @@
         "rank_basis": "post",
         "hard_fail": true,
         "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.11447548296733157); full: equity_negative_days>0 (neg_days=422)",
+        "suite_hard_fail": true,
+        "suite_hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.11447548296733157); full: equity_negative_days>0 (neg_days=422)",
         "ok": true
       },
       {
@@ -4825,6 +4872,8 @@
         "rank_basis": "post",
         "hard_fail": true,
         "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.0639430290987017); full: equity_negative_days>0 (neg_days=124)",
+        "suite_hard_fail": true,
+        "suite_hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.0639430290987017); full: equity_negative_days>0 (neg_days=124)",
         "ok": true
       },
       {
@@ -4854,6 +4903,8 @@
         "rank_basis": "post",
         "hard_fail": true,
         "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.39616459186496916); full: equity_negative_days>0 (neg_days=1422)",
+        "suite_hard_fail": true,
+        "suite_hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.39616459186496916); full: equity_negative_days>0 (neg_days=1422)",
         "ok": true
       }
     ],
@@ -4868,8 +4919,33 @@
   "suite_ok": true,
   "abort_reason": null,
   "outputs": {
+    "equity_csv_by_strategy": {
+      "bb_conditional": "equity_curve.ee60e428f7__bb_conditional.csv",
+      "always_leverage_1.1x": "equity_curve.ee60e428f7__always_leverage_1.1x.csv",
+      "always_leverage_1.2x": "equity_curve.ee60e428f7__always_leverage_1.2x.csv",
+      "always_leverage_1.3x": "equity_curve.ee60e428f7__always_leverage_1.3x.csv",
+      "always_leverage_1.5x": "equity_curve.ee60e428f7__always_leverage_1.5x.csv",
+      "trend_leverage_price_gt_ma60_1.1x": "equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.1x.csv",
+      "trend_leverage_price_gt_ma60_1.2x": "equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.2x.csv",
+      "trend_leverage_price_gt_ma60_1.3x": "equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.3x.csv",
+      "trend_leverage_price_gt_ma60_1.5x": "equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.5x.csv"
+    },
+    "post_equity_csv_by_strategy": {
+      "bb_conditional": "backtest_mvp_post_equity__bb_conditional.csv",
+      "always_leverage_1.1x": "backtest_mvp_post_equity__always_leverage_1.1x.csv",
+      "always_leverage_1.2x": "backtest_mvp_post_equity__always_leverage_1.2x.csv",
+      "always_leverage_1.3x": "backtest_mvp_post_equity__always_leverage_1.3x.csv",
+      "always_leverage_1.5x": "backtest_mvp_post_equity__always_leverage_1.5x.csv",
+      "trend_leverage_price_gt_ma60_1.1x": "backtest_mvp_post_equity__trend_leverage_price_gt_ma60_1.1x.csv",
+      "trend_leverage_price_gt_ma60_1.2x": "backtest_mvp_post_equity__trend_leverage_price_gt_ma60_1.2x.csv",
+      "trend_leverage_price_gt_ma60_1.3x": "backtest_mvp_post_equity__trend_leverage_price_gt_ma60_1.3x.csv",
+      "trend_leverage_price_gt_ma60_1.5x": "backtest_mvp_post_equity__trend_leverage_price_gt_ma60_1.5x.csv"
+    },
     "export_strategy_id": "trend_leverage_price_gt_ma60_1.2x",
-    "export_policy": "top1_by_compare_policy else first_success"
+    "export_policy": "top1_by_compare_policy else first_success",
+    "export_equity_csv": "equity_curve.ee60e428f7.csv",
+    "export_trades_csv": "backtest_mvp_trades.csv",
+    "export_compare_csv": "backtest_strategy_compare.csv"
   },
   "notes": [
     "Hard-fail strategies are excluded from ranking.",
@@ -4877,6 +4953,7 @@
     "Maintenance ratio thresholds are NOT interchangeable across maint_ratio_mode values.",
     "JSON output is sanitized: NaN/Inf are converted to null; allow_nan=False enforced.",
     "v26.5+: RV20 entry filter is enabled for BB mode (defensive).",
-    "v26.6: hard_fail scope='post' still enforces full_floor."
+    "v26.6: hard_fail scope='post' still enforces full_floor.",
+    "v26.7: per-strategy equity csvs are written for renderer evidence."
   ]
 }
