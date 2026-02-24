@@ -1,8 +1,8 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T07:02:15Z`
+- generated_at_utc: `2026-02-24T07:20:06Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v7.suite_hard_fail_trend_rule_rv20`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v8.post_only_view_v1`
 - suite_ok: `True`
 
 ## Ranking (policy)
@@ -49,6 +49,16 @@ trend_rule: `price_gt_ma60`
 | 1.2x | post | trend_leverage_price_gt_ma60_1.2x | always_leverage_1.2x | trend_leverage_price_gt_ma60_1.2x | WIN:trend |
 | 1.3x | N/A | trend_leverage_price_gt_ma60_1.3x | always_leverage_1.3x | N/A | N/A (trend excluded: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0; always OK) |
 | 1.5x | N/A | trend_leverage_price_gt_ma60_1.5x | always_leverage_1.5x | N/A | N/A (trend excluded: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0; always excluded: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0) |
+
+## Post-only View (After Singularity / Ignore FULL)
+post_only_policy_v1: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); exclude post_gonogo=NO_GO; exclude missing post rank metrics; ignore FULL and ignore suite_hard_fail.`
+- top3_post_only: `trend_leverage_price_gt_ma60_1.5x, trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.2x`
+- would_be_eligible_post_only_but_excluded_by_full_floor: `trend_leverage_price_gt_ma60_1.5x, trend_leverage_price_gt_ma60_1.3x, always_leverage_1.5x`
+- post_only_total: `9`; post_only_eligible: `6`; post_only_excluded: `3`
+
+- always_leverage_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
+- bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO`
+- trend_leverage_price_gt_ma60_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
 
 ## Post Go/No-Go Details (compact)
 ### trend_leverage_price_gt_ma60_1.5x
