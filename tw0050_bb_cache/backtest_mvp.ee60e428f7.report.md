@@ -1,8 +1,8 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T09:20:08Z`
+- generated_at_utc: `2026-02-24T10:53:13Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.8.exclude_split_day_post_start_next_row`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v11.suite_hard_fail_date_evidence`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v12.post_only_semantic1_no_renderer_v4_gate`
 - suite_ok: `True`
 
 ## Ranking (policy)
@@ -51,29 +51,29 @@ trend_rule: `price_gt_ma60`
 | 1.5x | N/A | trend_leverage_price_gt_ma60_1.5x | always_leverage_1.5x | N/A | N/A (trend excluded: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0; always excluded: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0) |
 
 ## Post-only View (After Singularity / Ignore FULL)
-post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); exclude post_gonogo=NO_GO; exclude missing post rank metrics; PASS gate: require post_ΔSharpe>= -0.03; WATCH gate: require -0.05<=post_ΔSharpe<-0.03; post_MDD floor: require post_MDD>= -0.4 (i.e. not worse than -40%); ignore FULL and ignore suite_hard_fail.`
+post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); exclude post_gonogo=NO_GO; exclude missing post rank metrics; PASS gate: require post_ΔSharpe>= -0.03; WATCH gate: require -0.05<=post_ΔSharpe<-0.03; post_MDD floor: require post_MDD>= -0.4 (i.e. not worse than -40%); ignore FULL and ignore suite_hard_fail for eligibility (Semantic1=new start).`
 - top3_post_only_PASS: `trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.2x`
 - top3_post_only_WATCH: `trend_leverage_price_gt_ma60_1.5x, always_leverage_1.2x`
 - post_only_total: `9`; pass: `2`; watch: `2`; excluded: `5`
-- would_be_pass_or_watch_post_only_but_excluded_by_renderer_v4: `trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.5x`
+- post_only_warn_full_blowup (suite_hard_fail=true): `trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.5x`
 
-### PASS (deploy-grade, strict)
+### PASS (deploy-grade, strict; Semantic1=new start)
 | id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |
 |---|---:|---:|---:|---:|---:|---|
-| trend_leverage_price_gt_ma60_1.3x | 21.73% | -36.21% | 1.068 | 0.600 | -0.024 | excluded_by_renderer_v4: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0 |
+| trend_leverage_price_gt_ma60_1.3x | 21.73% | -36.21% | 1.068 | 0.600 | -0.024 | WARNING: suite_hard_fail=true (FULL period floor violated; Semantic2 risk) |
 | trend_leverage_price_gt_ma60_1.2x | 21.23% | -35.45% | 1.077 | 0.599 | -0.015 |   |
 
-### WATCH (research-grade, not for deploy)
+### WATCH (research-grade, not for deploy; Semantic1=new start)
 | id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |
 |---|---:|---:|---:|---:|---:|---|
-| trend_leverage_price_gt_ma60_1.5x | 22.66% | -37.65% | 1.048 | 0.602 | -0.044 | excluded_by_renderer_v4: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0 |
+| trend_leverage_price_gt_ma60_1.5x | 22.66% | -37.65% | 1.048 | 0.602 | -0.044 | WARNING: suite_hard_fail=true (FULL period floor violated; Semantic2 risk) |
 | always_leverage_1.2x | 21.52% | -37.05% | 1.048 | 0.581 | -0.043 |   |
 
 ### Post-only Exclusions (reasons)
 - always_leverage_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
 - always_leverage_1.3x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
-- always_leverage_1.5x: `EXCLUDE_POST_MDD_LT_-0.4, EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
-- bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO, EXCLUDE_POST_MDD_LT_-0.4, EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
+- always_leverage_1.5x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.05, EXCLUDE_POST_MDD_LT_-0.4`
+- bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO, EXCLUDE_POST_DELTA_SHARPE_LT_-0.05, EXCLUDE_POST_MDD_LT_-0.4`
 - trend_leverage_price_gt_ma60_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
 
 ## Post Go/No-Go Details (compact)
