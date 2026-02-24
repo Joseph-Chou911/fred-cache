@@ -6,6 +6,11 @@ backtest_tw0050_leverage_mvp.py
 
 Audit-first MVP backtest for "base hold + conditional leverage leg" using BB z-score.
 
+v26.9 (2026-02-24):
+- ADD(ops): cleanup old per-strategy equity curve CSVs in cache_dir at start of each run
+  to avoid accumulating many equity_curve.*.csv files across runs.
+  Target: cache_dir / equity_curve.*.csv
+
 v26.8 (2026-02-24):
 - FIX(segmentation): default post_start_date now EXCLUDES split_date (sularity day).
   If --segment_post_start_date is NOT provided, post_start_date becomes the NEXT available trading row
@@ -63,8 +68,8 @@ import numpy as np
 import pandas as pd
 
 
-SCHEMA_VERSION = "v26.8"
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.8.exclude_split_day_post_start_next_row"
+SCHEMA_VERSION = "v26.9"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs"
 
 # Tag used for per-strategy equity curve csv naming (stable per script fingerprint)
 _EQUITY_CURVE_TAG = hashlib.sha1(SCRIPT_FINGERPRINT.encode("utf-8")).hexdigest()[:10]
@@ -117,6 +122,54 @@ def _ensure_parent(path: str) -> None:
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
+
+
+def _cleanup_equity_curve_csvs(cache_dir: str) -> Dict[str, Any]:
+    """
+    v26.9:
+    Delete old per-strategy equity curve CSVs to prevent accumulation across runs.
+
+    Target: files in cache_dir where:
+      - filename startswith "equity_curve."
+      - filename endswith ".csv"
+
+    Best-effort:
+      - never raises
+      - returns audit dict {ok, removed, errors}
+    """
+    out: Dict[str, Any] = {"ok": False, "cache_dir": cache_dir, "removed": 0, "errors": []}
+
+    if not cache_dir:
+        out["errors"].append("cache_dir empty")
+        return out
+    if not os.path.isdir(cache_dir):
+        out["errors"].append("cache_dir not a directory")
+        return out
+
+    removed = 0
+    errors: List[str] = []
+    try:
+        with os.scandir(cache_dir) as it:
+            for ent in it:
+                try:
+                    if not ent.is_file(follow_symlinks=False):
+                        continue
+                    name = ent.name
+                    if not (name.startswith("equity_curve.") and name.endswith(".csv")):
+                        continue
+                    os.remove(ent.path)
+                    removed += 1
+                except Exception as e:
+                    errors.append(f"{getattr(ent, 'name', 'unknown')}: {type(e).__name__}: {e}")
+    except Exception as e:
+        out["errors"].append(f"scan: {type(e).__name__}: {e}")
+        out["removed"] = int(removed)
+        return out
+
+    out["ok"] = True
+    out["removed"] = int(removed)
+    out["errors"] = errors
+    return out
 
 
 def _json_sanitize(obj: Any, _depth: int = 0, _max_depth: int = 60) -> Any:
@@ -1850,6 +1903,16 @@ def main() -> None:
             raise SystemExit("ERROR: exit_z < entry_z for bb strategy. If intentional, set --allow_inverted_z.")
 
     cache_dir = str(args.cache_dir)
+
+    # v26.9: cleanup old equity_curve.*.csv (best-effort, non-fatal)
+    cleanup_info = _cleanup_equity_curve_csvs(cache_dir)
+    if cleanup_info.get("ok"):
+        nrm = int(cleanup_info.get("removed", 0) or 0)
+        if nrm > 0:
+            print(f"NOTE: removed {nrm} old equity_curve.*.csv files in cache_dir: {cache_dir}")
+    else:
+        print(f"WARNING: equity_curve cleanup failed: {cleanup_info}")
+
     price_path = os.path.join(cache_dir, str(args.price_csv))
     if not os.path.isfile(price_path):
         raise SystemExit(f"ERROR: missing price csv: {price_path}")
@@ -1997,6 +2060,7 @@ def main() -> None:
                 "q_min_periods": int(_RV20_Q_MIN_PERIODS),
             },
             "equity_curve_tag": _EQUITY_CURVE_TAG,
+            "equity_curve_cleanup": cleanup_info,  # v26.9 audit
         },
         "strategy_suite": {
             "mode": str(args.strategy_suite),
@@ -2022,6 +2086,7 @@ def main() -> None:
             "v26.6: hard_fail scope='post' still enforces full_floor.",
             "v26.7+: write per-strategy equity curve CSV for renderer evidence.",
             "v26.8: default post_start_date excludes split_date (cut singularity day from segment stats).",
+            "v26.9: cleanup old equity_curve.*.csv files in cache_dir at start of run.",
         ],
     }
 
