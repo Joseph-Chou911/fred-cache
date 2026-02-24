@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-24T07:50:22Z",
+  "generated_at_utc": "2026-02-24T07:58:16Z",
   "schema_version": "v26.6",
   "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
   "inputs": {
@@ -68,7 +68,7 @@
     {
       "strategy_id": "bb_conditional",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:22Z",
+      "generated_at_utc": "2026-02-24T07:58:16Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -212,7 +212,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:16Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -356,7 +356,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -570,7 +570,7 @@
     {
       "strategy_id": "always_leverage_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:22Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -714,7 +714,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -858,7 +858,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -1072,7 +1072,7 @@
     {
       "strategy_id": "always_leverage_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:22Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -1216,7 +1216,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -1360,7 +1360,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -1574,7 +1574,7 @@
     {
       "strategy_id": "always_leverage_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:22Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -1718,7 +1718,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -1862,7 +1862,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -2076,7 +2076,7 @@
     {
       "strategy_id": "always_leverage_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:22Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -2220,7 +2220,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -2364,7 +2364,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:22Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -2581,7 +2581,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:22Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -2725,7 +2725,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -2869,7 +2869,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -3083,7 +3083,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:23Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -3227,7 +3227,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -3371,7 +3371,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -3585,7 +3585,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:23Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -3729,7 +3729,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -3873,7 +3873,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -4090,7 +4090,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T07:50:23Z",
+      "generated_at_utc": "2026-02-24T07:58:17Z",
       "schema_version": "v26.6",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
       "params": {
@@ -4234,7 +4234,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {
@@ -4378,7 +4378,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T07:50:23Z",
+              "generated_at_utc": "2026-02-24T07:58:17Z",
               "schema_version": "v26.6",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard",
               "params": {

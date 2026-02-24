@@ -1,6 +1,6 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T07:50:22Z`
+- generated_at_utc: `2026-02-24T07:58:16Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard`
 - renderer_fingerprint: `render_backtest_mvp@2026-02-24.v10.post_only_pass_watch_v1`
 - suite_ok: `True`
