@@ -4,21 +4,23 @@
 """
 backtest_tw0050_tactical_cash.py
 
-v2.2 (2026-02-24):
-- ADD(conservative execution):
-  - --exec_delay_days: delay execution by N trading bars after signal_exec changes (default 0).
-    * If N=1: approximate "next-day execution" using next bar close (since daily csv usually lacks open).
-  - --extra_slip_bps: add extra slippage bps on top of slip_bps (default 0.0).
-- KEEP(v2.1):
+v2.3 (2026-02-24):
+- FIX(exec_delay=0 bug): if exec_delay_days == 0, execute immediately on the same bar.
+  This prevents "scheduled but never executed" due to loop ordering.
+- KEEP(v2.2):
   - post-only segmentation (default auto; split at singularity/break)
   - signal_lag_days (default 1) to avoid same-day lookahead
-- AUDIT: record exec_delay_days, extra_slip_bps, scheduling counters.
+  - exec_delay_days + extra_slip_bps for conservative stress tests
+- ADD(force-close at end): if position still open at end, close at last bar close (with costs),
+  so trades/PnL are auditable and comparable to v2.1.
 
 Notes:
 - signal_raw[t] uses close[t] vs MA[t]
 - signal_exec[t] = signal_raw[t-lag] (default lag=1)
 - desired position = signal_exec[t]
-- if desired != current, schedule an action executed at t+exec_delay_days (default same-day)
+- If desired != current:
+    - if exec_delay=0 => execute immediately at close[t]
+    - else schedule execution at close[t+exec_delay] (single pending action)
 """
 
 from __future__ import annotations
@@ -34,8 +36,8 @@ import numpy as np
 import pandas as pd
 
 
-SCRIPT_FINGERPRINT = "backtest_tw0050_tactical_cash@2026-02-24.v2.2.post_only_segmentation_lag_execdelay_extraslip"
-SCHEMA_VERSION = "v2.2"
+SCRIPT_FINGERPRINT = "backtest_tw0050_tactical_cash@2026-02-24.v2.3.fix_execdelay0_and_force_close"
+SCHEMA_VERSION = "v2.3"
 
 _DEFAULT_RATIO_HI = 1.8
 _DEFAULT_RATIO_LO = round(1.0 / _DEFAULT_RATIO_HI, 10)
@@ -497,8 +499,8 @@ def main() -> None:
     ap.add_argument("--core_frac", type=float, default=0.90)
 
     ap.add_argument("--signal_lag_days", type=int, default=1)
-    ap.add_argument("--exec_delay_days", type=int, default=0, help="Execution delay in bars after desired position change (default 0). Try 1 for conservative next-bar close.")
-    ap.add_argument("--extra_slip_bps", type=float, default=0.0, help="Extra slippage bps added on top of slip_bps (default 0).")
+    ap.add_argument("--exec_delay_days", type=int, default=0)
+    ap.add_argument("--extra_slip_bps", type=float, default=0.0)
 
     ap.add_argument("--trading_days", type=int, default=252)
     ap.add_argument("--perf_ddof", type=int, default=0, choices=[0, 1])
@@ -530,10 +532,9 @@ def main() -> None:
 
     core_frac = float(args.core_frac)
     if (not np.isfinite(core_frac)) or core_frac <= 0.0 or core_frac >= 1.0:
-        raise SystemExit("ERROR: --core_frac must be in (0,1), e.g. 0.9 or 0.8")
+        raise SystemExit("ERROR: --core_frac must be in (0,1)")
 
     cache_dir = str(args.cache_dir)
-
     price_path = os.path.join(cache_dir, str(args.price_csv))
     if not os.path.isfile(price_path):
         raise SystemExit(f"ERROR: missing price csv: {price_path}")
@@ -587,7 +588,6 @@ def main() -> None:
 
     df_use = df_use.copy()
     df_use["ma"] = _calc_sma(df_use["price"], int(args.ma_window))
-
     df_use["signal_raw"] = (df_use["price"] > df_use["ma"]) & df_use["ma"].notna()
     if lag > 0:
         df_use["signal_exec"] = df_use["signal_raw"].shift(lag).fillna(False).astype(bool)
@@ -598,7 +598,6 @@ def main() -> None:
     dates = df_use["date"].astype(str).to_numpy()
     desired = df_use["signal_exec"].astype(bool).to_numpy()
 
-    # slippage = base + extra
     slip_rate = _slip_rate_from_bps(float(args.slip_bps)) + _slip_rate_from_bps(extra_slip_bps)
     fee_rate = float(args.fee_rate)
     tax_rate = float(args.tax_rate)
@@ -624,13 +623,101 @@ def main() -> None:
     skipped_schedule_due_to_eod = 0
     executed_entries = 0
     executed_exits = 0
+    immediate_exec_entries = 0
+    immediate_exec_exits = 0
+
+    def _do_enter(exec_i: int, sig_i: int) -> None:
+        nonlocal cash, tac_shares, in_pos, hold_days, cur, executed_entries, immediate_exec_entries
+        price = float(prices[exec_i])
+        date = str(dates[exec_i])
+        sig_date = str(dates[sig_i]) if 0 <= sig_i < len(dates) else None
+
+        if in_pos:
+            return
+        avail = float(cash)
+        if avail <= 0:
+            return
+
+        denom = 1.0 + max(fee_rate, 0.0) + max(slip_rate, 0.0)
+        entry_notional = float(avail / denom) if denom > 0 else 0.0
+        en_cost = _entry_cost(entry_notional, fee_rate, slip_rate)
+        shares = float(entry_notional / price) if price > 0 else 0.0
+        if shares <= 0 or entry_notional <= 0:
+            return
+
+        cash -= (entry_notional + en_cost)
+        tac_shares = float(shares)
+        in_pos = True
+        hold_days = 0
+        executed_entries += 1
+
+        if exec_delay == 0:
+            immediate_exec_entries += 1
+
+        cur = {
+            "signal_date": sig_date,
+            "entry_date": date,
+            "entry_price": price,
+            "entry_notional": float(entry_notional),
+            "tac_shares": float(tac_shares),
+            "entry_cost": float(en_cost),
+            "exit_date": None,
+            "exit_price": None,
+            "exit_cost": None,
+            "hold_days": None,
+            "net_pnl_after_costs": None,
+            "exec_delay_days": int(exec_delay),
+            "extra_slip_bps": float(extra_slip_bps),
+        }
+
+    def _do_exit(exec_i: int, sig_i: int) -> None:
+        nonlocal cash, tac_shares, in_pos, hold_days, cur, executed_exits, immediate_exec_exits
+        price = float(prices[exec_i])
+        date = str(dates[exec_i])
+
+        if not in_pos:
+            return
+
+        proceeds = float(tac_shares * price)
+        ex_cost = _exit_cost(proceeds, fee_rate, tax_rate, slip_rate)
+        cash += (proceeds - ex_cost)
+        executed_exits += 1
+        if exec_delay == 0:
+            immediate_exec_exits += 1
+
+        if cur is not None:
+            cur["exit_date"] = date
+            cur["exit_price"] = price
+            cur["exit_cost"] = float(ex_cost)
+            cur["hold_days"] = int(hold_days)
+            entry_notional = float(cur.get("entry_notional", 0.0))
+            entry_cost = float(cur.get("entry_cost", 0.0))
+            net_pnl = (proceeds - ex_cost) - (entry_notional + entry_cost)
+            cur["net_pnl_after_costs"] = float(net_pnl)
+            trades.append(cur)
+
+        tac_shares = 0.0
+        in_pos = False
+        hold_days = 0
+        cur = None
 
     def _schedule(action: str, i: int) -> None:
         nonlocal pending_action, scheduled_entries, scheduled_exits, skipped_schedule_due_to_eod
+
         exec_i = i + int(exec_delay)
         if exec_i >= len(prices):
             skipped_schedule_due_to_eod += 1
             return
+
+        # FIX: exec_delay=0 => execute immediately on same bar
+        if exec_i == i:
+            if action == "enter":
+                _do_enter(exec_i=i, sig_i=i)
+            else:
+                _do_exit(exec_i=i, sig_i=i)
+            pending_action = None
+            return
+
         pending_action = {"type": action, "signal_idx": i, "exec_idx": exec_i}
         if action == "enter":
             scheduled_entries += 1
@@ -638,77 +725,27 @@ def main() -> None:
             scheduled_exits += 1
 
     for i in range(len(prices)):
-        price = float(prices[i])
-        date = str(dates[i])
-
         # execute pending action if due
         if pending_action is not None and int(pending_action["exec_idx"]) == i:
             act = str(pending_action["type"])
             sig_i = int(pending_action.get("signal_idx", i))
-            sig_date = str(dates[sig_i]) if 0 <= sig_i < len(dates) else None
-
-            if act == "enter" and (not in_pos):
-                avail = float(cash)
-                if avail > 0:
-                    denom = 1.0 + max(fee_rate, 0.0) + max(slip_rate, 0.0)
-                    entry_notional = float(avail / denom) if denom > 0 else 0.0
-                    en_cost = _entry_cost(entry_notional, fee_rate, slip_rate)
-                    shares = float(entry_notional / price) if price > 0 else 0.0
-                    if shares > 0 and entry_notional > 0:
-                        cash -= (entry_notional + en_cost)
-                        tac_shares = float(shares)
-                        in_pos = True
-                        hold_days = 0
-                        executed_entries += 1
-                        cur = {
-                            "signal_date": sig_date,
-                            "entry_date": date,
-                            "entry_price": price,
-                            "entry_notional": float(entry_notional),
-                            "tac_shares": float(tac_shares),
-                            "entry_cost": float(en_cost),
-                            "exit_date": None,
-                            "exit_price": None,
-                            "exit_cost": None,
-                            "hold_days": None,
-                            "net_pnl_after_costs": None,
-                            "exec_delay_days": int(exec_delay),
-                        }
-
-            if act == "exit" and in_pos:
-                proceeds = float(tac_shares * price)
-                ex_cost = _exit_cost(proceeds, fee_rate, tax_rate, slip_rate)
-                cash += (proceeds - ex_cost)
-                executed_exits += 1
-
-                if cur is not None:
-                    cur["exit_date"] = date
-                    cur["exit_price"] = price
-                    cur["exit_cost"] = float(ex_cost)
-                    cur["hold_days"] = int(hold_days)
-                    entry_notional = float(cur.get("entry_notional", 0.0))
-                    entry_cost = float(cur.get("entry_cost", 0.0))
-                    net_pnl = (proceeds - ex_cost) - (entry_notional + entry_cost)
-                    cur["net_pnl_after_costs"] = float(net_pnl)
-                    trades.append(cur)
-
-                tac_shares = 0.0
-                in_pos = False
-                hold_days = 0
-                cur = None
-
+            if act == "enter":
+                _do_enter(exec_i=i, sig_i=sig_i)
+            else:
+                _do_exit(exec_i=i, sig_i=sig_i)
             pending_action = None
 
-        # if no pending action, schedule if desired != current
+        # schedule if desired != current and no pending action
         if pending_action is None:
             tgt = bool(desired[i])
             if tgt != bool(in_pos):
                 _schedule("enter" if tgt else "exit", i)
 
-        # hold_days counts bars while in position (includes entry day bar)
+        # hold_days counts bars while in position
         if in_pos:
             hold_days += 1
 
+        price = float(prices[i])
         eq = float(core_shares * price + tac_shares * price + cash)
         eq_base = float(core_shares * price + cash0)
 
@@ -716,8 +753,14 @@ def main() -> None:
         equity_base.append(eq_base)
         overlay_on.append(bool(in_pos))
 
-    # end: do NOT force close (keep consistent with scheduled execution; but you can choose to force-close)
-    # If you prefer force-close, you can add it back; for "death test" leaving it open is usually fine.
+    # force close at end if still open (auditable)
+    if in_pos and len(prices) > 0:
+        last_i = len(prices) - 1
+        _do_exit(exec_i=last_i, sig_i=last_i)
+        # update last equity point after close
+        price = float(prices[last_i])
+        equity[-1] = float(core_shares * price + cash)
+        overlay_on[-1] = False
 
     df_out = df_use[["date", "date_ts", "price", "ma", "signal_raw", "signal_exec"]].copy()
     df_out["equity"] = equity
@@ -733,9 +776,9 @@ def main() -> None:
 
     timing_assumption = (
         f"signal_raw uses close[t] vs MA[t]; signal_exec uses signal_raw[t-{lag}] (lag={lag}); "
-        f"desired_pos=signal_exec[t]; when desired changes, schedule execution at t+exec_delay_days (exec_delay={exec_delay}) "
+        f"desired_pos=signal_exec[t]; if desired changes, execute at t+exec_delay_days (exec_delay={exec_delay}) "
         f"using close[exec_day]. extra_slip_bps={extra_slip_bps} added to slip_bps. "
-        "This is a conservative stress test for thin-edge strategies."
+        "force_close_end=True."
     )
 
     out_json = {
@@ -758,8 +801,6 @@ def main() -> None:
             "tax_rate": float(tax_rate),
             "slip_bps": float(args.slip_bps),
             "slip_rate_total": float(slip_rate),
-            "break_ratio_hi": float(ratio_hi),
-            "break_ratio_lo": float(ratio_lo),
             "segment_split_date": str(args.segment_split_date),
             "segment_break_rank": int(args.segment_break_rank),
             "segment_post_start_date": args.segment_post_start_date,
@@ -775,11 +816,13 @@ def main() -> None:
             "n_trades": int(len(trades)),
             "time_in_market_days": time_in_market_days,
             "time_in_market_pct": time_in_market_pct,
-            "pending_action_policy": "single pending action; ignores subsequent flips until executed (conservative).",
+            "pending_action_policy": "single pending action; ignores flips until executed (conservative). exec_delay=0 executes immediately (v2.3 fix).",
             "scheduled_entries": int(scheduled_entries),
             "scheduled_exits": int(scheduled_exits),
             "executed_entries": int(executed_entries),
             "executed_exits": int(executed_exits),
+            "immediate_exec_entries": int(immediate_exec_entries),
+            "immediate_exec_exits": int(immediate_exec_exits),
             "skipped_schedule_due_to_eod": int(skipped_schedule_due_to_eod),
             "timing_assumption": timing_assumption,
         },
