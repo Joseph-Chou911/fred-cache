@@ -6,26 +6,13 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
-v8 (2026-02-24):
-- ADD: "POST-only (After-Singularity) View"
-  * Provide an additional ranking/eligibility view that ignores FULL metrics (treat FULL as contaminated).
-  * post_only_policy: require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%);
-    exclude post_gonogo=NO_GO; exclude missing post rank metrics.
-  * Report:
-    - top3_post_only
-    - strategies that were excluded by FULL floor but would be eligible under post-only view
-    - a compact post-only exclusions list
-
-v7 (2026-02-24):
-- ADD: Exclude suite_hard_fail==true (EXCLUDE_SUITE_HARD_FAIL_TRUE) to prevent "missing-metrics" false negatives.
-- ADD: Always-vs-Trend compare uses dynamic trend_rule from suite JSON (strategy_suite.trend_rule) if present.
-- ADD: Show v26.5 RV20 audit counter skipped_entries_on_rv20 in Strategies table (rv20_skipped).
-- Keep v6 structure & eq50 gate disabled.
-
-v6 (2026-02-23):
-- Disable eq50 (basis_equity_min<=0.5) filter gate.
-- Keep hard_fail gates only: equity_min<=0 OR equity_negative_days>0 OR mdd<=-100% on full/post.
-- Keep report structure and markdown safety.
+v9 (2026-02-24):
+- UPDATE: Post-only View policy tightened with two hard gates:
+  * B2 gate: post_delta_sharpe0_vs_base >= -0.03 (exclude if < -0.03)
+  * post_MDD floor: post_mdd >= -40% (exclude if < -0.40)
+- ADD: Post-only exclusion reason codes for the new gates.
+- ADD: Post-only counters by reason (B2/MDD/NO_GO/etc).
+- Keep v8 structure (main ranking + exclusions + always-vs-trend + post-only view + gonogo details).
 """
 
 from __future__ import annotations
@@ -39,7 +26,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v8.post_only_view_v1"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v9.post_only_b2_and_mdd40"
+
+
+# =========================
+# Post-only policy constants (v9)
+# =========================
+POST_ONLY_B2_MIN_DELTA_SHARPE = -0.03   # require post_delta_sharpe0_vs_base >= -0.03
+POST_ONLY_MDD_FLOOR = -0.40             # require post_mdd >= -0.40  (i.e., not worse than -40%)
 
 
 # =========================
@@ -267,7 +261,7 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # =========================
-# policy: sorting / filtering / exclusion reasons
+# policy: sorting / filtering / exclusion reasons (main view)
 # =========================
 def _finite_or_neginf(x: Any) -> float:
     v = _to_float(x)
@@ -343,17 +337,36 @@ def _is_eligible_for_recommendation(r: Dict[str, Any]) -> bool:
     return len(_exclusion_reasons_renderer_filter_v4(r)) == 0
 
 
-# -------------------------
-# POST-only (After singularity) view
-# -------------------------
-def _exclusion_reasons_post_only_v1(r: Dict[str, Any]) -> List[str]:
+def _rank_key_on_basis(r: Dict[str, Any], basis: str) -> Tuple[float, float, str]:
+    rid = _fmt_str(r.get("id"))
+    if basis == "post":
+        return (_finite_or_neginf(r.get("post_calmar")), _finite_or_neginf(r.get("post_sharpe0")), rid)
+    return (_finite_or_neginf(r.get("full_calmar")), _finite_or_neginf(r.get("full_sharpe0")), rid)
+
+
+# =========================
+# POST-only (After singularity) view: v9 policy
+# =========================
+def _exclusion_reasons_post_only_v2(r: Dict[str, Any]) -> List[str]:
+    """
+    Post-only policy v2:
+    - require ok=true
+    - require post_ok=true
+    - exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%)
+    - exclude post_gonogo=NO_GO
+    - exclude missing post rank metrics (post_calmar, post_sharpe0)
+    - B2 hard gate: post_delta_sharpe0_vs_base >= POST_ONLY_B2_MIN_DELTA_SHARPE
+    - post_MDD floor: post_mdd >= POST_ONLY_MDD_FLOOR
+    """
     reasons: List[str] = []
+
     if not bool(r.get("ok")):
         reasons.append("EXCLUDE_OK_FALSE")
 
     if not bool(r.get("post_ok")):
         reasons.append("EXCLUDE_POST_OK_FALSE")
 
+    # hard fails within POST segment
     reasons += _hard_fail_reasons_for_segment(
         "POST", r.get("post_mdd"), r.get("post_equity_min"), r.get("post_neg_days")
     )
@@ -364,11 +377,26 @@ def _exclusion_reasons_post_only_v1(r: Dict[str, Any]) -> List[str]:
     if (_to_float(r.get("post_calmar")) is None) or (_to_float(r.get("post_sharpe0")) is None):
         reasons.append("EXCLUDE_MISSING_RANK_METRICS_POST")
 
+    # B2 gate: post ΔSharpe vs base
+    dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
+    if dsh is None:
+        reasons.append("EXCLUDE_POST_DELTA_SHARPE_MISSING")
+    else:
+        if float(dsh) < float(POST_ONLY_B2_MIN_DELTA_SHARPE):
+            reasons.append(f"EXCLUDE_POST_DELTA_SHARPE_LT_{POST_ONLY_B2_MIN_DELTA_SHARPE}")
+
+    # post MDD floor
+    pmdd = _to_float(r.get("post_mdd"))
+    if pmdd is not None:
+        if float(pmdd) < float(POST_ONLY_MDD_FLOOR):
+            reasons.append(f"EXCLUDE_POST_MDD_LT_{POST_ONLY_MDD_FLOOR}")
+    # if pmdd missing, post hard fail already didn't trigger; but missing is handled by rank metrics anyway.
+
     return reasons
 
 
 def _is_eligible_post_only(r: Dict[str, Any]) -> bool:
-    return len(_exclusion_reasons_post_only_v1(r)) == 0
+    return len(_exclusion_reasons_post_only_v2(r)) == 0
 
 
 def _rank_key_post_only(r: Dict[str, Any]) -> Tuple[float, float, str]:
@@ -390,13 +418,6 @@ def _find_strategy_by_id(rows: List[Dict[str, Any]], sid: str) -> Optional[Dict[
         if _fmt_str(r.get("id")) == sid:
             return r
     return None
-
-
-def _rank_key_on_basis(r: Dict[str, Any], basis: str) -> Tuple[float, float, str]:
-    rid = _fmt_str(r.get("id"))
-    if basis == "post":
-        return (_finite_or_neginf(r.get("post_calmar")), _finite_or_neginf(r.get("post_sharpe0")), rid)
-    return (_finite_or_neginf(r.get("full_calmar")), _finite_or_neginf(r.get("full_sharpe0")), rid)
 
 
 def _compare_two_rows(r1: Dict[str, Any], r2: Dict[str, Any], basis: str) -> str:
@@ -615,19 +636,22 @@ def _render_md(obj: Dict[str, Any]) -> str:
         lines.append(f"- {rid}: `{', '.join(rs)}`")
 
     lines.append("")
+    lines.extend(_always_vs_trend_table(rows, str(trend_rule)))
 
-    lines.extend(_always_vs_trend_table(rows, trend_rule=str(trend_rule)))
-
-    # Post-only view
+    # Post-only view (v9)
     lines.append("## Post-only View (After Singularity / Ignore FULL)")
     lines.append(
-        "post_only_policy_v1: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); "
-        "exclude post_gonogo=NO_GO; exclude missing post rank metrics; ignore FULL and ignore suite_hard_fail.`"
+        "post_only_policy_v2: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); "
+        "exclude post_gonogo=NO_GO; exclude missing post rank metrics; "
+        f"B2 gate: require post_ΔSharpe>= {POST_ONLY_B2_MIN_DELTA_SHARPE}; "
+        f"post_MDD floor: require post_MDD>= {POST_ONLY_MDD_FLOOR} (i.e. not worse than -40%); "
+        "ignore FULL and ignore suite_hard_fail.`"
     )
 
     top3_post_only = _topn_post_only(rows, n=3)
     lines.append(f"- top3_post_only: `{', '.join(top3_post_only) if top3_post_only else 'N/A'}`")
 
+    # "rescued" list: eligible post-only but excluded by main view due to FULL/suite floor
     rescued = []
     for r in rows:
         if _is_eligible_post_only(r) and (not _is_eligible_for_recommendation(r)):
@@ -637,17 +661,57 @@ def _render_md(obj: Dict[str, Any]) -> str:
 
     if rescued:
         rescued_sorted = sorted(rescued, key=_rank_key_post_only, reverse=True)
-        lines.append(f"- would_be_eligible_post_only_but_excluded_by_full_floor: `{', '.join([_fmt_str(r.get('id')) for r in rescued_sorted])}`")
+        lines.append(
+            f"- would_be_eligible_post_only_but_excluded_by_full_floor: `{', '.join([_fmt_str(r.get('id')) for r in rescued_sorted])}`"
+        )
     else:
         lines.append("- would_be_eligible_post_only_but_excluded_by_full_floor: `N/A`")
 
     post_only_eligible = [r for r in rows if _is_eligible_post_only(r)]
     post_only_excluded = [r for r in rows if not _is_eligible_post_only(r)]
     lines.append(f"- post_only_total: `{len(rows)}`; post_only_eligible: `{len(post_only_eligible)}`; post_only_excluded: `{len(post_only_excluded)}`")
+
+    # counters by reason (post-only)
+    cnt = {
+        "ok_false": 0,
+        "post_ok_false": 0,
+        "post_hard_fail": 0,
+        "post_no_go": 0,
+        "missing_rank_post": 0,
+        "delta_sharpe_missing": 0,
+        "b2_fail": 0,
+        "post_mdd_floor_fail": 0,
+    }
+    for r in post_only_excluded:
+        rs = _exclusion_reasons_post_only_v2(r)
+        if "EXCLUDE_OK_FALSE" in rs:
+            cnt["ok_false"] += 1
+        if "EXCLUDE_POST_OK_FALSE" in rs:
+            cnt["post_ok_false"] += 1
+        if any(s.startswith("HARD_FAIL_POST_") for s in rs):
+            cnt["post_hard_fail"] += 1
+        if "EXCLUDE_POST_GONOGO_NO_GO" in rs:
+            cnt["post_no_go"] += 1
+        if "EXCLUDE_MISSING_RANK_METRICS_POST" in rs:
+            cnt["missing_rank_post"] += 1
+        if "EXCLUDE_POST_DELTA_SHARPE_MISSING" in rs:
+            cnt["delta_sharpe_missing"] += 1
+        if any(s.startswith("EXCLUDE_POST_DELTA_SHARPE_LT_") for s in rs):
+            cnt["b2_fail"] += 1
+        if any(s.startswith("EXCLUDE_POST_MDD_LT_") for s in rs):
+            cnt["post_mdd_floor_fail"] += 1
+
+    lines.append(
+        "- post_only_exclusion_counters: "
+        f"`ok_false={cnt['ok_false']}, post_ok_false={cnt['post_ok_false']}, post_hard_fail={cnt['post_hard_fail']}, "
+        f"post_NO_GO={cnt['post_no_go']}, missing_rank_post={cnt['missing_rank_post']}, "
+        f"delta_sharpe_missing={cnt['delta_sharpe_missing']}, b2_fail={cnt['b2_fail']}, post_mdd_floor_fail={cnt['post_mdd_floor_fail']}`"
+    )
     lines.append("")
+
     for r in sorted(post_only_excluded, key=lambda x: _fmt_str(x.get("id"))):
         rid = _fmt_str(r.get("id"))
-        rs = _exclusion_reasons_post_only_v1(r)
+        rs = _exclusion_reasons_post_only_v2(r)
         lines.append(f"- {rid}: `{', '.join(rs)}`")
     lines.append("")
 
