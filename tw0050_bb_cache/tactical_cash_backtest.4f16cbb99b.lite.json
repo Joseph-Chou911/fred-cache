@@ -1,0 +1,75 @@
+{
+  "generated_at_utc": "2026-02-24T13:57:45Z",
+  "schema_version": "v1",
+  "script_fingerprint": "backtest_tw0050_tactical_cash@2026-02-24.v1",
+  "inputs": {
+    "cache_dir": "tw0050_bb_cache",
+    "price_csv": "data.csv",
+    "price_csv_resolved": "tw0050_bb_cache/data.csv",
+    "price_col": "adjclose",
+    "ma_window": 60,
+    "core_frac": 0.9,
+    "fee_rate": 0.001425,
+    "tax_rate": 0.001,
+    "slip_bps": 5.0,
+    "slip_rate": 0.0005
+  },
+  "audit": {
+    "rows": 4193,
+    "start_date": "2009-01-02",
+    "end_date": "2026-02-24",
+    "p0": 20.467866897583008,
+    "core_shares": 0.0439713627464657,
+    "cash0": 0.09999999999999998,
+    "n_trades": 121,
+    "time_in_market_days": 2800,
+    "time_in_market_pct": 0.667779632721202
+  },
+  "perf": {
+    "overlay": {
+      "ok": true,
+      "start": 1.0,
+      "end": 3.588586000958948,
+      "n_days": 4193,
+      "years": 16.634920634920636,
+      "cagr": 0.07983883526660707,
+      "vol_ann": 0.274532890669019,
+      "sharpe0": 0.49504151527752366,
+      "sharpe_note": "rf=0 assumed",
+      "perf_ddof": 0,
+      "mdd": -0.7764897356045054,
+      "mdd_peak": "2011-01-28",
+      "mdd_trough": "2014-02-05"
+    },
+    "base_only": {
+      "ok": true,
+      "start": 1.0,
+      "end": 3.5913262691643517,
+      "n_days": 4193,
+      "years": 16.634920634920636,
+      "cagr": 0.07988838623244154,
+      "vol_ann": 0.25996753131132755,
+      "sharpe0": 0.48835881176471035,
+      "sharpe_note": "rf=0 assumed",
+      "perf_ddof": 0,
+      "mdd": -0.7309827377949465,
+      "mdd_peak": "2011-01-28",
+      "mdd_trough": "2014-02-05"
+    },
+    "calmar_overlay": 0.10282020689488149,
+    "calmar_base_only": 0.10928901888084208,
+    "delta_vs_base": {
+      "cagr": -4.955096583447727e-05,
+      "mdd": -0.04550699780955891,
+      "sharpe0": 0.006682703512813304
+    }
+  },
+  "trade_kpis": {
+    "n_trades": 121,
+    "win_rate": 0.2644628099173554,
+    "avg_net_pnl": -2.264684467275646e-05,
+    "profit_factor": 0.9832593599507484,
+    "avg_hold_days": 23.14876033057851,
+    "time_in_market_pct": null
+  }
+}

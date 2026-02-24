@@ -1,6 +1,6 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T12:16:38Z`
+- generated_at_utc: `2026-02-24T13:57:43Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs`
 - renderer_fingerprint: `render_backtest_mvp@2026-02-24.v13.dq_post_neg_days_vs_equity_csv`
 - suite_ok: `True`
