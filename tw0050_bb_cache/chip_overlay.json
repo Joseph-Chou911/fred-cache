@@ -1,13 +1,13 @@
 {
   "meta": {
-    "run_ts_utc": "2026-02-23T23:33:55.935Z",
+    "run_ts_utc": "2026-02-24T07:34:15.589Z",
     "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v6",
     "stock_no": "0050",
     "window_n": 5,
     "timeout": 15.0,
     "retries": 3,
     "backoff": 1.5,
-    "aligned_last_date": "20260223"
+    "aligned_last_date": "20260224"
   },
   "sources": {
     "t86_tpl": "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999",
@@ -35,6 +35,32 @@
       "dq": []
     },
     "per_day": [
+      {
+        "date": "20260224",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260224&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260224&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
       {
         "date": "20260223",
         "dq": [],
