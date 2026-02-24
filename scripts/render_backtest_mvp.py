@@ -6,13 +6,23 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
-v9 (2026-02-24):
-- UPDATE: Post-only View policy tightened with two hard gates:
-  * B2 gate: post_delta_sharpe0_vs_base >= -0.03 (exclude if < -0.03)
-  * post_MDD floor: post_mdd >= -40% (exclude if < -0.40)
-- ADD: Post-only exclusion reason codes for the new gates.
-- ADD: Post-only counters by reason (B2/MDD/NO_GO/etc).
-- Keep v8 structure (main ranking + exclusions + always-vs-trend + post-only view + gonogo details).
+v10 (2026-02-24):
+- ADD: Post-only PASS/WATCH split to avoid "too strict to research" while keeping deploy gate strict.
+  * PASS:  post_ok=true AND no post hard-fail AND post_gonogo!=NO_GO AND rank metrics ok
+           AND post_ΔSharpe >= -0.03 AND post_MDD >= -40%
+  * WATCH: same base gates, but -0.05 <= post_ΔSharpe < -0.03 AND post_MDD >= -40%
+  * Both ignore FULL and ignore suite_hard_fail (post-only view).
+- Keep renderer filter v4 for "top3_recommended" (deployment-biased):
+  exclude(ok=false); exclude(suite_hard_fail=true);
+  exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post);
+  exclude(post_gonogo=NO_GO);
+  exclude(missing rank metrics on chosen basis).
+- Robust: bool handling uses bool(x) (numpy.bool_ safe).
+- Keep: Strategies table, Exclusions, Deterministic Always vs Trend compare (trend_rule from suite),
+  Post Go/No-Go Details (prints suite_hard_fail reasons if present).
+
+NOTE:
+- This renderer does NOT recompute any stats. It only formats fields present in suite JSON.
 """
 
 from __future__ import annotations
@@ -26,14 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v9.post_only_b2_and_mdd40"
-
-
-# =========================
-# Post-only policy constants (v9)
-# =========================
-POST_ONLY_B2_MIN_DELTA_SHARPE = -0.03   # require post_delta_sharpe0_vs_base >= -0.03
-POST_ONLY_MDD_FLOOR = -0.40             # require post_mdd >= -0.40  (i.e., not worse than -40%)
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v10.post_only_pass_watch_v1"
 
 
 # =========================
@@ -113,15 +116,21 @@ def _get(d: Any, path: List[str], default=None):
 
 
 def _is_true(x: Any) -> bool:
-    return x is True
+    # numpy.bool_ safe
+    try:
+        return bool(x)
+    except Exception:
+        return False
 
 
 # =========================
 # parsing / extraction
 # =========================
 def _strategy_list(obj: Dict[str, Any]) -> List[Dict[str, Any]]:
+    # suite output: obj["strategies"] list
     if isinstance(obj.get("strategies"), list):
         return [s for s in obj["strategies"] if isinstance(s, dict)]
+    # single strategy output fallback: wrap the root
     if "strategy_id" in obj or "perf" in obj:
         return [obj]
     return []
@@ -135,13 +144,22 @@ def _leverage_mult_from_params(params: Dict[str, Any]) -> Optional[float]:
 
 
 def _extract_trades_n(audit: Any) -> Optional[int]:
+    """
+    audit may contain:
+    - trades_n: int
+    - trades: list of trade records
+    - trades: int (rare)
+    We convert into an int count when possible.
+    """
     if not isinstance(audit, dict):
         return None
+
     if "trades_n" in audit:
         try:
             return int(audit.get("trades_n"))
         except Exception:
             return None
+
     tr = audit.get("trades")
     if tr is None:
         return None
@@ -153,15 +171,51 @@ def _extract_trades_n(audit: Any) -> Optional[int]:
         return None
 
 
+def _extract_rv20_skipped(audit: Any) -> Optional[int]:
+    if not isinstance(audit, dict):
+        return None
+    # backtest v26.5+: skipped_entries_on_rv20
+    if "skipped_entries_on_rv20" in audit:
+        try:
+            return int(audit.get("skipped_entries_on_rv20"))
+        except Exception:
+            return None
+    return None
+
+
+def _extract_suite_hard_fail(strat: Dict[str, Any]) -> Tuple[Optional[bool], List[str]]:
+    """
+    Prefer explicit fields if present:
+    - suite_hard_fail: bool
+    - suite_hard_fail_reasons: list[str]
+    Fallback to older naming:
+    - hard_fail (bool) and hard_fail_reasons (list[str])
+    """
+    shf = None
+    reasons: List[str] = []
+
+    if "suite_hard_fail" in strat:
+        shf = _is_true(strat.get("suite_hard_fail"))
+        rs = strat.get("suite_hard_fail_reasons")
+        if isinstance(rs, list):
+            reasons = [str(x) for x in rs[:50]]
+        return shf, reasons
+
+    if "hard_fail" in strat:
+        shf = _is_true(strat.get("hard_fail"))
+        rs = strat.get("hard_fail_reasons")
+        if isinstance(rs, list):
+            reasons = [str(x) for x in rs[:50]]
+        return shf, reasons
+
+    return None, []
+
+
 def _extract_full_metrics(strat: Dict[str, Any]) -> Dict[str, Any]:
     perf = strat.get("perf") or {}
     lev = perf.get("leverage") or {}
     delta = perf.get("delta_vs_base") or {}
     audit = strat.get("audit") or {}
-
-    rv20_skipped = None
-    if isinstance(audit, dict):
-        rv20_skipped = audit.get("skipped_entries_on_rv20")
 
     return {
         "full_cagr": lev.get("cagr"),
@@ -175,7 +229,7 @@ def _extract_full_metrics(strat: Dict[str, Any]) -> Dict[str, Any]:
         "full_equity_min": (audit.get("equity_min") if isinstance(audit, dict) else None),
         "full_neg_days": (audit.get("equity_negative_days") if isinstance(audit, dict) else None),
         "trades_n": _extract_trades_n(audit),
-        "rv20_skipped": rv20_skipped,
+        "rv20_skipped": _extract_rv20_skipped(audit),
     }
 
 
@@ -236,20 +290,19 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
     entry_mode = (params.get("entry_mode") if isinstance(params, dict) else None)
     L = _leverage_mult_from_params(params)
 
+    suite_hf, suite_hf_reasons = _extract_suite_hard_fail(strat)
+
     full = _extract_full_metrics(strat)
     post = _extract_post_metrics(strat)
     gg = _extract_gonogo(strat)
 
-    suite_hard_fail = bool(strat.get("hard_fail", False))
-    suite_hard_fail_reasons = strat.get("hard_fail_reasons")
-
     return {
         "id": sid,
         "ok": ok,
+        "suite_hard_fail": suite_hf,
+        "suite_hard_fail_reasons": suite_hf_reasons,
         "entry_mode": entry_mode,
         "L": L,
-        "suite_hard_fail": suite_hard_fail,
-        "suite_hard_fail_reasons": suite_hard_fail_reasons,
         **full,
         **post,
         "post_gonogo": gg.get("decision"),
@@ -261,7 +314,7 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # =========================
-# policy: sorting / filtering / exclusion reasons (main view)
+# policy: sorting / filtering / exclusion reasons
 # =========================
 def _finite_or_neginf(x: Any) -> float:
     v = _to_float(x)
@@ -269,6 +322,11 @@ def _finite_or_neginf(x: Any) -> float:
 
 
 def _sort_rows_like_policy(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Follow suite policy:
+    prefer post (calmar desc, sharpe0 desc) when post_ok=True; else fallback to full
+    Deterministic tie-breaker by strategy_id.
+    """
     def key(r: Dict[str, Any]) -> Tuple[float, float, str]:
         rid = _fmt_str(r.get("id"))
         if _is_true(r.get("post_ok")):
@@ -279,6 +337,12 @@ def _sort_rows_like_policy(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _hard_fail_reasons_for_segment(seg_name: str, mdd: Any, eq_min: Any, neg_days: Any) -> List[str]:
+    """
+    Hard fail:
+    - equity_min <= 0
+    - equity_negative_days > 0
+    - mdd <= -100% (<= -1.0)
+    """
     out: List[str] = []
 
     vmdd = _to_float(mdd)
@@ -306,14 +370,25 @@ def _is_missing_rank_metrics(r: Dict[str, Any], basis: str) -> bool:
 
 
 def _exclusion_reasons_renderer_filter_v4(r: Dict[str, Any]) -> List[str]:
+    """
+    Renderer filter policy v4:
+    exclude(ok=false);
+    exclude(suite_hard_fail=true);
+    exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post);
+    exclude(post_gonogo=NO_GO);
+    exclude(missing rank metrics on chosen basis).
+    """
     reasons: List[str] = []
 
+    # ok=false
     if not bool(r.get("ok")):
         reasons.append("EXCLUDE_OK_FALSE")
 
-    if bool(r.get("suite_hard_fail")):
+    # suite_hard_fail
+    if _is_true(r.get("suite_hard_fail")):
         reasons.append("EXCLUDE_SUITE_HARD_FAIL_TRUE")
 
+    # hard fails on full/post
     reasons += _hard_fail_reasons_for_segment(
         "FULL", r.get("full_mdd"), r.get("full_equity_min"), r.get("full_neg_days")
     )
@@ -321,9 +396,11 @@ def _exclusion_reasons_renderer_filter_v4(r: Dict[str, Any]) -> List[str]:
         "POST", r.get("post_mdd"), r.get("post_equity_min"), r.get("post_neg_days")
     )
 
+    # post gonogo
     if _fmt_str(r.get("post_gonogo")) == "NO_GO":
         reasons.append("EXCLUDE_POST_GONOGO_NO_GO")
 
+    # missing rank metrics on chosen basis
     basis = _fmt_str(r.get("rank_basis"))
     if basis not in ("post", "full"):
         basis = "full"
@@ -344,69 +421,13 @@ def _rank_key_on_basis(r: Dict[str, Any], basis: str) -> Tuple[float, float, str
     return (_finite_or_neginf(r.get("full_calmar")), _finite_or_neginf(r.get("full_sharpe0")), rid)
 
 
-# =========================
-# POST-only (After singularity) view: v9 policy
-# =========================
-def _exclusion_reasons_post_only_v2(r: Dict[str, Any]) -> List[str]:
-    """
-    Post-only policy v2:
-    - require ok=true
-    - require post_ok=true
-    - exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%)
-    - exclude post_gonogo=NO_GO
-    - exclude missing post rank metrics (post_calmar, post_sharpe0)
-    - B2 hard gate: post_delta_sharpe0_vs_base >= POST_ONLY_B2_MIN_DELTA_SHARPE
-    - post_MDD floor: post_mdd >= POST_ONLY_MDD_FLOOR
-    """
-    reasons: List[str] = []
-
-    if not bool(r.get("ok")):
-        reasons.append("EXCLUDE_OK_FALSE")
-
-    if not bool(r.get("post_ok")):
-        reasons.append("EXCLUDE_POST_OK_FALSE")
-
-    # hard fails within POST segment
-    reasons += _hard_fail_reasons_for_segment(
-        "POST", r.get("post_mdd"), r.get("post_equity_min"), r.get("post_neg_days")
+def _topn_recommended(rows: List[Dict[str, Any]], n: int = 3) -> List[str]:
+    eligible = [r for r in rows if _is_eligible_for_recommendation(r)]
+    eligible_sorted = sorted(
+        eligible,
+        key=lambda r: _rank_key_on_basis(r, _fmt_str(r.get("rank_basis"))),
+        reverse=True,
     )
-
-    if _fmt_str(r.get("post_gonogo")) == "NO_GO":
-        reasons.append("EXCLUDE_POST_GONOGO_NO_GO")
-
-    if (_to_float(r.get("post_calmar")) is None) or (_to_float(r.get("post_sharpe0")) is None):
-        reasons.append("EXCLUDE_MISSING_RANK_METRICS_POST")
-
-    # B2 gate: post ΔSharpe vs base
-    dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
-    if dsh is None:
-        reasons.append("EXCLUDE_POST_DELTA_SHARPE_MISSING")
-    else:
-        if float(dsh) < float(POST_ONLY_B2_MIN_DELTA_SHARPE):
-            reasons.append(f"EXCLUDE_POST_DELTA_SHARPE_LT_{POST_ONLY_B2_MIN_DELTA_SHARPE}")
-
-    # post MDD floor
-    pmdd = _to_float(r.get("post_mdd"))
-    if pmdd is not None:
-        if float(pmdd) < float(POST_ONLY_MDD_FLOOR):
-            reasons.append(f"EXCLUDE_POST_MDD_LT_{POST_ONLY_MDD_FLOOR}")
-    # if pmdd missing, post hard fail already didn't trigger; but missing is handled by rank metrics anyway.
-
-    return reasons
-
-
-def _is_eligible_post_only(r: Dict[str, Any]) -> bool:
-    return len(_exclusion_reasons_post_only_v2(r)) == 0
-
-
-def _rank_key_post_only(r: Dict[str, Any]) -> Tuple[float, float, str]:
-    rid = _fmt_str(r.get("id"))
-    return (_finite_or_neginf(r.get("post_calmar")), _finite_or_neginf(r.get("post_sharpe0")), rid)
-
-
-def _topn_post_only(rows: List[Dict[str, Any]], n: int = 3) -> List[str]:
-    eligible = [r for r in rows if _is_eligible_post_only(r)]
-    eligible_sorted = sorted(eligible, key=_rank_key_post_only, reverse=True)
     return [str(r.get("id")) for r in eligible_sorted[:n]]
 
 
@@ -421,6 +442,10 @@ def _find_strategy_by_id(rows: List[Dict[str, Any]], sid: str) -> Optional[Dict[
 
 
 def _compare_two_rows(r1: Dict[str, Any], r2: Dict[str, Any], basis: str) -> str:
+    """
+    winner=calmar desc, then sharpe0 desc, then id
+    returns winner id
+    """
     k1 = _rank_key_on_basis(r1, basis)
     k2 = _rank_key_on_basis(r2, basis)
     if k1[0] > k2[0]:
@@ -434,19 +459,22 @@ def _compare_two_rows(r1: Dict[str, Any], r2: Dict[str, Any], basis: str) -> str
     return min(_fmt_str(r1.get("id")), _fmt_str(r2.get("id")))
 
 
-def _always_vs_trend_table(rows: List[Dict[str, Any]], trend_rule: str) -> List[str]:
-    tr = str(trend_rule).strip() if trend_rule else "price_gt_ma60"
-
+def _always_vs_trend_table(rows: List[Dict[str, Any]], trend_rule: str, bench_levels: List[str]) -> List[str]:
+    """
+    compare_v2: for same L, compare post if both post_ok else full;
+    winner=calmar desc, then sharpe0 desc, then id
+    trend_id uses suite trend_rule
+    """
     lines: List[str] = []
     lines.append("## Deterministic Always vs Trend (checkmarks)")
     lines.append("compare_policy: `compare_v2: for same L, compare post if both post_ok else full; winner=calmar desc, then sharpe0 desc, then id; trend_id uses suite trend_rule`")
-    lines.append(f"trend_rule: `{tr}`")
+    lines.append(f"trend_rule: `{_fmt_str(trend_rule)}`")
     lines.append("")
     lines.append("| L | basis | trend_id | always_id | winner | verdict |")
     lines.append("|---:|---|---|---|---|---|")
 
-    for L in ["1.1x", "1.2x", "1.3x", "1.5x"]:
-        trend_id = f"trend_leverage_{tr}_{L}"
+    for L in bench_levels:
+        trend_id = f"trend_leverage_{trend_rule}_{L}"
         always_id = f"always_leverage_{L}"
 
         rt = _find_strategy_by_id(rows, trend_id)
@@ -475,6 +503,175 @@ def _always_vs_trend_table(rows: List[Dict[str, Any]], trend_rule: str) -> List[
 
 
 # =========================
+# post-only PASS/WATCH
+# =========================
+_POST_DELTA_SHARPE_PASS = -0.03
+_POST_DELTA_SHARPE_WATCH = -0.05
+_POST_MDD_FLOOR = -0.40
+
+
+def _post_only_base_exclusions(r: Dict[str, Any]) -> List[str]:
+    """
+    post-only base gates (ignore FULL and ignore suite_hard_fail):
+    - require post_ok=true
+    - exclude post hard fails: post equity_min<=0 OR post neg_days>0 OR post mdd<=-100%
+    - exclude post_gonogo=NO_GO
+    - exclude missing post rank metrics: post_calmar/post_sharpe0
+    """
+    reasons: List[str] = []
+
+    if not _is_true(r.get("post_ok")):
+        reasons.append("EXCLUDE_POST_OK_FALSE")
+
+    reasons += _hard_fail_reasons_for_segment("POST", r.get("post_mdd"), r.get("post_equity_min"), r.get("post_neg_days"))
+
+    if _fmt_str(r.get("post_gonogo")) == "NO_GO":
+        reasons.append("EXCLUDE_POST_GONOGO_NO_GO")
+
+    if (_to_float(r.get("post_calmar")) is None) or (_to_float(r.get("post_sharpe0")) is None):
+        reasons.append("EXCLUDE_MISSING_RANK_METRICS_POST")
+
+    return reasons
+
+
+def _post_only_bucket(r: Dict[str, Any]) -> Tuple[str, List[str]]:
+    """
+    Return (bucket, reasons):
+    - PASS
+    - WATCH
+    - EXCLUDE
+    """
+    base = _post_only_base_exclusions(r)
+    if base:
+        return "EXCLUDE", base
+
+    dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
+    if dsh is None:
+        return "EXCLUDE", ["EXCLUDE_POST_DELTA_SHARPE_MISSING"]
+
+    pmdd = _to_float(r.get("post_mdd"))
+    if pmdd is None:
+        return "EXCLUDE", ["EXCLUDE_POST_MDD_MISSING"]
+
+    if pmdd < _POST_MDD_FLOOR:
+        return "EXCLUDE", [f"EXCLUDE_POST_MDD_LT_{_POST_MDD_FLOOR}"]
+
+    if dsh >= _POST_DELTA_SHARPE_PASS:
+        return "PASS", []
+
+    if (_POST_DELTA_SHARPE_WATCH <= dsh) and (dsh < _POST_DELTA_SHARPE_PASS):
+        return "WATCH", [f"WATCH_POST_DELTA_SHARPE_BETWEEN_{_POST_DELTA_SHARPE_WATCH}_AND_{_POST_DELTA_SHARPE_PASS}"]
+
+    return "EXCLUDE", [f"EXCLUDE_POST_DELTA_SHARPE_LT_{_POST_DELTA_SHARPE_PASS}"]
+
+
+def _topn_post_only(rows: List[Dict[str, Any]], bucket: str, n: int = 3) -> List[str]:
+    cand: List[Dict[str, Any]] = []
+    for r in rows:
+        b, _ = _post_only_bucket(r)
+        if b == bucket:
+            cand.append(r)
+    cand_sorted = sorted(cand, key=lambda r: _rank_key_on_basis(r, "post"), reverse=True)
+    return [str(r.get("id")) for r in cand_sorted[:n]]
+
+
+def _post_only_section(rows: List[Dict[str, Any]]) -> List[str]:
+    lines: List[str] = []
+    lines.append("## Post-only View (After Singularity / Ignore FULL)")
+    lines.append(
+        "post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); "
+        "exclude post_gonogo=NO_GO; exclude missing post rank metrics; "
+        f"PASS gate: require post_ΔSharpe>= {_POST_DELTA_SHARPE_PASS}; "
+        f"WATCH gate: require {_POST_DELTA_SHARPE_WATCH}<=post_ΔSharpe<{_POST_DELTA_SHARPE_PASS}; "
+        f"post_MDD floor: require post_MDD>= {_POST_MDD_FLOOR} (i.e. not worse than -40%); "
+        "ignore FULL and ignore suite_hard_fail.`"
+    )
+
+    top_pass = _topn_post_only(rows, "PASS", n=3)
+    top_watch = _topn_post_only(rows, "WATCH", n=3)
+
+    # counts and exclusions
+    total = len(rows)
+    pass_rows: List[Dict[str, Any]] = []
+    watch_rows: List[Dict[str, Any]] = []
+    excl_rows: List[Dict[str, Any]] = []
+    excl_reasons_map: Dict[str, List[str]] = {}
+
+    for r in rows:
+        b, rs = _post_only_bucket(r)
+        if b == "PASS":
+            pass_rows.append(r)
+        elif b == "WATCH":
+            watch_rows.append(r)
+        else:
+            excl_rows.append(r)
+            excl_reasons_map[_fmt_str(r.get("id"))] = rs
+
+    lines.append(f"- top3_post_only_PASS: `{', '.join(top_pass) if top_pass else 'N/A'}`")
+    lines.append(f"- top3_post_only_WATCH: `{', '.join(top_watch) if top_watch else 'N/A'}`")
+    lines.append(f"- post_only_total: `{total}`; pass: `{len(pass_rows)}`; watch: `{len(watch_rows)}`; excluded: `{len(excl_rows)}`")
+
+    # show "would be pass/watch but excluded by full floor" (deployment filter v4)
+    would_but_excluded: List[str] = []
+    for r in pass_rows + watch_rows:
+        rid = _fmt_str(r.get("id"))
+        rs = _exclusion_reasons_renderer_filter_v4(r)
+        if rs:
+            would_but_excluded.append(rid)
+    if would_but_excluded:
+        lines.append(f"- would_be_pass_or_watch_post_only_but_excluded_by_renderer_v4: `{', '.join(sorted(would_but_excluded))}`")
+
+    lines.append("")
+
+    # PASS/WATCH detail tables (compact)
+    def _bucket_table(title: str, bucket_rows: List[Dict[str, Any]]) -> None:
+        lines.append(f"### {title}")
+        if not bucket_rows:
+            lines.append("- N/A")
+            lines.append("")
+            return
+        lines.append("| id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |")
+        lines.append("|---|---:|---:|---:|---:|---:|---|")
+        bucket_sorted = sorted(bucket_rows, key=lambda r: _rank_key_on_basis(r, "post"), reverse=True)
+        for r in bucket_sorted:
+            rid = _fmt_str(r.get("id"))
+            dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
+            note = ""
+            # surface if renderer v4 would exclude it (full-floor / suite hard fail etc)
+            rs_v4 = _exclusion_reasons_renderer_filter_v4(r)
+            if rs_v4:
+                note = "excluded_by_renderer_v4: " + ", ".join(rs_v4)
+            lines.append(
+                "| {id} | {cagr} | {mdd} | {sh} | {calmar} | {dsh} | {note} |".format(
+                    id=_escape_md_cell(rid),
+                    cagr=_fmt_pct(r.get("post_cagr")),
+                    mdd=_fmt_pct(r.get("post_mdd")),
+                    sh=_fmt_num(r.get("post_sharpe0"), nd=3),
+                    calmar=_fmt_num(r.get("post_calmar"), nd=3),
+                    dsh=_fmt_num(dsh, nd=3) if dsh is not None else "N/A",
+                    note=_escape_md_cell(note) if note else "",
+                )
+            )
+        lines.append("")
+
+    _bucket_table("PASS (deploy-grade, strict)", pass_rows)
+    _bucket_table("WATCH (research-grade, not for deploy)", watch_rows)
+
+    # exclusions list
+    lines.append("### Post-only Exclusions (reasons)")
+    if not excl_rows:
+        lines.append("- N/A")
+        lines.append("")
+        return lines
+
+    for rid in sorted([_fmt_str(r.get("id")) for r in excl_rows]):
+        rs = excl_reasons_map.get(rid, [])
+        lines.append(f"- {rid}: `{', '.join(rs) if rs else 'N/A'}`")
+    lines.append("")
+    return lines
+
+
+# =========================
 # render md
 # =========================
 def _render_md(obj: Dict[str, Any]) -> str:
@@ -488,19 +685,36 @@ def _render_md(obj: Dict[str, Any]) -> str:
     ranking_policy = compare.get("ranking_policy")
     top3_raw = compare.get("top3_by_policy")
 
-    trend_rule = _get(obj, ["strategy_suite", "trend_rule"], default="price_gt_ma60")
+    # trend_rule for compare section (suite)
+    trend_rule = _get(obj, ["strategy_suite", "trend_rule"], default=None)
+    if trend_rule is None:
+        trend_rule = _get(obj, ["inputs", "strategy_suite", "trend_rule"], default="price_gt_ma60")
+    trend_rule = _fmt_str(trend_rule) if trend_rule is not None else "price_gt_ma60"
 
+    # bench levels
+    bench_levels_raw = _get(obj, ["strategy_suite", "bench_levels"], default=None)
+    bench_levels: List[str] = []
+    if isinstance(bench_levels_raw, list) and bench_levels_raw:
+        # expect floats like 1.1, 1.2 -> render as "1.1x"
+        for v in bench_levels_raw:
+            fv = _to_float(v)
+            if fv is None:
+                continue
+            s = f"{fv:.2f}".rstrip("0").rstrip(".")
+            bench_levels.append(f"{s}x")
+    if not bench_levels:
+        bench_levels = ["1.1x", "1.2x", "1.3x", "1.5x"]
+
+    # FULL singularity note
     full_note = (
         "FULL_* metrics may be impacted by data singularity around 2014 (price series anomaly/adjustment). "
         "Treat FULL as audit-only; prefer POST for decision and ranking."
     )
 
     renderer_filter_policy = (
-        "renderer_rank_filter_v4: exclude(ok=false); "
-        "exclude(suite_hard_fail=true); "
+        "renderer_rank_filter_v4: exclude(ok=false); exclude(suite_hard_fail=true); "
         "exclude(hard_fail: equity_min<=0 or equity_negative_days>0 or mdd<=-100% on full/post); "
-        "exclude(post_gonogo=NO_GO); "
-        "exclude(missing rank metrics on chosen basis); "
+        "exclude(post_gonogo=NO_GO); exclude(missing rank metrics on chosen basis); "
         "NOTE: eq50 gate disabled (basis_equity_min<=0.5 removed; equity_min semantics not aligned with MDD)."
     )
 
@@ -514,31 +728,29 @@ def _render_md(obj: Dict[str, Any]) -> str:
         lines.append(f"- suite_ok: `{_fmt_str(suite_ok)}`")
     lines.append("")
 
+    # ranking block
     lines.append("## Ranking (policy)")
     lines.append(f"- ranking_policy: `{_fmt_str(ranking_policy)}`")
     lines.append(f"- renderer_filter_policy: `{renderer_filter_policy}`")
     lines.append(f"- full_segment_note: `{full_note}`")
 
+    # build rows
     strategies = _strategy_list(obj)
     rows = [_mk_row(s) for s in strategies]
     rows_sorted = _sort_rows_like_policy(rows)
 
-    eligible_v4 = [r for r in rows if _is_eligible_for_recommendation(r)]
-    eligible_v4_sorted = sorted(
-        eligible_v4,
-        key=lambda r: _rank_key_on_basis(r, _fmt_str(r.get("rank_basis"))),
-        reverse=True,
-    )
-    top3_rec = [str(r.get("id")) for r in eligible_v4_sorted[:3]]
+    # recommended top3 from renderer filtering
+    top3_rec = _topn_recommended(rows, n=3)
     lines.append(f"- top3_recommended: `{', '.join(top3_rec) if top3_rec else 'N/A'}`")
 
+    # raw top3 from suite
     if isinstance(top3_raw, list):
         lines.append(f"- top3_raw_from_suite: `{', '.join([str(x) for x in top3_raw])}`")
     else:
         lines.append(f"- top3_raw_from_suite: `{_fmt_str(top3_raw)}`")
     lines.append("")
 
-    # strategies table
+    # strategies table (ALL rows, sorted by suite policy)
     lines.append("## Strategies")
     lines.append("note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`")
     lines.append("")
@@ -601,18 +813,20 @@ def _render_md(obj: Dict[str, Any]) -> str:
     # exclusions summary
     lines.append("## Exclusions (not eligible for recommendation)")
     total = len(rows)
+    eligible_rows = [r for r in rows if _is_eligible_for_recommendation(r)]
     excluded_rows = [r for r in rows if not _is_eligible_for_recommendation(r)]
 
+    # counters
     hard_fail = 0
-    suite_hard_fail = 0
     post_no_go = 0
     ok_false = 0
     missing_rank = 0
+    suite_hf = 0
 
     for r in excluded_rows:
         rs = _exclusion_reasons_renderer_filter_v4(r)
         if "EXCLUDE_SUITE_HARD_FAIL_TRUE" in rs:
-            suite_hard_fail += 1
+            suite_hf += 1
         if any(s.startswith("HARD_FAIL_") for s in rs):
             hard_fail += 1
         if "EXCLUDE_POST_GONOGO_NO_GO" in rs:
@@ -623,10 +837,10 @@ def _render_md(obj: Dict[str, Any]) -> str:
             missing_rank += 1
 
     lines.append(f"- total_strategies: `{total}`")
-    lines.append(f"- eligible: `{len(eligible_v4)}`")
+    lines.append(f"- eligible: `{len(eligible_rows)}`")
     lines.append(
         f"- excluded: `{len(excluded_rows)}` "
-        f"(suite_hard_fail={suite_hard_fail}, hard_fail_fullpost={hard_fail}, post_NO_GO={post_no_go}, ok_false={ok_false}, missing_rank_metrics={missing_rank})"
+        f"(suite_hard_fail={suite_hf}, hard_fail_fullpost={hard_fail}, post_NO_GO={post_no_go}, ok_false={ok_false}, missing_rank_metrics={missing_rank})"
     )
     lines.append("")
 
@@ -636,86 +850,14 @@ def _render_md(obj: Dict[str, Any]) -> str:
         lines.append(f"- {rid}: `{', '.join(rs)}`")
 
     lines.append("")
-    lines.extend(_always_vs_trend_table(rows, str(trend_rule)))
 
-    # Post-only view (v9)
-    lines.append("## Post-only View (After Singularity / Ignore FULL)")
-    lines.append(
-        "post_only_policy_v2: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); "
-        "exclude post_gonogo=NO_GO; exclude missing post rank metrics; "
-        f"B2 gate: require post_ΔSharpe>= {POST_ONLY_B2_MIN_DELTA_SHARPE}; "
-        f"post_MDD floor: require post_MDD>= {POST_ONLY_MDD_FLOOR} (i.e. not worse than -40%); "
-        "ignore FULL and ignore suite_hard_fail.`"
-    )
+    # Always vs Trend compare section
+    lines.extend(_always_vs_trend_table(rows, trend_rule=trend_rule, bench_levels=bench_levels))
 
-    top3_post_only = _topn_post_only(rows, n=3)
-    lines.append(f"- top3_post_only: `{', '.join(top3_post_only) if top3_post_only else 'N/A'}`")
+    # Post-only PASS/WATCH section
+    lines.extend(_post_only_section(rows))
 
-    # "rescued" list: eligible post-only but excluded by main view due to FULL/suite floor
-    rescued = []
-    for r in rows:
-        if _is_eligible_post_only(r) and (not _is_eligible_for_recommendation(r)):
-            rs_v4 = _exclusion_reasons_renderer_filter_v4(r)
-            if ("EXCLUDE_SUITE_HARD_FAIL_TRUE" in rs_v4) or any(s.startswith("HARD_FAIL_FULL_") for s in rs_v4):
-                rescued.append(r)
-
-    if rescued:
-        rescued_sorted = sorted(rescued, key=_rank_key_post_only, reverse=True)
-        lines.append(
-            f"- would_be_eligible_post_only_but_excluded_by_full_floor: `{', '.join([_fmt_str(r.get('id')) for r in rescued_sorted])}`"
-        )
-    else:
-        lines.append("- would_be_eligible_post_only_but_excluded_by_full_floor: `N/A`")
-
-    post_only_eligible = [r for r in rows if _is_eligible_post_only(r)]
-    post_only_excluded = [r for r in rows if not _is_eligible_post_only(r)]
-    lines.append(f"- post_only_total: `{len(rows)}`; post_only_eligible: `{len(post_only_eligible)}`; post_only_excluded: `{len(post_only_excluded)}`")
-
-    # counters by reason (post-only)
-    cnt = {
-        "ok_false": 0,
-        "post_ok_false": 0,
-        "post_hard_fail": 0,
-        "post_no_go": 0,
-        "missing_rank_post": 0,
-        "delta_sharpe_missing": 0,
-        "b2_fail": 0,
-        "post_mdd_floor_fail": 0,
-    }
-    for r in post_only_excluded:
-        rs = _exclusion_reasons_post_only_v2(r)
-        if "EXCLUDE_OK_FALSE" in rs:
-            cnt["ok_false"] += 1
-        if "EXCLUDE_POST_OK_FALSE" in rs:
-            cnt["post_ok_false"] += 1
-        if any(s.startswith("HARD_FAIL_POST_") for s in rs):
-            cnt["post_hard_fail"] += 1
-        if "EXCLUDE_POST_GONOGO_NO_GO" in rs:
-            cnt["post_no_go"] += 1
-        if "EXCLUDE_MISSING_RANK_METRICS_POST" in rs:
-            cnt["missing_rank_post"] += 1
-        if "EXCLUDE_POST_DELTA_SHARPE_MISSING" in rs:
-            cnt["delta_sharpe_missing"] += 1
-        if any(s.startswith("EXCLUDE_POST_DELTA_SHARPE_LT_") for s in rs):
-            cnt["b2_fail"] += 1
-        if any(s.startswith("EXCLUDE_POST_MDD_LT_") for s in rs):
-            cnt["post_mdd_floor_fail"] += 1
-
-    lines.append(
-        "- post_only_exclusion_counters: "
-        f"`ok_false={cnt['ok_false']}, post_ok_false={cnt['post_ok_false']}, post_hard_fail={cnt['post_hard_fail']}, "
-        f"post_NO_GO={cnt['post_no_go']}, missing_rank_post={cnt['missing_rank_post']}, "
-        f"delta_sharpe_missing={cnt['delta_sharpe_missing']}, b2_fail={cnt['b2_fail']}, post_mdd_floor_fail={cnt['post_mdd_floor_fail']}`"
-    )
-    lines.append("")
-
-    for r in sorted(post_only_excluded, key=lambda x: _fmt_str(x.get("id"))):
-        rid = _fmt_str(r.get("id"))
-        rs = _exclusion_reasons_post_only_v2(r)
-        lines.append(f"- {rid}: `{', '.join(rs)}`")
-    lines.append("")
-
-    # go/no-go details
+    # Post go/no-go details
     lines.append("## Post Go/No-Go Details (compact)")
     any_details = False
     for r in rows_sorted:
@@ -735,12 +877,16 @@ def _render_md(obj: Dict[str, Any]) -> str:
             if isinstance(reasons, list) and reasons:
                 for msg in reasons[:5]:
                     lines.append(f"  - {str(msg)}")
-            if bool(r.get("suite_hard_fail")):
-                lines.append(f"- suite_hard_fail: `true`")
-                rr = r.get("suite_hard_fail_reasons")
-                if isinstance(rr, list) and rr:
-                    for msg in rr[:5]:
+
+            # suite hard fail detail (if present)
+            if _is_true(r.get("suite_hard_fail")):
+                lines.append("")
+                lines.append("- suite_hard_fail: `true`")
+                rs = r.get("suite_hard_fail_reasons") or []
+                if isinstance(rs, list) and rs:
+                    for msg in rs[:10]:
                         lines.append(f"  - {str(msg)}")
+
             lines.append("")
     if not any_details:
         lines.append("- N/A (no post_gonogo details found in JSON)")
