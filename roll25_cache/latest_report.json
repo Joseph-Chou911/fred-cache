@@ -1,26 +1,30 @@
 {
-  "generated_at": "2026-02-24T10:54:21.446517+08:00",
+  "generated_at": "2026-02-24T18:04:33.220293+08:00",
   "timezone": "Asia/Taipei",
-  "summary": "今日資料未更新；UsedDate=2026-02-23：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet",
+  "summary": "UsedDate=2026-02-24：Mode=FULL；freshness_ok=True",
   "fetch": {
-    "fetch_plan": "openapi_primary",
-    "notes": []
+    "fetch_plan": "monthly_fallback_current_month",
+    "notes": [
+      "openapi_fmtqik_failed:HTTP GET failed after 3 tries: https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; last_err=('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
+      "openapi_ohlc_failed(downgrade):HTTP GET failed after 3 tries: https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST ; last_err=('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
+      "monthly_fallback_used:yyyymm01=20260201"
+    ]
   },
   "numbers": {
-    "UsedDate": "2026-02-23",
-    "Close": 33773.26,
-    "PctChange": 0.498576,
-    "TradeValue": 949992767170,
-    "AmplitudePct": 1.634722,
-    "VolMultiplier": 1.185894,
-    "VolumeMultiplier": 1.185894,
+    "UsedDate": "2026-02-24",
+    "Close": 34700.82,
+    "PctChange": 2.746433,
+    "TradeValue": 861808912768,
+    "AmplitudePct": 2.36551,
+    "VolMultiplier": 1.075117,
+    "VolumeMultiplier": 1.075117,
     "LookbackNTarget": 20,
     "LookbackNActual": 20
   },
   "signal": {
     "DownDay": false,
     "OhlcMissing": false,
-    "UsedDateStatus": "DATA_NOT_UPDATED",
+    "UsedDateStatus": "OK_TODAY",
     "RunDayTag": "WEEKDAY",
     "VolumeAmplified": false,
     "VolAmplified": false,
@@ -28,26 +32,34 @@
     "ConsecutiveBreak": 0,
     "LookbackNTarget": 20,
     "LookbackNActual": 20,
-    "VolMultiplier": 1.185894,
-    "VolumeMultiplier": 1.185894,
+    "VolMultiplier": 1.075117,
+    "VolumeMultiplier": 1.075117,
     "VolWin": 20,
     "VolThreshold": 1.5,
     "NewLowWin": 60
   },
   "action": "維持風險控管紀律；如資料延遲或 OHLC 缺失，避免做過度解讀，待資料補齊再對照完整條件。",
-  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-02-23 | UsedDminus1=2026-02-11\nRunDayTag=WEEKDAY | UsedDateStatus=DATA_NOT_UPDATED\nfreshness_ok=True | freshness_age_days=1\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).\nGUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).",
+  "caveats": "Sources: daily_fmtqik=https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK ; daily_mi_5mins_hist=https://openapi.twse.com.tw/v1/indicesReport/MI_5MINS_HIST\nSources: backfill_fmtqik_tpl=https://www.twse.com.tw/exchangeReport/FMTQIK?response=json&date={yyyymm01} ; backfill_mi_5mins_hist_tpl=https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date={yyyymm01}\nrun_day_tag is weekday-only heuristic (not exchange calendar)\nBackfillMonths=0 | BackfillLimit=252 | StoreCap=400 | LookbackTarget=20\nMode=FULL | OHLC=OK | UsedDate=2026-02-24 | UsedDminus1=2026-02-23\nRunDayTag=WEEKDAY | UsedDateStatus=OK_TODAY\nfreshness_ok=True | freshness_age_days=0\ndedupe_ok=True\nREPORT_CACHE_ROLL25_CAP=200 (cache_roll25 points embedded in latest_report)\nADDITIVE_DERIVED: vol_multiplier_20=today_trade_value/avg(tv_last20) (min_points=15); VolumeAmplified=(>= 1.5); NewLow_N: 60 if close<=min(close_last60) (min_points=40) else 0; ConsecutiveBreak=consecutive down days from UsedDate (ret<0) else 0/None.\nADDITIVE_UNIFIED_COMPAT: latest_report.cache_roll25 is provided (newest->oldest).\nGUARDRAIL: retry/backoff enabled; monthly fallback for current month; cache-only degrade supported; cache-preserving merge (None does not overwrite).",
   "run_day_tag": "WEEKDAY",
-  "used_date_status": "DATA_NOT_UPDATED",
+  "used_date_status": "OK_TODAY",
   "tag": "WEEKDAY",
   "freshness_ok": true,
-  "freshness_age_days": 1,
+  "freshness_age_days": 0,
   "mode": "FULL",
   "ohlc_status": "OK",
-  "used_date": "2026-02-23",
-  "used_dminus1": "2026-02-11",
+  "used_date": "2026-02-24",
+  "used_dminus1": "2026-02-23",
   "lookback_n_actual": 20,
-  "lookback_oldest": "2026-01-16",
+  "lookback_oldest": "2026-01-19",
   "cache_tail": [
+    {
+      "date": "2026-02-24",
+      "close": 34700.82,
+      "change": 927.56,
+      "trade_value": 861808912768,
+      "high": 34786.42,
+      "low": 33987.51
+    },
     {
       "date": "2026-02-23",
       "close": 33773.26,
@@ -239,17 +251,17 @@
       "trade_value": 626408176303,
       "high": 30681.99,
       "low": 30472.7
-    },
-    {
-      "date": "2026-01-09",
-      "close": 30288.96,
-      "change": -71.59,
-      "trade_value": 704371387415,
-      "high": 30500.42,
-      "low": 29925.49
     }
   ],
   "cache_roll25": [
+    {
+      "date": "2026-02-24",
+      "close": 34700.82,
+      "change": 927.56,
+      "trade_value": 861808912768,
+      "high": 34786.42,
+      "low": 33987.51
+    },
     {
       "date": "2026-02-23",
       "close": 33773.26,
@@ -1841,14 +1853,6 @@
       "trade_value": 282189467291,
       "high": 20331.89,
       "low": 20185.31
-    },
-    {
-      "date": "2025-04-29",
-      "close": 20232.63,
-      "change": 198.22,
-      "trade_value": 250105465896,
-      "high": 20232.63,
-      "low": 20007.3
     }
   ]
 }
