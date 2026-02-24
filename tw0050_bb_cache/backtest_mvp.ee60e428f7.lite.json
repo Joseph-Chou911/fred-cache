@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-24T14:23:30Z",
+  "generated_at_utc": "2026-02-24T14:38:10Z",
   "schema_version": "v26.9",
   "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
   "inputs": {
@@ -76,7 +76,7 @@
     {
       "strategy_id": "bb_conditional",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:10Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -221,7 +221,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -365,7 +365,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -583,7 +583,7 @@
     {
       "strategy_id": "always_leverage_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:10Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -728,7 +728,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -872,7 +872,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1090,7 +1090,7 @@
     {
       "strategy_id": "always_leverage_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:10Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -1235,7 +1235,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1379,7 +1379,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1597,7 +1597,7 @@
     {
       "strategy_id": "always_leverage_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:10Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -1742,7 +1742,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1886,7 +1886,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2104,7 +2104,7 @@
     {
       "strategy_id": "always_leverage_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:10Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -2249,7 +2249,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2393,7 +2393,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:10Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2617,7 +2617,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:11Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -2762,7 +2762,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2906,7 +2906,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3124,7 +3124,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:11Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -3269,7 +3269,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3413,7 +3413,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3631,7 +3631,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:11Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -3776,7 +3776,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3920,7 +3920,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -4144,7 +4144,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-24T14:23:30Z",
+      "generated_at_utc": "2026-02-24T14:38:11Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -4289,7 +4289,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:30Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -4433,7 +4433,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-24T14:23:31Z",
+              "generated_at_utc": "2026-02-24T14:38:11Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {

@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-02-24T14:23:32Z",
-  "schema_version": "v2.1",
-  "script_fingerprint": "backtest_tw0050_tactical_cash@2026-02-24.v2.1.post_only_segmentation_signal_lag1",
+  "generated_at_utc": "2026-02-24T14:38:12Z",
+  "schema_version": "v2.2",
+  "script_fingerprint": "backtest_tw0050_tactical_cash@2026-02-24.v2.2.post_only_segmentation_lag_execdelay_extraslip",
   "inputs": {
     "cache_dir": "tw0050_bb_cache",
     "price_csv": "data.csv",
@@ -12,10 +12,12 @@
     "ma_window": 60,
     "core_frac": 0.9,
     "signal_lag_days": 1,
+    "exec_delay_days": 0,
+    "extra_slip_bps": 0.0,
     "fee_rate": 0.001425,
     "tax_rate": 0.001,
     "slip_bps": 5.0,
-    "slip_rate": 0.0005,
+    "slip_rate_total": 0.0005,
     "break_ratio_hi": 1.8,
     "break_ratio_lo": 0.5555555556,
     "segment_split_date": "auto",
@@ -50,26 +52,30 @@
     "p0": 9.217665672302246,
     "core_shares": 0.09763860309062522,
     "cash0": 0.09999999999999998,
-    "n_trades": 77,
-    "time_in_market_days": 2057,
-    "time_in_market_pct": 0.6963439404197698,
-    "normalization_note": "equity is normalized to 1.0 at analysis period start (default: post). not chainable to full period.",
-    "timing_assumption": "signal_raw uses close[t] vs MA[t]; signal_exec uses signal_raw[t-1] (lag=1); entry/exit executed at close[t] price. This avoids same-day lookahead but is still EOD execution.",
-    "hold_days_semantics": "hold_days starts at 0 on entry, increments by 1 each bar while in position (includes entry day bar)."
+    "n_trades": 0,
+    "time_in_market_days": 0,
+    "time_in_market_pct": 0.0,
+    "pending_action_policy": "single pending action; ignores subsequent flips until executed (conservative).",
+    "scheduled_entries": 1,
+    "scheduled_exits": 0,
+    "executed_entries": 0,
+    "executed_exits": 0,
+    "skipped_schedule_due_to_eod": 0,
+    "timing_assumption": "signal_raw uses close[t] vs MA[t]; signal_exec uses signal_raw[t-1] (lag=1); desired_pos=signal_exec[t]; when desired changes, schedule execution at t+exec_delay_days (exec_delay=0) using close[exec_day]. extra_slip_bps=0.0 added to slip_bps. This is a conservative stress test for thin-edge strategies."
   },
   "perf": {
     "overlay": {
       "ok": true,
       "start": 1.0,
-      "end": 8.097528198871048,
+      "end": 7.852505234380327,
       "n_days": 2954,
       "years": 11.718253968253968,
-      "cagr": 0.1954076344736524,
-      "vol_ann": 0.17831879706010773,
-      "sharpe0": 1.0905748971721463,
+      "cagr": 0.19227728215716344,
+      "vol_ann": 0.1756059530230542,
+      "sharpe0": 1.0897280942264795,
       "sharpe_note": "rf=0 assumed",
       "perf_ddof": 0,
-      "mdd": -0.3273196864561627,
+      "mdd": -0.328113905946369,
       "mdd_peak": "2022-01-17",
       "mdd_trough": "2022-10-25"
     },
@@ -88,20 +94,20 @@
       "mdd_peak": "2022-01-17",
       "mdd_trough": "2022-10-25"
     },
-    "calmar_overlay": 0.59699322270927,
+    "calmar_overlay": 0.5860077207108424,
     "calmar_base_only": 0.5860077207108424,
     "delta_vs_base": {
-      "cagr": 0.003130352316488949,
-      "mdd": 0.0007942194902063049,
-      "sharpe0": 0.000846802945666747
+      "cagr": 0.0,
+      "mdd": 0.0,
+      "sharpe0": 0.0
     }
   },
   "trade_kpis": {
-    "n_trades": 77,
-    "win_rate": 0.35064935064935066,
-    "avg_net_pnl": 0.003182116421957411,
-    "profit_factor": 3.0074331580070095,
-    "avg_hold_days": 26.727272727272727,
-    "time_in_market_pct": 0.6963439404197698
+    "n_trades": 0,
+    "win_rate": null,
+    "avg_net_pnl": null,
+    "profit_factor": null,
+    "avg_hold_days": null,
+    "time_in_market_pct": 0.0
   }
 }
