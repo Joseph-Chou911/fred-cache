@@ -7,17 +7,16 @@
   - percentiles: expansion20=90.0, contraction20=10.0, watch1d=90.0, watchspread20=90.0, watchaccel=90.0
   - thresholds_used: expansion20=8.0000, contraction20=-8.0000, watch1d=0.8000, watchspread20=3.0000, watchaccel=0.2500
   - calibration_status:
-    - expansion20: status=FALLBACK_FIXED, sample_n=25, threshold=8.0, reason=insufficient samples (n=25 < calib_min_n=60)
-    - contraction20: status=FALLBACK_FIXED, sample_n=25, threshold=-8.0, reason=insufficient samples (n=25 < calib_min_n=60)
-    - watch1d: status=FALLBACK_FIXED, sample_n=44, threshold=0.8, reason=insufficient samples (n=44 < calib_min_n=60)
-    - watchspread20: status=FALLBACK_FIXED, sample_n=25, threshold=3.0, reason=insufficient samples (n=25 < calib_min_n=60)
-    - watchaccel: status=FALLBACK_FIXED, sample_n=40, threshold=0.25, reason=insufficient samples (n=40 < calib_min_n=60)
+    - expansion20: status=FALLBACK_FIXED, sample_n=26, threshold=8.0, reason=insufficient samples (n=26 < calib_min_n=60)
+    - contraction20: status=FALLBACK_FIXED, sample_n=26, threshold=-8.0, reason=insufficient samples (n=26 < calib_min_n=60)
+    - watch1d: status=FALLBACK_FIXED, sample_n=45, threshold=0.8, reason=insufficient samples (n=45 < calib_min_n=60)
+    - watchspread20: status=FALLBACK_FIXED, sample_n=26, threshold=3.0, reason=insufficient samples (n=26 < calib_min_n=60)
+    - watchaccel: status=FALLBACK_FIXED, sample_n=41, threshold=0.25, reason=insufficient samples (n=41 < calib_min_n=60)
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
 - 一致性判定（Margin × Roll25）：QUIET
   - rationale: no resonance rule triggered
   - resonance_policy: latest
-  - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
-  - resonance_confidence: DOWNGRADED
+  - resonance_confidence: OK
 - OTC_guardrail（display-only; 不影響主信號）：NONE｜stage=NONE
   - rationale: no OTC guardrail triggered
   - thresholds: thr_expansion20=8.0000, prewatch_gap=0.2000, prewatch_threshold=7.8000
@@ -43,41 +42,40 @@
 - 目的：避免僅看合計（TOTAL-only）時，OTC 端先升溫/轉弱被稀釋而晚報。
 
 ## 2) 資料
-- 上市(TWSE)：融資餘額 3721.60 億元｜資料日期 2026-02-23｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
-  - rows_latest_table=30｜rows_series=45｜head_dates=['2026-02-23', '2026-02-11', '2026-02-10']｜tail_dates=['2026-01-06', '2026-01-05', '2026-01-02']
-- 上櫃(TPEX)：融資餘額 1322.20 億元｜資料日期 2026-02-23｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
-  - rows_latest_table=30｜rows_series=45｜head_dates=['2026-02-23', '2026-02-11', '2026-02-10']｜tail_dates=['2026-01-06', '2026-01-05', '2026-01-02']
-- 合計：融資餘額 5043.80 億元｜資料日期 2026-02-23｜來源：TWSE=HiStock / TPEX=HiStock
+- 上市(TWSE)：融資餘額 3775.00 億元｜資料日期 2026-02-24｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg）
+  - rows_latest_table=30｜rows_series=46｜head_dates=['2026-02-24', '2026-02-23', '2026-02-11']｜tail_dates=['2026-01-07', '2026-01-06', '2026-01-05']
+- 上櫃(TPEX)：融資餘額 1336.40 億元｜資料日期 2026-02-24｜來源：HiStock（https://histock.tw/stock/three.aspx?m=mg&no=TWOI）
+  - rows_latest_table=30｜rows_series=46｜head_dates=['2026-02-24', '2026-02-23', '2026-02-11']｜tail_dates=['2026-01-07', '2026-01-06', '2026-01-05']
+- 合計：融資餘額 5111.40 億元｜資料日期 2026-02-24｜來源：TWSE=HiStock / TPEX=HiStock
 
 ## 2.0) 大盤融資維持率（proxy；僅供參考，不作為信號輸入）
 - maint_path: taiwan_margin_cache/maint_ratio_latest.json
 - maint_ratio_policy: PROXY_TREND_ONLY
 - maint_ratio_confidence: DOWNGRADED
-- data_date: 2026-02-23｜maint_ratio_pct: 183.899292
-- maint_ratio_1d_delta_pctpt: 3.293383｜maint_ratio_1d_pct_change: 1.823519
-- maint_ratio_trend_note: trend_from: today=183.899292(2026-02-23), prev=180.605909(2026-02-11)
+- data_date: 2026-02-24｜maint_ratio_pct: 188.694745
+- maint_ratio_1d_delta_pctpt: 4.795453｜maint_ratio_1d_pct_change: 2.607652
+- maint_ratio_trend_note: trend_from: today=188.694745(2026-02-24), prev=183.899292(2026-02-23)
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-02-23｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 低(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
-- summary: 今日資料未更新；UsedDate=2026-02-23：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
-- resonance_confidence: DOWNGRADED
+- UsedDate: 2026-02-24｜UsedDateStatus: OK_TODAY｜risk_level: 低(derived)｜risk_level_raw: NA｜tag: WEEKDAY
+- summary: UsedDate=2026-02-24：Mode=FULL；freshness_ok=True
+- resonance_confidence: OK
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
 - 判定：QUIET（no resonance rule triggered）
-- resonance_confidence: DOWNGRADED
-- resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
+- resonance_confidence: OK
 
 ## 3) 計算（以 balance 序列計算 Δ/Δ%，不依賴站點『增加』欄）
 ### 上市(TWSE)
-- 1D：Δ=41.10 億元；Δ%=1.1167 %｜latest=3721.60｜base=3680.50（基期日=2026-02-11）
+- 1D：Δ=53.40 億元；Δ%=1.4349 %｜latest=3775.00｜base=3721.60（基期日=2026-02-23）
 ### 上櫃(TPEX)
-- 1D：Δ=8.90 億元；Δ%=0.6777 %｜latest=1322.20｜base=1313.30（基期日=2026-02-11）
+- 1D：Δ=14.20 億元；Δ%=1.0740 %｜latest=1336.40｜base=1322.20（基期日=2026-02-23）
 
 ## 3.1) OTC Guardrail（display-only；不影響主信號）
 - stage: NONE｜label: NONE
 - rationale: no OTC guardrail triggered
-- inputs: TPEX_20D%=3.1116｜TPEX_1D%=0.6777｜TPEX_5D%=-1.4093
+- inputs: TPEX_20D%=3.4285｜TPEX_1D%=1.0740｜TPEX_5D%=0.3755
 - thresholds: thr_expansion20=8.0000｜prewatch_threshold=7.8000
 
 ## 6) 反方審核檢查（任一 Margin 失敗 → margin_quality=PARTIAL；roll25/maint/guardrail 僅供對照）
@@ -86,14 +84,14 @@
 - Check-2 TWSE head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-2 TPEX head5 dates 嚴格遞減且無重複：✅（PASS）
 - Check-3 TWSE/TPEX head5 完全相同（日期+餘額）視為抓錯頁：✅（PASS）
-- Check-4 TWSE history rows>=21：✅（PASS）（rows_series=45）
-- Check-4 TPEX history rows>=21：✅（PASS）（rows_series=45）
+- Check-4 TWSE history rows>=21：✅（PASS）（rows_series=46）
+- Check-4 TPEX history rows>=21：✅（PASS）（rows_series=46）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-02-23) == TWSE(2026-02-23)）
-- Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：✅（PASS）（OK）
+- Check-7 roll25 Lookback window（info）：✅（PASS）（LookbackNActual=20/20（OK））
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 - Check-12 OTC Guardrail（info-only）：⚠️（NOTE）（stage=NONE, label=NONE, prewatch_hit=False, otc_alert_hit=False）
 
-_generated_at_utc: 2026-02-23T23:00:32Z_
+_generated_at_utc: 2026-02-24T15:31:59Z_
