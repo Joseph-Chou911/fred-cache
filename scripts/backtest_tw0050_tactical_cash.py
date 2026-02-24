@@ -4,39 +4,33 @@
 """
 backtest_tw0050_tactical_cash.py
 
-v2 (2026-02-24):
-- ADD(segmentation/post-only): default evaluate ONLY "post" period after detected singularity/break.
-  - default --segment_split_date=auto
-  - prefer break samples from stats_latest.json (same cache) if available
-  - fallback: detect breaks from price by ratio thresholds (hi/lo)
-  - default post_start_date EXCLUDES split_date (use next trading row after split), aligned with MVP v26.8 policy
-- AUDIT: write segmentation block into JSON output (split_date, post_start_date, policy, break evidence)
-- NOTE: equity is normalized to 1.0 at the chosen period start (post). Results are NOT chainable to full period.
+v2.1 (2026-02-24):
+- FIX(lookahead): trade decisions use lagged signal (default lag=1 trading day).
+  - signal_raw[t] = (price[t] > MA[t]) computed on day t close
+  - signal_exec[t] = signal_raw[t-1] by default (lag=1)
+  - execute entry/exit at day t close using signal_exec[t]
+  This avoids "same-day signal + same-day execution" optimism in daily-bar backtests.
+- KEEP(v2): post-only segmentation (default --segment_split_date=auto) using singularity/break as split.
+- AUDIT: output both signal_raw and signal_exec in equity CSV; include timing assumptions in JSON.
 
 Purpose:
 - Audit-first, simple "core hold + tactical cash overlay" backtest (NO borrowing / NO leverage).
-- Tactical overlay uses MA filter (default MA60) to do low-frequency in/out for price-diff attempts.
-- Designed to be easy to paste as a NEW file (no need to modify your long MVP script).
+- Default evaluates ONLY post period after detected singularity/break (post-only), equity normalized to 1.0 at post start.
 
 Model (within chosen analysis period, default: post):
 - Initial capital = 1.0 (normalized)
 - Core: buy-and-hold shares = core_frac / p0
 - Tactical cash = 1 - core_frac
-- Signal:
-    ON  if price > MA
-    OFF otherwise
-- When ON: invest all tactical cash (after entry costs) into tactical shares
-- When OFF: liquidate all tactical shares (pay exit costs incl tax) back to cash
+- Tactical signal (MA filter):
+    signal_raw:  price > MA
+    signal_exec: lagged signal_raw (default lag=1)
+- When signal_exec ON: invest all tactical cash (after entry costs) into tactical shares
+- When signal_exec OFF: liquidate all tactical shares (pay exit costs incl tax) back to cash
 
 Costs:
 - entry cost: notional * (fee_rate + slip_rate)
 - exit  cost: notional * (fee_rate + tax_rate + slip_rate)
 - slip_rate = slip_bps * 1e-4
-
-Outputs (written to cache_dir):
-- out_json (default: tactical_cash_backtest.json)
-- out_equity_csv (default: tactical_cash_equity.csv)
-- out_trades_csv (default: tactical_cash_trades.csv)
 """
 
 from __future__ import annotations
@@ -52,8 +46,8 @@ import numpy as np
 import pandas as pd
 
 
-SCRIPT_FINGERPRINT = "backtest_tw0050_tactical_cash@2026-02-24.v2.post_only_segmentation"
-SCHEMA_VERSION = "v2"
+SCRIPT_FINGERPRINT = "backtest_tw0050_tactical_cash@2026-02-24.v2.1.post_only_segmentation_signal_lag1"
+SCHEMA_VERSION = "v2.1"
 
 _DEFAULT_RATIO_HI = 1.8
 _DEFAULT_RATIO_LO = round(1.0 / _DEFAULT_RATIO_HI, 10)
@@ -396,10 +390,6 @@ def _parse_ymd(s: str) -> Optional[pd.Timestamp]:
 
 
 def _default_post_start_next_row(df_raw_in: pd.DataFrame, split_ts: pd.Timestamp) -> Tuple[pd.Timestamp, str]:
-    """
-    Exclude split day from post by default.
-    Choose the next available trading row strictly AFTER split_ts.
-    """
     try:
         cand = df_raw_in.loc[df_raw_in["date_ts"] > split_ts, "date_ts"]
         if cand is None or cand.empty:
@@ -419,10 +409,6 @@ def _build_post_df(
     ratio_hi: float,
     ratio_lo: float,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """
-    Returns (df_post, segmentation_audit).
-    If segmentation can't be applied, df_post == df_raw and enabled=False.
-    """
     seg: Dict[str, Any] = {
         "enabled": False,
         "mode": None,
@@ -446,7 +432,6 @@ def _build_post_df(
         seg["notes"] = "segmentation disabled by --segment_split_date=none/off"
         return df_raw, seg
 
-    # get break samples: stats first, else detect
     raw_samples: List[Dict[str, Any]] = []
     source = None
     if isinstance(stats, dict):
@@ -478,7 +463,6 @@ def _build_post_df(
         seg["notes"] = "no valid split_date resolved; segmentation disabled"
         return df_raw, seg
 
-    # post_start_date policy
     if seg_post_start_date:
         pst = _parse_ymd(seg_post_start_date)
         if pst is None:
@@ -524,6 +508,8 @@ def main() -> None:
     ap.add_argument("--ma_window", type=int, default=60)
     ap.add_argument("--core_frac", type=float, default=0.90)
 
+    ap.add_argument("--signal_lag_days", type=int, default=1, help="Lag days for signal execution (default 1). 0 = same-day (not recommended).")
+
     ap.add_argument("--trading_days", type=int, default=252)
     ap.add_argument("--perf_ddof", type=int, default=0, choices=[0, 1])
 
@@ -539,6 +525,10 @@ def main() -> None:
 
     if int(args.ma_window) < 2:
         raise SystemExit("ERROR: --ma_window must be >= 2")
+
+    lag = int(args.signal_lag_days)
+    if lag < 0 or lag > 10:
+        raise SystemExit("ERROR: --signal_lag_days must be in [0,10]")
 
     core_frac = float(args.core_frac)
     if (not np.isfinite(core_frac)) or core_frac <= 0.0 or core_frac >= 1.0:
@@ -556,7 +546,6 @@ def main() -> None:
     ratio_hi = float(args.break_ratio_hi) if args.break_ratio_hi is not None else _DEFAULT_RATIO_HI
     ratio_lo = float(args.break_ratio_lo) if args.break_ratio_lo is not None else _DEFAULT_RATIO_LO
 
-    # If stats has break_ratio overrides (best-effort)
     if isinstance(stats, dict):
         bd = stats.get("break_detection", {})
         if isinstance(bd, dict):
@@ -577,7 +566,6 @@ def main() -> None:
     df["price"] = pd.to_numeric(df[pc], errors="coerce")
     df = df.dropna(subset=["price"]).sort_values("date_ts").reset_index(drop=True)
 
-    # Build post-only df (default: auto)
     df_use, seg_audit = _build_post_df(
         df_raw=df,
         stats=stats,
@@ -588,11 +576,12 @@ def main() -> None:
         ratio_lo=float(ratio_lo),
     )
 
-    # Basic warmup guard
-    if len(df_use) < int(args.ma_window) + 10:
+    # warmup guard: need MA warmup + lag
+    min_rows = int(args.ma_window) + 10 + max(lag, 0)
+    if len(df_use) < min_rows:
         raise SystemExit(
-            f"ERROR: not enough rows after segmentation for ma_window={args.ma_window}; "
-            f"rows={len(df_use)}; consider disabling segmentation or lowering ma_window"
+            f"ERROR: not enough rows after segmentation: rows={len(df_use)} min_rows={min_rows} "
+            f"(ma_window={args.ma_window}, lag={lag})"
         )
 
     p0 = float(df_use["price"].iloc[0])
@@ -601,7 +590,15 @@ def main() -> None:
 
     df_use = df_use.copy()
     df_use["ma"] = _calc_sma(df_use["price"], int(args.ma_window))
-    df_use["signal_on"] = (df_use["price"] > df_use["ma"]) & df_use["ma"].notna()
+
+    # raw signal computed on same-day close
+    df_use["signal_raw"] = (df_use["price"] > df_use["ma"]) & df_use["ma"].notna()
+
+    # execution signal is lagged to avoid lookahead (default lag=1)
+    if lag > 0:
+        df_use["signal_exec"] = df_use["signal_raw"].shift(lag).fillna(False).astype(bool)
+    else:
+        df_use["signal_exec"] = df_use["signal_raw"].fillna(False).astype(bool)
 
     slip_rate = _slip_rate(float(args.slip_bps))
     fee_rate = float(args.fee_rate)
@@ -626,10 +623,10 @@ def main() -> None:
     for i in range(len(df_use)):
         date = str(df_use.at[i, "date"])
         price = float(df_use.at[i, "price"])
-        sig = bool(df_use.at[i, "signal_on"])
+        sig_exec = bool(df_use.at[i, "signal_exec"])
 
-        # exit when signal turns off
-        if in_pos and (not sig):
+        # exit when execution signal turns off
+        if in_pos and (not sig_exec):
             proceeds = float(tac_shares * price)
             ex_cost = _exit_cost(proceeds, fee_rate, tax_rate, slip_rate)
             cash += (proceeds - ex_cost)
@@ -650,8 +647,8 @@ def main() -> None:
             hold_days = 0
             cur = None
 
-        # enter when signal turns on
-        if (not in_pos) and sig:
+        # enter when execution signal turns on
+        if (not in_pos) and sig_exec:
             avail = float(cash)
             if avail > 0:
                 denom = 1.0 + max(fee_rate, 0.0) + max(slip_rate, 0.0)
@@ -714,24 +711,21 @@ def main() -> None:
         equity[-1] = float(core_shares * price + cash)
         overlay_on[-1] = False
 
-    df_out = df_use[["date", "date_ts", "price", "ma", "signal_on"]].copy()
+    df_out = df_use[["date", "date_ts", "price", "ma", "signal_raw", "signal_exec"]].copy()
     df_out["equity"] = equity
     df_out["equity_base_only"] = equity_base
     df_out["overlay_on"] = overlay_on
 
-    perf = _perf_summary(
-        df_out.set_index("date")["equity"],
-        trading_days=int(args.trading_days),
-        perf_ddof=int(args.perf_ddof),
-    )
-    perf_base = _perf_summary(
-        df_out.set_index("date")["equity_base_only"],
-        trading_days=int(args.trading_days),
-        perf_ddof=int(args.perf_ddof),
-    )
+    perf = _perf_summary(df_out.set_index("date")["equity"], trading_days=int(args.trading_days), perf_ddof=int(args.perf_ddof))
+    perf_base = _perf_summary(df_out.set_index("date")["equity_base_only"], trading_days=int(args.trading_days), perf_ddof=int(args.perf_ddof))
 
     time_in_market_days = int(sum(1 for x in overlay_on if x))
     time_in_market_pct = float(time_in_market_days / len(overlay_on)) if overlay_on else None
+
+    timing_assumption = (
+        f"signal_raw uses close[t] vs MA[t]; signal_exec uses signal_raw[t-{lag}] (lag={lag}); "
+        "entry/exit executed at close[t] price. This avoids same-day lookahead but is still EOD execution."
+    )
 
     out_json = {
         "generated_at_utc": utc_now_iso(),
@@ -746,6 +740,7 @@ def main() -> None:
             "price_col": str(pc),
             "ma_window": int(args.ma_window),
             "core_frac": float(core_frac),
+            "signal_lag_days": int(lag),
             "fee_rate": float(fee_rate),
             "tax_rate": float(tax_rate),
             "slip_bps": float(args.slip_bps),
@@ -768,6 +763,8 @@ def main() -> None:
             "time_in_market_days": time_in_market_days,
             "time_in_market_pct": time_in_market_pct,
             "normalization_note": "equity is normalized to 1.0 at analysis period start (default: post). not chainable to full period.",
+            "timing_assumption": timing_assumption,
+            "hold_days_semantics": "hold_days starts at 0 on entry, increments by 1 each bar while in position (includes entry day bar).",
         },
         "perf": {
             "overlay": perf,
@@ -797,7 +794,7 @@ def main() -> None:
     _write_json(out_json_path, out_json)
 
     _ensure_parent(out_eq_path)
-    df_out[["date", "price", "ma", "signal_on", "equity", "equity_base_only", "overlay_on"]].to_csv(
+    df_out[["date", "price", "ma", "signal_raw", "signal_exec", "equity", "equity_base_only", "overlay_on"]].to_csv(
         out_eq_path, index=False, encoding="utf-8"
     )
 
@@ -809,6 +806,7 @@ def main() -> None:
     print(f"OK: wrote {out_tr_path}")
     if seg_audit.get("enabled"):
         print("NOTE: post-only segmentation enabled:", seg_audit.get("split_date"), "->", seg_audit.get("post_start_date"))
+    print("NOTE:", timing_assumption)
 
 
 if __name__ == "__main__":
