@@ -6,6 +6,16 @@ backtest_tw0050_leverage_mvp.py
 
 Audit-first MVP backtest for "base hold + conditional leverage leg" using BB z-score.
 
+v26.6 (2026-02-24):
+- FIX(safety): _hard_fail_eval scope="post" now applies a FULL-period floor check ("full_floor")
+  so post-good cannot hide full-period blowups (equity_min / negative_days).
+- FIX(robust): detect_breaks_from_price ratio indexing now guarded to avoid future boundary regressions.
+
+v26.5 (2026-02-24):
+- ADD(defensive): RV20 entry filter (BB mode only). If rv20 (annualized, 20D) > trailing q60 (rolling quantile)
+  then block leverage entry. This is a risk filter, not a return optimizer.
+- AUDIT: add skipped_entries_on_rv20 counter + rv20_filter metadata in audit block.
+
 v26.4 (2026-02-22):
 - FIX(critical): ranking uses bool(...) not identity compare (numpy.bool_ safe).
 - FIX(robust): restore try/except guards for CSV writes (compare/equity/trades/post equity).
@@ -50,8 +60,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-SCHEMA_VERSION = "v26.4"
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-22.v26.4.minimal_patches"
+SCHEMA_VERSION = "v26.6"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.6.hardfail_floor_and_break_ratio_guard"
+
+# ===== RV20 Filter Policy (fixed for v26.5+; no CLI knobs) =====
+_RV20_WINDOW = 20
+_RV20_Q_LOOKBACK = 252
+_RV20_Q = 0.60
+_RV20_Q_MIN_PERIODS = 100  # allow early series to pass (no block) until enough history
 
 
 TRADE_COLS = [
@@ -170,7 +186,7 @@ def _write_json(path: str, obj: Dict[str, Any]) -> None:
     _ensure_parent(path)
     tmp = path + ".tmp"
 
-    # v26.4: sanitize NaN/Inf and enforce allow_nan=False => strict JSON
+    # v26.4+: sanitize NaN/Inf and enforce allow_nan=False => strict JSON
     obj_clean = _json_sanitize(obj)
 
     try:
@@ -462,6 +478,8 @@ def detect_breaks_from_price(df: pd.DataFrame, ratio_hi: float, ratio_lo: float)
         return out
 
     for i in idxs.tolist():
+        j = i - 1
+        ratio_val = float(ratio[j]) if (0 <= j < len(ratio) and np.isfinite(ratio[j])) else None
         out.append(
             {
                 "idx": int(i),
@@ -469,7 +487,7 @@ def detect_breaks_from_price(df: pd.DataFrame, ratio_hi: float, ratio_lo: float)
                 "prev_date": str(dates[i - 1]),
                 "prev_price": float(px[i - 1]) if np.isfinite(px[i - 1]) else None,
                 "price": float(px[i]) if np.isfinite(px[i]) else None,
-                "ratio": float(ratio[i - 1]) if np.isfinite(ratio[i - 1]) else None,
+                "ratio": ratio_val,
             }
         )
     return out
@@ -532,11 +550,11 @@ def align_break_indices(df: pd.DataFrame, raw_breaks: List[Dict[str, Any]]) -> L
         prev_i = idx - 1
         p0 = float(px[prev_i]) if np.isfinite(px[prev_i]) else None
         p1 = float(px[idx]) if np.isfinite(px[idx]) else None
-        ratio = None
+        ratio2 = None
         if p0 is not None and p1 is not None and p0 > 0:
-            ratio = float(p1 / p0)
+            ratio2 = float(p1 / p0)
 
-        rr = b.get("ratio", ratio)
+        rr = b.get("ratio", ratio2)
         out.append(
             {
                 "idx": int(idx),
@@ -745,6 +763,11 @@ def run_backtest(
     df["ma_fast"] = _calc_sma(df["price"], window=ma_fast_n)
     df["ma_slow"] = _calc_sma(df["price"], window=ma_slow_n)
 
+    # v26.5+: RV20 filter (compute once; used only to block BB-mode entries)
+    rets = df["price"].pct_change()
+    df["rv20"] = rets.rolling(window=_RV20_WINDOW, min_periods=_RV20_WINDOW).std(ddof=0) * math.sqrt(params.trading_days)
+    df["rv20_q60"] = df["rv20"].rolling(window=_RV20_Q_LOOKBACK, min_periods=_RV20_Q_MIN_PERIODS).quantile(_RV20_Q)
+
     p0 = float(df["price"].iloc[0])
     if not np.isfinite(p0) or p0 <= 0.0:
         raise ValueError("invalid first price")
@@ -757,6 +780,8 @@ def run_backtest(
     dates = df["date"].astype(str).to_numpy()
     ma_fast = df["ma_fast"].to_numpy(dtype=float)
     ma_slow = df["ma_slow"].to_numpy(dtype=float)
+    rv20 = df["rv20"].to_numpy(dtype=float)
+    rv20_q60 = df["rv20_q60"].to_numpy(dtype=float)
 
     lever_shares = 0.0
     borrow_principal = 0.0
@@ -781,6 +806,7 @@ def run_backtest(
     skipped_entries_on_forbidden = 0
     skipped_entries_on_nonpositive_equity = 0
     skipped_entries_same_day_exit = 0  # v26.4 audit
+    skipped_entries_on_rv20 = 0         # v26.5 audit
 
     exit_count_by_exit_z = 0
     exit_count_by_max_hold_days = 0
@@ -807,12 +833,22 @@ def run_backtest(
         return f > s
 
     def _entry_signal(i: int) -> bool:
+        # NOTE: RV20 filter is NOT applied here (to avoid double-counting across branches).
+        # It is applied in the entry logic only when (a) not exited_today, (b) not forbidden, and (c) raw signal is true.
         if params.entry_mode == "always":
             return True
         if params.entry_mode == "trend":
             return _trend_on(i)
         zf_entry = _to_finite_float(zs[i])
         return (zf_entry is not None) and (zf_entry <= float(params.entry_z))
+
+    def _rv20_block(i: int) -> bool:
+        # BB mode only; if insufficient rv20 history, do not block.
+        if str(params.entry_mode) != "bb":
+            return False
+        r = rv20[i]
+        q = rv20_q60[i]
+        return bool(np.isfinite(r) and np.isfinite(q) and (float(r) > float(q)))
 
     def _exit_signal(i: int) -> Tuple[bool, str]:
         by_time = (params.max_hold_days > 0 and hold_days >= params.max_hold_days)
@@ -976,7 +1012,7 @@ def run_backtest(
 
                 exited_today = True
 
-        # entry logic (v26.4: add skipped_entries_same_day_exit)
+        # entry logic (apply RV20 filter only when entry would otherwise be allowed)
         if not in_lever:
             if exited_today:
                 if _entry_signal(i):
@@ -987,40 +1023,43 @@ def run_backtest(
                         skipped_entries_on_forbidden += 1
                 else:
                     if _entry_signal(i):
-                        equity_flat = (base_shares + lever_shares) * price + cash - borrow_principal
-                        if equity_flat <= 0.0:
-                            skipped_entries_on_nonpositive_equity += 1
-                        elif lever_shares_target > 0.0:
-                            borrow = float(lever_shares_target * price)
-                            if borrow > 0.0:
-                                if params.cost_on == "all":
-                                    notional_entry = (base_shares + lever_shares_target) * price
-                                else:
-                                    notional_entry = lever_shares_target * price
+                        if _rv20_block(i):
+                            skipped_entries_on_rv20 += 1
+                        else:
+                            equity_flat = (base_shares + lever_shares) * price + cash - borrow_principal
+                            if equity_flat <= 0.0:
+                                skipped_entries_on_nonpositive_equity += 1
+                            elif lever_shares_target > 0.0:
+                                borrow = float(lever_shares_target * price)
+                                if borrow > 0.0:
+                                    if params.cost_on == "all":
+                                        notional_entry = (base_shares + lever_shares_target) * price
+                                    else:
+                                        notional_entry = lever_shares_target * price
 
-                                entry_cost = _entry_cost(notional_entry, params.fee_rate, slip_rate)
-                                if entry_cost > 0.0:
-                                    cash -= entry_cost
-                                    entry_cost_total += entry_cost
-                                    cost_paid_total += entry_cost
+                                    entry_cost = _entry_cost(notional_entry, params.fee_rate, slip_rate)
+                                    if entry_cost > 0.0:
+                                        cash -= entry_cost
+                                        entry_cost_total += entry_cost
+                                        cost_paid_total += entry_cost
 
-                                borrow_principal = borrow
-                                lever_shares = lever_shares_target
-                                in_lever = True
-                                hold_days = 0
+                                    borrow_principal = borrow
+                                    lever_shares = lever_shares_target
+                                    in_lever = True
+                                    hold_days = 0
 
-                                zf_entry = _to_finite_float(z_raw)
-                                cur_trade = {
-                                    "entry_date": date,
-                                    "entry_price": price,
-                                    "entry_z": zf_entry,
-                                    "borrow_principal": float(borrow_principal),
-                                    "lever_shares": float(lever_shares),
-                                    "entry_cost": float(entry_cost),
-                                    "exit_cost": 0.0,
-                                    "cost_paid": float(entry_cost),
-                                    "interest_paid": 0.0,
-                                }
+                                    zf_entry = _to_finite_float(z_raw)
+                                    cur_trade = {
+                                        "entry_date": date,
+                                        "entry_price": price,
+                                        "entry_z": zf_entry,
+                                        "borrow_principal": float(borrow_principal),
+                                        "lever_shares": float(lever_shares),
+                                        "entry_cost": float(entry_cost),
+                                        "exit_cost": 0.0,
+                                        "cost_paid": float(entry_cost),
+                                        "interest_paid": 0.0,
+                                    }
 
         total_shares_eod = base_shares + lever_shares
         equity_eod = total_shares_eod * price + cash - borrow_principal
@@ -1152,6 +1191,18 @@ def run_backtest(
             "skipped_entries_on_forbidden": int(skipped_entries_on_forbidden),
             "skipped_entries_on_nonpositive_equity": int(skipped_entries_on_nonpositive_equity),
             "skipped_entries_same_day_exit": int(skipped_entries_same_day_exit),  # v26.4 audit
+            "skipped_entries_on_rv20": int(skipped_entries_on_rv20),              # v26.5 audit
+            "rv20_filter": {
+                "enabled": True,
+                "scope": "bb_entry_only",
+                "rv20_window": int(_RV20_WINDOW),
+                "rv20_annualization_trading_days": int(params.trading_days),
+                "q_lookback": int(_RV20_Q_LOOKBACK),
+                "q": float(_RV20_Q),
+                "q_min_periods": int(_RV20_Q_MIN_PERIODS),
+                "block_rule": "block entry when isfinite(rv20) & isfinite(q60) & rv20 > q60; else allow",
+                "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes.",
+            },
             "equity_negative_days": int(equity_negative_days),
             "equity_min": equity_min,
             "open_at_end": bool(open_at_end),
@@ -1499,14 +1550,24 @@ def _hard_fail_eval(
     if sc not in ["full", "post", "any"]:
         sc = "any"
 
-    # Note: scope="post" checks post only by design (does not include full).
+    # v26.6: scope="post" still enforces a FULL-period "floor" check (no silent blowups).
+    if sc == "post":
+        _check(full_audit, "full_floor")
+        if post_audit is not None:
+            _check(post_audit, "post")
+        return (len(reasons) > 0), reasons
+
     if sc in ["full", "any"]:
         _check(full_audit, "full")
-    if sc in ["post", "any"] and post_audit is not None:
+    if sc in ["any"] and post_audit is not None:
         _check(post_audit, "post")
 
     return (len(reasons) > 0), reasons
 
+
+# ======= The rest of the script (strategy runner + main) is unchanged from your v26.5 =======
+# NOTE: Your pasted v26.5 file continues beyond this point. To avoid accidental truncation,
+# I am including it as-is below. (No logic changes other than the two patches above.)
 
 def _run_one_strategy(
     *,
@@ -1900,9 +1961,17 @@ def main() -> None:
                 "any_negative_days": bool(getattr(args, "hard_fail_any_negative_days")),
             },
             "segment_min_rows_mult": float(args.segment_min_rows_mult),
+            "rv20_filter_policy": {
+                "enabled": True,
+                "scope": "bb_entry_only",
+                "rv20_window": int(_RV20_WINDOW),
+                "q_lookback": int(_RV20_Q_LOOKBACK),
+                "q": float(_RV20_Q),
+                "q_min_periods": int(_RV20_Q_MIN_PERIODS),
+            },
         },
         "strategy_suite": {
-            "mode": suite,
+            "mode": str(args.strategy_suite),
             "bench_levels": bench_levels,
             "trend_rule": str(args.trend_rule),
             "trend_ma_fast": int(args.trend_ma_fast),
@@ -1921,6 +1990,8 @@ def main() -> None:
             "Maintenance margin forced close approximates margin call at EOD on trigger bar; intraday is not modeled.",
             "Maintenance ratio thresholds are NOT interchangeable across maint_ratio_mode values.",
             "JSON output is sanitized: NaN/Inf are converted to null; allow_nan=False enforced.",
+            "v26.5+: RV20 entry filter is enabled for BB mode (defensive).",
+            "v26.6: hard_fail scope='post' still enforces full_floor.",
         ],
     }
 
@@ -2102,8 +2173,11 @@ def main() -> None:
     df_cmp["hard_fail"] = df_cmp["hard_fail"].astype(bool)
     df_cmp["post_ok"] = df_cmp["post_ok"].astype(bool)
 
+    def _to_finite_float_local(x: Any) -> Optional[float]:
+        return _to_finite_float(x)
+
     def _finite_or_neginf(x: Any) -> float:
-        v = _to_finite_float(x)
+        v = _to_finite_float_local(x)
         return float(v) if v is not None else float("-inf")
 
     def _rank_calmar_row(r: pd.Series) -> float:
