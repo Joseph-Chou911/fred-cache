@@ -1,7 +1,7 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-24T08:55:44Z`
-- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.7.per_strategy_equity_csv_and_suite_hard_fail`
+- generated_at_utc: `2026-02-24T09:20:08Z`
+- script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.8.exclude_split_day_post_start_next_row`
 - renderer_fingerprint: `render_backtest_mvp@2026-02-24.v11.suite_hard_fail_date_evidence`
 - suite_ok: `True`
 
@@ -17,15 +17,15 @@ note_full: `FULL_* columns may be contaminated by a known data singularity issue
 
 | id | ok | suite_hard_fail | entry_mode | L | full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|
-| trend_leverage_price_gt_ma60_1.5x | True | True | trend | 1.50 | 8.87% | -118.88% | -0.193 | 0.075 | 0.38% | -41.55% | -0.699 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 22.52% | -37.67% | 1.042 | 0.598 | 2.48% | -3.84% | -0.044 | GO_OR_REVIEW | post | 1422 | -0.40 | 0 | 0.95 | 94 | 0 |
-| trend_leverage_price_gt_ma60_1.3x | True | True | trend | 1.30 | 8.70% | -103.16% | -0.030 | 0.084 | 0.21% | -25.82% | -0.537 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 21.59% | -36.23% | 1.062 | 0.596 | 1.55% | -2.40% | -0.024 | GO_OR_REVIEW | post | 124 | -0.06 | 0 | 0.95 | 138 | 0 |
-| trend_leverage_price_gt_ma60_1.2x | True | False | trend | 1.20 | 8.64% | -94.86% | 0.607 | 0.091 | 0.15% | -17.53% | 0.101 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 21.10% | -35.46% | 1.071 | 0.595 | 1.06% | -1.63% | -0.015 | GO_OR_REVIEW | post | 0 | 0.10 | 0 | 0.95 | 139 | 0 |
-| trend_leverage_price_gt_ma60_1.1x | True | False | trend | 1.10 | 8.56% | -86.26% | 0.536 | 0.099 | 0.07% | -8.93% | 0.030 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 20.58% | -34.66% | 1.079 | 0.594 | 0.54% | -0.83% | -0.007 | NO_GO | post | 0 | 0.27 | 0 | 0.95 | 139 | 0 |
-| always_leverage_1.1x | True | False | always | 1.10 | 8.73% | -83.64% | 0.524 | 0.104 | 0.24% | -6.31% | 0.018 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 20.70% | -35.71% | 1.057 | 0.580 | 0.66% | -1.88% | -0.028 | NO_GO | post | 0 | 0.32 | 0 | 0.95 | 69 | 0 |
-| always_leverage_1.2x | True | False | always | 1.20 | 8.96% | -89.53% | 0.554 | 0.100 | 0.47% | -12.20% | 0.048 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 21.32% | -37.44% | 1.033 | 0.570 | 1.28% | -3.61% | -0.052 | GO_OR_REVIEW | post | 0 | 0.21 | 0 | 0.94 | 69 | 0 |
-| always_leverage_1.3x | True | False | always | 1.30 | 9.18% | -95.05% | 0.603 | 0.097 | 0.69% | -17.71% | 0.097 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 21.91% | -39.02% | 1.013 | 0.562 | 1.87% | -5.19% | -0.072 | GO_OR_REVIEW | post | 0 | 0.11 | 0 | 0.94 | 69 | 0 |
-| always_leverage_1.5x | True | True | always | 1.50 | 9.68% | -105.07% | -0.196 | 0.092 | 1.19% | -27.74% | -0.702 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 23.01% | -41.82% | 0.981 | 0.550 | 2.96% | -7.99% | -0.105 | GO_OR_REVIEW | post | 422 | -0.11 | 0 | 0.93 | 65 | 0 |
-| bb_conditional | True | False | bb | 1.50 | 8.66% | -71.42% | 0.495 | 0.121 | 0.17% | 5.91% | -0.011 | True | 2014-01-02 | 2014-01-02 | 2955 | 11.722 | 19.98% | -41.37% | 0.979 | 0.483 | -0.06% | -7.54% | -0.106 | NO_GO | post | 0 | 0.56 | 0 | 0.95 | 22 | 147 |
+| trend_leverage_price_gt_ma60_1.5x | True | True | trend | 1.50 | 8.87% | -118.88% | -0.193 | 0.075 | 0.38% | -41.55% | -0.699 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 22.66% | -37.65% | 1.048 | 0.602 | 2.48% | -3.82% | -0.044 | GO_OR_REVIEW | post | 1422 | -0.40 | 0 | 0.96 | 94 | 0 |
+| trend_leverage_price_gt_ma60_1.3x | True | True | trend | 1.30 | 8.70% | -103.16% | -0.030 | 0.084 | 0.21% | -25.82% | -0.537 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 21.73% | -36.21% | 1.068 | 0.600 | 1.55% | -2.38% | -0.024 | GO_OR_REVIEW | post | 124 | -0.06 | 0 | 0.96 | 138 | 0 |
+| trend_leverage_price_gt_ma60_1.2x | True | False | trend | 1.20 | 8.64% | -94.86% | 0.607 | 0.091 | 0.15% | -17.53% | 0.101 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 21.23% | -35.45% | 1.077 | 0.599 | 1.06% | -1.62% | -0.015 | GO_OR_REVIEW | post | 0 | 0.10 | 0 | 0.96 | 139 | 0 |
+| trend_leverage_price_gt_ma60_1.1x | True | False | trend | 1.10 | 8.56% | -86.26% | 0.536 | 0.099 | 0.07% | -8.93% | 0.030 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 20.72% | -34.66% | 1.085 | 0.598 | 0.54% | -0.83% | -0.007 | NO_GO | post | 0 | 0.27 | 0 | 0.96 | 139 | 0 |
+| always_leverage_1.1x | True | False | always | 1.10 | 8.73% | -83.64% | 0.524 | 0.104 | 0.24% | -6.31% | 0.018 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 20.87% | -35.52% | 1.068 | 0.588 | 0.70% | -1.69% | -0.024 | NO_GO | post | 0 | 0.32 | 0 | 0.96 | 69 | 0 |
+| always_leverage_1.2x | True | False | always | 1.20 | 8.96% | -89.53% | 0.554 | 0.100 | 0.47% | -12.20% | 0.048 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 21.52% | -37.05% | 1.048 | 0.581 | 1.35% | -3.23% | -0.043 | GO_OR_REVIEW | post | 0 | 0.21 | 0 | 0.96 | 69 | 0 |
+| always_leverage_1.3x | True | False | always | 1.30 | 9.18% | -95.05% | 0.603 | 0.097 | 0.69% | -17.71% | 0.097 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 22.14% | -38.45% | 1.031 | 0.576 | 1.97% | -4.62% | -0.060 | GO_OR_REVIEW | post | 0 | 0.11 | 0 | 0.95 | 69 | 0 |
+| always_leverage_1.5x | True | True | always | 1.50 | 9.68% | -105.07% | -0.196 | 0.092 | 1.19% | -27.74% | -0.702 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 23.29% | -40.90% | 1.004 | 0.569 | 3.12% | -7.07% | -0.087 | GO_OR_REVIEW | post | 422 | -0.11 | 0 | 0.94 | 65 | 0 |
+| bb_conditional | True | False | bb | 1.50 | 8.66% | -71.42% | 0.495 | 0.121 | 0.17% | 5.91% | -0.011 | True | 2014-01-02 | 2014-01-03 | 2954 | 11.718 | 20.11% | -41.37% | 0.984 | 0.486 | -0.06% | -7.54% | -0.107 | NO_GO | post | 0 | 0.56 | 0 | 0.96 | 22 | 147 |
 
 ## Exclusions (not eligible for recommendation)
 - total_strategies: `9`
@@ -53,24 +53,24 @@ trend_rule: `price_gt_ma60`
 ## Post-only View (After Singularity / Ignore FULL)
 post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity_min<=0 or post neg_days>0 or post mdd<=-100%); exclude post_gonogo=NO_GO; exclude missing post rank metrics; PASS gate: require post_ΔSharpe>= -0.03; WATCH gate: require -0.05<=post_ΔSharpe<-0.03; post_MDD floor: require post_MDD>= -0.4 (i.e. not worse than -40%); ignore FULL and ignore suite_hard_fail.`
 - top3_post_only_PASS: `trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.2x`
-- top3_post_only_WATCH: `trend_leverage_price_gt_ma60_1.5x`
-- post_only_total: `9`; pass: `2`; watch: `1`; excluded: `6`
+- top3_post_only_WATCH: `trend_leverage_price_gt_ma60_1.5x, always_leverage_1.2x`
+- post_only_total: `9`; pass: `2`; watch: `2`; excluded: `5`
 - would_be_pass_or_watch_post_only_but_excluded_by_renderer_v4: `trend_leverage_price_gt_ma60_1.3x, trend_leverage_price_gt_ma60_1.5x`
 
 ### PASS (deploy-grade, strict)
 | id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |
 |---|---:|---:|---:|---:|---:|---|
-| trend_leverage_price_gt_ma60_1.3x | 21.59% | -36.23% | 1.062 | 0.596 | -0.024 | excluded_by_renderer_v4: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0 |
-| trend_leverage_price_gt_ma60_1.2x | 21.10% | -35.46% | 1.071 | 0.595 | -0.015 |   |
+| trend_leverage_price_gt_ma60_1.3x | 21.73% | -36.21% | 1.068 | 0.600 | -0.024 | excluded_by_renderer_v4: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0 |
+| trend_leverage_price_gt_ma60_1.2x | 21.23% | -35.45% | 1.077 | 0.599 | -0.015 |   |
 
 ### WATCH (research-grade, not for deploy)
 | id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |
 |---|---:|---:|---:|---:|---:|---|
-| trend_leverage_price_gt_ma60_1.5x | 22.52% | -37.67% | 1.042 | 0.598 | -0.044 | excluded_by_renderer_v4: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0 |
+| trend_leverage_price_gt_ma60_1.5x | 22.66% | -37.65% | 1.048 | 0.602 | -0.044 | excluded_by_renderer_v4: EXCLUDE_SUITE_HARD_FAIL_TRUE, HARD_FAIL_FULL_MDD_LE_-100PCT, HARD_FAIL_FULL_EQUITY_MIN_LE_0, HARD_FAIL_FULL_NEG_DAYS_GT_0 |
+| always_leverage_1.2x | 21.52% | -37.05% | 1.048 | 0.581 | -0.043 |   |
 
 ### Post-only Exclusions (reasons)
 - always_leverage_1.1x: `EXCLUDE_POST_GONOGO_NO_GO`
-- always_leverage_1.2x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
 - always_leverage_1.3x: `EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
 - always_leverage_1.5x: `EXCLUDE_POST_MDD_LT_-0.4, EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
 - bb_conditional: `EXCLUDE_POST_GONOGO_NO_GO, EXCLUDE_POST_MDD_LT_-0.4, EXCLUDE_POST_DELTA_SHARPE_LT_-0.05`
@@ -88,18 +88,18 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
   - full: equity_negative_days>0 (neg_days=1422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.5x.csv`
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.3b2c793f64__trend_leverage_price_gt_ma60_1.5x.csv`
   - FULL:
     - equity_min_date: `2014-02-05`
     - neg_days_first_date: `2014-01-02`
     - neg_days_last_date: `2020-04-24`
     - neg_days_count: `1422`
   - POST (date >= post_start_date):
-    - post_start_date: `2014-01-02`
+    - post_start_date: `2014-01-03`
     - equity_min_date: `2014-02-05`
-    - neg_days_first_date: `2014-01-02`
+    - neg_days_first_date: `2014-01-03`
     - neg_days_last_date: `2020-04-24`
-    - neg_days_count: `1422`
+    - neg_days_count: `1421`
 
 ### trend_leverage_price_gt_ma60_1.3x
 - decision: `GO_OR_REVIEW`
@@ -112,18 +112,18 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
   - full: equity_negative_days>0 (neg_days=124)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.ee60e428f7__trend_leverage_price_gt_ma60_1.3x.csv`
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.3b2c793f64__trend_leverage_price_gt_ma60_1.3x.csv`
   - FULL:
     - equity_min_date: `2014-02-05`
     - neg_days_first_date: `2014-01-02`
     - neg_days_last_date: `2016-01-28`
     - neg_days_count: `124`
   - POST (date >= post_start_date):
-    - post_start_date: `2014-01-02`
+    - post_start_date: `2014-01-03`
     - equity_min_date: `2014-02-05`
-    - neg_days_first_date: `2014-01-02`
+    - neg_days_first_date: `2014-01-03`
     - neg_days_last_date: `2016-01-28`
-    - neg_days_count: `124`
+    - neg_days_count: `123`
 
 ### trend_leverage_price_gt_ma60_1.2x
 - decision: `GO_OR_REVIEW`
@@ -166,18 +166,18 @@ post_only_policy_v3: `require post_ok=true; exclude post hard fails (post equity
   - full: equity_negative_days>0 (neg_days=422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
-  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.ee60e428f7__always_leverage_1.5x.csv`
+  - equity_csv: `/home/runner/work/fred-cache/fred-cache/tw0050_bb_cache/equity_curve.3b2c793f64__always_leverage_1.5x.csv`
   - FULL:
     - equity_min_date: `2014-02-05`
     - neg_days_first_date: `2014-01-02`
     - neg_days_last_date: `2016-07-14`
     - neg_days_count: `422`
   - POST (date >= post_start_date):
-    - post_start_date: `2014-01-02`
+    - post_start_date: `2014-01-03`
     - equity_min_date: `2014-02-05`
-    - neg_days_first_date: `2014-01-02`
+    - neg_days_first_date: `2014-01-03`
     - neg_days_last_date: `2016-07-14`
-    - neg_days_count: `422`
+    - neg_days_count: `421`
 
 ### bb_conditional
 - decision: `NO_GO`
