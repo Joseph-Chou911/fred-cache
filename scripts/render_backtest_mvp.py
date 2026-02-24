@@ -6,6 +6,12 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
+v13 (2026-02-24):
+- ADD(DQ): compare JSON post_neg_days vs equity CSV post neg_days_count (date >= post_start_date)
+  and mark DQ_MISMATCH when they differ.
+  * This does NOT change backtest, thresholds, or Semantic1 eligibility.
+  * Purpose: make the semantics mismatch explicit (post segment "new start" vs full-equity sliced-by-date).
+
 v12 (2026-02-24):
 - Semantic1 ("new start") for Post-only View:
   * Post-only PASS/WATCH eligibility is decided ONLY by Post-only rules.
@@ -18,6 +24,11 @@ Assumptions:
 - Suite JSON is produced by backtest_tw0050_leverage_mvp.py v26.7+ (per-strategy equity CSV enabled).
 - Equity curve CSV pattern (best-effort):
     equity_curve.*__<strategy_id>.csv  (located in the same directory as --in_json)
+
+DQ note (important):
+- JSON post_neg_days is computed on the POST SEGMENT backtest, which normalizes equity to 1.0 at post start.
+- equity CSV is the FULL backtest equity curve; filtering by date>=post_start_date does NOT re-normalize.
+- Therefore DQ_MISMATCH is often a "semantic mismatch" indicator, not necessarily a bug.
 """
 
 from __future__ import annotations
@@ -33,7 +44,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v12.post_only_semantic1_no_renderer_v4_gate"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v13.dq_post_neg_days_vs_equity_csv"
 
 
 # =========================
@@ -61,6 +72,22 @@ def _to_float(x: Any) -> Optional[float]:
     return v
 
 
+def _to_int(x: Any) -> Optional[int]:
+    if x is None:
+        return None
+    try:
+        if isinstance(x, bool):
+            return int(x)
+        if isinstance(x, (int, np.integer)):
+            return int(x)
+        v = _to_float(x)
+        if v is None:
+            return None
+        return int(v)
+    except Exception:
+        return None
+
+
 def _fmt_pct(x: Any, nd: int = 2) -> str:
     v = _to_float(x)
     if v is None:
@@ -76,12 +103,8 @@ def _fmt_num(x: Any, nd: int = 3) -> str:
 
 
 def _fmt_int(x: Any) -> str:
-    try:
-        if x is None:
-            return "N/A"
-        return str(int(x))
-    except Exception:
-        return "N/A"
+    v = _to_int(x)
+    return "N/A" if v is None else str(v)
 
 
 def _fmt_str(x: Any) -> str:
@@ -267,6 +290,11 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
         "post_gonogo_reasons": gg.get("reasons"),
         "rank_basis": _rank_basis(bool(post.get("post_ok"))),
         "hard_fail_reasons_from_suite": strat.get("hard_fail_reasons"),
+        # v13 DQ placeholders (filled later)
+        "equity_csv_path": None,
+        "csv_post_neg_days_count": None,
+        "dq_post_neg_days": "N/A",
+        "dq_post_neg_days_detail": None,
     }
 
 
@@ -463,7 +491,7 @@ def _always_vs_trend_table(rows: List[Dict[str, Any]], trend_rule: str) -> List[
 
 
 # =========================
-# suite_hard_fail evidence from equity CSV (best-effort)
+# suite_hard_fail evidence + DQ from equity CSV (best-effort)
 # =========================
 def _find_equity_csv(in_json_path: str, strategy_id: str) -> Optional[str]:
     base_dir = os.path.dirname(os.path.abspath(in_json_path)) or "."
@@ -542,23 +570,72 @@ def _equity_evidence_from_series(dates: List[str], eqs: List[float], date_ge: Op
     }
 
 
+def _attach_equity_dq_fields(in_json_path: str, rows: List[Dict[str, Any]]) -> None:
+    """
+    v13:
+    Fill per-row fields:
+      - equity_csv_path
+      - csv_post_neg_days_count (neg_days_count from equity CSV for date>=post_start_date)
+      - dq_post_neg_days: OK / DQ_MISMATCH / N/A
+      - dq_post_neg_days_detail
+    """
+    for r in rows:
+        sid = _fmt_str(r.get("id"))
+        post_start = _fmt_str(r.get("post_start_date"))
+        csv_path = _find_equity_csv(in_json_path, sid)
+        r["equity_csv_path"] = csv_path
+
+        if not csv_path:
+            r["dq_post_neg_days"] = "N/A"
+            r["dq_post_neg_days_detail"] = "equity_csv_not_found"
+            continue
+
+        dates, eqs = _read_equity_csv_dates_and_equity(csv_path)
+        if not dates:
+            r["dq_post_neg_days"] = "N/A"
+            r["dq_post_neg_days_detail"] = "equity_csv_unreadable"
+            continue
+
+        post_ev = _equity_evidence_from_series(dates, eqs, date_ge=post_start if post_start != "N/A" else None)
+        if not post_ev.get("ok"):
+            r["dq_post_neg_days"] = "N/A"
+            r["dq_post_neg_days_detail"] = f"equity_csv_post_ev_error:{_fmt_str(post_ev.get('error'))}"
+            continue
+
+        csv_neg = _to_int(post_ev.get("neg_days_count"))
+        r["csv_post_neg_days_count"] = csv_neg
+
+        json_neg = _to_int(r.get("post_neg_days"))
+        if json_neg is None or csv_neg is None:
+            r["dq_post_neg_days"] = "N/A"
+            r["dq_post_neg_days_detail"] = f"json={_fmt_str(json_neg)};csv={_fmt_str(csv_neg)}"
+            continue
+
+        if int(json_neg) != int(csv_neg):
+            r["dq_post_neg_days"] = "DQ_MISMATCH"
+            r["dq_post_neg_days_detail"] = f"json_post_neg_days={json_neg};csv_post_neg_days_count={csv_neg}"
+        else:
+            r["dq_post_neg_days"] = "OK"
+            r["dq_post_neg_days_detail"] = f"json_post_neg_days={json_neg};csv_post_neg_days_count={csv_neg}"
+
+
 def _suite_hard_fail_evidence_block(in_json_path: str, r: Dict[str, Any]) -> List[str]:
     """
     Best-effort evidence for suite_hard_fail strategies.
+    Includes v13 DQ line.
     """
     lines: List[str] = []
     sid = _fmt_str(r.get("id"))
     post_start = _fmt_str(r.get("post_start_date"))
     csv_path = _find_equity_csv(in_json_path, sid)
 
+    lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
     if not csv_path:
-        lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
         lines.append("  - status: `N/A` (equity csv not found)")
         return lines
 
     dates, eqs = _read_equity_csv_dates_and_equity(csv_path)
     if not dates:
-        lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
         lines.append(f"  - equity_csv: `{csv_path}`")
         lines.append("  - status: `N/A` (could not read date/equity columns)")
         return lines
@@ -566,8 +643,12 @@ def _suite_hard_fail_evidence_block(in_json_path: str, r: Dict[str, Any]) -> Lis
     full_ev = _equity_evidence_from_series(dates, eqs, date_ge=None)
     post_ev = _equity_evidence_from_series(dates, eqs, date_ge=post_start if post_start != "N/A" else None)
 
-    lines.append("- suite_hard_fail_evidence (from equity CSV, best-effort):")
     lines.append(f"  - equity_csv: `{csv_path}`")
+
+    # v13 DQ line (JSON vs CSV)
+    dq = _fmt_str(r.get("dq_post_neg_days"))
+    dq_detail = _fmt_str(r.get("dq_post_neg_days_detail"))
+    lines.append(f"  - dq_post_neg_days (json vs csv, date>=post_start): `{dq}`; detail: `{dq_detail}`")
 
     lines.append("  - FULL:")
     if full_ev.get("ok"):
@@ -578,7 +659,7 @@ def _suite_hard_fail_evidence_block(in_json_path: str, r: Dict[str, Any]) -> Lis
     else:
         lines.append(f"    - status: `N/A` ({_fmt_str(full_ev.get('error'))})")
 
-    lines.append("  - POST (date >= post_start_date):")
+    lines.append("  - POST (date >= post_start_date) [NOTE: this is FULL equity sliced by date, not post-segment normalized]:")
     lines.append(f"    - post_start_date: `{post_start}`")
     if post_ev.get("ok"):
         lines.append(f"    - equity_min_date: `{_fmt_str(post_ev.get('equity_min_date'))}`")
@@ -626,9 +707,6 @@ def _post_only_policy_v3_reasons(r: Dict[str, Any], pass_th: float, watch_lo: fl
     else:
         if dsh < float(watch_lo):
             rs.append(f"EXCLUDE_POST_DELTA_SHARPE_LT_{watch_lo}")
-        elif dsh < float(pass_th):
-            # between [watch_lo, pass_th) -> WATCH band, not PASS, but still eligible for WATCH if other gates pass
-            pass
 
     pmdd = _to_float(r.get("post_mdd"))
     if pmdd is not None and pmdd < float(mdd_floor):
@@ -638,9 +716,6 @@ def _post_only_policy_v3_reasons(r: Dict[str, Any], pass_th: float, watch_lo: fl
 
 
 def _post_only_bucket(r: Dict[str, Any], pass_th: float, watch_lo: float, watch_hi: float) -> str:
-    """
-    Return PASS / WATCH / EXCLUDE based on post_delta_sharpe, assuming other excludes already checked separately.
-    """
     dsh = _to_float(r.get("post_delta_sharpe0_vs_base"))
     if dsh is None:
         return "EXCLUDE"
@@ -652,11 +727,6 @@ def _post_only_bucket(r: Dict[str, Any], pass_th: float, watch_lo: float, watch_
 
 
 def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
-    """
-    v12: Semantic1 - Post-only PASS/WATCH lists are not filtered by renderer_v4 at all.
-    Still annotate rows with suite_hard_fail=true as a warning note.
-    """
-    # thresholds (keep v11 defaults)
     pass_th = -0.03
     watch_lo = -0.05
     watch_hi = -0.03
@@ -672,25 +742,15 @@ def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
         f"post_MDD floor: require post_MDD>= {mdd_floor} (i.e. not worse than -40%); "
         "ignore FULL and ignore suite_hard_fail for eligibility (Semantic1=new start).`"
     )
+    lines.append("- dq_check_v13: `Compare JSON post_neg_days (post-segment normalized) vs equity CSV neg_days_count on date>=post_start_date (full-equity sliced). DQ_MISMATCH usually indicates semantic mismatch, not necessarily a bug.`")
 
-    # classify
     excluded: List[Tuple[str, List[str]]] = []
     pass_rows: List[Dict[str, Any]] = []
     watch_rows: List[Dict[str, Any]] = []
 
     for r in rows:
         rs = _post_only_policy_v3_reasons(r, pass_th=pass_th, watch_lo=watch_lo, watch_hi=watch_hi, mdd_floor=mdd_floor)
-
-        # If ANY hard fail / missing / gonogo / mdd floor / too-bad sharpe => exclude
-        # But allow WATCH band (delta_sharpe in [watch_lo, pass_th)) if it didn't trip "LT_watch_lo".
-        # We detect LT_watch_lo by the explicit reason.
         if rs:
-            # special case: if the ONLY delta-sharpe-related "issue" is being in WATCH band (i.e. no LT_watch_lo, no missing),
-            # then it's not an exclusion reason. We keep rs as-is because we didn't add an "EXCLUDE" marker for WATCH band.
-            # Here we exclude only if rs contains a real excluding token.
-            excluding = True
-            # If rs contains ONLY post_delta_sharpe_in_watch_band (we don't store such token), nothing to do.
-            # So this stays True.
             excluded.append((_fmt_str(r.get("id")), rs))
             continue
 
@@ -700,32 +760,31 @@ def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
         elif bucket == "WATCH":
             watch_rows.append(r)
         else:
-            # should be rare (already handled by rs)
             excluded.append((_fmt_str(r.get("id")), ["EXCLUDE_POST_DELTA_SHARPE_LT_-0.05"]))
 
-    # sort within buckets by post calmar/sharpe
     pass_rows = sorted(pass_rows, key=lambda r: _rank_key_on_basis(r, "post"), reverse=True)
     watch_rows = sorted(watch_rows, key=lambda r: _rank_key_on_basis(r, "post"), reverse=True)
 
     top3_pass = [str(r.get("id")) for r in pass_rows[:3]]
     top3_watch = [str(r.get("id")) for r in watch_rows[:3]]
-
-    # list those that are PASS/WATCH but suite_hard_fail=true (warn only)
     warn_full = [str(r.get("id")) for r in (pass_rows + watch_rows) if _bool_flag(r.get("suite_hard_fail"))]
+    dq_mis = [str(r.get("id")) for r in (pass_rows + watch_rows) if _fmt_str(r.get("dq_post_neg_days")) == "DQ_MISMATCH"]
 
     lines.append(f"- top3_post_only_PASS: `{', '.join(top3_pass) if top3_pass else 'N/A'}`")
     lines.append(f"- top3_post_only_WATCH: `{', '.join(top3_watch) if top3_watch else 'N/A'}`")
     lines.append(f"- post_only_total: `{len(rows)}`; pass: `{len(pass_rows)}`; watch: `{len(watch_rows)}`; excluded: `{len(excluded)}`")
     lines.append(f"- post_only_warn_full_blowup (suite_hard_fail=true): `{', '.join(warn_full) if warn_full else 'N/A'}`")
+    lines.append(f"- post_only_dq_mismatch_post_neg_days: `{', '.join(dq_mis) if dq_mis else 'N/A'}`")
     lines.append("")
 
     def _note_for_post_only(r: Dict[str, Any]) -> str:
         notes: List[str] = []
         if _bool_flag(r.get("suite_hard_fail")):
             notes.append("WARNING: suite_hard_fail=true (FULL period floor violated; Semantic2 risk)")
+        if _fmt_str(r.get("dq_post_neg_days")) == "DQ_MISMATCH":
+            notes.append(f"DQ_MISMATCH(post_neg_days): { _fmt_str(r.get('dq_post_neg_days_detail')) }")
         return "; ".join(notes) if notes else ""
 
-    # PASS table
     lines.append("### PASS (deploy-grade, strict; Semantic1=new start)")
     lines.append("| id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |")
     lines.append("|---|---:|---:|---:|---:|---:|---|")
@@ -743,7 +802,6 @@ def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
         )
     lines.append("")
 
-    # WATCH table
     lines.append("### WATCH (research-grade, not for deploy; Semantic1=new start)")
     lines.append("| id | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔSharpe | note |")
     lines.append("|---|---:|---:|---:|---:|---:|---|")
@@ -761,7 +819,6 @@ def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
         )
     lines.append("")
 
-    # exclusions list
     lines.append("### Post-only Exclusions (reasons)")
     if excluded:
         for sid, rs in sorted(excluded, key=lambda x: x[0]):
@@ -789,7 +846,6 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
 
     trend_rule = _get(obj, ["strategy_suite", "trend_rule"], default="price_gt_ma60")
 
-    # FULL singularity note
     full_note = (
         "FULL_* metrics may be impacted by data singularity around 2014 (price series anomaly/adjustment). "
         "Treat FULL as audit-only; prefer POST for decision and ranking."
@@ -814,7 +870,6 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
         lines.append(f"- suite_ok: `{_fmt_str(suite_ok)}`")
     lines.append("")
 
-    # ranking block
     lines.append("## Ranking (policy)")
     lines.append(f"- ranking_policy: `{_fmt_str(ranking_policy)}`")
     lines.append(f"- renderer_filter_policy: `{renderer_filter_policy}`")
@@ -822,32 +877,36 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
 
     strategies = _strategy_list(obj)
     rows = [_mk_row(s) for s in strategies]
+
+    # v13 DQ enrichment (best-effort)
+    _attach_equity_dq_fields(in_json_path=in_json_path, rows=rows)
+
     rows_sorted = _sort_rows_like_policy(rows)
-
     top3_rec = _topn_recommended_renderer_v4(rows, n=3)
-    lines.append(f"- top3_recommended: `{', '.join(top3_rec) if top3_rec else 'N/A'}`")
 
+    lines.append(f"- top3_recommended: `{', '.join(top3_rec) if top3_rec else 'N/A'}`")
     if isinstance(top3_raw, list):
         lines.append(f"- top3_raw_from_suite: `{', '.join([str(x) for x in top3_raw])}`")
     else:
         lines.append(f"- top3_raw_from_suite: `{_fmt_str(top3_raw)}`")
     lines.append("")
 
-    # strategies table (ALL rows, sorted by suite policy)
     lines.append("## Strategies")
     lines.append("note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`")
     lines.append("")
+
+    # v13: add post_neg_days_csv + dq_post_neg_days columns at the end (minimal surface area)
     lines.append(
         "| id | ok | suite_hard_fail | entry_mode | L | "
         "full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | "
         "post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | "
-        "post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped |"
+        "post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped | post_neg_days_csv | dq_post_neg_days |"
     )
     lines.append(
         "|---|---:|---:|---|---:|"
         "---:|---:|---:|---:|---:|---:|---:|"
         "---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
-        "---|---|---:|---:|---:|---:|---:|---:|"
+        "---|---|---:|---:|---:|---:|---:|---:|---:|---|"
     )
 
     for r in rows_sorted:
@@ -855,7 +914,7 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
             "| {id} | {ok} | {shf} | {entry_mode} | {L} | "
             "{full_cagr} | {full_mdd} | {full_sh} | {full_calmar} | {dcagr} | {dmdd} | {dsh} | "
             "{post_ok} | {split} | {post_start} | {post_n} | {post_years} | {post_cagr} | {post_mdd} | {post_sh} | {post_calmar} | {post_dcagr} | {post_dmdd} | {post_dsh} | "
-            "{gonogo} | {rank_basis} | {neg_days} | {eq_min} | {post_neg_days} | {post_eq_min} | {trades} | {rv20} |".format(
+            "{gonogo} | {rank_basis} | {neg_days} | {eq_min} | {post_neg_days} | {post_eq_min} | {trades} | {rv20} | {post_neg_days_csv} | {dq} |".format(
                 id=_escape_md_cell(r.get("id")),
                 ok=_escape_md_cell(r.get("ok")),
                 shf=_escape_md_cell(r.get("suite_hard_fail")),
@@ -888,12 +947,13 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
                 post_eq_min=_fmt_num(r.get("post_equity_min"), nd=2),
                 trades=_fmt_int(r.get("trades_n")),
                 rv20=_fmt_int(r.get("rv20_skipped")),
+                post_neg_days_csv=_fmt_int(r.get("csv_post_neg_days_count")),
+                dq=_escape_md_cell(r.get("dq_post_neg_days")),
             )
         )
 
     lines.append("")
 
-    # exclusions summary (renderer v4)
     lines.append("## Exclusions (not eligible for recommendation)")
     total = len(rows)
     eligible_rows = [r for r in rows if _is_eligible_for_recommendation_renderer_v4(r)]
@@ -932,14 +992,9 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
         lines.append(f"- {rid}: `{', '.join(rs)}`")
 
     lines.append("")
-
-    # Always vs Trend compare section
     lines.extend(_always_vs_trend_table(rows, trend_rule=str(trend_rule)))
-
-    # Post-only view (Semantic1)
     lines.extend(_post_only_section_semantic1(rows))
 
-    # Post go/no-go details + suite_hard_fail evidence
     lines.append("## Post Go/No-Go Details (compact)")
     any_details = False
     for r in rows_sorted:
@@ -964,7 +1019,6 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
             # suite_hard_fail evidence
             if _bool_flag(r.get("suite_hard_fail")):
                 lines.append(f"- suite_hard_fail: `true`")
-                # if suite stored hard_fail_reasons, show them
                 hfr = r.get("hard_fail_reasons_from_suite")
                 if isinstance(hfr, list) and hfr:
                     for msg in hfr[:5]:
