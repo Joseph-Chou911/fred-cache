@@ -154,6 +154,17 @@
       "confidence": "OK",
       "dq_reason": "",
       "generated_at_utc": "2026-02-25T02:15:04Z"
+    },
+    {
+      "data_date": "2026-02-25",
+      "maint_ratio_pct": 189.37103,
+      "total_financing_amount_twd": 383127012000,
+      "total_collateral_value_twd": 725531567090,
+      "included_count": 1251,
+      "missing_price_count": 0,
+      "confidence": "OK",
+      "dq_reason": "",
+      "generated_at_utc": "2026-02-25T15:33:04Z"
     }
   ]
 }
