@@ -1,10 +1,10 @@
 {
   "meta": {
-    "run_ts_utc": "2026-02-25T02:12:13.217044+00:00",
+    "run_ts_utc": "2026-02-25T14:13:34.910992+00:00",
     "module": "fred_cache",
     "stale_hours": 72.0,
-    "stats_generated_at_utc": "2026-02-25T02:11:15+00:00",
-    "stats_as_of_ts": "2026-02-25T10:11:12+08:00",
+    "stats_generated_at_utc": "2026-02-25T13:41:07+00:00",
+    "stats_as_of_ts": "2026-02-25T21:40:53+08:00",
     "script_version": "stats_v1_ddof0_w60_w252_pct_le_ret1_delta",
     "series_count": 13,
     "history_path": "dashboard_fred_cache/history.json",
@@ -21,14 +21,14 @@
     },
     "history_lite_series": 13,
     "day_key_local": "2026-02-25",
-    "snapshot_id": "commit:c1d061d2a024c406def4217730618e5c87b21ac3",
-    "data_commit_sha": "c1d061d2a024c406def4217730618e5c87b21ac3"
+    "snapshot_id": "commit:2fbe730874a1759ca096d6ff0ed131f04133e5ae",
+    "data_commit_sha": "2fbe730874a1759ca096d6ff0ed131f04133e5ae"
   },
   "rows": [
     {
       "series": "DGS2",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-23",
       "value": 3.43,
       "z60": -1.4834340455655677,
@@ -49,12 +49,12 @@
       "hitbits": "Z+P",
       "dbg": "p60=6.666666666667;prev_p60=45;z60=-1.483434045566;prev_z60=-0.529751327158;prev_v=3.48;last_v=3.43;zΔ60=-0.953682718408;pΔ60=-38.333333333333;ret1%=-1.436781609195",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DGS2&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "BAMLH0A0HYM2",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-23",
       "value": 2.95,
       "z60": 1.293479961403871,
@@ -75,12 +75,12 @@
       "hitbits": "Z+P+R",
       "dbg": "p60=95;prev_p60=58.333333333333;z60=1.293479961404;prev_z60=0.287183263447;prev_v=2.86;last_v=2.95;zΔ60=1.006296697957;pΔ60=36.666666666667;ret1%=3.146853146853",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=BAMLH0A0HYM2&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "SP500",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-24",
       "value": 6890.07,
       "z60": 0.04142602014075691,
@@ -101,12 +101,12 @@
       "hitbits": "Z+P",
       "dbg": "p60=50;prev_p60=25;z60=0.041426020141;prev_z60=-0.791915818188;prev_v=6837.75;last_v=6890.07;zΔ60=0.833341838329;pΔ60=25;ret1%=0.765163979379",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "VIXCLS",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-23",
       "value": 21.01,
       "z60": 2.074671657347619,
@@ -127,21 +127,21 @@
       "hitbits": "Z+R",
       "dbg": "p60=96.666666666667;prev_p60=86.666666666667;z60=2.074671657348;prev_z60=1.21001993381;prev_v=19.09;last_v=21.01;zΔ60=0.864651723537;pΔ60=10;ret1%=10.057621791514",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "NFCINONFINLEVERAGE",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
-      "data_date": "2026-02-13",
-      "value": -0.47074,
-      "z60": 1.6198919134910055,
-      "z252": 1.5184202056555407,
+      "age_hours": 0.5410863866666666,
+      "data_date": "2026-02-20",
+      "value": -0.46681,
+      "z60": 1.627733653837296,
+      "z252": 1.541372236576585,
       "p60": 100.0,
       "p252": 100.0,
-      "z_delta_60": 0.007683842969119725,
+      "z_delta_60": 0.007841740346290482,
       "p_delta_60": 0.0,
-      "ret1_pct": 0.8112265323753176,
+      "ret1_pct": 0.8348557590177145,
       "reason": "P252>=95",
       "tag": "LONG_EXTREME",
       "near": "NA",
@@ -153,12 +153,12 @@
       "hitbits": "NA",
       "dbg": "NA",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=NFCINONFINLEVERAGE&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "DCOILWTICO",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-17",
       "value": 62.53,
       "z60": 1.0954741129250254,
@@ -179,12 +179,12 @@
       "hitbits": "NA",
       "dbg": "NA",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DCOILWTICO&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "DGS10",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-23",
       "value": 4.03,
       "z60": -1.8293099387804765,
@@ -205,12 +205,12 @@
       "hitbits": "NA",
       "dbg": "p60=6.666666666667;prev_p60=15;z60=-1.82930993878;prev_z60=-1.146821631804;prev_v=4.08;last_v=4.03;zΔ60=-0.682488306976;pΔ60=-8.333333333333;ret1%=-1.225490196078",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "DJIA",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-24",
       "value": 49174.5,
       "z60": 0.47989557618265694,
@@ -231,12 +231,12 @@
       "hitbits": "P",
       "dbg": "p60=63.333333333333;prev_p60=46.666666666667;z60=0.479895576183;prev_z60=0.022055775526;prev_v=48804.059999999998;last_v=49174.5;zΔ60=0.457839800657;pΔ60=16.666666666667;ret1%=0.759035211415",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DJIA&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "DTWEXBGS",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-20",
       "value": 117.9917,
       "z60": -1.1789386457296558,
@@ -257,21 +257,21 @@
       "hitbits": "NA",
       "dbg": "NA",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXBGS&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "NASDAQCOM",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
-      "data_date": "2026-02-23",
-      "value": 22627.27,
-      "z60": -1.9312105817826208,
-      "z252": 0.7107763568677551,
-      "p60": 8.333333333333334,
-      "p252": 64.28571428571429,
-      "z_delta_60": -0.7132963137963197,
-      "p_delta_60": -6.666666666666666,
-      "ret1_pct": -1.1308188780336654,
+      "age_hours": 0.5410863866666666,
+      "data_date": "2026-02-24",
+      "value": 22863.68,
+      "z60": -1.230432974745845,
+      "z252": 0.807580010786061,
+      "p60": 15.0,
+      "p252": 70.23809523809524,
+      "z_delta_60": 0.7007776070367759,
+      "p_delta_60": 6.666666666666668,
+      "ret1_pct": 1.0448012508800215,
       "reason": "NA",
       "tag": "NA",
       "near": "NEAR:ZΔ60",
@@ -281,14 +281,14 @@
       "streak_wa": 0,
       "jump_hits": 0,
       "hitbits": "NA",
-      "dbg": "p60=8.333333333333;prev_p60=15;z60=-1.931210581783;prev_z60=-1.217914267986;prev_v=22886.07;last_v=22627.27;zΔ60=-0.713296313796;pΔ60=-6.666666666667;ret1%=-1.130818878034",
+      "dbg": "p60=15;prev_p60=8.333333333333;z60=-1.230432974746;prev_z60=-1.931210581783;prev_v=22627.27;last_v=22863.68;zΔ60=0.700777607037;pΔ60=6.666666666667;ret1%=1.04480125088",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=NASDAQCOM&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "STLFSI4",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-13",
       "value": -0.6208,
       "z60": -0.2509704861780327,
@@ -309,12 +309,12 @@
       "hitbits": "R",
       "dbg": "p60=48.333333333333;prev_p60=36.666666666667;z60=-0.250970486178;prev_z60=-0.397538049189;prev_v=-0.6558;last_v=-0.6208;zΔ60=0.14656756301;pΔ60=11.666666666667;ret1%=5.336992985666",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=STLFSI4&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "T10Y2Y",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-24",
       "value": 0.61,
       "z60": -0.8857921325919084,
@@ -335,12 +335,12 @@
       "hitbits": "NA",
       "dbg": "NA",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     },
     {
       "series": "T10Y3M",
       "dq": "OK",
-      "age_hours": 0.016171401111111112,
+      "age_hours": 0.5410863866666666,
       "data_date": "2026-02-24",
       "value": 0.35,
       "z60": -1.2263696619763313,
@@ -361,7 +361,7 @@
       "hitbits": "R",
       "dbg": "p60=11.666666666667;prev_p60=11.666666666667;z60=-1.226369661976;prev_z60=-1.181767367757;prev_v=0.34;last_v=0.35;zΔ60=-0.044602294219;pΔ60=0;ret1%=2.941176470588",
       "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10Y3M&file_type=json&sort_order=desc&limit=1",
-      "effective_as_of_ts": "2026-02-25T10:11:12+08:00"
+      "effective_as_of_ts": "2026-02-25T21:40:53+08:00"
     }
   ]
 }
