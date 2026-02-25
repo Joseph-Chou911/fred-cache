@@ -1,6 +1,6 @@
 [
   {
-    "as_of_ts": "2026-02-25T11:17:40+08:00",
+    "as_of_ts": "2026-02-25T17:09:22+08:00",
     "series_id": "GLD.US_CLOSE",
     "data_date": "2026-02-24",
     "value": "474.61",
@@ -8,7 +8,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-25T11:17:40+08:00",
+    "as_of_ts": "2026-02-25T17:09:22+08:00",
     "series_id": "IAU.US_CLOSE",
     "data_date": "2026-02-24",
     "value": "97.2",
@@ -16,7 +16,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-25T11:17:40+08:00",
+    "as_of_ts": "2026-02-25T17:09:22+08:00",
     "series_id": "VNQ.US_CLOSE",
     "data_date": "2026-02-24",
     "value": "95.13",
@@ -24,10 +24,10 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-25T11:17:40+08:00",
+    "as_of_ts": "2026-02-25T17:09:22+08:00",
     "series_id": "IYR.US_CLOSE",
     "data_date": "2026-02-24",
-    "value": "100.755",
+    "value": "100.76",
     "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20260126&d2=20260225&i=d",
     "notes": "NA"
   }
