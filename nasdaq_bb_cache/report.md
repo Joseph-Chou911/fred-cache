@@ -1,17 +1,17 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-02-24T23:36:56Z`
+- report_generated_at_utc: `2026-02-25T15:40:49Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-02-24 close=607.8200) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.298%; dist_to_upper=4.430%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
+- **QQQ** (2026-02-25 close=614.8300) → **NORMAL_RANGE** (reason=default); dist_to_lower=2.421%; dist_to_upper=3.239%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
 - **VXN** (2026-02-24 close=24.8200) → **NORMAL_RANGE** (reason=default); z=1.3058; pos=0.791; bwΔ=0.77%; High-Vol tail (B) p90 runup=67.4% (n=54) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-24T23:36:55Z`
-- data_as_of (meta.max_date): `2026-02-24`  | staleness_days: `0`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-25T15:40:48Z`
+- data_as_of (meta.max_date): `2026-02-25`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
 - trigger_reason: `default`
@@ -20,18 +20,18 @@
 
 | field | value |
 |---|---:|
-| date | `2026-02-24` |
-| close | `607.8200` |
-| bb_mid | `617.0910` |
-| bb_lower | `599.9285` |
-| bb_upper | `634.7443` |
-| z | `-1.0734` |
+| date | `2026-02-25` |
+| close | `614.8300` |
+| bb_mid | `617.1012` |
+| bb_lower | `599.9456` |
+| bb_upper | `634.7473` |
+| z | `-0.2616` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `1.298%` |
-| distance_to_upper_pct | `4.430%` |
-| position_in_band | `0.227` |
+| distance_to_lower_pct | `2.421%` |
+| distance_to_upper_pct | `3.239%` |
+| position_in_band | `0.428` |
 | bandwidth_pct | `5.64%` |
-| bandwidth_delta_pct | `0.21%` |
+| bandwidth_delta_pct | `-0.03%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
@@ -58,8 +58,8 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-02-24T23:36:55Z`
-- data_as_of (meta.max_date): `2026-02-24`  | staleness_days: `0`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-02-25T15:40:48Z`
+- data_as_of (meta.max_date): `2026-02-24`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
 - action_output: **`NORMAL_RANGE`**
