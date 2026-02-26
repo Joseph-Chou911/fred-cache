@@ -1,6 +1,6 @@
 # 0050 Tactical Cash Overlay Backtest
 
-- generated_at_utc: `2026-02-26T06:35:12Z`
+- generated_at_utc: `2026-02-26T07:02:40Z`
 - script_fingerprint: `backtest_tw0050_tactical_cash@2026-02-24.v2.3.fix_execdelay0_and_force_close`
 - price_csv: `tw0050_bb_cache/data.csv`
 

@@ -1,8 +1,8 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-26T06:35:10Z`
+- generated_at_utc: `2026-02-26T07:02:38Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-26.v14.print_exit_params`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-26.v15.publish_step_summary`
 - suite_ok: `True`
 
 ## Ranking (policy)
