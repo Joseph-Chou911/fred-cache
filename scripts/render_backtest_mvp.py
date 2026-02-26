@@ -6,17 +6,6 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
-v15 (2026-02-26):
-- ADD(ci): if running in GitHub Actions, also publish the rendered Markdown into $GITHUB_STEP_SUMMARY
-  so you can read the report directly from the workflow run Summary on mobile.
-  * This is display-only. No change to ranking, filtering, or Semantic1 logic.
-  * Also prints a short preview to stdout (workflow logs) for quick inspection.
-
-v14 (2026-02-26):
-- ADD(print): expose tactical exit params in Strategies table so "tp/sl bounce-and-run" is auditable:
-  * exit_mode, exit_z, take_profit_pct, stop_loss_pct, max_hold_days, entry_z, leverage_frac
-  * This is display-only. No change to ranking, filtering, or Semantic1 logic.
-
 v13 (2026-02-24):
 - ADD(DQ): compare JSON post_neg_days vs equity CSV post neg_days_count (date >= post_start_date)
   and mark DQ_MISMATCH when they differ.
@@ -55,7 +44,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-26.v15.publish_step_summary"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v13.dq_post_neg_days_vs_equity_csv"
 
 
 # =========================
@@ -151,67 +140,6 @@ def _bool_flag(x: Any) -> bool:
     if isinstance(x, (bool, np.bool_)):
         return bool(x)
     return False
-
-
-def _is_github_actions() -> bool:
-    return str(os.environ.get("GITHUB_ACTIONS", "")).strip().lower() == "true"
-
-
-def _publish_to_github_step_summary(md: str, in_json: str, out_md: str) -> None:
-    """
-    Publish markdown into GitHub Actions Summary if $GITHUB_STEP_SUMMARY is available.
-    Keep it robust: never fail the workflow because of summary write errors.
-    """
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not summary_path:
-        return
-
-    try:
-        os.makedirs(os.path.dirname(summary_path) or ".", exist_ok=True)
-    except Exception:
-        # ignore
-        pass
-
-    # GitHub summary has size limits; be conservative.
-    # (We avoid guessing exact limit; truncate to reduce risk of failure.)
-    max_chars = 700_000
-    body = md
-    truncated = False
-    if len(body) > max_chars:
-        body = body[:max_chars]
-        truncated = True
-
-    try:
-        with open(summary_path, "a", encoding="utf-8") as f:
-            f.write("## Backtest MVP Report\n\n")
-            f.write(f"- in_json: `{_escape_md_cell(in_json)}`\n")
-            f.write(f"- out_md: `{_escape_md_cell(out_md)}`\n")
-            f.write(f"- renderer_fingerprint: `{SCRIPT_FINGERPRINT}`\n\n")
-            f.write("<details>\n")
-            f.write("<summary>Open rendered markdown</summary>\n\n")
-            f.write(body)
-            if truncated:
-                f.write("\n\n> NOTE: Summary content truncated (size guard). Please download artifact / open out_md for full report.\n")
-            f.write("\n\n</details>\n\n")
-    except Exception:
-        # Do not break the run if summary write fails.
-        return
-
-
-def _print_preview(md: str, max_lines: int = 80) -> None:
-    """
-    Print a short preview to stdout (workflow logs) for quick inspection on mobile.
-    """
-    try:
-        lines = md.splitlines()
-        print("---- report preview (head) ----")
-        for i, ln in enumerate(lines[:max_lines]):
-            print(ln)
-        if len(lines) > max_lines:
-            print(f"... (truncated preview; total_lines={len(lines)})")
-        print("---- end preview ----")
-    except Exception:
-        return
 
 
 # =========================
@@ -338,19 +266,8 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
     ok = bool(strat.get("ok")) if "ok" in strat else True
 
     params = strat.get("params") or {}
-
     entry_mode = (params.get("entry_mode") if isinstance(params, dict) else None)
-    entry_z = (params.get("entry_z") if isinstance(params, dict) else None)
-
-    leverage_frac = (params.get("leverage_frac") if isinstance(params, dict) else None)
-    L = _leverage_mult_from_params(params if isinstance(params, dict) else {})
-
-    # v14: tactical exit params (display-only)
-    exit_mode = (params.get("exit_mode") if isinstance(params, dict) else None)
-    exit_z = (params.get("exit_z") if isinstance(params, dict) else None)
-    take_profit_pct = (params.get("take_profit_pct") if isinstance(params, dict) else None)
-    stop_loss_pct = (params.get("stop_loss_pct") if isinstance(params, dict) else None)
-    max_hold_days = (params.get("max_hold_days") if isinstance(params, dict) else None)
+    L = _leverage_mult_from_params(params)
 
     full = _extract_full_metrics(strat)
     post = _extract_post_metrics(strat)
@@ -364,14 +281,7 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
         "ok": ok,
         "suite_hard_fail": suite_hard_fail,
         "entry_mode": entry_mode,
-        "entry_z": entry_z,
-        "leverage_frac": leverage_frac,
         "L": L,
-        "exit_mode": exit_mode,
-        "exit_z": exit_z,
-        "take_profit_pct": take_profit_pct,
-        "stop_loss_pct": stop_loss_pct,
-        "max_hold_days": max_hold_days,
         **full,
         **post,
         "post_gonogo": gg.get("decision"),
@@ -872,7 +782,7 @@ def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
         if _bool_flag(r.get("suite_hard_fail")):
             notes.append("WARNING: suite_hard_fail=true (FULL period floor violated; Semantic2 risk)")
         if _fmt_str(r.get("dq_post_neg_days")) == "DQ_MISMATCH":
-            notes.append(f"DQ_MISMATCH(post_neg_days): {_fmt_str(r.get('dq_post_neg_days_detail'))}")
+            notes.append(f"DQ_MISMATCH(post_neg_days): { _fmt_str(r.get('dq_post_neg_days_detail')) }")
         return "; ".join(notes) if notes else ""
 
     lines.append("### PASS (deploy-grade, strict; Semantic1=new start)")
@@ -985,15 +895,15 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
     lines.append("note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`")
     lines.append("")
 
-    # v14: insert tactical params columns (display-only)
+    # v13: add post_neg_days_csv + dq_post_neg_days columns at the end (minimal surface area)
     lines.append(
-        "| id | ok | suite_hard_fail | entry_mode | entry_z | lev_frac | L | exit_mode | exit_z | TP | SL | max_hold | "
+        "| id | ok | suite_hard_fail | entry_mode | L | "
         "full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | "
         "post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | "
         "post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped | post_neg_days_csv | dq_post_neg_days |"
     )
     lines.append(
-        "|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|---:|"
+        "|---|---:|---:|---|---:|"
         "---:|---:|---:|---:|---:|---:|---:|"
         "---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
         "---|---|---:|---:|---:|---:|---:|---:|---:|---|"
@@ -1001,7 +911,7 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
 
     for r in rows_sorted:
         lines.append(
-            "| {id} | {ok} | {shf} | {entry_mode} | {entry_z} | {lev_frac} | {L} | {exit_mode} | {exit_z} | {tp} | {sl} | {mhd} | "
+            "| {id} | {ok} | {shf} | {entry_mode} | {L} | "
             "{full_cagr} | {full_mdd} | {full_sh} | {full_calmar} | {dcagr} | {dmdd} | {dsh} | "
             "{post_ok} | {split} | {post_start} | {post_n} | {post_years} | {post_cagr} | {post_mdd} | {post_sh} | {post_calmar} | {post_dcagr} | {post_dmdd} | {post_dsh} | "
             "{gonogo} | {rank_basis} | {neg_days} | {eq_min} | {post_neg_days} | {post_eq_min} | {trades} | {rv20} | {post_neg_days_csv} | {dq} |".format(
@@ -1009,14 +919,7 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
                 ok=_escape_md_cell(r.get("ok")),
                 shf=_escape_md_cell(r.get("suite_hard_fail")),
                 entry_mode=_escape_md_cell(r.get("entry_mode")),
-                entry_z=_fmt_num(r.get("entry_z"), nd=2) if _to_float(r.get("entry_z")) is not None else "N/A",
-                lev_frac=_fmt_num(r.get("leverage_frac"), nd=2) if _to_float(r.get("leverage_frac")) is not None else "N/A",
                 L=_fmt_num(r.get("L"), nd=2) if _to_float(r.get("L")) is not None else "N/A",
-                exit_mode=_escape_md_cell(r.get("exit_mode")),
-                exit_z=_fmt_num(r.get("exit_z"), nd=2) if _to_float(r.get("exit_z")) is not None else "N/A",
-                tp=_fmt_pct(r.get("take_profit_pct"), nd=2),
-                sl=_fmt_pct(r.get("stop_loss_pct"), nd=2),
-                mhd=_fmt_int(r.get("max_hold_days")),
                 full_cagr=_fmt_pct(r.get("full_cagr")),
                 full_mdd=_fmt_pct(r.get("full_mdd")),
                 full_sh=_fmt_num(r.get("full_sharpe0"), nd=3),
@@ -1146,11 +1049,6 @@ def main() -> None:
         f.write(md)
 
     print("OK: wrote", out_md)
-
-    # v15: publish to GitHub Actions summary + print preview for mobile logs
-    if _is_github_actions():
-        _publish_to_github_step_summary(md=md, in_json=in_json, out_md=out_md)
-        _print_preview(md, max_lines=80)
 
 
 if __name__ == "__main__":
