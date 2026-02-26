@@ -1,13 +1,13 @@
 {
-  "generated_at_utc": "2026-02-25T03:25:12Z",
-  "as_of_ts": "2026-02-25T03:25:12Z",
+  "generated_at_utc": "2026-02-26T01:52:35Z",
+  "as_of_ts": "2026-02-26T01:52:35Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "series": {
     "OFR_FSI": {
-      "data_date": "2026-02-20",
-      "value": -2.527,
+      "data_date": "2026-02-23",
+      "value": -2.396,
       "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
-      "as_of_ts": "2026-02-25T03:25:12Z",
+      "as_of_ts": "2026-02-26T01:52:35Z",
       "parse_header": [
         "Date",
         "OFR FSI",
@@ -22,10 +22,10 @@
       ]
     },
     "VIX": {
-      "data_date": "2026-02-24",
-      "value": 19.55,
+      "data_date": "2026-02-25",
+      "value": 17.93,
       "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-      "as_of_ts": "2026-02-25T03:25:12Z",
+      "as_of_ts": "2026-02-26T01:52:35Z",
       "parse_header": [
         "DATE",
         "OPEN",
@@ -35,16 +35,16 @@
       ]
     },
     "SP500": {
-      "data_date": "2026-02-24",
-      "value": 6890.07,
+      "data_date": "2026-02-25",
+      "value": 6946.13,
       "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
-      "as_of_ts": "2026-02-25T03:25:12Z"
+      "as_of_ts": "2026-02-26T01:52:35Z"
     },
     "HYG_IEF_RATIO": {
-      "data_date": "2026-02-24",
-      "value": 0.8296288691545609,
+      "data_date": "2026-02-25",
+      "value": 0.8313042584887246,
       "source_url": "DERIVED",
-      "as_of_ts": "2026-02-25T03:25:12Z",
+      "as_of_ts": "2026-02-26T01:52:35Z",
       "sources": [
         "https://stooq.com/q/d/l/?s=hyg.us&i=d",
         "https://stooq.com/q/d/l/?s=ief.us&i=d"
