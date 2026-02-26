@@ -6,6 +6,12 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
+v15 (2026-02-26):
+- ADD(ci): if running in GitHub Actions, also publish the rendered Markdown into $GITHUB_STEP_SUMMARY
+  so you can read the report directly from the workflow run Summary on mobile.
+  * This is display-only. No change to ranking, filtering, or Semantic1 logic.
+  * Also prints a short preview to stdout (workflow logs) for quick inspection.
+
 v14 (2026-02-26):
 - ADD(print): expose tactical exit params in Strategies table so "tp/sl bounce-and-run" is auditable:
   * exit_mode, exit_z, take_profit_pct, stop_loss_pct, max_hold_days, entry_z, leverage_frac
@@ -49,7 +55,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-26.v14.print_exit_params"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-26.v15.publish_step_summary"
 
 
 # =========================
@@ -145,6 +151,67 @@ def _bool_flag(x: Any) -> bool:
     if isinstance(x, (bool, np.bool_)):
         return bool(x)
     return False
+
+
+def _is_github_actions() -> bool:
+    return str(os.environ.get("GITHUB_ACTIONS", "")).strip().lower() == "true"
+
+
+def _publish_to_github_step_summary(md: str, in_json: str, out_md: str) -> None:
+    """
+    Publish markdown into GitHub Actions Summary if $GITHUB_STEP_SUMMARY is available.
+    Keep it robust: never fail the workflow because of summary write errors.
+    """
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+
+    try:
+        os.makedirs(os.path.dirname(summary_path) or ".", exist_ok=True)
+    except Exception:
+        # ignore
+        pass
+
+    # GitHub summary has size limits; be conservative.
+    # (We avoid guessing exact limit; truncate to reduce risk of failure.)
+    max_chars = 700_000
+    body = md
+    truncated = False
+    if len(body) > max_chars:
+        body = body[:max_chars]
+        truncated = True
+
+    try:
+        with open(summary_path, "a", encoding="utf-8") as f:
+            f.write("## Backtest MVP Report\n\n")
+            f.write(f"- in_json: `{_escape_md_cell(in_json)}`\n")
+            f.write(f"- out_md: `{_escape_md_cell(out_md)}`\n")
+            f.write(f"- renderer_fingerprint: `{SCRIPT_FINGERPRINT}`\n\n")
+            f.write("<details>\n")
+            f.write("<summary>Open rendered markdown</summary>\n\n")
+            f.write(body)
+            if truncated:
+                f.write("\n\n> NOTE: Summary content truncated (size guard). Please download artifact / open out_md for full report.\n")
+            f.write("\n\n</details>\n\n")
+    except Exception:
+        # Do not break the run if summary write fails.
+        return
+
+
+def _print_preview(md: str, max_lines: int = 80) -> None:
+    """
+    Print a short preview to stdout (workflow logs) for quick inspection on mobile.
+    """
+    try:
+        lines = md.splitlines()
+        print("---- report preview (head) ----")
+        for i, ln in enumerate(lines[:max_lines]):
+            print(ln)
+        if len(lines) > max_lines:
+            print(f"... (truncated preview; total_lines={len(lines)})")
+        print("---- end preview ----")
+    except Exception:
+        return
 
 
 # =========================
@@ -1079,6 +1146,11 @@ def main() -> None:
         f.write(md)
 
     print("OK: wrote", out_md)
+
+    # v15: publish to GitHub Actions summary + print preview for mobile logs
+    if _is_github_actions():
+        _publish_to_github_step_summary(md=md, in_json=in_json, out_md=out_md)
+        _print_preview(md, max_lines=80)
 
 
 if __name__ == "__main__":
