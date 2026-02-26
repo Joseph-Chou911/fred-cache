@@ -6,6 +6,16 @@ backtest_tw0050_leverage_mvp.py
 
 Audit-first MVP backtest for "base hold + conditional leverage leg" using BB z-score.
 
+v27.0 (2026-02-26):
+- ADD(strategy): optional BB tactical exit mode "tp_sl" (take-profit / stop-loss) for the leverage leg.
+  * Does NOT change default behavior. Tactical strategy is enabled only if --add_bb_tactical is set.
+  * New CLI args: --add_bb_tactical, --take_profit_pct, --stop_loss_pct
+  * Exit logic (EOD close-based):
+      - max_hold_days (if >0) still applies as a safety bound
+      - stop_loss triggers when (price/entry_price - 1) <= -stop_loss_pct
+      - take_profit triggers when (price/entry_price - 1) >= take_profit_pct
+  * BB z exit (exit_z) remains the default BB exit for bb_conditional strategy.
+
 v26.9 (2026-02-24):
 - ADD(ops): cleanup old per-strategy equity curve CSVs in cache_dir at start of each run
   to avoid accumulating many equity_curve.*.csv files across runs.
@@ -68,8 +78,8 @@ import numpy as np
 import pandas as pd
 
 
-SCHEMA_VERSION = "v26.9"
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs"
+SCHEMA_VERSION = "v27.0"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit"
 
 # Tag used for per-strategy equity curve csv naming (stable per script fingerprint)
 _EQUITY_CURVE_TAG = hashlib.sha1(SCRIPT_FINGERPRINT.encode("utf-8")).hexdigest()[:10]
@@ -80,6 +90,7 @@ _RV20_Q_LOOKBACK = 252
 _RV20_Q = 0.60
 _RV20_Q_MIN_PERIODS = 100  # allow early series to pass (no block) until enough history
 
+EXIT_MODES = ["z", "tp_sl"]  # v27.0
 
 TRADE_COLS = [
     "entry_date",
@@ -798,6 +809,11 @@ class Params:
     maintenance_margin: float
     maint_ratio_mode: str
 
+    # v27.0 tactical exit mode
+    exit_mode: str               # "z" or "tp_sl"
+    take_profit_pct: float       # e.g. 0.02 for +2% (0 disables)
+    stop_loss_pct: float         # e.g. 0.03 for -3% (0 disables)
+
 
 def _maint_ratio_semantics(mode: str) -> str:
     m = str(mode).strip()
@@ -877,10 +893,17 @@ def run_backtest(
     exit_count_by_end_of_data = 0
     forced_eod_close = 0
 
+    # v27.0 tactical exit counters
+    exit_count_by_take_profit = 0
+    exit_count_by_stop_loss = 0
+
     margin_call_count = 0
     min_maint_ratio = None
 
     forbid = forbid_entry_mask if (forbid_entry_mask is not None and len(forbid_entry_mask) == n) else [False] * n
+
+    # v27.0: track entry price for tp/sl logic (leverage leg)
+    entry_price_pos: Optional[float] = None
 
     def _trend_on(i: int) -> bool:
         if params.trend_rule == "price_gt_ma60":
@@ -911,10 +934,33 @@ def run_backtest(
         return bool(np.isfinite(r) and np.isfinite(q) and (float(r) > float(q)))
 
     def _exit_signal(i: int) -> Tuple[bool, str]:
+        # Safety time bound first (applies to any mode)
         by_time = (params.max_hold_days > 0 and hold_days >= params.max_hold_days)
         if by_time:
             return True, "max_hold_days"
 
+        # v27.0: tp/sl exit mode
+        if str(params.exit_mode).strip() == "tp_sl":
+            ep = entry_price_pos
+            p = prices[i]
+            tp = float(getattr(params, "take_profit_pct", 0.0) or 0.0)
+            sl = float(getattr(params, "stop_loss_pct", 0.0) or 0.0)
+
+            # Trend off is still an optional safety exit for trend entry mode
+            if params.entry_mode == "trend" and (not _trend_on(i)):
+                return True, "trend_off"
+
+            if ep is not None and np.isfinite(ep) and ep > 0 and np.isfinite(p):
+                ret = (float(p) / float(ep)) - 1.0
+                if sl > 0.0 and ret <= -float(sl):
+                    return True, "stop_loss"
+                if tp > 0.0 and ret >= float(tp):
+                    return True, "take_profit"
+
+            # otherwise: no exit
+            return False, "none"
+
+        # default (legacy): exit depends on entry_mode
         if params.entry_mode == "always":
             return False, "none"
 
@@ -1018,6 +1064,7 @@ def run_backtest(
                 in_lever = False
                 cur_trade = None
                 hold_days = 0
+                entry_price_pos = None
 
                 exited_today = True
 
@@ -1063,12 +1110,17 @@ def run_backtest(
                     exit_count_by_max_hold_days += 1
                 elif exit_reason == "trend_off":
                     exit_count_by_trend_off += 1
+                elif exit_reason == "take_profit":
+                    exit_count_by_take_profit += 1
+                elif exit_reason == "stop_loss":
+                    exit_count_by_stop_loss += 1
 
                 borrow_principal = 0.0
                 lever_shares = 0.0
                 in_lever = False
                 cur_trade = None
                 hold_days = 0
+                entry_price_pos = None
 
                 exited_today = True
 
@@ -1107,6 +1159,7 @@ def run_backtest(
                                     lever_shares = lever_shares_target
                                     in_lever = True
                                     hold_days = 0
+                                    entry_price_pos = float(price)
 
                                     zf_entry = _to_finite_float(z_raw)
                                     cur_trade = {
@@ -1166,6 +1219,7 @@ def run_backtest(
         borrow_principal = 0.0
         lever_shares = 0.0
         cur_trade = None
+        entry_price_pos = None
 
         equity_final = base_shares * last_price + cash
         eq_arr[-1] = float(equity_final)
@@ -1236,6 +1290,11 @@ def run_backtest(
             "perf_ddof": int(params.perf_ddof),
             "maintenance_margin": float(params.maintenance_margin),
             "maint_ratio_mode": str(params.maint_ratio_mode),
+
+            # v27.0
+            "exit_mode": str(params.exit_mode),
+            "take_profit_pct": float(params.take_profit_pct),
+            "stop_loss_pct": float(params.stop_loss_pct),
         },
         "audit": {
             "rows": int(len(df_out)),
@@ -1271,6 +1330,11 @@ def run_backtest(
             "exit_count_by_max_hold_days": int(exit_count_by_max_hold_days),
             "exit_count_by_trend_off": int(exit_count_by_trend_off),
             "exit_count_by_end_of_data": int(exit_count_by_end_of_data),
+
+            # v27.0
+            "exit_count_by_take_profit": int(exit_count_by_take_profit),
+            "exit_count_by_stop_loss": int(exit_count_by_stop_loss),
+
             "margin_call_count": int(margin_call_count),
             "min_maintenance_ratio": float(min_maint_ratio) if min_maint_ratio is not None else None,
             "maintenance_margin": float(params.maintenance_margin),
@@ -1306,6 +1370,10 @@ def run_backtest(
             "cost_paid_total": float(cost_paid_total),
             "leverage_definition": (
                 "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
+            ),
+            "exit_mode_semantics": (
+                "exit_mode='z' uses bb_z >= exit_z for bb entry_mode; "
+                "exit_mode='tp_sl' uses take_profit_pct/stop_loss_pct on price/entry_price (EOD) and ignores exit_z for bb."
             ),
         },
         "perf_leverage": perf_leverage,
@@ -1551,7 +1619,34 @@ def _fmt_lever_mult(L: float) -> str:
     return s
 
 
-def _make_params_from_args(args: argparse.Namespace, leverage_frac: float, entry_mode: str, trend_rule: str) -> Params:
+def _fmt_bp(pct: float) -> str:
+    v = _to_finite_float(pct)
+    if v is None:
+        return "na"
+    bp = int(round(float(v) * 10000.0))
+    return str(bp)
+
+
+def _make_params_from_args(
+    args: argparse.Namespace,
+    leverage_frac: float,
+    entry_mode: str,
+    trend_rule: str,
+    *,
+    exit_mode: str,
+    take_profit_pct: float,
+    stop_loss_pct: float,
+) -> Params:
+    em = str(exit_mode).strip()
+    if em not in EXIT_MODES:
+        em = "z"
+    tp = float(take_profit_pct) if np.isfinite(float(take_profit_pct)) else 0.0
+    sl = float(stop_loss_pct) if np.isfinite(float(stop_loss_pct)) else 0.0
+    if tp < 0.0:
+        tp = 0.0
+    if sl < 0.0:
+        sl = 0.0
+
     return Params(
         bb_window=int(args.bb_window),
         bb_ddof=int(args.bb_ddof),
@@ -1575,6 +1670,11 @@ def _make_params_from_args(args: argparse.Namespace, leverage_frac: float, entry
         perf_ddof=int(args.perf_ddof),
         maintenance_margin=float(args.maintenance_margin),
         maint_ratio_mode=str(args.maint_ratio_mode),
+
+        # v27.0
+        exit_mode=em,
+        take_profit_pct=float(tp),
+        stop_loss_pct=float(sl),
     )
 
 
@@ -1877,6 +1977,26 @@ def main() -> None:
         help_text="If true, any equity_negative_days>0 triggers hard fail (default true). Use --no-hard_fail_any_negative_days (or --no-hard-fail-any-negative-days) to disable.",
     )
 
+    # v27.0: optional BB tactical tp/sl strategy
+    _add_boolopt(
+        ap,
+        "--add_bb_tactical",
+        default=False,
+        help_text="If set, add an extra BB tactical strategy that exits by take-profit/stop-loss (tp/sl). Default false (no behavior change).",
+    )
+    ap.add_argument(
+        "--take_profit_pct",
+        type=float,
+        default=0.0,
+        help="For BB tactical strategy (tp/sl): take profit threshold as pct (e.g. 0.02 for +2%). 0 disables.",
+    )
+    ap.add_argument(
+        "--stop_loss_pct",
+        type=float,
+        default=0.0,
+        help="For BB tactical strategy (tp/sl): stop loss threshold as pct (e.g. 0.03 for -3%). 0 disables.",
+    )
+
     ap.add_argument("--out_json", dest="out_json", default="backtest_mvp.json")
     ap.add_argument("--out_equity_csv", default="backtest_mvp_equity.csv")
     ap.add_argument("--out_trades_csv", default="backtest_mvp_trades.csv")
@@ -1897,10 +2017,23 @@ def main() -> None:
     if int(args.contam_horizon) < 0 or int(args.z_clear_days) < 0:
         raise SystemExit("ERROR: --contam_horizon and --z_clear_days must be >= 0")
 
+    # BB z sanity check applies to the legacy BB strategy that still exists
     suite = str(args.strategy_suite)
     if suite in ["all", "single_bb"]:
         if (float(args.exit_z) < float(args.entry_z)) and (not bool(args.allow_inverted_z)):
             raise SystemExit("ERROR: exit_z < entry_z for bb strategy. If intentional, set --allow_inverted_z.")
+
+    # v27.0 tactical sanity
+    tp = float(args.take_profit_pct)
+    sl = float(args.stop_loss_pct)
+    if tp < 0.0 or sl < 0.0:
+        raise SystemExit("ERROR: --take_profit_pct and --stop_loss_pct must be >= 0")
+    if bool(getattr(args, "add_bb_tactical")):
+        if (tp <= 0.0 and sl <= 0.0 and int(args.max_hold_days) <= 0):
+            raise SystemExit(
+                "ERROR: --add_bb_tactical set but tp/sl are both disabled and max_hold_days==0. "
+                "This can create an unbounded hold. Set take_profit_pct and/or stop_loss_pct and/or max_hold_days."
+            )
 
     cache_dir = str(args.cache_dir)
 
@@ -1984,25 +2117,63 @@ def main() -> None:
     strategies: List[Tuple[str, Params]] = []
 
     if suite in ["all", "single_bb"]:
+        # Legacy BB strategy (default behavior): z-exit
         p_bb = _make_params_from_args(
             args=args,
             leverage_frac=float(args.leverage_frac),
             entry_mode="bb",
             trend_rule=str(args.trend_rule),
+            exit_mode="z",
+            take_profit_pct=0.0,
+            stop_loss_pct=0.0,
         )
         strategies.append(("bb_conditional", p_bb))
+
+        # v27.0 optional tactical BB strategy: tp/sl exit
+        if bool(getattr(args, "add_bb_tactical")):
+            tp_bp = _fmt_bp(tp)
+            sl_bp = _fmt_bp(sl)
+            sid = f"bb_tactical_tp{tp_bp}bp_sl{sl_bp}bp"
+            if int(args.max_hold_days) > 0:
+                sid = sid + f"_h{int(args.max_hold_days)}"
+            p_tac = _make_params_from_args(
+                args=args,
+                leverage_frac=float(args.leverage_frac),
+                entry_mode="bb",
+                trend_rule=str(args.trend_rule),
+                exit_mode="tp_sl",
+                take_profit_pct=float(tp),
+                stop_loss_pct=float(sl),
+            )
+            strategies.append((sid, p_tac))
 
     if suite in ["all", "bench_only"]:
         for L in bench_levels:
             frac = float(L - 1.0)
             sid = f"always_leverage_{_fmt_lever_mult(L)}x"
-            p = _make_params_from_args(args=args, leverage_frac=frac, entry_mode="always", trend_rule=str(args.trend_rule))
+            p = _make_params_from_args(
+                args=args,
+                leverage_frac=frac,
+                entry_mode="always",
+                trend_rule=str(args.trend_rule),
+                exit_mode="z",
+                take_profit_pct=0.0,
+                stop_loss_pct=0.0,
+            )
             strategies.append((sid, p))
 
         for L in bench_levels:
             frac = float(L - 1.0)
             sid = f"trend_leverage_{args.trend_rule}_{_fmt_lever_mult(L)}x"
-            p = _make_params_from_args(args=args, leverage_frac=frac, entry_mode="trend", trend_rule=str(args.trend_rule))
+            p = _make_params_from_args(
+                args=args,
+                leverage_frac=frac,
+                entry_mode="trend",
+                trend_rule=str(args.trend_rule),
+                exit_mode="z",
+                take_profit_pct=0.0,
+                stop_loss_pct=0.0,
+            )
             strategies.append((sid, p))
 
     if not strategies:
@@ -2061,6 +2232,15 @@ def main() -> None:
             },
             "equity_curve_tag": _EQUITY_CURVE_TAG,
             "equity_curve_cleanup": cleanup_info,  # v26.9 audit
+
+            # v27.0
+            "bb_tactical": {
+                "enabled": bool(getattr(args, "add_bb_tactical")),
+                "take_profit_pct": float(tp),
+                "stop_loss_pct": float(sl),
+                "exit_mode": "tp_sl",
+                "note": "Only the tactical BB strategy uses tp/sl exit. Legacy bb_conditional remains z-exit.",
+            },
         },
         "strategy_suite": {
             "mode": str(args.strategy_suite),
@@ -2087,6 +2267,7 @@ def main() -> None:
             "v26.7+: write per-strategy equity curve CSV for renderer evidence.",
             "v26.8: default post_start_date excludes split_date (cut singularity day from segment stats).",
             "v26.9: cleanup old equity_curve.*.csv files in cache_dir at start of run.",
+            "v27.0: optional BB tactical tp/sl exit strategy (enabled only by --add_bb_tactical).",
         ],
     }
 
@@ -2227,6 +2408,9 @@ def main() -> None:
         row = {
             "strategy_id": sid,
             "entry_mode": (strat_obj.get("params") or {}).get("entry_mode"),
+            "exit_mode": (strat_obj.get("params") or {}).get("exit_mode"),
+            "take_profit_pct": (strat_obj.get("params") or {}).get("take_profit_pct"),
+            "stop_loss_pct": (strat_obj.get("params") or {}).get("stop_loss_pct"),
             "leverage_multiplier": (
                 1.0 + float((strat_obj.get("params") or {}).get("leverage_frac", 0.0))
                 if _to_finite_float((strat_obj.get("params") or {}).get("leverage_frac")) is not None
