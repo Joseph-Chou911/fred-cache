@@ -6,6 +6,11 @@ render_backtest_mvp.py
 
 Render backtest_tw0050_leverage_mvp suite json (lite or full) into a compact Markdown report.
 
+v14 (2026-02-26):
+- ADD(print): expose tactical exit params in Strategies table so "tp/sl bounce-and-run" is auditable:
+  * exit_mode, exit_z, take_profit_pct, stop_loss_pct, max_hold_days, entry_z, leverage_frac
+  * This is display-only. No change to ranking, filtering, or Semantic1 logic.
+
 v13 (2026-02-24):
 - ADD(DQ): compare JSON post_neg_days vs equity CSV post neg_days_count (date >= post_start_date)
   and mark DQ_MISMATCH when they differ.
@@ -44,7 +49,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-24.v13.dq_post_neg_days_vs_equity_csv"
+SCRIPT_FINGERPRINT = "render_backtest_mvp@2026-02-26.v14.print_exit_params"
 
 
 # =========================
@@ -266,8 +271,19 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
     ok = bool(strat.get("ok")) if "ok" in strat else True
 
     params = strat.get("params") or {}
+
     entry_mode = (params.get("entry_mode") if isinstance(params, dict) else None)
-    L = _leverage_mult_from_params(params)
+    entry_z = (params.get("entry_z") if isinstance(params, dict) else None)
+
+    leverage_frac = (params.get("leverage_frac") if isinstance(params, dict) else None)
+    L = _leverage_mult_from_params(params if isinstance(params, dict) else {})
+
+    # v14: tactical exit params (display-only)
+    exit_mode = (params.get("exit_mode") if isinstance(params, dict) else None)
+    exit_z = (params.get("exit_z") if isinstance(params, dict) else None)
+    take_profit_pct = (params.get("take_profit_pct") if isinstance(params, dict) else None)
+    stop_loss_pct = (params.get("stop_loss_pct") if isinstance(params, dict) else None)
+    max_hold_days = (params.get("max_hold_days") if isinstance(params, dict) else None)
 
     full = _extract_full_metrics(strat)
     post = _extract_post_metrics(strat)
@@ -281,7 +297,14 @@ def _mk_row(strat: Dict[str, Any]) -> Dict[str, Any]:
         "ok": ok,
         "suite_hard_fail": suite_hard_fail,
         "entry_mode": entry_mode,
+        "entry_z": entry_z,
+        "leverage_frac": leverage_frac,
         "L": L,
+        "exit_mode": exit_mode,
+        "exit_z": exit_z,
+        "take_profit_pct": take_profit_pct,
+        "stop_loss_pct": stop_loss_pct,
+        "max_hold_days": max_hold_days,
         **full,
         **post,
         "post_gonogo": gg.get("decision"),
@@ -782,7 +805,7 @@ def _post_only_section_semantic1(rows: List[Dict[str, Any]]) -> List[str]:
         if _bool_flag(r.get("suite_hard_fail")):
             notes.append("WARNING: suite_hard_fail=true (FULL period floor violated; Semantic2 risk)")
         if _fmt_str(r.get("dq_post_neg_days")) == "DQ_MISMATCH":
-            notes.append(f"DQ_MISMATCH(post_neg_days): { _fmt_str(r.get('dq_post_neg_days_detail')) }")
+            notes.append(f"DQ_MISMATCH(post_neg_days): {_fmt_str(r.get('dq_post_neg_days_detail'))}")
         return "; ".join(notes) if notes else ""
 
     lines.append("### PASS (deploy-grade, strict; Semantic1=new start)")
@@ -895,15 +918,15 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
     lines.append("note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`")
     lines.append("")
 
-    # v13: add post_neg_days_csv + dq_post_neg_days columns at the end (minimal surface area)
+    # v14: insert tactical params columns (display-only)
     lines.append(
-        "| id | ok | suite_hard_fail | entry_mode | L | "
+        "| id | ok | suite_hard_fail | entry_mode | entry_z | lev_frac | L | exit_mode | exit_z | TP | SL | max_hold | "
         "full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | "
         "post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | "
         "post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped | post_neg_days_csv | dq_post_neg_days |"
     )
     lines.append(
-        "|---|---:|---:|---|---:|"
+        "|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|---:|"
         "---:|---:|---:|---:|---:|---:|---:|"
         "---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
         "---|---|---:|---:|---:|---:|---:|---:|---:|---|"
@@ -911,7 +934,7 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
 
     for r in rows_sorted:
         lines.append(
-            "| {id} | {ok} | {shf} | {entry_mode} | {L} | "
+            "| {id} | {ok} | {shf} | {entry_mode} | {entry_z} | {lev_frac} | {L} | {exit_mode} | {exit_z} | {tp} | {sl} | {mhd} | "
             "{full_cagr} | {full_mdd} | {full_sh} | {full_calmar} | {dcagr} | {dmdd} | {dsh} | "
             "{post_ok} | {split} | {post_start} | {post_n} | {post_years} | {post_cagr} | {post_mdd} | {post_sh} | {post_calmar} | {post_dcagr} | {post_dmdd} | {post_dsh} | "
             "{gonogo} | {rank_basis} | {neg_days} | {eq_min} | {post_neg_days} | {post_eq_min} | {trades} | {rv20} | {post_neg_days_csv} | {dq} |".format(
@@ -919,7 +942,14 @@ def _render_md(obj: Dict[str, Any], in_json_path: str) -> str:
                 ok=_escape_md_cell(r.get("ok")),
                 shf=_escape_md_cell(r.get("suite_hard_fail")),
                 entry_mode=_escape_md_cell(r.get("entry_mode")),
+                entry_z=_fmt_num(r.get("entry_z"), nd=2) if _to_float(r.get("entry_z")) is not None else "N/A",
+                lev_frac=_fmt_num(r.get("leverage_frac"), nd=2) if _to_float(r.get("leverage_frac")) is not None else "N/A",
                 L=_fmt_num(r.get("L"), nd=2) if _to_float(r.get("L")) is not None else "N/A",
+                exit_mode=_escape_md_cell(r.get("exit_mode")),
+                exit_z=_fmt_num(r.get("exit_z"), nd=2) if _to_float(r.get("exit_z")) is not None else "N/A",
+                tp=_fmt_pct(r.get("take_profit_pct"), nd=2),
+                sl=_fmt_pct(r.get("stop_loss_pct"), nd=2),
+                mhd=_fmt_int(r.get("max_hold_days")),
                 full_cagr=_fmt_pct(r.get("full_cagr")),
                 full_mdd=_fmt_pct(r.get("full_mdd")),
                 full_sh=_fmt_num(r.get("full_sharpe0"), nd=3),
