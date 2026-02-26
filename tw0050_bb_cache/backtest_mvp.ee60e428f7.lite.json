@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-26T06:14:58Z",
+  "generated_at_utc": "2026-02-26T06:35:10Z",
   "schema_version": "v27.0",
   "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
   "inputs": {
@@ -54,7 +54,7 @@
     "equity_curve_cleanup": {
       "ok": true,
       "cache_dir": "tw0050_bb_cache",
-      "removed": 28,
+      "removed": 37,
       "errors": []
     },
     "bb_tactical": {
@@ -83,7 +83,7 @@
     {
       "strategy_id": "bb_conditional",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:58Z",
+      "generated_at_utc": "2026-02-26T06:35:10Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -234,7 +234,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:10Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -384,7 +384,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:10Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -608,7 +608,7 @@
     {
       "strategy_id": "always_leverage_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:58Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -759,7 +759,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -909,7 +909,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -1133,7 +1133,7 @@
     {
       "strategy_id": "always_leverage_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:58Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -1284,7 +1284,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -1434,7 +1434,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -1658,7 +1658,7 @@
     {
       "strategy_id": "always_leverage_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:58Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -1809,7 +1809,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -1959,7 +1959,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -2183,7 +2183,7 @@
     {
       "strategy_id": "always_leverage_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:58Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -2334,7 +2334,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -2484,7 +2484,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -2714,7 +2714,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:58Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -2865,7 +2865,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -3015,7 +3015,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -3239,7 +3239,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:58Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -3390,7 +3390,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -3540,7 +3540,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:58Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -3764,7 +3764,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:59Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -3915,7 +3915,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:59Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -4065,7 +4065,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:59Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -4295,7 +4295,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-02-26T06:14:59Z",
+      "generated_at_utc": "2026-02-26T06:35:11Z",
       "schema_version": "v27.0",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
       "params": {
@@ -4446,7 +4446,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:59Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {
@@ -4596,7 +4596,7 @@
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-02-26T06:14:59Z",
+              "generated_at_utc": "2026-02-26T06:35:11Z",
               "schema_version": "v27.0",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit",
               "params": {

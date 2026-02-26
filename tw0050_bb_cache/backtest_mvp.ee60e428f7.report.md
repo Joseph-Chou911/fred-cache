@@ -1,8 +1,8 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-26T06:14:58Z`
+- generated_at_utc: `2026-02-26T06:35:10Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit`
-- renderer_fingerprint: `render_backtest_mvp@2026-02-24.v13.dq_post_neg_days_vs_equity_csv`
+- renderer_fingerprint: `render_backtest_mvp@2026-02-26.v14.print_exit_params`
 - suite_ok: `True`
 
 ## Ranking (policy)
@@ -15,17 +15,17 @@
 ## Strategies
 note_full: `FULL_* columns may be contaminated by a known data singularity issue. Do not use FULL alone for go/no-go; use POST_* as primary.`
 
-| id | ok | suite_hard_fail | entry_mode | L | full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped | post_neg_days_csv | dq_post_neg_days |
-|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| trend_leverage_price_gt_ma60_1.5x | True | True | trend | 1.50 | 9.08% | -118.88% | -0.194 | 0.076 | 0.44% | -41.55% | -0.706 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 22.92% | -37.65% | 1.058 | 0.609 | 2.53% | -3.82% | -0.044 | GO_OR_REVIEW | post | 1422 | -0.40 | 0 | 0.96 | 94 | 0 | 1421 | DQ_MISMATCH |
-| trend_leverage_price_gt_ma60_1.3x | True | True | trend | 1.30 | 8.88% | -103.16% | -0.030 | 0.086 | 0.25% | -25.82% | -0.541 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.98% | -36.21% | 1.078 | 0.607 | 1.58% | -2.38% | -0.024 | GO_OR_REVIEW | post | 124 | -0.06 | 0 | 0.96 | 138 | 0 | 123 | DQ_MISMATCH |
-| trend_leverage_price_gt_ma60_1.2x | True | False | trend | 1.20 | 8.81% | -94.86% | 0.611 | 0.093 | 0.17% | -17.53% | 0.100 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.48% | -35.45% | 1.087 | 0.606 | 1.08% | -1.62% | -0.015 | GO_OR_REVIEW | post | 0 | 0.10 | 0 | 0.96 | 139 | 0 | 0 | OK |
-| trend_leverage_price_gt_ma60_1.1x | True | False | trend | 1.10 | 8.72% | -86.26% | 0.541 | 0.101 | 0.09% | -8.93% | 0.030 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 20.95% | -34.66% | 1.095 | 0.604 | 0.55% | -0.83% | -0.006 | NO_GO | post | 0 | 0.27 | 0 | 0.96 | 139 | 0 | 0 | OK |
-| always_leverage_1.1x | True | False | always | 1.10 | 8.89% | -83.64% | 0.529 | 0.106 | 0.25% | -6.31% | 0.018 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.10% | -35.52% | 1.078 | 0.594 | 0.70% | -1.69% | -0.024 | NO_GO | post | 0 | 0.32 | 0 | 0.96 | 69 | 0 | 0 | OK |
-| always_leverage_1.2x | True | False | always | 1.20 | 9.12% | -89.53% | 0.558 | 0.102 | 0.49% | -12.20% | 0.047 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.76% | -37.05% | 1.057 | 0.587 | 1.36% | -3.23% | -0.044 | GO_OR_REVIEW | post | 0 | 0.21 | 0 | 0.96 | 69 | 0 | 0 | OK |
-| always_leverage_1.3x | True | False | always | 1.30 | 9.36% | -95.05% | 0.607 | 0.098 | 0.72% | -17.71% | 0.096 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 22.38% | -38.45% | 1.040 | 0.582 | 1.99% | -4.62% | -0.061 | GO_OR_REVIEW | post | 0 | 0.11 | 0 | 0.95 | 69 | 0 | 0 | OK |
-| always_leverage_1.5x | True | True | always | 1.50 | 9.86% | -105.07% | -0.196 | 0.094 | 1.23% | -27.74% | -0.707 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 23.54% | -40.90% | 1.013 | 0.576 | 3.15% | -7.07% | -0.089 | GO_OR_REVIEW | post | 422 | -0.11 | 0 | 0.94 | 65 | 0 | 421 | DQ_MISMATCH |
-| bb_conditional | True | False | bb | 1.50 | 8.80% | -71.42% | 0.500 | 0.123 | 0.17% | 5.91% | -0.011 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 20.33% | -41.37% | 0.993 | 0.492 | -0.06% | -7.54% | -0.108 | NO_GO | post | 0 | 0.56 | 0 | 0.96 | 22 | 147 | 0 | OK |
+| id | ok | suite_hard_fail | entry_mode | entry_z | lev_frac | L | exit_mode | exit_z | TP | SL | max_hold | full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped | post_neg_days_csv | dq_post_neg_days |
+|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| trend_leverage_price_gt_ma60_1.5x | True | True | trend | -1.50 | 0.50 | 1.50 | z | 0.00 | 0.00% | 0.00% | 60 | 9.08% | -118.88% | -0.194 | 0.076 | 0.44% | -41.55% | -0.706 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 22.92% | -37.65% | 1.058 | 0.609 | 2.53% | -3.82% | -0.044 | GO_OR_REVIEW | post | 1422 | -0.40 | 0 | 0.96 | 94 | 0 | 1421 | DQ_MISMATCH |
+| trend_leverage_price_gt_ma60_1.3x | True | True | trend | -1.50 | 0.30 | 1.30 | z | 0.00 | 0.00% | 0.00% | 60 | 8.88% | -103.16% | -0.030 | 0.086 | 0.25% | -25.82% | -0.541 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.98% | -36.21% | 1.078 | 0.607 | 1.58% | -2.38% | -0.024 | GO_OR_REVIEW | post | 124 | -0.06 | 0 | 0.96 | 138 | 0 | 123 | DQ_MISMATCH |
+| trend_leverage_price_gt_ma60_1.2x | True | False | trend | -1.50 | 0.20 | 1.20 | z | 0.00 | 0.00% | 0.00% | 60 | 8.81% | -94.86% | 0.611 | 0.093 | 0.17% | -17.53% | 0.100 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.48% | -35.45% | 1.087 | 0.606 | 1.08% | -1.62% | -0.015 | GO_OR_REVIEW | post | 0 | 0.10 | 0 | 0.96 | 139 | 0 | 0 | OK |
+| trend_leverage_price_gt_ma60_1.1x | True | False | trend | -1.50 | 0.10 | 1.10 | z | 0.00 | 0.00% | 0.00% | 60 | 8.72% | -86.26% | 0.541 | 0.101 | 0.09% | -8.93% | 0.030 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 20.95% | -34.66% | 1.095 | 0.604 | 0.55% | -0.83% | -0.006 | NO_GO | post | 0 | 0.27 | 0 | 0.96 | 139 | 0 | 0 | OK |
+| always_leverage_1.1x | True | False | always | -1.50 | 0.10 | 1.10 | z | 0.00 | 0.00% | 0.00% | 60 | 8.89% | -83.64% | 0.529 | 0.106 | 0.25% | -6.31% | 0.018 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.10% | -35.52% | 1.078 | 0.594 | 0.70% | -1.69% | -0.024 | NO_GO | post | 0 | 0.32 | 0 | 0.96 | 69 | 0 | 0 | OK |
+| always_leverage_1.2x | True | False | always | -1.50 | 0.20 | 1.20 | z | 0.00 | 0.00% | 0.00% | 60 | 9.12% | -89.53% | 0.558 | 0.102 | 0.49% | -12.20% | 0.047 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 21.76% | -37.05% | 1.057 | 0.587 | 1.36% | -3.23% | -0.044 | GO_OR_REVIEW | post | 0 | 0.21 | 0 | 0.96 | 69 | 0 | 0 | OK |
+| always_leverage_1.3x | True | False | always | -1.50 | 0.30 | 1.30 | z | 0.00 | 0.00% | 0.00% | 60 | 9.36% | -95.05% | 0.607 | 0.098 | 0.72% | -17.71% | 0.096 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 22.38% | -38.45% | 1.040 | 0.582 | 1.99% | -4.62% | -0.061 | GO_OR_REVIEW | post | 0 | 0.11 | 0 | 0.95 | 69 | 0 | 0 | OK |
+| always_leverage_1.5x | True | True | always | -1.50 | 0.50 | 1.50 | z | 0.00 | 0.00% | 0.00% | 60 | 9.86% | -105.07% | -0.196 | 0.094 | 1.23% | -27.74% | -0.707 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 23.54% | -40.90% | 1.013 | 0.576 | 3.15% | -7.07% | -0.089 | GO_OR_REVIEW | post | 422 | -0.11 | 0 | 0.94 | 65 | 0 | 421 | DQ_MISMATCH |
+| bb_conditional | True | False | bb | -1.50 | 0.50 | 1.50 | z | 0.00 | 0.00% | 0.00% | 60 | 8.80% | -71.42% | 0.500 | 0.123 | 0.17% | 5.91% | -0.011 | True | 2014-01-02 | 2014-01-03 | 2956 | 11.726 | 20.33% | -41.37% | 0.993 | 0.492 | -0.06% | -7.54% | -0.108 | NO_GO | post | 0 | 0.56 | 0 | 0.96 | 22 | 147 | 0 | OK |
 
 ## Exclusions (not eligible for recommendation)
 - total_strategies: `9`
