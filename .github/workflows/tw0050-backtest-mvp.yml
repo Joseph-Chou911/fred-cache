@@ -30,7 +30,7 @@ jobs:
           pip install pandas numpy
 
       # =========================
-      # (A) Run backtest (MVP) — your original pipeline
+      # (A) Run backtest (MVP) — your original pipeline + enable tp_sl (bb_tactical)
       # =========================
       - name: Run backtest (MVP)
         env:
@@ -41,8 +41,25 @@ jobs:
           ENTER_Z: "-1.5"
           EXIT_Z: "0.0"
           MAX_HOLD_DAYS: "60"
+
+          # --- NEW: ensure suite includes BB strategies (avoid default surprises) ---
+          STRATEGY_SUITE: "single_bb" # or "all"
+
+          # --- NEW: enable bb_tactical(tp_sl) ---
+          ADD_BB_TACTICAL: "1"
+          TAKE_PROFIT_PCT: "0.02" # 2% take profit
+          STOP_LOSS_PCT: "0.03"   # 3% stop loss
         run: |
           set -euo pipefail
+
+          # ---- Preflight: hard fail if the script doesn't support tp/sl flags ----
+          HELP="$(python scripts/backtest_tw0050_leverage_mvp.py --help || true)"
+          echo "$HELP" | grep -q -- "--strategy_suite" || { echo "ERROR: backtest script missing flag --strategy_suite"; exit 1; }
+          if [ "${ADD_BB_TACTICAL}" = "1" ]; then
+            echo "$HELP" | grep -q -- "--add_bb_tactical" || { echo "ERROR: backtest script missing flag --add_bb_tactical"; exit 1; }
+            echo "$HELP" | grep -q -- "--take_profit_pct" || { echo "ERROR: backtest script missing flag --take_profit_pct"; exit 1; }
+            echo "$HELP" | grep -q -- "--stop_loss_pct" || { echo "ERROR: backtest script missing flag --stop_loss_pct"; exit 1; }
+          fi
 
           FP=$(python - << 'PY'
           import hashlib, os
@@ -52,6 +69,10 @@ jobs:
             os.environ["ENTER_Z"],
             os.environ["EXIT_Z"],
             os.environ["MAX_HOLD_DAYS"],
+            os.environ.get("STRATEGY_SUITE",""),
+            os.environ.get("ADD_BB_TACTICAL","0"),
+            os.environ.get("TAKE_PROFIT_PCT","0"),
+            os.environ.get("STOP_LOSS_PCT","0"),
           ]).encode("utf-8")
           print(hashlib.sha1(s).hexdigest()[:10])
           PY
@@ -62,6 +83,15 @@ jobs:
           OUT_JSON_LITE="backtest_mvp.${FP}.lite.json"
           OUT_MD="backtest_mvp.${FP}.report.md"
 
+          EXTRA_ARGS=()
+          EXTRA_ARGS+=(--strategy_suite "${STRATEGY_SUITE}")
+
+          if [ "${ADD_BB_TACTICAL}" = "1" ]; then
+            EXTRA_ARGS+=(--add_bb_tactical)
+            EXTRA_ARGS+=(--take_profit_pct "${TAKE_PROFIT_PCT}")
+            EXTRA_ARGS+=(--stop_loss_pct "${STOP_LOSS_PCT}")
+          fi
+
           python scripts/backtest_tw0050_leverage_mvp.py \
             --cache_dir "${CACHE_DIR}" \
             --price_csv "${PRICE_CSV}" \
@@ -71,7 +101,8 @@ jobs:
             --exit_z "${EXIT_Z}" \
             --max_hold_days "${MAX_HOLD_DAYS}" \
             --out_equity_csv "${OUT_EQ}" \
-            --out_json "${OUT_JSON}"
+            --out_json "${OUT_JSON}" \
+            "${EXTRA_ARGS[@]}"
 
           echo "Wrote MVP full outputs:"
           ls -lh "${CACHE_DIR}/${OUT_EQ}" "${CACHE_DIR}/${OUT_JSON}"
