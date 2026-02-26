@@ -6,6 +6,17 @@ backtest_tw0050_leverage_mvp.py
 
 Audit-first MVP backtest for "base hold + conditional leverage leg" using BB z-score.
 
+v27.1 (2026-02-26):
+- FIX(tp/sl enablement): make tp/sl tactical mode truly activatable by workflow/env:
+  * Add CLI: --enable_tp_sl / --tp_sl (alias)
+  * Support env: ENABLE_TP_SL=1 -> default-enable tp/sl unless user disables via --no-enable-tp-sl
+  * Add CLI alias: --enable_bb_tactical (alias of --add_bb_tactical)
+  * Add CLI aliases for thresholds:
+      - take-profit: --tp_pct / --take_profit (alias of --take_profit_pct)
+      - stop-loss:  --sl_pct / --stop_loss  (alias of --stop_loss_pct)
+  * Tactical strategy is enabled when (--add_bb_tactical OR --enable_tp_sl OR env ENABLE_TP_SL=1).
+  * Keep legacy bb_conditional unchanged (z-exit).
+
 v27.0 (2026-02-26):
 - ADD(strategy): optional BB tactical exit mode "tp_sl" (take-profit / stop-loss) for the leverage leg.
   * Does NOT change default behavior. Tactical strategy is enabled only if --add_bb_tactical is set.
@@ -78,8 +89,8 @@ import numpy as np
 import pandas as pd
 
 
-SCHEMA_VERSION = "v27.0"
-SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-26.v27.0.bb_tactical_tp_sl_exit"
+SCHEMA_VERSION = "v27.1"
+SCRIPT_FINGERPRINT = "backtest_tw0050_leverage_mvp@2026-02-26.v27.1.tp_sl_cli_env_enable"
 
 # Tag used for per-strategy equity curve csv naming (stable per script fingerprint)
 _EQUITY_CURVE_TAG = hashlib.sha1(SCRIPT_FINGERPRINT.encode("utf-8")).hexdigest()[:10]
@@ -90,7 +101,7 @@ _RV20_Q_LOOKBACK = 252
 _RV20_Q = 0.60
 _RV20_Q_MIN_PERIODS = 100  # allow early series to pass (no block) until enough history
 
-EXIT_MODES = ["z", "tp_sl"]  # v27.0
+EXIT_MODES = ["z", "tp_sl"]  # v27.0+
 
 TRADE_COLS = [
     "entry_date",
@@ -1888,6 +1899,15 @@ def _run_one_strategy(
 
 
 def main() -> None:
+    def _env_truthy(name: str) -> bool:
+        v = os.getenv(name)
+        if v is None:
+            return False
+        return str(v).strip().lower() in ("1", "true", "t", "yes", "y", "on")
+
+    # If ENABLE_TP_SL=1 in env, default-enable tp/sl mode unless user explicitly disables via --no-enable-tp-sl.
+    default_enable_tp_sl = _env_truthy("ENABLE_TP_SL")
+
     ap = argparse.ArgumentParser()
 
     ap.add_argument("--cache_dir", required=True)
@@ -1977,7 +1997,24 @@ def main() -> None:
         help_text="If true, any equity_negative_days>0 triggers hard fail (default true). Use --no-hard_fail_any_negative_days (or --no-hard-fail-any-negative-days) to disable.",
     )
 
-    # v27.0: optional BB tactical tp/sl strategy
+    # v27.1: tp/sl enable flags + optional BB tactical tp/sl strategy
+    _add_boolopt(
+        ap,
+        "--enable_tp_sl",
+        default=bool(default_enable_tp_sl),
+        help_text=(
+            "If set (or env ENABLE_TP_SL=1), include the BB tactical tp/sl exit strategy. "
+            "Configure thresholds via --take_profit_pct/--stop_loss_pct (or aliases)."
+        ),
+    )
+    ap.add_argument(
+        "--tp_sl",
+        dest="enable_tp_sl",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Alias for --enable_tp_sl.",
+    )
+
     _add_boolopt(
         ap,
         "--add_bb_tactical",
@@ -1985,13 +2022,27 @@ def main() -> None:
         help_text="If set, add an extra BB tactical strategy that exits by take-profit/stop-loss (tp/sl). Default false (no behavior change).",
     )
     ap.add_argument(
+        "--enable_bb_tactical",
+        dest="add_bb_tactical",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Alias for --add_bb_tactical.",
+    )
+
+    ap.add_argument(
         "--take_profit_pct",
+        "--tp_pct",
+        "--take_profit",
+        dest="take_profit_pct",
         type=float,
         default=0.0,
         help="For BB tactical strategy (tp/sl): take profit threshold as pct (e.g. 0.02 for +2%). 0 disables.",
     )
     ap.add_argument(
         "--stop_loss_pct",
+        "--sl_pct",
+        "--stop_loss",
+        dest="stop_loss_pct",
         type=float,
         default=0.0,
         help="For BB tactical strategy (tp/sl): stop loss threshold as pct (e.g. 0.03 for -3%). 0 disables.",
@@ -2023,15 +2074,19 @@ def main() -> None:
         if (float(args.exit_z) < float(args.entry_z)) and (not bool(args.allow_inverted_z)):
             raise SystemExit("ERROR: exit_z < entry_z for bb strategy. If intentional, set --allow_inverted_z.")
 
-    # v27.0 tactical sanity
+    # v27.1 tactical sanity (covers --add_bb_tactical, --enable_bb_tactical, --enable_tp_sl, env ENABLE_TP_SL=1)
     tp = float(args.take_profit_pct)
     sl = float(args.stop_loss_pct)
     if tp < 0.0 or sl < 0.0:
         raise SystemExit("ERROR: --take_profit_pct and --stop_loss_pct must be >= 0")
-    if bool(getattr(args, "add_bb_tactical")):
+
+    enable_tp_sl = bool(getattr(args, "enable_tp_sl", False))
+    bb_tactical_requested = bool(getattr(args, "add_bb_tactical", False)) or enable_tp_sl
+
+    if bb_tactical_requested:
         if (tp <= 0.0 and sl <= 0.0 and int(args.max_hold_days) <= 0):
             raise SystemExit(
-                "ERROR: --add_bb_tactical set but tp/sl are both disabled and max_hold_days==0. "
+                "ERROR: tp/sl enabled but tp/sl are both disabled and max_hold_days==0. "
                 "This can create an unbounded hold. Set take_profit_pct and/or stop_loss_pct and/or max_hold_days."
             )
 
@@ -2129,8 +2184,8 @@ def main() -> None:
         )
         strategies.append(("bb_conditional", p_bb))
 
-        # v27.0 optional tactical BB strategy: tp/sl exit
-        if bool(getattr(args, "add_bb_tactical")):
+        # v27.1 optional tactical BB strategy: tp/sl exit (enabled by --add_bb_tactical OR --enable_tp_sl OR env ENABLE_TP_SL=1)
+        if bb_tactical_requested:
             tp_bp = _fmt_bp(tp)
             sl_bp = _fmt_bp(sl)
             sid = f"bb_tactical_tp{tp_bp}bp_sl{sl_bp}bp"
@@ -2233,9 +2288,11 @@ def main() -> None:
             "equity_curve_tag": _EQUITY_CURVE_TAG,
             "equity_curve_cleanup": cleanup_info,  # v26.9 audit
 
-            # v27.0
+            # v27.1
             "bb_tactical": {
-                "enabled": bool(getattr(args, "add_bb_tactical")),
+                "enabled": bool(bb_tactical_requested),
+                "enabled_by": ("enable_tp_sl" if enable_tp_sl else ("add_bb_tactical" if bool(getattr(args, "add_bb_tactical", False)) else "none")),
+                "env_ENABLE_TP_SL": str(os.getenv("ENABLE_TP_SL")) if os.getenv("ENABLE_TP_SL") is not None else None,
                 "take_profit_pct": float(tp),
                 "stop_loss_pct": float(sl),
                 "exit_mode": "tp_sl",
@@ -2267,7 +2324,8 @@ def main() -> None:
             "v26.7+: write per-strategy equity curve CSV for renderer evidence.",
             "v26.8: default post_start_date excludes split_date (cut singularity day from segment stats).",
             "v26.9: cleanup old equity_curve.*.csv files in cache_dir at start of run.",
-            "v27.0: optional BB tactical tp/sl exit strategy (enabled only by --add_bb_tactical).",
+            "v27.0: optional BB tactical tp/sl exit strategy (enabled only by flags).",
+            "v27.1: tp/sl can be enabled by env ENABLE_TP_SL=1 and CLI aliases added for workflow compatibility.",
         ],
     }
 
