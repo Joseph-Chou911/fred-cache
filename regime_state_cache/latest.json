@@ -1,6 +1,6 @@
 [
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "NOMINAL_10Y",
     "data_date": "2026-02-26",
     "value": "4.02",
@@ -8,7 +8,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "REAL_10Y",
     "data_date": "2026-02-26",
     "value": "1.74",
@@ -16,7 +16,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "BE10Y_PROXY",
     "data_date": "2026-02-26",
     "value": "2.2799999999999994",
@@ -24,7 +24,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "VIX_PROXY",
     "data_date": "2026-02-26",
     "value": "18.63",
@@ -32,31 +32,31 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "HYG_CLOSE",
     "data_date": "2026-02-26",
     "value": "80.85",
-    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20251030&d2=20260227&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20251031&d2=20260228&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "IEF_CLOSE",
     "data_date": "2026-02-26",
     "value": "97.6",
-    "source_url": "https://stooq.com/q/d/l/?s=ief.us&d1=20251030&d2=20260227&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&d1=20251031&d2=20260228&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "TIP_CLOSE",
     "data_date": "2026-02-26",
     "value": "111.71",
-    "source_url": "https://stooq.com/q/d/l/?s=tip.us&d1=20251030&d2=20260227&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=tip.us&d1=20251031&d2=20260228&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "HYG_IEF_RATIO",
     "data_date": "2026-02-26",
     "value": "0.8283811475409836",
@@ -64,7 +64,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "TIP_IEF_RATIO",
     "data_date": "2026-02-26",
     "value": "1.1445696721311476",
@@ -72,34 +72,34 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "OFR_FSI",
-    "data_date": "2026-02-24",
-    "value": "-2.344",
+    "data_date": "2026-02-25",
+    "value": "-2.601",
     "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "REGIME_STATE",
-    "data_date": "2026-02-27",
+    "data_date": "2026-02-28",
     "value": "NEUTRAL_MIXED",
     "source_url": "NA",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "REGIME_CONFIDENCE",
-    "data_date": "2026-02-27",
+    "data_date": "2026-02-28",
     "value": "LOW",
     "source_url": "NA",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-02-27T21:34:21.328226+08:00",
+    "as_of_ts": "2026-02-28T03:04:31.561888+08:00",
     "series_id": "REGIME_REASONS",
-    "data_date": "2026-02-27",
-    "value": "[\"panic=LOW(VIX=18.63)\", \"inflation_expect=MID(BE10Y=2.2799999999999994)\", \"credit_dev_unavailable(history_lt_60(36))\", \"OFR_FSI=OK(-2.344)\", \"confidence_cap=LOW(credit_unavailable)\"]",
+    "data_date": "2026-02-28",
+    "value": "[\"panic=LOW(VIX=18.63)\", \"inflation_expect=MID(BE10Y=2.2799999999999994)\", \"credit_dev_unavailable(history_lt_60(36))\", \"OFR_FSI=OK(-2.601)\", \"confidence_cap=LOW(credit_unavailable)\"]",
     "source_url": "NA",
     "notes": "NA"
   }
