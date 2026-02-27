@@ -9,14 +9,14 @@ Build an "episode pack" for video/script production by combining:
 - taiwan_margin_cache/latest.json
 - tw0050_bb_cache/stats_latest.json
 
-Outputs (flat):
-- episode_pack.json
-- episode_outline.md
+Outputs:
+- episode_pack.json (audit-first, includes raw inputs)
+- episode_data.md   (data-only brief for later human/LLM narration)
+- episode_outline.md (compat; in data mode it's same as episode_data.md)
 
-Audit-first:
-- keep raw inputs
-- best-effort extracts with picked_from path trace
-- explicit warnings (missing/stale/date_misaligned)
+Design goal:
+- The Python script outputs ONLY auditable facts + deterministic computed flags.
+- Narration / investment advice is produced later (you paste MD back to ChatGPT for polishing).
 """
 
 from __future__ import annotations
@@ -31,11 +31,19 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 SCHEMA_VERSION = "episode_pack_schema_v1"
-BUILD_FINGERPRINT = "build_video_pack@v1.2.rich_outline_more_extracts"
+BUILD_FINGERPRINT = "build_video_pack@v1.2.data_only_flags_more_extracts"
 
+
+# ---------------------------
+# Basic helpers
+# ---------------------------
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def local_now_iso() -> str:
+    return datetime.now().astimezone().isoformat()
 
 
 def load_json(path: str) -> Dict[str, Any]:
@@ -118,31 +126,7 @@ def compute_age_days(day_key_local: str, as_of: Optional[date]) -> Optional[int]
     return (d0 - as_of).days
 
 
-def fmt_float(x: Any, nd: int = 2) -> str:
-    try:
-        if x is None:
-            return "N/A"
-        return f"{float(x):.{nd}f}"
-    except Exception:
-        return "N/A"
-
-
-@dataclass
-class Extract:
-    field: str
-    value: Any
-    picked_from: List[str]
-
-
-def add_extract(extracts: List[Dict[str, Any]], field: str, obj: Dict[str, Any], paths: List[str]) -> None:
-    v, _p = pick_first(obj, paths)
-    if v is None:
-        return
-    # Keep full candidate paths for audit (best-effort trace)
-    extracts.append({"field": field, "value": v, "picked_from": paths})
-
-
-def _safe_float(x: Any) -> Optional[float]:
+def to_float(x: Any) -> Optional[float]:
     try:
         if x is None:
             return None
@@ -151,156 +135,301 @@ def _safe_float(x: Any) -> Optional[float]:
         return None
 
 
-def _sum_last_n(rows: List[Dict[str, Any]], key: str, n: int) -> Optional[float]:
-    if not isinstance(rows, list) or n <= 0:
+def fmt_num(x: Any, nd: int = 2) -> str:
+    v = to_float(x)
+    if v is None:
+        return "N/A"
+    return f"{v:.{nd}f}"
+
+
+def fmt_int(x: Any) -> str:
+    try:
+        if x is None:
+            return "N/A"
+        return str(int(x))
+    except Exception:
+        return "N/A"
+
+
+def fmt_bool(x: Any) -> str:
+    if x is True:
+        return "true"
+    if x is False:
+        return "false"
+    return "N/A"
+
+
+def uniq_keep_order(xs: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for x in xs:
+        if x not in seen:
+            out.append(x)
+            seen.add(x)
+    return out
+
+
+@dataclass
+class Extract:
+    field: str
+    value: Any
+    picked_from: List[str]
+    picked_path: Optional[str]
+
+
+def add_extract(extracts: List[Dict[str, Any]], field: str, obj: Dict[str, Any], paths: List[str]) -> None:
+    v, p = pick_first(obj, paths)
+    if v is None:
+        return
+    extracts.append({
+        "field": field,
+        "value": v,
+        "picked_from": paths,   # candidate list
+        "picked_path": p,       # actual selected path
+    })
+
+
+# ---------------------------
+# Computed flags (deterministic)
+# ---------------------------
+
+def flag_ge(x: Any, thr: float) -> Optional[bool]:
+    v = to_float(x)
+    if v is None:
         return None
-    s = 0.0
-    cnt = 0
-    for it in rows[:n]:
+    return v >= thr
+
+
+def flag_le(x: Any, thr: float) -> Optional[bool]:
+    v = to_float(x)
+    if v is None:
+        return None
+    return v <= thr
+
+
+def safe_max(xs: List[Optional[float]]) -> Optional[float]:
+    ys = [x for x in xs if isinstance(x, (int, float))]
+    return max(ys) if ys else None
+
+
+def safe_sum(xs: List[Optional[float]]) -> Optional[float]:
+    ys = [x for x in xs if isinstance(x, (int, float))]
+    return sum(ys) if ys else None
+
+
+def margin_series_rows(m: Dict[str, Any], market: str) -> List[Dict[str, Any]]:
+    rows = deep_get(m, f"series.{market}.rows")
+    return rows if isinstance(rows, list) else []
+
+
+def margin_latest(m: Dict[str, Any], market: str) -> Tuple[Optional[str], Optional[float], Optional[float]]:
+    rows = margin_series_rows(m, market)
+    if not rows:
+        return None, None, None
+    d = rows[0].get("date")
+    bal = to_float(rows[0].get("balance_yi"))
+    chg = to_float(rows[0].get("chg_yi"))
+    return d, bal, chg
+
+
+def margin_sum_chg(m: Dict[str, Any], market: str, n: int) -> Optional[float]:
+    rows = margin_series_rows(m, market)[:n]
+    chgs = [to_float(r.get("chg_yi")) for r in rows]
+    return safe_sum(chgs)
+
+
+def margin_is_30row_high(m: Dict[str, Any], market: str) -> Optional[bool]:
+    rows = margin_series_rows(m, market)
+    if not rows:
+        return None
+    bals = [to_float(r.get("balance_yi")) for r in rows]
+    cur = bals[0]
+    mx = safe_max(bals)
+    if cur is None or mx is None:
+        return None
+    return cur >= mx
+
+
+def tranche_levels_compact(tw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    levels = deep_get(tw, "pledge.unconditional_tranche_levels.levels")
+    if not isinstance(levels, list):
+        return []
+    out = []
+    for it in levels:
         if not isinstance(it, dict):
             continue
-        v = _safe_float(it.get(key))
-        if v is None:
-            continue
-        s += v
-        cnt += 1
-    return s if cnt > 0 else None
+        out.append({
+            "label": it.get("label"),
+            "price_level": it.get("price_level"),
+            "drawdown": it.get("drawdown"),
+        })
+    return out
 
 
-def _is_latest_max(rows: List[Dict[str, Any]], key: str) -> Optional[bool]:
-    if not isinstance(rows, list) or not rows:
-        return None
-    latest = _safe_float(rows[0].get(key)) if isinstance(rows[0], dict) else None
-    if latest is None:
-        return None
-    mx = latest
-    ok = True
-    for it in rows[1:]:
-        if not isinstance(it, dict):
-            continue
-        v = _safe_float(it.get(key))
-        if v is None:
-            continue
-        if v > mx:
-            mx = v
-            ok = False
-    return ok if mx == latest else False
+# ---------------------------
+# Data-only Markdown report
+# ---------------------------
 
-
-def build_outline(pack: Dict[str, Any]) -> str:
+def build_md_data(pack: Dict[str, Any]) -> str:
     tz = pack.get("timezone", "Asia/Taipei")
     day = pack.get("day_key_local", "N/A")
     warnings = pack.get("warnings", [])
     inp = pack.get("inputs", {})
     ext = pack.get("extracts_best_effort", {})
+    flags = pack.get("computed_flags", {})
 
-    def s(x: Any) -> str:
-        return "N/A" if x is None else str(x)
+    def w(s: str) -> str:
+        return s + "\n"
 
-    def fnum(x: Any, nd: int = 2) -> str:
-        return fmt_float(x, nd)
+    out = ""
+    out += w("# 投資日記 Data Brief（roll25 + taiwan margin + tw0050_bb）")
+    out += w("")
+    out += w(f"- day_key_local: {day} ({tz})")
+    out += w(f"- generated_at_local: {pack.get('generated_at_local', 'N/A')}")
+    out += w(f"- generated_at_utc: {pack.get('generated_at_utc', 'N/A')}")
+    out += w(f"- build_fingerprint: {pack.get('build_fingerprint', 'N/A')}")
+    out += w(f"- warnings: {', '.join(warnings) if warnings else 'NONE'}")
+    out += w("")
 
-    def vmap(key: str) -> Dict[str, Any]:
-        return {e["field"]: e["value"] for e in ext.get(key, []) if isinstance(e, dict) and "field" in e}
+    out += w("## 0) Quick facts (for narration later)")
+    # Assemble a compact line of the highest-signal numbers (still data-only)
+    roll = {e["field"]: e["value"] for e in ext.get("roll25", [])}
+    mar = {e["field"]: e["value"] for e in ext.get("margin", [])}
+    tw = {e["field"]: e["value"] for e in ext.get("tw0050_bb", [])}
 
+    tv60z = roll.get("trade_value_win60_z")
+    tv60p = roll.get("trade_value_win60_p")
+    tv252z = roll.get("trade_value_win252_z")
+    tv252p = roll.get("trade_value_win252_p")
+
+    out += w(f"- roll25 trade_value heat: 60d z={fmt_num(tv60z,3)} p={fmt_num(tv60p,3)} | 252d z={fmt_num(tv252z,3)} p={fmt_num(tv252p,3)}")
+    out += w(f"- margin latest: TWSE bal_yi={fmt_num(mar.get('twse_balance_yi'),1)} chg_yi={fmt_num(mar.get('twse_chg_yi'),1)} | TPEX bal_yi={fmt_num(mar.get('tpex_balance_yi'),1)} chg_yi={fmt_num(mar.get('tpex_chg_yi'),1)}")
+    out += w(f"- 0050 latest: state={tw.get('bb_state','N/A')} bb_z={fmt_num(tw.get('bb_z'),3)} price={fmt_num(tw.get('adjclose'),2)} regime_allowed={fmt_bool(tw.get('regime_allowed'))} pledge_action={tw.get('pledge_action_bucket','N/A')}")
+    out += w("")
+
+    # roll25 section
     r = inp.get("roll25", {})
+    out += w("## 1) roll25 (TWSE Turnover / Heat)")
+    out += w(f"- path: {r.get('path','N/A')}")
+    out += w(f"- as_of_date: {r.get('as_of_date','N/A')} | age_days: {r.get('age_days','N/A')} | picked_as_of_path: {r.get('picked_as_of_path','N/A')}")
+    out += w(f"- fingerprint: {r.get('fingerprint','N/A')}")
+    out += w("")
+    out += w("### extracts")
+    for k in [
+        "mode",
+        "used_date",
+        "trade_value_win60_z", "trade_value_win60_p",
+        "trade_value_win252_z", "trade_value_win252_p",
+        "close_win252_z", "close_win252_p",
+        "pct_change_win60_z", "pct_change_win60_p",
+        "amplitude_pct_win60_z", "amplitude_pct_win60_p",
+        "vol_multiplier_20", "volume_amplified",
+        "new_low_n", "consecutive_down_days",
+    ]:
+        if k in roll:
+            out += w(f"- {k}: {roll[k]}")
+    out += w("")
+    out += w("### computed_flags (thresholds are explicit)")
+    rf = flags.get("roll25", {})
+    for k, v in rf.items():
+        out += w(f"- {k}: {v}")
+    out += w("")
+
+    # margin section
     m = inp.get("taiwan_margin", {})
+    out += w("## 2) taiwan_margin (Margin financing)")
+    out += w(f"- path: {m.get('path','N/A')}")
+    out += w(f"- as_of_date: {m.get('as_of_date','N/A')} | age_days: {m.get('age_days','N/A')} | picked_as_of_path: {m.get('picked_as_of_path','N/A')}")
+    out += w(f"- fingerprint: {m.get('fingerprint','N/A')}")
+    out += w("")
+    out += w("### extracts")
+    for k in [
+        "twse_data_date", "twse_balance_yi", "twse_chg_yi",
+        "tpex_data_date", "tpex_balance_yi", "tpex_chg_yi",
+        "total_balance_yi", "total_chg_yi",
+        "twse_chg_3d_sum", "tpex_chg_3d_sum", "total_chg_3d_sum",
+        "twse_is_30row_high", "tpex_is_30row_high", "total_is_30row_high",
+    ]:
+        if k in mar:
+            out += w(f"- {k}: {mar[k]}")
+    out += w("")
+    out += w("### computed_flags (thresholds are explicit)")
+    mf = flags.get("margin", {})
+    for k, v in mf.items():
+        out += w(f"- {k}: {v}")
+    out += w("")
+
+    # tw0050 section
     t = inp.get("tw0050_bb", {})
+    out += w("## 3) tw0050_bb (0050 Bollinger / Trend / Vol / Pledge gate)")
+    out += w(f"- path: {t.get('path','N/A')}")
+    out += w(f"- as_of_date: {t.get('as_of_date','N/A')} | age_days: {t.get('age_days','N/A')} | picked_as_of_path: {t.get('picked_as_of_path','N/A')}")
+    out += w(f"- fingerprint: {t.get('fingerprint','N/A')}")
+    dq = t.get("dq_flags", [])
+    out += w(f"- dq_flags: {', '.join(dq) if dq else 'NONE'}")
+    out += w("")
+    out += w("### extracts")
+    for k in [
+        "last_date",
+        "adjclose",
+        "bb_state", "bb_z",
+        "dist_to_upper_pct", "dist_to_lower_pct",
+        "band_width_std_pct", "band_width_geo_pct",
+        "trend_state", "price_vs_200ma_pct", "trend_slope_pct",
+        "rv_ann", "rv_ann_pctl",
+        "regime_allowed",
+        "pledge_action_bucket",
+        "pledge_veto_reasons",
+        "tranche_levels",
+    ]:
+        if k in tw:
+            out += w(f"- {k}: {tw[k]}")
+    out += w("")
+    out += w("### computed_flags (thresholds are explicit)")
+    tf = flags.get("tw0050_bb", {})
+    for k, v in tf.items():
+        out += w(f"- {k}: {v}")
+    out += w("")
 
-    rE = vmap("roll25")
-    mE = vmap("margin")
-    tE = vmap("tw0050_bb")
+    out += w("## 4) Notes")
+    out += w("- This MD is data-only. Paste it back to ChatGPT for narration/script polishing.")
+    return out
 
-    out: List[str] = []
-    out.append("# 投資日記 Episode Outline（roll25 + taiwan margin + tw0050_bb）\n")
-    out.append(f"- 產出日：{day}（{tz}）")
-    out.append("- 輸出：episode_pack.json, episode_outline.md")
-    out.append(f"- warnings: {', '.join(warnings) if warnings else 'NONE'}\n")
 
-    # ---- 10秒總結 ----
-    out.append("## 今日 10 秒總結（先講人話）")
-    if warnings:
-        out.append("- ⚠️ 偵測到 warnings：本集只做狀態描述，不做跨模組因果推論。")
-    out.append(
-        f"- **成交熱度**：20日成交金額 z={fnum(rE.get('trade_value_win60_z'),3)} / p={fnum(rE.get('trade_value_win60_p'),3)}；"
-        f"252日 z={fnum(rE.get('trade_value_win252_z'),3)} / p={fnum(rE.get('trade_value_win252_p'),3)}"
-    )
-    out.append(
-        f"- **槓桿動向**：TWSE 融資餘額(億)={fnum(mE.get('twse_balance_yi'),1)}（日變動 {fnum(mE.get('twse_chg_yi'),1)}）；"
-        f"TPEX={fnum(mE.get('tpex_balance_yi'),1)}（日變動 {fnum(mE.get('tpex_chg_yi'),1)}）"
-    )
-    out.append(
-        f"- **0050 位置**：{s(tE.get('bb_state'))}（bb_z={fnum(tE.get('bb_z'),3)}，價格 {fnum(tE.get('adjclose'),2)}）；"
-        f"Regime gate={s(tE.get('regime_allowed'))}；質押指引={s(tE.get('pledge_action_bucket'))}\n"
-    )
+# Optional: keep a narration-ish outline for those who still want it
+def build_md_outline_minimal(pack: Dict[str, Any]) -> str:
+    # Intentionally minimal and rule-free (still avoids advice)
+    tz = pack.get("timezone", "Asia/Taipei")
+    day = pack.get("day_key_local", "N/A")
+    warnings = pack.get("warnings", [])
 
-    # ---- 開場 ----
-    out.append("## 開場（20秒）")
-    out.append("- 今天用三個訊號整理市場位置：成交熱度（roll25）、槓桿動向（margin）、0050 技術位置（BB）。")
-    out.append("- 原則：只講「目前狀態 + 可稽核數字」，不把它包裝成預測。\n")
+    ext = pack.get("extracts_best_effort", {})
+    roll = {e["field"]: e["value"] for e in ext.get("roll25", [])}
+    mar = {e["field"]: e["value"] for e in ext.get("margin", [])}
+    tw = {e["field"]: e["value"] for e in ext.get("tw0050_bb", [])}
 
-    # ---- Roll25 ----
-    out.append("## 1) 成交熱度（roll25）（60–90秒）")
-    out.append(f"- as_of：{s(r.get('as_of_date'))}；age_days={s(r.get('age_days'))}；mode={s(rE.get('mode'))}")
-    out.append(
-        f"- 成交金額熱度：20日 z={fnum(rE.get('trade_value_win60_z'),3)} / p={fnum(rE.get('trade_value_win60_p'),3)}；"
-        f"252日 z={fnum(rE.get('trade_value_win252_z'),3)} / p={fnum(rE.get('trade_value_win252_p'),3)}"
-    )
-    if rE.get("close_win252_z") is not None and rE.get("close_win252_p") is not None:
-        out.append(f"- 指數位置（可選口播）：252日 close z={fnum(rE.get('close_win252_z'),3)} / p={fnum(rE.get('close_win252_p'),3)}")
-    if rE.get("vol_multiplier_20") is not None:
-        out.append(f"- 放量檢查：vol_multiplier_20={fnum(rE.get('vol_multiplier_20'),3)}；volume_amplified={s(rE.get('volume_amplified'))}")
-    out.append("- 一句話狀態：成交與熱度分位偏高，市場有「擁擠交易」的味道。")
-    out.append("- 反方審核：高成交 ≠ 必然回檔；多頭趨勢中，高成交可能持續。")
-    out.append("- 今天的動作：新增資金優先做再平衡（現金/短債），避免追價式加碼。\n")
+    def w(s: str) -> str:
+        return s + "\n"
 
-    # ---- Margin ----
-    out.append("## 2) 槓桿動向（taiwan margin）（60–90秒）")
-    out.append(f"- as_of：{s(m.get('as_of_date'))}；age_days={s(m.get('age_days'))}")
-    out.append(f"- TWSE：餘額(億)={fnum(mE.get('twse_balance_yi'),1)}；日變動(億)={fnum(mE.get('twse_chg_yi'),1)}")
-    out.append(f"- TPEX：餘額(億)={fnum(mE.get('tpex_balance_yi'),1)}；日變動(億)={fnum(mE.get('tpex_chg_yi'),1)}")
-    if mE.get("total_balance_yi") is not None and mE.get("total_chg_yi") is not None:
-        out.append(f"- 合計：餘額(億)={fnum(mE.get('total_balance_yi'),1)}；日變動(億)={fnum(mE.get('total_chg_yi'),1)}")
-    if mE.get("twse_chg_3d_sum_yi") is not None or mE.get("tpex_chg_3d_sum_yi") is not None:
-        out.append(
-            f"- 近3日累積變動(億)：TWSE={fnum(mE.get('twse_chg_3d_sum_yi'),1)}；TPEX={fnum(mE.get('tpex_chg_3d_sum_yi'),1)}；"
-            f"合計={fnum(mE.get('total_chg_3d_sum_yi'),1)}"
-        )
-    if mE.get("twse_balance_is_30row_high") is not None or mE.get("tpex_balance_is_30row_high") is not None:
-        out.append(
-            f"- 近30筆是否創高：TWSE={s(mE.get('twse_balance_is_30row_high'))}；TPEX={s(mE.get('tpex_balance_is_30row_high'))}"
-        )
-    out.append("- 一句話狀態：融資水位與變動方向若偏正，代表市場承擔風險的意願偏高。")
-    out.append("- 反方審核：融資增加不等於散戶一定輸；但通常意味著脆弱性上升（遇到急跌時更容易擠兌）。")
-    out.append("- 今天的動作：避免新增槓桿；若你已經有槓桿，優先檢查維持率與最大損失上限。\n")
+    out = ""
+    out += w("# 投資日記 Episode Outline (data-only skeleton)")
+    out += w("")
+    out += w(f"- day_key_local: {day} ({tz})")
+    out += w(f"- warnings: {', '.join(warnings) if warnings else 'NONE'}")
+    out += w("")
+    out += w("## 今日重點數字")
+    out += w(f"- roll25 trade_value 60d z={fmt_num(roll.get('trade_value_win60_z'),3)} p={fmt_num(roll.get('trade_value_win60_p'),3)}")
+    out += w(f"- margin TWSE bal={fmt_num(mar.get('twse_balance_yi'),1)} chg={fmt_num(mar.get('twse_chg_yi'),1)}")
+    out += w(f"- 0050 state={tw.get('bb_state','N/A')} bb_z={fmt_num(tw.get('bb_z'),3)} price={fmt_num(tw.get('adjclose'),2)}")
+    out += w("")
+    out += w("## (Paste to ChatGPT) Request")
+    out += w("- Please generate a narration script based ONLY on the numbers and flags above, without inventing facts.")
+    return out
 
-    # ---- TW0050 ----
-    out.append("## 3) 0050 位置（tw0050_bb）（90–140秒）")
-    out.append(f"- as_of：{s(t.get('as_of_date'))}；age_days={s(t.get('age_days'))}")
-    out.append(f"- BB 狀態：{s(tE.get('bb_state'))}；bb_z={fnum(tE.get('bb_z'),3)}；價格(adjclose)={fnum(tE.get('adjclose'),2)}")
-    if tE.get("trend_state") is not None or tE.get("price_vs_200ma_pct") is not None:
-        out.append(
-            f"- 趨勢：trend_state={s(tE.get('trend_state'))}；price_vs_200MA={fnum(tE.get('price_vs_200ma_pct'),2)}%"
-        )
-    if tE.get("rv_ann_pctl") is not None:
-        out.append(f"- 波動分位：RV20 pctl={fnum(tE.get('rv_ann_pctl'),2)}（分位越高代表近期波動相對歷史更偏大）")
-    out.append(f"- Gate/指引：regime_allowed={s(tE.get('regime_allowed'))}；pledge_action={s(tE.get('pledge_action_bucket'))}")
-    if tE.get("veto_reasons") is not None:
-        out.append(f"- VETO 原因（可選口播）：{s(tE.get('veto_reasons'))}")
-    if tE.get("tranche_levels") is not None:
-        out.append(f"- 分批參考價位（你自己的 tranche levels）：{s(tE.get('tranche_levels'))}")
-    out.append("- 一句話狀態：在上軌極端區時，最大的錯誤是『用更高風險去追更高價格』。")
-    out.append("- 反方審核：EXTREME_UPPER_BAND 不等於立刻回檔；強勢趨勢可能貼上軌很久。")
-    out.append("- 今天的動作：不追價；把加碼改成「等回檔分批」，用 tranche levels 當節奏參考。\n")
 
-    # ---- 收尾 ----
-    out.append("## 收尾（20–30秒）")
-    out.append("- 免責：非投資建議。本集是狀態描述；高分位數只代表『偏極端』，不保證反轉。")
-    out.append("- 下集追蹤：成交熱度是否降溫（pctl 回落）、融資是否轉負、0050 是否脫離上軌極端或 RV 分位下降。")
-    out.append("- 行動句：當三訊號同向偏熱時，我只做再平衡與風險上限管理；當訊號降溫且回到可接受區間，才恢復分批投入。")
-
-    return "\n".join(out) + "\n"
-
+# ---------------------------
+# main
+# ---------------------------
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -308,6 +437,12 @@ def main() -> int:
     ap.add_argument("--roll25", required=True)
     ap.add_argument("--margin", required=True)
     ap.add_argument("--out_dir", required=True)
+    ap.add_argument(
+        "--md_mode",
+        choices=["data", "outline", "both"],
+        default="data",
+        help="data: episode_outline.md == data brief; outline: minimal outline; both: write both variants",
+    )
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -317,10 +452,9 @@ def main() -> int:
     r25 = load_json(args.roll25)
     m = load_json(args.margin)
 
-    # --- day key local ---
     day_key_local = datetime.now().astimezone().date().isoformat()
 
-    # --- as_of extraction (match YOUR real JSON structure) ---
+    # as_of extraction (match current real JSON)
     tw_asof_raw, tw_asof_path = pick_first(tw, ["meta.last_date", "latest.date", "last_date", "date"])
     r25_asof_raw, r25_asof_path = pick_first(r25, ["used_date", "series.trade_value.asof", "series.close.asof", "asof"])
     m_asof_raw, m_asof_path = pick_first(m, ["series.TWSE.data_date", "series.TWSE.rows.0.date", "series.TPEX.data_date"])
@@ -341,7 +475,7 @@ def main() -> int:
     r25_age = compute_age_days(day_key_local, r25_asof)
     m_age = compute_age_days(day_key_local, m_asof)
 
-    # staleness rule (tunable)
+    # staleness rule
     for name, age in [("tw0050", tw_age), ("roll25", r25_age), ("margin", m_age)]:
         if age is not None and age > 2:
             warnings.append(f"{name}_stale_gt2d")
@@ -359,31 +493,40 @@ def main() -> int:
     if not isinstance(tw_dq_flags, list):
         tw_dq_flags = []
 
-    # fingerprints
+    # fingerprints (best-effort)
     tw_fp = deep_get(tw, "meta.script_fingerprint")
     r25_fp = deep_get(r25, "script_fingerprint") or deep_get(r25, "schema_version")
     m_fp = deep_get(m, "schema_version")
 
-    # --- extracts_best_effort ---
+    # ---------------------------
+    # extracts_best_effort
+    # ---------------------------
     extracts_tw: List[Dict[str, Any]] = []
     extracts_r25: List[Dict[str, Any]] = []
     extracts_m: List[Dict[str, Any]] = []
 
-    # roll25: mode + trade_value heat + close heat + volume signals
+    # roll25
     add_extract(extracts_r25, "mode", r25, ["mode"])
     add_extract(extracts_r25, "used_date", r25, ["used_date"])
     add_extract(extracts_r25, "trade_value_win60_z", r25, ["series.trade_value.win60.z"])
     add_extract(extracts_r25, "trade_value_win60_p", r25, ["series.trade_value.win60.p"])
     add_extract(extracts_r25, "trade_value_win252_z", r25, ["series.trade_value.win252.z"])
     add_extract(extracts_r25, "trade_value_win252_p", r25, ["series.trade_value.win252.p"])
-    add_extract(extracts_r25, "close_win60_z", r25, ["series.close.win60.z"])
-    add_extract(extracts_r25, "close_win60_p", r25, ["series.close.win60.p"])
+
     add_extract(extracts_r25, "close_win252_z", r25, ["series.close.win252.z"])
     add_extract(extracts_r25, "close_win252_p", r25, ["series.close.win252.p"])
+
+    add_extract(extracts_r25, "pct_change_win60_z", r25, ["series.pct_change.win60.z"])
+    add_extract(extracts_r25, "pct_change_win60_p", r25, ["series.pct_change.win60.p"])
+    add_extract(extracts_r25, "amplitude_pct_win60_z", r25, ["series.amplitude_pct.win60.z"])
+    add_extract(extracts_r25, "amplitude_pct_win60_p", r25, ["series.amplitude_pct.win60.p"])
+
     add_extract(extracts_r25, "vol_multiplier_20", r25, ["derived.vol_multiplier_20"])
     add_extract(extracts_r25, "volume_amplified", r25, ["derived.volume_amplified"])
+    add_extract(extracts_r25, "new_low_n", r25, ["derived.new_low_n"])
+    add_extract(extracts_r25, "consecutive_down_days", r25, ["derived.consecutive_down_days"])
 
-    # margin: latest row for TWSE/TPEX + totals + 3D sum + 30row high check
+    # margin: latest + sums + highs
     add_extract(extracts_m, "twse_data_date", m, ["series.TWSE.data_date"])
     add_extract(extracts_m, "twse_balance_yi", m, ["series.TWSE.rows.0.balance_yi"])
     add_extract(extracts_m, "twse_chg_yi", m, ["series.TWSE.rows.0.chg_yi"])
@@ -391,83 +534,119 @@ def main() -> int:
     add_extract(extracts_m, "tpex_balance_yi", m, ["series.TPEX.rows.0.balance_yi"])
     add_extract(extracts_m, "tpex_chg_yi", m, ["series.TPEX.rows.0.chg_yi"])
 
-    twse_bal = _safe_float(deep_get(m, "series.TWSE.rows.0.balance_yi"))
-    tpex_bal = _safe_float(deep_get(m, "series.TPEX.rows.0.balance_yi"))
-    twse_chg = _safe_float(deep_get(m, "series.TWSE.rows.0.chg_yi"))
-    tpex_chg = _safe_float(deep_get(m, "series.TPEX.rows.0.chg_yi"))
+    twse_bal = to_float(deep_get(m, "series.TWSE.rows.0.balance_yi"))
+    tpex_bal = to_float(deep_get(m, "series.TPEX.rows.0.balance_yi"))
+    twse_chg = to_float(deep_get(m, "series.TWSE.rows.0.chg_yi"))
+    tpex_chg = to_float(deep_get(m, "series.TPEX.rows.0.chg_yi"))
 
     if twse_bal is not None and tpex_bal is not None:
-        extracts_m.append({
-            "field": "total_balance_yi",
-            "value": twse_bal + tpex_bal,
-            "picked_from": ["series.TWSE.rows.0.balance_yi + series.TPEX.rows.0.balance_yi"],
-        })
+        extracts_m.append({"field": "total_balance_yi", "value": twse_bal + tpex_bal, "picked_from": ["sum(TWSE,TPEX)"], "picked_path": None})
     if twse_chg is not None and tpex_chg is not None:
-        extracts_m.append({
-            "field": "total_chg_yi",
-            "value": twse_chg + tpex_chg,
-            "picked_from": ["series.TWSE.rows.0.chg_yi + series.TPEX.rows.0.chg_yi"],
-        })
+        extracts_m.append({"field": "total_chg_yi", "value": twse_chg + tpex_chg, "picked_from": ["sum(TWSE,TPEX)"], "picked_path": None})
 
-    twse_rows = deep_get(m, "series.TWSE.rows") or []
-    tpex_rows = deep_get(m, "series.TPEX.rows") or []
-    if isinstance(twse_rows, list):
-        v = _sum_last_n(twse_rows, "chg_yi", 3)
-        if v is not None:
-            extracts_m.append({"field": "twse_chg_3d_sum_yi", "value": v, "picked_from": ["sum(series.TWSE.rows[:3].chg_yi)"]})
-        hi = _is_latest_max(twse_rows, "balance_yi")
-        if hi is not None:
-            extracts_m.append({"field": "twse_balance_is_30row_high", "value": hi, "picked_from": ["latest == max(series.TWSE.rows[:].balance_yi)"]})
-    if isinstance(tpex_rows, list):
-        v = _sum_last_n(tpex_rows, "chg_yi", 3)
-        if v is not None:
-            extracts_m.append({"field": "tpex_chg_3d_sum_yi", "value": v, "picked_from": ["sum(series.TPEX.rows[:3].chg_yi)"]})
-        hi = _is_latest_max(tpex_rows, "balance_yi")
-        if hi is not None:
-            extracts_m.append({"field": "tpex_balance_is_30row_high", "value": hi, "picked_from": ["latest == max(series.TPEX.rows[:].balance_yi)"]})
+    twse_3d = margin_sum_chg(m, "TWSE", 3)
+    tpex_3d = margin_sum_chg(m, "TPEX", 3)
+    if twse_3d is not None:
+        extracts_m.append({"field": "twse_chg_3d_sum", "value": twse_3d, "picked_from": ["sum(series.TWSE.rows[:3].chg_yi)"], "picked_path": None})
+    if tpex_3d is not None:
+        extracts_m.append({"field": "tpex_chg_3d_sum", "value": tpex_3d, "picked_from": ["sum(series.TPEX.rows[:3].chg_yi)"], "picked_path": None})
+    if twse_3d is not None and tpex_3d is not None:
+        extracts_m.append({"field": "total_chg_3d_sum", "value": twse_3d + tpex_3d, "picked_from": ["sum(TWSE_3d,TPEX_3d)"], "picked_path": None})
 
-    # total 3D sum best-effort
-    tw3 = next((e["value"] for e in extracts_m if e.get("field") == "twse_chg_3d_sum_yi"), None)
-    tp3 = next((e["value"] for e in extracts_m if e.get("field") == "tpex_chg_3d_sum_yi"), None)
-    tw3f = _safe_float(tw3)
-    tp3f = _safe_float(tp3)
-    if tw3f is not None and tp3f is not None:
-        extracts_m.append({"field": "total_chg_3d_sum_yi", "value": tw3f + tp3f, "picked_from": ["twse_chg_3d_sum_yi + tpex_chg_3d_sum_yi"]})
+    twse_high = margin_is_30row_high(m, "TWSE")
+    tpex_high = margin_is_30row_high(m, "TPEX")
+    if twse_high is not None:
+        extracts_m.append({"field": "twse_is_30row_high", "value": twse_high, "picked_from": ["TWSE latest >= max(last_30)"], "picked_path": None})
+    if tpex_high is not None:
+        extracts_m.append({"field": "tpex_is_30row_high", "value": tpex_high, "picked_from": ["TPEX latest >= max(last_30)"], "picked_path": None})
+    if twse_bal is not None and tpex_bal is not None:
+        # total 30-row high check uses per-market rows; best-effort: compare today's total vs max(total per row index) by aligning indexes
+        twse_rows = margin_series_rows(m, "TWSE")
+        tpex_rows = margin_series_rows(m, "TPEX")
+        n = min(len(twse_rows), len(tpex_rows))
+        totals = []
+        for i in range(n):
+            a = to_float(twse_rows[i].get("balance_yi"))
+            b = to_float(tpex_rows[i].get("balance_yi"))
+            if a is None or b is None:
+                totals.append(None)
+            else:
+                totals.append(a + b)
+        cur_total = totals[0] if totals else None
+        mx_total = safe_max([t for t in totals if isinstance(t, (int, float))])
+        if cur_total is not None and mx_total is not None:
+            extracts_m.append({"field": "total_is_30row_high", "value": cur_total >= mx_total, "picked_from": ["(TWSE+TPEX) latest >= max(last_30)"], "picked_path": None})
 
-    # tw0050_bb: latest state + z + regime + pledge decision + trend/vol + veto reasons + tranche levels
+    # tw0050_bb: price/bb + trend/vol + regime/pledge + tranche levels
     add_extract(extracts_tw, "last_date", tw, ["meta.last_date", "latest.date"])
     add_extract(extracts_tw, "adjclose", tw, ["latest.adjclose", "latest.price_used"])
     add_extract(extracts_tw, "bb_z", tw, ["latest.bb_z"])
     add_extract(extracts_tw, "bb_state", tw, ["latest.state"])
-    add_extract(extracts_tw, "regime_allowed", tw, ["regime.allowed"])
-    add_extract(extracts_tw, "pledge_action_bucket", tw, ["pledge.decision.action_bucket"])
+
+    add_extract(extracts_tw, "dist_to_upper_pct", tw, ["latest.dist_to_upper_pct"])
+    add_extract(extracts_tw, "dist_to_lower_pct", tw, ["latest.dist_to_lower_pct"])
+    add_extract(extracts_tw, "band_width_std_pct", tw, ["latest.band_width_std_pct"])
+    add_extract(extracts_tw, "band_width_geo_pct", tw, ["latest.band_width_geo_pct"])
 
     add_extract(extracts_tw, "trend_state", tw, ["trend.state"])
     add_extract(extracts_tw, "price_vs_200ma_pct", tw, ["trend.price_vs_trend_ma_pct"])
-    add_extract(extracts_tw, "rv_ann_pctl", tw, ["vol.rv_ann_pctl"])
-    add_extract(extracts_tw, "veto_reasons", tw, ["pledge.decision.veto_reasons"])
+    add_extract(extracts_tw, "trend_slope_pct", tw, ["trend.trend_slope_pct"])
 
-    levels = deep_get(tw, "pledge.unconditional_tranche_levels.levels")
-    if isinstance(levels, list) and levels:
-        lvl_txt: List[str] = []
-        for it in levels[:6]:
-            if isinstance(it, dict) and "label" in it and "price_level" in it:
-                try:
-                    lvl_txt.append(f"{it['label']}={float(it['price_level']):.2f}")
-                except Exception:
-                    pass
-        if lvl_txt:
-            extracts_tw.append({
-                "field": "tranche_levels",
-                "value": ", ".join(lvl_txt),
-                "picked_from": ["pledge.unconditional_tranche_levels.levels[:6].(label,price_level)"],
-            })
+    add_extract(extracts_tw, "rv_ann", tw, ["vol.rv_ann"])
+    add_extract(extracts_tw, "rv_ann_pctl", tw, ["vol.rv_ann_pctl"])
+
+    add_extract(extracts_tw, "regime_allowed", tw, ["regime.allowed"])
+    add_extract(extracts_tw, "pledge_action_bucket", tw, ["pledge.decision.action_bucket"])
+    add_extract(extracts_tw, "pledge_veto_reasons", tw, ["pledge.decision.veto_reasons"])
+
+    # tranche levels (compact)
+    levels = tranche_levels_compact(tw)
+    if levels:
+        extracts_tw.append({"field": "tranche_levels", "value": levels, "picked_from": ["pledge.unconditional_tranche_levels.levels"], "picked_path": "pledge.unconditional_tranche_levels.levels"})
+
+    # ---------------------------
+    # computed flags (deterministic)
+    # ---------------------------
+    roll_map = {e["field"]: e["value"] for e in extracts_r25}
+    mar_map = {e["field"]: e["value"] for e in extracts_m}
+    tw_map = {e["field"]: e["value"] for e in extracts_tw}
+
+    computed_flags: Dict[str, Any] = {
+        "roll25": {
+            "heat_trade_value_p_ge_95_60d": flag_ge(roll_map.get("trade_value_win60_p"), 95.0),
+            "heat_trade_value_p_ge_99_252d": flag_ge(roll_map.get("trade_value_win252_p"), 99.0),
+            "index_close_p_ge_99_252d": flag_ge(roll_map.get("close_win252_p"), 99.0),
+            "volume_amplified": roll_map.get("volume_amplified"),
+            "vol_multiplier_20_ge_1p5": flag_ge(roll_map.get("vol_multiplier_20"), 1.5),
+        },
+        "margin": {
+            "twse_is_30row_high": mar_map.get("twse_is_30row_high"),
+            "tpex_is_30row_high": mar_map.get("tpex_is_30row_high"),
+            "total_is_30row_high": mar_map.get("total_is_30row_high"),
+            "total_chg_3d_sum_ge_0": flag_ge(mar_map.get("total_chg_3d_sum"), 0.0),
+        },
+        "tw0050_bb": {
+            "bb_z_ge_2": flag_ge(tw_map.get("bb_z"), 2.0),
+            "rv_pctl_ge_80": flag_ge(tw_map.get("rv_ann_pctl"), 80.0),
+            "regime_allowed": tw_map.get("regime_allowed"),
+            "pledge_action_bucket": tw_map.get("pledge_action_bucket"),
+        },
+        "thresholds_note": {
+            "roll25.heat_trade_value_p_ge_95_60d": "p >= 95",
+            "roll25.heat_trade_value_p_ge_99_252d": "p >= 99",
+            "roll25.index_close_p_ge_99_252d": "p >= 99",
+            "roll25.vol_multiplier_20_ge_1p5": "vol_multiplier_20 >= 1.5",
+            "margin.total_chg_3d_sum_ge_0": "sum(chg_yi, last 3) >= 0",
+            "tw0050_bb.bb_z_ge_2": "bb_z >= 2.0",
+            "tw0050_bb.rv_pctl_ge_80": "rv_ann_pctl >= 80",
+        }
+    }
 
     pack: Dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "build_fingerprint": BUILD_FINGERPRINT,
         "generated_at_utc": utc_now_iso(),
-        "generated_at_local": datetime.now().astimezone().isoformat(),
+        "generated_at_local": local_now_iso(),
         "timezone": "Asia/Taipei",
         "day_key_local": day_key_local,
         "inputs": {
@@ -496,12 +675,13 @@ def main() -> int:
                 "picked_as_of_path": m_asof_path,
             },
         },
-        "warnings": sorted(list(dict.fromkeys(warnings))),
+        "warnings": uniq_keep_order(sorted(warnings)),
         "extracts_best_effort": {
             "tw0050_bb": extracts_tw,
             "roll25": extracts_r25,
             "margin": extracts_m,
         },
+        "computed_flags": computed_flags,
         "raw": {
             "tw0050_bb": tw,
             "roll25": r25,
@@ -518,10 +698,23 @@ def main() -> int:
 
     # write outputs
     pack_path = out_dir / "episode_pack.json"
-    md_path = out_dir / "episode_outline.md"
+    data_md_path = out_dir / "episode_data.md"
+    outline_md_path = out_dir / "episode_outline.md"
+
     dump_json(str(pack_path), pack)
-    md = build_outline(pack)
-    md_path.write_text(md, encoding="utf-8")
+
+    md_data = build_md_data(pack)
+    data_md_path.write_text(md_data, encoding="utf-8")
+
+    if args.md_mode == "data":
+        # keep workflow compatibility: episode_outline.md is the data brief
+        outline_md_path.write_text(md_data, encoding="utf-8")
+    elif args.md_mode == "outline":
+        md_outline = build_md_outline_minimal(pack)
+        outline_md_path.write_text(md_outline, encoding="utf-8")
+    else:  # both
+        md_outline = build_md_outline_minimal(pack)
+        outline_md_path.write_text(md_outline, encoding="utf-8")
 
     return 0
 
