@@ -1,8 +1,8 @@
 {
   "schema_version": "episode_pack_schema_v1",
-  "build_fingerprint": "build_video_pack@v1.1.nested_paths",
-  "generated_at_utc": "2026-02-27T11:55:57.647180Z",
-  "generated_at_local": "2026-02-27T11:55:57.647193+00:00",
+  "build_fingerprint": "build_video_pack@v1.2.rich_outline_more_extracts",
+  "generated_at_utc": "2026-02-27T12:08:13Z",
+  "generated_at_local": "2026-02-27T12:08:13.502035+00:00",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-02-27",
   "inputs": {
@@ -82,6 +82,45 @@
         "picked_from": [
           "pledge.decision.action_bucket"
         ]
+      },
+      {
+        "field": "trend_state",
+        "value": "TREND_UP",
+        "picked_from": [
+          "trend.state"
+        ]
+      },
+      {
+        "field": "price_vs_200ma_pct",
+        "value": 42.78204169364075,
+        "picked_from": [
+          "trend.price_vs_trend_ma_pct"
+        ]
+      },
+      {
+        "field": "rv_ann_pctl",
+        "value": 82.71072796934867,
+        "picked_from": [
+          "vol.rv_ann_pctl"
+        ]
+      },
+      {
+        "field": "veto_reasons",
+        "value": [
+          "regime_gate_closed",
+          "no_chase_state:EXTREME_UPPER_BAND",
+          "no_chase_z>= 1.50"
+        ],
+        "picked_from": [
+          "pledge.decision.veto_reasons"
+        ]
+      },
+      {
+        "field": "tranche_levels",
+        "value": "10D_p10_uncond=77.26, 10D_p05_uncond=76.03, 20D_p10_uncond=75.58, 20D_p05_uncond=73.63",
+        "picked_from": [
+          "pledge.unconditional_tranche_levels.levels[:6].(label,price_level)"
+        ]
       }
     ],
     "roll25": [
@@ -125,6 +164,48 @@
         "value": 99.802,
         "picked_from": [
           "series.trade_value.win252.p"
+        ]
+      },
+      {
+        "field": "close_win60_z",
+        "value": 2.307043,
+        "picked_from": [
+          "series.close.win60.z"
+        ]
+      },
+      {
+        "field": "close_win60_p",
+        "value": 99.167,
+        "picked_from": [
+          "series.close.win60.p"
+        ]
+      },
+      {
+        "field": "close_win252_z",
+        "value": 2.774885,
+        "picked_from": [
+          "series.close.win252.z"
+        ]
+      },
+      {
+        "field": "close_win252_p",
+        "value": 99.802,
+        "picked_from": [
+          "series.close.win252.p"
+        ]
+      },
+      {
+        "field": "vol_multiplier_20",
+        "value": 1.451967,
+        "picked_from": [
+          "derived.vol_multiplier_20"
+        ]
+      },
+      {
+        "field": "volume_amplified",
+        "value": false,
+        "picked_from": [
+          "derived.volume_amplified"
         ]
       }
     ],
@@ -183,6 +264,41 @@
         "value": 97.3,
         "picked_from": [
           "series.TWSE.rows.0.chg_yi + series.TPEX.rows.0.chg_yi"
+        ]
+      },
+      {
+        "field": "twse_chg_3d_sum_yi",
+        "value": 177.0,
+        "picked_from": [
+          "sum(series.TWSE.rows[:3].chg_yi)"
+        ]
+      },
+      {
+        "field": "twse_balance_is_30row_high",
+        "value": true,
+        "picked_from": [
+          "latest == max(series.TWSE.rows[:].balance_yi)"
+        ]
+      },
+      {
+        "field": "tpex_chg_3d_sum_yi",
+        "value": 56.3,
+        "picked_from": [
+          "sum(series.TPEX.rows[:3].chg_yi)"
+        ]
+      },
+      {
+        "field": "tpex_balance_is_30row_high",
+        "value": true,
+        "picked_from": [
+          "latest == max(series.TPEX.rows[:].balance_yi)"
+        ]
+      },
+      {
+        "field": "total_chg_3d_sum_yi",
+        "value": 233.3,
+        "picked_from": [
+          "twse_chg_3d_sum_yi + tpex_chg_3d_sum_yi"
         ]
       }
     ]
@@ -1425,8 +1541,8 @@
     }
   },
   "meta_env": {
-    "GITHUB_SHA": "a543128665b73356ec68db01b327e3c43d3420be",
-    "GITHUB_RUN_ID": "22485218145",
+    "GITHUB_SHA": "939710ed19b06f3545c1798272821144d9e42ad1",
+    "GITHUB_RUN_ID": "22485593276",
     "GITHUB_WORKFLOW": "build-video-pack (roll25 + margin + tw0050_bb) - manual",
     "GITHUB_REF_NAME": "main",
     "GITHUB_REPOSITORY": "Joseph-Chou911/fred-cache"
