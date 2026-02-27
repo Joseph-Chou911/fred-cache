@@ -1,168 +1,259 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+build_video_pack.py
+
+Build an "episode pack" for video/script production by combining:
+- roll25_cache/stats_latest.json
+- taiwan_margin_cache/latest.json
+- tw0050_bb_cache/stats_latest.json
+
+Outputs (flat):
+- episode_pack.json
+- episode_outline.md
+
+Audit-first:
+- keep raw inputs
+- best-effort extracts with picked_from path trace
+- explicit warnings (missing/stale/date_misaligned)
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
 import os
-from datetime import datetime, date, timezone
+from dataclasses import dataclass
+from datetime import datetime, timezone, date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
-try:
-    from zoneinfo import ZoneInfo
-except Exception:
-    ZoneInfo = None  # type: ignore
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
-TZ_NAME = "Asia/Taipei"
 SCHEMA_VERSION = "episode_pack_schema_v1"
-BUILD_FINGERPRINT = "build_video_pack@v1.flat"
+BUILD_FINGERPRINT = "build_video_pack@v1.1.nested_paths"
 
 
-def _now_local() -> datetime:
-    if ZoneInfo is None:
-        return datetime.now()
-    return datetime.now(ZoneInfo(TZ_NAME))
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+def load_json(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def _read_json(p: Path) -> Dict[str, Any]:
-    if not p.exists():
-        raise FileNotFoundError(f"missing input file: {p}")
-    return json.loads(p.read_text(encoding="utf-8"))
-
-
-def _write_json(p: Path, obj: Any) -> None:
-    p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _write_text(p: Path, s: str) -> None:
-    p.write_text(s, encoding="utf-8")
-
-
-def pick(d: Dict[str, Any], keys: Tuple[str, ...], default=None):
-    for k in keys:
-        if k in d and d[k] is not None:
-            return d[k]
-    return default
-
-
-def get_nested(d: Dict[str, Any], path: Tuple[str, ...], default=None):
-    cur: Any = d
-    for k in path:
-        if not isinstance(cur, dict) or k not in cur:
-            return default
-        cur = cur[k]
-    return cur
+def dump_json(path: str, obj: Any) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=False)
 
 
 def parse_ymd(x: Any) -> Optional[date]:
+    """Accept YYYY-MM-DD (optionally with time), YYYYMMDD, int YYYYMMDD."""
     if x is None:
         return None
     if isinstance(x, date) and not isinstance(x, datetime):
         return x
-    s = str(x).strip()
-    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+
+    if isinstance(x, int):
+        s = str(x)
+    else:
+        s = str(x).strip()
+
+    # YYYY-MM-DD...
+    if len(s) >= 10 and len(s) >= 10 and s[4] == "-" and s[7] == "-":
         try:
             return date.fromisoformat(s[:10])
         except Exception:
             return None
+
+    # YYYYMMDD
+    if len(s) == 8 and s.isdigit():
+        try:
+            return datetime.strptime(s, "%Y%m%d").date()
+        except Exception:
+            return None
+
     return None
 
 
-def compute_age_days(as_of: Optional[date], today: date) -> Optional[int]:
-    if as_of is None:
+def deep_get(obj: Any, path: str) -> Any:
+    """
+    Get nested value by dotted path. Supports list index by numeric token.
+    Example: "series.TWSE.rows.0.date"
+    """
+    cur = obj
+    for token in path.split("."):
+        if cur is None:
+            return None
+        if isinstance(cur, dict):
+            cur = cur.get(token)
+        elif isinstance(cur, list):
+            if token.isdigit():
+                idx = int(token)
+                if 0 <= idx < len(cur):
+                    cur = cur[idx]
+                else:
+                    return None
+            else:
+                return None
+        else:
+            return None
+    return cur
+
+
+def pick_first(obj: Dict[str, Any], paths: List[str]) -> Tuple[Any, Optional[str]]:
+    for p in paths:
+        v = deep_get(obj, p)
+        if v is not None:
+            return v, p
+    return None, None
+
+
+def compute_age_days(day_key_local: str, as_of: Optional[date]) -> Optional[int]:
+    d0 = parse_ymd(day_key_local)
+    if d0 is None or as_of is None:
         return None
+    return (d0 - as_of).days
+
+
+def fmt_float(x: Any, nd: int = 2) -> str:
     try:
-        return (today - as_of).days
+        if x is None:
+            return "N/A"
+        return f"{float(x):.{nd}f}"
     except Exception:
-        return None
+        return "N/A"
 
 
-def extract_dq_flags(d: Dict[str, Any]) -> List[str]:
-    flags: List[str] = []
-    v = get_nested(d, ("dq", "flags"))
-    if isinstance(v, list):
-        flags.extend([str(x) for x in v])
-    v2 = d.get("dq_flags")
-    if isinstance(v2, list):
-        flags.extend([str(x) for x in v2])
-    out: List[str] = []
-    seen = set()
-    for f in flags:
-        if f not in seen:
-            out.append(f)
-            seen.add(f)
+def fmt_pct(x: Any, nd: int = 2) -> str:
+    try:
+        if x is None:
+            return "N/A"
+        return f"{float(x):.{nd}f}%"
+    except Exception:
+        return "N/A"
+
+
+@dataclass
+class Extract:
+    field: str
+    value: Any
+    picked_from: List[str]
+
+
+def add_extract(extracts: List[Dict[str, Any]], field: str, obj: Dict[str, Any], paths: List[str]) -> None:
+    v, p = pick_first(obj, paths)
+    if v is None:
+        return
+    extracts.append({"field": field, "value": v, "picked_from": paths})
+
+
+def build_outline(pack: Dict[str, Any]) -> str:
+    tz = pack.get("timezone", "Asia/Taipei")
+    day = pack.get("day_key_local", "N/A")
+    warnings = pack.get("warnings", [])
+    inp = pack.get("inputs", {})
+    ext = pack.get("extracts_best_effort", {})
+
+    def wline(s: str) -> str:
+        return s + "\n"
+
+    out = ""
+    out += wline("# 投資日記 Episode Outline（roll25 + taiwan margin + tw0050_bb）")
+    out += wline("")
+    out += wline(f"- 產出日：{day}（{tz}）")
+    out += wline("- 輸出：episode_pack.json, episode_outline.md")
+    out += wline(f"- warnings: {', '.join(warnings) if warnings else 'NONE'}")
+    out += wline("")
+
+    out += wline("## 開場（20秒）")
+    out += wline("- 今天用三個訊號整理市場位置：成交熱度（roll25）、槓桿動向（margin）、0050 技術位置（BB）。")
+    if warnings:
+        out += wline("- ⚠️ 本集偵測到 warnings：僅做「狀態描述」，避免跨模組因果推論。")
+    out += wline("")
+
+    # roll25
+    r = inp.get("roll25", {})
+    r_asof = r.get("as_of_date") or "N/A"
+    r_age = r.get("age_days")
+    out += wline("## 1) 成交熱度（roll25）（60秒）")
+    out += wline(f"- as_of：{r_asof}；age_days={r_age if r_age is not None else 'N/A'}")
+    # Pull key numbers from extracts if present
+    roll_ext = {e["field"]: e["value"] for e in ext.get("roll25", [])}
+    if "mode" in roll_ext:
+        out += wline(f"- mode: {roll_ext['mode']}")
+    if "trade_value_win60_z" in roll_ext and "trade_value_win60_p" in roll_ext:
+        out += wline(f"- 20日成交金額熱度：z={fmt_float(roll_ext['trade_value_win60_z'],3)} / p={fmt_float(roll_ext['trade_value_win60_p'],3)}")
+    if "trade_value_win252_z" in roll_ext and "trade_value_win252_p" in roll_ext:
+        out += wline(f"- 252日成交金額熱度：z={fmt_float(roll_ext['trade_value_win252_z'],3)} / p={fmt_float(roll_ext['trade_value_win252_p'],3)}")
+    out += wline("")
+
+    # margin
+    m = inp.get("taiwan_margin", {})
+    m_asof = m.get("as_of_date") or "N/A"
+    m_age = m.get("age_days")
+    out += wline("## 2) 槓桿動向（taiwan margin）（60秒）")
+    out += wline(f"- as_of：{m_asof}；age_days={m_age if m_age is not None else 'N/A'}")
+    m_ext = {e["field"]: e["value"] for e in ext.get("margin", [])}
+    if "twse_balance_yi" in m_ext and "twse_chg_yi" in m_ext:
+        out += wline(f"- TWSE 融資餘額(億)：{fmt_float(m_ext['twse_balance_yi'],1)}；當日變動(億)：{fmt_float(m_ext['twse_chg_yi'],1)}")
+    if "tpex_balance_yi" in m_ext and "tpex_chg_yi" in m_ext:
+        out += wline(f"- TPEX 融資餘額(億)：{fmt_float(m_ext['tpex_balance_yi'],1)}；當日變動(億)：{fmt_float(m_ext['tpex_chg_yi'],1)}")
+    if "total_balance_yi" in m_ext and "total_chg_yi" in m_ext:
+        out += wline(f"- 合計（TWSE+TPEX）餘額(億)：{fmt_float(m_ext['total_balance_yi'],1)}；變動(億)：{fmt_float(m_ext['total_chg_yi'],1)}")
+    out += wline("")
+
+    # tw0050_bb
+    t = inp.get("tw0050_bb", {})
+    t_asof = t.get("as_of_date") or "N/A"
+    t_age = t.get("age_days")
+    out += wline("## 3) 0050 位置（tw0050_bb）（80秒）")
+    out += wline(f"- as_of：{t_asof}；age_days={t_age if t_age is not None else 'N/A'}")
+    t_ext = {e["field"]: e["value"] for e in ext.get("tw0050_bb", [])}
+    if "bb_state" in t_ext and "bb_z" in t_ext:
+        out += wline(f"- BB 狀態：{t_ext['bb_state']}；bb_z={fmt_float(t_ext['bb_z'],3)}")
+    if "adjclose" in t_ext:
+        out += wline(f"- 價格（adjclose）：{fmt_float(t_ext['adjclose'],2)}")
+    if "regime_allowed" in t_ext:
+        out += wline(f"- Regime gate（允許風險開槓/加碼）：{t_ext['regime_allowed']}")
+    if "pledge_action_bucket" in t_ext:
+        out += wline(f"- 你自己的質押指引：{t_ext['pledge_action_bucket']}")
+    out += wline("")
+
+    out += wline("## 收尾（20秒）")
+    out += wline("- 免責：非投資建議。資料可能落後/不一致（見 warnings）。歷史統計不保證未來。")
+    out += wline("- 行動句（模板）：若風險訊號升溫，優先守住現金流與部位上限；若訊號降溫，再考慮分批與再平衡。")
     return out
 
 
-def best_effort_extract_numbers(tag: str, d: Dict[str, Any]) -> List[Dict[str, Any]]:
-    candidates: List[Tuple[str, Tuple[str, ...]]] = []
-
-    if tag == "tw0050_bb":
-        candidates = [
-            ("price", ("last_price", "price", "close", "adjclose_last", "adjclose")),
-            ("bb_z", ("bb_z", "bb_z60", "z60", "z_score", "bbz")),
-            ("pctl", ("p60", "percentile", "pct", "pctl")),
-        ]
-    elif tag == "roll25":
-        candidates = [
-            ("mode", ("mode", "Mode")),
-            ("used_date", ("UsedDate", "used_date", "as_of_data_date")),
-            ("turnover_z", ("turnover_z", "z", "z60", "z_score")),
-        ]
-    elif tag == "margin":
-        candidates = [
-            ("margin_balance", ("margin_balance", "financing_balance", "total_margin", "balance")),
-            ("delta", ("delta", "change", "chg", "diff")),
-            ("as_of", ("as_of", "as_of_date", "date", "day_key_local")),
-        ]
-
-    extracted: List[Dict[str, Any]] = []
-    for name, keys in candidates:
-        val = pick(d, keys, default=None)
-        if val is None:
-            summ = d.get("summary")
-            if isinstance(summ, dict):
-                val = pick(summ, keys, default=None)
-        if val is not None:
-            extracted.append({"field": name, "value": val, "picked_from": list(keys)})
-    return extracted
-
-
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tw0050", required=True)
     ap.add_argument("--roll25", required=True)
     ap.add_argument("--margin", required=True)
-    ap.add_argument("--out_dir", required=True, help="Output directory that will contain episode_pack.json and episode_outline.md")
+    ap.add_argument("--out_dir", required=True)
     args = ap.parse_args()
 
-    tw_path = Path(args.tw0050)
-    r25_path = Path(args.roll25)
-    m_path = Path(args.margin)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    tw = _read_json(tw_path)
-    r25 = _read_json(r25_path)
-    m = _read_json(m_path)
+    tw = load_json(args.tw0050)
+    r25 = load_json(args.roll25)
+    m = load_json(args.margin)
 
-    now_local = _now_local()
-    today = now_local.date()
-    day_key = today.isoformat()
+    # --- day key local ---
+    day_key_local = datetime.now().astimezone().date().isoformat()
 
-    # as_of dates (best effort; no guessing)
-    tw_asof = parse_ymd(pick(tw, ("last_date", "as_of_data_date", "UsedDate", "day_key_local")))
-    r25_asof = parse_ymd(pick(r25, ("as_of_data_date", "UsedDate", "last_date", "day_key_local")))
-    m_asof = parse_ymd(pick(m, ("as_of_date", "as_of", "date", "day_key_local", "last_date")))
+    # --- as_of extraction (match YOUR real JSON structure) ---
+    tw_asof_raw, tw_asof_path = pick_first(tw, ["meta.last_date", "latest.date", "last_date", "date"])
+    r25_asof_raw, r25_asof_path = pick_first(r25, ["used_date", "series.trade_value.asof", "series.close.asof", "asof"])
+    m_asof_raw, m_asof_path = pick_first(m, ["series.TWSE.data_date", "series.TWSE.rows.0.date", "series.TPEX.data_date"])
 
-    tw_age = compute_age_days(tw_asof, today)
-    r25_age = compute_age_days(r25_asof, today)
-    m_age = compute_age_days(m_asof, today)
+    tw_asof = parse_ymd(tw_asof_raw)
+    r25_asof = parse_ymd(r25_asof_raw)
+    m_asof = parse_ymd(m_asof_raw)
 
     warnings: List[str] = []
     if tw_asof is None:
@@ -172,115 +263,133 @@ def main() -> None:
     if m_asof is None:
         warnings.append("margin_as_of_missing")
 
-    if tw_asof and r25_asof and m_asof and not (tw_asof == r25_asof == m_asof):
-        warnings.append(f"date_misaligned: tw0050={tw_asof}, roll25={r25_asof}, margin={m_asof}")
+    tw_age = compute_age_days(day_key_local, tw_asof)
+    r25_age = compute_age_days(day_key_local, r25_asof)
+    m_age = compute_age_days(day_key_local, m_asof)
 
-    STALE_DAYS_WARN = 2
-    for name, age in (("tw0050", tw_age), ("roll25", r25_age), ("margin", m_age)):
-        if age is not None and age > STALE_DAYS_WARN:
-            warnings.append(f"stale_{name}: age_days={age} (> {STALE_DAYS_WARN})")
+    # staleness rule (you can tune)
+    for name, age in [("tw0050", tw_age), ("roll25", r25_age), ("margin", m_age)]:
+        if age is not None and age > 2:
+            warnings.append(f"{name}_stale_gt2d")
 
-    tw_dq = extract_dq_flags(tw)
-    r25_dq = extract_dq_flags(r25)
-    m_dq = extract_dq_flags(m)
+    # date_misaligned: if any as_of differs by >=2 days
+    asofs = [d for d in [tw_asof, r25_asof, m_asof] if d is not None]
+    if len(asofs) >= 2:
+        mx = max(asofs)
+        mn = min(asofs)
+        if (mx - mn).days >= 2:
+            warnings.append("date_misaligned_ge2d")
 
-    extracts = {
-        "tw0050_bb": best_effort_extract_numbers("tw0050_bb", tw),
-        "roll25": best_effort_extract_numbers("roll25", r25),
-        "margin": best_effort_extract_numbers("margin", m),
-    }
+    # dq flags
+    tw_dq_flags = deep_get(tw, "dq.flags") or []
+    if not isinstance(tw_dq_flags, list):
+        tw_dq_flags = []
 
-    meta_env = {
-        "GITHUB_SHA": os.environ.get("GITHUB_SHA"),
-        "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID"),
-        "GITHUB_WORKFLOW": os.environ.get("GITHUB_WORKFLOW"),
-        "GITHUB_REF_NAME": os.environ.get("GITHUB_REF_NAME"),
-        "GITHUB_REPOSITORY": os.environ.get("GITHUB_REPOSITORY"),
-    }
+    # fingerprints
+    tw_fp = deep_get(tw, "meta.script_fingerprint")
+    r25_fp = deep_get(r25, "script_fingerprint") or deep_get(r25, "schema_version")
+    m_fp = deep_get(m, "schema_version")
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # --- extracts_best_effort ---
+    extracts_tw: List[Dict[str, Any]] = []
+    extracts_r25: List[Dict[str, Any]] = []
+    extracts_m: List[Dict[str, Any]] = []
 
-    pack = {
+    # roll25: mode + trade_value heat
+    add_extract(extracts_r25, "mode", r25, ["mode"])
+    add_extract(extracts_r25, "used_date", r25, ["used_date"])
+    add_extract(extracts_r25, "trade_value_win60_z", r25, ["series.trade_value.win60.z"])
+    add_extract(extracts_r25, "trade_value_win60_p", r25, ["series.trade_value.win60.p"])
+    add_extract(extracts_r25, "trade_value_win252_z", r25, ["series.trade_value.win252.z"])
+    add_extract(extracts_r25, "trade_value_win252_p", r25, ["series.trade_value.win252.p"])
+
+    # margin: latest row for TWSE/TPEX + totals
+    add_extract(extracts_m, "twse_data_date", m, ["series.TWSE.data_date"])
+    add_extract(extracts_m, "twse_balance_yi", m, ["series.TWSE.rows.0.balance_yi"])
+    add_extract(extracts_m, "twse_chg_yi", m, ["series.TWSE.rows.0.chg_yi"])
+    add_extract(extracts_m, "tpex_data_date", m, ["series.TPEX.data_date"])
+    add_extract(extracts_m, "tpex_balance_yi", m, ["series.TPEX.rows.0.balance_yi"])
+    add_extract(extracts_m, "tpex_chg_yi", m, ["series.TPEX.rows.0.chg_yi"])
+
+    twse_bal = deep_get(m, "series.TWSE.rows.0.balance_yi")
+    tpex_bal = deep_get(m, "series.TPEX.rows.0.balance_yi")
+    twse_chg = deep_get(m, "series.TWSE.rows.0.chg_yi")
+    tpex_chg = deep_get(m, "series.TPEX.rows.0.chg_yi")
+    if isinstance(twse_bal, (int, float)) and isinstance(tpex_bal, (int, float)):
+        extracts_m.append({"field": "total_balance_yi", "value": twse_bal + tpex_bal, "picked_from": ["series.TWSE.rows.0.balance_yi + series.TPEX.rows.0.balance_yi"]})
+    if isinstance(twse_chg, (int, float)) and isinstance(tpex_chg, (int, float)):
+        extracts_m.append({"field": "total_chg_yi", "value": twse_chg + tpex_chg, "picked_from": ["series.TWSE.rows.0.chg_yi + series.TPEX.rows.0.chg_yi"]})
+
+    # tw0050_bb: latest state + z + regime + pledge decision
+    add_extract(extracts_tw, "last_date", tw, ["meta.last_date", "latest.date"])
+    add_extract(extracts_tw, "adjclose", tw, ["latest.adjclose", "latest.price_used"])
+    add_extract(extracts_tw, "bb_z", tw, ["latest.bb_z"])
+    add_extract(extracts_tw, "bb_state", tw, ["latest.state"])
+    add_extract(extracts_tw, "regime_allowed", tw, ["regime.allowed"])
+    add_extract(extracts_tw, "pledge_action_bucket", tw, ["pledge.decision.action_bucket"])
+
+    pack: Dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "build_fingerprint": BUILD_FINGERPRINT,
-        "generated_at_utc": _now_utc_iso(),
-        "generated_at_local": now_local.isoformat(),
-        "timezone": TZ_NAME,
-        "day_key_local": day_key,
+        "generated_at_utc": utc_now_iso(),
+        "generated_at_local": datetime.now().astimezone().isoformat(),
+        "timezone": "Asia/Taipei",
+        "day_key_local": day_key_local,
         "inputs": {
             "tw0050_bb": {
-                "path": str(tw_path),
+                "path": args.tw0050,
                 "as_of_date": tw_asof.isoformat() if tw_asof else None,
                 "age_days": tw_age,
-                "dq_flags": tw_dq,
-                "fingerprint": pick(tw, ("build_script_fingerprint", "script_fingerprint", "SCRIPT_FINGERPRINT")),
+                "dq_flags": tw_dq_flags,
+                "fingerprint": tw_fp,
+                "picked_as_of_path": tw_asof_path,
             },
             "roll25": {
-                "path": str(r25_path),
+                "path": args.roll25,
                 "as_of_date": r25_asof.isoformat() if r25_asof else None,
                 "age_days": r25_age,
-                "dq_flags": r25_dq,
-                "fingerprint": pick(r25, ("script_fingerprint", "SCRIPT_FINGERPRINT")),
+                "dq_flags": [],
+                "fingerprint": r25_fp,
+                "picked_as_of_path": r25_asof_path,
             },
             "taiwan_margin": {
-                "path": str(m_path),
+                "path": args.margin,
                 "as_of_date": m_asof.isoformat() if m_asof else None,
                 "age_days": m_age,
-                "dq_flags": m_dq,
-                "fingerprint": pick(m, ("script_fingerprint", "SCRIPT_FINGERPRINT")),
+                "dq_flags": [],
+                "fingerprint": m_fp,
+                "picked_as_of_path": m_asof_path,
             },
         },
-        "warnings": warnings,
-        "extracts_best_effort": extracts,
-        # v1: keep raw blobs to avoid losing information (NotebookLM can search them)
+        "warnings": sorted(list(dict.fromkeys(warnings))),  # unique keep order-ish
+        "extracts_best_effort": {
+            "tw0050_bb": extracts_tw,
+            "roll25": extracts_r25,
+            "margin": extracts_m,
+        },
         "raw": {
             "tw0050_bb": tw,
             "roll25": r25,
             "taiwan_margin": m,
         },
-        "meta_env": meta_env,
+        "meta_env": {
+            "GITHUB_SHA": os.getenv("GITHUB_SHA"),
+            "GITHUB_RUN_ID": os.getenv("GITHUB_RUN_ID"),
+            "GITHUB_WORKFLOW": os.getenv("GITHUB_WORKFLOW"),
+            "GITHUB_REF_NAME": os.getenv("GITHUB_REF_NAME"),
+            "GITHUB_REPOSITORY": os.getenv("GITHUB_REPOSITORY"),
+        },
     }
 
-    _write_json(out_dir / "episode_pack.json", pack)
+    # write outputs
+    pack_path = out_dir / "episode_pack.json"
+    md_path = out_dir / "episode_outline.md"
+    dump_json(str(pack_path), pack)
+    md = build_outline(pack)
+    md_path.write_text(md, encoding="utf-8")
 
-    def _fmt_extract(block: str) -> str:
-        rows = extracts.get(block, [])
-        if not rows:
-            return "- 可引用數據：N/A（未在 JSON 中找到常見欄位；請直接在 episode_pack.json 內搜尋）"
-        return "\n".join([f"- {r['field']}: {r['value']}" for r in rows])
-
-    outline = f"""# 投資日記 Episode Outline（roll25 + taiwan margin + tw0050_bb）
-
-- 產出日：{day_key}（{TZ_NAME}）
-- 輸出：episode_pack.json, episode_outline.md
-- warnings: {", ".join(warnings) if warnings else "None"}
-
-## 開場（20秒）
-- 今天用三個訊號整理市場位置：成交熱度（roll25）、槓桿動向（margin）、0050 技術位置（BB）。
-- 若 warnings 含 stale 或 date_misaligned：本集只做「狀態描述」，避免跨模組因果結論。
-
-## 1) 成交熱度（roll25）（60秒）
-- as_of：{r25_asof.isoformat() if r25_asof else "N/A"}；age_days={r25_age if r25_age is not None else "N/A"}
-{_fmt_extract("roll25")}
-
-## 2) 槓桿動向（taiwan margin）（60秒）
-- as_of：{m_asof.isoformat() if m_asof else "N/A"}；age_days={m_age if m_age is not None else "N/A"}
-{_fmt_extract("margin")}
-
-## 3) 0050 位置（tw0050_bb）（80秒）
-- as_of：{tw_asof.isoformat() if tw_asof else "N/A"}；age_days={tw_age if tw_age is not None else "N/A"}
-{_fmt_extract("tw0050_bb")}
-
-## 收尾（20秒）
-- 免責：非投資建議。資料可能落後/不一致（見 warnings）。歷史統計不保證未來。
-- 行動句（模板）：若風險訊號升溫，優先守住現金流與部位上限；若訊號降溫，再考慮分批與再平衡。
-"""
-    _write_text(out_dir / "episode_outline.md", outline)
-
-    print(f"[OK] wrote: {out_dir / 'episode_pack.json'}")
-    print(f"[OK] wrote: {out_dir / 'episode_outline.md'}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
