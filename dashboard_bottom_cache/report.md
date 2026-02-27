@@ -1,33 +1,33 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.10`
-- as_of_ts (TPE): `2026-02-27T00:11:26.022371+08:00`
-- run_ts_utc: `2026-02-26T16:11:26.022352Z`
+- as_of_ts (TPE): `2026-02-27T23:55:12.066505+08:00`
+- run_ts_utc: `2026-02-27T15:55:12.066494Z`
 - bottom_state (Global): **NONE**  (streak=2)
-- market_cache_as_of_ts: `2026-02-26T03:20:22Z`
-- market_cache_generated_at_utc: `2026-02-26T03:20:22Z`
-- history_load_status: `OK`; reason: `dict.items`; loaded_items: `22`
-- history_pre_items: `22`; history_post_items: `23`; pre_unique_days: `22`; post_unique_days: `23`
+- market_cache_as_of_ts: `2026-02-27T03:17:23Z`
+- market_cache_generated_at_utc: `2026-02-27T03:17:23Z`
+- history_load_status: `OK`; reason: `dict.items`; loaded_items: `23`
+- history_pre_items: `23`; history_post_items: `23`; pre_unique_days: `23`; post_unique_days: `23`
 - history_write: status=`OK`; reason=`ok`; allow_reset=`False`; allow_shrink=`False`
-- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260226T161126Z.json`; bytes=`20502`; keep_n=`30`; prune_deleted=`1`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260227T155512Z.json`; bytes=`21430`; keep_n=`30`; prune_deleted=`1`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `0`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
-- TRIG_SYSTEMIC_VETO = `0`  (systemic veto via HYG_IEF_RATIO / OFR_FSI)
+- TRIG_SYSTEMIC_VETO = `1`  (systemic veto via HYG_IEF_RATIO / OFR_FSI)
 - TRIG_REVERSAL = `0`  (panic & NOT systemic & VIX cooling & SP500 stable)
 
 ## Distance to Triggers - Global
-- VIX panic gap: `2.0700`
-- SP500 ret1% gap: `2.3136`
-- HYG veto gap(z): `0.5195`
-- OFR veto gap(z): `1.5598`
+- VIX panic gap: `1.3700`
+- SP500 ret1% gap: `0.9634`
+- HYG veto gap(z): `-0.0493`
+- OFR veto gap(z): `1.3178`
 
 ## Context (Non-trigger) - Global
-- SP500.p252: `96.42857142857143`; equity_extreme(p252>=95): `1`
+- SP500.p252: `89.28571428571429`; equity_extreme(p252>=95): `0`
 
 ## TW Local Gate (roll25 + margin)
 - tw_state: **NONE**  (streak=23)
-- UsedDate: `2026-02-25`; run_day_tag: `WEEKDAY`; used_date_status: `DATA_NOT_UPDATED`
+- UsedDate: `2026-02-26`; run_day_tag: `WEEKDAY`; used_date_status: `DATA_NOT_UPDATED`
 - Lookback: `20/20`
 - roll25_raw: DownDay=`False`; VolumeAmplified=`False`; VolAmplified=`False`; NewLow_N=`0`; ConsecutiveBreak=`0`
 - roll25_paired_basis: `False` (basis = VolumeAmplified OR VolAmplified OR (NewLow_N>=1))
@@ -55,7 +55,7 @@
 | 2026-02-24 | 2026-02-24T00:08:17.893960+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-25 | 2026-02-25T00:32:15.907695+08:00 | BOTTOM_WATCH | 1 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-26 | 2026-02-26T00:38:32.185218+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
-| 2026-02-27 | 2026-02-27T00:11:26.022371+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 1 | 0 | ALERT | DOWNGRADED |
+| 2026-02-27 | 2026-02-27T23:55:12.066505+08:00 | NONE | 0 | 1 | 0 | NONE | 0 | 1 | 0 | ALERT | DOWNGRADED |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`
