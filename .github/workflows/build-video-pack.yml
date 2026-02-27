@@ -6,11 +6,11 @@ on:
       out_dir:
         description: "Output directory"
         required: false
-        default: "fred-cache/video_pack"
+        default: "video_pack"
       commit_output:
         description: "Commit outputs back to repo"
         required: false
-        default: "false"
+        default: "true"
 
 permissions:
   contents: write
@@ -65,14 +65,14 @@ jobs:
             ${{ inputs.out_dir }}/episode_outline.md
           if-no-files-found: error
 
-      - name: Commit output (optional)
+      - name: Commit output (default on)
         if: ${{ inputs.commit_output == 'true' }}
         run: |
           set -euo pipefail
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git status --porcelain
-          git add ${{ inputs.out_dir }}/episode_pack.json ${{ inputs.out_dir }}/episode_outline.md
+          git add "${{ inputs.out_dir }}/episode_pack.json" "${{ inputs.out_dir }}/episode_outline.md"
           git diff --cached --quiet && echo "No changes to commit." && exit 0
           git commit -m "build: video pack outputs"
           git push
