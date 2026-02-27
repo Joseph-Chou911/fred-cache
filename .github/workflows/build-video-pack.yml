@@ -1,0 +1,45 @@
+name: build-video-pack (roll25 + margin + tw0050_bb) - manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      out_dir:
+        description: "Output directory (will contain episode_pack.json and episode_outline.md)"
+        required: false
+        default: "video_pack"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-video-pack
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build video pack (flat outputs)
+        run: |
+          set -euo pipefail
+          python tools/build_video_pack.py \
+            --tw0050 tw0050_bb_cache/stats_latest.json \
+            --roll25 roll25_cache/stats_latest.json \
+            --margin taiwan_margin_cache/latest.json \
+            --out_dir "${{ inputs.out_dir }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-pack
+          path: |
+            ${{ inputs.out_dir }}/episode_pack.json
+            ${{ inputs.out_dir }}/episode_outline.md
