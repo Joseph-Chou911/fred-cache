@@ -2,15 +2,6 @@ name: build-video-pack (roll25 + margin + tw0050_bb) - manual
 
 on:
   workflow_dispatch:
-    inputs:
-      out_dir:
-        description: "Output directory"
-        required: false
-        default: "video_pack"
-      commit_output:
-        description: "Commit outputs back to repo"
-        required: false
-        default: "true"
 
 permissions:
   contents: write
@@ -22,6 +13,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      OUT_DIR: video_pack
+      TZ: Asia/Taipei
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,38 +36,42 @@ jobs:
       - name: Build video pack
         run: |
           set -euo pipefail
-          mkdir -p "${{ inputs.out_dir }}"
+          mkdir -p "${OUT_DIR}"
           python tools/build_video_pack.py \
             --tw0050 tw0050_bb_cache/stats_latest.json \
             --roll25 roll25_cache/stats_latest.json \
             --margin taiwan_margin_cache/latest.json \
-            --out_dir "${{ inputs.out_dir }}"
+            --out_dir "${OUT_DIR}"
 
       - name: Show outputs (audit)
         run: |
           set -euo pipefail
           echo "=== out_dir listing ==="
-          ls -al "${{ inputs.out_dir }}"
+          ls -al "${OUT_DIR}"
+          echo "=== episode_* files ==="
+          find "${OUT_DIR}" -maxdepth 1 -type f -name "episode_*" -print
           echo "=== file sizes ==="
-          wc -c "${{ inputs.out_dir }}/episode_pack.json" "${{ inputs.out_dir }}/episode_outline.md"
+          wc -c "${OUT_DIR}/episode_pack.json" "${OUT_DIR}/episode_outline.md" "${OUT_DIR}/episode_data.md"
 
-      - name: Upload artifact (must exist)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: video-pack
           path: |
-            ${{ inputs.out_dir }}/episode_pack.json
-            ${{ inputs.out_dir }}/episode_outline.md
+            video_pack/episode_pack.json
+            video_pack/episode_outline.md
+            video_pack/episode_data.md
           if-no-files-found: error
 
-      - name: Commit output (default on)
-        if: ${{ inputs.commit_output == 'true' }}
+      - name: Commit output
         run: |
           set -euo pipefail
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git status --porcelain
-          git add "${{ inputs.out_dir }}/episode_pack.json" "${{ inputs.out_dir }}/episode_outline.md"
+
+          git add video_pack/episode_pack.json video_pack/episode_outline.md video_pack/episode_data.md
+
           git diff --cached --quiet && echo "No changes to commit." && exit 0
           git commit -m "build: video pack outputs"
           git push
