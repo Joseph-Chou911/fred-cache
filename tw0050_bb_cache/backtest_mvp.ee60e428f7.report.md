@@ -1,6 +1,6 @@
 # Backtest MVP Summary
 
-- generated_at_utc: `2026-02-26T08:29:14Z`
+- generated_at_utc: `2026-02-27T07:54:02Z`
 - script_fingerprint: `backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs`
 - renderer_fingerprint: `render_backtest_mvp@2026-02-24.v13.dq_post_neg_days_vs_equity_csv`
 - suite_ok: `True`
@@ -17,7 +17,7 @@ note_full: `FULL_* columns may be contaminated by a known data singularity issue
 
 | id | ok | suite_hard_fail | entry_mode | L | full_CAGR | full_MDD | full_Sharpe | full_Calmar | ΔCAGR | ΔMDD | ΔSharpe | post_ok | split | post_start | post_n | post_years | post_CAGR | post_MDD | post_Sharpe | post_Calmar | post_ΔCAGR | post_ΔMDD | post_ΔSharpe | post_go/no-go | rank_basis | neg_days | equity_min | post_neg_days | post_equity_min | trades | rv20_skipped | post_neg_days_csv | dq_post_neg_days |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| trend_leverage_price_gt_ma60_1.5x | True | True | trend | 1.50 | 9.06% | -118.88% | -0.195 | 0.076 | 0.43% | -41.55% | -0.705 | True | 2014-01-02 | 2014-01-03 | 2957 | 11.730 | 22.90% | -37.65% | 1.057 | 0.608 | 2.52% | -3.82% | -0.044 | GO_OR_REVIEW | post | 1422 | -0.40 | 0 | 0.96 | 94 | 0 | 1421 | DQ_MISMATCH |
+| trend_leverage_price_gt_ma60_1.5x | True | True | trend | 1.50 | 9.06% | -118.88% | -0.194 | 0.076 | 0.43% | -41.55% | -0.705 | True | 2014-01-02 | 2014-01-03 | 2957 | 11.730 | 22.90% | -37.65% | 1.057 | 0.608 | 2.52% | -3.82% | -0.044 | GO_OR_REVIEW | post | 1422 | -0.40 | 0 | 0.96 | 94 | 0 | 1421 | DQ_MISMATCH |
 | trend_leverage_price_gt_ma60_1.3x | True | True | trend | 1.30 | 8.87% | -103.16% | -0.030 | 0.086 | 0.24% | -25.82% | -0.541 | True | 2014-01-02 | 2014-01-03 | 2957 | 11.730 | 21.95% | -36.21% | 1.077 | 0.606 | 1.58% | -2.38% | -0.024 | GO_OR_REVIEW | post | 124 | -0.06 | 0 | 0.96 | 138 | 0 | 123 | DQ_MISMATCH |
 | trend_leverage_price_gt_ma60_1.2x | True | False | trend | 1.20 | 8.80% | -94.86% | 0.611 | 0.093 | 0.17% | -17.53% | 0.100 | True | 2014-01-02 | 2014-01-03 | 2957 | 11.730 | 21.45% | -35.45% | 1.086 | 0.605 | 1.08% | -1.62% | -0.015 | GO_OR_REVIEW | post | 0 | 0.10 | 0 | 0.96 | 139 | 0 | 0 | OK |
 | trend_leverage_price_gt_ma60_1.1x | True | False | trend | 1.10 | 8.71% | -86.26% | 0.541 | 0.101 | 0.09% | -8.93% | 0.030 | True | 2014-01-02 | 2014-01-03 | 2957 | 11.730 | 20.93% | -34.66% | 1.094 | 0.604 | 0.55% | -0.83% | -0.006 | NO_GO | post | 0 | 0.27 | 0 | 0.96 | 139 | 0 | 0 | OK |
@@ -86,7 +86,7 @@ post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (p
   - delta_cagr not below threshold
 
 - suite_hard_fail: `true`
-  - full: equity_min<= 0.0 (equity_min=-0.39616201036035165)
+  - full: equity_min<= 0.0 (equity_min=-0.3961628582188265)
   - full: equity_negative_days>0 (neg_days=1422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
@@ -111,7 +111,7 @@ post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (p
   - delta_cagr not below threshold
 
 - suite_hard_fail: `true`
-  - full: equity_min<= 0.0 (equity_min=-0.06394142917471746)
+  - full: equity_min<= 0.0 (equity_min=-0.06394200265723271)
   - full: equity_negative_days>0 (neg_days=124)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
@@ -166,7 +166,7 @@ post_only_policy_v3_semantic1: `require post_ok=true; exclude post hard fails (p
   - delta_cagr not below threshold
 
 - suite_hard_fail: `true`
-  - full: equity_min<= 0.0 (equity_min=-0.11447374811936006)
+  - full: equity_min<= 0.0 (equity_min=-0.11447388698621286)
   - full: equity_negative_days>0 (neg_days=422)
 
 - suite_hard_fail_evidence (from equity CSV, best-effort):
