@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       out_dir:
-        description: "Output directory (will contain episode_pack.json and episode_outline.md)"
+        description: "Output directory"
         required: false
         default: "fred-cache/video_pack"
+      commit_output:
+        description: "Commit outputs back to repo"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -27,19 +31,48 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build video pack (flat outputs)
+      - name: Sanity check inputs exist
         run: |
           set -euo pipefail
+          ls -al tw0050_bb_cache/stats_latest.json
+          ls -al roll25_cache/stats_latest.json
+          ls -al taiwan_margin_cache/latest.json
+
+      - name: Build video pack
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ inputs.out_dir }}"
           python tools/build_video_pack.py \
             --tw0050 tw0050_bb_cache/stats_latest.json \
             --roll25 roll25_cache/stats_latest.json \
             --margin taiwan_margin_cache/latest.json \
             --out_dir "${{ inputs.out_dir }}"
 
-      - name: Upload artifact
+      - name: Show outputs (audit)
+        run: |
+          set -euo pipefail
+          echo "=== out_dir listing ==="
+          ls -al "${{ inputs.out_dir }}"
+          echo "=== file sizes ==="
+          wc -c "${{ inputs.out_dir }}/episode_pack.json" "${{ inputs.out_dir }}/episode_outline.md"
+
+      - name: Upload artifact (must exist)
         uses: actions/upload-artifact@v4
         with:
           name: video-pack
           path: |
             ${{ inputs.out_dir }}/episode_pack.json
             ${{ inputs.out_dir }}/episode_outline.md
+          if-no-files-found: error
+
+      - name: Commit output (optional)
+        if: ${{ inputs.commit_output == 'true' }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git status --porcelain
+          git add ${{ inputs.out_dir }}/episode_pack.json ${{ inputs.out_dir }}/episode_outline.md
+          git diff --cached --quiet && echo "No changes to commit." && exit 0
+          git commit -m "build: video pack outputs"
+          git push
