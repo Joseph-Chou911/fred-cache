@@ -1,65 +1,191 @@
 {
   "schema_version": "episode_pack_schema_v1",
-  "build_fingerprint": "build_video_pack@v1.flat",
-  "generated_at_utc": "2026-02-27T11:40:42Z",
-  "generated_at_local": "2026-02-27T19:40:42.576813+08:00",
+  "build_fingerprint": "build_video_pack@v1.1.nested_paths",
+  "generated_at_utc": "2026-02-27T11:55:57.647180Z",
+  "generated_at_local": "2026-02-27T11:55:57.647193+00:00",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-02-27",
   "inputs": {
     "tw0050_bb": {
       "path": "tw0050_bb_cache/stats_latest.json",
-      "as_of_date": null,
-      "age_days": null,
+      "as_of_date": "2026-02-26",
+      "age_days": 1,
       "dq_flags": [
         "PRICE_SERIES_BREAK_DETECTED",
         "FWD_MDD_CLEAN_APPLIED",
         "FWD_MDD_OUTLIER_MIN_RAW_20D",
         "RAW_OUTLIER_EXCLUDED_BY_CLEAN"
       ],
-      "fingerprint": null
+      "fingerprint": "tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit",
+      "picked_as_of_path": "meta.last_date"
     },
     "roll25": {
       "path": "roll25_cache/stats_latest.json",
-      "as_of_date": null,
-      "age_days": null,
+      "as_of_date": "2026-02-26",
+      "age_days": 1,
       "dq_flags": [],
-      "fingerprint": null
+      "fingerprint": "twse_stats_v1",
+      "picked_as_of_path": "used_date"
     },
     "taiwan_margin": {
       "path": "taiwan_margin_cache/latest.json",
-      "as_of_date": null,
-      "age_days": null,
+      "as_of_date": "2026-02-26",
+      "age_days": 1,
       "dq_flags": [],
-      "fingerprint": null
+      "fingerprint": "taiwan_margin_financing_latest_v1",
+      "picked_as_of_path": "series.TWSE.data_date"
     }
   },
-  "warnings": [
-    "tw0050_as_of_missing",
-    "roll25_as_of_missing",
-    "margin_as_of_missing"
-  ],
+  "warnings": [],
   "extracts_best_effort": {
-    "tw0050_bb": [],
+    "tw0050_bb": [
+      {
+        "field": "last_date",
+        "value": "2026-02-26",
+        "picked_from": [
+          "meta.last_date",
+          "latest.date"
+        ]
+      },
+      {
+        "field": "adjclose",
+        "value": 81.1500015258789,
+        "picked_from": [
+          "latest.adjclose",
+          "latest.price_used"
+        ]
+      },
+      {
+        "field": "bb_z",
+        "value": 2.2710145565515196,
+        "picked_from": [
+          "latest.bb_z"
+        ]
+      },
+      {
+        "field": "bb_state",
+        "value": "EXTREME_UPPER_BAND",
+        "picked_from": [
+          "latest.state"
+        ]
+      },
+      {
+        "field": "regime_allowed",
+        "value": false,
+        "picked_from": [
+          "regime.allowed"
+        ]
+      },
+      {
+        "field": "pledge_action_bucket",
+        "value": "VETO",
+        "picked_from": [
+          "pledge.decision.action_bucket"
+        ]
+      }
+    ],
     "roll25": [
       {
         "field": "mode",
         "value": "FULL",
         "picked_from": [
-          "mode",
-          "Mode"
+          "mode"
         ]
       },
       {
         "field": "used_date",
         "value": "2026-02-26",
         "picked_from": [
-          "UsedDate",
-          "used_date",
-          "as_of_data_date"
+          "used_date"
+        ]
+      },
+      {
+        "field": "trade_value_win60_z",
+        "value": 3.009013,
+        "picked_from": [
+          "series.trade_value.win60.z"
+        ]
+      },
+      {
+        "field": "trade_value_win60_p",
+        "value": 99.167,
+        "picked_from": [
+          "series.trade_value.win60.p"
+        ]
+      },
+      {
+        "field": "trade_value_win252_z",
+        "value": 4.352935,
+        "picked_from": [
+          "series.trade_value.win252.z"
+        ]
+      },
+      {
+        "field": "trade_value_win252_p",
+        "value": 99.802,
+        "picked_from": [
+          "series.trade_value.win252.p"
         ]
       }
     ],
-    "margin": []
+    "margin": [
+      {
+        "field": "twse_data_date",
+        "value": "2026-02-26",
+        "picked_from": [
+          "series.TWSE.data_date"
+        ]
+      },
+      {
+        "field": "twse_balance_yi",
+        "value": 3898.6,
+        "picked_from": [
+          "series.TWSE.rows.0.balance_yi"
+        ]
+      },
+      {
+        "field": "twse_chg_yi",
+        "value": 67.3,
+        "picked_from": [
+          "series.TWSE.rows.0.chg_yi"
+        ]
+      },
+      {
+        "field": "tpex_data_date",
+        "value": "2026-02-26",
+        "picked_from": [
+          "series.TPEX.data_date"
+        ]
+      },
+      {
+        "field": "tpex_balance_yi",
+        "value": 1378.5,
+        "picked_from": [
+          "series.TPEX.rows.0.balance_yi"
+        ]
+      },
+      {
+        "field": "tpex_chg_yi",
+        "value": 30.0,
+        "picked_from": [
+          "series.TPEX.rows.0.chg_yi"
+        ]
+      },
+      {
+        "field": "total_balance_yi",
+        "value": 5277.1,
+        "picked_from": [
+          "series.TWSE.rows.0.balance_yi + series.TPEX.rows.0.balance_yi"
+        ]
+      },
+      {
+        "field": "total_chg_yi",
+        "value": 97.3,
+        "picked_from": [
+          "series.TWSE.rows.0.chg_yi + series.TPEX.rows.0.chg_yi"
+        ]
+      }
+    ]
   },
   "raw": {
     "tw0050_bb": {
@@ -1299,8 +1425,8 @@
     }
   },
   "meta_env": {
-    "GITHUB_SHA": "a6d6e0f9570c45f1f74400ab077fdd6a6c51b02f",
-    "GITHUB_RUN_ID": "22484767137",
+    "GITHUB_SHA": "a543128665b73356ec68db01b327e3c43d3420be",
+    "GITHUB_RUN_ID": "22485218145",
     "GITHUB_WORKFLOW": "build-video-pack (roll25 + margin + tw0050_bb) - manual",
     "GITHUB_REF_NAME": "main",
     "GITHUB_REPOSITORY": "Joseph-Chou911/fred-cache"
