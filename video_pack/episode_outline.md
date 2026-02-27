@@ -1,51 +1,103 @@
-# 投資日記 Episode Outline（roll25 + taiwan margin + tw0050_bb）
+# 投資日記 Data Brief（roll25 + taiwan margin + tw0050_bb）
 
-- 產出日：2026-02-27（Asia/Taipei）
-- 輸出：episode_pack.json, episode_outline.md
+- day_key_local: 2026-02-27 (Asia/Taipei)
+- generated_at_local: 2026-02-27T12:33:52.333820+00:00
+- generated_at_utc: 2026-02-27T12:33:52Z
+- build_fingerprint: build_video_pack@v1.2.data_only_flags_more_extracts
 - warnings: NONE
 
-## 今日 10 秒總結（先講人話）
-- **成交熱度**：20日成交金額 z=3.009 / p=99.167；252日 z=4.353 / p=99.802
-- **槓桿動向**：TWSE 融資餘額(億)=3898.6（日變動 67.3）；TPEX=1378.5（日變動 30.0）
-- **0050 位置**：EXTREME_UPPER_BAND（bb_z=2.271，價格 81.15）；Regime gate=False；質押指引=VETO
+## 0) Quick facts (for narration later)
+- roll25 trade_value heat: 60d z=3.009 p=99.167 | 252d z=4.353 p=99.802
+- margin latest: TWSE bal_yi=3898.6 chg_yi=67.3 | TPEX bal_yi=1378.5 chg_yi=30.0
+- 0050 latest: state=EXTREME_UPPER_BAND bb_z=2.271 price=81.15 regime_allowed=false pledge_action=VETO
 
-## 開場（20秒）
-- 今天用三個訊號整理市場位置：成交熱度（roll25）、槓桿動向（margin）、0050 技術位置（BB）。
-- 原則：只講「目前狀態 + 可稽核數字」，不把它包裝成預測。
+## 1) roll25 (TWSE Turnover / Heat)
+- path: roll25_cache/stats_latest.json
+- as_of_date: 2026-02-26 | age_days: 1 | picked_as_of_path: used_date
+- fingerprint: twse_stats_v1
 
-## 1) 成交熱度（roll25）（60–90秒）
-- as_of：2026-02-26；age_days=1；mode=FULL
-- 成交金額熱度：20日 z=3.009 / p=99.167；252日 z=4.353 / p=99.802
-- 指數位置（可選口播）：252日 close z=2.775 / p=99.802
-- 放量檢查：vol_multiplier_20=1.452；volume_amplified=False
-- 一句話狀態：成交與熱度分位偏高，市場有「擁擠交易」的味道。
-- 反方審核：高成交 ≠ 必然回檔；多頭趨勢中，高成交可能持續。
-- 今天的動作：新增資金優先做再平衡（現金/短債），避免追價式加碼。
+### extracts
+- mode: FULL
+- used_date: 2026-02-26
+- trade_value_win60_z: 3.009013
+- trade_value_win60_p: 99.167
+- trade_value_win252_z: 4.352935
+- trade_value_win252_p: 99.802
+- close_win252_z: 2.774885
+- close_win252_p: 99.802
+- pct_change_win60_z: -0.465833
+- pct_change_win60_p: 30.833
+- amplitude_pct_win60_z: -0.274213
+- amplitude_pct_win60_p: 49.167
+- vol_multiplier_20: 1.451967
+- volume_amplified: False
+- new_low_n: 0
+- consecutive_down_days: 0
 
-## 2) 槓桿動向（taiwan margin）（60–90秒）
-- as_of：2026-02-26；age_days=1
-- TWSE：餘額(億)=3898.6；日變動(億)=67.3
-- TPEX：餘額(億)=1378.5；日變動(億)=30.0
-- 合計：餘額(億)=5277.1；日變動(億)=97.3
-- 近3日累積變動(億)：TWSE=177.0；TPEX=56.3；合計=233.3
-- 近30筆是否創高：TWSE=True；TPEX=True
-- 一句話狀態：融資水位與變動方向若偏正，代表市場承擔風險的意願偏高。
-- 反方審核：融資增加不等於散戶一定輸；但通常意味著脆弱性上升（遇到急跌時更容易擠兌）。
-- 今天的動作：避免新增槓桿；若你已經有槓桿，優先檢查維持率與最大損失上限。
+### computed_flags (thresholds are explicit)
+- heat_trade_value_p_ge_95_60d: True
+- heat_trade_value_p_ge_99_252d: True
+- index_close_p_ge_99_252d: True
+- volume_amplified: False
+- vol_multiplier_20_ge_1p5: False
 
-## 3) 0050 位置（tw0050_bb）（90–140秒）
-- as_of：2026-02-26；age_days=1
-- BB 狀態：EXTREME_UPPER_BAND；bb_z=2.271；價格(adjclose)=81.15
-- 趨勢：trend_state=TREND_UP；price_vs_200MA=42.78%
-- 波動分位：RV20 pctl=82.71（分位越高代表近期波動相對歷史更偏大）
-- Gate/指引：regime_allowed=False；pledge_action=VETO
-- VETO 原因（可選口播）：['regime_gate_closed', 'no_chase_state:EXTREME_UPPER_BAND', 'no_chase_z>= 1.50']
-- 分批參考價位（你自己的 tranche levels）：10D_p10_uncond=77.26, 10D_p05_uncond=76.03, 20D_p10_uncond=75.58, 20D_p05_uncond=73.63
-- 一句話狀態：在上軌極端區時，最大的錯誤是『用更高風險去追更高價格』。
-- 反方審核：EXTREME_UPPER_BAND 不等於立刻回檔；強勢趨勢可能貼上軌很久。
-- 今天的動作：不追價；把加碼改成「等回檔分批」，用 tranche levels 當節奏參考。
+## 2) taiwan_margin (Margin financing)
+- path: taiwan_margin_cache/latest.json
+- as_of_date: 2026-02-26 | age_days: 1 | picked_as_of_path: series.TWSE.data_date
+- fingerprint: taiwan_margin_financing_latest_v1
 
-## 收尾（20–30秒）
-- 免責：非投資建議。本集是狀態描述；高分位數只代表『偏極端』，不保證反轉。
-- 下集追蹤：成交熱度是否降溫（pctl 回落）、融資是否轉負、0050 是否脫離上軌極端或 RV 分位下降。
-- 行動句：當三訊號同向偏熱時，我只做再平衡與風險上限管理；當訊號降溫且回到可接受區間，才恢復分批投入。
+### extracts
+- twse_data_date: 2026-02-26
+- twse_balance_yi: 3898.6
+- twse_chg_yi: 67.3
+- tpex_data_date: 2026-02-26
+- tpex_balance_yi: 1378.5
+- tpex_chg_yi: 30.0
+- total_balance_yi: 5277.1
+- total_chg_yi: 97.3
+- twse_chg_3d_sum: 177.0
+- tpex_chg_3d_sum: 56.3
+- total_chg_3d_sum: 233.3
+- twse_is_30row_high: True
+- tpex_is_30row_high: True
+- total_is_30row_high: True
+
+### computed_flags (thresholds are explicit)
+- twse_is_30row_high: True
+- tpex_is_30row_high: True
+- total_is_30row_high: True
+- total_chg_3d_sum_ge_0: True
+
+## 3) tw0050_bb (0050 Bollinger / Trend / Vol / Pledge gate)
+- path: tw0050_bb_cache/stats_latest.json
+- as_of_date: 2026-02-26 | age_days: 1 | picked_as_of_path: meta.last_date
+- fingerprint: tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit
+- dq_flags: PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, FWD_MDD_OUTLIER_MIN_RAW_20D, RAW_OUTLIER_EXCLUDED_BY_CLEAN
+
+### extracts
+- last_date: 2026-02-26
+- adjclose: 81.1500015258789
+- bb_state: EXTREME_UPPER_BAND
+- bb_z: 2.2710145565515196
+- dist_to_upper_pct: -1.971951060176166
+- dist_to_lower_pct: 31.076676433867217
+- band_width_std_pct: 34.86611093616811
+- band_width_geo_pct: 42.22768704089657
+- trend_state: TREND_UP
+- price_vs_200ma_pct: 42.78204169364075
+- trend_slope_pct: 6.473457401789284
+- rv_ann: 0.21892785245279517
+- rv_ann_pctl: 82.71072796934867
+- regime_allowed: False
+- pledge_action_bucket: VETO
+- pledge_veto_reasons: ['regime_gate_closed', 'no_chase_state:EXTREME_UPPER_BAND', 'no_chase_z>= 1.50']
+- tranche_levels: [{'label': '10D_p10_uncond', 'price_level': 77.25644969234536, 'drawdown': -0.04797968897501359}, {'label': '10D_p05_uncond', 'price_level': 76.03104598653216, 'drawdown': -0.06308016565735114}, {'label': '20D_p10_uncond', 'price_level': 75.57789541822046, 'drawdown': -0.06866427606759168}, {'label': '20D_p05_uncond', 'price_level': 73.62555568073307, 'drawdown': -0.09272268273151263}]
+
+### computed_flags (thresholds are explicit)
+- bb_z_ge_2: True
+- rv_pctl_ge_80: True
+- regime_allowed: False
+- pledge_action_bucket: VETO
+
+## 4) Notes
+- This MD is data-only. Paste it back to ChatGPT for narration/script polishing.

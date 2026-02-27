@@ -1,8 +1,8 @@
 {
   "schema_version": "episode_pack_schema_v1",
-  "build_fingerprint": "build_video_pack@v1.2.rich_outline_more_extracts",
-  "generated_at_utc": "2026-02-27T12:08:13Z",
-  "generated_at_local": "2026-02-27T12:08:13.502035+00:00",
+  "build_fingerprint": "build_video_pack@v1.2.data_only_flags_more_extracts",
+  "generated_at_utc": "2026-02-27T12:33:52Z",
+  "generated_at_local": "2026-02-27T12:33:52.333820+00:00",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-02-27",
   "inputs": {
@@ -45,7 +45,8 @@
         "picked_from": [
           "meta.last_date",
           "latest.date"
-        ]
+        ],
+        "picked_path": "meta.last_date"
       },
       {
         "field": "adjclose",
@@ -53,59 +54,115 @@
         "picked_from": [
           "latest.adjclose",
           "latest.price_used"
-        ]
+        ],
+        "picked_path": "latest.adjclose"
       },
       {
         "field": "bb_z",
         "value": 2.2710145565515196,
         "picked_from": [
           "latest.bb_z"
-        ]
+        ],
+        "picked_path": "latest.bb_z"
       },
       {
         "field": "bb_state",
         "value": "EXTREME_UPPER_BAND",
         "picked_from": [
           "latest.state"
-        ]
+        ],
+        "picked_path": "latest.state"
       },
       {
-        "field": "regime_allowed",
-        "value": false,
+        "field": "dist_to_upper_pct",
+        "value": -1.971951060176166,
         "picked_from": [
-          "regime.allowed"
-        ]
+          "latest.dist_to_upper_pct"
+        ],
+        "picked_path": "latest.dist_to_upper_pct"
       },
       {
-        "field": "pledge_action_bucket",
-        "value": "VETO",
+        "field": "dist_to_lower_pct",
+        "value": 31.076676433867217,
         "picked_from": [
-          "pledge.decision.action_bucket"
-        ]
+          "latest.dist_to_lower_pct"
+        ],
+        "picked_path": "latest.dist_to_lower_pct"
+      },
+      {
+        "field": "band_width_std_pct",
+        "value": 34.86611093616811,
+        "picked_from": [
+          "latest.band_width_std_pct"
+        ],
+        "picked_path": "latest.band_width_std_pct"
+      },
+      {
+        "field": "band_width_geo_pct",
+        "value": 42.22768704089657,
+        "picked_from": [
+          "latest.band_width_geo_pct"
+        ],
+        "picked_path": "latest.band_width_geo_pct"
       },
       {
         "field": "trend_state",
         "value": "TREND_UP",
         "picked_from": [
           "trend.state"
-        ]
+        ],
+        "picked_path": "trend.state"
       },
       {
         "field": "price_vs_200ma_pct",
         "value": 42.78204169364075,
         "picked_from": [
           "trend.price_vs_trend_ma_pct"
-        ]
+        ],
+        "picked_path": "trend.price_vs_trend_ma_pct"
+      },
+      {
+        "field": "trend_slope_pct",
+        "value": 6.473457401789284,
+        "picked_from": [
+          "trend.trend_slope_pct"
+        ],
+        "picked_path": "trend.trend_slope_pct"
+      },
+      {
+        "field": "rv_ann",
+        "value": 0.21892785245279517,
+        "picked_from": [
+          "vol.rv_ann"
+        ],
+        "picked_path": "vol.rv_ann"
       },
       {
         "field": "rv_ann_pctl",
         "value": 82.71072796934867,
         "picked_from": [
           "vol.rv_ann_pctl"
-        ]
+        ],
+        "picked_path": "vol.rv_ann_pctl"
       },
       {
-        "field": "veto_reasons",
+        "field": "regime_allowed",
+        "value": false,
+        "picked_from": [
+          "regime.allowed"
+        ],
+        "picked_path": "regime.allowed"
+      },
+      {
+        "field": "pledge_action_bucket",
+        "value": "VETO",
+        "picked_from": [
+          "pledge.decision.action_bucket"
+        ],
+        "picked_path": "pledge.decision.action_bucket"
+      },
+      {
+        "field": "pledge_veto_reasons",
         "value": [
           "regime_gate_closed",
           "no_chase_state:EXTREME_UPPER_BAND",
@@ -113,14 +170,37 @@
         ],
         "picked_from": [
           "pledge.decision.veto_reasons"
-        ]
+        ],
+        "picked_path": "pledge.decision.veto_reasons"
       },
       {
         "field": "tranche_levels",
-        "value": "10D_p10_uncond=77.26, 10D_p05_uncond=76.03, 20D_p10_uncond=75.58, 20D_p05_uncond=73.63",
+        "value": [
+          {
+            "label": "10D_p10_uncond",
+            "price_level": 77.25644969234536,
+            "drawdown": -0.04797968897501359
+          },
+          {
+            "label": "10D_p05_uncond",
+            "price_level": 76.03104598653216,
+            "drawdown": -0.06308016565735114
+          },
+          {
+            "label": "20D_p10_uncond",
+            "price_level": 75.57789541822046,
+            "drawdown": -0.06866427606759168
+          },
+          {
+            "label": "20D_p05_uncond",
+            "price_level": 73.62555568073307,
+            "drawdown": -0.09272268273151263
+          }
+        ],
         "picked_from": [
-          "pledge.unconditional_tranche_levels.levels[:6].(label,price_level)"
-        ]
+          "pledge.unconditional_tranche_levels.levels"
+        ],
+        "picked_path": "pledge.unconditional_tranche_levels.levels"
       }
     ],
     "roll25": [
@@ -129,84 +209,128 @@
         "value": "FULL",
         "picked_from": [
           "mode"
-        ]
+        ],
+        "picked_path": "mode"
       },
       {
         "field": "used_date",
         "value": "2026-02-26",
         "picked_from": [
           "used_date"
-        ]
+        ],
+        "picked_path": "used_date"
       },
       {
         "field": "trade_value_win60_z",
         "value": 3.009013,
         "picked_from": [
           "series.trade_value.win60.z"
-        ]
+        ],
+        "picked_path": "series.trade_value.win60.z"
       },
       {
         "field": "trade_value_win60_p",
         "value": 99.167,
         "picked_from": [
           "series.trade_value.win60.p"
-        ]
+        ],
+        "picked_path": "series.trade_value.win60.p"
       },
       {
         "field": "trade_value_win252_z",
         "value": 4.352935,
         "picked_from": [
           "series.trade_value.win252.z"
-        ]
+        ],
+        "picked_path": "series.trade_value.win252.z"
       },
       {
         "field": "trade_value_win252_p",
         "value": 99.802,
         "picked_from": [
           "series.trade_value.win252.p"
-        ]
-      },
-      {
-        "field": "close_win60_z",
-        "value": 2.307043,
-        "picked_from": [
-          "series.close.win60.z"
-        ]
-      },
-      {
-        "field": "close_win60_p",
-        "value": 99.167,
-        "picked_from": [
-          "series.close.win60.p"
-        ]
+        ],
+        "picked_path": "series.trade_value.win252.p"
       },
       {
         "field": "close_win252_z",
         "value": 2.774885,
         "picked_from": [
           "series.close.win252.z"
-        ]
+        ],
+        "picked_path": "series.close.win252.z"
       },
       {
         "field": "close_win252_p",
         "value": 99.802,
         "picked_from": [
           "series.close.win252.p"
-        ]
+        ],
+        "picked_path": "series.close.win252.p"
+      },
+      {
+        "field": "pct_change_win60_z",
+        "value": -0.465833,
+        "picked_from": [
+          "series.pct_change.win60.z"
+        ],
+        "picked_path": "series.pct_change.win60.z"
+      },
+      {
+        "field": "pct_change_win60_p",
+        "value": 30.833,
+        "picked_from": [
+          "series.pct_change.win60.p"
+        ],
+        "picked_path": "series.pct_change.win60.p"
+      },
+      {
+        "field": "amplitude_pct_win60_z",
+        "value": -0.274213,
+        "picked_from": [
+          "series.amplitude_pct.win60.z"
+        ],
+        "picked_path": "series.amplitude_pct.win60.z"
+      },
+      {
+        "field": "amplitude_pct_win60_p",
+        "value": 49.167,
+        "picked_from": [
+          "series.amplitude_pct.win60.p"
+        ],
+        "picked_path": "series.amplitude_pct.win60.p"
       },
       {
         "field": "vol_multiplier_20",
         "value": 1.451967,
         "picked_from": [
           "derived.vol_multiplier_20"
-        ]
+        ],
+        "picked_path": "derived.vol_multiplier_20"
       },
       {
         "field": "volume_amplified",
         "value": false,
         "picked_from": [
           "derived.volume_amplified"
-        ]
+        ],
+        "picked_path": "derived.volume_amplified"
+      },
+      {
+        "field": "new_low_n",
+        "value": 0,
+        "picked_from": [
+          "derived.new_low_n"
+        ],
+        "picked_path": "derived.new_low_n"
+      },
+      {
+        "field": "consecutive_down_days",
+        "value": 0,
+        "picked_from": [
+          "derived.consecutive_down_days"
+        ],
+        "picked_path": "derived.consecutive_down_days"
       }
     ],
     "margin": [
@@ -215,93 +339,144 @@
         "value": "2026-02-26",
         "picked_from": [
           "series.TWSE.data_date"
-        ]
+        ],
+        "picked_path": "series.TWSE.data_date"
       },
       {
         "field": "twse_balance_yi",
         "value": 3898.6,
         "picked_from": [
           "series.TWSE.rows.0.balance_yi"
-        ]
+        ],
+        "picked_path": "series.TWSE.rows.0.balance_yi"
       },
       {
         "field": "twse_chg_yi",
         "value": 67.3,
         "picked_from": [
           "series.TWSE.rows.0.chg_yi"
-        ]
+        ],
+        "picked_path": "series.TWSE.rows.0.chg_yi"
       },
       {
         "field": "tpex_data_date",
         "value": "2026-02-26",
         "picked_from": [
           "series.TPEX.data_date"
-        ]
+        ],
+        "picked_path": "series.TPEX.data_date"
       },
       {
         "field": "tpex_balance_yi",
         "value": 1378.5,
         "picked_from": [
           "series.TPEX.rows.0.balance_yi"
-        ]
+        ],
+        "picked_path": "series.TPEX.rows.0.balance_yi"
       },
       {
         "field": "tpex_chg_yi",
         "value": 30.0,
         "picked_from": [
           "series.TPEX.rows.0.chg_yi"
-        ]
+        ],
+        "picked_path": "series.TPEX.rows.0.chg_yi"
       },
       {
         "field": "total_balance_yi",
         "value": 5277.1,
         "picked_from": [
-          "series.TWSE.rows.0.balance_yi + series.TPEX.rows.0.balance_yi"
-        ]
+          "sum(TWSE,TPEX)"
+        ],
+        "picked_path": null
       },
       {
         "field": "total_chg_yi",
         "value": 97.3,
         "picked_from": [
-          "series.TWSE.rows.0.chg_yi + series.TPEX.rows.0.chg_yi"
-        ]
+          "sum(TWSE,TPEX)"
+        ],
+        "picked_path": null
       },
       {
-        "field": "twse_chg_3d_sum_yi",
+        "field": "twse_chg_3d_sum",
         "value": 177.0,
         "picked_from": [
           "sum(series.TWSE.rows[:3].chg_yi)"
-        ]
+        ],
+        "picked_path": null
       },
       {
-        "field": "twse_balance_is_30row_high",
-        "value": true,
-        "picked_from": [
-          "latest == max(series.TWSE.rows[:].balance_yi)"
-        ]
-      },
-      {
-        "field": "tpex_chg_3d_sum_yi",
+        "field": "tpex_chg_3d_sum",
         "value": 56.3,
         "picked_from": [
           "sum(series.TPEX.rows[:3].chg_yi)"
-        ]
+        ],
+        "picked_path": null
       },
       {
-        "field": "tpex_balance_is_30row_high",
-        "value": true,
-        "picked_from": [
-          "latest == max(series.TPEX.rows[:].balance_yi)"
-        ]
-      },
-      {
-        "field": "total_chg_3d_sum_yi",
+        "field": "total_chg_3d_sum",
         "value": 233.3,
         "picked_from": [
-          "twse_chg_3d_sum_yi + tpex_chg_3d_sum_yi"
-        ]
+          "sum(TWSE_3d,TPEX_3d)"
+        ],
+        "picked_path": null
+      },
+      {
+        "field": "twse_is_30row_high",
+        "value": true,
+        "picked_from": [
+          "TWSE latest >= max(last_30)"
+        ],
+        "picked_path": null
+      },
+      {
+        "field": "tpex_is_30row_high",
+        "value": true,
+        "picked_from": [
+          "TPEX latest >= max(last_30)"
+        ],
+        "picked_path": null
+      },
+      {
+        "field": "total_is_30row_high",
+        "value": true,
+        "picked_from": [
+          "(TWSE+TPEX) latest >= max(last_30)"
+        ],
+        "picked_path": null
       }
     ]
+  },
+  "computed_flags": {
+    "roll25": {
+      "heat_trade_value_p_ge_95_60d": true,
+      "heat_trade_value_p_ge_99_252d": true,
+      "index_close_p_ge_99_252d": true,
+      "volume_amplified": false,
+      "vol_multiplier_20_ge_1p5": false
+    },
+    "margin": {
+      "twse_is_30row_high": true,
+      "tpex_is_30row_high": true,
+      "total_is_30row_high": true,
+      "total_chg_3d_sum_ge_0": true
+    },
+    "tw0050_bb": {
+      "bb_z_ge_2": true,
+      "rv_pctl_ge_80": true,
+      "regime_allowed": false,
+      "pledge_action_bucket": "VETO"
+    },
+    "thresholds_note": {
+      "roll25.heat_trade_value_p_ge_95_60d": "p >= 95",
+      "roll25.heat_trade_value_p_ge_99_252d": "p >= 99",
+      "roll25.index_close_p_ge_99_252d": "p >= 99",
+      "roll25.vol_multiplier_20_ge_1p5": "vol_multiplier_20 >= 1.5",
+      "margin.total_chg_3d_sum_ge_0": "sum(chg_yi, last 3) >= 0",
+      "tw0050_bb.bb_z_ge_2": "bb_z >= 2.0",
+      "tw0050_bb.rv_pctl_ge_80": "rv_ann_pctl >= 80"
+    }
   },
   "raw": {
     "tw0050_bb": {
@@ -1541,8 +1716,8 @@
     }
   },
   "meta_env": {
-    "GITHUB_SHA": "939710ed19b06f3545c1798272821144d9e42ad1",
-    "GITHUB_RUN_ID": "22485593276",
+    "GITHUB_SHA": "ac0b7f8d6a4eef3cf4115dd6a7333b0fa5f70618",
+    "GITHUB_RUN_ID": "22486393700",
     "GITHUB_WORKFLOW": "build-video-pack (roll25 + margin + tw0050_bb) - manual",
     "GITHUB_REF_NAME": "main",
     "GITHUB_REPOSITORY": "Joseph-Chou911/fred-cache"
