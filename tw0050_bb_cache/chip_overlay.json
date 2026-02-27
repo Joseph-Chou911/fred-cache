@@ -1,6 +1,6 @@
 {
   "meta": {
-    "run_ts_utc": "2026-02-26T08:15:15.334Z",
+    "run_ts_utc": "2026-02-27T02:01:24.364Z",
     "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v6",
     "stock_no": "0050",
     "window_n": 5,
@@ -19,11 +19,11 @@
   },
   "data": {
     "borrow_summary": {
-      "asof_date": "20260225",
-      "borrow_shares": 177565000,
-      "borrow_shares_chg_1d": 10690000,
-      "borrow_mv_ntd": 14400521500.0,
-      "borrow_mv_ntd_chg_1d": 1150646500.0
+      "asof_date": "20260226",
+      "borrow_shares": 176611000,
+      "borrow_shares_chg_1d": -954000,
+      "borrow_mv_ntd": 14331982650.0,
+      "borrow_mv_ntd_chg_1d": -68538850.0
     },
     "etf_units": {
       "source": "yuanta_pcf",
@@ -98,12 +98,37 @@
           "total3_net_shares": -60323212
         },
         "twt72u": {
-          "dq": [
-            "TWT72U_EMPTY"
+          "dq": [],
+          "fields": [
+            "證券代號",
+            "證券名稱",
+            "前日借券餘額(1)股",
+            "本日異動股借券(2)",
+            "本日異動股還券(3)",
+            "本日借券餘額股(4)=(1)+(2)-(3)",
+            "本日收盤價(5)單位：元",
+            "借券餘額市值單位：元(6)=(4)*(5)",
+            "市場別"
           ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
+          "raw_row": [
+            "0050",
+            "元大台灣50",
+            "177,565,000",
+            "2,165,000",
+            "3,119,000",
+            "176,611,000",
+            "81.15",
+            "14,331,982,650",
+            "集中市場"
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "close": 6,
+            "mv": 7
+          },
+          "borrow_shares": 176611000,
+          "close": 81.15,
+          "borrow_mv_ntd": 14331982650.0
         }
       },
       {
@@ -448,10 +473,267 @@
       },
       {
         "date": "20260220",
-        "dq": [],
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
         "sources": {
           "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260220&selectType=ALLBUT0999",
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260220&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260219",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260219&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260219&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260218",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260218&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260218&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260217",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260217&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260217&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260216",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260216&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260216&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260215",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260215&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260215&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260214",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260214&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260214&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260213",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260213&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260213&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
+      {
+        "date": "20260212",
+        "dq": [],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260212&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260212&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [],
+          "fields": [
+            "證券代號",
+            "證券名稱",
+            "前日借券餘額(1)股",
+            "本日異動股借券(2)",
+            "本日異動股還券(3)",
+            "本日借券餘額股(4)=(1)+(2)-(3)",
+            "本日收盤價(5)單位：元",
+            "借券餘額市值單位：元(6)=(4)*(5)",
+            "市場別"
+          ],
+          "raw_row": [
+            "0050",
+            "元大台灣50",
+            "135,405,000",
+            "1,500,000",
+            "0",
+            "136,905,000",
+            "77.20",
+            "10,569,066,000",
+            "集中市場"
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "close": 6,
+            "mv": 7
+          },
+          "borrow_shares": 136905000,
+          "close": 77.2,
+          "borrow_mv_ntd": 10569066000.0
+        }
+      },
+      {
+        "date": "20260211",
+        "dq": [],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260211&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260211&selectType=SLBNLB"
         },
         "t86": {
           "dq": [],
@@ -479,23 +761,23 @@
           "raw_row": [
             "0050",
             "元大台灣50      ",
-            "1,543,000",
-            "2,804,000",
-            "-1,261,000",
+            "8,017,758",
+            "6,822,458",
+            "1,195,300",
             "0",
             "0",
             "0",
+            "8,500,000",
             "0",
-            "0",
-            "0",
-            "892,000",
-            "2,000",
-            "0",
-            "2,000",
-            "997,000",
-            "107,000",
-            "890,000",
-            "-369,000"
+            "8,500,000",
+            "-15,171,792",
+            "1,080,000",
+            "3,881,155",
+            "-2,801,155",
+            "20,510,153",
+            "32,880,790",
+            "-12,370,637",
+            "-5,476,492"
           ],
           "col_idx": {
             "foreign": 4,
@@ -503,34 +785,59 @@
             "dealer": 11,
             "total3": 18
           },
-          "foreign_net_shares": -1261000,
-          "trust_net_shares": 0,
-          "dealer_net_shares": 892000,
-          "total3_net_shares": -369000
+          "foreign_net_shares": 1195300,
+          "trust_net_shares": 8500000,
+          "dealer_net_shares": -15171792,
+          "total3_net_shares": -5476492
         },
         "twt72u": {
-          "dq": [
-            "TWT72U_EMPTY"
+          "dq": [],
+          "fields": [
+            "證券代號",
+            "證券名稱",
+            "前日借券餘額(1)股",
+            "本日異動股借券(2)",
+            "本日異動股還券(3)",
+            "本日借券餘額股(4)=(1)+(2)-(3)",
+            "本日收盤價(5)單位：元",
+            "借券餘額市值單位：元(6)=(4)*(5)",
+            "市場別"
           ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
+          "raw_row": [
+            "0050",
+            "元大台灣50",
+            "144,851,000",
+            "0",
+            "9,446,000",
+            "135,405,000",
+            "77.20",
+            "10,453,266,000",
+            "集中市場"
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "close": 6,
+            "mv": 7
+          },
+          "borrow_shares": 135405000,
+          "close": 77.2,
+          "borrow_mv_ntd": 10453266000.0
         }
       }
     ],
     "t86_agg": {
       "window_n": 5,
       "days_used": [
-        "20260220",
+        "20260211",
         "20260223",
         "20260224",
         "20260225",
         "20260226"
       ],
-      "foreign_net_shares_sum": -156056028,
-      "trust_net_shares_sum": 21700000,
-      "dealer_net_shares_sum": -114700140,
-      "total3_net_shares_sum": -249056168
+      "foreign_net_shares_sum": -153599728,
+      "trust_net_shares_sum": 30200000,
+      "dealer_net_shares_sum": -130763932,
+      "total3_net_shares_sum": -254163660
     }
   }
 }
