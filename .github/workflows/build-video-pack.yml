@@ -6,7 +6,7 @@ on:
       out_dir:
         description: "Output directory (will contain episode_pack.json and episode_outline.md)"
         required: false
-        default: "video_pack"
+        default: "fred-cache/video_pack"
 
 permissions:
   contents: write
