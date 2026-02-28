@@ -667,35 +667,6 @@
       },
       "margin_final_signal": "ALERT",
       "margin_confidence": "DOWNGRADED"
-    },
-    {
-      "run_ts_utc": "2026-02-28T15:40:26.856395Z",
-      "as_of_ts": "2026-02-28T23:40:26.856407+08:00",
-      "data_commit_sha": "505ae47b0c91c2a15e97ce31a0c8f01240d0b6c0",
-      "bottom_state_global": "NONE",
-      "triggers_global": {
-        "TRIG_PANIC": 0,
-        "TRIG_SYSTEMIC_VETO": 1,
-        "TRIG_REVERSAL": 0
-      },
-      "context_global": {
-        "context_equity_extreme_sp500_p252_ge_95": 0,
-        "sp500_p252": 84.92063492063492
-      },
-      "distances_global": {
-        "vix_panic_gap": 0.14000000000000057,
-        "sp500_ret1_panic_gap": 1.0660644447853977,
-        "hyg_veto_gap_z": -0.8245628661051594,
-        "ofr_veto_gap_z": 2.5104447162588768
-      },
-      "tw_state": "NONE",
-      "tw_triggers": {
-        "TRIG_TW_PANIC": 0,
-        "TRIG_TW_LEVERAGE_HEAT": 1,
-        "TRIG_TW_REVERSAL": 0
-      },
-      "margin_final_signal": "ALERT",
-      "margin_confidence": "DOWNGRADED"
     }
   ]
 }
