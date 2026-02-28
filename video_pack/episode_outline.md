@@ -1,6 +1,6 @@
 # 投資日記 Episode Outline（roll25 + taiwan margin + tw0050_bb）
 
-- 產出日：2026-02-27（Asia/Taipei）
+- 產出日：2026-02-28（Asia/Taipei）
 - 輸出：episode_pack.json, episode_outline.md, episode_data.md
 - warnings: NONE
 
@@ -12,13 +12,13 @@
 - 0050：EXTREME_UPPER_BAND / bb_z=2.271 / 價格=81.15
 
 ## 1) roll25（成交熱度）
-- as_of=2026-02-26 / age_days=1 / mode=FULL
+- as_of=2026-02-26 / age_days=2 / mode=FULL
 
 ## 2) taiwan margin（槓桿動向）
-- as_of=2026-02-26 / age_days=1
+- as_of=2026-02-26 / age_days=2
 
 ## 3) tw0050_bb（0050 技術位置）
-- as_of=2026-02-26 / age_days=1
+- as_of=2026-02-26 / age_days=2
 
 ## 提示
 - 詳細數據與欄位來源請看 episode_data.md（可直接貼回來讓我幫你潤飾成口播稿）。

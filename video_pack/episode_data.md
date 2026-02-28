@@ -1,16 +1,16 @@
 # Episode Data (DATA-ONLY)
 
-- day_key_local: 2026-02-27 (Asia/Taipei)
-- generated_at_utc: 2026-02-27T13:58:03Z
-- generated_at_local: 2026-02-27T21:58:03+08:00
+- day_key_local: 2026-02-28 (Asia/Taipei)
+- generated_at_utc: 2026-02-28T02:12:16Z
+- generated_at_local: 2026-02-28T10:12:16+08:00
 - build_fingerprint: build_video_pack@v1.3.data_md_out_and_tz_fix
 - warnings: NONE
 
 ## Inputs (as_of / age_days / fingerprint)
 
-- roll25: as_of=2026-02-26 age_days=1 fingerprint=twse_stats_v1
-- taiwan_margin: as_of=2026-02-26 age_days=1 fingerprint=taiwan_margin_financing_latest_v1
-- tw0050_bb: as_of=2026-02-26 age_days=1 fingerprint=tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit
+- roll25: as_of=2026-02-26 age_days=2 fingerprint=twse_stats_v1
+- taiwan_margin: as_of=2026-02-26 age_days=2 fingerprint=taiwan_margin_financing_latest_v1
+- tw0050_bb: as_of=2026-02-26 age_days=2 fingerprint=tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit
 
 ## roll25 extracts
 
