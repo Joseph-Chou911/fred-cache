@@ -385,6 +385,17 @@
         "DFII10": "ALERT",
         "T10YIE": "WATCH"
       }
+    },
+    {
+      "run_ts_utc": "2026-02-28T16:44:18.134056+00:00",
+      "stats_as_of_ts": "2026-03-01T00:44:13+08:00",
+      "module": "inflation_realrate_cache",
+      "ruleset_id": "signals_v8",
+      "script_fingerprint": "render_dashboard_py_signals_v8@7119ea6",
+      "series_signals": {
+        "DFII10": "ALERT",
+        "T10YIE": "WATCH"
+      }
     }
   ]
 }
