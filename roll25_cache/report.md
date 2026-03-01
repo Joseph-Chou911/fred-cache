@@ -1,7 +1,7 @@
 # Roll25 Cache Report (TWSE Turnover)
 ## 1) Summary
-- generated_at_utc: `2026-02-28T18:47:51Z`
-- generated_at_local: `2026-03-01T02:47:51.807930+08:00`
+- generated_at_utc: `2026-03-01T00:41:05Z`
+- generated_at_local: `2026-03-01T08:41:05.303170+08:00`
 - report_date_local: `2026-03-01`
 - timezone: `Asia/Taipei`
 - as_of_data_date: `2026-02-26` (latest available)
@@ -127,7 +127,7 @@
 - z-score uses population std (ddof=0). Percentile is tie-aware (less + 0.5*equal).
 - ret1% (in Z/P table) is STRICT adjacency at as_of_data_date (simple %).
 - Dynamic Risk Check ret1 uses STRICT adjacency LOG return: 100*ln(Close_t/Close_{t-1}).
-- zΔ60/pΔ60 are computed on delta series (today - prev) over last 60 deltas (anchored), not (z_today - z_prev).
+- zΔ60/pΔ60 are computed on the 1-day absolute change Δ = (today - prev) (strict adjacency), ranked vs last 60 such Δ’s (anchored at UsedDate); this is NOT (z_today - z_prev).
 - AMPLITUDE derived policy: prefer prev_close (= close - change) as denominator when available; fallback to close.
 - AMPLITUDE mismatch threshold: 0.01 (abs(latest - derived@UsedDate) > threshold => DOWNGRADED).
 - CLOSE pct mismatch threshold: 0.05 (abs(latest_pct_change - computed_close_ret1%) > threshold => DOWNGRADED).
