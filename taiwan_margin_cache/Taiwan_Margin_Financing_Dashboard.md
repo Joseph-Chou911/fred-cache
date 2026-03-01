@@ -59,7 +59,7 @@
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
 - UsedDate: 2026-02-26｜UsedDateStatus: OK_LATEST｜risk_level: 低(derived)｜risk_level_raw: NA｜tag: WEEKEND
-- summary: 今日為週末；UsedDate=2026-02-26：Mode=FULL；freshness_ok=True
+- summary: 資料來源降級(僅使用既有快取)；今日為週末；UsedDate=2026-02-26：Mode=FULL；freshness_ok=True；cache-only degrade (no new fetch)
 - resonance_confidence: OK
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
@@ -94,4 +94,4 @@
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 - Check-12 OTC Guardrail（info-only）：⚠️（NOTE）（stage=NONE, label=NONE, prewatch_hit=False, otc_alert_hit=False）
 
-_generated_at_utc: 2026-02-28T14:48:33Z_
+_generated_at_utc: 2026-03-01T14:50:10Z_
