@@ -1009,13 +1009,13 @@
       }
     },
     {
-      "run_ts_utc": "2026-03-01T13:46:42.135970+00:00",
+      "run_ts_utc": "2026-03-01T14:04:37.003417+00:00",
       "day_key_local": "2026-03-01",
       "module": "fred_cache",
-      "stats_as_of_ts": "2026-03-01T21:08:46+08:00",
-      "stats_generated_at_utc": "2026-03-01T13:08:50+00:00",
-      "data_commit_sha": "6a955fe9a7ade05bf4b1880c38e98a1380f1f591",
-      "snapshot_id": "commit:6a955fe9a7ade05bf4b1880c38e98a1380f1f591",
+      "stats_as_of_ts": "2026-03-01T22:04:00+08:00",
+      "stats_generated_at_utc": "2026-03-01T14:04:02+00:00",
+      "data_commit_sha": "17e26613254674fd5a7ee6bfd736ee30392576ed",
+      "snapshot_id": "commit:17e26613254674fd5a7ee6bfd736ee30392576ed",
       "series_signals": {
         "DGS2": "ALERT",
         "DCOILWTICO": "WATCH",
