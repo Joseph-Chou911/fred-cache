@@ -6,20 +6,28 @@ make_market_cache_charts.py
 
 Generate chart-ready CSV + standard charts from dashboard/DASHBOARD.md.
 
-Key fix:
-- Force Traditional Chinese font preference (Noto Sans CJK TC) to avoid tofu when using
-  Traditional glyphs like 「總」「覽」.
-- Use FontProperties(fname=...) (font file path) instead of relying only on rcParams.
-- Emit a font smoke test image to validate CJK rendering in CI.
+Fix for "tofu Chinese in charts":
+- Use a CJK font by *file path* (FontProperties(fname=...)).
+- Force-apply that FontProperties to every axes text element (title/xlabel/ylabel/ticks/texts)
+  right before savefig, to prevent matplotlib fallback fonts from rendering Chinese.
+
+Outputs (to --out):
+- 00_font_smoketest.png
+- chart_ready.csv
+- 01_rank252_overview.png
+- 02_rank60_jump_abs.png
+- 03_z60_vs_rank252_scatter.png
+- 04_ret1_abs_pct.png
 """
 
 import argparse
 from pathlib import Path
 from typing import List, Tuple, Optional
+import glob
 
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib import font_manager as fm
 from matplotlib.font_manager import FontProperties
 from matplotlib.ft2font import FT2Font
 
@@ -55,12 +63,7 @@ ZH = {
     "ret1_abs_pct": "單日變化幅度（%）",
 }
 
-# Global font props used for all Chinese text
 CJK_FP: Optional[FontProperties] = None
-
-
-def _fp_kwargs() -> dict:
-    return {"fontproperties": CJK_FP} if CJK_FP is not None else {}
 
 
 # -----------------------------
@@ -68,9 +71,7 @@ def _fp_kwargs() -> dict:
 # -----------------------------
 
 def _font_supports_text(font_path: str, text: str) -> bool:
-    """
-    Check glyph coverage by charmap presence (fast sanity check).
-    """
+    """Glyph coverage check by charmap presence."""
     try:
         ft = FT2Font(font_path)
         cmap = ft.get_charmap()
@@ -86,103 +87,99 @@ def _font_supports_text(font_path: str, text: str) -> bool:
 
 def setup_cjk_font(verbose: bool = True) -> None:
     """
-    Prefer Traditional Chinese CJK fonts to avoid tofu on Traditional glyphs.
-    Uses font file path (FontProperties(fname=...)) for deterministic rendering.
+    Prefer NotoSansCJK-Regular.ttc if present (GitHub Actions + fonts-noto-cjk).
+    If not present, fallback to any Noto CJK TTC/OTF/TTF that supports our Traditional sample.
     """
     global CJK_FP
 
-    # This contains Traditional glyphs that commonly break under JP variants:
-    # 「總」「覽」等字在日文字體可能只提供「総」「覧」。
-    sample = "長窗口位階總覽（近252筆）近60位階變化（百分位點）單日變動幅度"
+    # Ensure deterministic backend in CI
+    matplotlib.use("Agg", force=True)
 
-    preferred_families = [
-        # Prefer Traditional Chinese first
-        "Noto Sans CJK TC",
-        "Noto Serif CJK TC",
-        # Then Simplified Chinese
-        "Noto Sans CJK SC",
-        "Noto Serif CJK SC",
-        # Then JP/KR as last resort
-        "Noto Sans CJK JP",
-        "Noto Serif CJK JP",
-        "Noto Sans CJK KR",
-        "Noto Serif CJK KR",
+    # Traditional sample (includes chars that often break with JP-only face)
+    sample = "中文冒煙測試：長窗口位階總覽（近252筆）近60位階變化（百分位點）單日變動幅度"
+
+    preferred_paths = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     ]
 
-    chosen = None  # (family, path)
-    for fam in preferred_families:
-        try:
-            # If family doesn't exist, this may fallback; we want to detect that.
-            path = fm.findfont(FontProperties(family=fam), fallback_to_default=True)
-        except Exception:
-            continue
+    candidates: List[str] = []
+    for p in preferred_paths:
+        if Path(p).exists():
+            candidates.append(p)
 
-        if not path or not Path(path).exists():
-            continue
+    # Fallback: scan common dirs for Noto CJK font files
+    if not candidates:
+        patterns = [
+            "/usr/share/fonts/**/NotoSansCJK-*.ttc",
+            "/usr/share/fonts/**/NotoSansCJK-*.otf",
+            "/usr/share/fonts/**/NotoSansCJK-*.ttf",
+            "/usr/share/fonts/**/NotoSerifCJK-*.ttc",
+            "/usr/share/fonts/**/NotoSerifCJK-*.otf",
+            "/usr/share/fonts/**/NotoSerifCJK-*.ttf",
+        ]
+        for pat in patterns:
+            candidates.extend(glob.glob(pat, recursive=True))
 
-        # Reject obvious fallback fonts (DejaVu, Liberation) for CJK
-        low = path.lower()
-        if "dejavu" in low or "liberation" in low:
-            continue
-
-        # Verify glyph coverage for our Traditional sample
-        if _font_supports_text(path, sample):
-            chosen = (fam, path)
+    # Pick first font file that truly supports the Traditional sample
+    selected_path = None
+    for p in candidates:
+        if Path(p).exists() and _font_supports_text(p, sample):
+            selected_path = p
             break
 
-    if chosen is None:
-        # As a last fallback, brute-scan noto cjk entries known to matplotlib
-        # and pick the first that supports the sample.
-        for fe in fm.fontManager.ttflist:
-            name = getattr(fe, "name", "") or ""
-            path = getattr(fe, "fname", "") or ""
-            if not path:
-                continue
-            if "Noto" in name and "CJK" in name and Path(path).exists():
-                if _font_supports_text(path, sample):
-                    chosen = (name, path)
-                    break
-
-    if chosen is None:
+    if selected_path is None:
         CJK_FP = None
         plt.rcParams["axes.unicode_minus"] = False
         if verbose:
-            print("[charts] font_selected=DEFAULT(no usable CJK font for Traditional sample)")
+            print("[charts] font_selected=DEFAULT(no usable CJK font found)")
         return
 
-    fam, path = chosen
-    CJK_FP = FontProperties(fname=path)
-
-    # rcParams help ticks etc., but we still pass fontproperties explicitly to titles/labels/text
-    plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["font.sans-serif"] = [fam]
+    CJK_FP = FontProperties(fname=selected_path)
     plt.rcParams["axes.unicode_minus"] = False
 
     if verbose:
-        print(f"[charts] font_selected={fam}")
-        print(f"[charts] font_path={path}")
+        print("[charts] font_selected=FILE")
+        print(f"[charts] font_path={selected_path}")
+
+
+def apply_cjk_to_axes(ax) -> None:
+    """Force-apply CJK FontProperties to all text elements on an axes."""
+    if CJK_FP is None:
+        return
+
+    # Title / axis labels
+    ax.title.set_fontproperties(CJK_FP)
+    ax.xaxis.label.set_fontproperties(CJK_FP)
+    ax.yaxis.label.set_fontproperties(CJK_FP)
+
+    # Tick labels
+    for t in ax.get_xticklabels() + ax.get_yticklabels():
+        t.set_fontproperties(CJK_FP)
+
+    # Annotations / texts
+    for t in ax.texts:
+        t.set_fontproperties(CJK_FP)
 
 
 def save_font_smoketest(outdir: Path) -> None:
-    """
-    Output a tiny image to prove CJK glyph rendering works (or not).
-    """
-    out = outdir / "00_font_smoketest.png"
-    plt.figure(figsize=(9, 2.2))
-    plt.axis("off")
-    plt.text(
+    """A tiny image to validate Chinese rendering end-to-end."""
+    fig, ax = plt.subplots(figsize=(9, 2.2))
+    ax.axis("off")
+    ax.text(
         0.01, 0.65,
         "中文冒煙測試：長窗口位階總覽（近252筆）",
-        fontsize=16, **_fp_kwargs()
+        fontsize=16,
+        fontproperties=CJK_FP
     )
-    plt.text(
+    ax.text(
         0.01, 0.20,
-        "如果這行是豆腐字＝字型沒生效或缺繁體字形",
-        fontsize=12, **_fp_kwargs()
+        "如果這行是豆腐字＝字型沒生效或缺字形",
+        fontsize=12,
+        fontproperties=CJK_FP
     )
-    plt.tight_layout()
-    plt.savefig(out, dpi=200)
-    plt.close()
+    fig.tight_layout()
+    fig.savefig(outdir / "00_font_smoketest.png", dpi=200)
+    plt.close(fig)
 
 
 # -----------------------------
@@ -282,19 +279,22 @@ def save_chart_rank252(df: pd.DataFrame, outdir: Path,
     d = df.copy().dropna(subset=["rank_252_obs_pct", "series"])
     if d.empty:
         return
-
     d = d.sort_values("rank_252_obs_pct", ascending=True)
 
-    plt.figure(figsize=(12, 6))
-    plt.barh(d["series"], d["rank_252_obs_pct"])
-    plt.axvline(p_watch_lo, linestyle="--")
-    plt.axvline(p_watch_hi, linestyle="--")
-    plt.axvline(p_alert_lo, linestyle=":")
-    plt.xlabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"), **_fp_kwargs())
-    plt.title("長窗口位階總覽（近252筆）", **_fp_kwargs())
-    plt.tight_layout()
-    plt.savefig(outdir / "01_rank252_overview.png", dpi=200)
-    plt.close()
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.barh(d["series"], d["rank_252_obs_pct"])
+    ax.axvline(p_watch_lo, linestyle="--")
+    ax.axvline(p_watch_hi, linestyle="--")
+    ax.axvline(p_alert_lo, linestyle=":")
+
+    ax.set_xlabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"))
+    ax.set_title("長窗口位階總覽（近252筆）")
+
+    apply_cjk_to_axes(ax)
+
+    fig.tight_layout()
+    fig.savefig(outdir / "01_rank252_overview.png", dpi=200)
+    plt.close(fig)
 
 
 def save_chart_rank60_jump_abs(df: pd.DataFrame, outdir: Path, jump_p_threshold: float = 15.0) -> None:
@@ -308,14 +308,18 @@ def save_chart_rank60_jump_abs(df: pd.DataFrame, outdir: Path, jump_p_threshold:
     d["abs_rank60_jump_pp"] = d["rank_60_delta_pp"].abs()
     d = d.sort_values("abs_rank60_jump_pp", ascending=True)
 
-    plt.figure(figsize=(12, 6))
-    plt.barh(d["series"], d["abs_rank60_jump_pp"])
-    plt.axvline(jump_p_threshold, linestyle="--")
-    plt.xlabel("近60位階變化（百分位點，|Δ|）", **_fp_kwargs())
-    plt.title("短窗口跳動強度（近60位階變化）", **_fp_kwargs())
-    plt.tight_layout()
-    plt.savefig(outdir / "02_rank60_jump_abs.png", dpi=200)
-    plt.close()
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.barh(d["series"], d["abs_rank60_jump_pp"])
+    ax.axvline(jump_p_threshold, linestyle="--")
+
+    ax.set_xlabel("近60位階變化（百分位點，|Δ|）")
+    ax.set_title("短窗口跳動強度（近60位階變化）")
+
+    apply_cjk_to_axes(ax)
+
+    fig.tight_layout()
+    fig.savefig(outdir / "02_rank60_jump_abs.png", dpi=200)
+    plt.close(fig)
 
 
 def save_chart_scatter(df: pd.DataFrame, outdir: Path,
@@ -329,24 +333,28 @@ def save_chart_scatter(df: pd.DataFrame, outdir: Path,
     if d.empty:
         return
 
-    plt.figure(figsize=(10, 6))
-    plt.scatter(d["z60"], d["rank_252_obs_pct"])
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(d["z60"], d["rank_252_obs_pct"])
+
     for _, r in d.iterrows():
-        plt.text(r["z60"], r["rank_252_obs_pct"], str(r["series"]), fontsize=9, **_fp_kwargs())
+        ax.text(r["z60"], r["rank_252_obs_pct"], str(r["series"]), fontsize=9)
 
-    plt.axhline(p_watch_lo, linestyle="--")
-    plt.axhline(p_watch_hi, linestyle="--")
-    plt.axvline(extreme_z_watch, linestyle="--")
-    plt.axvline(-extreme_z_watch, linestyle="--")
-    plt.axvline(extreme_z_alert, linestyle=":")
-    plt.axvline(-extreme_z_alert, linestyle=":")
+    ax.axhline(p_watch_lo, linestyle="--")
+    ax.axhline(p_watch_hi, linestyle="--")
+    ax.axvline(extreme_z_watch, linestyle="--")
+    ax.axvline(-extreme_z_watch, linestyle="--")
+    ax.axvline(extreme_z_alert, linestyle=":")
+    ax.axvline(-extreme_z_alert, linestyle=":")
 
-    plt.xlabel(ZH.get("z60", "z60"), **_fp_kwargs())
-    plt.ylabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"), **_fp_kwargs())
-    plt.title("z60 × 長窗口位階（快速定位『極端+位階』）", **_fp_kwargs())
-    plt.tight_layout()
-    plt.savefig(outdir / "03_z60_vs_rank252_scatter.png", dpi=200)
-    plt.close()
+    ax.set_xlabel(ZH.get("z60", "z60"))
+    ax.set_ylabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"))
+    ax.set_title("z60 × 長窗口位階（快速定位『極端+位階』）")
+
+    apply_cjk_to_axes(ax)
+
+    fig.tight_layout()
+    fig.savefig(outdir / "03_z60_vs_rank252_scatter.png", dpi=200)
+    plt.close(fig)
 
 
 def save_chart_ret1_abs(df: pd.DataFrame, outdir: Path, jump_ret_threshold: float = 2.0) -> None:
@@ -356,17 +364,20 @@ def save_chart_ret1_abs(df: pd.DataFrame, outdir: Path, jump_ret_threshold: floa
     d = df.copy().dropna(subset=["ret1_abs_pct", "series"])
     if d.empty:
         return
-
     d = d.sort_values("ret1_abs_pct", ascending=True)
 
-    plt.figure(figsize=(12, 6))
-    plt.barh(d["series"], d["ret1_abs_pct"])
-    plt.axvline(jump_ret_threshold, linestyle="--")
-    plt.xlabel(ZH.get("ret1_abs_pct", "ret1_abs_pct"), **_fp_kwargs())
-    plt.title("單日變動幅度總覽（|ret1|%）", **_fp_kwargs())
-    plt.tight_layout()
-    plt.savefig(outdir / "04_ret1_abs_pct.png", dpi=200)
-    plt.close()
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.barh(d["series"], d["ret1_abs_pct"])
+    ax.axvline(jump_ret_threshold, linestyle="--")
+
+    ax.set_xlabel(ZH.get("ret1_abs_pct", "ret1_abs_pct"))
+    ax.set_title("單日變動幅度總覽（|ret1|%）")
+
+    apply_cjk_to_axes(ax)
+
+    fig.tight_layout()
+    fig.savefig(outdir / "04_ret1_abs_pct.png", dpi=200)
+    plt.close(fig)
 
 
 # -----------------------------
@@ -391,10 +402,7 @@ def main() -> None:
     outdir = Path(args.out)
     ensure_outdir(outdir)
 
-    # Select a TC-capable font (critical for Traditional glyphs)
     setup_cjk_font(verbose=True)
-
-    # Always write a smoketest image first (fast diagnosis)
     save_font_smoketest(outdir)
 
     if not report_path.exists():
@@ -402,6 +410,7 @@ def main() -> None:
 
     text = report_path.read_text(encoding="utf-8")
     df_raw, header_idx = extract_markdown_table(text)
+
     df_raw = coerce_numeric(df_raw)
     df = df_raw.rename(columns=RENAME)
 
