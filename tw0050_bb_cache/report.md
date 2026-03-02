@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-02T07:33:43Z`
+- report_generated_at_utc: `2026-03-02T08:27:32Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -28,7 +28,7 @@
 - vol_filter(RV20,ATR14): rv_ann=21.8%; atr=1.3816 (1.72%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=82.64
 - margin(5D,thr=100.00億): TOTAL 236.80 億 => **LEVERAGING**; TWSE 178.20 / TPEX 58.60; margin_date=2026-02-26, price_last_date=2026-03-02 (MISALIGNED); data_date=2026-02-26
-- chip_overlay(T86+TWT72U,5D): total3_5D=-254,163,660; foreign=-153,599,728; trust=30,200,000; dealer=-130,763,932; borrow_shares=176,611,000 (Δ1D=-954,000); borrow_mv(億)=143.3 (Δ1D=-0.7); asof=20260226; price_last_date=2026-03-02 (ALIGNED)
+- chip_overlay(T86+TWT72U,5D): total3_5D=-369,139,445; foreign=-256,295,126; trust=24,914,000; dealer=-137,758,319; borrow_shares=176,611,000 (Δ1D=-954,000); borrow_mv(億)=143.3 (Δ1D=-0.7); asof=20260226; price_last_date=2026-03-02 (ALIGNED)
 
 ## forward_mdd_conditional (bb_z buckets)
 
@@ -476,7 +476,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-02T07:33:43.119Z`
+- overlay_generated_at_utc: `2026-03-02T08:27:32.422Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260302` vs price_last_date=`2026-03-02` => **ALIGNED**
@@ -495,11 +495,11 @@
 
 | item | value |
 |---|---:|
-| days_used | 20260211, 20260223, 20260224, 20260225, 20260226 |
-| foreign_net_shares_sum | -153,599,728 |
-| trust_net_shares_sum | 30,200,000 |
-| dealer_net_shares_sum | -130,763,932 |
-| total3_net_shares_sum | -254,163,660 |
+| days_used | 20260223, 20260224, 20260225, 20260226, 20260302 |
+| foreign_net_shares_sum | -256,295,126 |
+| trust_net_shares_sum | 24,914,000 |
+| dealer_net_shares_sum | -137,758,319 |
+| total3_net_shares_sum | -369,139,445 |
 
 ### ETF Units（受益權單位）
 
