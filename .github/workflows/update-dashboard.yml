@@ -16,7 +16,11 @@ concurrency:
 jobs:
   dashboard:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+
+    # Isolate matplotlib cache/config per-run to avoid stale font cache issues
+    env:
+      MPLCONFIGDIR: .mplconfig
 
     steps:
       - name: Checkout
@@ -29,7 +33,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Install Python deps (and keep it explicit/auditable)
       - name: Install deps
         shell: bash
         run: |
@@ -37,15 +40,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas matplotlib
 
-      # Install CJK fonts so matplotlib can render Chinese in charts
-      - name: Install CJK fonts
+      - name: Install CJK fonts + refresh cache
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk
-          # Prevent matplotlib from using a stale font cache
+          sudo apt-get install -y fonts-noto-cjk fontconfig
+
+          # Refresh fontconfig cache (important on runners)
+          sudo fc-cache -f || true
+
+          # Ensure matplotlib cache is not stale
           rm -rf ~/.cache/matplotlib || true
+          rm -rf "${MPLCONFIGDIR}" || true
+          mkdir -p "${MPLCONFIGDIR}"
 
       - name: Ensure dashboard dir
         shell: bash
@@ -80,10 +88,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Clean output dir to avoid accidentally keeping old PNGs
+          rm -rf dashboard/charts/market_cache || true
           mkdir -p dashboard/charts/market_cache
+
           python tools/make_market_cache_charts.py \
             --report dashboard/DASHBOARD.md \
             --out dashboard/charts/market_cache
+
+          # Quick sanity: show output files
+          ls -al dashboard/charts/market_cache
 
       - name: Commit & push
         shell: bash
