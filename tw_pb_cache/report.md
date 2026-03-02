@@ -5,17 +5,17 @@
 - source_vendor: `statementdog` (THIRD_PARTY)
 - source_url: `https://statementdog.com/taiex`
 - fetch_status: `OK` / confidence: `OK` / dq_reason: `None`
-- data_date: `2026-02-26`
-- series_len_pbr: `15`
+- data_date: `2026-03-02`
+- series_len_pbr: `16`
 
 ## 2) Latest
-- date: `2026-02-26`
+- date: `2026-03-02`
 - PBR: `3.7200`
-- Close: `35414.49`
+- Close: `35095.09`
 
 ## 3) Stats (z / percentile)
-- z60: `None` / p60: `None` / na_reason_60: `INSUFFICIENT_HISTORY:15/60`
-- z252: `None` / p252: `None` / na_reason_252: `INSUFFICIENT_HISTORY:15/252`
+- z60: `None` / p60: `None` / na_reason_60: `INSUFFICIENT_HISTORY:16/60`
+- z252: `None` / p252: `None` / na_reason_252: `INSUFFICIENT_HISTORY:16/252`
 
 ## 4) Historical Context (non-trigger)
 - label: `HISTORICAL_ANCHOR (USER_PROVIDED_SCREENSHOT)`
