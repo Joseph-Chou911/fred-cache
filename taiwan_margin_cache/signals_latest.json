@@ -1,9 +1,9 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-03-02T07:16:11Z",
+  "generated_at_utc": "2026-03-02T15:07:49Z",
   "generated_at_local": null,
-  "data_date": "2026-02-26",
+  "data_date": "2026-03-02",
   "state": "中性",
   "signal": "NONE",
   "margin_quality": "OK",
@@ -57,145 +57,145 @@
       "items": {
         "expansion20": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 28,
+          "sample_n": 29,
           "percentile": 90.0,
           "threshold": 8.0,
-          "reason": "insufficient samples (n=28 < calib_min_n=60)"
+          "reason": "insufficient samples (n=29 < calib_min_n=60)"
         },
         "contraction20": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 28,
+          "sample_n": 29,
           "percentile": 10.0,
           "threshold": -8.0,
-          "reason": "insufficient samples (n=28 < calib_min_n=60)"
+          "reason": "insufficient samples (n=29 < calib_min_n=60)"
         },
         "watch1d": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 47,
+          "sample_n": 48,
           "percentile": 90.0,
           "threshold": 0.8,
-          "reason": "insufficient samples (n=47 < calib_min_n=60)"
+          "reason": "insufficient samples (n=48 < calib_min_n=60)"
         },
         "watchspread20": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 28,
+          "sample_n": 29,
           "percentile": 90.0,
           "threshold": 3.0,
-          "reason": "insufficient samples (n=28 < calib_min_n=60)"
+          "reason": "insufficient samples (n=29 < calib_min_n=60)"
         },
         "watchaccel": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 43,
+          "sample_n": 44,
           "percentile": 90.0,
           "threshold": 0.25,
-          "reason": "insufficient samples (n=43 < calib_min_n=60)"
+          "reason": "insufficient samples (n=44 < calib_min_n=60)"
         }
       },
       "mode": "percentile",
       "distributions": {
-        "total_series_rows": 48,
-        "dist_total_20d_pct_n": 28,
-        "dist_total_1d_pct_n": 47,
-        "dist_spread20_n": 28,
-        "dist_accel_n": 43
+        "total_series_rows": 49,
+        "dist_total_20d_pct_n": 29,
+        "dist_total_1d_pct_n": 48,
+        "dist_spread20_n": 29,
+        "dist_accel_n": 44
       }
     }
   },
   "margin": {
-    "twse_meta_date": "2026-02-26",
-    "tpex_meta_date": "2026-02-26",
+    "twse_meta_date": "2026-03-02",
+    "tpex_meta_date": "2026-03-02",
     "twse": {
-      "latest_balance_yi": 3898.6,
+      "latest_balance_yi": 3916.2,
       "h1": {
-        "delta": 67.29999999999973,
-        "pct": 1.7565839271265555,
-        "base_date": "2026-02-25",
-        "latest": 3898.6,
-        "base": 3831.3
+        "delta": 17.59999999999991,
+        "pct": 0.45144410814138175,
+        "base_date": "2026-02-26",
+        "latest": 3916.2,
+        "base": 3898.6
       },
       "h5": {
-        "delta": 172.69999999999982,
-        "pct": 4.635121715558652,
-        "base_date": "2026-02-10",
-        "latest": 3898.6,
-        "base": 3725.9
+        "delta": 235.69999999999982,
+        "pct": 6.404021192772716,
+        "base_date": "2026-02-11",
+        "latest": 3916.2,
+        "base": 3680.5
       },
       "h20": {
-        "delta": 186.29999999999973,
-        "pct": 5.018452172507602,
-        "base_date": "2026-01-20",
-        "latest": 3898.6,
-        "base": 3712.3
+        "delta": 238.69999999999982,
+        "pct": 6.490822569680485,
+        "base_date": "2026-01-21",
+        "latest": 3916.2,
+        "base": 3677.5
       },
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg"
       },
-      "rows_series": 48,
+      "rows_series": 49,
       "rows_latest_table": 30
     },
     "tpex": {
-      "latest_balance_yi": 1378.5,
+      "latest_balance_yi": 1389.1,
       "h1": {
-        "delta": 30.0,
-        "pct": 2.2246941045606228,
-        "base_date": "2026-02-25",
-        "latest": 1378.5,
-        "base": 1348.5
+        "delta": 10.599999999999909,
+        "pct": 0.768951759158499,
+        "base_date": "2026-02-26",
+        "latest": 1389.1,
+        "base": 1378.5
       },
       "h5": {
-        "delta": 56.200000000000045,
-        "pct": 4.250170158057933,
-        "base_date": "2026-02-10",
-        "latest": 1378.5,
-        "base": 1322.3
+        "delta": 75.79999999999995,
+        "pct": 5.7717200944186375,
+        "base_date": "2026-02-11",
+        "latest": 1389.1,
+        "base": 1313.3
       },
       "h20": {
-        "delta": 76.5,
-        "pct": 5.875576036866359,
-        "base_date": "2026-01-20",
-        "latest": 1378.5,
-        "base": 1302.0
+        "delta": 97.29999999999995,
+        "pct": 7.532125716055113,
+        "base_date": "2026-01-21",
+        "latest": 1389.1,
+        "base": 1291.8
       },
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
       },
-      "rows_series": 48,
+      "rows_series": 49,
       "rows_latest_table": 30
     },
     "total": {
       "h1": {
-        "delta": 97.30000000000018,
-        "pct": 1.878450905440368,
-        "base_date": "2026-02-25",
-        "latest": 5277.1,
-        "base": 5179.8,
+        "delta": 28.19999999999891,
+        "pct": 0.5343844156828353,
+        "base_date": "2026-02-26",
+        "latest": 5305.299999999999,
+        "base": 5277.1,
         "ok": true,
         "reason": ""
       },
       "h5": {
-        "delta": 228.90000000000055,
-        "pct": 4.534289449704857,
-        "base_date": "2026-02-10",
-        "latest": 5277.1,
-        "base": 5048.2,
+        "delta": 311.4999999999991,
+        "pct": 6.237734791140996,
+        "base_date": "2026-02-11",
+        "latest": 5305.299999999999,
+        "base": 4993.8,
         "ok": true,
         "reason": ""
       },
       "h20": {
-        "delta": 262.8000000000002,
-        "pct": 5.241010709371201,
-        "base_date": "2026-01-20",
-        "latest": 5277.1,
-        "base": 5014.3,
+        "delta": 335.9999999999991,
+        "pct": 6.761515706437509,
+        "base_date": "2026-01-21",
+        "latest": 5305.299999999999,
+        "base": 4969.3,
         "ok": true,
         "reason": ""
       }
     },
     "derived": {
-      "accel": 0.9715930154993966,
-      "spread20": 0.8571238643587575
+      "accel": -0.7131625425453639,
+      "spread20": 1.041303146374628
     }
   },
   "roll25": {
@@ -209,7 +209,7 @@
     "tag": "WEEKDAY",
     "is_heated": false,
     "lookback_note": null,
-    "strict_same_day": true,
+    "strict_same_day": false,
     "strict_not_stale": false,
     "strict_roll_match": false
   },
@@ -221,15 +221,19 @@
     "ok_latest": true,
     "ok_history": true,
     "latest": {
-      "data_date": "2026-02-26",
-      "maint_ratio_pct": 190.268942,
-      "maint_ratio_1d_delta_pctpt": 0.8979120000000194,
-      "maint_ratio_1d_pct_change": 0.4741548905342171,
-      "trend_note": "trend_from: today=190.268942(2026-02-26), prev=189.37103(2026-02-25)"
+      "data_date": "2026-03-02",
+      "maint_ratio_pct": 189.609343,
+      "maint_ratio_1d_delta_pctpt": -0.6595990000000143,
+      "maint_ratio_1d_pct_change": -0.3466666672272841,
+      "trend_note": "trend_from: today=189.609343(2026-03-02), prev=190.268942(2026-02-26)"
     },
     "history": {
-      "rows": 16,
+      "rows": 17,
       "head5": [
+        [
+          "2026-03-02",
+          189.609343
+        ],
         [
           "2026-02-26",
           190.268942
@@ -245,10 +249,6 @@
         [
           "2026-02-23",
           183.899292
-        ],
-        [
-          "2026-02-11",
-          180.605909
         ]
       ]
     }
