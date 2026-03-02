@@ -10,7 +10,7 @@
 
 ## 2) Latest
 - date: `2026-03-02`
-- PBR: `3.7200`
+- PBR: `3.6900`
 - Close: `35095.09`
 
 ## 3) Stats (z / percentile)
@@ -25,10 +25,10 @@
 - note: Context-only; NOT used for deterministic signals (triggers rely on p60/p252 once available).
 
 ### 4.1) Anchor comparison (context only)
-- latest_pb: `3.7200`
+- latest_pb: `3.6900`
 - compare_to_anchor: `GT` (GT/LT/EQ/NA)
-- delta_vs_anchor: `0.6400`
-- ratio_vs_anchor: `1.2078`
+- delta_vs_anchor: `0.6100`
+- ratio_vs_anchor: `1.1981`
 
 ## 5) Caveats
 - History builds forward only (NO historical backfill; NO inferred dates).
