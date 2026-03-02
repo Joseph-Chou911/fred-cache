@@ -4,21 +4,13 @@
 """
 make_market_cache_charts.py
 
-Generate chart-ready CSV + a few standard charts from dashboard/DASHBOARD.md.
+Generate chart-ready CSV + standard charts from dashboard/DASHBOARD.md.
 
-Design goals:
-- Avoid p60/p252 ambiguity by renaming to rank_* columns.
-- Robust markdown table extraction (search for a table that contains 'Signal' and 'Series').
-- Fail loudly with actionable diagnostics if the table format changes.
-- No imports from your repo modules (only stdlib + pandas + matplotlib).
-- Robust CJK rendering in CI: force FontProperties(fname=...) rather than relying only on rcParams.
-
-Outputs (to --out):
-- chart_ready.csv
-- 01_rank252_overview.png
-- 02_rank60_jump_abs.png
-- 03_z60_vs_rank252_scatter.png
-- 04_ret1_abs_pct.png
+Key fix:
+- Force Traditional Chinese font preference (Noto Sans CJK TC) to avoid tofu when using
+  Traditional glyphs like 「總」「覽」.
+- Use FontProperties(fname=...) (font file path) instead of relying only on rcParams.
+- Emit a font smoke test image to validate CJK rendering in CI.
 """
 
 import argparse
@@ -32,18 +24,20 @@ from matplotlib.font_manager import FontProperties
 from matplotlib.ft2font import FT2Font
 
 
-# Columns that are expected numeric if present
+# -----------------------------
+# Data defs
+# -----------------------------
+
 NUM_COLS = [
     "age_h", "value", "z60", "p60", "p252", "z252",
     "z_poschg60", "p_poschg60", "ret1_pct1d_absPrev",
     "StreakHist", "StreakWA",
 ]
 
-# Rename to reduce ambiguity for humans/other AIs
 RENAME = {
-    "p60": "rank_60_obs_pct",            # 近60筆位階(%)
-    "p252": "rank_252_obs_pct",          # 近252筆位階(%)
-    "p_poschg60": "rank_60_delta_pp",    # 近60位階變化(百分位點)
+    "p60": "rank_60_obs_pct",
+    "p252": "rank_252_obs_pct",
+    "p_poschg60": "rank_60_delta_pp",
     "z_poschg60": "z_60_delta",
     "ret1_pct1d_absPrev": "ret1_abs_pct",
     "Series": "series",
@@ -54,7 +48,6 @@ RENAME = {
     "as_of_ts": "as_of_ts",
 }
 
-# Optional Chinese labels for chart axes/titles (keep data columns English for scripts)
 ZH = {
     "rank_252_obs_pct": "近252筆位階（%）",
     "rank_60_delta_pp": "近60位階變化（百分位點）",
@@ -62,23 +55,26 @@ ZH = {
     "ret1_abs_pct": "單日變化幅度（%）",
 }
 
-# Global font properties for CJK rendering (set in setup_cjk_font())
+# Global font props used for all Chinese text
 CJK_FP: Optional[FontProperties] = None
 
 
 def _fp_kwargs() -> dict:
-    """Helper: attach CJK font to matplotlib text calls."""
     return {"fontproperties": CJK_FP} if CJK_FP is not None else {}
 
 
-def _font_supports_sample(fname: str, sample: str) -> bool:
+# -----------------------------
+# Font handling (CJK)
+# -----------------------------
+
+def _font_supports_text(font_path: str, text: str) -> bool:
     """
-    Verify a font file can render the sample text (basic glyph coverage check).
+    Check glyph coverage by charmap presence (fast sanity check).
     """
     try:
-        ft = FT2Font(fname)
-        cmap = ft.get_charmap()  # dict: codepoint -> glyph index
-        for ch in sample:
+        ft = FT2Font(font_path)
+        cmap = ft.get_charmap()
+        for ch in text:
             if ch.isspace():
                 continue
             if ord(ch) not in cmap:
@@ -90,87 +86,108 @@ def _font_supports_sample(fname: str, sample: str) -> bool:
 
 def setup_cjk_font(verbose: bool = True) -> None:
     """
-    Choose a CJK-capable font by FILE PATH and force matplotlib to use it.
-    This does NOT install fonts. CI should install fonts-noto-cjk.
-
-    Strategy:
-    - Enumerate system fonts known to matplotlib.
-    - Prefer Traditional Chinese (TC), then SC, then JP, then KR.
-    - Verify glyph coverage on a small Traditional-Chinese sample.
-    - Build FontProperties(fname=...) and apply to rcParams AND later explicit calls.
+    Prefer Traditional Chinese CJK fonts to avoid tofu on Traditional glyphs.
+    Uses font file path (FontProperties(fname=...)) for deterministic rendering.
     """
     global CJK_FP
 
-    # A sample that matches your chart labels/titles (Traditional Chinese + punctuation)
-    sample = "近252筆位階（%）長窗口位階總覽短窗口跳動強度單日變動幅度"
+    # This contains Traditional glyphs that commonly break under JP variants:
+    # 「總」「覽」等字在日文字體可能只提供「総」「覧」。
+    sample = "長窗口位階總覽（近252筆）近60位階變化（百分位點）單日變動幅度"
 
-    # Build candidate list: (priority, display_name, file_path)
-    candidates = []
+    preferred_families = [
+        # Prefer Traditional Chinese first
+        "Noto Sans CJK TC",
+        "Noto Serif CJK TC",
+        # Then Simplified Chinese
+        "Noto Sans CJK SC",
+        "Noto Serif CJK SC",
+        # Then JP/KR as last resort
+        "Noto Sans CJK JP",
+        "Noto Serif CJK JP",
+        "Noto Sans CJK KR",
+        "Noto Serif CJK KR",
+    ]
 
-    def prio(name: str) -> int:
-        n = name.lower()
-        # Prefer TC (Traditional Chinese) if present
-        if "cjk tc" in n or "sans tc" in n or "traditional" in n:
-            return 0
-        if "cjk sc" in n or "sans sc" in n or "simplified" in n:
-            return 1
-        if "cjk jp" in n:
-            return 2
-        if "cjk kr" in n:
-            return 3
-        # Accept other Noto CJK as later fallbacks
-        if "noto" in n and "cjk" in n:
-            return 5
-        return 9
-
-    for fe in fm.fontManager.ttflist:
-        name = getattr(fe, "name", "") or ""
-        fname = getattr(fe, "fname", "") or ""
-        if not fname:
+    chosen = None  # (family, path)
+    for fam in preferred_families:
+        try:
+            # If family doesn't exist, this may fallback; we want to detect that.
+            path = fm.findfont(FontProperties(family=fam), fallback_to_default=True)
+        except Exception:
             continue
-        # Filter to likely CJK fonts (avoid scanning everything)
-        if "Noto Sans CJK" in name or ("noto" in name.lower() and "cjk" in name.lower()):
-            candidates.append((prio(name), name, fname))
 
-    # Also accept WenQuanYi if present (common on some linux distros)
-    for fe in fm.fontManager.ttflist:
-        name = getattr(fe, "name", "") or ""
-        fname = getattr(fe, "fname", "") or ""
-        if not fname:
+        if not path or not Path(path).exists():
             continue
-        if "WenQuanYi" in name:
-            candidates.append((7, name, fname))
 
-    # Sort by priority then name
-    candidates.sort(key=lambda x: (x[0], x[1]))
+        # Reject obvious fallback fonts (DejaVu, Liberation) for CJK
+        low = path.lower()
+        if "dejavu" in low or "liberation" in low:
+            continue
 
-    selected = None
-    for p, name, fname in candidates:
-        # Some entries may point to TTC/OTF; FT2Font can read many of them
-        if _font_supports_sample(fname, sample):
-            selected = (name, fname)
+        # Verify glyph coverage for our Traditional sample
+        if _font_supports_text(path, sample):
+            chosen = (fam, path)
             break
 
-    if selected is None:
-        # No usable CJK font found; keep default but avoid unicode minus issue
+    if chosen is None:
+        # As a last fallback, brute-scan noto cjk entries known to matplotlib
+        # and pick the first that supports the sample.
+        for fe in fm.fontManager.ttflist:
+            name = getattr(fe, "name", "") or ""
+            path = getattr(fe, "fname", "") or ""
+            if not path:
+                continue
+            if "Noto" in name and "CJK" in name and Path(path).exists():
+                if _font_supports_text(path, sample):
+                    chosen = (name, path)
+                    break
+
+    if chosen is None:
+        CJK_FP = None
         plt.rcParams["axes.unicode_minus"] = False
         if verbose:
-            print("[charts] font_selected=DEFAULT(no usable CJK font file found)")
-        CJK_FP = None
+            print("[charts] font_selected=DEFAULT(no usable CJK font for Traditional sample)")
         return
 
-    sel_name, sel_path = selected
-    CJK_FP = FontProperties(fname=sel_path)
+    fam, path = chosen
+    CJK_FP = FontProperties(fname=path)
 
-    # rcParams still help for ticks, but we will also pass fontproperties explicitly
+    # rcParams help ticks etc., but we still pass fontproperties explicitly to titles/labels/text
     plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["font.sans-serif"] = [sel_name]
+    plt.rcParams["font.sans-serif"] = [fam]
     plt.rcParams["axes.unicode_minus"] = False
 
     if verbose:
-        print(f"[charts] font_selected={sel_name}")
-        print(f"[charts] font_path={sel_path}")
+        print(f"[charts] font_selected={fam}")
+        print(f"[charts] font_path={path}")
 
+
+def save_font_smoketest(outdir: Path) -> None:
+    """
+    Output a tiny image to prove CJK glyph rendering works (or not).
+    """
+    out = outdir / "00_font_smoketest.png"
+    plt.figure(figsize=(9, 2.2))
+    plt.axis("off")
+    plt.text(
+        0.01, 0.65,
+        "中文冒煙測試：長窗口位階總覽（近252筆）",
+        fontsize=16, **_fp_kwargs()
+    )
+    plt.text(
+        0.01, 0.20,
+        "如果這行是豆腐字＝字型沒生效或缺繁體字形",
+        fontsize=12, **_fp_kwargs()
+    )
+    plt.tight_layout()
+    plt.savefig(out, dpi=200)
+    plt.close()
+
+
+# -----------------------------
+# Markdown parsing
+# -----------------------------
 
 def _peek_context(lines: List[str], idx: int, radius: int = 10) -> str:
     lo = max(0, idx - radius)
@@ -183,12 +200,6 @@ def _peek_context(lines: List[str], idx: int, radius: int = 10) -> str:
 
 
 def extract_markdown_table(report_text: str) -> Tuple[pd.DataFrame, int]:
-    """
-    Find the markdown table that contains the dashboard rows.
-    We search for a header line that:
-    - starts with '|'
-    - contains 'Signal' and 'Series' columns (your format)
-    """
     lines = report_text.splitlines()
 
     header_idx: Optional[int] = None
@@ -220,7 +231,6 @@ def extract_markdown_table(report_text: str) -> Tuple[pd.DataFrame, int]:
 
     header_line = lines[header_idx].strip()
     sep_line = lines[header_idx + 1].strip()
-
     if "---" not in sep_line:
         ctx = _peek_context(lines, header_idx)
         raise ValueError(
@@ -243,13 +253,9 @@ def extract_markdown_table(report_text: str) -> Tuple[pd.DataFrame, int]:
 
     if not rows:
         ctx = _peek_context(lines, header_idx)
-        raise ValueError(
-            "找到表頭但沒有任何資料列。\n"
-            f"附近內容：\n{ctx}"
-        )
+        raise ValueError(f"找到表頭但沒有任何資料列。\n附近內容：\n{ctx}")
 
-    df = pd.DataFrame(rows, columns=cols)
-    return df, header_idx
+    return pd.DataFrame(rows, columns=cols), header_idx
 
 
 def coerce_numeric(df: pd.DataFrame) -> pd.DataFrame:
@@ -263,6 +269,10 @@ def coerce_numeric(df: pd.DataFrame) -> pd.DataFrame:
 def ensure_outdir(outdir: Path) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
 
+
+# -----------------------------
+# Charts
+# -----------------------------
 
 def save_chart_rank252(df: pd.DataFrame, outdir: Path,
                        p_watch_lo: float = 5.0, p_watch_hi: float = 95.0, p_alert_lo: float = 2.0) -> None:
@@ -280,7 +290,6 @@ def save_chart_rank252(df: pd.DataFrame, outdir: Path,
     plt.axvline(p_watch_lo, linestyle="--")
     plt.axvline(p_watch_hi, linestyle="--")
     plt.axvline(p_alert_lo, linestyle=":")
-
     plt.xlabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"), **_fp_kwargs())
     plt.title("長窗口位階總覽（近252筆）", **_fp_kwargs())
     plt.tight_layout()
@@ -302,7 +311,6 @@ def save_chart_rank60_jump_abs(df: pd.DataFrame, outdir: Path, jump_p_threshold:
     plt.figure(figsize=(12, 6))
     plt.barh(d["series"], d["abs_rank60_jump_pp"])
     plt.axvline(jump_p_threshold, linestyle="--")
-
     plt.xlabel("近60位階變化（百分位點，|Δ|）", **_fp_kwargs())
     plt.title("短窗口跳動強度（近60位階變化）", **_fp_kwargs())
     plt.tight_layout()
@@ -323,9 +331,7 @@ def save_chart_scatter(df: pd.DataFrame, outdir: Path,
 
     plt.figure(figsize=(10, 6))
     plt.scatter(d["z60"], d["rank_252_obs_pct"])
-
     for _, r in d.iterrows():
-        # series is English, but safe to apply font anyway
         plt.text(r["z60"], r["rank_252_obs_pct"], str(r["series"]), fontsize=9, **_fp_kwargs())
 
     plt.axhline(p_watch_lo, linestyle="--")
@@ -356,7 +362,6 @@ def save_chart_ret1_abs(df: pd.DataFrame, outdir: Path, jump_ret_threshold: floa
     plt.figure(figsize=(12, 6))
     plt.barh(d["series"], d["ret1_abs_pct"])
     plt.axvline(jump_ret_threshold, linestyle="--")
-
     plt.xlabel(ZH.get("ret1_abs_pct", "ret1_abs_pct"), **_fp_kwargs())
     plt.title("單日變動幅度總覽（|ret1|%）", **_fp_kwargs())
     plt.tight_layout()
@@ -364,34 +369,39 @@ def save_chart_ret1_abs(df: pd.DataFrame, outdir: Path, jump_ret_threshold: floa
     plt.close()
 
 
+# -----------------------------
+# Main
+# -----------------------------
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", required=True, help="Path to dashboard markdown, e.g. dashboard/DASHBOARD.md")
     ap.add_argument("--out", required=True, help="Output directory, e.g. dashboard/charts/market_cache")
 
-    ap.add_argument("--jump-p", type=float, default=15.0, help="Jump threshold for abs(PΔ60) in percentile points")
-    ap.add_argument("--jump-ret", type=float, default=2.0, help="Jump threshold for abs(ret1%1d)")
-    ap.add_argument("--extreme-z-watch", type=float, default=2.0, help="Extreme Z watch threshold")
-    ap.add_argument("--extreme-z-alert", type=float, default=2.5, help="Extreme Z alert threshold")
-    ap.add_argument("--p-watch-lo", type=float, default=5.0, help="Low percentile watch threshold (p252)")
-    ap.add_argument("--p-watch-hi", type=float, default=95.0, help="High percentile watch threshold (p252)")
-    ap.add_argument("--p-alert-lo", type=float, default=2.0, help="Low percentile alert threshold (p252)")
-
+    ap.add_argument("--jump-p", type=float, default=15.0)
+    ap.add_argument("--jump-ret", type=float, default=2.0)
+    ap.add_argument("--extreme-z-watch", type=float, default=2.0)
+    ap.add_argument("--extreme-z-alert", type=float, default=2.5)
+    ap.add_argument("--p-watch-lo", type=float, default=5.0)
+    ap.add_argument("--p-watch-hi", type=float, default=95.0)
+    ap.add_argument("--p-alert-lo", type=float, default=2.0)
     args = ap.parse_args()
-
-    # Force-select a CJK font by file path (CI should install fonts-noto-cjk)
-    setup_cjk_font(verbose=True)
 
     report_path = Path(args.report)
     outdir = Path(args.out)
     ensure_outdir(outdir)
+
+    # Select a TC-capable font (critical for Traditional glyphs)
+    setup_cjk_font(verbose=True)
+
+    # Always write a smoketest image first (fast diagnosis)
+    save_font_smoketest(outdir)
 
     if not report_path.exists():
         raise FileNotFoundError(f"report not found: {report_path}")
 
     text = report_path.read_text(encoding="utf-8")
     df_raw, header_idx = extract_markdown_table(text)
-
     df_raw = coerce_numeric(df_raw)
     df = df_raw.rename(columns=RENAME)
 
@@ -407,11 +417,9 @@ def main() -> None:
 
     save_chart_rank252(df, outdir, p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi, p_alert_lo=args.p_alert_lo)
     save_chart_rank60_jump_abs(df, outdir, jump_p_threshold=args.jump_p)
-    save_chart_scatter(
-        df, outdir,
-        extreme_z_watch=args.extreme_z_watch, extreme_z_alert=args.extreme_z_alert,
-        p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi
-    )
+    save_chart_scatter(df, outdir,
+                       extreme_z_watch=args.extreme_z_watch, extreme_z_alert=args.extreme_z_alert,
+                       p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi)
     save_chart_ret1_abs(df, outdir, jump_ret_threshold=args.jump_ret)
 
     print(f"OK: wrote {csv_path} and charts to {outdir}")
