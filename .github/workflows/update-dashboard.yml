@@ -29,6 +29,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install pandas matplotlib
+
       - name: Ensure dashboard dir
         shell: bash
         run: |
@@ -58,6 +65,15 @@ jobs:
             --history dashboard/history.json \
             --max-items 400
 
+      - name: Build charts (from dashboard/DASHBOARD.md)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dashboard/charts/market_cache
+          python tools/make_market_cache_charts.py \
+            --report dashboard/DASHBOARD.md \
+            --out dashboard/charts/market_cache
+
       - name: Commit & push
         shell: bash
         run: |
@@ -66,6 +82,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add dashboard/DASHBOARD.md dashboard/dashboard_latest.json dashboard/history.json
+          git add dashboard/charts/market_cache
 
           if git diff --cached --quiet; then
             echo "No changes"
