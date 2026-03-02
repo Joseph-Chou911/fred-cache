@@ -26,6 +26,7 @@ from typing import List, Tuple, Optional
 
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import font_manager as fm
 
 
 # Columns that are expected numeric if present
@@ -57,6 +58,51 @@ ZH = {
     "z60": "z60（近60標準化偏離）",
     "ret1_abs_pct": "單日變化幅度（%）",
 }
+
+
+def setup_cjk_font(verbose: bool = True) -> None:
+    """
+    Ensure matplotlib uses a CJK-capable font if available.
+    This does NOT install fonts. It only selects a font if present on the system.
+
+    For GitHub Actions ubuntu-latest, installing `fonts-noto-cjk` is recommended.
+    """
+    candidates = [
+        # Noto CJK family (common on Ubuntu when fonts-noto-cjk is installed)
+        "Noto Sans CJK TC",
+        "Noto Sans CJK SC",
+        "Noto Sans CJK JP",
+        "Noto Sans CJK KR",
+        # Sometimes exposed under slightly different names
+        "Noto Sans TC",
+        "Noto Sans SC",
+        # Other common CJK fonts that may exist in some envs
+        "WenQuanYi Zen Hei",
+        "AR PL UMing TW",
+        "AR PL UKai TW",
+        # Windows fallback (mostly for local runs)
+        "Microsoft JhengHei",
+    ]
+
+    available = {f.name for f in fm.fontManager.ttflist}
+    selected = None
+    for name in candidates:
+        if name in available:
+            selected = name
+            break
+
+    if selected:
+        plt.rcParams["font.family"] = "sans-serif"
+        plt.rcParams["font.sans-serif"] = [selected]
+        # Avoid minus sign rendering as a box when using some CJK fonts
+        plt.rcParams["axes.unicode_minus"] = False
+        if verbose:
+            print(f"[charts] font_selected={selected}")
+    else:
+        if verbose:
+            print("[charts] font_selected=DEFAULT(no CJK font found)")
+        # Still ensure minus sign renders sanely in default fonts
+        plt.rcParams["axes.unicode_minus"] = False
 
 
 def _peek_context(lines: List[str], idx: int, radius: int = 10) -> str:
@@ -130,7 +176,7 @@ def extract_markdown_table(report_text: str) -> Tuple[pd.DataFrame, int]:
         if len(row) == len(cols):
             rows.append(row)
         else:
-            # ignore malformed row but fail if it's clearly within the main table
+            # ignore malformed row
             pass
         j += 1
 
@@ -217,7 +263,6 @@ def save_chart_scatter(df: pd.DataFrame, outdir: Path,
     plt.figure(figsize=(10, 6))
     plt.scatter(d["z60"], d["rank_252_obs_pct"])
 
-    # label points; if too crowded later, we can add a flag to disable labels
     for _, r in d.iterrows():
         plt.text(r["z60"], r["rank_252_obs_pct"], str(r["series"]), fontsize=9)
 
@@ -272,6 +317,9 @@ def main() -> None:
 
     args = ap.parse_args()
 
+    # Ensure Chinese can render if fonts are present (CI should install fonts-noto-cjk)
+    setup_cjk_font(verbose=True)
+
     report_path = Path(args.report)
     outdir = Path(args.out)
     ensure_outdir(outdir)
@@ -282,13 +330,11 @@ def main() -> None:
     text = report_path.read_text(encoding="utf-8")
     df_raw, header_idx = extract_markdown_table(text)
 
-    # numeric cleanup
     df_raw = coerce_numeric(df_raw)
 
     # rename for ambiguity-proof sharing
     df = df_raw.rename(columns=RENAME)
 
-    # sanity: must contain series
     if "series" not in df.columns:
         ctx = _peek_context(text.splitlines(), header_idx)
         raise ValueError(
@@ -296,16 +342,16 @@ def main() -> None:
             f"附近內容：\n{ctx}"
         )
 
-    # Export a chart-ready CSV with safe column names
     csv_path = outdir / "chart_ready.csv"
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 
-    # Standard charts
     save_chart_rank252(df, outdir, p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi, p_alert_lo=args.p_alert_lo)
     save_chart_rank60_jump_abs(df, outdir, jump_p_threshold=args.jump_p)
-    save_chart_scatter(df, outdir,
-                       extreme_z_watch=args.extreme_z_watch, extreme_z_alert=args.extreme_z_alert,
-                       p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi)
+    save_chart_scatter(
+        df, outdir,
+        extreme_z_watch=args.extreme_z_watch, extreme_z_alert=args.extreme_z_alert,
+        p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi
+    )
     save_chart_ret1_abs(df, outdir, jump_ret_threshold=args.jump_ret)
 
     print(f"OK: wrote {csv_path} and charts to {outdir}")
