@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-03-02T09:03:00+00:00",
-  "as_of_ts": "2026-03-02T17:03:00+08:00",
-  "data_commit_sha": "e41e081ed0ff4930ceddca914668a9f760252e41",
+  "generated_at_utc": "2026-03-02T17:07:43+00:00",
+  "as_of_ts": "2026-03-03T01:07:43+08:00",
+  "data_commit_sha": "11364a1bb92f81bc19de43285aefe06afeb60b87",
   "pinned": {
-    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e41e081ed0ff4930ceddca914668a9f760252e41/inflation_realrate_cache/latest.json",
-    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e41e081ed0ff4930ceddca914668a9f760252e41/inflation_realrate_cache/history.json",
-    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/e41e081ed0ff4930ceddca914668a9f760252e41/inflation_realrate_cache/latest.csv"
+    "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/11364a1bb92f81bc19de43285aefe06afeb60b87/inflation_realrate_cache/latest.json",
+    "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/11364a1bb92f81bc19de43285aefe06afeb60b87/inflation_realrate_cache/history.json",
+    "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/11364a1bb92f81bc19de43285aefe06afeb60b87/inflation_realrate_cache/latest.csv"
   },
   "notes": [
     "This manifest intentionally pins DATA files to data_commit_sha.",
