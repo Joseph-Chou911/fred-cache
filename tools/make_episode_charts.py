@@ -4,90 +4,33 @@
 """
 make_episode_charts.py
 
-Snapshot charts for ONE episode using episode_pack.json (built by build_video_pack.py).
+Snapshot charts for a single episode pack (video_pack/episode_pack.json).
 
-Design goal:
-- "Today snapshot" only (no long history lines).
-- Output PNGs + chart_manifest.json (audit-first).
-- Keep text readable for YouTube overlays.
+Reads:
+- episode_pack.json (output of build_video_pack.py)
 
-Inputs:
-- --episode_pack: path to episode_pack.json
+Writes PNG charts to --out_dir.
 
-Outputs (to --out_dir):
-- 00_episode_snapshot.png                (text-based one-page snapshot)
-- 01_roll25_percentile_bars.png          (p(0-100) bars: trade_value/close/amplitude)
-- 02_margin_balance_bars.png             (TWSE/TPEX/TOTAL balances)
-- 03_margin_change_bars.png              (TWSE/TPEX/TOTAL daily chg)
-- 04_0050_bb_band_gauge.png              (BB lower/ma/upper with price marker)
-- [optional] 05_0050_tranche_levels.png  (price levels from tranche_levels; default OFF)
-- episode_chart_ready.csv                (flat table for downstream)
-- chart_manifest.json                    (what charts were produced, with sha256, as_of, warnings)
-
-Dependencies:
-- matplotlib, numpy, pandas (pandas optional but recommended; used for CSV convenience)
+Key design:
+- Audit-first: ONLY uses values available in the pack (raw or extracts).
+- Headroom fix: bar labels will NOT collide with the title (adds ylim headroom + title pad).
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import json
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import matplotlib
-
-matplotlib.use("Agg", force=True)
-import matplotlib.pyplot as plt  # noqa: E402
-
-
-TZ_NAME_DEFAULT = "Asia/Taipei"
-MANIFEST_SCHEMA = "chart_manifest_v1"
-SCRIPT_FINGERPRINT = "make_episode_charts@v1.snapshot_plus_manifest"
+matplotlib.use("Agg", force=True)  # headless
+import matplotlib.pyplot as plt
 
 
-# -----------------------------
-# Helpers (audit-first)
-# -----------------------------
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def sha256_bytes(b: bytes) -> str:
-    h = hashlib.sha256()
-    h.update(b)
-    return h.hexdigest()
-
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def load_json(path: Path) -> Dict[str, Any]:
-    with path.open("r", encoding="utf-8") as f:
+def load_json(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
-
-
-def dump_json(path: Path, obj: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=False)
-
-
-def fmt_float(x: Any, nd: int = 2, na: str = "N/A") -> str:
-    try:
-        if x is None:
-            return na
-        return f"{float(x):.{nd}f}"
-    except Exception:
-        return na
 
 
 def deep_get(obj: Any, path: str) -> Any:
@@ -111,496 +54,225 @@ def deep_get(obj: Any, path: str) -> Any:
     return cur
 
 
-def extracts_to_map(ext_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-    return {e.get("field"): e.get("value") for e in (ext_list or [])}
+def _as_float(x: Any) -> Optional[float]:
+    try:
+        if x is None:
+            return None
+        return float(x)
+    except Exception:
+        return None
 
 
-def save_fig(fig: plt.Figure, out_path: Path, dpi: int) -> Dict[str, Any]:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+def _as_str(x: Any) -> str:
+    return "N/A" if x is None else str(x)
+
+
+def ensure_dir(p: Path) -> None:
+    p.mkdir(parents=True, exist_ok=True)
+
+
+def add_headroom_for_barlabels(ax, bars, headroom_ratio: float = 0.08) -> None:
+    """
+    Prevent collision of bar labels with the title by increasing y max.
+    """
+    heights = [b.get_height() for b in bars if b is not None]
+    if not heights:
+        return
+
+    ymin, ymax = ax.get_ylim()
+    top = max(heights)
+
+    # If the chart is percent-like (0-100), we explicitly cap at 110 for clean look.
+    if 0 <= top <= 100 and 0 <= ymax <= 100.0001:
+        ax.set_ylim(0, 110)
+        return
+
+    # Generic case: increase y-limit
+    new_ymax = max(ymax, top) * (1.0 + headroom_ratio)
+    ax.set_ylim(ymin, new_ymax)
+
+
+def save_fig(fig, out_path: Path) -> None:
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
-    # compute sha256 + geometry
-    b = out_path.read_bytes()
-    w_in, h_in = fig.get_size_inches()
-    return {
-        "file": out_path.name,
-        "path": str(out_path),
-        "sha256": sha256_bytes(b),
-        "dpi": dpi,
-        "size_inches": [float(w_in), float(h_in)],
-    }
 
-
-def set_font_defaults() -> None:
-    # Best-effort Traditional Chinese support; fall back gracefully.
-    plt.rcParams["font.sans-serif"] = [
-        "Noto Sans CJK TC",
-        "Noto Sans CJK SC",
-        "Noto Sans CJK JP",
-        "Microsoft JhengHei",
-        "PingFang TC",
-        "Heiti TC",
-        "Arial Unicode MS",
-        "DejaVu Sans",
-    ]
-    plt.rcParams["axes.unicode_minus"] = False
-
-
-# -----------------------------
-# Chart builders (snapshot)
-# -----------------------------
-def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tuple[Optional[Dict[str, Any]], List[str]]:
-    warnings: List[str] = []
-    tz = pack.get("timezone") or TZ_NAME_DEFAULT
-    day = pack.get("day_key_local") or "N/A"
-    pack_warnings = pack.get("warnings") or []
-    if not isinstance(pack_warnings, list):
-        pack_warnings = ["pack_warnings_not_list"]
-    warnings.extend([str(x) for x in pack_warnings])
-
-    inp = pack.get("inputs") or {}
-    ext = pack.get("extracts_best_effort") or {}
-    r = extracts_to_map(ext.get("roll25", []))
-    m = extracts_to_map(ext.get("margin", []))
-    t = extracts_to_map(ext.get("tw0050_bb", []))
-
-    # Build a text-only "one page" snapshot (YouTube friendly).
-    fig = plt.figure(figsize=(8, 4.5))  # ~1280x720 at dpi=160
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.axis("off")
-
-    # Header
-    header = f"Episode Snapshot | day={day} ({tz})"
-    sub = f"pack.generated_at_local={pack.get('generated_at_local','N/A')} | build={pack.get('build_fingerprint','N/A')}"
-    ax.text(0.02, 0.95, header, fontsize=16, fontweight="bold", va="top")
-    ax.text(0.02, 0.91, sub, fontsize=9, va="top")
-
-    # Inputs block (as_of / age)
-    def _inp_line(k: str) -> str:
-        v = inp.get(k, {}) if isinstance(inp, dict) else {}
-        return f"{k}: as_of={v.get('as_of_date','N/A')} age_days={v.get('age_days','N/A')} fp={v.get('fingerprint','N/A')}"
-
-    ax.text(0.02, 0.86, "Inputs:", fontsize=10, fontweight="bold", va="top")
-    ax.text(0.02, 0.83, _inp_line("roll25"), fontsize=9, va="top")
-    ax.text(0.02, 0.80, _inp_line("taiwan_margin"), fontsize=9, va="top")
-    ax.text(0.02, 0.77, _inp_line("tw0050_bb"), fontsize=9, va="top")
-
-    # Warnings
-    warn_txt = "NONE" if not warnings else ", ".join(warnings)
-    ax.text(0.02, 0.72, f"Warnings: {warn_txt}", fontsize=9, va="top")
-
-    # Section: roll25
-    y = 0.66
-    ax.text(0.02, y, "roll25 (TWSE Turnover / Heat):", fontsize=11, fontweight="bold", va="top")
-    y -= 0.04
-    roll_lines = [
-        f"used_date={r.get('used_date','N/A')} mode={r.get('mode','N/A')}",
-        f"trade_value win60: z={fmt_float(r.get('trade_value_win60_z'),3)} p={fmt_float(r.get('trade_value_win60_p'),3)} value={fmt_float(r.get('trade_value_win60_value'),0)}",
-        f"trade_value win252: z={fmt_float(r.get('trade_value_win252_z'),3)} p={fmt_float(r.get('trade_value_win252_p'),3)} value={fmt_float(r.get('trade_value_win252_value'),0)}",
-        f"close win252: z={fmt_float(r.get('close_win252_z'),3)} p={fmt_float(r.get('close_win252_p'),3)}",
-        f"vol_multiplier_20={fmt_float(r.get('vol_multiplier_20'),3)} | volume_amplified={r.get('volume_amplified','N/A')} | consecutive_down_days={r.get('consecutive_down_days','N/A')}",
-    ]
-    for s in roll_lines:
-        ax.text(0.04, y, s, fontsize=9, va="top")
-        y -= 0.03
-
-    # Section: margin
-    y -= 0.01
-    ax.text(0.02, y, "taiwan_margin (Leverage):", fontsize=11, fontweight="bold", va="top")
-    y -= 0.04
-    margin_lines = [
-        f"date={m.get('twse_data_date','N/A')}",
-        f"TWSE balance(億)={fmt_float(m.get('twse_balance_yi'),1)} chg(億)={fmt_float(m.get('twse_chg_yi'),1)}",
-        f"TPEX balance(億)={fmt_float(m.get('tpex_balance_yi'),1)} chg(億)={fmt_float(m.get('tpex_chg_yi'),1)}",
-        f"TOTAL balance(億)={fmt_float(m.get('total_balance_yi'),1)} chg(億)={fmt_float(m.get('total_chg_yi'),1)}",
-        f"3rows chg sum: TWSE={fmt_float(m.get('twse_chg_sum_3rows'),1)} TPEX={fmt_float(m.get('tpex_chg_sum_3rows'),1)} TOTAL={fmt_float(m.get('total_chg_sum_3rows'),1)}",
-        f"30rows high balance: TWSE={m.get('twse_is_30rows_high_balance','N/A')} TPEX={m.get('tpex_is_30rows_high_balance','N/A')}",
-    ]
-    for s in margin_lines:
-        ax.text(0.04, y, s, fontsize=9, va="top")
-        y -= 0.03
-
-    # Section: 0050 BB
-    y -= 0.01
-    ax.text(0.02, y, "tw0050_bb (0050 Position):", fontsize=11, fontweight="bold", va="top")
-    y -= 0.04
-    veto_reasons = t.get("pledge_veto_reasons")
-    if isinstance(veto_reasons, list):
-        veto_str = "; ".join([str(x) for x in veto_reasons][:4])
-    else:
-        veto_str = str(veto_reasons) if veto_reasons is not None else "N/A"
-
-    t_lines = [
-        f"last_date={t.get('last_date','N/A')} price={fmt_float(t.get('adjclose'),2)} state={t.get('bb_state','N/A')} bb_z={fmt_float(t.get('bb_z'),3)}",
-        f"BB: lower={fmt_float(t.get('bb_lower'),2)} ma={fmt_float(t.get('bb_ma'),2)} upper={fmt_float(t.get('bb_upper'),2)}",
-        f"dist_to_upper_pct={fmt_float(t.get('dist_to_upper_pct'),3)} | dist_to_lower_pct={fmt_float(t.get('dist_to_lower_pct'),3)}",
-        f"trend_state={t.get('trend_state','N/A')} | price_vs_200ma_pct={fmt_float(t.get('price_vs_200ma_pct'),2)} | slope_pct={fmt_float(t.get('trend_slope_pct'),2)}",
-        f"rv_ann={fmt_float(t.get('rv_ann'),3)} | rv_ann_pctl={fmt_float(t.get('rv_ann_pctl'),2)}",
-        f"regime_allowed={t.get('regime_allowed','N/A')} | pledge_action_bucket={t.get('pledge_action_bucket','N/A')}",
-        f"pledge_veto_reasons={veto_str}",
-    ]
-    for s in t_lines:
-        ax.text(0.04, y, s, fontsize=9, va="top")
-        y -= 0.03
-
-    # Footer disclaimer
-    ax.text(
-        0.02,
-        0.02,
-        "Note: Snapshot for reporting/logging; not investment advice. Use manifest for audit.",
-        fontsize=8,
-        va="bottom",
+def plot_roll25_percentiles(pack: Dict[str, Any], out_dir: Path) -> Optional[Path]:
+    r = deep_get(pack, "raw.roll25") or {}
+    asof = (
+        deep_get(pack, "inputs.roll25.as_of_date")
+        or deep_get(r, "used_date")
+        or deep_get(r, "series.trade_value.asof")
+        or deep_get(r, "series.close.asof")
     )
 
-    meta = save_fig(fig, out_dir / "00_episode_snapshot.png", dpi=dpi)
-    meta["title"] = "Episode snapshot (one-page text)"
-    return meta, warnings
-
-
-def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
-    raw_r25 = deep_get(pack, "raw.roll25") or {}
-    # From stats_latest.json style:
-    # series.trade_value.win60.p, series.trade_value.win252.p, series.close.win252.p, series.amplitude_pct.win60.p, series.amplitude_pct.win252.p
     items: List[Tuple[str, Optional[float]]] = [
-        ("trade_value p60", deep_get(raw_r25, "series.trade_value.win60.p")),
-        ("trade_value p252", deep_get(raw_r25, "series.trade_value.win252.p")),
-        ("close p252", deep_get(raw_r25, "series.close.win252.p")),
-        ("amplitude p60", deep_get(raw_r25, "series.amplitude_pct.win60.p")),
-        ("amplitude p252", deep_get(raw_r25, "series.amplitude_pct.win252.p")),
+        ("trade_value p60", _as_float(deep_get(r, "series.trade_value.win60.p"))),
+        ("trade_value p252", _as_float(deep_get(r, "series.trade_value.win252.p"))),
+        ("close p252", _as_float(deep_get(r, "series.close.win252.p"))),
+        ("amplitude p60", _as_float(deep_get(r, "series.amplitude_pct.win60.p"))),
+        ("amplitude p252", _as_float(deep_get(r, "series.amplitude_pct.win252.p"))),
     ]
-    labels = []
-    values = []
-    for k, v in items:
-        if isinstance(v, (int, float)):
-            labels.append(k)
-            values.append(float(v))
+    labels = [k for k, v in items if v is not None]
+    values = [v for _, v in items if v is not None]
 
     if not values:
         return None
 
-    fig = plt.figure(figsize=(8, 4.5))
-    ax = fig.add_subplot(111)
-    ax.bar(labels, values)
-    ax.set_ylim(0, 100)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    bars = ax.bar(labels, values)
     ax.set_ylabel("Percentile (0-100)")
-    asof = deep_get(raw_r25, "used_date") or deep_get(raw_r25, "series.trade_value.asof") or "N/A"
-    ax.set_title(f"roll25 percentiles (as_of={asof})")
+    ax.set_title(f"roll25 percentiles (as_of={_as_str(asof)})", pad=16)
 
-    # label numbers on top (no boxes)
-    for i, v in enumerate(values):
-        ax.text(i, v + 1.5, f"{v:.1f}", ha="center", va="bottom", fontsize=9)
+    # Bar labels
+    ax.bar_label(bars, fmt="%.1f", padding=3)
+    add_headroom_for_barlabels(ax, bars, headroom_ratio=0.10)
 
-    fig.autofmt_xdate(rotation=0)
-    fig.tight_layout()
-    meta = save_fig(fig, out_dir / "01_roll25_percentile_bars.png", dpi=dpi)
-    meta["title"] = "roll25 percentiles bars"
-    return meta
-
-
-def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-    ext = pack.get("extracts_best_effort") or {}
-    m = extracts_to_map(ext.get("margin", []))
-
-    twse_bal = m.get("twse_balance_yi")
-    tpex_bal = m.get("tpex_balance_yi")
-    total_bal = m.get("total_balance_yi")
-
-    twse_chg = m.get("twse_chg_yi")
-    tpex_chg = m.get("tpex_chg_yi")
-    total_chg = m.get("total_chg_yi")
-
-    # Balance chart
-    meta_bal = None
-    vals_bal: List[Tuple[str, float]] = []
-    for k, v in [("TWSE", twse_bal), ("TPEX", tpex_bal), ("TOTAL", total_bal)]:
-        if isinstance(v, (int, float)):
-            vals_bal.append((k, float(v)))
-
-    if vals_bal:
-        fig = plt.figure(figsize=(8, 4.5))
-        ax = fig.add_subplot(111)
-        labels = [x[0] for x in vals_bal]
-        values = [x[1] for x in vals_bal]
-        ax.bar(labels, values)
-        ax.set_ylabel("Balance (億)")
-        asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
-        ax.set_title(f"Margin balance (as_of={asof})")
-        for i, v in enumerate(values):
-            ax.text(i, v, f"{v:.1f}", ha="center", va="bottom", fontsize=9)
-        fig.tight_layout()
-        meta_bal = save_fig(fig, out_dir / "02_margin_balance_bars.png", dpi=dpi)
-        meta_bal["title"] = "Margin balance bars"
-
-    # Change chart
-    meta_chg = None
-    vals_chg: List[Tuple[str, float]] = []
-    for k, v in [("TWSE", twse_chg), ("TPEX", tpex_chg), ("TOTAL", total_chg)]:
-        if isinstance(v, (int, float)):
-            vals_chg.append((k, float(v)))
-
-    if vals_chg:
-        fig = plt.figure(figsize=(8, 4.5))
-        ax = fig.add_subplot(111)
-        labels = [x[0] for x in vals_chg]
-        values = [x[1] for x in vals_chg]
-        ax.bar(labels, values)
-        ax.axhline(0.0)
-        ax.set_ylabel("Daily change (億)")
-        asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
-        ax.set_title(f"Margin daily change (as_of={asof})")
-        for i, v in enumerate(values):
-            ax.text(i, v, f"{v:.1f}", ha="center", va="bottom" if v >= 0 else "top", fontsize=9)
-        fig.tight_layout()
-        meta_chg = save_fig(fig, out_dir / "03_margin_change_bars.png", dpi=dpi)
-        meta_chg["title"] = "Margin daily change bars"
-
-    return meta_bal, meta_chg
-
-
-def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
-    ext = pack.get("extracts_best_effort") or {}
-    t = extracts_to_map(ext.get("tw0050_bb", []))
-
-    price = t.get("adjclose")
-    lower = t.get("bb_lower")
-    ma = t.get("bb_ma")
-    upper = t.get("bb_upper")
-
-    if not all(isinstance(x, (int, float)) for x in [price, lower, ma, upper]):
-        return None
-
-    price = float(price)
-    lower = float(lower)
-    ma = float(ma)
-    upper = float(upper)
-
-    fig = plt.figure(figsize=(8, 4.5))
-    ax = fig.add_subplot(111)
-
-    # Draw a "gauge": lower -> upper line, with ma and price markers
-    ax.plot([lower, upper], [0, 0])  # band range
-    ax.scatter([ma], [0], marker="|", s=800)
-    ax.scatter([price], [0], s=80)
-
-    ax.set_yticks([])
-    ax.set_xlabel("Price")
-    ax.set_title(
-        f"0050 BB band position (as_of={t.get('last_date','N/A')}) | state={t.get('bb_state','N/A')} | z={fmt_float(t.get('bb_z'),3)}"
-    )
-
-    # Expand x a bit for readability
-    span = max(upper - lower, 1e-6)
-    ax.set_xlim(lower - 0.10 * span, upper + 0.10 * span)
-
-    # label key points
-    ax.text(lower, 0.05, f"lower={lower:.2f}", ha="left", va="bottom", fontsize=9)
-    ax.text(ma, 0.08, f"ma={ma:.2f}", ha="center", va="bottom", fontsize=9)
-    ax.text(upper, 0.05, f"upper={upper:.2f}", ha="right", va="bottom", fontsize=9)
-    ax.text(price, -0.08, f"price={price:.2f}", ha="center", va="top", fontsize=9)
-
-    fig.tight_layout()
-    meta = save_fig(fig, out_dir / "04_0050_bb_band_gauge.png", dpi=dpi)
-    meta["title"] = "0050 BB band gauge"
-    return meta
-
-
-def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
-    # WARNING: exact price levels can cause anchoring in audiences.
-    ext = pack.get("extracts_best_effort") or {}
-    t = extracts_to_map(ext.get("tw0050_bb", []))
-    levels = t.get("tranche_levels")
-
-    if not isinstance(levels, list) or not levels:
-        return None
-
-    rows: List[Tuple[str, float]] = []
-    for item in levels:
-        if not isinstance(item, dict):
-            continue
-        label = str(item.get("label", "N/A"))
-        pl = item.get("price_level")
-        if isinstance(pl, (int, float)):
-            rows.append((label, float(pl)))
-
-    if not rows:
-        return None
-
-    # sort by price descending (closer to current usually higher)
-    rows.sort(key=lambda x: x[1], reverse=True)
-
-    fig = plt.figure(figsize=(8, 4.5))
-    ax = fig.add_subplot(111)
-    labels = [x[0] for x in rows]
-    values = [x[1] for x in rows]
-    ax.bar(labels, values)
-    ax.set_ylabel("Price level")
-    ax.set_title(f"0050 tranche levels (as_of={t.get('last_date','N/A')})")
-    ax.text(
-        0.01,
-        0.98,
-        "CAUTION: levels are statistical mapping, not buy/sell points.",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9,
-    )
-    for i, v in enumerate(values):
-        ax.text(i, v, f"{v:.2f}", ha="center", va="bottom", fontsize=9)
-    fig.tight_layout()
-
-    meta = save_fig(fig, out_dir / "05_0050_tranche_levels.png", dpi=dpi)
-    meta["title"] = "0050 tranche levels bars (anchoring caution)"
-    return meta
-
-
-def write_episode_chart_ready_csv(pack: Dict[str, Any], out_dir: Path) -> Path:
-    out_path = out_dir / "episode_chart_ready.csv"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    ext = pack.get("extracts_best_effort") or {}
-    r = extracts_to_map(ext.get("roll25", []))
-    m = extracts_to_map(ext.get("margin", []))
-    t = extracts_to_map(ext.get("tw0050_bb", []))
-
-    rows: List[Dict[str, Any]] = []
-    for module, mp in [("roll25", r), ("margin", m), ("tw0050_bb", t)]:
-        for k, v in mp.items():
-            rows.append({"module": module, "metric": k, "value": json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v})
-
-    with out_path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["module", "metric", "value"])
-        w.writeheader()
-        w.writerows(rows)
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    out_path = out_dir / "01_roll25_percentiles.png"
+    save_fig(fig, out_path)
     return out_path
 
 
-def build_manifest(
-    out_dir: Path,
-    input_pack_path: Path,
-    pack: Dict[str, Any],
-    charts_meta: List[Dict[str, Any]],
-    extra_warnings: List[str],
-) -> Dict[str, Any]:
-    tz = pack.get("timezone") or TZ_NAME_DEFAULT
-    day = pack.get("day_key_local") or "N/A"
+def plot_roll25_zscores(pack: Dict[str, Any], out_dir: Path) -> Optional[Path]:
+    r = deep_get(pack, "raw.roll25") or {}
+    asof = (
+        deep_get(pack, "inputs.roll25.as_of_date")
+        or deep_get(r, "used_date")
+        or deep_get(r, "series.trade_value.asof")
+        or deep_get(r, "series.close.asof")
+    )
 
-    # Decide "data_as_of": prefer roll25 used_date, else max of inputs as_of_date (string)
-    ext = pack.get("extracts_best_effort") or {}
-    r = extracts_to_map(ext.get("roll25", []))
-    data_as_of = r.get("used_date")
-    if not data_as_of:
-        inp = pack.get("inputs") or {}
-        candidates = []
-        for k in ["roll25", "taiwan_margin", "tw0050_bb"]:
-            v = inp.get(k, {}) if isinstance(inp, dict) else {}
-            s = v.get("as_of_date")
-            if isinstance(s, str) and s:
-                candidates.append(s)
-        data_as_of = max(candidates) if candidates else "N/A"
+    items: List[Tuple[str, Optional[float]]] = [
+        ("trade_value z60", _as_float(deep_get(r, "series.trade_value.win60.z"))),
+        ("trade_value z252", _as_float(deep_get(r, "series.trade_value.win252.z"))),
+        ("close z252", _as_float(deep_get(r, "series.close.win252.z"))),
+        ("amplitude z60", _as_float(deep_get(r, "series.amplitude_pct.win60.z"))),
+        ("amplitude z252", _as_float(deep_get(r, "series.amplitude_pct.win252.z"))),
+    ]
+    labels = [k for k, v in items if v is not None]
+    values = [v for _, v in items if v is not None]
+    if not values:
+        return None
 
-    warnings = []
-    pack_warnings = pack.get("warnings") or []
-    if isinstance(pack_warnings, list):
-        warnings.extend([str(x) for x in pack_warnings])
-    warnings.extend([str(x) for x in extra_warnings])
+    fig, ax = plt.subplots(figsize=(10, 5))
+    bars = ax.bar(labels, values)
+    ax.set_ylabel("Z-score")
+    ax.set_title(f"roll25 z-scores (as_of={_as_str(asof)})", pad=16)
 
-    manifest = {
-        "schema_version": MANIFEST_SCHEMA,
-        "script_fingerprint": SCRIPT_FINGERPRINT,
-        "generated_at_utc": utc_now_iso(),
-        "timezone": tz,
-        "day_key_local": day,
-        "data_as_of": data_as_of,
-        "input_files": {
-            "episode_pack": str(input_pack_path),
-            "episode_pack_sha256": sha256_file(input_pack_path),
-        },
-        "pack_build_fingerprint": pack.get("build_fingerprint", "N/A"),
-        "pack_generated_at_local": pack.get("generated_at_local", "N/A"),
-        "warnings": sorted(list(dict.fromkeys(warnings))),
-        "charts": charts_meta,
-    }
-    return manifest
+    ax.bar_label(bars, fmt="%.2f", padding=3)
+    add_headroom_for_barlabels(ax, bars, headroom_ratio=0.15)
+
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    out_path = out_dir / "02_roll25_zscores.png"
+    save_fig(fig, out_path)
+    return out_path
+
+
+def plot_margin_snapshot(pack: Dict[str, Any], out_dir: Path) -> Optional[Path]:
+    m = deep_get(pack, "raw.taiwan_margin") or {}
+    asof = deep_get(pack, "inputs.taiwan_margin.as_of_date") or deep_get(m, "series.TWSE.data_date")
+
+    twse_bal = _as_float(deep_get(m, "series.TWSE.rows.0.balance_yi"))
+    tpex_bal = _as_float(deep_get(m, "series.TPEX.rows.0.balance_yi"))
+    twse_chg = _as_float(deep_get(m, "series.TWSE.rows.0.chg_yi"))
+    tpex_chg = _as_float(deep_get(m, "series.TPEX.rows.0.chg_yi"))
+
+    if twse_bal is None and tpex_bal is None:
+        return None
+
+    # balances
+    labels = ["TWSE", "TPEX", "TOTAL"]
+    vals = [
+        twse_bal if twse_bal is not None else 0.0,
+        tpex_bal if tpex_bal is not None else 0.0,
+        (twse_bal or 0.0) + (tpex_bal or 0.0),
+    ]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    bars = ax.bar(labels, vals)
+    ax.set_ylabel("Balance (億)")
+    ax.set_title(f"Margin balances (as_of={_as_str(asof)})", pad=16)
+    ax.bar_label(bars, fmt="%.1f", padding=3)
+    add_headroom_for_barlabels(ax, bars, headroom_ratio=0.08)
+
+    # annotate daily changes under title area (figure text to avoid overlay on bars)
+    notes = []
+    if twse_chg is not None:
+        notes.append(f"TWSE Δ={twse_chg:+.1f}億")
+    if tpex_chg is not None:
+        notes.append(f"TPEX Δ={tpex_chg:+.1f}億")
+    if twse_chg is not None and tpex_chg is not None:
+        notes.append(f"TOTAL Δ={(twse_chg + tpex_chg):+.1f}億")
+    if notes:
+        fig.text(0.5, 0.02, " / ".join(notes), ha="center", va="bottom")
+
+    fig.tight_layout(rect=(0, 0.04, 1, 0.98))
+    out_path = out_dir / "03_margin_balances.png"
+    save_fig(fig, out_path)
+    return out_path
+
+
+def plot_tw0050_bb_position(pack: Dict[str, Any], out_dir: Path) -> Optional[Path]:
+    tw = deep_get(pack, "raw.tw0050_bb") or {}
+    asof = deep_get(pack, "inputs.tw0050_bb.as_of_date") or deep_get(tw, "meta.last_date") or deep_get(tw, "latest.date")
+
+    price = _as_float(deep_get(tw, "latest.adjclose")) or _as_float(deep_get(tw, "latest.price_used"))
+    bb_ma = _as_float(deep_get(tw, "latest.bb_ma"))
+    bb_up = _as_float(deep_get(tw, "latest.bb_upper"))
+    bb_lo = _as_float(deep_get(tw, "latest.bb_lower"))
+    bb_z = _as_float(deep_get(tw, "latest.bb_z"))
+    state = deep_get(tw, "latest.state")
+
+    if price is None or bb_ma is None or bb_up is None or bb_lo is None:
+        return None
+
+    labels = ["BB lower", "BB MA", "Price", "BB upper"]
+    vals = [bb_lo, bb_ma, price, bb_up]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(range(len(vals)), vals, marker="o")
+    ax.set_xticks(range(len(labels)), labels)
+    ax.set_ylabel("Price")
+    ax.set_title(f"0050 BB position (as_of={_as_str(asof)})", pad=16)
+
+    # simple value labels near points
+    for i, v in enumerate(vals):
+        ax.text(i, v, f"{v:.2f}", ha="center", va="bottom")
+
+    # bottom note (keeps the plot clean)
+    note_parts = []
+    if state is not None:
+        note_parts.append(f"state={state}")
+    if bb_z is not None:
+        note_parts.append(f"bb_z={bb_z:.3f}")
+    rv_pctl = _as_float(deep_get(tw, "vol.rv_ann_pctl"))
+    if rv_pctl is not None:
+        note_parts.append(f"rv_pctl={rv_pctl:.1f}")
+    if note_parts:
+        fig.text(0.5, 0.02, " / ".join(note_parts), ha="center", va="bottom")
+
+    fig.tight_layout(rect=(0, 0.04, 1, 0.98))
+    out_path = out_dir / "04_tw0050_bb_position.png"
+    save_fig(fig, out_path)
+    return out_path
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--episode_pack", required=True, help="Path to episode_pack.json")
-    ap.add_argument("--out_dir", required=True, help="Output directory for PNGs + manifest")
-    ap.add_argument("--dpi", default="160", help="PNG dpi (default 160 for 1280x720 at 8x4.5)")
-    ap.add_argument(
-        "--include_tranche_levels",
-        action="store_true",
-        help="Also output 05_0050_tranche_levels.png (may cause anchoring; default OFF).",
-    )
+    ap.add_argument("--out_dir", required=True, help="Output directory for charts")
     args = ap.parse_args()
 
-    set_font_defaults()
-
-    pack_path = Path(args.episode_pack)
+    pack = load_json(args.episode_pack)
     out_dir = Path(args.out_dir)
-    dpi = int(args.dpi)
+    ensure_dir(out_dir)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    pack = load_json(pack_path)
-
-    charts_meta: List[Dict[str, Any]] = []
-    extra_warnings: List[str] = []
-
-    # 00 snapshot
-    meta0, w0 = chart_00_episode_snapshot(pack, out_dir, dpi)
-    if meta0:
-        charts_meta.append(meta0)
-    extra_warnings.extend(w0)
-
-    # 01 roll25 percentile bars (from raw roll25 stats_latest)
-    meta1 = chart_01_roll25_percentile_bars(pack, out_dir, dpi)
-    if meta1:
-        charts_meta.append(meta1)
-    else:
-        extra_warnings.append("roll25_percentile_bars_skipped_no_data")
-
-    # 02/03 margin bars
-    meta2, meta3 = chart_02_03_margin_bars(pack, out_dir, dpi)
-    if meta2:
-        charts_meta.append(meta2)
-    else:
-        extra_warnings.append("margin_balance_bars_skipped_no_data")
-    if meta3:
-        charts_meta.append(meta3)
-    else:
-        extra_warnings.append("margin_change_bars_skipped_no_data")
-
-    # 04 0050 BB gauge
-    meta4 = chart_04_0050_bb_band_gauge(pack, out_dir, dpi)
-    if meta4:
-        charts_meta.append(meta4)
-    else:
-        extra_warnings.append("tw0050_bb_gauge_skipped_no_data")
-
-    # optional tranche levels
-    if args.include_tranche_levels:
-        meta5 = chart_05_0050_tranche_levels(pack, out_dir, dpi)
-        if meta5:
-            charts_meta.append(meta5)
-        else:
-            extra_warnings.append("tranche_levels_skipped_no_data")
-
-    # chart_ready.csv
-    csv_path = write_episode_chart_ready_csv(pack, out_dir)
-    charts_meta.append(
-        {
-            "file": csv_path.name,
-            "path": str(csv_path),
-            "sha256": sha256_file(csv_path),
-            "title": "episode_chart_ready.csv (flat metrics table)",
-        }
-    )
-
-    # manifest
-    manifest = build_manifest(out_dir, pack_path, pack, charts_meta, extra_warnings)
-    dump_json(out_dir / "chart_manifest.json", manifest)
+    # Generate charts (best-effort; no crash if some fields missing)
+    plot_roll25_percentiles(pack, out_dir)
+    plot_roll25_zscores(pack, out_dir)
+    plot_margin_snapshot(pack, out_dir)
+    plot_tw0050_bb_position(pack, out_dir)
 
     return 0
 
