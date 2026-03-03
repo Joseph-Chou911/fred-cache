@@ -27,11 +27,19 @@ jobs:
     env:
       TZ: Asia/Taipei
       AMP_MISMATCH_ABS_THRESHOLD: "0.01"
+      MPLCONFIGDIR: /tmp/matplotlib
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Install system fonts (CJK)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra
+          fc-cache -f -v
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -180,12 +188,20 @@ jobs:
       TZ: Asia/Taipei
       BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
       AMP_MISMATCH_ABS_THRESHOLD: "0.01"
+      MPLCONFIGDIR: /tmp/matplotlib
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Install system fonts (CJK)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra
+          fc-cache -f -v
 
       - name: Set up Python
         uses: actions/setup-python@v5
