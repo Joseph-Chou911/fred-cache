@@ -1,8 +1,8 @@
 # Episode Data (DATA-ONLY)
 
 - day_key_local: 2026-03-03 (Asia/Taipei)
-- generated_at_utc: 2026-03-03T12:21:49Z
-- generated_at_local: 2026-03-03T20:21:49+08:00
+- generated_at_utc: 2026-03-03T12:42:16Z
+- generated_at_local: 2026-03-03T20:42:16+08:00
 - build_fingerprint: build_video_pack@v1.3.data_md_out_and_tz_fix
 - warnings: NONE
 
