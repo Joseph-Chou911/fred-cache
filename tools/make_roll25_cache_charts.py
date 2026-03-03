@@ -548,17 +548,22 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, bottom: str, waterm
     ax.bar(x, y)
     ax.set_xticks(x)
     ax.set_xticklabels(d["label"].tolist(), rotation=0)
-    ax.set_ylim(0, 100)
+
+    # Headroom + title padding: avoid value labels colliding with title/axes top
+    ax.set_ylim(0, 105)
     ax.set_ylabel("p252 (percentile)")
-    ax.set_title("Roll25 Overview — p252 (Position in last ~252 trading days)")
+    ax.set_title("Roll25 Overview — p252 (Position in last ~252 trading days)", pad=14)
 
     for xi, yi in zip(x, y):
         if not math.isnan(yi):
-            ax.text(xi, yi + 1.2, f"{yi:.2f}", ha="center", va="bottom", fontsize=9)
+            y_text = min(yi + 1.2, 104.0)
+            ax.text(xi, y_text, f"{yi:.2f}", ha="center", va="bottom", fontsize=9, clip_on=True)
 
     fig_bottom_note(fig, bottom)
     fig_watermark(fig, watermark)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+
+    # Leave some top margin for title + labels
+    fig.tight_layout(rect=[0, 0.06, 1, 0.94])
     fig.savefig(out_png, bbox_inches="tight")
     plt.close(fig)
 
@@ -574,7 +579,7 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, bottom: str, waterma
         ax.text(0.01, 0.6, "No pΔ60 data available (all NA).", fontsize=14)
         fig_bottom_note(fig, bottom)
         fig_watermark(fig, watermark)
-        fig.tight_layout(rect=[0, 0.06, 1, 1])
+        fig.tight_layout(rect=[0, 0.06, 1, 0.94])
         fig.savefig(out_png, bbox_inches="tight")
         plt.close(fig)
         return
@@ -589,17 +594,22 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, bottom: str, waterma
     ax.bar(x, y)
     ax.set_xticks(x)
     ax.set_xticklabels(d["label"].tolist(), rotation=0)
-    ax.set_ylim(0, 100)
+
+    # Headroom + title padding: avoid value labels colliding with title/axes top
+    ax.set_ylim(0, 105)
     ax.set_ylabel("pΔ60 (percentile of |Δ1D| vs last 60)")
-    ax.set_title("Jump Rank — pΔ60 (Abs 1-day change vs last 60 trading days)")
+    ax.set_title("Jump Rank — pΔ60 (Abs 1-day change vs last 60 trading days)", pad=14)
 
     for xi, yi in zip(x, y):
         if not math.isnan(yi):
-            ax.text(xi, yi + 1.2, f"{yi:.1f}", ha="center", va="bottom", fontsize=9)
+            y_text = min(yi + 1.2, 104.0)
+            ax.text(xi, y_text, f"{yi:.1f}", ha="center", va="bottom", fontsize=9, clip_on=True)
 
     fig_bottom_note(fig, bottom)
     fig_watermark(fig, watermark)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+
+    # Leave some top margin for title + labels
+    fig.tight_layout(rect=[0, 0.06, 1, 0.94])
     fig.savefig(out_png, bbox_inches="tight")
     plt.close(fig)
 
@@ -622,7 +632,7 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, bottom: str, 
     ax.set_xlim(0, 100)
     ax.set_xlabel("p252 (percentile)")
     ax.set_ylabel("z60 (z-score)")
-    ax.set_title("Scatter — z60 vs p252 (Roll25 key series)")
+    ax.set_title("Scatter — z60 vs p252 (Roll25 key series)", pad=12)
 
     handles, labels = ax.get_legend_handles_labels()
     if labels:
@@ -631,7 +641,7 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, bottom: str, 
 
     fig_bottom_note(fig, bottom)
     fig_watermark(fig, watermark)
-    fig.tight_layout(rect=[0, 0.10, 1, 1])
+    fig.tight_layout(rect=[0, 0.10, 1, 0.96])
     fig.savefig(out_png, bbox_inches="tight")
     plt.close(fig)
 
@@ -647,7 +657,7 @@ def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, bottom: str, watermark:
         ax.text(0.01, 0.6, "No ret1% data available (all NA).", fontsize=14)
         fig_bottom_note(fig, bottom)
         fig_watermark(fig, watermark)
-        fig.tight_layout(rect=[0, 0.06, 1, 1])
+        fig.tight_layout(rect=[0, 0.06, 1, 0.94])
         fig.savefig(out_png, bbox_inches="tight")
         plt.close(fig)
         return
@@ -664,15 +674,15 @@ def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, bottom: str, watermark:
     ax.set_xticks(x)
     ax.set_xticklabels(d["label"].tolist(), rotation=0)
     ax.set_ylabel("|ret1%| (abs 1-day change, %)")
-    ax.set_title("Abs 1-day change — |ret1%| (only for non-suppressed series)")
+    ax.set_title("Abs 1-day change — |ret1%| (only for non-suppressed series)", pad=12)
 
     for xi, yi in zip(x, y):
         if not math.isnan(yi):
-            ax.text(xi, abs(yi) + 0.25, f"{yi:.3f}%", ha="center", va="bottom", fontsize=9)
+            ax.text(xi, abs(yi) + 0.25, f"{yi:.3f}%", ha="center", va="bottom", fontsize=9, clip_on=True)
 
     fig_bottom_note(fig, bottom)
     fig_watermark(fig, watermark)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    fig.tight_layout(rect=[0, 0.06, 1, 0.94])
     fig.savefig(out_png, bbox_inches="tight")
     plt.close(fig)
 
