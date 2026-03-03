@@ -19,6 +19,17 @@ Audit-first:
   * rolling z: (x-mean)/std, std uses ddof=0
   * rolling percentile p: ECDF percentile = 100*(n_less + 0.5*n_equal)/n
     (This matches your observed 95.833 for 60D and 99.008 for 252D style.)
+
+Charts:
+- 10_close_series.png
+- 11_trade_value_series.png
+- 12_trade_value_p252.png
+- 13_trade_value_z252.png
+- 14_amplitude_pct.png
+- 15_amplitude_p252.png
+- 16_close_p252.png          (added)
+- 17_trade_value_p60.png     (added)
+- roll25_chart_ready.csv
 """
 
 from __future__ import annotations
@@ -73,7 +84,6 @@ def rolling_z_and_p(series: np.ndarray, window: int) -> Tuple[np.ndarray, np.nda
     z = np.full(n, np.nan, dtype=float)
     p = np.full(n, np.nan, dtype=float)
 
-    # We compute using trailing windows of raw positions, but require enough non-NaNs.
     for i in range(n):
         start = max(0, i - window + 1)
         w = series[start : i + 1].astype(float)
@@ -198,7 +208,7 @@ def main() -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "13_trade_value_z252.png")
 
-    # 5) Amplitude pct + its p252 (two separate charts, keeps it clean)
+    # 5) Amplitude pct + its p252
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["amplitude_pct"])
     ax.set_title(f"amplitude_pct (as_of={asof})", pad=16)
@@ -213,6 +223,24 @@ def main() -> int:
     ax.set_ylim(0, 100)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "15_amplitude_p252.png")
+
+    # 6) (added) Close p252
+    fig, ax = plt.subplots(figsize=(11, 5))
+    ax.plot(df["date"], df["close_p252"])
+    ax.set_title(f"close percentile p252 (ECDF) (as_of={asof})", pad=16)
+    ax.set_ylabel("Percentile (0-100)")
+    ax.set_ylim(0, 100)
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    save_fig(fig, out_dir / "16_close_p252.png")
+
+    # 7) (added) Trade value p60
+    fig, ax = plt.subplots(figsize=(11, 5))
+    ax.plot(df["date"], df["tv_p60"])
+    ax.set_title(f"trade_value percentile p60 (ECDF) (as_of={asof})", pad=16)
+    ax.set_ylabel("Percentile (0-100)")
+    ax.set_ylim(0, 100)
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    save_fig(fig, out_dir / "17_trade_value_p60.png")
 
     # Optional: export a chart-ready CSV for manual edits
     csv_path = out_dir / "roll25_chart_ready.csv"
