@@ -13,10 +13,10 @@ Generate chart_ready.csv + standard charts for roll25_cache (TWSE turnover).
 - 浮水印固定在右上角（避免與頁尾碰撞）。
 - Scatter 圖例放在頁尾上方（figure-level），避免遮住點。
 - 長條圖預留 headroom，避免頂端數值與圖表標題擠在一起。
-- 04 圖改為「保留正負號」：Y 軸含正負方向，並畫出 y=0 基準線。
 
 重要提醒（避免誤導觀眾）：
 - TURNOVER 這裡使用的是 trade_value（成交金額，TWD），不是「成交量（張數）」。
+- pΔ60（本圖表用法）代表「|Δ1日| 的強度百分位」，不分漲跌方向。
 
 Outputs (to --out):
 - 00_font_smoketest.png
@@ -24,8 +24,8 @@ Outputs (to --out):
 - 01_rank252_overview.png
 - 02_rank60_jump_abs.png
 - 03_z60_vs_rank252_scatter.png
-- 04_ret1_signed_pct.png   (你目前 yml 需要的檔名)
-- 04_ret1_abs_pct.png      (額外保留一份舊檔名，避免其他引用壞掉)
+- 04_ret1_signed_pct.png   (保留正負號)
+- 04_ret1_abs_pct.png      (真正的 abs 版本：|ret1%|)
 """
 
 from __future__ import annotations
@@ -279,11 +279,16 @@ def load_points(cache_dir: Path) -> Tuple[List[Dict[str, Any]], Meta]:
 def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
     """
     Normalize points into a dataframe with columns:
-    date, turnover_twd, close, change, prev_close, pct_change_close, amplitude_pct
+    date, turnover_twd, close, change, prev_close, pct_change_close, amplitude_pct, high, low
 
     Audit-first:
     - Drop rows without parseable date (no silent coercion).
     - Sort ascending for plotting & strict adjacency computations.
+
+    補齊策略（重要更新）：
+    - pct_change_close：針對「缺值的列」逐列補齊（用 close/prev_close 計算），而非整欄全 NA 才補。
+    - amplitude_pct：針對「缺值的列」逐列補齊（用 (high-low)/denom 計算），而非整欄全 NA 才補。
+      denom 優先 prev_close，若缺則 fallback close。
     """
     date_keys = ["date", "Date", "d", "trade_date", "TradeDate", "交易日期", "日期"]
     turnover_keys = [
@@ -359,6 +364,7 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
                 prev_c = safe_float(p.get(k))
                 break
 
+        # prev_close 推導：若缺 prev_close 但有 close + change，則 prev_close = close - change
         if prev_c is None and c is not None and chg is not None:
             prev_c = c - chg
 
@@ -386,17 +392,35 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
 
     df = df.sort_values("date").reset_index(drop=True)
 
+    # 若 prev_close 仍缺，先用「前一日 close」補（用於最基本的回報率推導）
     df["prev_close"] = df["prev_close"].where(df["prev_close"].notna(), df["close"].shift(1))
 
-    if df["pct_change_close"].isna().all() and df["close"].notna().sum() >= 2:
-        denom = df["prev_close"]
-        ok = denom.notna() & (denom != 0) & df["close"].notna()
-        df.loc[ok, "pct_change_close"] = 100.0 * (df.loc[ok, "close"] / denom.loc[ok] - 1.0)
+    # -----------------------------
+    # (1) pct_change_close：逐列補齊缺值
+    # pct = 100 * (close/prev_close - 1)
+    # -----------------------------
+    denom_pc = df["prev_close"]
+    ok_pc = (
+        df["pct_change_close"].isna()
+        & df["close"].notna()
+        & denom_pc.notna()
+        & (denom_pc != 0)
+    )
+    df.loc[ok_pc, "pct_change_close"] = 100.0 * (df.loc[ok_pc, "close"] / denom_pc.loc[ok_pc] - 1.0)
 
-    if df["amplitude_pct"].isna().all():
-        denom = df["prev_close"].where(df["prev_close"].notna(), df["close"])
-        ok = df["high"].notna() & df["low"].notna() & denom.notna() & (denom != 0)
-        df.loc[ok, "amplitude_pct"] = 100.0 * (df.loc[ok, "high"] - df.loc[ok, "low"]) / denom.loc[ok]
+    # -----------------------------
+    # (2) amplitude_pct：逐列補齊缺值
+    # amp = 100 * (high-low)/denom, denom 優先 prev_close，否則 fallback close
+    # -----------------------------
+    denom_amp = df["prev_close"].where(df["prev_close"].notna(), df["close"])
+    ok_amp = (
+        df["amplitude_pct"].isna()
+        & df["high"].notna()
+        & df["low"].notna()
+        & denom_amp.notna()
+        & (denom_amp != 0)
+    )
+    df.loc[ok_amp, "amplitude_pct"] = 100.0 * (df.loc[ok_amp, "high"] - df.loc[ok_amp, "low"]) / denom_amp.loc[ok_amp]
 
     return df
 
@@ -412,6 +436,7 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = np.nan
 
+    # vol_multiplier_20：用「前 20 日（不含今天）」的成交金額均值當分母
     tv = df["turnover_twd"].astype(float)
     roll_mean_20_prev = tv.shift(1).rolling(window=20, min_periods=min_points_20).mean()
     df["vol_multiplier_20"] = tv / roll_mean_20_prev
@@ -435,7 +460,12 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
             return (float("nan"), float("nan"), "DOWNGRADED")
         return (zscore_ddof0(vals, v), tie_aware_percentile(vals, v), "OK")
 
-    def latest_delta_zp(series: pd.Series, n: int, v_today: float, v_prev: float) -> Tuple[float, float, str]:
+    def latest_delta_zp_abs(series: pd.Series, n: int, v_today: float, v_prev: float) -> Tuple[float, float, str]:
+        """
+        Δ強度（不分方向）：用 |Δ| 做排名。
+        deltas_win = |s_t - s_{t-1}| 的近 n 日視窗
+        d_today    = |v_today - v_prev|
+        """
         s = series.astype(float)
         deltas = np.abs(s - s.shift(1)).to_numpy(dtype=float)
         deltas = deltas[~np.isnan(deltas)]
@@ -472,7 +502,7 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
         if allow_delta:
             v_prev = safe_float(prev.get(col))
             v_prev = float("nan") if v_prev is None else float(v_prev)
-            zD60, pD60, cd = latest_delta_zp(df[col], 60, v, v_prev)
+            zD60, pD60, cd = latest_delta_zp_abs(df[col], 60, v, v_prev)
         else:
             zD60, pD60, cd = (float("nan"), float("nan"), "OK")
 
@@ -495,8 +525,8 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
                 "p60": p60,
                 "z252": z252,
                 "p252": p252,
-                "zΔ60": zD60,
-                "pΔ60": pD60,
+                "zΔ60": zD60,   # Δ強度（abs）
+                "pΔ60": pD60,   # Δ強度（abs）
                 "ret1%": r1,
                 "confidence": conf,
             }
@@ -578,8 +608,8 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, footer: str, waterma
         ax.set_xticks(x)
         ax.set_xticklabels(d["label_zh"].tolist(), rotation=0)
         ax.set_ylim(0, 105)
-        ax.set_ylabel("60日變動強度位階（pΔ60：|Δ1日| 在近60日中的百分位）")
-        ax.set_title("今日變動：60日變動強度位階（pΔ60）", pad=12)
+        ax.set_ylabel("60日變動強度位階（pΔ60：|Δ1日| 在近60日中的百分位；不分漲跌）")
+        ax.set_title("今日波動強度：60日位階（pΔ60，取 |Δ| 不分方向）", pad=12)
 
         for xi, yi in zip(x, y):
             if not math.isnan(yi):
@@ -671,6 +701,49 @@ def make_ret1_signed_pct(df_m: pd.DataFrame, out_png: Path, footer: str, waterma
     plt.close(fig)
 
 
+def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
+    """
+    真正的 abs 版本：y = |ret1%|，不分方向，只看幅度。
+    """
+    d = df_m.copy()
+    d = d[~d["ret1%"].isna()].copy()
+    d["label_zh"] = d["series"].map(series_label_zh)
+
+    fig = plt.figure(figsize=(12, 5.6), dpi=160)
+    ax = fig.add_subplot(111)
+
+    if d.empty:
+        ax.axis("off")
+        ax.text(0.01, 0.6, "目前沒有可用的 1 日變動幅度（%）資料（皆為 NA）。", fontsize=14)
+    else:
+        x = np.arange(len(d))
+        y_signed = d["ret1%"].to_numpy(dtype=float)
+        y = np.abs(y_signed)
+
+        ax.bar(x, y)
+        ax.set_xticks(x)
+        ax.set_xticklabels(d["label_zh"].tolist(), rotation=0)
+        ax.set_ylabel("1 日變動幅度（%）— 取 |ret1%|（不分方向）")
+        ax.set_title("1 日變動幅度（%）：成交金額 / 加權指數（非投資建議）", pad=12)
+
+        max_v = float(np.nanmax(y)) if len(y) else 0.0
+        if not np.isfinite(max_v) or max_v <= 0.0:
+            max_v = 1.0
+        pad = max_v * 0.22
+        ax.set_ylim(0.0, max_v + pad)
+
+        for xi, yi in zip(x, y):
+            if math.isnan(yi):
+                continue
+            ax.text(xi, yi + max_v * 0.04, f"{yi:.3f}%", ha="center", va="bottom", fontsize=10)
+
+    fig_footer_short(fig, footer)
+    fig_watermark_topright(fig, watermark)
+    fig.tight_layout(rect=[0, 0.06, 1, 0.98])
+    fig.savefig(out_png, bbox_inches="tight")
+    plt.close(fig)
+
+
 # -----------------------------
 # Main
 # -----------------------------
@@ -713,15 +786,13 @@ def main() -> int:
     make_rank60_jump_abs(df_m, out_dir / "02_rank60_jump_abs.png", footer, args.watermark)
     make_z60_vs_rank252_scatter(df_m, out_dir / "03_z60_vs_rank252_scatter.png", footer, args.watermark)
 
-    # ✅ 你目前 yml 需要的檔名（確保 mtime 會被更新）
+    # 04：兩種版本都輸出，且檔名語意一致
     make_ret1_signed_pct(df_m, out_dir / "04_ret1_signed_pct.png", footer, args.watermark)
-
-    # ✅ 同時保留舊檔名（避免其他引用壞掉；不需要可自行刪掉）
-    make_ret1_signed_pct(df_m, out_dir / "04_ret1_abs_pct.png", footer, args.watermark)
+    make_ret1_abs_pct(df_m, out_dir / "04_ret1_abs_pct.png", footer, args.watermark)
 
     print(f"[OK] out_dir={out_dir}")
     print(f"[OK] wrote: {chart_csv}")
-    print("[OK] wrote: 00..04 pngs (04 includes signed version; also wrote legacy name)")
+    print("[OK] wrote: 00..04 pngs (04 includes signed + abs)")
     print(f"[INFO] points_rows={len(df_points)} date_range={df_points['date'].iloc[0].date()}..{df_points['date'].iloc[-1].date()}")
     return 0
 
