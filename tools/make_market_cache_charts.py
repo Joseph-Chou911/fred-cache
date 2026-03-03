@@ -6,7 +6,7 @@ make_market_cache_charts.py
 
 Generate chart-ready CSV + standard charts from dashboard/DASHBOARD.md.
 
-Key goals:
+Design goals:
 - Avoid p60/p252 ambiguity by renaming to rank_* columns (safe for sharing / other AIs).
 - Robust markdown table extraction (find table containing Signal + Series).
 - CI Chinese tofu hard-fix:
@@ -14,10 +14,11 @@ Key goals:
   - Apply FontProperties at set_title/xlabel/ylabel/text creation time
   - Re-apply to axes objects before savefig (defensive)
 - Produce 4 charts + CSV + font smoketest.
-- Add annotations to ALL 4 charts:
-  - Threshold legend/notes
-  - Bar-end value labels
-  - Scatter threshold note + point labels (optional)
+- Annotations for ALL 4 charts without covering data:
+  - Put long rule notes BELOW the plot area (figure-level, not axes-level).
+  - Keep in-plot legend minimal.
+  - Add bar-end numeric labels.
+  - Scatter keeps point labels but avoids boxes inside axes.
 - Add watermark (generated_at_utc + sha7) to fight GitHub app PNG cache confusion.
 
 Outputs (to --out):
@@ -287,7 +288,7 @@ def ensure_outdir(outdir: Path) -> None:
 
 
 # -----------------------------
-# Annotation helpers
+# Figure annotation helpers
 # -----------------------------
 
 def legend_kwargs():
@@ -305,12 +306,41 @@ def add_watermark(fig, enabled: bool) -> None:
     fig.text(0.99, 0.01, text, ha="right", va="bottom", fontsize=9, fontproperties=CJK_FP)
 
 
+def add_bottom_note(fig, text: str) -> None:
+    """
+    Put a multi-line note BELOW axes using figure coordinates.
+    This never covers data points.
+    """
+    if not text.strip():
+        return
+    fig.text(
+        0.01, 0.01,
+        text,
+        ha="left",
+        va="bottom",
+        fontsize=10,
+        fontproperties=CJK_FP,
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", alpha=0.9),
+    )
+
+
+def finalize_figure(fig, ax, outpath: Path, bottom_note: str, watermark: bool) -> None:
+    """
+    Reserve bottom space for note + watermark, then save.
+    """
+    apply_cjk_to_axes(ax)
+    # Leave ~18% height at bottom for note/watermark.
+    fig.tight_layout(rect=[0.0, 0.18, 1.0, 1.0])
+
+    add_bottom_note(fig, bottom_note)
+    add_watermark(fig, watermark)
+
+    fig.savefig(outpath, dpi=200)
+    plt.close(fig)
+
+
 def add_bar_end_labels(ax, bars, fmt: str, x_pad_frac: float = 0.01) -> None:
-    """
-    Add numeric labels at the end of horizontal bars.
-    fmt examples: "{:.1f}%" / "{:.2f}" / "{:.1f}pp"
-    """
-    # Determine padding based on current x-range
+    """Add numeric labels at the end of horizontal bars."""
     xmin, xmax = ax.get_xlim()
     pad = (xmax - xmin) * x_pad_frac if xmax > xmin else 0.5
 
@@ -319,6 +349,7 @@ def add_bar_end_labels(ax, bars, fmt: str, x_pad_frac: float = 0.01) -> None:
         y = b.get_y() + b.get_height() / 2.0
         if pd.isna(w):
             continue
+
         ax.text(
             w + pad,
             y,
@@ -328,32 +359,6 @@ def add_bar_end_labels(ax, bars, fmt: str, x_pad_frac: float = 0.01) -> None:
             fontsize=10,
             fontproperties=CJK_FP,
         )
-
-
-def add_threshold_note_box(ax, text: str, loc: str = "upper left") -> None:
-    """
-    Add a small explanatory note box inside the axes.
-    loc: 'upper left' / 'upper right' / ...
-    """
-    xy = {
-        "upper left": (0.02, 0.98),
-        "upper right": (0.98, 0.98),
-        "lower left": (0.02, 0.02),
-        "lower right": (0.98, 0.02),
-    }.get(loc, (0.02, 0.98))
-
-    ha = "left" if "left" in loc else "right"
-    va = "top" if "upper" in loc else "bottom"
-
-    ax.text(
-        xy[0], xy[1],
-        text,
-        transform=ax.transAxes,
-        ha=ha, va=va,
-        fontsize=10,
-        fontproperties=CJK_FP,
-        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", alpha=0.9),
-    )
 
 
 # -----------------------------
@@ -374,40 +379,32 @@ def save_chart_rank252(
     d = df.copy().dropna(subset=["rank_252_obs_pct", "series"])
     if d.empty:
         return
-
     d = d.sort_values("rank_252_obs_pct", ascending=True)
 
     fig, ax = plt.subplots(figsize=(12, 6))
     bars = ax.barh(d["series"], d["rank_252_obs_pct"])
 
-    # thresholds
     ax.axvline(p_watch_lo, linestyle="--", label=f"WATCH {p_watch_lo:g}%")
     ax.axvline(p_watch_hi, linestyle="--", label=f"WATCH {p_watch_hi:g}%")
     ax.axvline(p_alert_lo, linestyle=":", label=f"ALERT {p_alert_lo:g}%")
 
     ax.set_xlim(0, 100)
-
     ax.set_xlabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"), fontproperties=CJK_FP)
     ax.set_title("長窗口位階總覽（近252筆）", fontproperties=CJK_FP)
 
-    # bar-end labels
     add_bar_end_labels(ax, bars, "{:.1f}%")
 
-    # legend + note
     ax.legend(loc="lower right", **legend_kwargs())
-    add_threshold_note_box(
-        ax,
-        "虛線：WATCH 門檻（5% / 95%）\n點線：ALERT 門檻（2%）\n條形末端：當前位階（%）",
-        loc="upper left",
-    )
 
-    apply_cjk_to_axes(ax)
     log_axes_fonts(ax, "rank252")
-    add_watermark(fig, watermark)
 
-    fig.tight_layout()
-    fig.savefig(outdir / "01_rank252_overview.png", dpi=200)
-    plt.close(fig)
+    bottom_note = (
+        "註解：\n"
+        f"• 條形末端＝當前位階（%）\n"
+        f"• 虛線＝WATCH 門檻（{p_watch_lo:g}% / {p_watch_hi:g}%）\n"
+        f"• 點線＝ALERT 門檻（{p_alert_lo:g}%）"
+    )
+    finalize_figure(fig, ax, outdir / "01_rank252_overview.png", bottom_note, watermark)
 
 
 def save_chart_rank60_jump_abs(
@@ -437,19 +434,15 @@ def save_chart_rank60_jump_abs(
     add_bar_end_labels(ax, bars, "{:.1f}pp")
 
     ax.legend(loc="lower right", **legend_kwargs())
-    add_threshold_note_box(
-        ax,
-        "條形：|Δ rank60|（百分位點）\n虛線：JUMP 門檻",
-        loc="upper left",
-    )
 
-    apply_cjk_to_axes(ax)
     log_axes_fonts(ax, "rank60_jump_abs")
-    add_watermark(fig, watermark)
 
-    fig.tight_layout()
-    fig.savefig(outdir / "02_rank60_jump_abs.png", dpi=200)
-    plt.close(fig)
+    bottom_note = (
+        "註解：\n"
+        "• 條形＝|Δ rank60|（百分位點）\n"
+        f"• 虛線＝JUMP 門檻（{jump_p_threshold:g}pp）"
+    )
+    finalize_figure(fig, ax, outdir / "02_rank60_jump_abs.png", bottom_note, watermark)
 
 
 def save_chart_scatter(
@@ -480,11 +473,11 @@ def save_chart_scatter(
                 r["z60"],
                 r["rank_252_obs_pct"],
                 str(r["series"]),
-                fontsize=9,
+                fontsize=10,
                 fontproperties=CJK_FP,
             )
 
-    # thresholds (WATCH: dashed, ALERT: dotted)
+    # thresholds
     ax.axhline(p_watch_lo, linestyle="--")
     ax.axhline(p_watch_hi, linestyle="--")
     ax.axhline(p_alert_lo, linestyle=":")
@@ -498,26 +491,22 @@ def save_chart_scatter(
     ax.set_ylabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"), fontproperties=CJK_FP)
     ax.set_title("z60 × 長窗口位階（快速定位『極端+位階』）", fontproperties=CJK_FP)
 
-    # Custom legend to avoid clutter
+    # Minimal legend
     handles = [
         Line2D([0], [0], linestyle="--", color="black", label=f"WATCH：|z|={extreme_z_watch:g}, p={p_watch_lo:g}/{p_watch_hi:g}"),
         Line2D([0], [0], linestyle=":", color="black", label=f"ALERT：|z|={extreme_z_alert:g}, p={p_alert_lo:g}"),
     ]
     ax.legend(handles=handles, loc="lower right", **legend_kwargs())
 
-    add_threshold_note_box(
-        ax,
-        "虛線：WATCH 門檻\n  • |z60| >= 2\n  • p252 <= 5 或 >= 95\n點線：ALERT 門檻\n  • |z60| >= 2.5\n  • p252 <= 2\n點標：各序列當前位置",
-        loc="upper left",
-    )
-
-    apply_cjk_to_axes(ax)
     log_axes_fonts(ax, "scatter")
-    add_watermark(fig, watermark)
 
-    fig.tight_layout()
-    fig.savefig(outdir / "03_z60_vs_rank252_scatter.png", dpi=200)
-    plt.close(fig)
+    bottom_note = (
+        "註解：\n"
+        "• 點標＝各序列當前位置\n"
+        f"• WATCH（虛線）：|z60|≥{extreme_z_watch:g} 或 p252≤{p_watch_lo:g} / ≥{p_watch_hi:g}\n"
+        f"• ALERT（點線）：|z60|≥{extreme_z_alert:g} 或 p252≤{p_alert_lo:g}"
+    )
+    finalize_figure(fig, ax, outdir / "03_z60_vs_rank252_scatter.png", bottom_note, watermark)
 
 
 def save_chart_ret1_abs(
@@ -529,10 +518,12 @@ def save_chart_ret1_abs(
     if "ret1_abs_pct" not in df.columns:
         return
 
+    # NOTE: this chart uses absolute change magnitude (|ret1|%),
+    # but we keep the signed value display if you want:
+    # Current df stores ret1_abs_pct = ret1%1d_absPrev from dashboard, which is already abs.
     d = df.copy().dropna(subset=["ret1_abs_pct", "series"])
     if d.empty:
         return
-
     d = d.sort_values("ret1_abs_pct", ascending=True)
 
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -540,25 +531,21 @@ def save_chart_ret1_abs(
 
     ax.axvline(jump_ret_threshold, linestyle="--", label=f"JUMP 門檻 {jump_ret_threshold:g}%")
 
-    ax.set_xlabel(ZH.get("ret1_abs_pct", "ret1_abs_pct"), fontproperties=CJK_FP)
+    ax.set_xlabel("單日變化幅度（%）", fontproperties=CJK_FP)
     ax.set_title("單日變動幅度總覽（|ret1|%）", fontproperties=CJK_FP)
 
     add_bar_end_labels(ax, bars, "{:.2f}%")
 
     ax.legend(loc="lower right", **legend_kwargs())
-    add_threshold_note_box(
-        ax,
-        "條形：|ret1|（%）\n虛線：JUMP 門檻",
-        loc="upper left",
-    )
 
-    apply_cjk_to_axes(ax)
     log_axes_fonts(ax, "ret1_abs")
-    add_watermark(fig, watermark)
 
-    fig.tight_layout()
-    fig.savefig(outdir / "04_ret1_abs_pct.png", dpi=200)
-    plt.close(fig)
+    bottom_note = (
+        "註解：\n"
+        "• 條形＝|ret1|（單日變化幅度，%）\n"
+        f"• 虛線＝JUMP 門檻（{jump_ret_threshold:g}%）"
+    )
+    finalize_figure(fig, ax, outdir / "04_ret1_abs_pct.png", bottom_note, watermark)
 
 
 # -----------------------------
@@ -613,7 +600,6 @@ def main() -> None:
     watermark = not args.no_watermark
     label_points = not args.no_point_labels
 
-    # 4 charts
     save_chart_rank252(
         df, outdir, watermark,
         p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi, p_alert_lo=args.p_alert_lo
