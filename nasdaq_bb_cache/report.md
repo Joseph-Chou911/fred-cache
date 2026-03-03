@@ -1,17 +1,17 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-03-02T15:26:18Z`
+- report_generated_at_utc: `2026-03-03T08:55:47Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-03-02 close=605.7000) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.115%; dist_to_upper=4.775%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
-- **VXN** (2026-02-27 close=24.5200) → **NORMAL_RANGE** (reason=default); z=1.1456; pos=0.744; bwΔ=1.08%; High-Vol tail (B) p90 runup=67.4% (n=54) (conf=LOW)
+- **QQQ** (2026-03-02 close=608.0900) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.483%; dist_to_upper=4.355%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
+- **VXN** (2026-03-02 close=25.4000) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.815)); z=1.3921; pos=0.815; bwΔ=1.72%; Pos-WATCH (C) p90 runup=58.1% (n=78) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-02T15:26:17Z`
-- data_as_of (meta.max_date): `2026-03-02`  | staleness_days: `0`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-03-03T08:55:46Z`
+- data_as_of (meta.max_date): `2026-03-02`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
 - trigger_reason: `default`
@@ -21,17 +21,17 @@
 | field | value |
 |---|---:|
 | date | `2026-03-02` |
-| close | `605.7000` |
-| bb_mid | `616.5256` |
-| bb_lower | `598.9462` |
-| bb_upper | `634.6210` |
-| z | `-1.2248` |
+| close | `608.0900` |
+| bb_mid | `616.5661` |
+| bb_lower | `599.0715` |
+| bb_upper | `634.5716` |
+| z | `-0.9618` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `1.115%` |
-| distance_to_upper_pct | `4.775%` |
-| position_in_band | `0.189` |
-| bandwidth_pct | `5.79%` |
-| bandwidth_delta_pct | `1.00%` |
+| distance_to_lower_pct | `1.483%` |
+| distance_to_upper_pct | `4.355%` |
+| position_in_band | `0.254` |
+| bandwidth_pct | `5.76%` |
+| bandwidth_delta_pct | `0.50%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
@@ -58,36 +58,36 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-02T15:26:18Z`
-- data_as_of (meta.max_date): `2026-02-27`  | staleness_days: `3`  | staleness_flag: **`HIGH`**
+- snippet.generated_at_utc: `2026-03-03T08:55:46Z`
+- data_as_of (meta.max_date): `2026-03-02`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
-- action_output: **`NORMAL_RANGE`**
-- trigger_reason: `default`
+- action_output: **`NEAR_UPPER_BAND (WATCH)`**
+- trigger_reason: `position_in_band>=0.8 (pos=0.815)`
 
 ### Latest
 
 | field | value |
 |---|---:|
-| date | `2026-02-27` |
-| close | `24.5200` |
-| bb_mid | `21.3776` |
-| bb_lower | `16.8259` |
-| bb_upper | `27.1606` |
-| z | `1.1456` |
+| date | `2026-03-02` |
+| close | `25.4000` |
+| bb_mid | `21.4407` |
+| bb_lower | `16.8077` |
+| bb_upper | `27.3508` |
+| z | `1.3921` |
 | trigger_z_le_-2 (A_lowvol) | `False` |
 | trigger_z_ge_2 (B_highvol) | `False` |
-| distance_to_lower_pct | `31.379%` |
-| distance_to_upper_pct | `10.769%` |
-| position_in_band | `0.744` |
-| bandwidth_pct | `48.34%` |
-| bandwidth_delta_pct | `1.08%` |
+| distance_to_lower_pct | `33.828%` |
+| distance_to_upper_pct | `7.680%` |
+| position_in_band | `0.815` |
+| bandwidth_pct | `49.17%` |
+| bandwidth_delta_pct | `1.72%` |
 | walk_upper_count | 0 |
 ### Historical simulation (conditional)
 
 #### C) Position-based WATCH (pos >= threshold)
 
-- confidence: **`LOW`** (staleness_flag=HIGH)
+- confidence: **`MED`** (sample_size=78 (30-79))
 
 | field | value |
 |---|---:|
@@ -108,7 +108,7 @@
 
 #### A) Low-Vol / Complacency (z <= threshold)
 
-- confidence: **`LOW`** (staleness_flag=HIGH)
+- confidence: **`LOW`** (sample_size=29 (<30))
 
 | field | value |
 |---|---:|
@@ -129,7 +129,7 @@
 
 #### B) High-Vol / Stress (z >= threshold)
 
-- confidence: **`LOW`** (staleness_flag=HIGH)
+- confidence: **`MED`** (sample_size=54 (30-79))
 
 | field | value |
 |---|---:|
