@@ -2806,7 +2806,7 @@
     "rows_kept": 400,
     "run_ts_utc": "2026-02-19T02:33:11Z",
     "ticker": "0050.TW",
-    "updated_at_utc": "2026-03-02T08:26:53Z"
+    "updated_at_utc": "2026-03-03T07:25:57Z"
   },
   "rows": [
     {
@@ -2897,6 +2897,16 @@
       "price_used": 80.3499984741211,
       "run_ts_utc": "2026-03-02T08:26:52Z",
       "state": "EXTREME_UPPER_BAND"
+    },
+    {
+      "as_of_last_date": "2026-03-03",
+      "bb_pos": 0.9268874253391177,
+      "bb_pos_raw": 0.9268874253391177,
+      "bb_z": 1.7075497013564718,
+      "day_key_local": "2026-03-03",
+      "price_used": 78.75,
+      "run_ts_utc": "2026-03-03T07:25:57Z",
+      "state": "NEAR_UPPER_BAND"
     }
   ]
 }
