@@ -7,7 +7,8 @@ make_market_cache_charts.py
 Generate chart-ready CSV + standard charts from dashboard/DASHBOARD.md.
 
 - Bar charts: legend stays inside (keep text short).
-- Scatter chart: NO in-axes annotation boxes; legend moved BELOW (figure-level) to avoid covering points.
+- Scatter chart: NO in-axes annotation boxes; NO extra legend box (avoid duplicated rules).
+  Use ONLY bottom_note for rule explanation.
 - Long rule notes are placed BELOW (figure-level bottom_note).
 - Watermark stays at bottom-right.
 
@@ -36,7 +37,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from matplotlib.ft2font import FT2Font
-from matplotlib.lines import Line2D
 
 
 # -----------------------------
@@ -300,23 +300,6 @@ def add_bottom_note(fig, text: str) -> None:
     )
 
 
-def add_figure_legend_below(fig, handles, *, x=0.99, y=0.12) -> None:
-    """
-    Figure-level legend placed below the plot area (NOT inside axes).
-    Put it on bottom-right by default.
-    """
-    leg = fig.legend(
-        handles=handles,
-        loc="lower right",
-        bbox_to_anchor=(x, y),
-        frameon=True,
-        **legend_kwargs(),
-    )
-    if CJK_FP is not None and leg is not None:
-        for t in leg.get_texts():
-            t.set_fontproperties(CJK_FP)
-
-
 def finalize_figure(
     fig, ax, outpath: Path, bottom_note: str, watermark: bool,
     rect: Optional[List[float]] = None
@@ -374,7 +357,6 @@ def save_chart_rank252(
     fig, ax = plt.subplots(figsize=(12, 6))
     bars = ax.barh(d["series"], d["rank_252_obs_pct"])
 
-    # Keep legend short but explicit (two ends belong to same WATCH concept)
     ax.axvline(p_watch_lo, linestyle="--", label=f"WATCH 低尾端≤{p_watch_lo:g}%")
     ax.axvline(p_watch_hi, linestyle="--", label=f"WATCH 高尾端≥{p_watch_hi:g}%")
     ax.axvline(p_alert_lo, linestyle=":", label=f"ALERT 低尾端≤{p_alert_lo:g}%")
@@ -463,7 +445,7 @@ def save_chart_scatter(
                 fontsize=10, fontproperties=CJK_FP
             )
 
-    # thresholds on axes
+    # thresholds on axes (no labels -> no legend)
     ax.axhline(p_watch_lo, linestyle="--")
     ax.axhline(p_watch_hi, linestyle="--")
     ax.axhline(p_alert_lo, linestyle=":")
@@ -477,21 +459,9 @@ def save_chart_scatter(
     ax.set_ylabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"), fontproperties=CJK_FP)
     ax.set_title("z60 × 長窗口位階（快速定位『極端+位階』）", fontproperties=CJK_FP)
 
-    # Figure-level legend BELOW (no in-axes legend)
-    handles = [
-        Line2D(
-            [0], [0], linestyle="--", color="black",
-            label=f"WATCH：|z60|≥{extreme_z_watch:g} 或 p252 低≤{p_watch_lo:g}%／高≥{p_watch_hi:g}%"
-        ),
-        Line2D(
-            [0], [0], linestyle=":", color="black",
-            label=f"ALERT：|z60|≥{extreme_z_alert:g} 或 p252 低≤{p_alert_lo:g}%"
-        ),
-    ]
-    add_figure_legend_below(fig, handles, x=0.99, y=0.12)
-
     log_axes_fonts(ax, "scatter")
 
+    # Use ONLY bottom_note to avoid duplicated rule box on bottom-right
     bottom_note = (
         "註解：\n"
         "• 點標＝各序列當前位置\n"
@@ -499,13 +469,13 @@ def save_chart_scatter(
         f"• ALERT（點線）：|z60|≥{extreme_z_alert:g} 或 p252 低尾端≤{p_alert_lo:g}%"
     )
 
-    # Reserve MORE bottom space (legend + note + watermark)
+    # Reserve bottom space for note + watermark (no extra legend needed)
     finalize_figure(
         fig, ax,
         outdir / "03_z60_vs_rank252_scatter.png",
         bottom_note,
         watermark,
-        rect=[0.0, 0.28, 1.0, 1.0],
+        rect=[0.0, 0.24, 1.0, 1.0],
     )
 
 
