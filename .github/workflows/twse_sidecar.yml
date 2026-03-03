@@ -70,6 +70,7 @@ jobs:
             "roll25_cache/charts/02_rank60_jump_abs.png"
             "roll25_cache/charts/03_z60_vs_rank252_scatter.png"
             "roll25_cache/charts/04_ret1_signed_pct.png"
+            "roll25_cache/charts/04_ret1_abs_pct.png"
           )
           manifest_file="roll25_cache/manifest.json"
 
@@ -232,6 +233,7 @@ jobs:
             "roll25_cache/charts/02_rank60_jump_abs.png"
             "roll25_cache/charts/03_z60_vs_rank252_scatter.png"
             "roll25_cache/charts/04_ret1_signed_pct.png"
+            "roll25_cache/charts/04_ret1_abs_pct.png"
           )
           manifest_file="roll25_cache/manifest.json"
 
