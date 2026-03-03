@@ -1,4 +1,4 @@
-name: Update TWSE sidecar (roll25 + latest_report + stats + report + manifest)
+name: Update TWSE sidecar (roll25 + latest_report + stats + report + charts + manifest)
 
 on:
   workflow_dispatch:
@@ -24,6 +24,9 @@ jobs:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.backfill_months == '' || github.event.inputs.backfill_months == '0'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      TZ: Asia/Taipei
+      AMP_MISMATCH_ABS_THRESHOLD: "0.01"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,28 +44,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests pandas numpy matplotlib
 
-      - name: Install system fonts (Noto CJK) for Matplotlib
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig
-          fc-cache -f -v
-          echo "[INFO] Font check (Noto CJK):"
-          fc-list | grep -i "noto.*cjk" | head -n 20 || true
-
       - name: Generate + sanity + report + charts + commit + manifest + push (retry-safe, no-rebase)
-        env:
-          TZ: Asia/Taipei
-          MPLCONFIGDIR: /tmp/matplotlib
-          AMP_MISMATCH_ABS_THRESHOLD: "0.01"
         run: |
           set -euo pipefail
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Ensure charts dir exists even before script runs (audit-friendly)
-          mkdir -p roll25_cache/charts
 
           data_files=(
             "roll25_cache/roll25.json"
@@ -74,7 +61,7 @@ jobs:
             "roll25_cache/charts/01_rank252_overview.png"
             "roll25_cache/charts/02_rank60_jump_abs.png"
             "roll25_cache/charts/03_z60_vs_rank252_scatter.png"
-            "roll25_cache/charts/04_ret1_abs_pct.png"
+            "roll25_cache/charts/04_ret1_signed_pct.png"
           )
           manifest_file="roll25_cache/manifest.json"
 
@@ -189,6 +176,11 @@ jobs:
       group: repo-writer-backfill
       cancel-in-progress: false
 
+    env:
+      TZ: Asia/Taipei
+      BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
+      AMP_MISMATCH_ABS_THRESHOLD: "0.01"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -206,28 +198,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests pandas numpy matplotlib
 
-      - name: Install system fonts (Noto CJK) for Matplotlib
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig
-          fc-cache -f -v
-          echo "[INFO] Font check (Noto CJK):"
-          fc-list | grep -i "noto.*cjk" | head -n 20 || true
-
       - name: Backfill + sanity + report + charts + commit + manifest + push (retry-safe, no-rebase)
-        env:
-          TZ: Asia/Taipei
-          MPLCONFIGDIR: /tmp/matplotlib
-          BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
-          AMP_MISMATCH_ABS_THRESHOLD: "0.01"
         run: |
           set -euo pipefail
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          mkdir -p roll25_cache/charts
 
           data_files=(
             "roll25_cache/roll25.json"
@@ -239,7 +215,7 @@ jobs:
             "roll25_cache/charts/01_rank252_overview.png"
             "roll25_cache/charts/02_rank60_jump_abs.png"
             "roll25_cache/charts/03_z60_vs_rank252_scatter.png"
-            "roll25_cache/charts/04_ret1_abs_pct.png"
+            "roll25_cache/charts/04_ret1_signed_pct.png"
           )
           manifest_file="roll25_cache/manifest.json"
 
@@ -268,7 +244,7 @@ jobs:
               --roll25 "roll25_cache/roll25.json" \
               --out "roll25_cache/report.md"
 
-            # 4) Render charts (local-only) -> roll25_cache/charts
+            # 4) Render charts (local-only)
             mkdir -p roll25_cache/charts
             python tools/make_roll25_cache_charts.py \
               --cache-dir "roll25_cache" \
