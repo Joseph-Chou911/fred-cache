@@ -1,22 +1,22 @@
 {
   "schema_version": "chart_manifest_v1",
   "script_fingerprint": "make_episode_charts@v1.1.headroom_fix",
-  "generated_at_utc": "2026-03-03T14:21:40Z",
+  "generated_at_utc": "2026-03-03T14:38:45Z",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-03-03",
   "data_as_of": "2026-03-02",
   "input_files": {
     "episode_pack": "video_pack/episode_pack.json",
-    "episode_pack_sha256": "3e260c52517203022856218b300ea8e36d877d9e871f8bc4a5f8bf574d03b072"
+    "episode_pack_sha256": "f86062d9beea6785326b2b3c2cf3cd0fb2584c0a1a18978d9a3131166cf64397"
   },
   "pack_build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
-  "pack_generated_at_local": "2026-03-03T22:21:38+08:00",
+  "pack_generated_at_local": "2026-03-03T22:38:43+08:00",
   "warnings": [],
   "charts": [
     {
       "file": "00_episode_snapshot.png",
       "path": "video_pack/charts_snapshot/00_episode_snapshot.png",
-      "sha256": "18466c18332ac5c2e0282360884ef26e4f69726b90f17b92e9c71ac547a8e2f9",
+      "sha256": "3037ad163b8603c315335ff5dfddeae5d3ca91523459d8a9a42e3dce342a6329",
       "dpi": 160,
       "size_inches": [
         8.0,
