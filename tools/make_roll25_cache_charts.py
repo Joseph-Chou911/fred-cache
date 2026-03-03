@@ -2,14 +2,22 @@
 # -*- coding: utf-8 -*-
 
 """
-make_roll25_cache_charts.py
+make_roll25_cache_charts.py  (PUBLIC version)
 
 Generate chart_ready.csv + standard charts for roll25_cache (TWSE turnover).
+
+Public-facing changes:
+- Remove "Roll25" from chart titles (keep repo/cache name unchanged).
+- Keep p252 / z60 / pΔ60, but add explicit definitions to avoid confusion:
+  - p252 = percentile rank within last ~252 trading days (NOT probability).
+  - z60  = standardized deviation vs last 60 days (NOT forecast).
+  - pΔ60 = percentile rank of today's |Δ1D| within last 60 (NOT forecast).
+- For "ret1%" chart: label as 1-day % change of Turnover/Index (NOT investment return).
 
 Template-compatible with make_market_cache_charts.py:
 - No in-axes annotation boxes (avoid covering data + avoid duplicate notes).
 - Legend moved to BELOW (figure-level) when needed.
-- Long audit notes placed BELOW (figure-level bottom_note).
+- Long notes placed BELOW (figure-level bottom_note).
 - Watermark stays at bottom-right.
 - Audit-first: if data missing/insufficient -> NA (no guessing).
 
@@ -400,7 +408,7 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
     - z-score uses ddof=0 population std.
     - percentile is tie-aware (less + 0.5*equal).
     - zΔ60/pΔ60 computed on ABS 1D change vs last 60 ABS deltas (strict adjacency).
-    - ret1% uses strict adjacency simple return.
+    - ret1% uses strict adjacency simple % change (NOT "investment return" in public charts).
     - Suppression policy (audit-friendly):
       PCT_CHANGE_CLOSE / AMPLITUDE_PCT / VOL_MULTIPLIER_20 suppress ret1% and zΔ60/pΔ60.
     """
@@ -423,7 +431,6 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
     prev = df.iloc[i - 1]
 
     def window_vals(series: pd.Series, n: int) -> np.ndarray:
-        # Keep time order; take trailing n
         vals = series.to_numpy(dtype=float)
         vals = vals[~np.isnan(vals)]
         if len(vals) == 0:
@@ -432,7 +439,6 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
 
     def latest_zp(series: pd.Series, n: int, v: float) -> Tuple[float, float, str]:
         vals = window_vals(series, n)
-        # conservative minimum: at least 10 points (or n if n<10)
         need = min(n, 10)
         if len(vals) < need:
             return (float("nan"), float("nan"), "DOWNGRADED")
@@ -456,7 +462,6 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
             return float("nan")
         return 100.0 * (v_today / v_prev - 1.0)
 
-    # Series definitions
     series_specs = [
         ("TURNOVER_TWD", "turnover_twd", True, True),
         ("CLOSE", "close", True, True),
@@ -510,6 +515,68 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
 
 
 # -----------------------------
+# Public-facing labels / notes
+# -----------------------------
+
+def label_public(series: str) -> str:
+    # Keep short (x-axis)
+    m = {
+        "TURNOVER_TWD": "TURNOVER",
+        "CLOSE": "INDEX",
+        "PCT_CHANGE_CLOSE": "INDEX_%CHG",
+        "AMPLITUDE_PCT": "AMPL_%",
+        "VOL_MULTIPLIER_20": "TURNOVERx20",
+    }
+    return m.get(series, series)
+
+
+def asof_phrase_public(meta: "Meta", latest_dt: Optional[str] = None) -> str:
+    """
+    Audience-friendly as-of phrase.
+    Avoid dumping internal audit flags, but keep the essential "as-of" + generation time.
+    """
+    s = f"Data as-of {meta.used_date}"
+    if meta.used_date_status == "DATA_NOT_UPDATED":
+        s += " (today not published yet; using latest available)"
+    elif meta.used_date_status and meta.used_date_status not in ("OK", "NA"):
+        s += f" ({meta.used_date_status})"
+    if latest_dt and latest_dt != meta.used_date:
+        s += f"; latest_row_date={latest_dt}"
+    if meta.data_age_days is not None:
+        s += f"; age_days={meta.data_age_days}"
+    s += f"; gen_utc={meta.generated_at_utc}"
+    return s
+
+
+def note_p252(meta: "Meta", latest_dt: str) -> str:
+    return (
+        f"{asof_phrase_public(meta, latest_dt)} | "
+        f"p252 = 1Y percentile rank within ~252 trading days (NOT probability)."
+    )
+
+
+def note_pdelta(meta: "Meta", latest_dt: str) -> str:
+    return (
+        f"{asof_phrase_public(meta, latest_dt)} | "
+        f"pΔ60 = percentile rank of today's |Δ1D| within last 60 (NOT forecast)."
+    )
+
+
+def note_scatter(meta: "Meta", latest_dt: str) -> str:
+    return (
+        f"{asof_phrase_public(meta, latest_dt)} | "
+        f"x=p252 (1Y rank), y=z60 (60D z-score deviation). Descriptive only (NOT forecast)."
+    )
+
+
+def note_1dchange(meta: "Meta", latest_dt: str) -> str:
+    return (
+        f"{asof_phrase_public(meta, latest_dt)} | "
+        f"1-day % change here is Turnover/Index day-to-day change (NOT investment return)."
+    )
+
+
+# -----------------------------
 # Plotting (template-compatible)
 # -----------------------------
 
@@ -524,20 +591,9 @@ def font_smoketest(out_png: Path) -> None:
     plt.close(fig)
 
 
-def short_label(series: str) -> str:
-    m = {
-        "TURNOVER_TWD": "TURNOVER",
-        "CLOSE": "CLOSE",
-        "PCT_CHANGE_CLOSE": "PCT_CHG",
-        "AMPLITUDE_PCT": "AMPL",
-        "VOL_MULTIPLIER_20": "VOLx20",
-    }
-    return m.get(series, series)
-
-
 def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, bottom: str, watermark: str) -> None:
     d = df_m.copy()
-    d["label"] = d["series"].map(short_label)
+    d["label"] = d["series"].map(label_public)
 
     fig = plt.figure(figsize=(10, 5.2), dpi=160)
     ax = fig.add_subplot(111)
@@ -549,10 +605,9 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, bottom: str, waterm
     ax.set_xticks(x)
     ax.set_xticklabels(d["label"].tolist(), rotation=0)
 
-    # Headroom + title padding: avoid value labels colliding with title/axes top
-    ax.set_ylim(0, 105)
-    ax.set_ylabel("p252 (percentile)")
-    ax.set_title("Roll25 Overview — p252 (Position in last ~252 trading days)", pad=14)
+    ax.set_ylim(0, 105)  # headroom for labels
+    ax.set_ylabel("1Y percentile rank (p252, 0-100)")
+    ax.set_title("TWSE Market Snapshot — 1Y Rank (p252)", pad=14)
 
     for xi, yi in zip(x, y):
         if not math.isnan(yi):
@@ -561,8 +616,6 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, bottom: str, waterm
 
     fig_bottom_note(fig, bottom)
     fig_watermark(fig, watermark)
-
-    # Leave some top margin for title + labels
     fig.tight_layout(rect=[0, 0.06, 1, 0.94])
     fig.savefig(out_png, bbox_inches="tight")
     plt.close(fig)
@@ -584,7 +637,7 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, bottom: str, waterma
         plt.close(fig)
         return
 
-    d["label"] = d["series"].map(short_label)
+    d["label"] = d["series"].map(label_public)
 
     fig = plt.figure(figsize=(10, 5.2), dpi=160)
     ax = fig.add_subplot(111)
@@ -595,10 +648,9 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, bottom: str, waterma
     ax.set_xticks(x)
     ax.set_xticklabels(d["label"].tolist(), rotation=0)
 
-    # Headroom + title padding: avoid value labels colliding with title/axes top
     ax.set_ylim(0, 105)
-    ax.set_ylabel("pΔ60 (percentile of |Δ1D| vs last 60)")
-    ax.set_title("Jump Rank — pΔ60 (Abs 1-day change vs last 60 trading days)", pad=14)
+    ax.set_ylabel("Shock rank (pΔ60, percentile of |Δ1D| within last 60)")
+    ax.set_title("Today's Move — 60D Shock Rank (pΔ60)", pad=14)
 
     for xi, yi in zip(x, y):
         if not math.isnan(yi):
@@ -607,8 +659,6 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, bottom: str, waterma
 
     fig_bottom_note(fig, bottom)
     fig_watermark(fig, watermark)
-
-    # Leave some top margin for title + labels
     fig.tight_layout(rect=[0, 0.06, 1, 0.94])
     fig.savefig(out_png, bbox_inches="tight")
     plt.close(fig)
@@ -616,12 +666,11 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, bottom: str, waterma
 
 def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, bottom: str, watermark: str) -> None:
     d = df_m.copy()
-    d["label"] = d["series"].map(short_label)
+    d["label"] = d["series"].map(label_public)
 
     fig = plt.figure(figsize=(10, 5.6), dpi=160)
     ax = fig.add_subplot(111)
 
-    # scatter each point; label via legend (no in-axes annotations)
     for _, row in d.iterrows():
         x = float(row["p252"]) if not pd.isna(row["p252"]) else float("nan")
         y = float(row["z60"]) if not pd.isna(row["z60"]) else float("nan")
@@ -630,9 +679,9 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, bottom: str, 
         ax.scatter([x], [y], label=row["label"])
 
     ax.set_xlim(0, 100)
-    ax.set_xlabel("p252 (percentile)")
-    ax.set_ylabel("z60 (z-score)")
-    ax.set_title("Scatter — z60 vs p252 (Roll25 key series)", pad=12)
+    ax.set_xlabel("1Y rank (p252 percentile)")
+    ax.set_ylabel("60D deviation (z60, z-score)")
+    ax.set_title("Short-term Deviation vs 1Y Rank (z60 vs p252)", pad=12)
 
     handles, labels = ax.get_legend_handles_labels()
     if labels:
@@ -654,7 +703,7 @@ def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, bottom: str, watermark:
         fig = plt.figure(figsize=(10, 4.8), dpi=160)
         ax = fig.add_subplot(111)
         ax.axis("off")
-        ax.text(0.01, 0.6, "No ret1% data available (all NA).", fontsize=14)
+        ax.text(0.01, 0.6, "No 1-day % change data available (all NA).", fontsize=14)
         fig_bottom_note(fig, bottom)
         fig_watermark(fig, watermark)
         fig.tight_layout(rect=[0, 0.06, 1, 0.94])
@@ -662,19 +711,24 @@ def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, bottom: str, watermark:
         plt.close(fig)
         return
 
-    d["label"] = d["series"].map(short_label)
+    d["label"] = d["series"].map(label_public)
 
     fig = plt.figure(figsize=(10, 5.2), dpi=160)
     ax = fig.add_subplot(111)
 
     x = np.arange(len(d))
     y = d["ret1%"].to_numpy(dtype=float)
+    y_abs = np.abs(y)
 
-    ax.bar(x, np.abs(y))
+    ax.bar(x, y_abs)
     ax.set_xticks(x)
     ax.set_xticklabels(d["label"].tolist(), rotation=0)
-    ax.set_ylabel("|ret1%| (abs 1-day change, %)")
-    ax.set_title("Abs 1-day change — |ret1%| (only for non-suppressed series)", pad=12)
+    ax.set_ylabel("1-day % change (abs, %) — NOT investment return")
+    ax.set_title("1-day % change — Turnover / Index (NOT investment return)", pad=12)
+
+    if np.isfinite(y_abs).any():
+        ymax = float(np.nanmax(y_abs))
+        ax.set_ylim(0, max(1.0, ymax * 1.12 + 0.5))  # headroom for labels
 
     for xi, yi in zip(x, y):
         if not math.isnan(yi):
@@ -697,7 +751,7 @@ def main() -> int:
     ap.add_argument("--out", default="out_roll25_charts", help="output directory")
     ap.add_argument("--min-points-volmult", type=int, default=15,
                     help="min points for vol_multiplier_20 avg(last20_before_today) (default: 15)")
-    ap.add_argument("--watermark", default="roll25_cache charts", help="watermark text")
+    ap.add_argument("--watermark", default="TWSE (cached) | public charts", help="watermark text")
     args = ap.parse_args()
 
     cache_dir = Path(args.cache_dir)
@@ -707,14 +761,12 @@ def main() -> int:
     points, meta = load_points(cache_dir)
     df_points = points_to_df(points)
 
+    latest_dt = pd.Timestamp(df_points["date"].iloc[-1]).normalize().strftime("%Y-%m-%d")
+
     # Determine effective used_date (prefer meta, fallback latest df date)
     used_dt = parse_date_any(meta.used_date) if meta.used_date else None
-    latest_dt = pd.Timestamp(df_points["date"].iloc[-1]).normalize()
     if used_dt is None:
-        meta.used_date = latest_dt.strftime("%Y-%m-%d")
-    else:
-        # If meta used_date mismatches latest date, keep meta but show mismatch in bottom note (audit visibility)
-        pass
+        meta.used_date = latest_dt
 
     # Build metrics table
     df_m = compute_metrics(df_points, min_points_20=args.min_points_volmult)
@@ -723,27 +775,20 @@ def main() -> int:
     chart_csv = out_dir / "chart_ready.csv"
     df_m.to_csv(chart_csv, index=False, encoding="utf-8")
 
-    # Bottom note & watermark
-    mismatch = ""
-    if meta.used_date and meta.used_date != latest_dt.strftime("%Y-%m-%d"):
-        mismatch = f" | latest_row_date={latest_dt.strftime('%Y-%m-%d')} (mismatch)"
-
-    bottom = (
-        f"UsedDate={meta.used_date} ({meta.used_date_status})"
-        f"{mismatch}; age_days={meta.data_age_days if meta.data_age_days is not None else 'NA'}; "
-        f"freshness_ok={meta.freshness_ok if meta.freshness_ok is not None else 'NA'}; "
-        f"mode={meta.mode if meta.mode else 'NA'}; ohlc={meta.ohlc_status if meta.ohlc_status else 'NA'}; "
-        f"src={meta.source}; gen_utc={meta.generated_at_utc}"
-    )
-
     # 00 smoketest
     font_smoketest(out_dir / "00_font_smoketest.png")
 
-    # Charts (template naming)
-    make_rank252_overview(df_m, out_dir / "01_rank252_overview.png", bottom, args.watermark)
-    make_rank60_jump_abs(df_m, out_dir / "02_rank60_jump_abs.png", bottom, args.watermark)
-    make_z60_vs_rank252_scatter(df_m, out_dir / "03_z60_vs_rank252_scatter.png", bottom, args.watermark)
-    make_ret1_abs_pct(df_m, out_dir / "04_ret1_abs_pct.png", bottom, args.watermark)
+    # Public bottom notes (chart-specific, to reduce misunderstanding)
+    b1 = note_p252(meta, latest_dt)
+    b2 = note_pdelta(meta, latest_dt)
+    b3 = note_scatter(meta, latest_dt)
+    b4 = note_1dchange(meta, latest_dt)
+
+    # Charts
+    make_rank252_overview(df_m, out_dir / "01_rank252_overview.png", b1, args.watermark)
+    make_rank60_jump_abs(df_m, out_dir / "02_rank60_jump_abs.png", b2, args.watermark)
+    make_z60_vs_rank252_scatter(df_m, out_dir / "03_z60_vs_rank252_scatter.png", b3, args.watermark)
+    make_ret1_abs_pct(df_m, out_dir / "04_ret1_abs_pct.png", b4, args.watermark)
 
     print(f"[OK] out_dir={out_dir}")
     print(f"[OK] wrote: {chart_csv}")
