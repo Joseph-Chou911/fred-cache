@@ -12,6 +12,7 @@ Public-facing tweaks:
 - Watermark moved to TOP-RIGHT (prevents collision with footer).
 - Scatter legend placed ABOVE footer (figure-level) to avoid overlap.
 - Bar charts: add headroom (ylim up to 105) so top labels don't collide.
+- Ret1 chart: KEEP SIGN (direction) and use symmetric y-axis around 0.
 
 Inputs:
 - Prefer: <CACHE_DIR>/roll25.json (points, newest-first)
@@ -23,7 +24,7 @@ Outputs (to --out):
 - 01_rank252_overview.png
 - 02_rank60_jump_abs.png
 - 03_z60_vs_rank252_scatter.png
-- 04_ret1_abs_pct.png
+- 04_ret1_abs_pct.png   (signed 1-day % change for TURNOVER/INDEX; NOT investment return)
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ import numpy as np
 import pandas as pd
 
 import matplotlib
+
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
@@ -134,6 +136,25 @@ def fig_watermark_topright(fig: plt.Figure, text: str) -> None:
 def fig_footer_short(fig: plt.Figure, text: str) -> None:
     # keep footer short; one line only
     fig.text(0.01, 0.012, text, ha="left", va="bottom", fontsize=9, alpha=0.85)
+
+
+# -----------------------------
+# Labels (public-facing)
+# -----------------------------
+
+def short_label(series_name: str) -> str:
+    """
+    Public-facing short labels for charts.
+    Keep it short for x-axis.
+    """
+    m = {
+        "TURNOVER": "TURNOVER",
+        "INDEX": "INDEX",
+        "INDEX_%CHG": "INDEX_%CHG",
+        "AMPL_%": "AMPL_%",
+        "TURNOVERx20": "TURNOVERx20",
+    }
+    return m.get(series_name, series_name)
 
 
 # -----------------------------
@@ -514,6 +535,7 @@ def font_smoketest(out_png: Path) -> None:
 
 def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     d = df_m.copy()
+    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 5.6), dpi=160)
     ax = fig.add_subplot(111)
@@ -523,7 +545,7 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, footer: str, waterm
 
     ax.bar(x, y)
     ax.set_xticks(x)
-    ax.set_xticklabels(d["series"].tolist(), rotation=0)
+    ax.set_xticklabels(d["label"].tolist(), rotation=0)
     ax.set_ylim(0, 105)  # headroom for value labels
     ax.set_ylabel("1Y percentile rank (p252, 0-100)")
     ax.set_title("TWSE Market Snapshot — 1Y Rank (p252)", pad=12)
@@ -542,6 +564,7 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, footer: str, waterm
 def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     d = df_m.copy()
     d = d[~d["pΔ60"].isna()].copy()
+    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 5.6), dpi=160)
     ax = fig.add_subplot(111)
@@ -555,7 +578,7 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, footer: str, waterma
 
         ax.bar(x, y)
         ax.set_xticks(x)
-        ax.set_xticklabels(d["series"].tolist(), rotation=0)
+        ax.set_xticklabels(d["label"].tolist(), rotation=0)
         ax.set_ylim(0, 105)
         ax.set_ylabel("Shock rank (pΔ60, percentile of |Δ1D| within last 60)")
         ax.set_title("Today's Move — 60D Shock Rank (pΔ60)", pad=12)
@@ -573,6 +596,7 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, footer: str, waterma
 
 def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     d = df_m.copy()
+    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 6.2), dpi=160)
     ax = fig.add_subplot(111)
@@ -582,7 +606,7 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
         y = float(row["z60"]) if not pd.isna(row["z60"]) else float("nan")
         if math.isnan(x) or math.isnan(y):
             continue
-        ax.scatter([x], [y], label=str(row["series"]))
+        ax.scatter([x], [y], label=str(row["label"]))
 
     ax.set_xlim(0, 100)
     ax.set_xlabel("1Y rank (p252 percentile)")
@@ -608,8 +632,15 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
 
 
 def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
+    """
+    Public-facing:
+    - Keep SIGN (direction) for ret1% (TURNOVER/INDEX only).
+    - Symmetric y-axis around 0.
+    - Draw 0 baseline.
+    """
     d = df_m.copy()
     d = d[~d["ret1%"].isna()].copy()
+    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 5.6), dpi=160)
     ax = fig.add_subplot(111)
@@ -619,17 +650,33 @@ def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark:
         ax.text(0.01, 0.6, "No 1-day % change data available (all NA).", fontsize=14)
     else:
         x = np.arange(len(d))
-        y = d["ret1%"].to_numpy(dtype=float)
+        y = d["ret1%"].to_numpy(dtype=float)  # <-- keep sign (NO abs)
 
-        ax.bar(x, np.abs(y))
+        ax.bar(x, y)
+        ax.axhline(0.0, linewidth=1.0, alpha=0.6)
+
         ax.set_xticks(x)
-        ax.set_xticklabels(d["series"].tolist(), rotation=0)
-        ax.set_ylabel("1-day % change (abs, %) — descriptive only")
+        ax.set_xticklabels(d["label"].tolist(), rotation=0)
+        ax.set_ylabel("1-day % change (signed, %) — descriptive only")
         ax.set_title("1-day % change — Turnover / Index (NOT investment return)", pad=12)
 
+        # symmetric y-limits around 0 to show +/- clearly
+        if np.isfinite(y).any():
+            max_abs = float(np.nanmax(np.abs(y)))
+        else:
+            max_abs = 1.0
+        max_abs = max(max_abs, 0.5)  # avoid too-tight range when near 0
+        pad = max(0.6, 0.12 * max_abs)  # headroom for labels
+        ax.set_ylim(-max_abs - pad, max_abs + pad)
+
+        # value labels: above for +, below for -
         for xi, yi in zip(x, y):
-            if not math.isnan(yi):
-                ax.text(xi, abs(yi) + 0.25, f"{yi:.3f}%", ha="center", va="bottom", fontsize=10)
+            if math.isnan(yi):
+                continue
+            if yi >= 0:
+                ax.text(xi, yi + 0.06 * (max_abs + pad), f"{yi:.3f}%", ha="center", va="bottom", fontsize=10)
+            else:
+                ax.text(xi, yi - 0.06 * (max_abs + pad), f"{yi:.3f}%", ha="center", va="top", fontsize=10)
 
     fig_footer_short(fig, footer)
     fig_watermark_topright(fig, watermark)
