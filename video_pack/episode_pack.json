@@ -1,8 +1,8 @@
 {
   "schema_version": "episode_pack_schema_v1",
   "build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
-  "generated_at_utc": "2026-03-03T12:42:16Z",
-  "generated_at_local": "2026-03-03T20:42:16+08:00",
+  "generated_at_utc": "2026-03-03T12:46:43Z",
+  "generated_at_local": "2026-03-03T20:46:43+08:00",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-03-03",
   "inputs": {
@@ -1668,8 +1668,8 @@
     }
   },
   "meta_env": {
-    "GITHUB_SHA": "2955f5bfd0369495d59320e4598c1b4fb3f299e7",
-    "GITHUB_RUN_ID": "22623476610",
+    "GITHUB_SHA": "5685e42c963922263a9e576415ad5ae109ea1c1a",
+    "GITHUB_RUN_ID": "22623636003",
     "GITHUB_WORKFLOW": "build-video-pack (roll25 + margin + tw0050_bb) - manual",
     "GITHUB_REF_NAME": "main",
     "GITHUB_REPOSITORY": "Joseph-Chou911/fred-cache"
