@@ -18,17 +18,16 @@ Audit-first:
   * amplitude_pct: (high-low)/prev_close * 100
   * rolling z: (x-mean)/std, std uses ddof=0
   * rolling percentile p: ECDF percentile = 100*(n_less + 0.5*n_equal)/n
-    (This matches your observed 95.833 for 60D and 99.008 for 252D style.)
 
 Charts:
 - 10_close_series.png
 - 11_trade_value_series.png
-- 12_trade_value_p252.png
+- 12_trade_value_p252.png          (+ ref lines + last value)
 - 13_trade_value_z252.png
 - 14_amplitude_pct.png
-- 15_amplitude_p252.png
-- 16_close_p252.png          (added)
-- 17_trade_value_p60.png     (added)
+- 15_amplitude_p252.png            (+ ref lines + last value)
+- 16_close_p252.png                (+ ref lines + last value)
+- 17_trade_value_p60.png           (+ ref lines + last value)
 - roll25_chart_ready.csv
 """
 
@@ -45,6 +44,9 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
+
+
+PERCENTILE_GUIDES = [50, 80, 90, 95, 99]
 
 
 def load_roll25_json(path: str) -> List[Dict[str, Any]]:
@@ -106,6 +108,55 @@ def rolling_z_and_p(series: np.ndarray, window: int) -> Tuple[np.ndarray, np.nda
             p[i] = pp
 
     return z, p
+
+
+def add_percentile_guides(ax) -> None:
+    """
+    Add horizontal reference lines for percentiles: 50/80/90/95/99.
+    Keep them subtle to avoid overpowering the main series.
+    """
+    for lvl in PERCENTILE_GUIDES:
+        ax.axhline(lvl, linewidth=0.8, alpha=0.25)
+
+
+def annotate_last_value(ax, x: pd.Series, y: pd.Series, fmt: str = "{:.1f}") -> None:
+    """
+    Mark + label the last NON-NaN point of a series.
+    - Adds a small marker at the last point.
+    - Adds a short text label with the numeric value.
+    """
+    if x is None or y is None:
+        return
+    xs = pd.to_datetime(x, errors="coerce")
+    ys = pd.to_numeric(y, errors="coerce")
+
+    valid = (~xs.isna()) & (~ys.isna())
+    if not bool(valid.any()):
+        return
+
+    last_idx = valid[valid].index[-1]
+    x_last = xs.loc[last_idx]
+    y_last = float(ys.loc[last_idx])
+
+    # marker
+    ax.plot([x_last], [y_last], marker="o", markersize=4)
+
+    # label offset: if near the top (e.g., 98~100), place label downward.
+    if y_last >= 95:
+        xytext = (6, -10)
+        va = "top"
+    else:
+        xytext = (6, 10)
+        va = "bottom"
+
+    ax.annotate(
+        fmt.format(y_last),
+        xy=(x_last, y_last),
+        xytext=xytext,
+        textcoords="offset points",
+        ha="left",
+        va=va,
+    )
 
 
 def main() -> int:
@@ -191,9 +242,11 @@ def main() -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "11_trade_value_series.png")
 
-    # 3) Trade value p252
+    # 3) Trade value p252  (+ guides + last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_p252"])
+    add_percentile_guides(ax)
+    annotate_last_value(ax, df["date"], df["tv_p252"])
     ax.set_title(f"trade_value percentile p252 (ECDF) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile (0-100)")
     ax.set_ylim(0, 100)
@@ -208,7 +261,7 @@ def main() -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "13_trade_value_z252.png")
 
-    # 5) Amplitude pct + its p252
+    # 5) Amplitude pct
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["amplitude_pct"])
     ax.set_title(f"amplitude_pct (as_of={asof})", pad=16)
@@ -216,26 +269,33 @@ def main() -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "14_amplitude_pct.png")
 
+    # 6) Amplitude p252  (+ guides + last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["amp_p252"])
+    add_percentile_guides(ax)
+    annotate_last_value(ax, df["date"], df["amp_p252"])
     ax.set_title(f"amplitude percentile p252 (ECDF) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile (0-100)")
     ax.set_ylim(0, 100)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "15_amplitude_p252.png")
 
-    # 6) (added) Close p252
+    # 7) Close p252  (+ guides + last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["close_p252"])
+    add_percentile_guides(ax)
+    annotate_last_value(ax, df["date"], df["close_p252"])
     ax.set_title(f"close percentile p252 (ECDF) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile (0-100)")
     ax.set_ylim(0, 100)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "16_close_p252.png")
 
-    # 7) (added) Trade value p60
+    # 8) Trade value p60  (+ guides + last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_p60"])
+    add_percentile_guides(ax)
+    annotate_last_value(ax, df["date"], df["tv_p60"])
     ax.set_title(f"trade_value percentile p60 (ECDF) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile (0-100)")
     ax.set_ylim(0, 100)
