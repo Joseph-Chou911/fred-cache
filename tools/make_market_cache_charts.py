@@ -16,9 +16,9 @@ Design goals:
 - Produce 4 charts + CSV + font smoketest.
 - Annotations for ALL 4 charts without covering data:
   - Put long rule notes BELOW the plot area (figure-level, not axes-level).
-  - Keep in-plot legend minimal.
+  - Keep in-plot legend minimal for bar charts.
+  - Scatter legend is moved OUTSIDE (right side) to avoid covering points.
   - Add bar-end numeric labels.
-  - Scatter keeps point labels but avoids boxes inside axes.
 - Add watermark (generated_at_utc + sha7) to fight GitHub app PNG cache confusion.
 
 Outputs (to --out):
@@ -324,13 +324,20 @@ def add_bottom_note(fig, text: str) -> None:
     )
 
 
-def finalize_figure(fig, ax, outpath: Path, bottom_note: str, watermark: bool) -> None:
+def finalize_figure(fig, ax, outpath: Path, bottom_note: str, watermark: bool,
+                    tight_rect: Optional[List[float]] = None) -> None:
     """
     Reserve bottom space for note + watermark, then save.
+    tight_rect:
+      - default: [0.0, 0.18, 1.0, 1.0]
+      - scatter (legend outside): use a smaller right boundary, e.g. [0.0, 0.18, 0.80, 1.0]
     """
     apply_cjk_to_axes(ax)
-    # Leave ~18% height at bottom for note/watermark.
-    fig.tight_layout(rect=[0.0, 0.18, 1.0, 1.0])
+
+    if tight_rect is None:
+        tight_rect = [0.0, 0.18, 1.0, 1.0]
+
+    fig.tight_layout(rect=tight_rect)
 
     add_bottom_note(fig, bottom_note)
     add_watermark(fig, watermark)
@@ -384,6 +391,7 @@ def save_chart_rank252(
     fig, ax = plt.subplots(figsize=(12, 6))
     bars = ax.barh(d["series"], d["rank_252_obs_pct"])
 
+    # legend: keep minimal + short (thresholds only)
     ax.axvline(p_watch_lo, linestyle="--", label=f"WATCH {p_watch_lo:g}%")
     ax.axvline(p_watch_hi, linestyle="--", label=f"WATCH {p_watch_hi:g}%")
     ax.axvline(p_alert_lo, linestyle=":", label=f"ALERT {p_alert_lo:g}%")
@@ -394,13 +402,14 @@ def save_chart_rank252(
 
     add_bar_end_labels(ax, bars, "{:.1f}%")
 
+    # legend stays in-plot (as requested)
     ax.legend(loc="lower right", **legend_kwargs())
 
     log_axes_fonts(ax, "rank252")
 
     bottom_note = (
         "註解：\n"
-        f"• 條形末端＝當前位階（%）\n"
+        "• 條形末端＝當前位階（%）\n"
         f"• 虛線＝WATCH 門檻（{p_watch_lo:g}% / {p_watch_hi:g}%）\n"
         f"• 點線＝ALERT 門檻（{p_alert_lo:g}%）"
     )
@@ -426,13 +435,14 @@ def save_chart_rank60_jump_abs(
     fig, ax = plt.subplots(figsize=(12, 6))
     bars = ax.barh(d["series"], d["abs_rank60_jump_pp"])
 
-    ax.axvline(jump_p_threshold, linestyle="--", label=f"JUMP 門檻 {jump_p_threshold:g}pp")
+    ax.axvline(jump_p_threshold, linestyle="--", label=f"JUMP {jump_p_threshold:g}pp")
 
     ax.set_xlabel("近60位階變化（百分位點，|Δ|）", fontproperties=CJK_FP)
     ax.set_title("短窗口跳動強度（近60位階變化）", fontproperties=CJK_FP)
 
     add_bar_end_labels(ax, bars, "{:.1f}pp")
 
+    # legend stays in-plot (as requested)
     ax.legend(loc="lower right", **legend_kwargs())
 
     log_axes_fonts(ax, "rank60_jump_abs")
@@ -464,7 +474,7 @@ def save_chart_scatter(
     if d.empty:
         return
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(11, 6))  # slightly wider to accommodate outside legend
     ax.scatter(d["z60"], d["rank_252_obs_pct"])
 
     if label_points:
@@ -491,12 +501,21 @@ def save_chart_scatter(
     ax.set_ylabel(ZH.get("rank_252_obs_pct", "rank_252_obs_pct"), fontproperties=CJK_FP)
     ax.set_title("z60 × 長窗口位階（快速定位『極端+位階』）", fontproperties=CJK_FP)
 
-    # Minimal legend
+    # Minimal legend (MOVED OUTSIDE to avoid covering points)
     handles = [
-        Line2D([0], [0], linestyle="--", color="black", label=f"WATCH：|z|={extreme_z_watch:g}, p={p_watch_lo:g}/{p_watch_hi:g}"),
-        Line2D([0], [0], linestyle=":", color="black", label=f"ALERT：|z|={extreme_z_alert:g}, p={p_alert_lo:g}"),
+        Line2D([0], [0], linestyle="--", color="black",
+               label=f"WATCH：|z|={extreme_z_watch:g}, p={p_watch_lo:g}/{p_watch_hi:g}"),
+        Line2D([0], [0], linestyle=":", color="black",
+               label=f"ALERT：|z|={extreme_z_alert:g}, p={p_alert_lo:g}"),
     ]
-    ax.legend(handles=handles, loc="lower right", **legend_kwargs())
+    # Put legend OUTSIDE (right)
+    ax.legend(
+        handles=handles,
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        borderaxespad=0.0,
+        **legend_kwargs(),
+    )
 
     log_axes_fonts(ax, "scatter")
 
@@ -506,7 +525,15 @@ def save_chart_scatter(
         f"• WATCH（虛線）：|z60|≥{extreme_z_watch:g} 或 p252≤{p_watch_lo:g} / ≥{p_watch_hi:g}\n"
         f"• ALERT（點線）：|z60|≥{extreme_z_alert:g} 或 p252≤{p_alert_lo:g}"
     )
-    finalize_figure(fig, ax, outdir / "03_z60_vs_rank252_scatter.png", bottom_note, watermark)
+
+    # Leave right space for outside legend + leave bottom for note/watermark
+    finalize_figure(
+        fig, ax,
+        outdir / "03_z60_vs_rank252_scatter.png",
+        bottom_note,
+        watermark,
+        tight_rect=[0.0, 0.18, 0.78, 1.0],  # right boundary < 1.0 to reserve legend area
+    )
 
 
 def save_chart_ret1_abs(
@@ -518,9 +545,6 @@ def save_chart_ret1_abs(
     if "ret1_abs_pct" not in df.columns:
         return
 
-    # NOTE: this chart uses absolute change magnitude (|ret1|%),
-    # but we keep the signed value display if you want:
-    # Current df stores ret1_abs_pct = ret1%1d_absPrev from dashboard, which is already abs.
     d = df.copy().dropna(subset=["ret1_abs_pct", "series"])
     if d.empty:
         return
@@ -529,13 +553,14 @@ def save_chart_ret1_abs(
     fig, ax = plt.subplots(figsize=(12, 6))
     bars = ax.barh(d["series"], d["ret1_abs_pct"])
 
-    ax.axvline(jump_ret_threshold, linestyle="--", label=f"JUMP 門檻 {jump_ret_threshold:g}%")
+    ax.axvline(jump_ret_threshold, linestyle="--", label=f"JUMP {jump_ret_threshold:g}%")
 
     ax.set_xlabel("單日變化幅度（%）", fontproperties=CJK_FP)
     ax.set_title("單日變動幅度總覽（|ret1|%）", fontproperties=CJK_FP)
 
     add_bar_end_labels(ax, bars, "{:.2f}%")
 
+    # legend stays in-plot (as requested)
     ax.legend(loc="lower right", **legend_kwargs())
 
     log_axes_fonts(ax, "ret1_abs")
