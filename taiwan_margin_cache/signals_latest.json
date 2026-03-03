@@ -1,7 +1,7 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-03-03T15:13:04Z",
+  "generated_at_utc": "2026-03-03T23:12:25Z",
   "generated_at_local": null,
   "data_date": "2026-03-03",
   "state": "中性",
@@ -202,14 +202,14 @@
     "path": "roll25_cache/latest_report.json",
     "ok": true,
     "error": null,
-    "used_date": "2026-03-02",
+    "used_date": "2026-03-03",
     "used_date_status": "DATA_NOT_UPDATED",
     "risk_level_display": "中(derived)（stale）",
     "risk_level_raw": "NA",
     "tag": "WEEKDAY",
     "is_heated": true,
     "lookback_note": null,
-    "strict_same_day": false,
+    "strict_same_day": true,
     "strict_not_stale": false,
     "strict_roll_match": false
   },
@@ -221,15 +221,19 @@
     "ok_latest": true,
     "ok_history": true,
     "latest": {
-      "data_date": null,
-      "maint_ratio_pct": null,
-      "maint_ratio_1d_delta_pctpt": null,
-      "maint_ratio_1d_pct_change": null,
-      "trend_note": "maint_latest.maint_ratio_pct missing/non-numeric"
+      "data_date": "2026-03-03",
+      "maint_ratio_pct": 182.484684,
+      "maint_ratio_1d_delta_pctpt": -7.124659000000008,
+      "maint_ratio_1d_pct_change": -3.7575463778702134,
+      "trend_note": "trend_from: today=182.484684(2026-03-03), prev=189.609343(2026-03-02)"
     },
     "history": {
-      "rows": 17,
+      "rows": 18,
       "head5": [
+        [
+          "2026-03-03",
+          182.484684
+        ],
         [
           "2026-03-02",
           189.609343
@@ -245,10 +249,6 @@
         [
           "2026-02-24",
           188.694745
-        ],
-        [
-          "2026-02-23",
-          183.899292
         ]
       ]
     }
