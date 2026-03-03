@@ -1,7 +1,7 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-03-03T02:03:17Z",
-  "generated_at_local": "2026-03-03T10:03:17.364234+08:00",
+  "generated_at_utc": "2026-03-03T02:45:30Z",
+  "generated_at_local": "2026-03-03T10:45:30.393229+08:00",
   "timezone": "Asia/Taipei",
   "used_date": "2026-03-02",
   "run_day_tag": "WEEKDAY",
