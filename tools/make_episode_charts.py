@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 TZ_NAME_DEFAULT = "Asia/Taipei"
 MANIFEST_SCHEMA = "chart_manifest_v1"
-SCRIPT_FINGERPRINT = "make_episode_charts@v1.snapshot_plus_manifest"
+SCRIPT_FINGERPRINT = "make_episode_charts@v1.1.headroom_fix"
 
 
 # -----------------------------
@@ -145,6 +145,51 @@ def set_font_defaults() -> None:
         "DejaVu Sans",
     ]
     plt.rcParams["axes.unicode_minus"] = False
+
+
+def _set_ylim_with_headroom(ax: plt.Axes, values: List[float], *, pct_like: bool = False, ratio: float = 0.10) -> None:
+    """
+    Prevent value-labels from colliding with title by keeping labels inside axes.
+    - pct_like=True: default y-limit is [0, 110] (not [0, 100])
+    - otherwise: expand ymax by (1+ratio)
+    """
+    if not values:
+        return
+
+    ymin, ymax = ax.get_ylim()
+    vmin = min(values)
+    vmax = max(values)
+
+    if pct_like:
+        # fixed, readable headroom for percentiles (0~100)
+        ax.set_ylim(0, 110)
+        return
+
+    # general case
+    base_top = max(ymax, vmax)
+    if base_top == 0:
+        ax.set_ylim(ymin, 1)
+    else:
+        ax.set_ylim(min(ymin, vmin), base_top * (1.0 + ratio))
+
+
+def _bar_label_safe(ax: plt.Axes, bars, *, fmt: str, fontsize: int = 9, padding: int = 3) -> None:
+    """
+    Use bar_label if available; fall back to manual text.
+    """
+    if hasattr(ax, "bar_label"):
+        ax.bar_label(bars, fmt=fmt, padding=padding, fontsize=fontsize)
+        return
+
+    # Fallback (older matplotlib)
+    try:
+        for b in bars:
+            h = float(b.get_height())
+            x = b.get_x() + b.get_width() / 2
+            ax.text(x, h, fmt % h, ha="center", va="bottom", fontsize=fontsize)
+    except Exception:
+        # best-effort only
+        return
 
 
 # -----------------------------
@@ -260,8 +305,8 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
 
 def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
     raw_r25 = deep_get(pack, "raw.roll25") or {}
-    # From stats_latest.json style:
-    # series.trade_value.win60.p, series.trade_value.win252.p, series.close.win252.p, series.amplitude_pct.win60.p, series.amplitude_pct.win252.p
+    # series.trade_value.win60.p, series.trade_value.win252.p, series.close.win252.p,
+    # series.amplitude_pct.win60.p, series.amplitude_pct.win252.p
     items: List[Tuple[str, Optional[float]]] = [
         ("trade_value p60", deep_get(raw_r25, "series.trade_value.win60.p")),
         ("trade_value p252", deep_get(raw_r25, "series.trade_value.win252.p")),
@@ -269,8 +314,9 @@ def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: in
         ("amplitude p60", deep_get(raw_r25, "series.amplitude_pct.win60.p")),
         ("amplitude p252", deep_get(raw_r25, "series.amplitude_pct.win252.p")),
     ]
-    labels = []
-    values = []
+
+    labels: List[str] = []
+    values: List[float] = []
     for k, v in items:
         if isinstance(v, (int, float)):
             labels.append(k)
@@ -281,18 +327,24 @@ def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: in
 
     fig = plt.figure(figsize=(8, 4.5))
     ax = fig.add_subplot(111)
-    ax.bar(labels, values)
-    ax.set_ylim(0, 100)
-    ax.set_ylabel("Percentile (0-100)")
-    asof = deep_get(raw_r25, "used_date") or deep_get(raw_r25, "series.trade_value.asof") or "N/A"
-    ax.set_title(f"roll25 percentiles (as_of={asof})")
 
-    # label numbers on top (no boxes)
-    for i, v in enumerate(values):
-        ax.text(i, v + 1.5, f"{v:.1f}", ha="center", va="bottom", fontsize=9)
+    bars = ax.bar(labels, values)
+
+    # IMPORTANT FIX:
+    # - Percentile charts should NOT cap at 100 if you draw value labels above bars.
+    # - Keep labels INSIDE axes by giving headroom (0..110).
+    ax.set_ylabel("Percentile (0-100)")
+    _set_ylim_with_headroom(ax, values, pct_like=True)
+
+    asof = deep_get(raw_r25, "used_date") or deep_get(raw_r25, "series.trade_value.asof") or "N/A"
+    ax.set_title(f"roll25 percentiles (as_of={asof})", pad=16)
+
+    # Label numbers (safe)
+    _bar_label_safe(ax, bars, fmt="%.1f", fontsize=9, padding=3)
 
     fig.autofmt_xdate(rotation=0)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
+
     meta = save_fig(fig, out_dir / "01_roll25_percentile_bars.png", dpi=dpi)
     meta["title"] = "roll25 percentiles bars"
     return meta
@@ -322,13 +374,15 @@ def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tu
         ax = fig.add_subplot(111)
         labels = [x[0] for x in vals_bal]
         values = [x[1] for x in vals_bal]
-        ax.bar(labels, values)
+        bars = ax.bar(labels, values)
         ax.set_ylabel("Balance (億)")
         asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
-        ax.set_title(f"Margin balance (as_of={asof})")
-        for i, v in enumerate(values):
-            ax.text(i, v, f"{v:.1f}", ha="center", va="bottom", fontsize=9)
-        fig.tight_layout()
+        ax.set_title(f"Margin balance (as_of={asof})", pad=16)
+
+        _set_ylim_with_headroom(ax, values, pct_like=False, ratio=0.08)
+        _bar_label_safe(ax, bars, fmt="%.1f", fontsize=9, padding=3)
+
+        fig.tight_layout(rect=(0, 0, 1, 0.98))
         meta_bal = save_fig(fig, out_dir / "02_margin_balance_bars.png", dpi=dpi)
         meta_bal["title"] = "Margin balance bars"
 
@@ -344,14 +398,28 @@ def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tu
         ax = fig.add_subplot(111)
         labels = [x[0] for x in vals_chg]
         values = [x[1] for x in vals_chg]
-        ax.bar(labels, values)
+        bars = ax.bar(labels, values)
         ax.axhline(0.0)
         ax.set_ylabel("Daily change (億)")
         asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
-        ax.set_title(f"Margin daily change (as_of={asof})")
-        for i, v in enumerate(values):
-            ax.text(i, v, f"{v:.1f}", ha="center", va="bottom" if v >= 0 else "top", fontsize=9)
-        fig.tight_layout()
+        ax.set_title(f"Margin daily change (as_of={asof})", pad=16)
+
+        # Headroom both sides (avoid tight bbox squeezing)
+        ymin = min(values)
+        ymax = max(values)
+        span = max(ymax - ymin, 1e-6)
+        ax.set_ylim(ymin - 0.12 * span, ymax + 0.12 * span)
+
+        # Labels: place above for positive, below for negative
+        if hasattr(ax, "bar_label"):
+            ax.bar_label(bars, fmt="%.1f", padding=3, fontsize=9)
+        else:
+            for b in bars:
+                h = float(b.get_height())
+                x = b.get_x() + b.get_width() / 2
+                ax.text(x, h, f"{h:.1f}", ha="center", va="bottom" if h >= 0 else "top", fontsize=9)
+
+        fig.tight_layout(rect=(0, 0, 1, 0.98))
         meta_chg = save_fig(fig, out_dir / "03_margin_change_bars.png", dpi=dpi)
         meta_chg["title"] = "Margin daily change bars"
 
@@ -386,7 +454,8 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     ax.set_yticks([])
     ax.set_xlabel("Price")
     ax.set_title(
-        f"0050 BB band position (as_of={t.get('last_date','N/A')}) | state={t.get('bb_state','N/A')} | z={fmt_float(t.get('bb_z'),3)}"
+        f"0050 BB band position (as_of={t.get('last_date','N/A')}) | state={t.get('bb_state','N/A')} | z={fmt_float(t.get('bb_z'),3)}",
+        pad=16,
     )
 
     # Expand x a bit for readability
@@ -399,7 +468,7 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     ax.text(upper, 0.05, f"upper={upper:.2f}", ha="right", va="bottom", fontsize=9)
     ax.text(price, -0.08, f"price={price:.2f}", ha="center", va="top", fontsize=9)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
     meta = save_fig(fig, out_dir / "04_0050_bb_band_gauge.png", dpi=dpi)
     meta["title"] = "0050 BB band gauge"
     return meta
@@ -433,9 +502,9 @@ def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) 
     ax = fig.add_subplot(111)
     labels = [x[0] for x in rows]
     values = [x[1] for x in rows]
-    ax.bar(labels, values)
+    bars = ax.bar(labels, values)
     ax.set_ylabel("Price level")
-    ax.set_title(f"0050 tranche levels (as_of={t.get('last_date','N/A')})")
+    ax.set_title(f"0050 tranche levels (as_of={t.get('last_date','N/A')})", pad=16)
     ax.text(
         0.01,
         0.98,
@@ -445,9 +514,11 @@ def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) 
         va="top",
         fontsize=9,
     )
-    for i, v in enumerate(values):
-        ax.text(i, v, f"{v:.2f}", ha="center", va="bottom", fontsize=9)
-    fig.tight_layout()
+
+    _set_ylim_with_headroom(ax, values, pct_like=False, ratio=0.08)
+    _bar_label_safe(ax, bars, fmt="%.2f", fontsize=9, padding=3)
+
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
 
     meta = save_fig(fig, out_dir / "05_0050_tranche_levels.png", dpi=dpi)
     meta["title"] = "0050 tranche levels bars (anchoring caution)"
@@ -466,7 +537,13 @@ def write_episode_chart_ready_csv(pack: Dict[str, Any], out_dir: Path) -> Path:
     rows: List[Dict[str, Any]] = []
     for module, mp in [("roll25", r), ("margin", m), ("tw0050_bb", t)]:
         for k, v in mp.items():
-            rows.append({"module": module, "metric": k, "value": json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v})
+            rows.append(
+                {
+                    "module": module,
+                    "metric": k,
+                    "value": json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v,
+                }
+            )
 
     with out_path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["module", "metric", "value"])
