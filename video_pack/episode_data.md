@@ -1,8 +1,8 @@
 # Episode Data (DATA-ONLY)
 
 - day_key_local: 2026-03-03 (Asia/Taipei)
-- generated_at_utc: 2026-03-03T02:20:26Z
-- generated_at_local: 2026-03-03T10:20:26+08:00
+- generated_at_utc: 2026-03-03T12:00:34Z
+- generated_at_local: 2026-03-03T20:00:34+08:00
 - build_fingerprint: build_video_pack@v1.3.data_md_out_and_tz_fix
 - warnings: NONE
 
@@ -10,7 +10,7 @@
 
 - roll25: as_of=2026-03-02 age_days=1 fingerprint=twse_stats_v1
 - taiwan_margin: as_of=2026-03-02 age_days=1 fingerprint=taiwan_margin_financing_latest_v1
-- tw0050_bb: as_of=2026-03-02 age_days=1 fingerprint=tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit
+- tw0050_bb: as_of=2026-03-03 age_days=0 fingerprint=tw0050_bb60_k2_forwardmdd20@2026-02-21.v12.adjclose_audit
 
 ## roll25 extracts
 
@@ -53,24 +53,24 @@
 
 | field | value | picked_path |
 |---|---:|---|
-| last_date | 2026-03-02 | meta.last_date |
-| adjclose | 80.349998 | latest.adjclose |
-| bb_ma | 68.101001 | latest.bb_ma |
-| bb_upper | 80.105797 | latest.bb_upper |
-| bb_lower | 56.096204 | latest.bb_lower |
-| bb_z | 2.040684 | latest.bb_z |
-| bb_state | EXTREME_UPPER_BAND | latest.state |
-| dist_to_upper_pct | -0.303922 | latest.dist_to_upper_pct |
-| dist_to_lower_pct | 30.185183 | latest.dist_to_lower_pct |
+| last_date | 2026-03-03 | meta.last_date |
+| adjclose | 78.75 | latest.adjclose |
+| bb_ma | 68.421667 | latest.bb_ma |
+| bb_upper | 80.518923 | latest.bb_upper |
+| bb_lower | 56.32441 | latest.bb_lower |
+| bb_z | 1.70755 | latest.bb_z |
+| bb_state | NEAR_UPPER_BAND | latest.state |
+| dist_to_upper_pct | 2.246252 | latest.dist_to_upper_pct |
+| dist_to_lower_pct | 28.47694 | latest.dist_to_lower_pct |
 | trend_state | TREND_UP | trend.state |
-| price_vs_200ma_pct | 40.900227 | trend.price_vs_trend_ma_pct |
-| trend_slope_pct | 6.554682 | trend.trend_slope_pct |
-| rv_ann | 0.218476 | vol.rv_ann |
-| rv_ann_pctl | 82.643045 | vol.rv_ann_pctl |
+| price_vs_200ma_pct | 37.649277 | trend.price_vs_trend_ma_pct |
+| trend_slope_pct | 6.570524 | trend.trend_slope_pct |
+| rv_ann | 0.234926 | vol.rv_ann |
+| rv_ann_pctl | 86.596458 | vol.rv_ann_pctl |
 | regime_allowed | False | regime.allowed |
 | pledge_action_bucket | VETO | pledge.decision.action_bucket |
-| pledge_veto_reasons | ["regime_gate_closed", "no_chase_state:EXTREME_UPPER_BAND", "no_chase_z>= 1.50"] | pledge.decision.veto_reasons |
-| tranche_levels | [{"drawdown": -0.04797993423577851, "label": "10D_p10_uncond", "price_level": 76.49481083148785}, {"drawdown": -0.06306896261329482, "label": "10D_p05_uncond", "price_level": 75.28240742437845}, {"drawdown": -0.06866343293489847, "label": "20D_p10_uncond", "price_level": 74.83289174257408}, {"drawdown": -0.0927091188902018, "label": "20D_p05_uncond", "price_level": 72.90082091275626}] | pledge.unconditional_tranche_levels.levels |
+| pledge_veto_reasons | ["regime_gate_closed", "no_chase_state:NEAR_UPPER_BAND", "no_chase_z>= 1.50"] | pledge.decision.veto_reasons |
+| tranche_levels | [{"drawdown": -0.047979817489179455, "label": "10D_p10_uncond", "price_level": 74.97158937272712}, {"drawdown": -0.06305813304751152, "label": "10D_p05_uncond", "price_level": 73.78417202250847}, {"drawdown": -0.06866230312395323, "label": "20D_p10_uncond", "price_level": 73.34284362898867}, {"drawdown": -0.0926959461182094, "label": "20D_p05_uncond", "price_level": 71.450194243191}] | pledge.unconditional_tranche_levels.levels |
 
 ## tw0050_bb dq.notes (first 6)
 

@@ -1,0 +1,78 @@
+{
+  "schema_version": "chart_manifest_v1",
+  "script_fingerprint": "make_episode_charts@v1.snapshot_plus_manifest",
+  "generated_at_utc": "2026-03-03T12:00:37Z",
+  "timezone": "Asia/Taipei",
+  "day_key_local": "2026-03-03",
+  "data_as_of": "2026-03-02",
+  "input_files": {
+    "episode_pack": "video_pack/episode_pack.json",
+    "episode_pack_sha256": "9a23f8d757cd170bdda273f76922c7e3d5dd1fc2311107081b7880beeb627c0f"
+  },
+  "pack_build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
+  "pack_generated_at_local": "2026-03-03T20:00:34+08:00",
+  "warnings": [],
+  "charts": [
+    {
+      "file": "00_episode_snapshot.png",
+      "path": "video_pack/charts_episode/00_episode_snapshot.png",
+      "sha256": "64bd05bd289650bfc14c31b2e4e14ff6219a73a22c7d97fa1beda5f0f22a391a",
+      "dpi": 160,
+      "size_inches": [
+        8.0,
+        4.5
+      ],
+      "title": "Episode snapshot (one-page text)"
+    },
+    {
+      "file": "01_roll25_percentile_bars.png",
+      "path": "video_pack/charts_episode/01_roll25_percentile_bars.png",
+      "sha256": "e7e5d5b00db87c5b1f0513efea6860a63895ca973c252c9cf87e4e9047d2de64",
+      "dpi": 160,
+      "size_inches": [
+        8.0,
+        4.5
+      ],
+      "title": "roll25 percentiles bars"
+    },
+    {
+      "file": "02_margin_balance_bars.png",
+      "path": "video_pack/charts_episode/02_margin_balance_bars.png",
+      "sha256": "ad1faa82443cde12645cff330e5225768562912e818a4d563af8822c9d081ee8",
+      "dpi": 160,
+      "size_inches": [
+        8.0,
+        4.5
+      ],
+      "title": "Margin balance bars"
+    },
+    {
+      "file": "03_margin_change_bars.png",
+      "path": "video_pack/charts_episode/03_margin_change_bars.png",
+      "sha256": "326c8736b3d9dd7f72c30231cfc2386e7c945aa73ed8dd8296565e84974a289a",
+      "dpi": 160,
+      "size_inches": [
+        8.0,
+        4.5
+      ],
+      "title": "Margin daily change bars"
+    },
+    {
+      "file": "04_0050_bb_band_gauge.png",
+      "path": "video_pack/charts_episode/04_0050_bb_band_gauge.png",
+      "sha256": "4510ca15bb177e98ff3594a413df0d4a97ad3bff6bcb6068fb8dc7e18b0ce841",
+      "dpi": 160,
+      "size_inches": [
+        8.0,
+        4.5
+      ],
+      "title": "0050 BB band gauge"
+    },
+    {
+      "file": "episode_chart_ready.csv",
+      "path": "video_pack/charts_episode/episode_chart_ready.csv",
+      "sha256": "f367b8340d02148ea30a85015744a9224b73d5be3710aff1b7c4ebf9e930e57f",
+      "title": "episode_chart_ready.csv (flat metrics table)"
+    }
+  ]
+}
