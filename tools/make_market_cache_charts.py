@@ -7,7 +7,8 @@ make_market_cache_charts.py
 Generate chart-ready CSV + standard charts from dashboard/DASHBOARD.md.
 
 - Bar charts: legend stays inside (keep text short).
-- Scatter chart: NO in-axes annotation boxes; legend moved BELOW (figure-level) to avoid covering points.
+- Scatter chart: NO in-axes annotation boxes; NO legend (avoid duplication).
+  Rules are explained ONLY in bottom_note (figure-level).
 - Long rule notes are placed BELOW (figure-level bottom_note).
 - Watermark stays at bottom-right.
 """
@@ -28,7 +29,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from matplotlib.ft2font import FT2Font
-from matplotlib.lines import Line2D
 
 
 # -----------------------------
@@ -292,28 +292,10 @@ def add_bottom_note(fig, text: str) -> None:
     )
 
 
-def add_figure_legend_below(fig, handles, *, x=0.99, y=0.12) -> None:
-    """
-    Figure-level legend placed below the plot area (NOT inside axes).
-    Put it on bottom-right by default.
-    """
-    leg = fig.legend(
-        handles=handles,
-        loc="lower right",
-        bbox_to_anchor=(x, y),
-        frameon=True,
-        **legend_kwargs(),
-    )
-    if CJK_FP is not None and leg is not None:
-        for t in leg.get_texts():
-            t.set_fontproperties(CJK_FP)
-
-
 def finalize_figure(fig, ax, outpath: Path, bottom_note: str, watermark: bool,
                     rect: Optional[List[float]] = None) -> None:
     """
     rect default leaves bottom space for note/watermark.
-    For scatter we reserve MORE bottom space for figure legend.
     """
     apply_cjk_to_axes(ax)
 
@@ -429,8 +411,10 @@ def save_chart_scatter(df: pd.DataFrame, outdir: Path, watermark: bool,
 
     if label_points:
         for _, r in d.iterrows():
-            ax.text(r["z60"], r["rank_252_obs_pct"], str(r["series"]),
-                    fontsize=10, fontproperties=CJK_FP)
+            ax.text(
+                r["z60"], r["rank_252_obs_pct"], str(r["series"]),
+                fontsize=10, fontproperties=CJK_FP
+            )
 
     # thresholds on axes
     ax.axhline(p_watch_lo, linestyle="--")
@@ -447,17 +431,8 @@ def save_chart_scatter(df: pd.DataFrame, outdir: Path, watermark: bool,
     ax.set_title("z60 × 長窗口位階（快速定位『極端+位階』）", fontproperties=CJK_FP)
 
     # IMPORTANT:
-    # 1) NO ax.text(... bbox=...) box inside axes
-    # 2) NO ax.legend(...) inside axes
-    # Instead: figure-level legend BELOW the plot (bottom-right).
-    handles = [
-        Line2D([0], [0], linestyle="--", color="black",
-               label=f"WATCH：|z|={extreme_z_watch:g}, p={p_watch_lo:g}/{p_watch_hi:g}"),
-        Line2D([0], [0], linestyle=":", color="black",
-               label=f"ALERT：|z|={extreme_z_alert:g}, p={p_alert_lo:g}"),
-    ]
-    add_figure_legend_below(fig, handles, x=0.99, y=0.12)
-
+    # - NO annotation boxes inside axes
+    # - NO legend (avoid duplication with bottom_note)
     log_axes_fonts(ax, "scatter")
 
     bottom_note = (
@@ -467,13 +442,13 @@ def save_chart_scatter(df: pd.DataFrame, outdir: Path, watermark: bool,
         f"• ALERT（點線）：|z60|≥{extreme_z_alert:g} 或 p252≤{p_alert_lo:g}"
     )
 
-    # Reserve MORE bottom space (legend + note + watermark)
+    # Reserve modest bottom space (note + watermark only)
     finalize_figure(
         fig, ax,
         outdir / "03_z60_vs_rank252_scatter.png",
         bottom_note,
         watermark,
-        rect=[0.0, 0.28, 1.0, 1.0],
+        rect=[0.0, 0.20, 1.0, 1.0],
     )
 
 
@@ -554,14 +529,22 @@ def main() -> None:
     watermark = not args.no_watermark
     label_points = not args.no_point_labels
 
-    save_chart_rank252(df, outdir, watermark,
-                       p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi, p_alert_lo=args.p_alert_lo)
-    save_chart_rank60_jump_abs(df, outdir, watermark, jump_p_threshold=args.jump_p)
-    save_chart_scatter(df, outdir, watermark,
-                       extreme_z_watch=args.extreme_z_watch, extreme_z_alert=args.extreme_z_alert,
-                       p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi, p_alert_lo=args.p_alert_lo,
-                       label_points=label_points)
-    save_chart_ret1_abs(df, outdir, watermark, jump_ret_threshold=args.jump_ret)
+    save_chart_rank252(
+        df, outdir, watermark,
+        p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi, p_alert_lo=args.p_alert_lo
+    )
+    save_chart_rank60_jump_abs(
+        df, outdir, watermark, jump_p_threshold=args.jump_p
+    )
+    save_chart_scatter(
+        df, outdir, watermark,
+        extreme_z_watch=args.extreme_z_watch, extreme_z_alert=args.extreme_z_alert,
+        p_watch_lo=args.p_watch_lo, p_watch_hi=args.p_watch_hi, p_alert_lo=args.p_alert_lo,
+        label_points=label_points
+    )
+    save_chart_ret1_abs(
+        df, outdir, watermark, jump_ret_threshold=args.jump_ret
+    )
 
     print(f"OK: wrote {csv_path} and charts to {outdir}")
 
