@@ -1,17 +1,17 @@
 [
   {
-    "as_of_ts": "2026-03-03T01:07:39+08:00",
+    "as_of_ts": "2026-03-03T11:15:55+08:00",
     "series_id": "DFII10",
-    "data_date": "2026-02-26",
-    "value": "1.74",
+    "data_date": "2026-02-27",
+    "value": "1.72",
     "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-03T01:07:39+08:00",
+    "as_of_ts": "2026-03-03T11:15:55+08:00",
     "series_id": "T10YIE",
-    "data_date": "2026-02-27",
-    "value": "2.25",
+    "data_date": "2026-03-02",
+    "value": "2.29",
     "source_url": "https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1",
     "notes": "NA"
   }
