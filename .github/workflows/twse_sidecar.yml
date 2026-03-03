@@ -44,13 +44,15 @@ jobs:
       - name: Generate + sanity + report + charts + commit + manifest + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
-          # Optional: keep as env for easy tuning without code changes
           AMP_MISMATCH_ABS_THRESHOLD: "0.01"
         run: |
           set -euo pipefail
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Ensure charts dir exists even before script runs (audit-friendly)
+          mkdir -p roll25_cache/charts
 
           data_files=(
             "roll25_cache/roll25.json"
@@ -91,6 +93,7 @@ jobs:
               --out "roll25_cache/report.md"
 
             # 4) Render charts (local-only) -> roll25_cache/charts
+            mkdir -p roll25_cache/charts
             python tools/make_roll25_cache_charts.py \
               --cache-dir "roll25_cache" \
               --out "roll25_cache/charts"
@@ -149,7 +152,7 @@ jobs:
             echo "Snapshot URLs:"
             echo "  DATA latest_report (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
             echo "  REPORT (immutable):             https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/report.md"
-            echo "  CHARTS dir (immutable):         https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/charts/01_rank252_overview.png"
+            echo "  CHART example (immutable):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/charts/01_rank252_overview.png"
             echo "  MANIFEST (immutable):           https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
             echo "  MANIFEST (main):                https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
@@ -204,6 +207,8 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          mkdir -p roll25_cache/charts
+
           data_files=(
             "roll25_cache/roll25.json"
             "roll25_cache/latest_report.json"
@@ -244,6 +249,7 @@ jobs:
               --out "roll25_cache/report.md"
 
             # 4) Render charts (local-only) -> roll25_cache/charts
+            mkdir -p roll25_cache/charts
             python tools/make_roll25_cache_charts.py \
               --cache-dir "roll25_cache" \
               --out "roll25_cache/charts"
@@ -302,7 +308,7 @@ jobs:
             echo "Snapshot URLs:"
             echo "  DATA latest_report (immutable): https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/latest_report.json"
             echo "  REPORT (immutable):             https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/report.md"
-            echo "  CHARTS dir (immutable):         https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/charts/01_rank252_overview.png"
+            echo "  CHART example (immutable):      https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DATA_SHA}/roll25_cache/charts/01_rank252_overview.png"
             echo "  MANIFEST (immutable):           https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${MANIFEST_SHA}/roll25_cache/manifest.json"
             echo "  MANIFEST (main):                https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/heads/main/roll25_cache/manifest.json"
 
