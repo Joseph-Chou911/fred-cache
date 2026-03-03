@@ -41,9 +41,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests pandas numpy matplotlib
 
+      - name: Install system fonts (Noto CJK) for Matplotlib
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig
+          fc-cache -f -v
+          echo "[INFO] Font check (Noto CJK):"
+          fc-list | grep -i "noto.*cjk" | head -n 20 || true
+
       - name: Generate + sanity + report + charts + commit + manifest + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
+          MPLCONFIGDIR: /tmp/matplotlib
           AMP_MISMATCH_ABS_THRESHOLD: "0.01"
         run: |
           set -euo pipefail
@@ -196,9 +206,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir requests pandas numpy matplotlib
 
+      - name: Install system fonts (Noto CJK) for Matplotlib
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig
+          fc-cache -f -v
+          echo "[INFO] Font check (Noto CJK):"
+          fc-list | grep -i "noto.*cjk" | head -n 20 || true
+
       - name: Backfill + sanity + report + charts + commit + manifest + push (retry-safe, no-rebase)
         env:
           TZ: Asia/Taipei
+          MPLCONFIGDIR: /tmp/matplotlib
           BACKFILL_MONTHS: ${{ github.event.inputs.backfill_months }}
           AMP_MISMATCH_ABS_THRESHOLD: "0.01"
         run: |
