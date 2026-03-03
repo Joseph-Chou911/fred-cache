@@ -32,6 +32,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas numpy matplotlib
 
+      # =========================
+      # Clean old outputs (avoid stale files)
+      # =========================
+      - name: Clean old outputs
+        run: |
+          set -euo pipefail
+          echo "OUT_DIR='${OUT_DIR}'"
+          if [[ -z "${OUT_DIR}" || "${OUT_DIR}" == "/" || "${OUT_DIR}" == "." ]]; then
+            echo "Refusing to delete unsafe OUT_DIR='${OUT_DIR}'"
+            exit 1
+          fi
+
+          if [[ -d "${OUT_DIR}" ]]; then
+            echo "Removing existing '${OUT_DIR}' to avoid stale artifacts..."
+            rm -rf "${OUT_DIR}"
+          fi
+
+          mkdir -p "${OUT_DIR}"
+          echo "Clean done."
+
       - name: Sanity check inputs exist
         run: |
           set -euo pipefail
@@ -43,7 +63,6 @@ jobs:
       - name: Build video pack
         run: |
           set -euo pipefail
-          mkdir -p "${OUT_DIR}"
           python tools/build_video_pack.py \
             --tw0050 tw0050_bb_cache/stats_latest.json \
             --roll25 roll25_cache/stats_latest.json \
@@ -86,12 +105,12 @@ jobs:
         with:
           name: video-pack
           path: |
-            video_pack/episode_pack.json
-            video_pack/episode_outline.md
-            video_pack/episode_data.md
-            video_pack/charts_snapshot/*.png
-            video_pack/charts_roll25/*.png
-            video_pack/charts_roll25/roll25_chart_ready.csv
+            ${{ env.OUT_DIR }}/episode_pack.json
+            ${{ env.OUT_DIR }}/episode_outline.md
+            ${{ env.OUT_DIR }}/episode_data.md
+            ${{ env.OUT_DIR }}/charts_snapshot/*.png
+            ${{ env.OUT_DIR }}/charts_roll25/*.png
+            ${{ env.OUT_DIR }}/charts_roll25/roll25_chart_ready.csv
           if-no-files-found: error
 
       - name: Commit output
@@ -99,14 +118,12 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+
+          echo "=== git status (before add) ==="
           git status --porcelain
 
-          git add \
-            video_pack/episode_pack.json \
-            video_pack/episode_outline.md \
-            video_pack/episode_data.md \
-            video_pack/charts_snapshot \
-            video_pack/charts_roll25
+          # Stage additions + modifications + deletions under OUT_DIR
+          git add -A "${OUT_DIR}"
 
           git diff --cached --quiet && echo "No changes to commit." && exit 0
           git commit -m "build: video pack outputs (+charts)"
