@@ -7,6 +7,7 @@
     "latest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/51772b309d8fd1ee3fb93a8bc197d18c741d84bd/fallback_cache/latest.json",
     "latest_csv": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/51772b309d8fd1ee3fb93a8bc197d18c741d84bd/fallback_cache/latest.csv",
     "history_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/51772b309d8fd1ee3fb93a8bc197d18c741d84bd/fallback_cache/history.json",
-    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/refs/heads/main/fallback_cache/manifest.json"
-  }
+    "manifest_json": "https://raw.githubusercontent.com/Joseph-Chou911/fred-cache/6cdf19acd4cc7b0005b67146d5d15193b8d60635/fallback_cache/manifest.json"
+  },
+  "manifest_commit_sha_v1": "6cdf19acd4cc7b0005b67146d5d15193b8d60635"
 }
