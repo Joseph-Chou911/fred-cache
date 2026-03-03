@@ -32,19 +32,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas numpy matplotlib
 
-      - name: Sanity check scripts + inputs exist
+      - name: Sanity check inputs exist
         run: |
           set -euo pipefail
-          echo "=== scripts ==="
-          ls -al tools/build_video_pack.py
-          ls -al tools/make_episode_charts.py
-          ls -al tools/make_roll25_json_charts.py
-
-          echo "=== inputs ==="
           ls -al tw0050_bb_cache/stats_latest.json
           ls -al roll25_cache/stats_latest.json
-          ls -al roll25_cache/roll25.json
           ls -al taiwan_margin_cache/latest.json
+          ls -al roll25_cache/roll25.json
 
       - name: Build video pack
         run: |
@@ -56,45 +50,36 @@ jobs:
             --margin taiwan_margin_cache/latest.json \
             --out_dir "${OUT_DIR}"
 
-      - name: Make episode snapshot charts
+      - name: Make snapshot charts (episode_pack)
         run: |
           set -euo pipefail
-          mkdir -p "${OUT_DIR}/charts_episode"
+          mkdir -p "${OUT_DIR}/charts_snapshot"
           python tools/make_episode_charts.py \
             --episode_pack "${OUT_DIR}/episode_pack.json" \
-            --out_dir "${OUT_DIR}/charts_episode" \
-            --dpi 160
+            --out_dir "${OUT_DIR}/charts_snapshot"
 
-      - name: Make roll25 long-series charts (from roll25.json)
+      - name: Make long-series charts (roll25.json)
         run: |
           set -euo pipefail
           mkdir -p "${OUT_DIR}/charts_roll25"
           python tools/make_roll25_json_charts.py \
-            --in_json roll25_cache/roll25.json \
+            --roll25_json roll25_cache/roll25.json \
             --out_dir "${OUT_DIR}/charts_roll25" \
-            --dpi 160
+            --max_points 400
 
       - name: Show outputs (audit)
         run: |
           set -euo pipefail
           echo "=== out_dir listing ==="
           ls -al "${OUT_DIR}"
-
           echo "=== episode_* files ==="
           find "${OUT_DIR}" -maxdepth 1 -type f -name "episode_*" -print
-
-          echo "=== charts_episode ==="
-          ls -al "${OUT_DIR}/charts_episode" || true
-          echo "=== charts_roll25 ==="
+          echo "=== charts (snapshot) ==="
+          ls -al "${OUT_DIR}/charts_snapshot" || true
+          echo "=== charts (roll25) ==="
           ls -al "${OUT_DIR}/charts_roll25" || true
-
           echo "=== file sizes ==="
-          wc -c \
-            "${OUT_DIR}/episode_pack.json" \
-            "${OUT_DIR}/episode_outline.md" \
-            "${OUT_DIR}/episode_data.md" \
-            "${OUT_DIR}/charts_episode/chart_manifest.json" \
-            "${OUT_DIR}/charts_roll25/chart_manifest.json"
+          wc -c "${OUT_DIR}/episode_pack.json" "${OUT_DIR}/episode_outline.md" "${OUT_DIR}/episode_data.md" || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -104,8 +89,9 @@ jobs:
             video_pack/episode_pack.json
             video_pack/episode_outline.md
             video_pack/episode_data.md
-            video_pack/charts_episode/**
-            video_pack/charts_roll25/**
+            video_pack/charts_snapshot/*.png
+            video_pack/charts_roll25/*.png
+            video_pack/charts_roll25/roll25_chart_ready.csv
           if-no-files-found: error
 
       - name: Commit output
@@ -119,9 +105,9 @@ jobs:
             video_pack/episode_pack.json \
             video_pack/episode_outline.md \
             video_pack/episode_data.md \
-            video_pack/charts_episode \
+            video_pack/charts_snapshot \
             video_pack/charts_roll25
 
           git diff --cached --quiet && echo "No changes to commit." && exit 0
-          git commit -m "build: video pack + charts"
+          git commit -m "build: video pack outputs (+charts)"
           git push
