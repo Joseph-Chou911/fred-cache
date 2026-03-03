@@ -12,7 +12,7 @@ Public-facing tweaks:
 - Watermark moved to TOP-RIGHT (prevents collision with footer).
 - Scatter legend placed ABOVE footer (figure-level) to avoid overlap.
 - Bar charts: add headroom (ylim up to 105) so top labels don't collide.
-- 1-day % change chart uses SIGNED bars (keeps +/-); y-axis always includes 0 with small headroom.
+- 1-day % change chart uses SIGNED values with a 0 baseline and symmetric y-limits.
 
 Inputs:
 - Prefer: <CACHE_DIR>/roll25.json (points, newest-first)
@@ -24,7 +24,7 @@ Outputs (to --out):
 - 01_rank252_overview.png
 - 02_rank60_jump_abs.png
 - 03_z60_vs_rank252_scatter.png
-- 04_ret1_abs_pct.png   (NOTE: now SIGNED; filename kept for backward compatibility)
+- 04_ret1_signed_pct.png
 """
 
 from __future__ import annotations
@@ -332,6 +332,7 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
                 prev_c = safe_float(p.get(k))
                 break
 
+        # If prev_close missing but close+change exists, derive prev_close = close - change
         if prev_c is None and c is not None and chg is not None:
             prev_c = c - chg
 
@@ -598,9 +599,12 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
     plt.close(fig)
 
 
-def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
+def make_ret1_signed_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     """
-    NOTE: kept filename/function name for backward compatibility, but now plots SIGNED ret1%.
+    Signed 1-day % change for TURNOVER and INDEX (ret1%).
+    - Show 0 baseline
+    - Use symmetric y-limits around 0 to reduce misread risk
+    - Label with explicit +/-
     """
     d = df_m.copy()
     d = d[~d["ret1%"].isna()].copy()
@@ -615,33 +619,30 @@ def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark:
         x = np.arange(len(d))
         y = d["ret1%"].to_numpy(dtype=float)
 
+        ax.axhline(0.0, linewidth=1.0, alpha=0.6)
         ax.bar(x, y)
         ax.set_xticks(x)
         ax.set_xticklabels(d["series"].tolist(), rotation=0)
 
-        # Always include 0 and keep both +/- directions.
-        y_min = float(np.nanmin(y))
-        y_max = float(np.nanmax(y))
-        y_min = min(y_min, 0.0)
-        y_max = max(y_max, 0.0)
-        pad = max(0.5, 0.12 * max(abs(y_min), abs(y_max), 1e-9))
-        ax.set_ylim(y_min - pad, y_max + pad)
-
-        ax.axhline(0.0, linewidth=1.0, alpha=0.6)
+        max_abs = float(np.nanmax(np.abs(y))) if len(y) else 1.0
+        if not np.isfinite(max_abs) or max_abs <= 0:
+            max_abs = 1.0
+        pad = max(0.5, 0.15 * max_abs)
+        lim = max_abs + pad
+        ax.set_ylim(-lim, lim)
 
         ax.set_ylabel("1-day % change (signed, %) — descriptive only")
         ax.set_title("1-day % change — Turnover / Index (NOT investment return)", pad=12)
 
-        # Value labels: above for +, below for -
-        span = (y_max - y_min) + 2 * pad
-        off = 0.03 * span
+        # label placement: above for positive, below for negative
+        text_offset = max(0.25, 0.03 * lim)
         for xi, yi in zip(x, y):
             if math.isnan(yi):
                 continue
             if yi >= 0:
-                ax.text(xi, yi + off, f"{yi:.3f}%", ha="center", va="bottom", fontsize=10)
+                ax.text(xi, yi + text_offset, f"{yi:+.3f}%", ha="center", va="bottom", fontsize=10)
             else:
-                ax.text(xi, yi - off, f"{yi:.3f}%", ha="center", va="top", fontsize=10)
+                ax.text(xi, yi - text_offset, f"{yi:+.3f}%", ha="center", va="top", fontsize=10)
 
     fig_footer_short(fig, footer)
     fig_watermark_topright(fig, watermark)
@@ -689,7 +690,7 @@ def main() -> int:
     make_rank252_overview(df_m, out_dir / "01_rank252_overview.png", footer, args.watermark)
     make_rank60_jump_abs(df_m, out_dir / "02_rank60_jump_abs.png", footer, args.watermark)
     make_z60_vs_rank252_scatter(df_m, out_dir / "03_z60_vs_rank252_scatter.png", footer, args.watermark)
-    make_ret1_abs_pct(df_m, out_dir / "04_ret1_abs_pct.png", footer, args.watermark)
+    make_ret1_signed_pct(df_m, out_dir / "04_ret1_signed_pct.png", footer, args.watermark)
 
     print(f"[OK] out_dir={out_dir}")
     print(f"[OK] wrote: {chart_csv}")
