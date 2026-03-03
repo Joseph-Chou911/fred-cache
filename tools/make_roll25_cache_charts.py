@@ -12,7 +12,7 @@ Public-facing tweaks:
 - Watermark moved to TOP-RIGHT (prevents collision with footer).
 - Scatter legend placed ABOVE footer (figure-level) to avoid overlap.
 - Bar charts: add headroom (ylim up to 105) so top labels don't collide.
-- Ret1 chart: KEEP SIGN (direction) and use symmetric y-axis around 0.
+- 1-day % change chart uses SIGNED bars (keeps +/-); y-axis always includes 0 with small headroom.
 
 Inputs:
 - Prefer: <CACHE_DIR>/roll25.json (points, newest-first)
@@ -24,7 +24,7 @@ Outputs (to --out):
 - 01_rank252_overview.png
 - 02_rank60_jump_abs.png
 - 03_z60_vs_rank252_scatter.png
-- 04_ret1_abs_pct.png   (signed 1-day % change for TURNOVER/INDEX; NOT investment return)
+- 04_ret1_abs_pct.png   (NOTE: now SIGNED; filename kept for backward compatibility)
 """
 
 from __future__ import annotations
@@ -41,7 +41,6 @@ import numpy as np
 import pandas as pd
 
 import matplotlib
-
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
@@ -129,32 +128,11 @@ def ensure_dir(p: Path) -> None:
 
 
 def fig_watermark_topright(fig: plt.Figure, text: str) -> None:
-    # move watermark to top-right to avoid footer collisions
     fig.text(0.995, 0.995, text, ha="right", va="top", fontsize=9, alpha=0.35)
 
 
 def fig_footer_short(fig: plt.Figure, text: str) -> None:
-    # keep footer short; one line only
     fig.text(0.01, 0.012, text, ha="left", va="bottom", fontsize=9, alpha=0.85)
-
-
-# -----------------------------
-# Labels (public-facing)
-# -----------------------------
-
-def short_label(series_name: str) -> str:
-    """
-    Public-facing short labels for charts.
-    Keep it short for x-axis.
-    """
-    m = {
-        "TURNOVER": "TURNOVER",
-        "INDEX": "INDEX",
-        "INDEX_%CHG": "INDEX_%CHG",
-        "AMPL_%": "AMPL_%",
-        "TURNOVERx20": "TURNOVERx20",
-    }
-    return m.get(series_name, series_name)
 
 
 # -----------------------------
@@ -354,7 +332,6 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
                 prev_c = safe_float(p.get(k))
                 break
 
-        # If prev_close missing but close+change exists, derive prev_close = close - change
         if prev_c is None and c is not None and chg is not None:
             prev_c = c - chg
 
@@ -380,20 +357,15 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
     if df.empty:
         raise ValueError("All rows missing parseable date; cannot proceed.")
 
-    # roll25.json is newest-first; sort ascending for strict adjacency + plotting
     df = df.sort_values("date").reset_index(drop=True)
 
-    # If prev_close still NA, fill from strict adjacency previous close in ascending order
     df["prev_close"] = df["prev_close"].where(df["prev_close"].notna(), df["close"].shift(1))
 
-    # Derive pct_change_close if missing and close+prev_close available
     if df["pct_change_close"].isna().all() and df["close"].notna().sum() >= 2:
         denom = df["prev_close"]
         ok = denom.notna() & (denom != 0) & df["close"].notna()
         df.loc[ok, "pct_change_close"] = 100.0 * (df.loc[ok, "close"] / denom.loc[ok] - 1.0)
 
-    # Derive amplitude_pct if missing and high/low exists
-    # Policy: denominator prefer prev_close (= close - change) when available; else fallback close.
     if df["amplitude_pct"].isna().all():
         denom = df["prev_close"].where(df["prev_close"].notna(), df["close"])
         ok = df["high"].notna() & df["low"].notna() & denom.notna() & (denom != 0)
@@ -465,7 +437,6 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
             return float("nan")
         return 100.0 * (v_today / v_prev - 1.0)
 
-    # allow ret1/delta only for TURNOVER + INDEX (avoid confusing ratios for derived series)
     series_specs = [
         ("TURNOVER", "turnover_twd", True, True),
         ("INDEX", "close", True, True),
@@ -535,7 +506,6 @@ def font_smoketest(out_png: Path) -> None:
 
 def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     d = df_m.copy()
-    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 5.6), dpi=160)
     ax = fig.add_subplot(111)
@@ -545,8 +515,8 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, footer: str, waterm
 
     ax.bar(x, y)
     ax.set_xticks(x)
-    ax.set_xticklabels(d["label"].tolist(), rotation=0)
-    ax.set_ylim(0, 105)  # headroom for value labels
+    ax.set_xticklabels(d["series"].tolist(), rotation=0)
+    ax.set_ylim(0, 105)
     ax.set_ylabel("1Y percentile rank (p252, 0-100)")
     ax.set_title("TWSE Market Snapshot — 1Y Rank (p252)", pad=12)
 
@@ -564,7 +534,6 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, footer: str, waterm
 def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     d = df_m.copy()
     d = d[~d["pΔ60"].isna()].copy()
-    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 5.6), dpi=160)
     ax = fig.add_subplot(111)
@@ -578,7 +547,7 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, footer: str, waterma
 
         ax.bar(x, y)
         ax.set_xticks(x)
-        ax.set_xticklabels(d["label"].tolist(), rotation=0)
+        ax.set_xticklabels(d["series"].tolist(), rotation=0)
         ax.set_ylim(0, 105)
         ax.set_ylabel("Shock rank (pΔ60, percentile of |Δ1D| within last 60)")
         ax.set_title("Today's Move — 60D Shock Rank (pΔ60)", pad=12)
@@ -596,7 +565,6 @@ def make_rank60_jump_abs(df_m: pd.DataFrame, out_png: Path, footer: str, waterma
 
 def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     d = df_m.copy()
-    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 6.2), dpi=160)
     ax = fig.add_subplot(111)
@@ -606,7 +574,7 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
         y = float(row["z60"]) if not pd.isna(row["z60"]) else float("nan")
         if math.isnan(x) or math.isnan(y):
             continue
-        ax.scatter([x], [y], label=str(row["label"]))
+        ax.scatter([x], [y], label=str(row["series"]))
 
     ax.set_xlim(0, 100)
     ax.set_xlabel("1Y rank (p252 percentile)")
@@ -615,7 +583,6 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
 
     handles, labels = ax.get_legend_handles_labels()
     if labels:
-        # legend ABOVE footer; keep clear separation
         fig.legend(
             handles, labels,
             loc="lower center",
@@ -633,14 +600,10 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
 
 def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
     """
-    Public-facing:
-    - Keep SIGN (direction) for ret1% (TURNOVER/INDEX only).
-    - Symmetric y-axis around 0.
-    - Draw 0 baseline.
+    NOTE: kept filename/function name for backward compatibility, but now plots SIGNED ret1%.
     """
     d = df_m.copy()
     d = d[~d["ret1%"].isna()].copy()
-    d["label"] = d["series"].map(short_label)
 
     fig = plt.figure(figsize=(12, 5.6), dpi=160)
     ax = fig.add_subplot(111)
@@ -650,33 +613,35 @@ def make_ret1_abs_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark:
         ax.text(0.01, 0.6, "No 1-day % change data available (all NA).", fontsize=14)
     else:
         x = np.arange(len(d))
-        y = d["ret1%"].to_numpy(dtype=float)  # <-- keep sign (NO abs)
+        y = d["ret1%"].to_numpy(dtype=float)
 
         ax.bar(x, y)
+        ax.set_xticks(x)
+        ax.set_xticklabels(d["series"].tolist(), rotation=0)
+
+        # Always include 0 and keep both +/- directions.
+        y_min = float(np.nanmin(y))
+        y_max = float(np.nanmax(y))
+        y_min = min(y_min, 0.0)
+        y_max = max(y_max, 0.0)
+        pad = max(0.5, 0.12 * max(abs(y_min), abs(y_max), 1e-9))
+        ax.set_ylim(y_min - pad, y_max + pad)
+
         ax.axhline(0.0, linewidth=1.0, alpha=0.6)
 
-        ax.set_xticks(x)
-        ax.set_xticklabels(d["label"].tolist(), rotation=0)
         ax.set_ylabel("1-day % change (signed, %) — descriptive only")
         ax.set_title("1-day % change — Turnover / Index (NOT investment return)", pad=12)
 
-        # symmetric y-limits around 0 to show +/- clearly
-        if np.isfinite(y).any():
-            max_abs = float(np.nanmax(np.abs(y)))
-        else:
-            max_abs = 1.0
-        max_abs = max(max_abs, 0.5)  # avoid too-tight range when near 0
-        pad = max(0.6, 0.12 * max_abs)  # headroom for labels
-        ax.set_ylim(-max_abs - pad, max_abs + pad)
-
-        # value labels: above for +, below for -
+        # Value labels: above for +, below for -
+        span = (y_max - y_min) + 2 * pad
+        off = 0.03 * span
         for xi, yi in zip(x, y):
             if math.isnan(yi):
                 continue
             if yi >= 0:
-                ax.text(xi, yi + 0.06 * (max_abs + pad), f"{yi:.3f}%", ha="center", va="bottom", fontsize=10)
+                ax.text(xi, yi + off, f"{yi:.3f}%", ha="center", va="bottom", fontsize=10)
             else:
-                ax.text(xi, yi - 0.06 * (max_abs + pad), f"{yi:.3f}%", ha="center", va="top", fontsize=10)
+                ax.text(xi, yi - off, f"{yi:.3f}%", ha="center", va="top", fontsize=10)
 
     fig_footer_short(fig, footer)
     fig_watermark_topright(fig, watermark)
@@ -715,7 +680,6 @@ def main() -> int:
     chart_csv = out_dir / "chart_ready.csv"
     df_m.to_csv(chart_csv, index=False, encoding="utf-8")
 
-    # SHORT footer (public-facing) — keep it in one line
     not_published = (meta.used_date_status == "DATA_NOT_UPDATED")
     status_note = "today not published yet; using latest available" if not_published else "published"
     age = meta.data_age_days if meta.data_age_days is not None else "NA"
