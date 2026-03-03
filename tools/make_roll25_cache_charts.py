@@ -13,14 +13,10 @@ Generate chart_ready.csv + standard charts for roll25_cache (TWSE turnover).
 - 浮水印固定在右上角（避免與頁尾碰撞）。
 - Scatter 圖例放在頁尾上方（figure-level），避免遮住點。
 - 長條圖預留 headroom，避免頂端數值與圖表標題擠在一起。
-- 04 圖改為「保留正負號」：Y 軸含正負方向，並畫出 y=0 基準線（符合你提的需求）。
+- 04 圖改為「保留正負號」：Y 軸含正負方向，並畫出 y=0 基準線。
 
-資料定義提醒（避免誤導觀眾）：
+重要提醒（避免誤導觀眾）：
 - TURNOVER 這裡使用的是 trade_value（成交金額，TWD），不是「成交量（張數）」。
-
-Inputs:
-- Prefer: <CACHE_DIR>/roll25.json (points, newest-first)
-- Fallback: <CACHE_DIR>/latest_report.json with embedded "cache_roll25" points
 
 Outputs (to --out):
 - 00_font_smoketest.png
@@ -28,7 +24,8 @@ Outputs (to --out):
 - 01_rank252_overview.png
 - 02_rank60_jump_abs.png
 - 03_z60_vs_rank252_scatter.png
-- 04_ret1_signed_pct.png   (檔名仍沿用 04_ret1_abs_pct.png 以維持既有 workflow 相容)
+- 04_ret1_signed_pct.png   (你目前 yml 需要的檔名)
+- 04_ret1_abs_pct.png      (額外保留一份舊檔名，避免其他引用壞掉)
 """
 
 from __future__ import annotations
@@ -70,7 +67,7 @@ def set_cjk_font_best_effort() -> None:
             "Arial Unicode MS",
             "DejaVu Sans",
         ]
-        matplotlib.rcParams["axes.unicode_minus"] = False  # show minus sign correctly
+        matplotlib.rcParams["axes.unicode_minus"] = False
     except Exception:
         pass
 
@@ -162,7 +159,6 @@ def fig_watermark_topright(fig: plt.Figure, text: str) -> None:
 
 
 def fig_footer_short(fig: plt.Figure, text: str) -> None:
-    # keep footer short; one line only
     fig.text(0.01, 0.012, text, ha="left", va="bottom", fontsize=9, alpha=0.85)
 
 
@@ -363,7 +359,6 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
                 prev_c = safe_float(p.get(k))
                 break
 
-        # If prev_close missing but close+change exists, derive prev_close = close - change
         if prev_c is None and c is not None and chg is not None:
             prev_c = c - chg
 
@@ -389,20 +384,15 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
     if df.empty:
         raise ValueError("All rows missing parseable date; cannot proceed.")
 
-    # roll25.json is newest-first; sort ascending for strict adjacency + plotting
     df = df.sort_values("date").reset_index(drop=True)
 
-    # If prev_close still NA, fill from strict adjacency previous close in ascending order
     df["prev_close"] = df["prev_close"].where(df["prev_close"].notna(), df["close"].shift(1))
 
-    # Derive pct_change_close if missing and close+prev_close available
     if df["pct_change_close"].isna().all() and df["close"].notna().sum() >= 2:
         denom = df["prev_close"]
         ok = denom.notna() & (denom != 0) & df["close"].notna()
         df.loc[ok, "pct_change_close"] = 100.0 * (df.loc[ok, "close"] / denom.loc[ok] - 1.0)
 
-    # Derive amplitude_pct if missing and high/low exists
-    # Policy: denominator prefer prev_close (= close - change) when available; else fallback close.
     if df["amplitude_pct"].isna().all():
         denom = df["prev_close"].where(df["prev_close"].notna(), df["close"])
         ok = df["high"].notna() & df["low"].notna() & denom.notna() & (denom != 0)
@@ -412,21 +402,10 @@ def points_to_df(points: List[Dict[str, Any]]) -> pd.DataFrame:
 
 
 # -----------------------------
-# Metrics (Z/P table compatible)
+# Metrics
 # -----------------------------
 
 def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
-    """
-    Public series names:
-    - TURNOVER: turnover_twd (成交金額)
-    - INDEX: close (加權指數收盤)
-    - INDEX_%CHG: pct_change_close
-    - AMPL_%: amplitude_pct
-    - TURNOVERx20: vol_multiplier_20 (成交金額相對 20 日均值的倍數)
-
-    Table:
-    series | value | z60 | p60 | z252 | p252 | zΔ60 | pΔ60 | ret1% | confidence
-    """
     df = df.copy()
 
     for col in ["turnover_twd", "close", "pct_change_close", "amplitude_pct", "prev_close"]:
@@ -474,7 +453,6 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
             return float("nan")
         return 100.0 * (v_today / v_prev - 1.0)
 
-    # allow ret1/delta only for TURNOVER + INDEX (avoid confusing ratios for derived series)
     series_specs = [
         ("TURNOVER", "turnover_twd", True, True),
         ("INDEX", "close", True, True),
@@ -528,13 +506,10 @@ def compute_metrics(df: pd.DataFrame, min_points_20: int = 15) -> pd.DataFrame:
 
 
 # -----------------------------
-# Plotting (public-facing / 全中文)
+# Plotting (全中文)
 # -----------------------------
 
 def series_label_zh(series_key: str) -> str:
-    """
-    圖表顯示用中文名稱（不改動 chart_ready.csv 的 series key）
-    """
     m = {
         "TURNOVER": "成交金額",
         "INDEX": "加權指數",
@@ -569,7 +544,7 @@ def make_rank252_overview(df_m: pd.DataFrame, out_png: Path, footer: str, waterm
     ax.bar(x, y)
     ax.set_xticks(x)
     ax.set_xticklabels(d["label_zh"].tolist(), rotation=0)
-    ax.set_ylim(0, 105)  # headroom for value labels
+    ax.set_ylim(0, 105)
     ax.set_ylabel("近一年位階（p252，百分位 0–100）")
     ax.set_title("台股市場快照：近一年位階（p252）", pad=12)
 
@@ -641,9 +616,9 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
         fig.legend(
             handles, labels,
             loc="lower center",
-            ncol=min(3, len(labels)),   # 中文較長，保守一點
+            ncol=min(3, len(labels)),
             frameon=False,
-            bbox_to_anchor=(0.5, 0.06),  # above footer
+            bbox_to_anchor=(0.5, 0.06),
         )
 
     fig_footer_short(fig, footer)
@@ -654,9 +629,6 @@ def make_z60_vs_rank252_scatter(df_m: pd.DataFrame, out_png: Path, footer: str, 
 
 
 def make_ret1_signed_pct(df_m: pd.DataFrame, out_png: Path, footer: str, watermark: str) -> None:
-    """
-    保留正負號（y 軸含正負方向）
-    """
     d = df_m.copy()
     d = d[~d["ret1%"].isna()].copy()
     d["label_zh"] = d["series"].map(series_label_zh)
@@ -672,20 +644,18 @@ def make_ret1_signed_pct(df_m: pd.DataFrame, out_png: Path, footer: str, waterma
         y = d["ret1%"].to_numpy(dtype=float)
 
         ax.bar(x, y)
-        ax.axhline(0.0, linewidth=1.0)  # baseline
+        ax.axhline(0.0, linewidth=1.0)
         ax.set_xticks(x)
         ax.set_xticklabels(d["label_zh"].tolist(), rotation=0)
         ax.set_ylabel("1 日變動（%）— 保留正負號（描述用途）")
         ax.set_title("1 日變動（%）：成交金額 / 加權指數（非投資建議）", pad=12)
 
-        # symmetric y-limits
         max_abs = float(np.nanmax(np.abs(y))) if len(y) else 0.0
         if not np.isfinite(max_abs) or max_abs <= 0.0:
             max_abs = 1.0
         pad = max_abs * 0.18
         ax.set_ylim(-(max_abs + pad), (max_abs + pad))
 
-        # value labels
         for xi, yi in zip(x, y):
             if math.isnan(yi):
                 continue
@@ -733,7 +703,6 @@ def main() -> int:
     chart_csv = out_dir / "chart_ready.csv"
     df_m.to_csv(chart_csv, index=False, encoding="utf-8")
 
-    # SHORT footer (單行)
     not_published = (meta.used_date_status == "DATA_NOT_UPDATED")
     note = "（今日尚未公布，採用最新可得）" if not_published else ""
     age = meta.data_age_days if meta.data_age_days is not None else "NA"
@@ -744,12 +713,15 @@ def main() -> int:
     make_rank60_jump_abs(df_m, out_dir / "02_rank60_jump_abs.png", footer, args.watermark)
     make_z60_vs_rank252_scatter(df_m, out_dir / "03_z60_vs_rank252_scatter.png", footer, args.watermark)
 
-    # 檔名仍維持 04_ret1_abs_pct.png，避免你現有 yml/檢核清單要改一堆
+    # ✅ 你目前 yml 需要的檔名（確保 mtime 會被更新）
+    make_ret1_signed_pct(df_m, out_dir / "04_ret1_signed_pct.png", footer, args.watermark)
+
+    # ✅ 同時保留舊檔名（避免其他引用壞掉；不需要可自行刪掉）
     make_ret1_signed_pct(df_m, out_dir / "04_ret1_abs_pct.png", footer, args.watermark)
 
     print(f"[OK] out_dir={out_dir}")
     print(f"[OK] wrote: {chart_csv}")
-    print("[OK] wrote: 00..04 pngs (04 is signed % change; filename kept for workflow compatibility)")
+    print("[OK] wrote: 00..04 pngs (04 includes signed version; also wrote legacy name)")
     print(f"[INFO] points_rows={len(df_points)} date_range={df_points['date'].iloc[0].date()}..{df_points['date'].iloc[-1].date()}")
     return 0
 
