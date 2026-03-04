@@ -50,6 +50,78 @@ import matplotlib.dates as mdates
 PERCENTILE_GUIDES = [50, 80, 90, 95, 99]
 
 
+# -----------------------
+# i18n / labels
+# -----------------------
+TEXT = {
+    "en": {
+        "twse_close_title": "TWSE close",
+        "twse_trade_value_title": "TWSE trade_value",
+        "close_ylabel": "Close",
+        "trade_value_ylabel": "Trade value",
+        "percentile_rank_ylabel": "Percentile rank (0-100)",
+        "zscore_ylabel": "Z-score",
+        "amplitude_pct_title": "amplitude_pct",
+        "amplitude_pct_ylabel": "Amplitude %",
+        "trade_value_percentile_rank": "Trade value percentile rank",
+        "trade_value_zscore": "Trade value z-score",
+        "close_percentile_rank": "Close percentile rank",
+        "amplitude_percentile_rank": "Amplitude percentile rank",
+        "win_252": "252D ~ 1Y",
+        "win_60": "60D ~ 3M",
+        "note_percentile_252": "Note: percentile rank = today's position within the last 252 trading days (0-100).",
+        "note_percentile_60": "Note: percentile rank = today's position within the last 60 trading days (0-100).",
+        "note_z_252": "Note: z-score = (x - mean) / std within the last 252 trading days.",
+    },
+    "zh": {
+        "twse_close_title": "加權指數收盤",
+        "twse_trade_value_title": "大盤成交金額",
+        "close_ylabel": "指數點位",
+        "trade_value_ylabel": "成交金額",
+        "percentile_rank_ylabel": "百分位排名（0–100）",
+        "zscore_ylabel": "Z 分數",
+        "amplitude_pct_title": "振幅（%）",
+        "amplitude_pct_ylabel": "振幅（%）",
+        "trade_value_percentile_rank": "成交金額百分位排名",
+        "trade_value_zscore": "成交金額 Z 分數",
+        "close_percentile_rank": "收盤指數百分位排名",
+        "amplitude_percentile_rank": "振幅百分位排名",
+        "win_252": "近 252 個交易日 ≈ 1 年",
+        "win_60": "近 60 個交易日 ≈ 3 個月",
+        "note_percentile_252": "註：百分位排名＝今日數值在近 252 個交易日的相對位置（0–100）。",
+        "note_percentile_60": "註：百分位排名＝今日數值在近 60 個交易日的相對位置（0–100）。",
+        "note_z_252": "註：Z 分數＝（今日值－近 252 日平均）÷ 近 252 日標準差。",
+    },
+}
+
+
+def apply_cjk_font_if_needed(lang: str) -> None:
+    """
+    Make CJK work on GitHub Actions ubuntu runners (fonts-noto-cjk installed in your workflow).
+    This is intentionally "best-effort": if the font name differs, matplotlib will fallback.
+    """
+    if lang != "zh":
+        return
+    plt.rcParams["font.sans-serif"] = [
+        "Noto Sans CJK TC",
+        "Noto Sans CJK SC",
+        "Noto Sans CJK JP",
+        "Noto Sans CJK KR",
+        "Noto Sans",
+        "DejaVu Sans",
+    ]
+    plt.rcParams["axes.unicode_minus"] = False
+
+
+def t(lang: str, key: str) -> str:
+    if lang not in TEXT:
+        lang = "en"
+    return TEXT[lang].get(key, TEXT["en"].get(key, key))
+
+
+# -----------------------
+# IO helpers
+# -----------------------
 def load_roll25_json(path: str) -> List[Dict[str, Any]]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -64,6 +136,9 @@ def save_fig(fig, out_path: Path) -> None:
     plt.close(fig)
 
 
+# -----------------------
+# math helpers
+# -----------------------
 def ecdf_percentile(window: np.ndarray, x: float) -> Optional[float]:
     """
     Percentile definition:
@@ -111,6 +186,9 @@ def rolling_z_and_p(series: np.ndarray, window: int) -> Tuple[np.ndarray, np.nda
     return z, p
 
 
+# -----------------------
+# chart helpers
+# -----------------------
 def add_percentile_guides(ax) -> None:
     """Add horizontal reference lines for percentiles: 50/80/90/95/99."""
     for lvl in PERCENTILE_GUIDES:
@@ -146,7 +224,7 @@ def annotate_last_value(
     """
     Mark + label the last NON-NaN point of a series.
     - Adds a small circle at the last point.
-    - Adds a value label near the point (auto places to avoid clipping).
+    - Adds a value label near the point (auto places to reduce clipping).
     """
     xs = pd.to_datetime(x, errors="coerce")
     ys = pd.to_numeric(y, errors="coerce")
@@ -158,14 +236,20 @@ def annotate_last_value(
     x_last = xs.loc[last_idx]
     y_last = float(ys.loc[last_idx])
 
-    # marker
+    # marker (last effective point)
     ax.plot([x_last], [y_last], marker="o", markersize=marker_size)
 
-    # text: compact or numeric
+    # label
     label = formatter(y_last) if formatter is not None else fmt.format(y_last)
 
-    # Decide label side: if too close to right edge, put label on the left.
-    # (matplotlib uses float days for date axis)
+    # Make sure axis limits are materialized before we decide label placement
+    # (Agg backend usually works without draw(), but this is safer.)
+    try:
+        ax.figure.canvas.draw()
+    except Exception:
+        pass
+
+    # Decide label side (avoid right-edge clipping)
     try:
         x_num = mdates.date2num(x_last.to_pydatetime())
     except Exception:
@@ -175,7 +259,7 @@ def annotate_last_value(
     xspan = max(xmax - xmin, 1e-9)
     near_right = x_num > (xmax - 0.03 * xspan)
 
-    # Decide vertical offset: if near top of visible range, place below.
+    # Decide vertical offset (avoid top clipping)
     ymin, ymax = ax.get_ylim()
     yspan = max(ymax - ymin, 1e-9)
     y_pos = (y_last - ymin) / yspan
@@ -204,12 +288,19 @@ def add_bottom_note(fig, text: str) -> None:
     fig.text(0.01, 0.01, text, ha="left", va="bottom", fontsize=9, alpha=0.85)
 
 
+# -----------------------
+# main
+# -----------------------
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--roll25_json", required=True, help="Path to roll25.json (list of records)")
     ap.add_argument("--out_dir", required=True, help="Output directory for charts")
     ap.add_argument("--max_points", default="400", help="Max points to plot (most recent). Default 400")
+    ap.add_argument("--lang", default="zh", choices=["zh", "en"], help="Chart language: zh or en (default: zh)")
     args = ap.parse_args()
+
+    lang = args.lang
+    apply_cjk_font_if_needed(lang)
 
     out_dir = Path(args.out_dir)
     ensure_dir(out_dir)
@@ -269,8 +360,8 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["close"])
     annotate_last_value(ax, df["date"], df["close"], fmt="{:,.0f}")
-    ax.set_title(f"TWSE close (as_of={asof})", pad=16)
-    ax.set_ylabel("Close")
+    ax.set_title(f"{t(lang,'twse_close_title')} (as_of={asof})", pad=16)
+    ax.set_ylabel(t(lang, "close_ylabel"))
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "10_close_series.png")
 
@@ -278,30 +369,36 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["trade_value"])
     annotate_last_value(ax, df["date"], df["trade_value"], formatter=format_compact_number)
-    ax.set_title(f"TWSE trade_value (as_of={asof})", pad=16)
-    ax.set_ylabel("Trade value")
+    ax.set_title(f"{t(lang,'twse_trade_value_title')} (as_of={asof})", pad=16)
+    ax.set_ylabel(t(lang, "trade_value_ylabel"))
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "11_trade_value_series.png")
 
-    # 3) Trade value p252  (+ guides + last value + note)
+    # 3) Trade value p252 (+ guides + last value + note)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_p252"])
     add_percentile_guides(ax)
+    ax.set_ylim(0, 100)  # set first so annotation placement uses correct ylim
     annotate_last_value(ax, df["date"], df["tv_p252"], fmt="{:.1f}")
-    ax.set_title(f"Trade value percentile rank (252D ~ 1Y) (as_of={asof})", pad=16)
-    ax.set_ylabel("Percentile rank (0-100)")
-    ax.set_ylim(0, 100)
-    add_bottom_note(fig, "Note: percentile rank = today's position within the last 252 trading days (0-100).")
+    ax.set_title(
+        f"{t(lang,'trade_value_percentile_rank')} ({t(lang,'win_252')}) (as_of={asof})",
+        pad=16,
+    )
+    ax.set_ylabel(t(lang, "percentile_rank_ylabel"))
+    add_bottom_note(fig, t(lang, "note_percentile_252"))
     fig.tight_layout(rect=(0, 0.04, 1, 0.98))
     save_fig(fig, out_dir / "12_trade_value_p252.png")
 
-    # 4) Trade value z252  (+ note + last value)
+    # 4) Trade value z252 (+ note + last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_z252"])
     annotate_last_value(ax, df["date"], df["tv_z252"], fmt="{:.2f}")
-    ax.set_title(f"Trade value z-score (252D ~ 1Y) (as_of={asof})", pad=16)
-    ax.set_ylabel("Z-score")
-    add_bottom_note(fig, "Note: z-score = (x - mean) / std within the last 252 trading days.")
+    ax.set_title(
+        f"{t(lang,'trade_value_zscore')} ({t(lang,'win_252')}) (as_of={asof})",
+        pad=16,
+    )
+    ax.set_ylabel(t(lang, "zscore_ylabel"))
+    add_bottom_note(fig, t(lang, "note_z_252"))
     fig.tight_layout(rect=(0, 0.04, 1, 0.98))
     save_fig(fig, out_dir / "13_trade_value_z252.png")
 
@@ -309,48 +406,57 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["amplitude_pct"])
     annotate_last_value(ax, df["date"], df["amplitude_pct"], fmt="{:.2f}")
-    ax.set_title(f"amplitude_pct (as_of={asof})", pad=16)
-    ax.set_ylabel("Amplitude %")
+    ax.set_title(f"{t(lang,'amplitude_pct_title')} (as_of={asof})", pad=16)
+    ax.set_ylabel(t(lang, "amplitude_pct_ylabel"))
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "14_amplitude_pct.png")
 
-    # 6) Amplitude p252  (+ guides + last value + note)
+    # 6) Amplitude p252 (+ guides + last value + note)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["amp_p252"])
     add_percentile_guides(ax)
-    annotate_last_value(ax, df["date"], df["amp_p252"], fmt="{:.1f}")
-    ax.set_title(f"Amplitude percentile rank (252D ~ 1Y) (as_of={asof})", pad=16)
-    ax.set_ylabel("Percentile rank (0-100)")
     ax.set_ylim(0, 100)
-    add_bottom_note(fig, "Note: percentile rank = today's position within the last 252 trading days (0-100).")
+    annotate_last_value(ax, df["date"], df["amp_p252"], fmt="{:.1f}")
+    ax.set_title(
+        f"{t(lang,'amplitude_percentile_rank')} ({t(lang,'win_252')}) (as_of={asof})",
+        pad=16,
+    )
+    ax.set_ylabel(t(lang, "percentile_rank_ylabel"))
+    add_bottom_note(fig, t(lang, "note_percentile_252"))
     fig.tight_layout(rect=(0, 0.04, 1, 0.98))
     save_fig(fig, out_dir / "15_amplitude_p252.png")
 
-    # 7) Close p252  (+ guides + last value + note)
+    # 7) Close p252 (+ guides + last value + note)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["close_p252"])
     add_percentile_guides(ax)
-    annotate_last_value(ax, df["date"], df["close_p252"], fmt="{:.1f}")
-    ax.set_title(f"Close percentile rank (252D ~ 1Y) (as_of={asof})", pad=16)
-    ax.set_ylabel("Percentile rank (0-100)")
     ax.set_ylim(0, 100)
-    add_bottom_note(fig, "Note: percentile rank = today's position within the last 252 trading days (0-100).")
+    annotate_last_value(ax, df["date"], df["close_p252"], fmt="{:.1f}")
+    ax.set_title(
+        f"{t(lang,'close_percentile_rank')} ({t(lang,'win_252')}) (as_of={asof})",
+        pad=16,
+    )
+    ax.set_ylabel(t(lang, "percentile_rank_ylabel"))
+    add_bottom_note(fig, t(lang, "note_percentile_252"))
     fig.tight_layout(rect=(0, 0.04, 1, 0.98))
     save_fig(fig, out_dir / "16_close_p252.png")
 
-    # 8) Trade value p60  (+ guides + last value + note)
+    # 8) Trade value p60 (+ guides + last value + note)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_p60"])
     add_percentile_guides(ax)
-    annotate_last_value(ax, df["date"], df["tv_p60"], fmt="{:.1f}")
-    ax.set_title(f"Trade value percentile rank (60D ~ 3M) (as_of={asof})", pad=16)
-    ax.set_ylabel("Percentile rank (0-100)")
     ax.set_ylim(0, 100)
-    add_bottom_note(fig, "Note: percentile rank = today's position within the last 60 trading days (0-100).")
+    annotate_last_value(ax, df["date"], df["tv_p60"], fmt="{:.1f}")
+    ax.set_title(
+        f"{t(lang,'trade_value_percentile_rank')} ({t(lang,'win_60')}) (as_of={asof})",
+        pad=16,
+    )
+    ax.set_ylabel(t(lang, "percentile_rank_ylabel"))
+    add_bottom_note(fig, t(lang, "note_percentile_60"))
     fig.tight_layout(rect=(0, 0.04, 1, 0.98))
     save_fig(fig, out_dir / "17_trade_value_p60.png")
 
-    # Optional: export a chart-ready CSV for manual edits
+    # Export chart-ready CSV (kept in English column names for audit/repro)
     csv_path = out_dir / "roll25_chart_ready.csv"
     df_out = df[
         [
