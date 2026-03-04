@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 TZ_NAME_DEFAULT = "Asia/Taipei"
 MANIFEST_SCHEMA = "chart_manifest_v1"
-SCRIPT_FINGERPRINT = "make_episode_charts@v1.1.headroom_fix"
+SCRIPT_FINGERPRINT = "make_episode_charts@v1.2.bb_gauge_point_labels"
 
 
 # -----------------------------
@@ -190,6 +190,33 @@ def _bar_label_safe(ax: plt.Axes, bars, *, fmt: str, fontsize: int = 9, padding:
     except Exception:
         # best-effort only
         return
+
+
+def _annotate_near_point(
+    ax: plt.Axes,
+    *,
+    x: float,
+    y: float,
+    text: str,
+    dx: float,
+    dy: float,
+    ha: str,
+    va: str,
+    fontsize: int = 9,
+) -> None:
+    """
+    Place a label close to (x,y) using offset points so it "sticks" to the marker.
+    """
+    ax.annotate(
+        text,
+        xy=(x, y),
+        xytext=(dx, dy),
+        textcoords="offset points",
+        ha=ha,
+        va=va,
+        fontsize=fontsize,
+        clip_on=False,
+    )
 
 
 # -----------------------------
@@ -446,10 +473,24 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     fig = plt.figure(figsize=(8, 4.5))
     ax = fig.add_subplot(111)
 
-    # Draw a "gauge": lower -> upper line, with ma and price markers
-    ax.plot([lower, upper], [0, 0])  # band range
-    ax.scatter([ma], [0], marker="|", s=800)
-    ax.scatter([price], [0], s=80)
+    # Use explicit colors (user要求 upper/lower 與 price 的點顏色不同)
+    band_color = "C0"
+    price_color = "C1"
+    bound_color = "C2"
+
+    y0 = 0.0
+
+    # Draw a "gauge": lower -> upper line, with explicit point markers
+    ax.hlines(y0, lower, upper, linewidth=2.0, color=band_color)
+
+    # lower/upper: dots (same color) != price color
+    ax.scatter([lower, upper], [y0, y0], s=90, marker="o", color=bound_color, zorder=3)
+
+    # ma: center tick (keep visually tied to the band line)
+    ax.scatter([ma], [y0], marker="|", s=1100, color=band_color, zorder=4)
+
+    # price: dot with different color
+    ax.scatter([price], [y0], s=120, marker="o", color=price_color, zorder=5)
 
     ax.set_yticks([])
     ax.set_xlabel("Price")
@@ -462,15 +503,59 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     span = max(upper - lower, 1e-6)
     ax.set_xlim(lower - 0.10 * span, upper + 0.10 * span)
 
-    # label key points
-    ax.text(lower, 0.05, f"lower={lower:.2f}", ha="left", va="bottom", fontsize=9)
-    ax.text(ma, 0.08, f"ma={ma:.2f}", ha="center", va="bottom", fontsize=9)
-    ax.text(upper, 0.05, f"upper={upper:.2f}", ha="right", va="bottom", fontsize=9)
-    ax.text(price, -0.08, f"price={price:.2f}", ha="center", va="top", fontsize=9)
+    # Give vertical room for near-point labels (we hide y-axis anyway)
+    ax.set_ylim(-1.0, 1.0)
+
+    # ---- Point-near labels (upper/lower/ma/price) ----
+    # Offsets are in "points" so they scale nicely at different DPI.
+    _annotate_near_point(
+        ax,
+        x=lower,
+        y=y0,
+        text=f"lower={lower:.2f}",
+        dx=4,
+        dy=14,
+        ha="left",
+        va="bottom",
+        fontsize=9,
+    )
+    _annotate_near_point(
+        ax,
+        x=upper,
+        y=y0,
+        text=f"upper={upper:.2f}",
+        dx=-4,
+        dy=14,
+        ha="right",
+        va="bottom",
+        fontsize=9,
+    )
+    _annotate_near_point(
+        ax,
+        x=ma,
+        y=y0,
+        text=f"ma={ma:.2f}",
+        dx=0,
+        dy=18,
+        ha="center",
+        va="bottom",
+        fontsize=9,
+    )
+    _annotate_near_point(
+        ax,
+        x=price,
+        y=y0,
+        text=f"price={price:.2f}",
+        dx=0,
+        dy=-18,
+        ha="center",
+        va="top",
+        fontsize=9,
+    )
 
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     meta = save_fig(fig, out_dir / "04_0050_bb_band_gauge.png", dpi=dpi)
-    meta["title"] = "0050 BB band gauge"
+    meta["title"] = "0050 BB band gauge (point-near labels + upper/lower dots)"
     return meta
 
 
