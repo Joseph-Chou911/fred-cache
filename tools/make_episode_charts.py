@@ -47,7 +47,7 @@ from matplotlib import font_manager as fm  # noqa: E402
 
 TZ_NAME_DEFAULT = "Asia/Taipei"
 MANIFEST_SCHEMA = "chart_manifest_v1"
-SCRIPT_FINGERPRINT = "make_episode_charts@v1.5.roll25_rank_note_lang"
+SCRIPT_FINGERPRINT = "make_episode_charts@v1.6.zh_all_charts_roll25_rename_market_heat"
 
 
 # -----------------------------
@@ -135,7 +135,7 @@ def save_fig(fig: plt.Figure, out_path: Path, dpi: int) -> Dict[str, Any]:
 def detect_cjk_font_family() -> Optional[str]:
     """
     Best-effort: detect whether a CJK font family exists on the current system.
-    This is used to decide whether we can safely render Traditional Chinese labels.
+    Used to decide if we can safely render Traditional Chinese labels (avoid tofu).
     """
     candidates = [
         "Noto Sans CJK TC",
@@ -243,10 +243,29 @@ def _annotate_near_point(
     )
 
 
+def _bb_state_human(bb_state: Any, lang: str) -> str:
+    s = str(bb_state) if bb_state is not None else "N/A"
+    if lang != "zh":
+        return s
+
+    mapping = {
+        "NEAR_UPPER_BAND": "接近上緣",
+        "NEAR_LOWER_BAND": "接近下緣",
+        "INSIDE_BAND": "通道內",
+        "ABOVE_UPPER_BAND": "高於上緣",
+        "BELOW_LOWER_BAND": "低於下緣",
+        "UNKNOWN": "未知",
+        "N/A": "N/A",
+    }
+    return mapping.get(s, s)
+
+
 # -----------------------------
 # Chart builders (snapshot)
 # -----------------------------
-def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+def chart_00_episode_snapshot(
+    pack: Dict[str, Any], out_dir: Path, dpi: int, *, lang: str = "en"
+) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     warnings: List[str] = []
     tz = pack.get("timezone") or TZ_NAME_DEFAULT
     day = pack.get("day_key_local") or "N/A"
@@ -265,8 +284,25 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
     ax = fig.add_axes([0, 0, 1, 1])
     ax.axis("off")
 
-    header = f"Episode Snapshot | day={day} ({tz})"
-    sub = f"pack.generated_at_local={pack.get('generated_at_local','N/A')} | build={pack.get('build_fingerprint','N/A')}"
+    if lang == "zh":
+        header = f"本集快照 | 日期={day} ({tz})"
+        sub = f"產出時間={pack.get('generated_at_local','N/A')} | build={pack.get('build_fingerprint','N/A')}"
+        label_inputs = "資料來源："
+        label_warn = "警示："
+        sec_heat = "市場熱度（大盤成交）"
+        sec_margin = "融資（槓桿）"
+        sec_0050 = "0050 位置（布林通道）"
+        footer = "註：此頁為紀錄/稽核快照，不是投資建議；可用 manifest 追溯資料。"
+    else:
+        header = f"Episode Snapshot | day={day} ({tz})"
+        sub = f"pack.generated_at_local={pack.get('generated_at_local','N/A')} | build={pack.get('build_fingerprint','N/A')}"
+        label_inputs = "Inputs:"
+        label_warn = "Warnings:"
+        sec_heat = "market heat (TWSE turnover)"
+        sec_margin = "taiwan_margin (Leverage)"
+        sec_0050 = "tw0050_bb (0050 Position)"
+        footer = "Note: Snapshot for reporting/logging; not investment advice. Use manifest for audit."
+
     ax.text(0.02, 0.95, header, fontsize=16, fontweight="bold", va="top")
     ax.text(0.02, 0.91, sub, fontsize=9, va="top")
 
@@ -274,16 +310,16 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
         v = inp.get(k, {}) if isinstance(inp, dict) else {}
         return f"{k}: as_of={v.get('as_of_date','N/A')} age_days={v.get('age_days','N/A')} fp={v.get('fingerprint','N/A')}"
 
-    ax.text(0.02, 0.86, "Inputs:", fontsize=10, fontweight="bold", va="top")
+    ax.text(0.02, 0.86, label_inputs, fontsize=10, fontweight="bold", va="top")
     ax.text(0.02, 0.83, _inp_line("roll25"), fontsize=9, va="top")
     ax.text(0.02, 0.80, _inp_line("taiwan_margin"), fontsize=9, va="top")
     ax.text(0.02, 0.77, _inp_line("tw0050_bb"), fontsize=9, va="top")
 
     warn_txt = "NONE" if not warnings else ", ".join(warnings)
-    ax.text(0.02, 0.72, f"Warnings: {warn_txt}", fontsize=9, va="top")
+    ax.text(0.02, 0.72, f"{label_warn} {warn_txt}", fontsize=9, va="top")
 
     y = 0.66
-    ax.text(0.02, y, "roll25 (TWSE Turnover / Heat):", fontsize=11, fontweight="bold", va="top")
+    ax.text(0.02, y, f"{sec_heat}：", fontsize=11, fontweight="bold", va="top")
     y -= 0.04
     roll_lines = [
         f"used_date={r.get('used_date','N/A')} mode={r.get('mode','N/A')}",
@@ -297,7 +333,7 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
         y -= 0.03
 
     y -= 0.01
-    ax.text(0.02, y, "taiwan_margin (Leverage):", fontsize=11, fontweight="bold", va="top")
+    ax.text(0.02, y, f"{sec_margin}：", fontsize=11, fontweight="bold", va="top")
     y -= 0.04
     margin_lines = [
         f"date={m.get('twse_data_date','N/A')}",
@@ -312,7 +348,7 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
         y -= 0.03
 
     y -= 0.01
-    ax.text(0.02, y, "tw0050_bb (0050 Position):", fontsize=11, fontweight="bold", va="top")
+    ax.text(0.02, y, f"{sec_0050}：", fontsize=11, fontweight="bold", va="top")
     y -= 0.04
     veto_reasons = t.get("pledge_veto_reasons")
     if isinstance(veto_reasons, list):
@@ -333,16 +369,10 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
         ax.text(0.04, y, s, fontsize=9, va="top")
         y -= 0.03
 
-    ax.text(
-        0.02,
-        0.02,
-        "Note: Snapshot for reporting/logging; not investment advice. Use manifest for audit.",
-        fontsize=8,
-        va="bottom",
-    )
+    ax.text(0.02, 0.02, footer, fontsize=8, va="bottom")
 
     meta = save_fig(fig, out_dir / "00_episode_snapshot.png", dpi=dpi)
-    meta["title"] = "Episode snapshot (one-page text)"
+    meta["title"] = f"Episode snapshot (lang={lang})"
     return meta, warnings
 
 
@@ -397,22 +427,24 @@ def chart_01_roll25_percentile_bars(
     _set_ylim_with_headroom(ax, values, pct_like=True)
 
     asof = deep_get(raw_r25, "used_date") or deep_get(raw_r25, "series.trade_value.asof") or "N/A"
-    ax.set_title(f"roll25 ranks (as_of={asof})", pad=16)
+    if lang == "zh":
+        ax.set_title(f"市場熱度位階（截至 {asof}）", pad=16)
+    else:
+        ax.set_title(f"market heat ranks (as_of={asof})", pad=16)
 
     _bar_label_safe(ax, bars, fmt="%.1f", fontsize=9, padding=3)
 
-    # Footnote (leave bottom space so it won't be cropped)
     fig.text(0.01, 0.01, note, ha="left", va="bottom", fontsize=9)
-
-    # Layout: reserve bottom margin for the footnote
     fig.tight_layout(rect=(0, 0.08, 1, 0.98))
 
     meta = save_fig(fig, out_dir / "01_roll25_percentile_bars.png", dpi=dpi)
-    meta["title"] = f"roll25 rank bars (lang={lang})"
+    meta["title"] = f"market heat rank bars (lang={lang})"
     return meta
 
 
-def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+def chart_02_03_margin_bars(
+    pack: Dict[str, Any], out_dir: Path, dpi: int, *, lang: str = "en"
+) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     ext = pack.get("extracts_best_effort") or {}
     m = extracts_to_map(ext.get("margin", []))
 
@@ -424,45 +456,69 @@ def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tu
     tpex_chg = m.get("tpex_chg_yi")
     total_chg = m.get("total_chg_yi")
 
+    # X labels
+    if lang == "zh":
+        xlabels = ["TWSE\n上市", "TPEX\n上櫃", "TOTAL\n合計"]
+        foot = "註：TWSE＝上市；TPEX＝上櫃。"
+        ylabel_bal = "餘額（億元）"
+        ylabel_chg = "單日增減（億元）"
+    else:
+        xlabels = ["TWSE", "TPEX", "TOTAL"]
+        foot = "Note: TWSE=listed; TPEX=OTC."
+        ylabel_bal = "Balance (億)"
+        ylabel_chg = "Daily change (億)"
+
     meta_bal = None
     vals_bal: List[Tuple[str, float]] = []
-    for k, v in [("TWSE", twse_bal), ("TPEX", tpex_bal), ("TOTAL", total_bal)]:
+    for k, v, xl in [("TWSE", twse_bal, xlabels[0]), ("TPEX", tpex_bal, xlabels[1]), ("TOTAL", total_bal, xlabels[2])]:
         if isinstance(v, (int, float)):
-            vals_bal.append((k, float(v)))
+            vals_bal.append((xl, float(v)))
+
+    asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
 
     if vals_bal:
         fig = plt.figure(figsize=(8, 4.5))
         ax = fig.add_subplot(111)
+
         labels = [x[0] for x in vals_bal]
         values = [x[1] for x in vals_bal]
         bars = ax.bar(labels, values)
-        ax.set_ylabel("Balance (億)")
-        asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
-        ax.set_title(f"Margin balance (as_of={asof})", pad=16)
+
+        ax.set_ylabel(ylabel_bal)
+        if lang == "zh":
+            ax.set_title(f"融資餘額（截至 {asof}）", pad=16)
+        else:
+            ax.set_title(f"Margin balance (as_of={asof})", pad=16)
 
         _set_ylim_with_headroom(ax, values, pct_like=False, ratio=0.08)
         _bar_label_safe(ax, bars, fmt="%.1f", fontsize=9, padding=3)
 
-        fig.tight_layout(rect=(0, 0, 1, 0.98))
+        fig.text(0.01, 0.01, foot, ha="left", va="bottom", fontsize=9)
+        fig.tight_layout(rect=(0, 0.06, 1, 0.98))
+
         meta_bal = save_fig(fig, out_dir / "02_margin_balance_bars.png", dpi=dpi)
-        meta_bal["title"] = "Margin balance bars"
+        meta_bal["title"] = f"Margin balance bars (lang={lang})"
 
     meta_chg = None
     vals_chg: List[Tuple[str, float]] = []
-    for k, v in [("TWSE", twse_chg), ("TPEX", tpex_chg), ("TOTAL", total_chg)]:
+    for k, v, xl in [("TWSE", twse_chg, xlabels[0]), ("TPEX", tpex_chg, xlabels[1]), ("TOTAL", total_chg, xlabels[2])]:
         if isinstance(v, (int, float)):
-            vals_chg.append((k, float(v)))
+            vals_chg.append((xl, float(v)))
 
     if vals_chg:
         fig = plt.figure(figsize=(8, 4.5))
         ax = fig.add_subplot(111)
+
         labels = [x[0] for x in vals_chg]
         values = [x[1] for x in vals_chg]
         bars = ax.bar(labels, values)
+
         ax.axhline(0.0)
-        ax.set_ylabel("Daily change (億)")
-        asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
-        ax.set_title(f"Margin daily change (as_of={asof})", pad=16)
+        ax.set_ylabel(ylabel_chg)
+        if lang == "zh":
+            ax.set_title(f"融資單日增減（截至 {asof}）", pad=16)
+        else:
+            ax.set_title(f"Margin daily change (as_of={asof})", pad=16)
 
         ymin = min(values)
         ymax = max(values)
@@ -477,14 +533,18 @@ def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tu
                 x = b.get_x() + b.get_width() / 2
                 ax.text(x, h, f"{h:.1f}", ha="center", va="bottom" if h >= 0 else "top", fontsize=9)
 
-        fig.tight_layout(rect=(0, 0, 1, 0.98))
+        fig.text(0.01, 0.01, foot, ha="left", va="bottom", fontsize=9)
+        fig.tight_layout(rect=(0, 0.06, 1, 0.98))
+
         meta_chg = save_fig(fig, out_dir / "03_margin_change_bars.png", dpi=dpi)
-        meta_chg["title"] = "Margin daily change bars"
+        meta_chg["title"] = f"Margin daily change bars (lang={lang})"
 
     return meta_bal, meta_chg
 
 
-def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
+def chart_04_0050_bb_band_gauge(
+    pack: Dict[str, Any], out_dir: Path, dpi: int, *, lang: str = "en"
+) -> Optional[Dict[str, Any]]:
     ext = pack.get("extracts_best_effort") or {}
     t = extracts_to_map(ext.get("tw0050_bb", []))
 
@@ -516,11 +576,20 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     ax.scatter([price], [y0], s=120, marker="o", color=price_color, zorder=5)
 
     ax.set_yticks([])
-    ax.set_xlabel("Price")
-    ax.set_title(
-        f"0050 BB band position (as_of={t.get('last_date','N/A')}) | state={t.get('bb_state','N/A')} | z={fmt_float(t.get('bb_z'),3)}",
-        pad=16,
-    )
+    ax.set_xlabel("價格" if lang == "zh" else "Price")
+
+    last_date = t.get("last_date", "N/A")
+    state_raw = t.get("bb_state", "N/A")
+    state_h = _bb_state_human(state_raw, lang)
+    ztxt = fmt_float(t.get("bb_z"), 3)
+
+    if lang == "zh":
+        ax.set_title(f"0050 布林通道位置（截至 {last_date}）｜狀態={state_h}｜z={ztxt}", pad=16)
+    else:
+        ax.set_title(
+            f"0050 BB band position (as_of={last_date}) | state={state_raw} | z={ztxt}",
+            pad=16,
+        )
 
     span = max(upper - lower, 1e-6)
     ax.set_xlim(lower - 0.10 * span, upper + 0.10 * span)
@@ -547,18 +616,31 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
         price_cfg["dy"] = -22
         price_cfg["ha"] = "left"
 
-    _annotate_near_point(ax, x=lower, y=y0, text=f"lower={lower:.2f}", fontsize=9, arrow=True, arrow_color=bound_color, **lower_cfg)
-    _annotate_near_point(ax, x=upper, y=y0, text=f"upper={upper:.2f}", fontsize=9, arrow=True, arrow_color=bound_color, **upper_cfg)
-    _annotate_near_point(ax, x=ma, y=y0, text=f"ma={ma:.2f}", fontsize=9, arrow=True, arrow_color=band_color, **ma_cfg)
-    _annotate_near_point(ax, x=price, y=y0, text=f"price={price:.2f}", fontsize=9, arrow=True, arrow_color=price_color, **price_cfg)
+    if lang == "zh":
+        txt_lower = f"下緣={lower:.2f}"
+        txt_upper = f"上緣={upper:.2f}"
+        txt_ma = f"中線={ma:.2f}"
+        txt_price = f"現價={price:.2f}"
+    else:
+        txt_lower = f"lower={lower:.2f}"
+        txt_upper = f"upper={upper:.2f}"
+        txt_ma = f"ma={ma:.2f}"
+        txt_price = f"price={price:.2f}"
+
+    _annotate_near_point(ax, x=lower, y=y0, text=txt_lower, fontsize=9, arrow=True, arrow_color=bound_color, **lower_cfg)
+    _annotate_near_point(ax, x=upper, y=y0, text=txt_upper, fontsize=9, arrow=True, arrow_color=bound_color, **upper_cfg)
+    _annotate_near_point(ax, x=ma, y=y0, text=txt_ma, fontsize=9, arrow=True, arrow_color=band_color, **ma_cfg)
+    _annotate_near_point(ax, x=price, y=y0, text=txt_price, fontsize=9, arrow=True, arrow_color=price_color, **price_cfg)
 
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     meta = save_fig(fig, out_dir / "04_0050_bb_band_gauge.png", dpi=dpi)
-    meta["title"] = "0050 BB band gauge (arrow labels to markers)"
+    meta["title"] = f"0050 BB band gauge (lang={lang})"
     return meta
 
 
-def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
+def chart_05_0050_tranche_levels(
+    pack: Dict[str, Any], out_dir: Path, dpi: int, *, lang: str = "en"
+) -> Optional[Dict[str, Any]]:
     ext = pack.get("extracts_best_effort") or {}
     t = extracts_to_map(ext.get("tw0050_bb", []))
     levels = t.get("tranche_levels")
@@ -585,9 +667,17 @@ def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) 
     labels = [x[0] for x in rows]
     values = [x[1] for x in rows]
     bars = ax.bar(labels, values)
-    ax.set_ylabel("Price level")
-    ax.set_title(f"0050 tranche levels (as_of={t.get('last_date','N/A')})", pad=16)
-    ax.text(0.01, 0.98, "CAUTION: levels are statistical mapping, not buy/sell points.", transform=ax.transAxes, ha="left", va="top", fontsize=9)
+
+    if lang == "zh":
+        ax.set_ylabel("價位")
+        ax.set_title(f"0050 分批價位層級（截至 {t.get('last_date','N/A')}）", pad=16)
+        caution = "注意：這些層級是統計映射，不是買賣點。"
+    else:
+        ax.set_ylabel("Price level")
+        ax.set_title(f"0050 tranche levels (as_of={t.get('last_date','N/A')})", pad=16)
+        caution = "CAUTION: levels are statistical mapping, not buy/sell points."
+
+    ax.text(0.01, 0.98, caution, transform=ax.transAxes, ha="left", va="top", fontsize=9)
 
     _set_ylim_with_headroom(ax, values, pct_like=False, ratio=0.08)
     _bar_label_safe(ax, bars, fmt="%.2f", fontsize=9, padding=3)
@@ -595,7 +685,7 @@ def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) 
     fig.tight_layout(rect=(0, 0, 1, 0.98))
 
     meta = save_fig(fig, out_dir / "05_0050_tranche_levels.png", dpi=dpi)
-    meta["title"] = "0050 tranche levels bars (anchoring caution)"
+    meta["title"] = f"0050 tranche levels bars (lang={lang})"
     return meta
 
 
@@ -611,7 +701,9 @@ def write_episode_chart_ready_csv(pack: Dict[str, Any], out_dir: Path) -> Path:
     rows: List[Dict[str, Any]] = []
     for module, mp in [("roll25", r), ("margin", m), ("tw0050_bb", t)]:
         for k, v in mp.items():
-            rows.append({"module": module, "metric": k, "value": json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v})
+            rows.append(
+                {"module": module, "metric": k, "value": json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v}
+            )
 
     with out_path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["module", "metric", "value"])
@@ -620,7 +712,13 @@ def write_episode_chart_ready_csv(pack: Dict[str, Any], out_dir: Path) -> Path:
     return out_path
 
 
-def build_manifest(out_dir: Path, input_pack_path: Path, pack: Dict[str, Any], charts_meta: List[Dict[str, Any]], extra_warnings: List[str]) -> Dict[str, Any]:
+def build_manifest(
+    out_dir: Path,
+    input_pack_path: Path,
+    pack: Dict[str, Any],
+    charts_meta: List[Dict[str, Any]],
+    extra_warnings: List[str],
+) -> Dict[str, Any]:
     tz = pack.get("timezone") or TZ_NAME_DEFAULT
     day = pack.get("day_key_local") or "N/A"
 
@@ -650,7 +748,10 @@ def build_manifest(out_dir: Path, input_pack_path: Path, pack: Dict[str, Any], c
         "timezone": tz,
         "day_key_local": day,
         "data_as_of": data_as_of,
-        "input_files": {"episode_pack": str(input_pack_path), "episode_pack_sha256": sha256_file(input_pack_path)},
+        "input_files": {
+            "episode_pack": str(input_pack_path),
+            "episode_pack_sha256": sha256_file(input_pack_path),
+        },
         "pack_build_fingerprint": pack.get("build_fingerprint", "N/A"),
         "pack_generated_at_local": pack.get("generated_at_local", "N/A"),
         "warnings": sorted(list(dict.fromkeys(warnings))),
@@ -665,7 +766,11 @@ def main() -> int:
     ap.add_argument("--out_dir", required=True, help="Output directory for PNGs + manifest")
     ap.add_argument("--dpi", default="160", help="PNG dpi (default 160 for 1280x720 at 8x4.5)")
     ap.add_argument("--lang", default="en", choices=["en", "zh"], help="Chart language for labels/notes (en/zh).")
-    ap.add_argument("--include_tranche_levels", action="store_true", help="Also output 05_0050_tranche_levels.png (may cause anchoring; default OFF).")
+    ap.add_argument(
+        "--include_tranche_levels",
+        action="store_true",
+        help="Also output 05_0050_tranche_levels.png (may cause anchoring; default OFF).",
+    )
     args = ap.parse_args()
 
     set_font_defaults()
@@ -680,14 +785,14 @@ def main() -> int:
     charts_meta: List[Dict[str, Any]] = []
     extra_warnings: List[str] = []
 
-    # Decide effective language (avoid tofu)
+    # Decide effective language (avoid tofu across ALL charts)
     effective_lang = args.lang
     cjk_family = detect_cjk_font_family()
     if effective_lang == "zh" and not cjk_family:
         effective_lang = "en"
-        extra_warnings.append("cjk_font_missing_fallback_to_en_for_chart_01")
+        extra_warnings.append("cjk_font_missing_fallback_to_en_all_charts")
 
-    meta0, w0 = chart_00_episode_snapshot(pack, out_dir, dpi)
+    meta0, w0 = chart_00_episode_snapshot(pack, out_dir, dpi, lang=effective_lang)
     if meta0:
         charts_meta.append(meta0)
     extra_warnings.extend(w0)
@@ -696,9 +801,9 @@ def main() -> int:
     if meta1:
         charts_meta.append(meta1)
     else:
-        extra_warnings.append("roll25_rank_bars_skipped_no_data")
+        extra_warnings.append("market_heat_rank_bars_skipped_no_data")
 
-    meta2, meta3 = chart_02_03_margin_bars(pack, out_dir, dpi)
+    meta2, meta3 = chart_02_03_margin_bars(pack, out_dir, dpi, lang=effective_lang)
     if meta2:
         charts_meta.append(meta2)
     else:
@@ -708,21 +813,28 @@ def main() -> int:
     else:
         extra_warnings.append("margin_change_bars_skipped_no_data")
 
-    meta4 = chart_04_0050_bb_band_gauge(pack, out_dir, dpi)
+    meta4 = chart_04_0050_bb_band_gauge(pack, out_dir, dpi, lang=effective_lang)
     if meta4:
         charts_meta.append(meta4)
     else:
         extra_warnings.append("tw0050_bb_gauge_skipped_no_data")
 
     if args.include_tranche_levels:
-        meta5 = chart_05_0050_tranche_levels(pack, out_dir, dpi)
+        meta5 = chart_05_0050_tranche_levels(pack, out_dir, dpi, lang=effective_lang)
         if meta5:
             charts_meta.append(meta5)
         else:
             extra_warnings.append("tranche_levels_skipped_no_data")
 
     csv_path = write_episode_chart_ready_csv(pack, out_dir)
-    charts_meta.append({"file": csv_path.name, "path": str(csv_path), "sha256": sha256_file(csv_path), "title": "episode_chart_ready.csv (flat metrics table)"})
+    charts_meta.append(
+        {
+            "file": csv_path.name,
+            "path": str(csv_path),
+            "sha256": sha256_file(csv_path),
+            "title": "episode_chart_ready.csv (flat metrics table)",
+        }
+    )
 
     manifest = build_manifest(out_dir, pack_path, pack, charts_meta, extra_warnings)
     dump_json(out_dir / "chart_manifest.json", manifest)
