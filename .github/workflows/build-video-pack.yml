@@ -16,6 +16,8 @@ jobs:
     env:
       OUT_DIR: video_pack
       TZ: Asia/Taipei
+      # Force matplotlib to use an isolated config dir (reduce cache surprises)
+      MPLCONFIGDIR: ${{ runner.temp }}/mplconfig
 
     steps:
       - name: Checkout
@@ -25,6 +27,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      # =========================
+      # Install system fonts for CJK + clear font cache (avoid tofu)
+      # =========================
+      - name: Install CJK fonts (Noto CJK) + clear matplotlib cache
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          fc-cache -fv
+          rm -rf ~/.cache/matplotlib || true
+          rm -rf "${MPLCONFIGDIR}" || true
+          mkdir -p "${MPLCONFIGDIR}"
+          echo "=== fc-list (noto cjk, sample) ==="
+          fc-list | grep -i "noto.*cjk" | head -n 20 || true
 
       - name: Install deps
         run: |
@@ -75,7 +92,8 @@ jobs:
           mkdir -p "${OUT_DIR}/charts_snapshot"
           python tools/make_episode_charts.py \
             --episode_pack "${OUT_DIR}/episode_pack.json" \
-            --out_dir "${OUT_DIR}/charts_snapshot"
+            --out_dir "${OUT_DIR}/charts_snapshot" \
+            --lang zh
 
       - name: Make long-series charts (roll25.json)
         run: |
