@@ -15,17 +15,17 @@ Inputs:
 - --episode_pack: path to episode_pack.json
 
 Outputs (to --out_dir):
-- 00_episode_snapshot.png                (text-based one-page snapshot)
-- 01_roll25_percentile_bars.png          (p(0-100) bars: trade_value/close/amplitude)
-- 02_margin_balance_bars.png             (TWSE/TPEX/TOTAL balances)
-- 03_margin_change_bars.png              (TWSE/TPEX/TOTAL daily chg)
-- 04_0050_bb_band_gauge.png              (BB lower/ma/upper with price marker)
-- [optional] 05_0050_tranche_levels.png  (price levels from tranche_levels; default OFF)
-- episode_chart_ready.csv                (flat table for downstream)
-- chart_manifest.json                    (what charts were produced, with sha256, as_of, warnings)
+- 00_episode_snapshot.png
+- 01_roll25_percentile_bars.png
+- 02_margin_balance_bars.png
+- 03_margin_change_bars.png
+- 04_0050_bb_band_gauge.png
+- [optional] 05_0050_tranche_levels.png
+- episode_chart_ready.csv
+- chart_manifest.json
 
 Dependencies:
-- matplotlib, numpy, pandas (pandas optional but recommended; used for CSV convenience)
+- matplotlib, numpy, pandas (pandas optional)
 """
 
 from __future__ import annotations
@@ -42,11 +42,12 @@ import matplotlib
 
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib import font_manager as fm  # noqa: E402
 
 
 TZ_NAME_DEFAULT = "Asia/Taipei"
 MANIFEST_SCHEMA = "chart_manifest_v1"
-SCRIPT_FINGERPRINT = "make_episode_charts@v1.4.bb_gauge_arrow_labels"
+SCRIPT_FINGERPRINT = "make_episode_charts@v1.5.roll25_rank_note_lang"
 
 
 # -----------------------------
@@ -131,7 +132,33 @@ def save_fig(fig: plt.Figure, out_path: Path, dpi: int) -> Dict[str, Any]:
     }
 
 
+def detect_cjk_font_family() -> Optional[str]:
+    """
+    Best-effort: detect whether a CJK font family exists on the current system.
+    This is used to decide whether we can safely render Traditional Chinese labels.
+    """
+    candidates = [
+        "Noto Sans CJK TC",
+        "Noto Sans CJK SC",
+        "Noto Sans CJK JP",
+        "Microsoft JhengHei",
+        "PingFang TC",
+        "Heiti TC",
+        "Arial Unicode MS",
+    ]
+    for fam in candidates:
+        try:
+            fp = fm.FontProperties(family=fam)
+            path = fm.findfont(fp, fallback_to_default=False)
+            if path and Path(path).exists():
+                return fam
+        except Exception:
+            continue
+    return None
+
+
 def set_font_defaults() -> None:
+    # Best-effort Traditional Chinese support; falls back gracefully if fonts not installed.
     plt.rcParams["font.sans-serif"] = [
         "Noto Sans CJK TC",
         "Noto Sans CJK SC",
@@ -148,6 +175,7 @@ def set_font_defaults() -> None:
 def _set_ylim_with_headroom(ax: plt.Axes, values: List[float], *, pct_like: bool = False, ratio: float = 0.10) -> None:
     if not values:
         return
+
     ymin, ymax = ax.get_ylim()
     vmin = min(values)
     vmax = max(values)
@@ -191,10 +219,6 @@ def _annotate_near_point(
     arrow_color: Optional[str] = None,
     arrow_lw: float = 1.0,
 ) -> None:
-    """
-    Place a label close to (x,y) using offset points so it "sticks" to the marker.
-    If arrow=True, draw an arrow from label to the exact point.
-    """
     arrowprops = None
     if arrow:
         arrowprops = {
@@ -322,15 +346,38 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
     return meta, warnings
 
 
-def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
+def chart_01_roll25_percentile_bars(
+    pack: Dict[str, Any], out_dir: Path, dpi: int, *, lang: str = "en"
+) -> Optional[Dict[str, Any]]:
     raw_r25 = deep_get(pack, "raw.roll25") or {}
-    items: List[Tuple[str, Optional[float]]] = [
-        ("trade_value p60", deep_get(raw_r25, "series.trade_value.win60.p")),
-        ("trade_value p252", deep_get(raw_r25, "series.trade_value.win252.p")),
-        ("close p252", deep_get(raw_r25, "series.close.win252.p")),
-        ("amplitude p60", deep_get(raw_r25, "series.amplitude_pct.win60.p")),
-        ("amplitude p252", deep_get(raw_r25, "series.amplitude_pct.win252.p")),
-    ]
+
+    # Source values
+    v_tv_60 = deep_get(raw_r25, "series.trade_value.win60.p")
+    v_tv_252 = deep_get(raw_r25, "series.trade_value.win252.p")
+    v_close_252 = deep_get(raw_r25, "series.close.win252.p")
+    v_amp_60 = deep_get(raw_r25, "series.amplitude_pct.win60.p")
+    v_amp_252 = deep_get(raw_r25, "series.amplitude_pct.win252.p")
+
+    if lang == "zh":
+        items: List[Tuple[str, Optional[float]]] = [
+            ("成交額\n60日位階", v_tv_60),
+            ("成交額\n252日位階", v_tv_252),
+            ("收盤\n252日位階", v_close_252),
+            ("振幅\n60日位階", v_amp_60),
+            ("振幅\n252日位階", v_amp_252),
+        ]
+        ylabel = "位階 (0–100)"
+        note = "註：60日位階＝今天在近60個交易日的相對位置(0–100)；252日位階＝近252個交易日(0–100)。數值越高＝越接近該期間高檔。"
+    else:
+        items = [
+            ("trade value\nrank60", v_tv_60),
+            ("trade value\nrank252", v_tv_252),
+            ("close\nrank252", v_close_252),
+            ("amplitude\nrank60", v_amp_60),
+            ("amplitude\nrank252", v_amp_252),
+        ]
+        ylabel = "Rank (0–100)"
+        note = "Note: rank60 = today's position within last 60 trading days (0–100); rank252 = within last 252 trading days (0–100). Higher = closer to the period high."
 
     labels: List[str] = []
     values: List[float] = []
@@ -346,20 +393,22 @@ def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: in
     ax = fig.add_subplot(111)
 
     bars = ax.bar(labels, values)
-
-    ax.set_ylabel("Percentile (0-100)")
+    ax.set_ylabel(ylabel)
     _set_ylim_with_headroom(ax, values, pct_like=True)
 
     asof = deep_get(raw_r25, "used_date") or deep_get(raw_r25, "series.trade_value.asof") or "N/A"
-    ax.set_title(f"roll25 percentiles (as_of={asof})", pad=16)
+    ax.set_title(f"roll25 ranks (as_of={asof})", pad=16)
 
     _bar_label_safe(ax, bars, fmt="%.1f", fontsize=9, padding=3)
 
-    fig.autofmt_xdate(rotation=0)
-    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    # Footnote (leave bottom space so it won't be cropped)
+    fig.text(0.01, 0.01, note, ha="left", va="bottom", fontsize=9)
+
+    # Layout: reserve bottom margin for the footnote
+    fig.tight_layout(rect=(0, 0.08, 1, 0.98))
 
     meta = save_fig(fig, out_dir / "01_roll25_percentile_bars.png", dpi=dpi)
-    meta["title"] = "roll25 percentiles bars"
+    meta["title"] = f"roll25 rank bars (lang={lang})"
     return meta
 
 
@@ -455,7 +504,6 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     fig = plt.figure(figsize=(8, 4.5))
     ax = fig.add_subplot(111)
 
-    # explicit colors (upper/lower dots != price dot)
     band_color = "C0"
     price_color = "C1"
     bound_color = "C2"
@@ -478,9 +526,6 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     ax.set_xlim(lower - 0.10 * span, upper + 0.10 * span)
     ax.set_ylim(-1.0, 1.0)
 
-    # -----------------------------
-    # Label collision avoidance + arrows to point markers
-    # -----------------------------
     near_thr = 0.12
     very_near_thr = 0.06
     d_upper = abs(price - upper) / span
@@ -502,47 +547,10 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
         price_cfg["dy"] = -22
         price_cfg["ha"] = "left"
 
-    # arrows (color-match each target marker to reduce ambiguity)
-    _annotate_near_point(
-        ax,
-        x=lower,
-        y=y0,
-        text=f"lower={lower:.2f}",
-        fontsize=9,
-        arrow=True,
-        arrow_color=bound_color,
-        **lower_cfg,
-    )
-    _annotate_near_point(
-        ax,
-        x=upper,
-        y=y0,
-        text=f"upper={upper:.2f}",
-        fontsize=9,
-        arrow=True,
-        arrow_color=bound_color,
-        **upper_cfg,
-    )
-    _annotate_near_point(
-        ax,
-        x=ma,
-        y=y0,
-        text=f"ma={ma:.2f}",
-        fontsize=9,
-        arrow=True,
-        arrow_color=band_color,
-        **ma_cfg,
-    )
-    _annotate_near_point(
-        ax,
-        x=price,
-        y=y0,
-        text=f"price={price:.2f}",
-        fontsize=9,
-        arrow=True,
-        arrow_color=price_color,
-        **price_cfg,
-    )
+    _annotate_near_point(ax, x=lower, y=y0, text=f"lower={lower:.2f}", fontsize=9, arrow=True, arrow_color=bound_color, **lower_cfg)
+    _annotate_near_point(ax, x=upper, y=y0, text=f"upper={upper:.2f}", fontsize=9, arrow=True, arrow_color=bound_color, **upper_cfg)
+    _annotate_near_point(ax, x=ma, y=y0, text=f"ma={ma:.2f}", fontsize=9, arrow=True, arrow_color=band_color, **ma_cfg)
+    _annotate_near_point(ax, x=price, y=y0, text=f"price={price:.2f}", fontsize=9, arrow=True, arrow_color=price_color, **price_cfg)
 
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     meta = save_fig(fig, out_dir / "04_0050_bb_band_gauge.png", dpi=dpi)
@@ -579,15 +587,7 @@ def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) 
     bars = ax.bar(labels, values)
     ax.set_ylabel("Price level")
     ax.set_title(f"0050 tranche levels (as_of={t.get('last_date','N/A')})", pad=16)
-    ax.text(
-        0.01,
-        0.98,
-        "CAUTION: levels are statistical mapping, not buy/sell points.",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9,
-    )
+    ax.text(0.01, 0.98, "CAUTION: levels are statistical mapping, not buy/sell points.", transform=ax.transAxes, ha="left", va="top", fontsize=9)
 
     _set_ylim_with_headroom(ax, values, pct_like=False, ratio=0.08)
     _bar_label_safe(ax, bars, fmt="%.2f", fontsize=9, padding=3)
@@ -611,13 +611,7 @@ def write_episode_chart_ready_csv(pack: Dict[str, Any], out_dir: Path) -> Path:
     rows: List[Dict[str, Any]] = []
     for module, mp in [("roll25", r), ("margin", m), ("tw0050_bb", t)]:
         for k, v in mp.items():
-            rows.append(
-                {
-                    "module": module,
-                    "metric": k,
-                    "value": json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v,
-                }
-            )
+            rows.append({"module": module, "metric": k, "value": json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v})
 
     with out_path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["module", "metric", "value"])
@@ -626,13 +620,7 @@ def write_episode_chart_ready_csv(pack: Dict[str, Any], out_dir: Path) -> Path:
     return out_path
 
 
-def build_manifest(
-    out_dir: Path,
-    input_pack_path: Path,
-    pack: Dict[str, Any],
-    charts_meta: List[Dict[str, Any]],
-    extra_warnings: List[str],
-) -> Dict[str, Any]:
+def build_manifest(out_dir: Path, input_pack_path: Path, pack: Dict[str, Any], charts_meta: List[Dict[str, Any]], extra_warnings: List[str]) -> Dict[str, Any]:
     tz = pack.get("timezone") or TZ_NAME_DEFAULT
     day = pack.get("day_key_local") or "N/A"
 
@@ -649,7 +637,7 @@ def build_manifest(
                 candidates.append(s)
         data_as_of = max(candidates) if candidates else "N/A"
 
-    warnings = []
+    warnings: List[str] = []
     pack_warnings = pack.get("warnings") or []
     if isinstance(pack_warnings, list):
         warnings.extend([str(x) for x in pack_warnings])
@@ -662,10 +650,7 @@ def build_manifest(
         "timezone": tz,
         "day_key_local": day,
         "data_as_of": data_as_of,
-        "input_files": {
-            "episode_pack": str(input_pack_path),
-            "episode_pack_sha256": sha256_file(input_pack_path),
-        },
+        "input_files": {"episode_pack": str(input_pack_path), "episode_pack_sha256": sha256_file(input_pack_path)},
         "pack_build_fingerprint": pack.get("build_fingerprint", "N/A"),
         "pack_generated_at_local": pack.get("generated_at_local", "N/A"),
         "warnings": sorted(list(dict.fromkeys(warnings))),
@@ -679,11 +664,8 @@ def main() -> int:
     ap.add_argument("--episode_pack", required=True, help="Path to episode_pack.json")
     ap.add_argument("--out_dir", required=True, help="Output directory for PNGs + manifest")
     ap.add_argument("--dpi", default="160", help="PNG dpi (default 160 for 1280x720 at 8x4.5)")
-    ap.add_argument(
-        "--include_tranche_levels",
-        action="store_true",
-        help="Also output 05_0050_tranche_levels.png (may cause anchoring; default OFF).",
-    )
+    ap.add_argument("--lang", default="en", choices=["en", "zh"], help="Chart language for labels/notes (en/zh).")
+    ap.add_argument("--include_tranche_levels", action="store_true", help="Also output 05_0050_tranche_levels.png (may cause anchoring; default OFF).")
     args = ap.parse_args()
 
     set_font_defaults()
@@ -698,16 +680,23 @@ def main() -> int:
     charts_meta: List[Dict[str, Any]] = []
     extra_warnings: List[str] = []
 
+    # Decide effective language (avoid tofu)
+    effective_lang = args.lang
+    cjk_family = detect_cjk_font_family()
+    if effective_lang == "zh" and not cjk_family:
+        effective_lang = "en"
+        extra_warnings.append("cjk_font_missing_fallback_to_en_for_chart_01")
+
     meta0, w0 = chart_00_episode_snapshot(pack, out_dir, dpi)
     if meta0:
         charts_meta.append(meta0)
     extra_warnings.extend(w0)
 
-    meta1 = chart_01_roll25_percentile_bars(pack, out_dir, dpi)
+    meta1 = chart_01_roll25_percentile_bars(pack, out_dir, dpi, lang=effective_lang)
     if meta1:
         charts_meta.append(meta1)
     else:
-        extra_warnings.append("roll25_percentile_bars_skipped_no_data")
+        extra_warnings.append("roll25_rank_bars_skipped_no_data")
 
     meta2, meta3 = chart_02_03_margin_bars(pack, out_dir, dpi)
     if meta2:
@@ -733,14 +722,7 @@ def main() -> int:
             extra_warnings.append("tranche_levels_skipped_no_data")
 
     csv_path = write_episode_chart_ready_csv(pack, out_dir)
-    charts_meta.append(
-        {
-            "file": csv_path.name,
-            "path": str(csv_path),
-            "sha256": sha256_file(csv_path),
-            "title": "episode_chart_ready.csv (flat metrics table)",
-        }
-    )
+    charts_meta.append({"file": csv_path.name, "path": str(csv_path), "sha256": sha256_file(csv_path), "title": "episode_chart_ready.csv (flat metrics table)"})
 
     manifest = build_manifest(out_dir, pack_path, pack, charts_meta, extra_warnings)
     dump_json(out_dir / "chart_manifest.json", manifest)
