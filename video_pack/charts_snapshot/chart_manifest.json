@@ -1,72 +1,72 @@
 {
   "schema_version": "chart_manifest_v1",
-  "script_fingerprint": "make_episode_charts@v1.5.roll25_rank_note_lang",
-  "generated_at_utc": "2026-03-04T02:51:03Z",
+  "script_fingerprint": "make_episode_charts@v1.6.zh_all_charts_roll25_rename_market_heat",
+  "generated_at_utc": "2026-03-04T03:13:30Z",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-03-04",
   "data_as_of": "2026-03-03",
   "input_files": {
     "episode_pack": "video_pack/episode_pack.json",
-    "episode_pack_sha256": "cb0262edda9e7ec9d9c048d7a97421d62c0caaee260caf09cfe778a6e899979f"
+    "episode_pack_sha256": "98341108efb869c2afaaff4ae1151d9ea5117708b5746b17085bdd5e9db785de"
   },
   "pack_build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
-  "pack_generated_at_local": "2026-03-04T10:51:01+08:00",
+  "pack_generated_at_local": "2026-03-04T11:13:28+08:00",
   "warnings": [],
   "charts": [
     {
       "file": "00_episode_snapshot.png",
       "path": "video_pack/charts_snapshot/00_episode_snapshot.png",
-      "sha256": "0f4025c4cfdd954846a5bae1c6ce9c01ea0987dc3d604ce9ff6faeae1d5aef71",
+      "sha256": "12cc0c6906050d680bd80ae3c24ad66f82ccd790121fc79be07d443571cdc714",
       "dpi": 160,
       "size_inches": [
         8.0,
         4.5
       ],
-      "title": "Episode snapshot (one-page text)"
+      "title": "Episode snapshot (lang=zh)"
     },
     {
       "file": "01_roll25_percentile_bars.png",
       "path": "video_pack/charts_snapshot/01_roll25_percentile_bars.png",
-      "sha256": "443a2ada947a7acd9b7b8432dd28f3f2b78e360a69d51c8b7e21257ccabf8496",
+      "sha256": "ade0dbd291b56de3dd644155042889f2c49512fb5ef2500d11e78a3cfe834c38",
       "dpi": 160,
       "size_inches": [
         8.0,
         4.5
       ],
-      "title": "roll25 rank bars (lang=zh)"
+      "title": "market heat rank bars (lang=zh)"
     },
     {
       "file": "02_margin_balance_bars.png",
       "path": "video_pack/charts_snapshot/02_margin_balance_bars.png",
-      "sha256": "64e4e2f54f969fec0b1e9731e66a311bff37eeed1ad9019b99f7d65a7bfc74ca",
+      "sha256": "e348b281ecc31d11c22d5569ece30afac6a36562c49d296d9afa9b605b9255e5",
       "dpi": 160,
       "size_inches": [
         8.0,
         4.5
       ],
-      "title": "Margin balance bars"
+      "title": "Margin balance bars (lang=zh)"
     },
     {
       "file": "03_margin_change_bars.png",
       "path": "video_pack/charts_snapshot/03_margin_change_bars.png",
-      "sha256": "d3e500667fd304486693f04b43ba9880e936f173f437e84de5a02644b816f24d",
+      "sha256": "20f385e33ec90d650aedc12779a1b26b611e14146544cab1f82828c4b4b8526f",
       "dpi": 160,
       "size_inches": [
         8.0,
         4.5
       ],
-      "title": "Margin daily change bars"
+      "title": "Margin daily change bars (lang=zh)"
     },
     {
       "file": "04_0050_bb_band_gauge.png",
       "path": "video_pack/charts_snapshot/04_0050_bb_band_gauge.png",
-      "sha256": "b3b0a3be5b15a800f78fbd4c8105c4ff4222bc01b77b9fbbf7a73b7ba0cebef0",
+      "sha256": "5978b031255e9e57078a5e3721e940711b0ec901e654cccafc44f4e895276397",
       "dpi": 160,
       "size_inches": [
         8.0,
         4.5
       ],
-      "title": "0050 BB band gauge (arrow labels to markers)"
+      "title": "0050 BB band gauge (lang=zh)"
     },
     {
       "file": "episode_chart_ready.csv",
