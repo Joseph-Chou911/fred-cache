@@ -15,14 +15,14 @@ Inputs:
 - --episode_pack: path to episode_pack.json
 
 Outputs (to --out_dir):
-- 00_episode_snapshot.png                (text-based one-page snapshot)
-- 01_roll25_percentile_bars.png          (p(0-100) bars: trade_value/close/amplitude)
-- 02_margin_balance_bars.png             (TWSE/TPEX/TOTAL balances)
-- 03_margin_change_bars.png              (TWSE/TPEX/TOTAL daily chg)
-- 04_0050_bb_band_gauge.png              (BB lower/ma/upper with price marker)
-- [optional] 05_0050_tranche_levels.png  (price levels from tranche_levels; default OFF)
-- episode_chart_ready.csv                (flat table for downstream)
-- chart_manifest.json                    (what charts were produced, with sha256, as_of, warnings)
+- 00_episode_snapshot.png
+- 01_roll25_percentile_bars.png
+- 02_margin_balance_bars.png
+- 03_margin_change_bars.png
+- 04_0050_bb_band_gauge.png
+- [optional] 05_0050_tranche_levels.png
+- episode_chart_ready.csv
+- chart_manifest.json
 
 Dependencies:
 - matplotlib, numpy, pandas (pandas optional but recommended; used for CSV convenience)
@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 TZ_NAME_DEFAULT = "Asia/Taipei"
 MANIFEST_SCHEMA = "chart_manifest_v1"
-SCRIPT_FINGERPRINT = "make_episode_charts@v1.2.bb_gauge_point_labels"
+SCRIPT_FINGERPRINT = "make_episode_charts@v1.3.bb_gauge_label_collision_avoid"
 
 
 # -----------------------------
@@ -120,7 +120,6 @@ def save_fig(fig: plt.Figure, out_path: Path, dpi: int) -> Dict[str, Any]:
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
-    # compute sha256 + geometry
     b = out_path.read_bytes()
     w_in, h_in = fig.get_size_inches()
     return {
@@ -133,7 +132,6 @@ def save_fig(fig: plt.Figure, out_path: Path, dpi: int) -> Dict[str, Any]:
 
 
 def set_font_defaults() -> None:
-    # Best-effort Traditional Chinese support; fall back gracefully.
     plt.rcParams["font.sans-serif"] = [
         "Noto Sans CJK TC",
         "Noto Sans CJK SC",
@@ -148,11 +146,6 @@ def set_font_defaults() -> None:
 
 
 def _set_ylim_with_headroom(ax: plt.Axes, values: List[float], *, pct_like: bool = False, ratio: float = 0.10) -> None:
-    """
-    Prevent value-labels from colliding with title by keeping labels inside axes.
-    - pct_like=True: default y-limit is [0, 110] (not [0, 100])
-    - otherwise: expand ymax by (1+ratio)
-    """
     if not values:
         return
 
@@ -161,11 +154,9 @@ def _set_ylim_with_headroom(ax: plt.Axes, values: List[float], *, pct_like: bool
     vmax = max(values)
 
     if pct_like:
-        # fixed, readable headroom for percentiles (0~100)
         ax.set_ylim(0, 110)
         return
 
-    # general case
     base_top = max(ymax, vmax)
     if base_top == 0:
         ax.set_ylim(ymin, 1)
@@ -174,21 +165,15 @@ def _set_ylim_with_headroom(ax: plt.Axes, values: List[float], *, pct_like: bool
 
 
 def _bar_label_safe(ax: plt.Axes, bars, *, fmt: str, fontsize: int = 9, padding: int = 3) -> None:
-    """
-    Use bar_label if available; fall back to manual text.
-    """
     if hasattr(ax, "bar_label"):
         ax.bar_label(bars, fmt=fmt, padding=padding, fontsize=fontsize)
         return
-
-    # Fallback (older matplotlib)
     try:
         for b in bars:
             h = float(b.get_height())
             x = b.get_x() + b.get_width() / 2
             ax.text(x, h, fmt % h, ha="center", va="bottom", fontsize=fontsize)
     except Exception:
-        # best-effort only
         return
 
 
@@ -204,9 +189,6 @@ def _annotate_near_point(
     va: str,
     fontsize: int = 9,
 ) -> None:
-    """
-    Place a label close to (x,y) using offset points so it "sticks" to the marker.
-    """
     ax.annotate(
         text,
         xy=(x, y),
@@ -237,18 +219,15 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
     m = extracts_to_map(ext.get("margin", []))
     t = extracts_to_map(ext.get("tw0050_bb", []))
 
-    # Build a text-only "one page" snapshot (YouTube friendly).
-    fig = plt.figure(figsize=(8, 4.5))  # ~1280x720 at dpi=160
+    fig = plt.figure(figsize=(8, 4.5))
     ax = fig.add_axes([0, 0, 1, 1])
     ax.axis("off")
 
-    # Header
     header = f"Episode Snapshot | day={day} ({tz})"
     sub = f"pack.generated_at_local={pack.get('generated_at_local','N/A')} | build={pack.get('build_fingerprint','N/A')}"
     ax.text(0.02, 0.95, header, fontsize=16, fontweight="bold", va="top")
     ax.text(0.02, 0.91, sub, fontsize=9, va="top")
 
-    # Inputs block (as_of / age)
     def _inp_line(k: str) -> str:
         v = inp.get(k, {}) if isinstance(inp, dict) else {}
         return f"{k}: as_of={v.get('as_of_date','N/A')} age_days={v.get('age_days','N/A')} fp={v.get('fingerprint','N/A')}"
@@ -258,11 +237,9 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
     ax.text(0.02, 0.80, _inp_line("taiwan_margin"), fontsize=9, va="top")
     ax.text(0.02, 0.77, _inp_line("tw0050_bb"), fontsize=9, va="top")
 
-    # Warnings
     warn_txt = "NONE" if not warnings else ", ".join(warnings)
     ax.text(0.02, 0.72, f"Warnings: {warn_txt}", fontsize=9, va="top")
 
-    # Section: roll25
     y = 0.66
     ax.text(0.02, y, "roll25 (TWSE Turnover / Heat):", fontsize=11, fontweight="bold", va="top")
     y -= 0.04
@@ -277,7 +254,6 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
         ax.text(0.04, y, s, fontsize=9, va="top")
         y -= 0.03
 
-    # Section: margin
     y -= 0.01
     ax.text(0.02, y, "taiwan_margin (Leverage):", fontsize=11, fontweight="bold", va="top")
     y -= 0.04
@@ -293,7 +269,6 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
         ax.text(0.04, y, s, fontsize=9, va="top")
         y -= 0.03
 
-    # Section: 0050 BB
     y -= 0.01
     ax.text(0.02, y, "tw0050_bb (0050 Position):", fontsize=11, fontweight="bold", va="top")
     y -= 0.04
@@ -316,7 +291,6 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
         ax.text(0.04, y, s, fontsize=9, va="top")
         y -= 0.03
 
-    # Footer disclaimer
     ax.text(
         0.02,
         0.02,
@@ -332,8 +306,6 @@ def chart_00_episode_snapshot(pack: Dict[str, Any], out_dir: Path, dpi: int) -> 
 
 def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
     raw_r25 = deep_get(pack, "raw.roll25") or {}
-    # series.trade_value.win60.p, series.trade_value.win252.p, series.close.win252.p,
-    # series.amplitude_pct.win60.p, series.amplitude_pct.win252.p
     items: List[Tuple[str, Optional[float]]] = [
         ("trade_value p60", deep_get(raw_r25, "series.trade_value.win60.p")),
         ("trade_value p252", deep_get(raw_r25, "series.trade_value.win252.p")),
@@ -357,16 +329,12 @@ def chart_01_roll25_percentile_bars(pack: Dict[str, Any], out_dir: Path, dpi: in
 
     bars = ax.bar(labels, values)
 
-    # IMPORTANT FIX:
-    # - Percentile charts should NOT cap at 100 if you draw value labels above bars.
-    # - Keep labels INSIDE axes by giving headroom (0..110).
     ax.set_ylabel("Percentile (0-100)")
     _set_ylim_with_headroom(ax, values, pct_like=True)
 
     asof = deep_get(raw_r25, "used_date") or deep_get(raw_r25, "series.trade_value.asof") or "N/A"
     ax.set_title(f"roll25 percentiles (as_of={asof})", pad=16)
 
-    # Label numbers (safe)
     _bar_label_safe(ax, bars, fmt="%.1f", fontsize=9, padding=3)
 
     fig.autofmt_xdate(rotation=0)
@@ -389,7 +357,6 @@ def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tu
     tpex_chg = m.get("tpex_chg_yi")
     total_chg = m.get("total_chg_yi")
 
-    # Balance chart
     meta_bal = None
     vals_bal: List[Tuple[str, float]] = []
     for k, v in [("TWSE", twse_bal), ("TPEX", tpex_bal), ("TOTAL", total_bal)]:
@@ -413,7 +380,6 @@ def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tu
         meta_bal = save_fig(fig, out_dir / "02_margin_balance_bars.png", dpi=dpi)
         meta_bal["title"] = "Margin balance bars"
 
-    # Change chart
     meta_chg = None
     vals_chg: List[Tuple[str, float]] = []
     for k, v in [("TWSE", twse_chg), ("TPEX", tpex_chg), ("TOTAL", total_chg)]:
@@ -431,13 +397,11 @@ def chart_02_03_margin_bars(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Tu
         asof = m.get("twse_data_date") or m.get("tpex_data_date") or "N/A"
         ax.set_title(f"Margin daily change (as_of={asof})", pad=16)
 
-        # Headroom both sides (avoid tight bbox squeezing)
         ymin = min(values)
         ymax = max(values)
         span = max(ymax - ymin, 1e-6)
         ax.set_ylim(ymin - 0.12 * span, ymax + 0.12 * span)
 
-        # Labels: place above for positive, below for negative
         if hasattr(ax, "bar_label"):
             ax.bar_label(bars, fmt="%.1f", padding=3, fontsize=9)
         else:
@@ -473,23 +437,15 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     fig = plt.figure(figsize=(8, 4.5))
     ax = fig.add_subplot(111)
 
-    # Use explicit colors (user要求 upper/lower 與 price 的點顏色不同)
     band_color = "C0"
     price_color = "C1"
     bound_color = "C2"
 
     y0 = 0.0
 
-    # Draw a "gauge": lower -> upper line, with explicit point markers
     ax.hlines(y0, lower, upper, linewidth=2.0, color=band_color)
-
-    # lower/upper: dots (same color) != price color
     ax.scatter([lower, upper], [y0, y0], s=90, marker="o", color=bound_color, zorder=3)
-
-    # ma: center tick (keep visually tied to the band line)
     ax.scatter([ma], [y0], marker="|", s=1100, color=band_color, zorder=4)
-
-    # price: dot with different color
     ax.scatter([price], [y0], s=120, marker="o", color=price_color, zorder=5)
 
     ax.set_yticks([])
@@ -499,68 +455,58 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
         pad=16,
     )
 
-    # Expand x a bit for readability
+    # X range padding
     span = max(upper - lower, 1e-6)
     ax.set_xlim(lower - 0.10 * span, upper + 0.10 * span)
-
-    # Give vertical room for near-point labels (we hide y-axis anyway)
     ax.set_ylim(-1.0, 1.0)
 
-    # ---- Point-near labels (upper/lower/ma/price) ----
-    # Offsets are in "points" so they scale nicely at different DPI.
-    _annotate_near_point(
-        ax,
-        x=lower,
-        y=y0,
-        text=f"lower={lower:.2f}",
-        dx=4,
-        dy=14,
-        ha="left",
-        va="bottom",
-        fontsize=9,
-    )
-    _annotate_near_point(
-        ax,
-        x=upper,
-        y=y0,
-        text=f"upper={upper:.2f}",
-        dx=-4,
-        dy=14,
-        ha="right",
-        va="bottom",
-        fontsize=9,
-    )
-    _annotate_near_point(
-        ax,
-        x=ma,
-        y=y0,
-        text=f"ma={ma:.2f}",
-        dx=0,
-        dy=18,
-        ha="center",
-        va="bottom",
-        fontsize=9,
-    )
-    _annotate_near_point(
-        ax,
-        x=price,
-        y=y0,
-        text=f"price={price:.2f}",
-        dx=0,
-        dy=-18,
-        ha="center",
-        va="top",
-        fontsize=9,
-    )
+    # -----------------------------
+    # Label collision avoidance
+    # -----------------------------
+    # rule: if price is too close to upper/lower, move labels to avoid overlapping
+    # threshold is relative to band span (tunable)
+    near_thr = 0.12  # 12% of span
+    d_upper = abs(price - upper) / span
+    d_lower = abs(price - lower) / span
+    very_near_thr = 0.06
+
+    # default offsets
+    lower_cfg = dict(dx=4, dy=14, ha="left", va="bottom")
+    upper_cfg = dict(dx=-4, dy=14, ha="right", va="bottom")
+    ma_cfg = dict(dx=0, dy=18, ha="center", va="bottom")
+    price_cfg = dict(dx=0, dy=-18, ha="center", va="top")
+
+    if d_upper < near_thr:
+        # upper label: lift up more so it doesn't sit close to the nearby price dot
+        upper_cfg["dy"] = 32 if d_upper >= very_near_thr else 42
+
+        # price label: shift left + slightly lower to separate from upper label cluster
+        price_cfg["dx"] = -22
+        price_cfg["dy"] = -22
+        price_cfg["ha"] = "right"
+
+    elif d_lower < near_thr:
+        # lower label: lift up more
+        lower_cfg["dy"] = 32 if d_lower >= very_near_thr else 42
+
+        # price label: shift right + slightly lower
+        price_cfg["dx"] = 22
+        price_cfg["dy"] = -22
+        price_cfg["ha"] = "left"
+
+    # place labels near points
+    _annotate_near_point(ax, x=lower, y=y0, text=f"lower={lower:.2f}", fontsize=9, **lower_cfg)
+    _annotate_near_point(ax, x=upper, y=y0, text=f"upper={upper:.2f}", fontsize=9, **upper_cfg)
+    _annotate_near_point(ax, x=ma, y=y0, text=f"ma={ma:.2f}", fontsize=9, **ma_cfg)
+    _annotate_near_point(ax, x=price, y=y0, text=f"price={price:.2f}", fontsize=9, **price_cfg)
 
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     meta = save_fig(fig, out_dir / "04_0050_bb_band_gauge.png", dpi=dpi)
-    meta["title"] = "0050 BB band gauge (point-near labels + upper/lower dots)"
+    meta["title"] = "0050 BB band gauge (label collision avoidance)"
     return meta
 
 
 def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) -> Optional[Dict[str, Any]]:
-    # WARNING: exact price levels can cause anchoring in audiences.
     ext = pack.get("extracts_best_effort") or {}
     t = extracts_to_map(ext.get("tw0050_bb", []))
     levels = t.get("tranche_levels")
@@ -580,7 +526,6 @@ def chart_05_0050_tranche_levels(pack: Dict[str, Any], out_dir: Path, dpi: int) 
     if not rows:
         return None
 
-    # sort by price descending (closer to current usually higher)
     rows.sort(key=lambda x: x[1], reverse=True)
 
     fig = plt.figure(figsize=(8, 4.5))
@@ -647,7 +592,6 @@ def build_manifest(
     tz = pack.get("timezone") or TZ_NAME_DEFAULT
     day = pack.get("day_key_local") or "N/A"
 
-    # Decide "data_as_of": prefer roll25 used_date, else max of inputs as_of_date (string)
     ext = pack.get("extracts_best_effort") or {}
     r = extracts_to_map(ext.get("roll25", []))
     data_as_of = r.get("used_date")
@@ -710,20 +654,17 @@ def main() -> int:
     charts_meta: List[Dict[str, Any]] = []
     extra_warnings: List[str] = []
 
-    # 00 snapshot
     meta0, w0 = chart_00_episode_snapshot(pack, out_dir, dpi)
     if meta0:
         charts_meta.append(meta0)
     extra_warnings.extend(w0)
 
-    # 01 roll25 percentile bars (from raw roll25 stats_latest)
     meta1 = chart_01_roll25_percentile_bars(pack, out_dir, dpi)
     if meta1:
         charts_meta.append(meta1)
     else:
         extra_warnings.append("roll25_percentile_bars_skipped_no_data")
 
-    # 02/03 margin bars
     meta2, meta3 = chart_02_03_margin_bars(pack, out_dir, dpi)
     if meta2:
         charts_meta.append(meta2)
@@ -734,14 +675,12 @@ def main() -> int:
     else:
         extra_warnings.append("margin_change_bars_skipped_no_data")
 
-    # 04 0050 BB gauge
     meta4 = chart_04_0050_bb_band_gauge(pack, out_dir, dpi)
     if meta4:
         charts_meta.append(meta4)
     else:
         extra_warnings.append("tw0050_bb_gauge_skipped_no_data")
 
-    # optional tranche levels
     if args.include_tranche_levels:
         meta5 = chart_05_0050_tranche_levels(pack, out_dir, dpi)
         if meta5:
@@ -749,7 +688,6 @@ def main() -> int:
         else:
             extra_warnings.append("tranche_levels_skipped_no_data")
 
-    # chart_ready.csv
     csv_path = write_episode_chart_ready_csv(pack, out_dir)
     charts_meta.append(
         {
@@ -760,7 +698,6 @@ def main() -> int:
         }
     )
 
-    # manifest
     manifest = build_manifest(out_dir, pack_path, pack, charts_meta, extra_warnings)
     dump_json(out_dir / "chart_manifest.json", manifest)
 
