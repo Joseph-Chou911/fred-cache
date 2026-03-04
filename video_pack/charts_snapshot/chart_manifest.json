@@ -1,22 +1,22 @@
 {
   "schema_version": "chart_manifest_v1",
   "script_fingerprint": "make_episode_charts@v1.5.roll25_rank_note_lang",
-  "generated_at_utc": "2026-03-04T02:34:07Z",
+  "generated_at_utc": "2026-03-04T02:51:03Z",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-03-04",
   "data_as_of": "2026-03-03",
   "input_files": {
     "episode_pack": "video_pack/episode_pack.json",
-    "episode_pack_sha256": "a4b6d2c282cccac5cfee20d0d315b37d8070ba0b46f53c1ee3028a2f87c0f1ca"
+    "episode_pack_sha256": "cb0262edda9e7ec9d9c048d7a97421d62c0caaee260caf09cfe778a6e899979f"
   },
   "pack_build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
-  "pack_generated_at_local": "2026-03-04T10:34:05+08:00",
+  "pack_generated_at_local": "2026-03-04T10:51:01+08:00",
   "warnings": [],
   "charts": [
     {
       "file": "00_episode_snapshot.png",
       "path": "video_pack/charts_snapshot/00_episode_snapshot.png",
-      "sha256": "f63e6a6f7bed1551509700f77b51f5798fbb2440d99c2c53fe65f62f0346c6e5",
+      "sha256": "0f4025c4cfdd954846a5bae1c6ce9c01ea0987dc3d604ce9ff6faeae1d5aef71",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -27,18 +27,18 @@
     {
       "file": "01_roll25_percentile_bars.png",
       "path": "video_pack/charts_snapshot/01_roll25_percentile_bars.png",
-      "sha256": "34539b47af6c80ea8b6fab8988e5a18ce86b5202f582fcded149caeaba20e6d7",
+      "sha256": "443a2ada947a7acd9b7b8432dd28f3f2b78e360a69d51c8b7e21257ccabf8496",
       "dpi": 160,
       "size_inches": [
         8.0,
         4.5
       ],
-      "title": "roll25 rank bars (lang=en)"
+      "title": "roll25 rank bars (lang=zh)"
     },
     {
       "file": "02_margin_balance_bars.png",
       "path": "video_pack/charts_snapshot/02_margin_balance_bars.png",
-      "sha256": "b33cbcd1e9e30b066b6175f2731a34b9649c9c41f57619957b8d438fae632852",
+      "sha256": "64e4e2f54f969fec0b1e9731e66a311bff37eeed1ad9019b99f7d65a7bfc74ca",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -49,7 +49,7 @@
     {
       "file": "03_margin_change_bars.png",
       "path": "video_pack/charts_snapshot/03_margin_change_bars.png",
-      "sha256": "fb1e8fb5e12cfac4a1ecb0ad01d2090de4149a9575bcf76f237bbbf8318b2678",
+      "sha256": "d3e500667fd304486693f04b43ba9880e936f173f437e84de5a02644b816f24d",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -60,7 +60,7 @@
     {
       "file": "04_0050_bb_band_gauge.png",
       "path": "video_pack/charts_snapshot/04_0050_bb_band_gauge.png",
-      "sha256": "08c302f68a2e3531b5d6dde0493270deabe8c2d62021f1964d08155e6caae1f5",
+      "sha256": "b3b0a3be5b15a800f78fbd4c8105c4ff4222bc01b77b9fbbf7a73b7ba0cebef0",
       "dpi": 160,
       "size_inches": [
         8.0,
