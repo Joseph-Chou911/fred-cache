@@ -15,14 +15,14 @@ Inputs:
 - --episode_pack: path to episode_pack.json
 
 Outputs (to --out_dir):
-- 00_episode_snapshot.png
-- 01_roll25_percentile_bars.png
-- 02_margin_balance_bars.png
-- 03_margin_change_bars.png
-- 04_0050_bb_band_gauge.png
-- [optional] 05_0050_tranche_levels.png
-- episode_chart_ready.csv
-- chart_manifest.json
+- 00_episode_snapshot.png                (text-based one-page snapshot)
+- 01_roll25_percentile_bars.png          (p(0-100) bars: trade_value/close/amplitude)
+- 02_margin_balance_bars.png             (TWSE/TPEX/TOTAL balances)
+- 03_margin_change_bars.png              (TWSE/TPEX/TOTAL daily chg)
+- 04_0050_bb_band_gauge.png              (BB lower/ma/upper with price marker)
+- [optional] 05_0050_tranche_levels.png  (price levels from tranche_levels; default OFF)
+- episode_chart_ready.csv                (flat table for downstream)
+- chart_manifest.json                    (what charts were produced, with sha256, as_of, warnings)
 
 Dependencies:
 - matplotlib, numpy, pandas (pandas optional but recommended; used for CSV convenience)
@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 TZ_NAME_DEFAULT = "Asia/Taipei"
 MANIFEST_SCHEMA = "chart_manifest_v1"
-SCRIPT_FINGERPRINT = "make_episode_charts@v1.3.bb_gauge_label_collision_avoid"
+SCRIPT_FINGERPRINT = "make_episode_charts@v1.4.bb_gauge_arrow_labels"
 
 
 # -----------------------------
@@ -148,7 +148,6 @@ def set_font_defaults() -> None:
 def _set_ylim_with_headroom(ax: plt.Axes, values: List[float], *, pct_like: bool = False, ratio: float = 0.10) -> None:
     if not values:
         return
-
     ymin, ymax = ax.get_ylim()
     vmin = min(values)
     vmax = max(values)
@@ -188,7 +187,25 @@ def _annotate_near_point(
     ha: str,
     va: str,
     fontsize: int = 9,
+    arrow: bool = False,
+    arrow_color: Optional[str] = None,
+    arrow_lw: float = 1.0,
 ) -> None:
+    """
+    Place a label close to (x,y) using offset points so it "sticks" to the marker.
+    If arrow=True, draw an arrow from label to the exact point.
+    """
+    arrowprops = None
+    if arrow:
+        arrowprops = {
+            "arrowstyle": "->",
+            "lw": arrow_lw,
+            "color": arrow_color if arrow_color is not None else "0.35",
+            "shrinkA": 0,
+            "shrinkB": 0,
+            "connectionstyle": "arc3,rad=0.0",
+        }
+
     ax.annotate(
         text,
         xy=(x, y),
@@ -197,6 +214,7 @@ def _annotate_near_point(
         ha=ha,
         va=va,
         fontsize=fontsize,
+        arrowprops=arrowprops,
         clip_on=False,
     )
 
@@ -437,6 +455,7 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
     fig = plt.figure(figsize=(8, 4.5))
     ax = fig.add_subplot(111)
 
+    # explicit colors (upper/lower dots != price dot)
     band_color = "C0"
     price_color = "C1"
     bound_color = "C2"
@@ -455,54 +474,79 @@ def chart_04_0050_bb_band_gauge(pack: Dict[str, Any], out_dir: Path, dpi: int) -
         pad=16,
     )
 
-    # X range padding
     span = max(upper - lower, 1e-6)
     ax.set_xlim(lower - 0.10 * span, upper + 0.10 * span)
     ax.set_ylim(-1.0, 1.0)
 
     # -----------------------------
-    # Label collision avoidance
+    # Label collision avoidance + arrows to point markers
     # -----------------------------
-    # rule: if price is too close to upper/lower, move labels to avoid overlapping
-    # threshold is relative to band span (tunable)
-    near_thr = 0.12  # 12% of span
+    near_thr = 0.12
+    very_near_thr = 0.06
     d_upper = abs(price - upper) / span
     d_lower = abs(price - lower) / span
-    very_near_thr = 0.06
 
-    # default offsets
     lower_cfg = dict(dx=4, dy=14, ha="left", va="bottom")
     upper_cfg = dict(dx=-4, dy=14, ha="right", va="bottom")
     ma_cfg = dict(dx=0, dy=18, ha="center", va="bottom")
     price_cfg = dict(dx=0, dy=-18, ha="center", va="top")
 
     if d_upper < near_thr:
-        # upper label: lift up more so it doesn't sit close to the nearby price dot
         upper_cfg["dy"] = 32 if d_upper >= very_near_thr else 42
-
-        # price label: shift left + slightly lower to separate from upper label cluster
         price_cfg["dx"] = -22
         price_cfg["dy"] = -22
         price_cfg["ha"] = "right"
-
     elif d_lower < near_thr:
-        # lower label: lift up more
         lower_cfg["dy"] = 32 if d_lower >= very_near_thr else 42
-
-        # price label: shift right + slightly lower
         price_cfg["dx"] = 22
         price_cfg["dy"] = -22
         price_cfg["ha"] = "left"
 
-    # place labels near points
-    _annotate_near_point(ax, x=lower, y=y0, text=f"lower={lower:.2f}", fontsize=9, **lower_cfg)
-    _annotate_near_point(ax, x=upper, y=y0, text=f"upper={upper:.2f}", fontsize=9, **upper_cfg)
-    _annotate_near_point(ax, x=ma, y=y0, text=f"ma={ma:.2f}", fontsize=9, **ma_cfg)
-    _annotate_near_point(ax, x=price, y=y0, text=f"price={price:.2f}", fontsize=9, **price_cfg)
+    # arrows (color-match each target marker to reduce ambiguity)
+    _annotate_near_point(
+        ax,
+        x=lower,
+        y=y0,
+        text=f"lower={lower:.2f}",
+        fontsize=9,
+        arrow=True,
+        arrow_color=bound_color,
+        **lower_cfg,
+    )
+    _annotate_near_point(
+        ax,
+        x=upper,
+        y=y0,
+        text=f"upper={upper:.2f}",
+        fontsize=9,
+        arrow=True,
+        arrow_color=bound_color,
+        **upper_cfg,
+    )
+    _annotate_near_point(
+        ax,
+        x=ma,
+        y=y0,
+        text=f"ma={ma:.2f}",
+        fontsize=9,
+        arrow=True,
+        arrow_color=band_color,
+        **ma_cfg,
+    )
+    _annotate_near_point(
+        ax,
+        x=price,
+        y=y0,
+        text=f"price={price:.2f}",
+        fontsize=9,
+        arrow=True,
+        arrow_color=price_color,
+        **price_cfg,
+    )
 
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     meta = save_fig(fig, out_dir / "04_0050_bb_band_gauge.png", dpi=dpi)
-    meta["title"] = "0050 BB band gauge (label collision avoidance)"
+    meta["title"] = "0050 BB band gauge (arrow labels to markers)"
     return meta
 
 
