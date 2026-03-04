@@ -1,22 +1,22 @@
 {
   "schema_version": "chart_manifest_v1",
-  "script_fingerprint": "make_episode_charts@v1.2.bb_gauge_point_labels",
-  "generated_at_utc": "2026-03-04T01:48:21Z",
+  "script_fingerprint": "make_episode_charts@v1.3.bb_gauge_label_collision_avoid",
+  "generated_at_utc": "2026-03-04T02:01:48Z",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-03-04",
   "data_as_of": "2026-03-03",
   "input_files": {
     "episode_pack": "video_pack/episode_pack.json",
-    "episode_pack_sha256": "a4e6508cc595e52d4064d54952e8a7f8e3072a22d17ee7585c4a10cb789d3474"
+    "episode_pack_sha256": "db636c0a386fb6f68a03c3a0b37fb4d789b4e70c18a11f36e7dd049e935c9537"
   },
   "pack_build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
-  "pack_generated_at_local": "2026-03-04T09:48:17+08:00",
+  "pack_generated_at_local": "2026-03-04T10:01:46+08:00",
   "warnings": [],
   "charts": [
     {
       "file": "00_episode_snapshot.png",
       "path": "video_pack/charts_snapshot/00_episode_snapshot.png",
-      "sha256": "290c1575f3948574222522960da37bd5cbbc4dd9a622936932d7ef14e136f8bb",
+      "sha256": "dfc54016ba809fd1d90db090ef183e7da3a89812d3ea5bd5fea177ac565abe79",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -60,13 +60,13 @@
     {
       "file": "04_0050_bb_band_gauge.png",
       "path": "video_pack/charts_snapshot/04_0050_bb_band_gauge.png",
-      "sha256": "6c621fc66d8efe7d02b4daced856ab81547bf533537fbf0dea9491b69e515663",
+      "sha256": "3b256e0fe675db07ca69b9afa2acdc0a04598e9e1ef3e7e38865c301d68e762a",
       "dpi": 160,
       "size_inches": [
         8.0,
         4.5
       ],
-      "title": "0050 BB band gauge (point-near labels + upper/lower dots)"
+      "title": "0050 BB band gauge (label collision avoidance)"
     },
     {
       "file": "episode_chart_ready.csv",
