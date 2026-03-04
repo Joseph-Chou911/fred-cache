@@ -20,14 +20,14 @@ Audit-first:
   * rolling percentile p: ECDF percentile = 100*(n_less + 0.5*n_equal)/n
 
 Charts:
-- 10_close_series.png
-- 11_trade_value_series.png
-- 12_trade_value_p252.png          (+ guides + last value + short note)
-- 13_trade_value_z252.png          (+ short note)
-- 14_amplitude_pct.png
-- 15_amplitude_p252.png            (+ guides + last value + short note)
-- 16_close_p252.png                (+ guides + last value + short note)
-- 17_trade_value_p60.png           (+ guides + last value + short note)
+- 10_close_series.png                (+ last value)
+- 11_trade_value_series.png          (+ last value)
+- 12_trade_value_p252.png            (+ guides + last value + short note)
+- 13_trade_value_z252.png            (+ note + last value)
+- 14_amplitude_pct.png               (+ last value)
+- 15_amplitude_p252.png              (+ guides + last value + short note)
+- 16_close_p252.png                  (+ guides + last value + short note)
+- 17_trade_value_p60.png             (+ guides + last value + short note)
 - roll25_chart_ready.csv
 """
 
@@ -36,7 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Callable
 
 import numpy as np
 import pandas as pd
@@ -44,6 +44,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 
 PERCENTILE_GUIDES = [50, 80, 90, 95, 99]
@@ -116,8 +117,37 @@ def add_percentile_guides(ax) -> None:
         ax.axhline(lvl, linewidth=0.8, alpha=0.25)
 
 
-def annotate_last_value(ax, x: pd.Series, y: pd.Series, fmt: str = "{:.1f}") -> None:
-    """Mark + label the last NON-NaN point of a series."""
+def format_compact_number(v: float) -> str:
+    """
+    Compact formatter for large numbers (e.g., trade_value).
+    Uses K/M/B/T (thousand/million/billion/trillion).
+    """
+    av = abs(v)
+    if av >= 1e12:
+        return f"{v/1e12:.2f}T"
+    if av >= 1e9:
+        return f"{v/1e9:.2f}B"
+    if av >= 1e6:
+        return f"{v/1e6:.2f}M"
+    if av >= 1e3:
+        return f"{v/1e3:.2f}K"
+    return f"{v:.0f}"
+
+
+def annotate_last_value(
+    ax,
+    x: pd.Series,
+    y: pd.Series,
+    *,
+    fmt: str = "{:.1f}",
+    formatter: Optional[Callable[[float], str]] = None,
+    marker_size: float = 5.0,
+) -> None:
+    """
+    Mark + label the last NON-NaN point of a series.
+    - Adds a small circle at the last point.
+    - Adds a value label near the point (auto places to avoid clipping).
+    """
     xs = pd.to_datetime(x, errors="coerce")
     ys = pd.to_numeric(y, errors="coerce")
     valid = (~xs.isna()) & (~ys.isna())
@@ -128,21 +158,40 @@ def annotate_last_value(ax, x: pd.Series, y: pd.Series, fmt: str = "{:.1f}") -> 
     x_last = xs.loc[last_idx]
     y_last = float(ys.loc[last_idx])
 
-    ax.plot([x_last], [y_last], marker="o", markersize=4)
+    # marker
+    ax.plot([x_last], [y_last], marker="o", markersize=marker_size)
 
-    if y_last >= 95:
-        xytext = (6, -10)
-        va = "top"
-    else:
-        xytext = (6, 10)
-        va = "bottom"
+    # text: compact or numeric
+    label = formatter(y_last) if formatter is not None else fmt.format(y_last)
+
+    # Decide label side: if too close to right edge, put label on the left.
+    # (matplotlib uses float days for date axis)
+    try:
+        x_num = mdates.date2num(x_last.to_pydatetime())
+    except Exception:
+        x_num = mdates.date2num(pd.to_datetime(x_last).to_pydatetime())
+
+    xmin, xmax = ax.get_xlim()
+    xspan = max(xmax - xmin, 1e-9)
+    near_right = x_num > (xmax - 0.03 * xspan)
+
+    # Decide vertical offset: if near top of visible range, place below.
+    ymin, ymax = ax.get_ylim()
+    yspan = max(ymax - ymin, 1e-9)
+    y_pos = (y_last - ymin) / yspan
+    near_top = y_pos > 0.88
+
+    dx = -6 if near_right else 6
+    ha = "right" if near_right else "left"
+    dy = -10 if near_top else 10
+    va = "top" if near_top else "bottom"
 
     ax.annotate(
-        fmt.format(y_last),
+        label,
         xy=(x_last, y_last),
-        xytext=xytext,
+        xytext=(dx, dy),
         textcoords="offset points",
-        ha="left",
+        ha=ha,
         va=va,
     )
 
@@ -216,17 +265,19 @@ def main() -> int:
 
     asof = df["date"].max().date().isoformat()
 
-    # 1) Close series
+    # 1) Close series (+ last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["close"])
+    annotate_last_value(ax, df["date"], df["close"], fmt="{:,.0f}")
     ax.set_title(f"TWSE close (as_of={asof})", pad=16)
     ax.set_ylabel("Close")
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     save_fig(fig, out_dir / "10_close_series.png")
 
-    # 2) Trade value series
+    # 2) Trade value series (+ last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["trade_value"])
+    annotate_last_value(ax, df["date"], df["trade_value"], formatter=format_compact_number)
     ax.set_title(f"TWSE trade_value (as_of={asof})", pad=16)
     ax.set_ylabel("Trade value")
     fig.tight_layout(rect=(0, 0, 1, 0.98))
@@ -236,7 +287,7 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_p252"])
     add_percentile_guides(ax)
-    annotate_last_value(ax, df["date"], df["tv_p252"])
+    annotate_last_value(ax, df["date"], df["tv_p252"], fmt="{:.1f}")
     ax.set_title(f"Trade value percentile rank (252D ~ 1Y) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile rank (0-100)")
     ax.set_ylim(0, 100)
@@ -244,18 +295,20 @@ def main() -> int:
     fig.tight_layout(rect=(0, 0.04, 1, 0.98))
     save_fig(fig, out_dir / "12_trade_value_p252.png")
 
-    # 4) Trade value z252  (+ note)
+    # 4) Trade value z252  (+ note + last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_z252"])
+    annotate_last_value(ax, df["date"], df["tv_z252"], fmt="{:.2f}")
     ax.set_title(f"Trade value z-score (252D ~ 1Y) (as_of={asof})", pad=16)
     ax.set_ylabel("Z-score")
     add_bottom_note(fig, "Note: z-score = (x - mean) / std within the last 252 trading days.")
     fig.tight_layout(rect=(0, 0.04, 1, 0.98))
     save_fig(fig, out_dir / "13_trade_value_z252.png")
 
-    # 5) Amplitude pct
+    # 5) Amplitude pct (+ last value)
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["amplitude_pct"])
+    annotate_last_value(ax, df["date"], df["amplitude_pct"], fmt="{:.2f}")
     ax.set_title(f"amplitude_pct (as_of={asof})", pad=16)
     ax.set_ylabel("Amplitude %")
     fig.tight_layout(rect=(0, 0, 1, 0.98))
@@ -265,7 +318,7 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["amp_p252"])
     add_percentile_guides(ax)
-    annotate_last_value(ax, df["date"], df["amp_p252"])
+    annotate_last_value(ax, df["date"], df["amp_p252"], fmt="{:.1f}")
     ax.set_title(f"Amplitude percentile rank (252D ~ 1Y) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile rank (0-100)")
     ax.set_ylim(0, 100)
@@ -277,7 +330,7 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["close_p252"])
     add_percentile_guides(ax)
-    annotate_last_value(ax, df["date"], df["close_p252"])
+    annotate_last_value(ax, df["date"], df["close_p252"], fmt="{:.1f}")
     ax.set_title(f"Close percentile rank (252D ~ 1Y) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile rank (0-100)")
     ax.set_ylim(0, 100)
@@ -289,7 +342,7 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(df["date"], df["tv_p60"])
     add_percentile_guides(ax)
-    annotate_last_value(ax, df["date"], df["tv_p60"])
+    annotate_last_value(ax, df["date"], df["tv_p60"], fmt="{:.1f}")
     ax.set_title(f"Trade value percentile rank (60D ~ 3M) (as_of={asof})", pad=16)
     ax.set_ylabel("Percentile rank (0-100)")
     ax.set_ylim(0, 100)
@@ -299,12 +352,27 @@ def main() -> int:
 
     # Optional: export a chart-ready CSV for manual edits
     csv_path = out_dir / "roll25_chart_ready.csv"
-    df_out = df[[
-        "date", "close", "trade_value", "ret_pct", "amplitude_pct",
-        "tv_z60", "tv_p60", "tv_z252", "tv_p252",
-        "close_z60", "close_p60", "close_z252", "close_p252",
-        "amp_z60", "amp_p60", "amp_z252", "amp_p252",
-    ]].copy()
+    df_out = df[
+        [
+            "date",
+            "close",
+            "trade_value",
+            "ret_pct",
+            "amplitude_pct",
+            "tv_z60",
+            "tv_p60",
+            "tv_z252",
+            "tv_p252",
+            "close_z60",
+            "close_p60",
+            "close_z252",
+            "close_p252",
+            "amp_z60",
+            "amp_p60",
+            "amp_z252",
+            "amp_p252",
+        ]
+    ].copy()
     df_out.to_csv(csv_path, index=False, encoding="utf-8")
 
     return 0
