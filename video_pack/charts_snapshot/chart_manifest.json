@@ -1,22 +1,22 @@
 {
   "schema_version": "chart_manifest_v1",
   "script_fingerprint": "make_episode_charts@v1.6.zh_all_charts_roll25_rename_market_heat",
-  "generated_at_utc": "2026-03-04T03:13:30Z",
+  "generated_at_utc": "2026-03-04T03:29:10Z",
   "timezone": "Asia/Taipei",
   "day_key_local": "2026-03-04",
   "data_as_of": "2026-03-03",
   "input_files": {
     "episode_pack": "video_pack/episode_pack.json",
-    "episode_pack_sha256": "98341108efb869c2afaaff4ae1151d9ea5117708b5746b17085bdd5e9db785de"
+    "episode_pack_sha256": "748be17fe82bb06aa0f9660cfeba79350b796ca50d86a1069fdb0f29d6475f85"
   },
   "pack_build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
-  "pack_generated_at_local": "2026-03-04T11:13:28+08:00",
+  "pack_generated_at_local": "2026-03-04T11:29:08+08:00",
   "warnings": [],
   "charts": [
     {
       "file": "00_episode_snapshot.png",
       "path": "video_pack/charts_snapshot/00_episode_snapshot.png",
-      "sha256": "12cc0c6906050d680bd80ae3c24ad66f82ccd790121fc79be07d443571cdc714",
+      "sha256": "0aa9af8c28209550e42b28715103daf1db8087134d1e9b9c27045da6c4e1c678",
       "dpi": 160,
       "size_inches": [
         8.0,
