@@ -16,32 +16,40 @@ jobs:
     env:
       OUT_DIR: video_pack
       TZ: Asia/Taipei
-      # Force matplotlib to use an isolated config dir (reduce cache surprises)
-      MPLCONFIGDIR: ${{ runner.temp }}/mplconfig
+      # Use a workspace-local matplotlib config dir to avoid runner-context + cache surprises
+      MPLCONFIGDIR: .mplconfig
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       # =========================
-      # Install system fonts for CJK + clear font cache (avoid tofu)
+      # Install system fonts for CJK + clear matplotlib cache (avoid tofu + "stale" look)
       # =========================
       - name: Install CJK fonts (Noto CJK) + clear matplotlib cache
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk
+          sudo apt-get install -y fonts-noto-cjk fontconfig
           fc-cache -fv
+
+          # Clear matplotlib caches (both default and our forced MPLCONFIGDIR)
           rm -rf ~/.cache/matplotlib || true
+
+          if [[ -z "${MPLCONFIGDIR}" || "${MPLCONFIGDIR}" == "/" || "${MPLCONFIGDIR}" == "." ]]; then
+            echo "Refusing to delete unsafe MPLCONFIGDIR='${MPLCONFIGDIR}'"
+            exit 1
+          fi
           rm -rf "${MPLCONFIGDIR}" || true
           mkdir -p "${MPLCONFIGDIR}"
+
           echo "=== fc-list (noto cjk, sample) ==="
           fc-list | grep -i "noto.*cjk" | head -n 20 || true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install deps
         run: |
@@ -90,10 +98,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${OUT_DIR}/charts_snapshot"
+
+          # Backward-compatible: only add --lang zh if your script supports it
+          EXTRA_LANG_ARGS=""
+          if python tools/make_episode_charts.py -h 2>&1 | grep -q -- "--lang"; then
+            EXTRA_LANG_ARGS="--lang zh"
+            echo "Detected --lang support; will use: ${EXTRA_LANG_ARGS}"
+          else
+            echo "No --lang option in make_episode_charts.py; skip language flag."
+          fi
+
           python tools/make_episode_charts.py \
             --episode_pack "${OUT_DIR}/episode_pack.json" \
             --out_dir "${OUT_DIR}/charts_snapshot" \
-            --lang zh
+            ${EXTRA_LANG_ARGS}
 
       - name: Make long-series charts (roll25.json)
         run: |
