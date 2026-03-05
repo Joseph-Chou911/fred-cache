@@ -1,14 +1,14 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-03-04T16:00:21.791528Z",
-  "as_of_ts": "2026-03-05T00:00:21.791540+08:00",
-  "data_commit_sha": "6de243b1dbca09bd2d726b7d05e7f572f4f0f05d",
+  "generated_at_utc": "2026-03-05T16:11:07.460389Z",
+  "as_of_ts": "2026-03-06T00:11:07.460409+08:00",
+  "data_commit_sha": "4da7b5b4486b560d64886053a3e1f5d5f2d5898b",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-03-04T03:13:42Z",
-    "market_cache_as_of_ts": "2026-03-04T03:13:42Z",
+    "market_cache_generated_at_utc": "2026-03-05T03:16:43Z",
+    "market_cache_as_of_ts": "2026-03-05T03:16:43Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -23,31 +23,31 @@
   },
   "context_global": {
     "context_equity_extreme_sp500_p252_ge_95": 0,
-    "sp500_p252": 74.20634920634922
+    "sp500_p252": 82.53968253968253
   },
   "distances_global": {
-    "vix_panic_gap": -3.5700000000000003,
-    "sp500_ret1_panic_gap": 0.5556002801665919,
-    "hyg_veto_gap_z": -0.21352759488241047,
-    "ofr_veto_gap_z": 1.5234271986008163
+    "vix_panic_gap": -1.1499999999999986,
+    "sp500_ret1_panic_gap": 2.275603193953609,
+    "hyg_veto_gap_z": 0.6656971722053049,
+    "ofr_veto_gap_z": -0.5843262576831791
   },
   "tw_local_gate": {
     "tw_state": "NONE",
-    "UsedDate": "2026-03-03",
+    "UsedDate": "2026-03-04",
     "run_day_tag": "WEEKDAY",
     "used_date_status": "DATA_NOT_UPDATED",
     "lookback_n_actual": 20,
     "lookback_n_target": 20,
-    "pct_change": -2.198142,
-    "amplitude_pct": 2.681116,
-    "turnover_twd": 1113233319063.0,
-    "close": 34323.65,
+    "pct_change": -4.354927,
+    "amplitude_pct": 4.078442,
+    "turnover_twd": 1099338575770.0,
+    "close": 32828.88,
     "signals": {
       "DownDay": true,
       "VolumeAmplified": false,
       "VolAmplified": false,
       "NewLow_N": 0,
-      "ConsecutiveBreak": 2,
+      "ConsecutiveBreak": 3,
       "stress_newlow": false,
       "paired_basis": false,
       "stress_consecutive_break_raw": true,
@@ -55,18 +55,18 @@
       "stress_consec_pair_required": true
     },
     "margin": {
-      "data_date": "2026-03-04",
+      "data_date": "2026-03-05",
       "unit": "億",
       "flow_signal": "NONE",
       "flow_dbg": {
         "chg_last5_yi": [
+          25.5,
           -77.4,
           -71.6,
           17.6,
-          67.3,
-          56.3
+          67.3
         ],
-        "sum_last5_yi": -7.800000000000011,
+        "sum_last5_yi": -38.60000000000001,
         "pos_days_last5": 3,
         "rule": "WATCH(sum5>=100.0 & pos_days>=4); ALERT(sum5>=150.0 & pos_days>=4)"
       },
@@ -78,8 +78,8 @@
       },
       "final_signal": "NONE",
       "confidence": "DOWNGRADED",
-      "latest_balance_yi": 3766.2,
-      "latest_chg_yi": -77.4
+      "latest_balance_yi": 3791.7,
+      "latest_chg_yi": 25.5
     },
     "triggers": {
       "TRIG_TW_PANIC": 0,
@@ -87,7 +87,7 @@
       "TRIG_TW_REVERSAL": 0
     },
     "distances": {
-      "pct_change_to_nonnegative_gap": 2.198142,
+      "pct_change_to_nonnegative_gap": 4.354927,
       "lookback_missing_points": 0
     }
   },
@@ -97,43 +97,43 @@
       "series_id": "VIX",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-03-03",
-        "value": 23.57,
-        "as_of_ts": "2026-03-04T03:13:42Z",
+        "data_date": "2026-03-04",
+        "value": 21.15,
+        "as_of_ts": "2026-03-05T03:16:43Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
-        "z": 2.7422064267431234,
-        "p": 100.0,
-        "ret1_pct": 9.934701492537307,
-        "z_delta": 0.7297652503634859,
-        "p_delta": 1.6666666666666714
+        "z": 1.636378294095711,
+        "p": 93.33333333333333,
+        "ret1_pct": -10.26728892660162,
+        "z_delta": -1.1058281326474124,
+        "p_delta": -6.666666666666671
       },
       "w252": {
-        "z": 0.88917843764433,
-        "p": 88.88888888888889
+        "z": 0.4276109119176778,
+        "p": 81.34920634920636
       },
-      "series_signal": "ALERT"
+      "series_signal": "NONE"
     },
     "SP500": {
       "series_id": "SP500",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-03-03",
-        "value": 6816.63,
-        "as_of_ts": "2026-03-04T03:13:42Z",
+        "data_date": "2026-03-04",
+        "value": 6869.5,
+        "as_of_ts": "2026-03-05T03:16:43Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
-        "z": -1.329060567053541,
-        "p": 11.666666666666666,
-        "ret1_pct": -0.9443997198334081,
-        "z_delta": -1.1298049739208353,
-        "p_delta": -30.000000000000007
+        "z": -0.40480075960209494,
+        "p": 31.666666666666664,
+        "ret1_pct": 0.7756031939536089,
+        "z_delta": 0.924259807451446,
+        "p_delta": 20.0
       },
       "w252": {
-        "z": 0.8909274089114138,
-        "p": 74.20634920634922
+        "z": 0.986610060709369,
+        "p": 82.53968253968253
       },
       "series_signal": "NONE"
     },
@@ -141,55 +141,55 @@
       "series_id": "HYG_IEF_RATIO",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-03-03",
-        "value": 0.8258091115233973,
-        "as_of_ts": "2026-03-04T03:13:42Z",
+        "data_date": "2026-03-04",
+        "value": 0.8304927176944531,
+        "as_of_ts": "2026-03-05T03:16:43Z",
         "source_url": "DERIVED"
       },
       "w60": {
-        "z": -2.2135275948824105,
-        "p": 3.3333333333333335,
-        "ret1_pct": -0.09643633389095096,
-        "z_delta": -0.05629657731105242,
-        "p_delta": 0.0
+        "z": -1.3343028277946951,
+        "p": 11.666666666666666,
+        "ret1_pct": 0.5671536079828163,
+        "z_delta": 0.8792247670877154,
+        "p_delta": 8.333333333333332
       },
       "w252": {
-        "z": -1.2186388300033886,
-        "p": 9.126984126984127
+        "z": -0.6922856095801212,
+        "p": 22.22222222222222
       },
-      "series_signal": "WATCH"
+      "series_signal": "NONE"
     },
     "OFR_FSI": {
       "series_id": "OFR_FSI",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-02-27",
-        "value": -2.386,
-        "as_of_ts": "2026-03-04T03:13:42Z",
+        "data_date": "2026-03-02",
+        "value": -1.893,
+        "as_of_ts": "2026-03-05T03:16:43Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
-        "z": 0.47657280139918373,
-        "p": 68.33333333333333,
-        "ret1_pct": 1.1599005799502908,
-        "z_delta": 0.11859773576852922,
-        "p_delta": 6.666666666666657
+        "z": 2.584326257683179,
+        "p": 100.0,
+        "ret1_pct": 20.662196144174352,
+        "z_delta": 2.1077534562839952,
+        "p_delta": 31.66666666666667
       },
       "w252": {
-        "z": -0.6189468574979006,
-        "p": 25.396825396825395
+        "z": -0.06293650293675732,
+        "p": 61.111111111111114
       },
-      "series_signal": "NONE"
+      "series_signal": "ALERT"
     }
   },
   "history_audit": {
     "history_load_status": "OK",
     "history_load_reason": "dict.items",
-    "loaded_items": 27,
+    "loaded_items": 28,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260304T160021Z.json",
-    "backup_bytes": 25171,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260305T161107Z.json",
+    "backup_bytes": 26116,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -197,10 +197,10 @@
       "deleted": 1
     },
     "history_file_exists": true,
-    "history_pre_items": 27,
-    "history_pre_unique_days": 27,
-    "history_post_items": 28,
-    "history_post_unique_days": 28,
+    "history_pre_items": 28,
+    "history_pre_unique_days": 28,
+    "history_post_items": 29,
+    "history_post_unique_days": 29,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,
