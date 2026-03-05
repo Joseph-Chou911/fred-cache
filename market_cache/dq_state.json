@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-03-04T03:13:42Z",
-  "as_of_ts": "2026-03-04T03:13:42Z",
+  "generated_at_utc": "2026-03-05T01:49:12Z",
+  "as_of_ts": "2026-03-05T01:49:12Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "dq": "OK",
   "checks": [
@@ -31,20 +31,20 @@
       "series_id": "HYG_IEF_RATIO",
       "check": "aligned_points",
       "status": "OK",
-      "n": 4753
+      "n": 4754
     },
     {
       "series_id": "HYG_IEF_RATIO",
       "check": "ratio_latest_date_present_in_hyg_and_ief",
       "status": "OK",
-      "latest_date": "2026-03-03"
+      "latest_date": "2026-03-04"
     },
     {
       "series_id": "OFR_FSI",
       "check": "staleness_days",
       "status": "OK",
-      "staleness_days": 5,
-      "latest_date": "2026-02-27",
+      "staleness_days": 3,
+      "latest_date": "2026-03-02",
       "threshold_warn_days": 7,
       "threshold_err_days": 14
     },
@@ -53,7 +53,7 @@
       "check": "staleness_days",
       "status": "OK",
       "staleness_days": 1,
-      "latest_date": "2026-03-03",
+      "latest_date": "2026-03-04",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
     },
@@ -62,7 +62,7 @@
       "check": "staleness_days",
       "status": "OK",
       "staleness_days": 1,
-      "latest_date": "2026-03-03",
+      "latest_date": "2026-03-04",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
     },
@@ -71,7 +71,7 @@
       "check": "staleness_days",
       "status": "OK",
       "staleness_days": 1,
-      "latest_date": "2026-03-03",
+      "latest_date": "2026-03-04",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
     },
@@ -79,32 +79,32 @@
       "series_id": "OFR_FSI",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 0.028000000000000025,
-      "std60": 0.21427296389315093,
+      "ret1_delta": 0.4930000000000001,
+      "std60": 0.22709980918823633,
       "threshold": "8*std60"
     },
     {
       "series_id": "VIX",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 2.129999999999999,
-      "std60": 2.335892709436801,
+      "ret1_delta": -2.4200000000000017,
+      "std60": 2.3898304449386267,
       "threshold": "8*std60"
     },
     {
       "series_id": "SP500",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": -64.98999999999978,
-      "std60": 56.93307128037854,
+      "ret1_delta": 52.86999999999989,
+      "std60": 56.827544878977655,
       "threshold": "8*std60"
     },
     {
       "series_id": "HYG_IEF_RATIO",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": -0.0007971487731430749,
-      "std60": 0.005530294709732253,
+      "ret1_delta": 0.0046836061710557875,
+      "std60": 0.0056040242061180055,
       "threshold": "8*std60"
     }
   ]
