@@ -600,11 +600,11 @@
       }
     },
     {
-      "run_ts_utc": "2026-03-06T00:22:40.155626+00:00",
-      "stats_as_of_ts": "2026-03-06T00:18:09Z",
+      "run_ts_utc": "2026-03-06T15:52:58.430479+00:00",
+      "stats_as_of_ts": "2026-03-06T03:15:31Z",
       "module": "market_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@a5f8dbf",
+      "script_fingerprint": "render_dashboard_py_signals_v8@8a68f21",
       "series_signals": {
         "OFR_FSI": "ALERT",
         "VIX": "ALERT",
