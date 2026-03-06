@@ -1,42 +1,42 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-03-05T15:35:05Z`
+- report_generated_at_utc: `2026-03-06T15:20:42Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-03-05 close=610.3400) → **NORMAL_RANGE** (reason=default); dist_to_lower=2.005%; dist_to_upper=3.861%; 20D forward_mdd: p50=-3.28%, p10=-14.48%, min=-24.99% (conf=HIGH)
-- **VXN** (2026-03-04 close=24.8700) → **NORMAL_RANGE** (reason=default); z=1.1054; pos=0.730; bwΔ=0.84%; High-Vol tail (B) p90 runup=67.4% (n=54) (conf=MED)
+- **QQQ** (2026-03-06 close=601.4900) → **NEAR_LOWER_BAND (MONITOR)** (reason=z<=-1.5); dist_to_lower=0.671%; dist_to_upper=5.366%; 20D forward_mdd: p50=-3.18%, p10=-14.47%, min=-24.99% (conf=HIGH)
+- **VXN** (2026-03-05 close=26.0000) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.816)); z=1.4020; pos=0.816; bwΔ=1.23%; Pos-WATCH (C) p90 runup=58.0% (n=79) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-05T15:35:04Z`
-- data_as_of (meta.max_date): `2026-03-05`  | staleness_days: `0`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-03-06T15:20:42Z`
+- data_as_of (meta.max_date): `2026-03-06`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
-- action_output: **`NORMAL_RANGE`**
-- trigger_reason: `default`
+- action_output: **`NEAR_LOWER_BAND (MONITOR)`**
+- trigger_reason: `z<=-1.5`
 
 ### Latest
 
 | field | value |
 |---|---:|
-| date | `2026-03-05` |
-| close | `610.3400` |
-| bb_mid | `615.7447` |
-| bb_lower | `598.1027` |
-| bb_upper | `633.9071` |
-| z | `-0.6066` |
+| date | `2026-03-06` |
+| close | `601.4900` |
+| bb_mid | `615.3394` |
+| bb_lower | `597.4511` |
+| bb_upper | `633.7634` |
+| z | `-1.5432` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `2.005%` |
-| distance_to_upper_pct | `3.861%` |
-| position_in_band | `0.342` |
-| bandwidth_pct | `5.81%` |
-| bandwidth_delta_pct | `-0.62%` |
+| distance_to_lower_pct | `0.671%` |
+| distance_to_upper_pct | `5.366%` |
+| position_in_band | `0.111` |
+| bandwidth_pct | `5.90%` |
+| bandwidth_delta_pct | `1.30%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
 
-- confidence: **`HIGH`** (sample_size=87 (>=80))
+- confidence: **`HIGH`** (sample_size=88 (>=80))
 
 | field | value |
 |---|---:|
@@ -45,11 +45,11 @@
 | z_thresh | -1.500000 |
 | horizon_days | 20 |
 | cooldown_bars | 20 |
-| sample_size | 87 |
-| p10 | -0.144813 |
-| p50 | -0.032842 |
+| sample_size | 88 |
+| p10 | -0.144695 |
+| p50 | -0.031846 |
 | p90 | 0.000000 |
-| mean | -0.054391 |
+| mean | -0.053773 |
 | min | -0.249947 |
 | max | 0.000000 |
 | gate | `{'field': 'z', 'op': '<=', 'value': -1.5}` |
@@ -58,36 +58,36 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-05T15:35:05Z`
-- data_as_of (meta.max_date): `2026-03-04`  | staleness_days: `1`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-03-06T15:20:42Z`
+- data_as_of (meta.max_date): `2026-03-05`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
-- action_output: **`NORMAL_RANGE`**
-- trigger_reason: `default`
+- action_output: **`NEAR_UPPER_BAND (WATCH)`**
+- trigger_reason: `position_in_band>=0.8 (pos=0.816)`
 
 ### Latest
 
 | field | value |
 |---|---:|
-| date | `2026-03-04` |
-| close | `24.8700` |
-| bb_mid | `21.6185` |
-| bb_lower | `16.7773` |
-| bb_upper | `27.8565` |
-| z | `1.1054` |
+| date | `2026-03-05` |
+| close | `26.0000` |
+| bb_mid | `21.7202` |
+| bb_lower | `16.8049` |
+| bb_upper | `28.0730` |
+| z | `1.4020` |
 | trigger_z_le_-2 (A_lowvol) | `False` |
 | trigger_z_ge_2 (B_highvol) | `False` |
-| distance_to_lower_pct | `32.540%` |
-| distance_to_upper_pct | `12.008%` |
-| position_in_band | `0.730` |
-| bandwidth_pct | `51.25%` |
-| bandwidth_delta_pct | `0.84%` |
+| distance_to_lower_pct | `35.366%` |
+| distance_to_upper_pct | `7.973%` |
+| position_in_band | `0.816` |
+| bandwidth_pct | `51.88%` |
+| bandwidth_delta_pct | `1.23%` |
 | walk_upper_count | 0 |
 ### Historical simulation (conditional)
 
 #### C) Position-based WATCH (pos >= threshold)
 
-- confidence: **`MED`** (sample_size=78 (30-79))
+- confidence: **`MED`** (sample_size=79 (30-79))
 
 | field | value |
 |---|---:|
@@ -96,11 +96,11 @@
 | z_thresh | `NA` |
 | horizon_days | 20 |
 | cooldown_bars | 20 |
-| sample_size | 78 |
+| sample_size | 79 |
 | p10 | 0.000000 |
-| p50 | 0.111346 |
-| p90 | 0.581213 |
-| mean | 0.205903 |
+| p50 | 0.104549 |
+| p90 | 0.580152 |
+| mean | 0.203296 |
 | min | 0.000000 |
 | max | 1.739651 |
 | gate | `{'field': 'position_in_band', 'op': '>=', 'value': 0.8}` |

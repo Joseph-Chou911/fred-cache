@@ -1,14 +1,14 @@
 {
   "name": "QQQ_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-03-05T15:35:04Z",
+  "generated_at_utc": "2026-03-06T15:20:42Z",
   "meta": {
     "source": "stooq",
     "url": "https://stooq.com/q/d/l/?s=qqq.us&i=d",
     "date_col": "Date",
     "value_col": "Close",
-    "rows": 6788,
+    "rows": 6789,
     "min_date": "1999-03-10",
-    "max_date": "2026-03-05"
+    "max_date": "2026-03-06"
   },
   "params": {
     "length": 60,
@@ -17,21 +17,21 @@
     "ddof": 0
   },
   "latest": {
-    "date": "2026-03-05",
-    "close": 610.34,
-    "bb_mid": 615.7446878443361,
-    "bb_lower": 598.1026873327964,
-    "bb_upper": 633.9070675292869,
-    "z": -0.6065528204593909,
+    "date": "2026-03-06",
+    "close": 601.49,
+    "bb_mid": 615.3394361413735,
+    "bb_lower": 597.4511129157248,
+    "bb_upper": 633.7633548340114,
+    "z": -1.5432483019879017,
     "trigger_z_le_-2": false,
     "trigger_z_ge_2": false,
-    "distance_to_lower_pct": 2.0049992901011864,
-    "distance_to_upper_pct": 3.861301492493835,
-    "position_in_band": 0.3417825584480606,
-    "bandwidth_pct": 0.058148094337343297,
+    "distance_to_lower_pct": 0.6714803378734789,
+    "distance_to_upper_pct": 5.365567978521894,
+    "position_in_band": 0.11122659662170954,
+    "bandwidth_pct": 0.059011725538006696,
     "walk_lower_count": 0,
     "walk_upper_count": 0,
-    "bandwidth_delta_pct": -0.6189825078363631
+    "bandwidth_delta_pct": 1.3013681578326386
   },
   "historical_simulation": {
     "metric": "forward_mdd",
@@ -39,11 +39,11 @@
     "z_thresh": -1.5,
     "horizon_days": 20,
     "cooldown_bars": 20,
-    "sample_size": 87,
-    "p10": -0.144813337021166,
-    "p50": -0.03284179637517559,
+    "sample_size": 88,
+    "p10": -0.14469513564114259,
+    "p50": -0.031845959178993466,
     "p90": 0.0,
-    "mean": -0.054391024160589975,
+    "mean": -0.053772944340583266,
     "min": -0.2499466667782133,
     "max": 0.0,
     "gate": {
@@ -57,6 +57,6 @@
       "value": -1.5
     }
   },
-  "action_output": "NORMAL_RANGE",
-  "trigger_reason": "default"
+  "action_output": "NEAR_LOWER_BAND (MONITOR)",
+  "trigger_reason": "z<=-1.5"
 }

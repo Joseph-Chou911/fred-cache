@@ -1,6 +1,6 @@
 {
   "name": "VXN_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-03-05T15:35:05Z",
+  "generated_at_utc": "2026-03-06T15:20:42Z",
   "meta": {
     "attempt_errors": [],
     "selected_source": "cboe",
@@ -10,9 +10,9 @@
     "index_code": "VXN",
     "date_col": "DATE",
     "value_col": "CLOSE",
-    "rows": 4136,
+    "rows": 4137,
     "min_date": "2009-09-14",
-    "max_date": "2026-03-04"
+    "max_date": "2026-03-05"
   },
   "params": {
     "length": 60,
@@ -21,21 +21,21 @@
     "ddof": 0
   },
   "latest": {
-    "date": "2026-03-04",
-    "close": 24.87,
-    "bb_mid": 21.6184683316414,
-    "bb_lower": 16.777338828566723,
-    "bb_upper": 27.85651394310597,
-    "z": 1.1053559376047568,
+    "date": "2026-03-05",
+    "close": 26.0,
+    "bb_mid": 21.720150325917704,
+    "bb_lower": 16.804935326540598,
+    "bb_upper": 28.072998855008315,
+    "z": 1.4020163052366634,
     "trigger_z_le_-2": false,
     "trigger_z_ge_2": false,
-    "distance_to_lower_pct": 32.539851915694726,
-    "distance_to_upper_pct": 12.00849997227973,
-    "position_in_band": 0.7304389620860172,
-    "bandwidth_pct": 0.5124865899182809,
+    "distance_to_lower_pct": 35.365633359459245,
+    "distance_to_upper_pct": 7.97307251926275,
+    "position_in_band": 0.8160288278663786,
+    "bandwidth_pct": 0.5187838647240867,
     "walk_lower_count": 0,
     "walk_upper_count": 0,
-    "bandwidth_delta_pct": 0.840936453284935
+    "bandwidth_delta_pct": 1.2287686994521874
   },
   "historical_simulation": {
     "C_poswatch": {
@@ -44,11 +44,11 @@
       "z_thresh": "NA",
       "horizon_days": 20,
       "cooldown_bars": 20,
-      "sample_size": 78,
+      "sample_size": 79,
       "p10": 0.0,
-      "p50": 0.11134644561834828,
-      "p90": 0.5812127543571184,
-      "mean": 0.2059025916382221,
+      "p50": 0.10454943132108485,
+      "p90": 0.5801524392864553,
+      "mean": 0.20329622971875094,
       "min": 0.0,
       "max": 1.7396510434485117,
       "gate": {
@@ -111,6 +111,6 @@
       }
     }
   },
-  "action_output": "NORMAL_RANGE",
-  "trigger_reason": "default"
+  "action_output": "NEAR_UPPER_BAND (WATCH)",
+  "trigger_reason": "position_in_band>=0.8 (pos=0.816)"
 }
