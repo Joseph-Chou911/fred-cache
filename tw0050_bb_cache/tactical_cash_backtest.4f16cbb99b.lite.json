@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-03-05T07:52:45Z",
+  "generated_at_utc": "2026-03-06T07:50:27Z",
   "schema_version": "v2.3",
   "script_fingerprint": "backtest_tw0050_tactical_cash@2026-02-24.v2.3.fix_execdelay0_and_force_close",
   "inputs": {
@@ -35,24 +35,24 @@
         "idx": 1238,
         "break_date": "2014-01-02",
         "prev_date": "2013-12-31",
-        "prev_price": 37.41241455078125,
-        "price": 9.329198837280272,
-        "ratio": 0.24936104630770103
+        "prev_price": 37.41240692138672,
+        "price": 9.329200744628906,
+        "ratio": 0.24936114814082944
       }
     ],
     "break_samples_source": "detect_breaks_from_price",
     "notes": "post-only evaluation: equity is normalized to 1.0 at post_start_date. split_date is excluded from post by default (post starts at next trading row)."
   },
   "audit": {
-    "rows": 2960,
+    "rows": 2961,
     "start_date": "2014-01-03",
-    "end_date": "2026-03-05",
-    "p0": 9.217663764953612,
-    "core_shares": 0.09763862329431902,
+    "end_date": "2026-03-06",
+    "p0": 9.217665672302246,
+    "core_shares": 0.09763860309062522,
     "cash0": 0.09999999999999998,
     "n_trades": 77,
-    "time_in_market_days": 2063,
-    "time_in_market_pct": 0.6969594594594595,
+    "time_in_market_days": 2064,
+    "time_in_market_pct": 0.6970618034447822,
     "pending_action_policy": "single pending action; ignores flips until executed (conservative). exec_delay=0 executes immediately (v2.3 fix).",
     "scheduled_entries": 0,
     "scheduled_exits": 0,
@@ -67,47 +67,47 @@
     "overlay": {
       "ok": true,
       "start": 1.0,
-      "end": 7.893561194237214,
-      "n_days": 2960,
-      "years": 11.742063492063492,
-      "cagr": 0.19238161841046741,
-      "vol_ann": 0.17841547390484547,
-      "sharpe0": 1.0758652237617876,
+      "end": 7.837468862534811,
+      "n_days": 2961,
+      "years": 11.746031746031745,
+      "cagr": 0.1915870644618325,
+      "vol_ann": 0.17876236064680068,
+      "sharpe0": 1.070401571754274,
       "sharpe_note": "rf=0 assumed",
       "perf_ddof": 0,
-      "mdd": -0.32731970151598533,
+      "mdd": -0.3273196791802778,
       "mdd_peak": "2022-01-17",
       "mdd_trough": "2022-10-25"
     },
     "base_only": {
       "ok": true,
       "start": 1.0,
-      "end": 7.657229591965008,
-      "n_days": 2960,
-      "years": 11.742063492063492,
-      "cagr": 0.18929884512743,
-      "vol_ann": 0.17569983716216478,
-      "sharpe0": 1.0749946600888756,
+      "end": 7.603526498529863,
+      "n_days": 2961,
+      "years": 11.746031746031745,
+      "cagr": 0.18851683157694987,
+      "vol_ann": 0.17604514825220724,
+      "sharpe0": 1.0695009375216422,
       "sharpe_note": "rf=0 assumed",
       "perf_ddof": 0,
-      "mdd": -0.3281139079860499,
+      "mdd": -0.328113905946369,
       "mdd_peak": "2022-01-17",
       "mdd_trough": "2022-10-25"
     },
-    "calmar_overlay": 0.5877483619820302,
-    "calmar_base_only": 0.5769302687878693,
+    "calmar_overlay": 0.5853209466098496,
+    "calmar_base_only": 0.5745469123998768,
     "delta_vs_base": {
-      "cagr": 0.00308277328303741,
-      "mdd": 0.0007942064700645624,
-      "sharpe0": 0.0008705636729120503
+      "cagr": 0.0030702328848826177,
+      "mdd": 0.0007942267660911995,
+      "sharpe0": 0.0009006342326318695
     }
   },
   "trade_kpis": {
     "n_trades": 77,
     "win_rate": 0.35064935064935066,
-    "avg_net_pnl": 0.0030692415879507206,
-    "profit_factor": 2.936226633214025,
-    "avg_hold_days": 26.805194805194805,
-    "time_in_market_pct": 0.6969594594594595
+    "avg_net_pnl": 0.003038212519544774,
+    "profit_factor": 2.916651718061617,
+    "avg_hold_days": 26.818181818181817,
+    "time_in_market_pct": 0.6970618034447822
   }
 }
