@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-06T02:08:26Z`
+- report_generated_at_utc: `2026-03-06T07:13:48Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -19,14 +19,14 @@
 - forward_mdd_conditional_path: `forward_mdd_conditional`
 
 ## 快速摘要（非預測，僅狀態）
-- state: **NEAR_UPPER_BAND**; bb_z=1.2639; pos=0.8160 (raw=0.8160); bw_geo=42.39%; bw_std=34.98%
-- dist_to_lower=25.70%; dist_to_upper=5.80%; above_upper=0.00%; below_lower=0.00%; DQ=PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN; FWD_OUTLIER=20D
+- state: **NEAR_UPPER_BAND**; bb_z=1.3114; pos=0.8279 (raw=0.8279); bw_geo=42.44%; bw_std=35.01%
+- dist_to_lower=26.00%; dist_to_upper=5.41%; above_upper=0.00%; below_lower=0.00%; DQ=PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN; FWD_OUTLIER=20D
 - forward_mdd_clean_20D distribution (n=4160): p50=-0.0182; p10=-0.0687; p05=-0.0927; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
 - forward_mdd_clean_10D distribution (n=4180): p50=-0.0114; p10=-0.0480; p05=-0.0630; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]
 - forward_mdd_conditional[20D/clean](bucket_key=-1.5_to_1.5, canon=(-1.5,1.5), n=2632): p10=-0.0679; p05=-0.0913; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528)
-- trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=33.01%; slope=6.50% => **TREND_UP**
-- vol_filter(RV20,ATR14): rv_ann=28.4%; atr=1.5152 (1.98%)
-- regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=92.89
+- trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=33.53%; slope=6.50% => **TREND_UP**
+- vol_filter(RV20,ATR14): rv_ann=28.6%; atr=1.5510 (2.02%)
+- regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=93.23
 - margin(5D,thr=100.00億): TOTAL -3.30 億 => **NEUTRAL**; TWSE -38.60 / TPEX 35.30; margin_date=2026-03-05, price_last_date=2026-03-06 (MISALIGNED); data_date=2026-03-05
 - chip_overlay(T86+TWT72U,5D): total3_5D=-717,438,285; foreign=-468,801,377; trust=10,786,000; dealer=-259,422,908; borrow_shares=239,754,000 (Δ1D=2,484,000); borrow_mv(億)=185.6 (Δ1D=6.2); asof=20260305; price_last_date=2026-03-06 (ALIGNED)
 
@@ -45,7 +45,7 @@
 - block_path_used: `forward_mdd_conditional`
 - scheme: `bb_z_5bucket_v1`
 - definition: `scheme=bb_z_5bucket_v1; horizon=20D; mode=clean`
-- current_bb_z: `1.2639`
+- current_bb_z: `1.3114`
 - current_bucket_key: `-1.5_to_1.5`
 - current_bucket_canonical: `(-1.5,1.5)`
 
@@ -169,7 +169,7 @@
 - block_path_used: `forward_mdd_conditional`
 - scheme: `bb_z_5bucket_v1`
 - definition: `scheme=bb_z_5bucket_v1; horizon=10D; mode=clean`
-- current_bb_z: `1.2639`
+- current_bb_z: `1.3114`
 - current_bucket_key: `-1.5_to_1.5`
 - current_bucket_canonical: `(-1.5,1.5)`
 
@@ -265,10 +265,10 @@
 | min_entry_date | 2009-06-03 |
 | min_entry_price | 29.7584 |
 | min_future_date | 2009-06-17 |
-| min_future_price | 26.7570 |
+| min_future_price | 26.7571 |
 | dq_flags | (none) |
 
-- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7570`
+- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7571`
 
 ##### bucket: >=2 (raw_key=z_ge_2.0)
 
@@ -294,13 +294,13 @@
 | item | value |
 |---|---:|
 | last_date | 2026-03-06 |
-| price_used | 76.55 |
+| price_used | 76.85 |
 | bb_state | NEAR_UPPER_BAND |
-| bb_z | 1.2639 |
+| bb_z | 1.3114 |
 | trend_state | TREND_UP |
 | regime_tag | **RISK_OFF_OR_DEFENSIVE** |
 | regime_allowed | false |
-| rv20_percentile | 92.89 |
+| rv20_percentile | 93.23 |
 | rv_pctl_max | 60.00 |
 | dq_core | PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN |
 | margin_note | margin: MISALIGNED (ignored in overlay) |
@@ -331,12 +331,12 @@
 
 | level | drawdown | price_level |
 |---|---:|---:|
-| 10D_p10_uncond | -4.80% | 72.88 |
-| 10D_p05_uncond | -6.30% | 71.72 |
-| 20D_p10_uncond | -6.87% | 71.29 |
-| 20D_p05_uncond | -9.27% | 69.46 |
+| 10D_p10_uncond | -4.80% | 73.16 |
+| 10D_p05_uncond | -6.30% | 72.01 |
+| 20D_p10_uncond | -6.87% | 71.57 |
+| 20D_p05_uncond | -9.27% | 69.73 |
 
-- source: stats (price_anchor=76.55)
+- source: stats (price_anchor=76.85)
 
 ### Pledge Guidance v2 (report-only; sizing proposal)
 
@@ -346,7 +346,7 @@
 | item | value |
 |---|---:|
 | v2_zone | **NO_CHASE** |
-| rv20_percentile | 92.89 |
+| rv20_percentile | 93.23 |
 | v2_policy | **DISALLOW** |
 | size_factor(0..1) | 0.0000 |
 | cooldown_sessions_hint | 0 |
@@ -363,39 +363,39 @@
 
 | item | value |
 |---|---:|
-| close | 76.5500 |
-| adjclose | 76.5500 |
-| price_used | 76.5500 |
-| bb_ma | 68.9319 |
-| bb_sd | 6.0274 |
-| bb_upper | 80.9868 |
-| bb_lower | 56.8770 |
-| bb_z | 1.2639 |
-| pos_in_band (clipped) | 0.8160 |
-| pos_in_band_raw (unclipped) | 0.8160 |
-| dist_to_lower | 25.70% |
-| dist_to_upper | 5.80% |
+| close | 76.8500 |
+| adjclose | 76.8500 |
+| price_used | 76.8500 |
+| bb_ma | 68.9369 |
+| bb_sd | 6.0339 |
+| bb_upper | 81.0047 |
+| bb_lower | 56.8692 |
+| bb_z | 1.3114 |
+| pos_in_band (clipped) | 0.8279 |
+| pos_in_band_raw (unclipped) | 0.8279 |
+| dist_to_lower | 26.00% |
+| dist_to_upper | 5.41% |
 | above_upper_pct | 0.00% |
 | below_lower_pct | 0.00% |
-| band_width_geo_pct (upper/lower-1) | 42.39% |
-| band_width_std_pct ((upper-lower)/ma) | 34.98% |
+| band_width_geo_pct (upper/lower-1) | 42.44% |
+| band_width_std_pct ((upper-lower)/ma) | 35.01% |
 
 ## Trend & Vol Filters
 
 | item | value |
 |---|---:|
 | trend_ma_days | 200 |
-| trend_ma_last | 57.5516 |
+| trend_ma_last | 57.5531 |
 | trend_slope_days | 20 |
 | trend_slope_pct | 6.50% |
-| price_vs_trend_ma_pct | 33.01% |
+| price_vs_trend_ma_pct | 33.53% |
 | trend_state | TREND_UP |
 
 | item | value |
 |---|---:|
 | rv_days | 20 |
-| rv_ann(%) | 28.4% |
-| rv20_percentile | 92.89 |
+| rv_ann(%) | 28.6% |
+| rv20_percentile | 93.23 |
 | rv_hist_n | 4180 |
 | rv_hist_q20(%) | 11.2% |
 | rv_hist_q50(%) | 14.8% |
@@ -404,8 +404,8 @@
 | item | value |
 |---|---:|
 | atr_days | 14 |
-| atr | 1.5152 |
-| atr_pct | 1.98% |
+| atr | 1.5510 |
+| atr_pct | 2.02% |
 | tr_mode | OHLC |
 
 ## Regime Tag
@@ -415,8 +415,8 @@
 | tag | **RISK_OFF_OR_DEFENSIVE** |
 | allowed | false |
 | trend_state | TREND_UP |
-| rv_ann(%) | 28.4% |
-| rv20_percentile | 92.89 |
+| rv_ann(%) | 28.6% |
+| rv20_percentile | 93.23 |
 | rv_hist_n | 4180 |
 | rv_pctl_max | 60.00 |
 | min_samples | 252 |
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-06T02:08:25.960Z`
+- overlay_generated_at_utc: `2026-03-06T07:13:48.603Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260306` vs price_last_date=`2026-03-06` => **ALIGNED**
@@ -549,7 +549,7 @@
 | 2026-03-02 | 80.3500 | 80.3500 | 204278933 |
 | 2026-03-03 | 78.7500 | 78.7500 | 288356288 |
 | 2026-03-04 | 75.6000 | 75.6000 | 455564304 |
-| 2026-03-06 | 76.5500 | 76.5500 | 45761381 |
+| 2026-03-06 | 76.8500 | 76.8500 | 150959699 |
 
 ## Data Quality Flags
 
