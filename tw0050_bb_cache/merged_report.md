@@ -10,7 +10,7 @@
 
 ## Base Inputs
 - base_0050: `76.69999694824219` (source=`bb_stats.latest.price_used`)
-- base_tsmc: `1890.0` (source=`config`)
+- base_tsmc: `1890.0` (source=`cli`)
 - tsmc_weight_in_0050: `0.6408` (source=`config`)
 - dividend_drag_points_per_year: `1.0` (enabled=`True`)
 
