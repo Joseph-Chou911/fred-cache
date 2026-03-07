@@ -21,6 +21,19 @@ Design principles
 - Backward-compatible JSON schema:
   * keep old keys: config_used / bb_summary / scenario_results / combined
   * add new keys: meta / inputs / valuation_cases / bb_snapshot
+
+Notes
+-----
+- base_0050 is resolved in this priority order:
+  1) CLI --base-0050
+  2) config.base.base_0050 (if not null / not "auto")
+  3) bb-stats latest.price_used / close / adjclose
+  4) fallback default
+- base_tsmc is resolved in this priority order:
+  1) CLI --base-tsmc
+  2) config.base.base_tsmc
+  3) fallback default
+- eps_base remains a slow-moving scenario input. Do not update it daily.
 """
 
 from __future__ import annotations
@@ -36,14 +49,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.1",
+        "config_version": "0050_merge_v1.2",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close."
         ),
     },
     "base": {
-        "base_0050": 76.85,
+        "base_0050": "auto",   # auto_from_bb_stats unless overridden
         "base_tsmc": 1890.0,
         "tsmc_weight": 0.6408,
     },
@@ -162,22 +175,33 @@ def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def deep_copy_jsonable(x: Any) -> Any:
+    return json.loads(json.dumps(x, ensure_ascii=False))
+
+
 def load_json(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def merge_config(user_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    cfg = deep_copy_jsonable(DEFAULT_CONFIG)
     if not user_cfg:
-        return json.loads(json.dumps(DEFAULT_CONFIG))
+        return cfg
 
-    cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     for top_key, value in user_cfg.items():
         if isinstance(value, dict) and isinstance(cfg.get(top_key), dict):
             cfg[top_key].update(value)
         else:
             cfg[top_key] = value
     return cfg
+
+
+def safe_float(x: Any, default: float = float("nan")) -> float:
+    try:
+        return float(x)
+    except Exception:
+        return default
 
 
 def parse_bb_stats(stats: Dict[str, Any]) -> BBState:
@@ -188,35 +212,89 @@ def parse_bb_stats(stats: Dict[str, Any]) -> BBState:
     levels = pledge.get("unconditional_tranche_levels", {}).get("levels", []) or []
     dq_flags = stats.get("dq", {}).get("flags", []) or []
 
-    price_used_raw = latest.get("price_used", latest.get("close", float("nan")))
-    try:
-        price_used = float(price_used_raw)
-    except Exception:
-        price_used = float("nan")
-
-    try:
-        bb_z = float(latest.get("bb_z", float("nan")))
-    except Exception:
-        bb_z = float("nan")
-
-    try:
-        rv20_pctl = float(stats.get("vol", {}).get("rv_ann_pctl", float("nan")))
-    except Exception:
-        rv20_pctl = float("nan")
+    price_used = safe_float(
+        latest.get("price_used", latest.get("close", latest.get("adjclose", float("nan"))))
+    )
 
     return BBState(
         date=str(latest.get("date", "")),
         price_used=price_used,
         state=str(latest.get("state", "N/A")),
-        bb_z=bb_z,
+        bb_z=safe_float(latest.get("bb_z", float("nan"))),
         regime_tag=str(regime.get("tag", "N/A")),
         regime_allowed=bool(regime.get("allowed", False)),
-        rv20_percentile=rv20_pctl,
+        rv20_percentile=safe_float(stats.get("vol", {}).get("rv_ann_pctl", float("nan"))),
         action_bucket=str(pledge_decision.get("action_bucket", "N/A")),
         pledge_policy=str(pledge_decision.get("pledge_policy", "N/A")),
         tranche_levels=list(levels),
         dq_flags=list(dq_flags),
     )
+
+
+def resolve_base_0050(cfg: Dict[str, Any], bb_stats: Dict[str, Any], cli_base_0050: Optional[float]) -> Tuple[float, str]:
+    if cli_base_0050 is not None:
+        return float(cli_base_0050), "cli"
+
+    cfg_val = cfg.get("base", {}).get("base_0050", "auto")
+    if cfg_val not in (None, "", "auto", "AUTO", "auto_from_bb_stats"):
+        return float(cfg_val), "config"
+
+    latest = bb_stats.get("latest", {}) or {}
+    for key in ("price_used", "close", "adjclose"):
+        if key in latest:
+            v = safe_float(latest.get(key))
+            if not math.isnan(v):
+                return v, f"bb_stats.latest.{key}"
+
+    fallback = safe_float(DEFAULT_CONFIG["base"]["base_0050"], 76.85) if DEFAULT_CONFIG["base"]["base_0050"] != "auto" else 76.85
+    return fallback, "default_fallback"
+
+
+def resolve_base_tsmc(cfg: Dict[str, Any], cli_base_tsmc: Optional[float]) -> Tuple[float, str]:
+    if cli_base_tsmc is not None:
+        return float(cli_base_tsmc), "cli"
+
+    cfg_val = cfg.get("base", {}).get("base_tsmc", None)
+    if cfg_val not in (None, "", "auto", "AUTO"):
+        return float(cfg_val), "config"
+
+    return 1890.0, "default_fallback"
+
+
+def resolve_tsmc_weight(cfg: Dict[str, Any], cli_tsmc_weight: Optional[float]) -> Tuple[float, str]:
+    if cli_tsmc_weight is not None:
+        return float(cli_tsmc_weight), "cli"
+
+    cfg_val = cfg.get("base", {}).get("tsmc_weight", None)
+    if cfg_val is not None:
+        return float(cfg_val), "config"
+
+    return 0.6408, "default_fallback"
+
+
+def apply_resolved_bases(
+    cfg: Dict[str, Any],
+    bb_stats: Dict[str, Any],
+    cli_base_0050: Optional[float],
+    cli_base_tsmc: Optional[float],
+    cli_tsmc_weight: Optional[float],
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    cfg2 = deep_copy_jsonable(cfg)
+
+    base_0050, src_0050 = resolve_base_0050(cfg2, bb_stats, cli_base_0050)
+    base_tsmc, src_tsmc = resolve_base_tsmc(cfg2, cli_base_tsmc)
+    tsmc_weight, src_weight = resolve_tsmc_weight(cfg2, cli_tsmc_weight)
+
+    cfg2["base"]["base_0050"] = base_0050
+    cfg2["base"]["base_tsmc"] = base_tsmc
+    cfg2["base"]["tsmc_weight"] = tsmc_weight
+
+    sources = {
+        "base_0050": src_0050,
+        "base_tsmc": src_tsmc,
+        "tsmc_weight": src_weight,
+    }
+    return cfg2, sources
 
 
 def compute_tsmc_price(
@@ -345,11 +423,7 @@ def build_combined_view(bb: BBState, results: List[ScenarioResult]) -> Dict[str,
 
     tranche_levels = []
     for level in bb.tranche_levels:
-        try:
-            price_level = float(level.get("price_level", float("nan")))
-        except Exception:
-            price_level = float("nan")
-
+        price_level = safe_float(level.get("price_level", float("nan")))
         tranche_levels.append(
             {
                 "label": level.get("label", ""),
@@ -409,6 +483,7 @@ def build_output_json(
     results: List[ScenarioResult],
     combined: Dict[str, Any],
     bb_stats_path: str,
+    base_sources: Dict[str, str],
 ) -> Dict[str, Any]:
     valuation_cases = [scenario_to_case(r) for r in results]
 
@@ -425,6 +500,7 @@ def build_output_json(
         "base_0050": float(cfg["base"]["base_0050"]),
         "base_tsmc": float(cfg["base"]["base_tsmc"]),
         "tsmc_weight": float(cfg["base"]["tsmc_weight"]),
+        "base_sources": base_sources,
         "dividend_drag": {
             "enabled": bool(cfg["dividend_drag"].get("enabled", True)),
             "points_per_year": float(cfg["dividend_drag"].get("points_per_year", 1.0)),
@@ -451,7 +527,7 @@ def build_output_json(
     }
 
     out_json = {
-        # new schema (for workflow assert)
+        # new schema
         "meta": meta,
         "inputs": inputs,
         "valuation_cases": valuation_cases,
@@ -466,7 +542,13 @@ def build_output_json(
     return out_json
 
 
-def markdown_report(cfg: Dict[str, Any], bb: BBState, results: List[ScenarioResult], combined: Dict[str, Any]) -> str:
+def markdown_report(
+    cfg: Dict[str, Any],
+    bb: BBState,
+    results: List[ScenarioResult],
+    combined: Dict[str, Any],
+    base_sources: Dict[str, str],
+) -> str:
     lines: List[str] = []
     lines.append("# 0050 Valuation × BB Merged Report")
     lines.append("")
@@ -479,18 +561,18 @@ def markdown_report(cfg: Dict[str, Any], bb: BBState, results: List[ScenarioResu
     lines.append(f"- combined_execution_bias: **{combined['combined_execution_bias']}**")
     lines.append("")
     lines.append("## Base Inputs")
-    lines.append(f"- base_0050: `{cfg['base']['base_0050']}`")
-    lines.append(f"- base_tsmc: `{cfg['base']['base_tsmc']}`")
-    lines.append(f"- tsmc_weight_in_0050: `{cfg['base']['tsmc_weight']}`")
+    lines.append(f"- base_0050: `{cfg['base']['base_0050']}` (source=`{base_sources['base_0050']}`)")
+    lines.append(f"- base_tsmc: `{cfg['base']['base_tsmc']}` (source=`{base_sources['base_tsmc']}`)")
+    lines.append(f"- tsmc_weight_in_0050: `{cfg['base']['tsmc_weight']}` (source=`{base_sources['tsmc_weight']}`)")
     lines.append(f"- dividend_drag_points_per_year: `{cfg['dividend_drag']['points_per_year']}` (enabled=`{cfg['dividend_drag']['enabled']}`)")
     lines.append("")
     lines.append("## Valuation Scenario Table")
     lines.append("")
-    lines.append("| scenario | years | EPS_growth | FX_haircut | P/E | other_ret | TSMC | 0050_gross | 0050_net |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("| scenario | years | EPS_base | EPS_growth | FX_haircut | P/E | other_ret | TSMC | 0050_gross | 0050_net |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for r in results:
         lines.append(
-            f"| {r.name} | {r.years_ahead} | {r.eps_growth*100:.1f}% | {r.fx_haircut*100:.1f}% | {r.pe:.1f} | {r.other_ret*100:.1f}% | {r.tsmc_price:.2f} | {r.gross_0050:.2f} | {r.net_0050:.2f} |"
+            f"| {r.name} | {r.years_ahead} | {r.eps_base:.2f} | {r.eps_growth*100:.1f}% | {r.fx_haircut*100:.1f}% | {r.pe:.1f} | {r.other_ret*100:.1f}% | {r.tsmc_price:.2f} | {r.gross_0050:.2f} | {r.net_0050:.2f} |"
         )
 
     lines.append("")
@@ -508,10 +590,7 @@ def markdown_report(cfg: Dict[str, Any], bb: BBState, results: List[ScenarioResu
     lines.append("|---|---:|---:|")
     for t in combined["tranche_reference"]:
         vsp = t["vs_current_pct"]
-        if vsp is None or math.isnan(vsp):
-            vsp_str = "N/A"
-        else:
-            vsp_str = f"{vsp:.2f}%"
+        vsp_str = "N/A" if vsp is None or math.isnan(vsp) else f"{vsp:.2f}%"
         price_level = t["price_level"]
         price_str = "N/A" if price_level is None or math.isnan(price_level) else f"{price_level:.2f}"
         lines.append(f"| {t['label']} | {price_str} | {vsp_str} |")
@@ -532,9 +611,10 @@ def markdown_report(cfg: Dict[str, Any], bb: BBState, results: List[ScenarioResu
 
     lines.append("")
     lines.append("## Notes")
+    lines.append("- base_0050 is auto-resolved from bb-stats unless overridden.")
+    lines.append("- base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.")
+    lines.append("- eps_base is a slow-moving fundamental anchor; revise only when earnings/model basis changes.")
     lines.append("- Outputs are dynamic, not fixed. The rules can stay fixed, but the zone boundaries will move when market data or scenario assumptions change.")
-    lines.append("- Slow-moving inputs: EPS growth assumptions, FX haircut assumptions, P/E bands, dividend drag.")
-    lines.append("- Fast-moving inputs: current 0050 price, BB state, regime, tranche levels, and TSMC weight if refreshed.")
 
     return "\n".join(lines) + "\n"
 
@@ -555,13 +635,13 @@ def main() -> None:
 
     user_cfg = load_json(Path(args.config)) if args.config else None
     cfg = merge_config(user_cfg)
-
-    if args.base_0050 is not None:
-        cfg["base"]["base_0050"] = args.base_0050
-    if args.base_tsmc is not None:
-        cfg["base"]["base_tsmc"] = args.base_tsmc
-    if args.tsmc_weight is not None:
-        cfg["base"]["tsmc_weight"] = args.tsmc_weight
+    cfg, base_sources = apply_resolved_bases(
+        cfg=cfg,
+        bb_stats=bb_stats,
+        cli_base_0050=args.base_0050,
+        cli_base_tsmc=args.base_tsmc,
+        cli_tsmc_weight=args.tsmc_weight,
+    )
 
     bb = parse_bb_stats(bb_stats)
     results = build_results(cfg)
@@ -573,6 +653,7 @@ def main() -> None:
         results=results,
         combined=combined,
         bb_stats_path=str(bb_stats_path),
+        base_sources=base_sources,
     )
 
     out_json_path = Path(args.out_json)
@@ -584,7 +665,7 @@ def main() -> None:
         json.dump(out_json, f, ensure_ascii=False, indent=2)
 
     with out_md_path.open("w", encoding="utf-8") as f:
-        f.write(markdown_report(cfg, bb, results, combined))
+        f.write(markdown_report(cfg, bb, results, combined, base_sources))
 
 
 if __name__ == "__main__":
