@@ -9,7 +9,7 @@
 - asset_proxy_cache: OK
 - inflation_realrate_cache: OK
 - nasdaq_bb_cache: OK
-- unified_generated_at_utc: 2026-03-07T12:42:57Z
+- unified_generated_at_utc: 2026-03-07T12:57:30Z
 
 ## (2) Positioning Matrix
 ### Current Strategy Mode (deterministic; report-only)
@@ -48,12 +48,11 @@
 ### taiwan_signals (pass-through; not used for mode)
 - source: --tw-signals (taiwan_margin_cache/signals_latest.json)
 - margin_signal: NONE
-- consistency: QUIET
-- confidence: DOWNGRADED
-- dq_reason: ROLL25_STALE
-- date_alignment: twmargin_date=2026-03-06, roll25_used_date=2026-03-05, used_date_status=LATEST, strict_same_day=false, strict_not_stale=false, strict_roll_match=false
+- consistency: MARKET_SHOCK_ONLY
+- confidence: OK
+- dq_reason: NA
+- date_alignment: twmargin_date=2026-03-06, roll25_used_date=2026-03-06, used_date_status=LATEST, strict_same_day=true, strict_not_stale=true, strict_roll_match=true
 - dq_note: NA
-- note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
 
 ## market_cache (detailed)
 - as_of_ts: 2026-03-07T08:50:22Z
@@ -120,47 +119,47 @@
 
 ## inflation_realrate_cache (detailed)
 - status: OK
-- as_of_ts: 2026-03-07T16:48:46+08:00
-- run_ts_utc: 2026-03-07T08:48:49.861225+00:00
+- as_of_ts: 2026-03-07T20:54:00+08:00
+- run_ts_utc: 2026-03-07T12:54:03.485200+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@df62f54
+- script_fingerprint: render_dashboard_py_signals_v8@af86230
 - script_version: cycle_sidecars_stats_v1
 - series_count: 2
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T10YIE | ALERT | MOVE | JUMP | 2.350000 | 2026-03-06 | 0.001073 | 1.561484 | 95.000000 | 76.984127 | 0.965362 | 23.813559 | 1.731602 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | JUMP_ZD,JUMP_P | NONE | NONE→ALERT | 0 | 1 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
-| DFII10 | NONE | MOVE | NONE | 1.820000 | 2026-03-05 | 0.001073 | -0.896424 | 25.000000 | 27.777778 | 0.340243 | 1.271186 | 1.111111 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| T10YIE | ALERT | MOVE | JUMP | 2.350000 | 2026-03-06 | 0.000968 | 1.561484 | 95.000000 | 76.984127 | 0.965362 | 23.813559 | 1.731602 | abs(ZΔ60)>=0.75;abs(PΔ60)>=15 | JUMP_ZD,JUMP_P | NONE | NONE→ALERT | 0 | 1 | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
+| DFII10 | NONE | MOVE | NONE | 1.820000 | 2026-03-05 | 0.000968 | -0.896424 | 25.000000 | 27.777778 | 0.340243 | 1.271186 | 1.111111 | NA | NA | NONE | SAME | 0 | 0 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 |
 
 ## asset_proxy_cache (detailed)
 - status: OK
-- as_of_ts: 2026-03-07T16:48:46+08:00
-- run_ts_utc: 2026-03-07T08:48:49.905071+00:00
+- as_of_ts: 2026-03-07T20:54:00+08:00
+- run_ts_utc: 2026-03-07T12:54:03.536721+00:00
 - ruleset_id: signals_v8
-- script_fingerprint: render_dashboard_py_signals_v8@df62f54
+- script_fingerprint: render_dashboard_py_signals_v8@af86230
 - script_version: cycle_sidecars_stats_v1
 - series_count: 4
 
 | series | signal | dir | class | value | data_date | age_h | z60 | p60 | p252 | zΔ60 | pΔ60 | ret1%60 | reason | tag | prev | delta | streak_hist | streak_wa | source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GLD.US_CLOSE | INFO | MOVE | LONG | 473.510000 | 2026-03-06 | 0.001085 | 1.117907 | 86.666667 | 96.825397 | 0.210593 | 10.395480 | 1.583249 | P252>=95 | LONG_EXTREME | NONE | NONE→INFO | 0 | 0 | https://stooq.com/q/d/l/?s=gld.us&d1=20260205&d2=20260307&i=d |
-| IAU.US_CLOSE | INFO | MOVE | LONG | 96.980000 | 2026-03-06 | 0.001085 | 1.117017 | 86.666667 | 96.825397 | 0.202617 | 10.395480 | 1.528476 | P252>=95 | LONG_EXTREME | NONE | NONE→INFO | 0 | 0 | https://stooq.com/q/d/l/?s=iau.us&d1=20260205&d2=20260307&i=d |
-| IYR.US_CLOSE | NONE | MOVE | NONE | 99.020000 | 2026-03-06 | 0.001085 | 0.879458 | 75.000000 | 94.047619 | -0.453319 | -6.355932 | -1.157916 | NA | NA | INFO | INFO→NONE | 0 | 0 | https://stooq.com/q/d/l/?s=iyr.us&d1=20260205&d2=20260307&i=d |
-| VNQ.US_CLOSE | NONE | MOVE | NONE | 93.550000 | 2026-03-06 | 0.001085 | 0.907407 | 75.000000 | 94.047619 | -0.429591 | -6.355932 | -1.089025 | NA | NA | INFO | INFO→NONE | 0 | 0 | https://stooq.com/q/d/l/?s=vnq.us&d1=20260205&d2=20260307&i=d |
+| GLD.US_CLOSE | INFO | MOVE | LONG | 473.510000 | 2026-03-06 | 0.000982 | 1.117907 | 86.666667 | 96.825397 | 0.210593 | 10.395480 | 1.583249 | P252>=95 | LONG_EXTREME | NONE | NONE→INFO | 0 | 0 | https://stooq.com/q/d/l/?s=gld.us&d1=20260205&d2=20260307&i=d |
+| IAU.US_CLOSE | INFO | MOVE | LONG | 96.980000 | 2026-03-06 | 0.000982 | 1.117017 | 86.666667 | 96.825397 | 0.202617 | 10.395480 | 1.528476 | P252>=95 | LONG_EXTREME | NONE | NONE→INFO | 0 | 0 | https://stooq.com/q/d/l/?s=iau.us&d1=20260205&d2=20260307&i=d |
+| IYR.US_CLOSE | NONE | MOVE | NONE | 99.020000 | 2026-03-06 | 0.000982 | 0.879458 | 75.000000 | 94.047619 | -0.453319 | -6.355932 | -1.157916 | NA | NA | INFO | INFO→NONE | 0 | 0 | https://stooq.com/q/d/l/?s=iyr.us&d1=20260205&d2=20260307&i=d |
+| VNQ.US_CLOSE | NONE | MOVE | NONE | 93.550000 | 2026-03-06 | 0.000982 | 0.907407 | 75.000000 | 94.047619 | -0.429591 | -6.355932 | -1.089025 | NA | NA | INFO | INFO→NONE | 0 | 0 | https://stooq.com/q/d/l/?s=vnq.us&d1=20260205&d2=20260307&i=d |
 
 ## nasdaq_bb_cache (display-only)
 - status: OK
 - note: display-only; not used for positioning/mode/cross_module
 - QQQ.data_date: 2026-03-06
-- QQQ.close: 601.490000
+- QQQ.close: 599.830000
 - QQQ.signal: NEAR_LOWER_BAND (MONITOR)
-- QQQ.z: -1.543248
-- QQQ.position_in_band: 0.111227
-- QQQ.dist_to_lower: 0.671000
-- QQQ.dist_to_upper: 5.366000
-- VXN.data_date: 2026-03-05
-- VXN.value: 26.000000
-- VXN.signal: NEAR_UPPER_BAND (WATCH) (position_in_band=0.816029)
+- QQQ.z: -1.718726
+- QQQ.position_in_band: 0.068397
+- QQQ.dist_to_lower: 0.416000
+- QQQ.dist_to_upper: 5.668000
+- VXN.data_date: 2026-03-06
+- VXN.value: 31.440000
+- VXN.signal: UPPER_BAND_TOUCH (STRESS) (position_in_band=1.000000)
 
 ## roll25_cache (TW turnover)
 - status: OK
@@ -169,7 +168,7 @@
 - used_date_status: LATEST
 - used_date_selection_tag: WEEKEND
 - tag (legacy): WEEKEND
-- roll25_strict_not_stale: false (from taiwan_signals; display-only)
+- roll25_strict_not_stale: true (from taiwan_signals; display-only)
 - note: UsedDate is the data date used for calculations. used_date_status is policy-normalized to LATEST for display only (typically T-1). Staleness/strictness should be tracked by dedicated checks (e.g., taiwan_signals strict flags).
 - risk_level: NA
 - turnover_twd: 655472934511
@@ -215,9 +214,9 @@
 ## taiwan_margin_financing (TWSE/TPEX)
 - status: OK
 - schema_version: taiwan_margin_financing_latest_v1
-- generated_at_utc: 2026-03-06T15:04:45Z
+- generated_at_utc: 2026-03-07T12:56:55Z
 
-<!-- rendered_at_utc: 2026-03-07T12:42:57Z -->
+<!-- rendered_at_utc: 2026-03-07T12:57:30Z -->
 <!-- input_path: unified_dashboard/latest.json | input_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/latest.json -->
 <!-- output_path: unified_dashboard/report.md | output_abs: /home/runner/work/fred-cache/fred-cache/unified_dashboard/report.md -->
 <!-- root_report_exists: false | root_report_is_output: false -->
