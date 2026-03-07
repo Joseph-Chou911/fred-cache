@@ -138,7 +138,8 @@ jobs:
       - name: Assert merged artifacts
         run: |
           python - << 'PY'
-          import json, os
+          import json
+          import os
 
           p_json = "tw0050_bb_cache/merged_latest.json"
           p_md = "tw0050_bb_cache/merged_report.md"
@@ -150,7 +151,7 @@ jobs:
 
           j = json.load(open(p_json, "r", encoding="utf-8"))
 
-          need_top = ["meta", "inputs", "valuation_cases", "bb_snapshot"]
+          need_top = ["meta", "inputs", "valuation_cases", "bb_snapshot", "combined"]
           miss_top = [k for k in need_top if k not in j]
           if miss_top:
             raise SystemExit(f"ERROR: merged_latest.json missing top-level keys: {miss_top}")
@@ -164,9 +165,34 @@ jobs:
           if not isinstance(vals, list) or len(vals) == 0:
             raise SystemExit("ERROR: valuation_cases is empty")
 
+          combined = j.get("combined", {})
+          for k in ["base_execution_bias", "dq_overlay", "combined_execution_bias"]:
+            if k not in combined:
+              raise SystemExit(f"ERROR: merged_latest.json missing combined.{k}")
+
+          inputs = j.get("inputs", {})
+          schema_validation = inputs.get("schema_validation", {})
+          if "validated" not in schema_validation:
+            raise SystemExit("ERROR: merged_latest.json missing inputs.schema_validation.validated")
+          if schema_validation.get("validated") is not True:
+            raise SystemExit(
+              f"ERROR: schema validation did not pass cleanly: {schema_validation}"
+            )
+
           print("OK: merged artifacts present and minimally valid.")
-          print("bb_snapshot:", bb)
+          print("bb_snapshot:", {
+            "state": bb.get("state"),
+            "bb_z": bb.get("bb_z"),
+            "regime_tag": bb.get("regime_tag"),
+            "regime_allowed": bb.get("regime_allowed"),
+          })
           print("valuation_cases count:", len(vals))
+          print("combined:", {
+            "base_execution_bias": combined.get("base_execution_bias"),
+            "dq_overlay": combined.get("dq_overlay"),
+            "combined_execution_bias": combined.get("combined_execution_bias"),
+          })
+          print("schema_validation:", schema_validation)
           PY
 
       - name: Debug artifacts
@@ -175,7 +201,31 @@ jobs:
           echo "---- report head ----"
           head -n 30 tw0050_bb_cache/report.md || true
           echo "---- merged report head ----"
-          head -n 40 tw0050_bb_cache/merged_report.md || true
+          head -n 50 tw0050_bb_cache/merged_report.md || true
+          echo "---- merged latest summary ----"
+          python - << 'PY'
+          import json
+          p = "tw0050_bb_cache/merged_latest.json"
+          j = json.load(open(p, "r", encoding="utf-8"))
+          print("meta:", j.get("meta", {}))
+          print("inputs.base_sources:", j.get("inputs", {}).get("base_sources", {}))
+          print("inputs.dividend_drag:", j.get("inputs", {}).get("dividend_drag", {}))
+          print("inputs.schema_validation:", j.get("inputs", {}).get("schema_validation", {}))
+          print("bb_snapshot:", {
+            "date": j.get("bb_snapshot", {}).get("date"),
+            "price_used": j.get("bb_snapshot", {}).get("price_used"),
+            "state": j.get("bb_snapshot", {}).get("state"),
+            "bb_z": j.get("bb_snapshot", {}).get("bb_z"),
+            "regime_tag": j.get("bb_snapshot", {}).get("regime_tag"),
+            "regime_allowed": j.get("bb_snapshot", {}).get("regime_allowed"),
+          })
+          print("combined:", {
+            "base_execution_bias": j.get("combined", {}).get("base_execution_bias"),
+            "dq_overlay": j.get("combined", {}).get("dq_overlay"),
+            "combined_execution_bias": j.get("combined", {}).get("combined_execution_bias"),
+          })
+          print("valuation_cases_count:", len(j.get("valuation_cases", [])))
+          PY
 
       - name: Commit artifacts (if changed)
         run: |
@@ -185,7 +235,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add -A tw0050_bb_cache
-            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report"
+            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.3"
             git push
           else
             echo "No changes to commit."
