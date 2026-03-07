@@ -27,6 +27,11 @@ NEW (2026-02-18):
     * signal=ALERT => runaway override (thresholds shown for reference only)
     * signal=WATCH => runaway requires thresholds (ret1%60>=5 AND value>=20)
   - add vol_runaway_branch + vol_runaway_note to prevent semantic disputes
+
+2026-03-07 updates:
+- Add optional fred fallback reference rendering from fallback_cache/latest.json
+- fallback is display-only reference; NEVER used for signal/z/p calculations
+- only show fallback reference rows when fallback.data_date > fred.data_date
 """
 
 from __future__ import annotations
@@ -175,6 +180,27 @@ def _pick_first(obj: Any, candidate_paths: List[Tuple[str, ...]]) -> Any:
         if v is not None:
             return v
     return None
+
+
+def _date_to_ord(x: Any) -> Optional[int]:
+    """
+    Convert YYYY-MM-DD to ordinal for deterministic comparison.
+    Returns None when parsing fails.
+    """
+    if x is None:
+        return None
+    try:
+        return datetime.strptime(str(x), "%Y-%m-%d").date().toordinal()
+    except Exception:
+        return None
+
+
+def _date_gap_days(primary_date: Any, fallback_date: Any) -> Optional[int]:
+    p = _date_to_ord(primary_date)
+    f = _date_to_ord(fallback_date)
+    if p is None or f is None:
+        return None
+    return int(f - p)
 
 
 # ---- positioning matrix helpers (report-only) ----
@@ -513,6 +539,151 @@ def _render_taiwan_signals_pass_through(lines: List[str], tw_signals_path: str) 
     }
 
 
+# ---- fred fallback helpers (display-only) ----
+
+def _try_load_fallback_rows(path: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """
+    Read fallback_cache/latest.json-like list.
+    Return (rows, note). Rows only include dict items.
+    """
+    try:
+        obj = _load_json(path)
+    except FileNotFoundError:
+        return [], "FRED_FALLBACK_FILE_NOT_FOUND"
+    except Exception:
+        return [], "FRED_FALLBACK_READ_OR_PARSE_FAILED"
+
+    if not isinstance(obj, list):
+        return [], "FRED_FALLBACK_NOT_A_LIST"
+
+    rows: List[Dict[str, Any]] = []
+    for it in obj:
+        if isinstance(it, dict):
+            rows.append(it)
+    return rows, None
+
+
+def _build_fallback_index(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """
+    Index fallback rows by series_id (uppercased).
+    Ignore meta rows like __META__.
+    """
+    idx: Dict[str, Dict[str, Any]] = {}
+    for it in rows:
+        sid = str(it.get("series_id", "")).strip()
+        if not sid or sid == "__META__":
+            continue
+        idx[sid.upper()] = it
+    return idx
+
+
+def _classify_fallback_source_type(note: Any, source_url: Any) -> str:
+    n = str(note or "")
+    u = str(source_url or "")
+    up_n = n.upper()
+    up_u = u.upper()
+
+    if "NONOFFICIAL" in up_n or "STOOQ" in up_n or "DATAHUB" in up_n:
+        return "unofficial_reference"
+    if "FREDGRAPH" in up_n:
+        return "downgraded_fredgraph"
+    if "TREASURY" in up_n or "CBOE" in up_n:
+        return "official_alt_source"
+    if "CHICAGOFED" in up_n:
+        return "official_alt_source"
+    if "HOME.TREASURY.GOV" in up_u or "CDN.CBOE.COM" in up_u or "CHICAGOFED.ORG" in up_u:
+        return "official_alt_source"
+    if "FRED.STLOUISFED.ORG/GRAPH/" in up_u:
+        return "downgraded_fredgraph"
+    return "reference_only"
+
+
+def _render_fred_fallback_references(
+    lines: List[str],
+    f_rows: Any,
+    fallback_path: str,
+) -> None:
+    """
+    Render display-only fallback references for fred_cache.
+    Rules:
+    - NEVER affects main table or signals.
+    - Only show rows where fallback.data_date > primary.data_date.
+    """
+    lines.append("- fallback_policy: display_only_reference")
+    lines.append("- fallback_note: fallback values are shown for freshness reference only; not used for signal/z/p calculations")
+
+    fb_rows, fb_note = _try_load_fallback_rows(fallback_path)
+    if fb_note is not None:
+        lines.append(f"- fallback_status: {fb_note}")
+        lines.append("")
+        return
+
+    lines.append(f"- fallback_source: {fallback_path}")
+
+    if not isinstance(f_rows, list) or not f_rows:
+        lines.append("- fallback_status: PRIMARY_FRED_ROWS_EMPTY")
+        lines.append("")
+        return
+
+    fb_idx = _build_fallback_index(fb_rows)
+    ref_rows: List[List[str]] = []
+
+    for it in f_rows:
+        if not isinstance(it, dict):
+            continue
+
+        series = str(it.get("series", "NA"))
+        key = series.upper()
+        fb = fb_idx.get(key)
+        if not isinstance(fb, dict):
+            continue
+
+        primary_date = it.get("data_date")
+        primary_value = it.get("value")
+        fallback_date = fb.get("data_date")
+        fallback_value = fb.get("value")
+        fallback_note = fb.get("notes")
+        fallback_source = fb.get("source_url")
+
+        gap = _date_gap_days(primary_date, fallback_date)
+        if gap is None or gap <= 0:
+            continue
+
+        ref_rows.append([
+            series,
+            str(primary_date if primary_date is not None else "NA"),
+            _fmt(primary_value, 6),
+            str(fallback_date if fallback_date is not None else "NA"),
+            _fmt(fallback_value, 6),
+            _fmt_int(gap),
+            str(fallback_note if fallback_note is not None else "NA"),
+            _classify_fallback_source_type(fallback_note, fallback_source),
+        ])
+
+    lines.append("")
+    lines.append("### fred_cache fallback references (display-only; not used for signal/z/p calculations)")
+    lines.append("- policy: only show when fallback.data_date > fred.data_date")
+    lines.append("- note: fallback is for freshness reference only; may be downgraded / unofficial depending on source")
+
+    if ref_rows:
+        hdr = [
+            "series",
+            "primary_date",
+            "primary_value",
+            "fallback_date",
+            "fallback_value",
+            "gap_days",
+            "fallback_note",
+            "fallback_source_type",
+        ]
+        lines.append("")
+        lines.append(_md_table(hdr, ref_rows))
+        lines.append("")
+    else:
+        lines.append("- note: no newer fallback references found.")
+        lines.append("")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", default="unified_dashboard/latest.json",
@@ -521,6 +692,8 @@ def main() -> int:
                     help="Output markdown report path")
     ap.add_argument("--tw-signals", dest="tw_signals_path", default="taiwan_margin_cache/signals_latest.json",
                     help="Taiwan margin signals_latest.json path (pass-through only; no fallback)")
+    ap.add_argument("--fred-fallback", dest="fred_fallback_path", default="fallback_cache/latest.json",
+                    help="Fallback reference JSON for fred_cache (display-only; never used for signal/z/p calculations)")
     args = ap.parse_args()
 
     # ---- input validation (hard fail; deterministic) ----
@@ -827,9 +1000,8 @@ def main() -> int:
         lines.append(f"- WATCH: {summ.get('WATCH','NA')}")
         lines.append(f"- INFO: {summ.get('INFO','NA')}")
         lines.append(f"- NONE: {summ.get('NONE','NA')}")
-        lines.append(f"- CHANGED: {summ.get('CHANGED','NA')}\n")
-    else:
-        lines.append("")
+        lines.append(f"- CHANGED: {summ.get('CHANGED','NA')}")
+    lines.append("")
 
     if isinstance(f_rows, list) and f_rows:
         hdr = [
@@ -873,13 +1045,16 @@ def main() -> int:
         lines.append(_md_table(hdr, rws_f))
         lines.append("")
 
+    # display-only fallback reference block for fred_cache
+    _render_fred_fallback_references(lines, f_rows, args.fred_fallback_path)
+
     # optional modules (existing)
     if "inflation_realrate_cache" in modules:
         _render_generic_dashboard_section(lines, "inflation_realrate_cache", infl)
     if "asset_proxy_cache" in modules:
         _render_generic_dashboard_section(lines, "asset_proxy_cache", apx)
 
-    # ✅ NEW optional module overlay (display-only; fixed 12 lines)
+    # optional module overlay (display-only; fixed 12 lines)
     if "nasdaq_bb_cache" in modules:
         _render_nasdaq_bb_cache_display_only_12(lines, modules)
 
