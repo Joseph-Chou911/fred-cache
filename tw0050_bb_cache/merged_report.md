@@ -6,12 +6,16 @@
 - bb_state: **NEAR_UPPER_BAND**; bb_z=`1.2403`
 - regime: **RISK_OFF_OR_DEFENSIVE**; allowed=`false`
 - action_bucket: **VETO**; pledge_policy=`DISALLOW`
+- base_execution_bias: **DEFENSIVE_NO_CHASE**
+- dq_overlay: **CAUTION**
 - combined_execution_bias: **DEFENSIVE_NO_CHASE**
+- matched_caution_flags: `FWD_MDD_CLEAN_APPLIED, FWD_MDD_OUTLIER_MIN_RAW_20D, PRICE_SERIES_BREAK_DETECTED, RAW_OUTLIER_EXCLUDED_BY_CLEAN`
 
 ## Base Inputs
 - base_0050: `76.69999694824219` (source=`bb_stats.latest.price_used`)
 - base_tsmc: `1890.0` (source=`cli`)
 - tsmc_weight_in_0050: `0.6408` (source=`config`)
+- dividend_drag_mode: `light`
 - dividend_drag_points_per_year: `1.0` (enabled=`True`)
 
 ## Valuation Scenario Table
@@ -31,6 +35,7 @@
 - scenario_net_range: `57.40` ~ `96.81`
 - percentile_in_scenario_net_range: `42.86`
 - zone: **MID_ZONE**
+- zone_note: `rough classification only; sparse scenario set => low percentile resolution`
 
 ## BB Tranche References
 
@@ -47,13 +52,19 @@
 - FWD_MDD_OUTLIER_MIN_RAW_20D
 - RAW_OUTLIER_EXCLUDED_BY_CLEAN
 
+## Schema Validation
+- validated: `True`
+- tranche_levels_present: `True`
+
 ## How to Use
 - Step 1: Use the valuation table to decide whether current price is in a low / fair / high zone.
-- Step 2: Use BB state, regime, and tranche references to decide whether to act now or wait.
+- Step 2: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.
 - Step 3: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.
 
 ## Notes
 - base_0050 is auto-resolved from bb-stats unless overridden.
 - base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.
 - eps_base is a slow-moving fundamental anchor; revise only when earnings/model basis changes.
+- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.
+- DQ flags can downgrade execution bias even if valuation/regime otherwise look constructive.
 - Outputs are dynamic, not fixed. The rules can stay fixed, but the zone boundaries will move when market data or scenario assumptions change.
