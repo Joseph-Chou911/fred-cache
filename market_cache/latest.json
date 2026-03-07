@@ -1,13 +1,13 @@
 {
-  "generated_at_utc": "2026-03-07T03:05:07Z",
-  "as_of_ts": "2026-03-07T03:05:07Z",
+  "generated_at_utc": "2026-03-07T08:50:22Z",
+  "as_of_ts": "2026-03-07T08:50:22Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "series": {
     "OFR_FSI": {
       "data_date": "2026-03-04",
       "value": -1.19,
       "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
-      "as_of_ts": "2026-03-07T03:05:07Z",
+      "as_of_ts": "2026-03-07T08:50:22Z",
       "parse_header": [
         "Date",
         "OFR FSI",
@@ -25,7 +25,7 @@
       "data_date": "2026-03-06",
       "value": 29.49,
       "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
-      "as_of_ts": "2026-03-07T03:05:07Z",
+      "as_of_ts": "2026-03-07T08:50:22Z",
       "parse_header": [
         "DATE",
         "OPEN",
@@ -38,13 +38,13 @@
       "data_date": "2026-03-06",
       "value": 6740.02,
       "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d",
-      "as_of_ts": "2026-03-07T03:05:07Z"
+      "as_of_ts": "2026-03-07T08:50:22Z"
     },
     "HYG_IEF_RATIO": {
       "data_date": "2026-03-06",
       "value": 0.8261883780001037,
       "source_url": "DERIVED",
-      "as_of_ts": "2026-03-07T03:05:07Z",
+      "as_of_ts": "2026-03-07T08:50:22Z",
       "sources": [
         "https://stooq.com/q/d/l/?s=hyg.us&i=d",
         "https://stooq.com/q/d/l/?s=ief.us&i=d"
