@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-07T04:54:04Z`
+- report_generated_at_utc: `2026-03-07T04:59:56Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -91,12 +91,12 @@
 | p05 | -0.1902 |
 | min | -0.2152 |
 | min_entry_date | 2020-03-02 |
-| min_entry_price | 18.4165 |
+| min_entry_price | 18.4164 |
 | min_future_date | 2020-03-19 |
 | min_future_price | 14.4528 |
 | dq_flags | (none) |
 
-- min_window: `2020-03-02->2020-03-19`; `18.4165->14.4528`
+- min_window: `2020-03-02->2020-03-19`; `18.4164->14.4528`
 
 ##### bucket: (-2,-1.5] (raw_key=-2.0_to_-1.5)
 
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-07T04:54:04.128Z`
+- overlay_generated_at_utc: `2026-03-07T04:59:56.319Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260306` vs price_last_date=`2026-03-06` => **ALIGNED**
