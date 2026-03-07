@@ -1,14 +1,14 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-03-06T15:56:26.230069Z",
-  "as_of_ts": "2026-03-06T23:56:26.230083+08:00",
-  "data_commit_sha": "b42e4b427d06e8ccb188ebb9d56fabef58abd235",
+  "generated_at_utc": "2026-03-07T15:41:21.273808Z",
+  "as_of_ts": "2026-03-07T23:41:21.273825+08:00",
+  "data_commit_sha": "de05d1ced94e7dee50a560231a4ae85f4318af4b",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-03-06T03:15:31Z",
-    "market_cache_as_of_ts": "2026-03-06T03:15:31Z",
+    "market_cache_generated_at_utc": "2026-03-07T08:50:22Z",
+    "market_cache_as_of_ts": "2026-03-07T08:50:22Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -23,31 +23,31 @@
   },
   "context_global": {
     "context_equity_extreme_sp500_p252_ge_95": 0,
-    "sp500_p252": 75.0
+    "sp500_p252": 67.85714285714286
   },
   "distances_global": {
-    "vix_panic_gap": -3.75,
-    "sp500_ret1_panic_gap": 0.9353300822476168,
-    "hyg_veto_gap_z": 0.5464183174545203,
-    "ofr_veto_gap_z": -1.3837309276982928
+    "vix_panic_gap": -9.489999999999998,
+    "sp500_ret1_panic_gap": 0.17231956853680508,
+    "hyg_veto_gap_z": 0.05069541741682326,
+    "ofr_veto_gap_z": -2.1683257183688056
   },
   "tw_local_gate": {
     "tw_state": "NONE",
-    "UsedDate": "2026-03-05",
-    "run_day_tag": "WEEKDAY",
-    "used_date_status": "DATA_NOT_UPDATED",
+    "UsedDate": "2026-03-06",
+    "run_day_tag": "WEEKEND",
+    "used_date_status": "OK_LATEST",
     "lookback_n_actual": 20,
     "lookback_n_target": 20,
-    "pct_change": 2.57109,
-    "amplitude_pct": 2.579345,
-    "turnover_twd": 793545602327.0,
-    "close": 33672.94,
+    "pct_change": -0.217979,
+    "amplitude_pct": 1.505571,
+    "turnover_twd": 655472934511.0,
+    "close": 33599.54,
     "signals": {
-      "DownDay": false,
+      "DownDay": true,
       "VolumeAmplified": false,
       "VolAmplified": false,
       "NewLow_N": 0,
-      "ConsecutiveBreak": 0,
+      "ConsecutiveBreak": 1,
       "stress_newlow": false,
       "paired_basis": false,
       "stress_consecutive_break_raw": false,
@@ -87,7 +87,7 @@
       "TRIG_TW_REVERSAL": 0
     },
     "distances": {
-      "pct_change_to_nonnegative_gap": 0.0,
+      "pct_change_to_nonnegative_gap": 0.217979,
       "lookback_missing_points": 0
     }
   },
@@ -97,21 +97,21 @@
       "series_id": "VIX",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-03-05",
-        "value": 23.75,
-        "as_of_ts": "2026-03-06T03:15:31Z",
+        "data_date": "2026-03-06",
+        "value": 29.49,
+        "as_of_ts": "2026-03-07T08:50:22Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
-        "z": 2.527993626483752,
+        "z": 4.022462658751223,
         "p": 100.0,
-        "ret1_pct": 12.293144208037834,
-        "z_delta": 0.8916153323880409,
-        "p_delta": 6.666666666666671
+        "ret1_pct": 24.168421052631572,
+        "z_delta": 1.4944690322674714,
+        "p_delta": 0.0
       },
       "w252": {
-        "z": 0.9290066768793397,
-        "p": 90.47619047619048
+        "z": 2.0126123542877963,
+        "p": 94.84126984126983
       },
       "series_signal": "ALERT"
     },
@@ -119,43 +119,43 @@
       "series_id": "SP500",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-03-05",
-        "value": 6830.71,
-        "as_of_ts": "2026-03-06T03:15:31Z",
+        "data_date": "2026-03-06",
+        "value": 6740.02,
+        "as_of_ts": "2026-03-07T08:50:22Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
-        "z": -1.0666966444454262,
-        "p": 15.0,
-        "ret1_pct": -0.5646699177523832,
-        "z_delta": -0.6618958848433313,
-        "p_delta": -16.666666666666664
+        "z": -2.4900257892969075,
+        "p": 3.3333333333333335,
+        "ret1_pct": -1.327680431463195,
+        "z_delta": -1.4233291448514813,
+        "p_delta": -11.666666666666666
       },
       "w252": {
-        "z": 0.9033735870690136,
-        "p": 75.0
+        "z": 0.7193772659281189,
+        "p": 67.85714285714286
       },
-      "series_signal": "NONE"
+      "series_signal": "WATCH"
     },
     "HYG_IEF_RATIO": {
       "series_id": "HYG_IEF_RATIO",
       "risk_dir": "LOW",
       "latest": {
-        "data_date": "2026-03-05",
-        "value": 0.8295513418298621,
-        "as_of_ts": "2026-03-06T03:15:31Z",
+        "data_date": "2026-03-06",
+        "value": 0.8261883780001037,
+        "as_of_ts": "2026-03-07T08:50:22Z",
         "source_url": "DERIVED"
       },
       "w60": {
-        "z": -1.4535816825454797,
-        "p": 10.0,
-        "ret1_pct": -0.11335148936698063,
-        "z_delta": -0.11927885475078459,
-        "p_delta": -1.666666666666666
+        "z": -1.9493045825831767,
+        "p": 5.0,
+        "ret1_pct": -0.43026927973274415,
+        "z_delta": -0.5302031021743256,
+        "p_delta": -5.0
       },
       "w252": {
-        "z": -0.7932815352125222,
-        "p": 19.444444444444446
+        "z": -1.1596711464181675,
+        "p": 9.523809523809524
       },
       "series_signal": "NONE"
     },
@@ -163,21 +163,21 @@
       "series_id": "OFR_FSI",
       "risk_dir": "HIGH",
       "latest": {
-        "data_date": "2026-03-03",
-        "value": -1.61,
-        "as_of_ts": "2026-03-06T03:15:31Z",
+        "data_date": "2026-03-04",
+        "value": -1.19,
+        "as_of_ts": "2026-03-07T08:50:22Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
-        "z": 3.3837309276982928,
+        "z": 4.168325718368806,
         "p": 100.0,
-        "ret1_pct": 14.94981510829371,
-        "z_delta": 0.7994046700151136,
+        "ret1_pct": 26.08695652173914,
+        "z_delta": 0.7845947906705129,
         "p_delta": 0.0
       },
       "w252": {
-        "z": 0.2565490413953225,
-        "p": 75.0
+        "z": 0.7267241196639784,
+        "p": 86.90476190476191
       },
       "series_signal": "ALERT"
     }
@@ -188,8 +188,8 @@
     "loaded_items": 29,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260306T155626Z.json",
-    "backup_bytes": 27059,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260307T154121Z.json",
+    "backup_bytes": 27033,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -199,8 +199,8 @@
     "history_file_exists": true,
     "history_pre_items": 29,
     "history_pre_unique_days": 29,
-    "history_post_items": 29,
-    "history_post_unique_days": 29,
+    "history_post_items": 30,
+    "history_post_unique_days": 30,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,
