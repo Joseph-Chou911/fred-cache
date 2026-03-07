@@ -1,6 +1,6 @@
 {
   "meta": {
-    "run_ts_utc": "2026-03-06T07:13:48.603Z",
+    "run_ts_utc": "2026-03-07T00:07:06.732Z",
     "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v6",
     "stock_no": "0050",
     "window_n": 5,
@@ -15,50 +15,129 @@
     "pcf_url": "https://www.yuantaetfs.com/tradeInfo/pcf/0050"
   },
   "dq": {
-    "flags": []
+    "flags": [
+      "ETF_UNITS_PCF_PARSE_ALL_MISSING",
+      "ETF_UNITS_VALUE_MISSING"
+    ]
   },
   "data": {
     "borrow_summary": {
-      "asof_date": "20260305",
-      "borrow_shares": 239754000,
-      "borrow_shares_chg_1d": 2484000,
-      "borrow_mv_ntd": 18556959600.0,
-      "borrow_mv_ntd_chg_1d": 619347600.0
+      "asof_date": "20260306",
+      "borrow_shares": 244241000,
+      "borrow_shares_chg_1d": 4487000,
+      "borrow_mv_ntd": 18769920850.0,
+      "borrow_mv_ntd_chg_1d": 212961250.0
     },
     "etf_units": {
       "source": "yuanta_pcf",
       "source_url": "https://www.yuantaetfs.com/tradeInfo/pcf/0050",
-      "trade_date": "2026/03/05",
-      "posting_dt": "2026-03-05 16:03:17",
-      "units_outstanding": 17122500000,
-      "units_chg_1d": 129000000,
-      "dq": []
+      "trade_date": null,
+      "posting_dt": null,
+      "units_outstanding": null,
+      "units_chg_1d": null,
+      "dq": [
+        "ETF_UNITS_PCF_POSTING_DATE_NOT_FOUND",
+        "ETF_UNITS_PCF_TRADE_DATE_NOT_FOUND",
+        "ETF_UNITS_PCF_OUTSTANDING_NOT_FOUND",
+        "ETF_UNITS_PCF_NET_CHANGE_NOT_FOUND",
+        "ETF_UNITS_PCF_PARSE_ALL_MISSING"
+      ]
     },
     "per_day": [
       {
         "date": "20260306",
-        "dq": [
-          "NON_TRADING_OR_NO_DATA"
-        ],
+        "dq": [],
         "sources": {
           "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260306&selectType=ALLBUT0999",
           "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260306&selectType=SLBNLB"
         },
         "t86": {
-          "dq": [
-            "T86_EMPTY"
+          "dq": [],
+          "fields": [
+            "證券代號",
+            "證券名稱",
+            "外陸資買進股數(不含外資自營商)",
+            "外陸資賣出股數(不含外資自營商)",
+            "外陸資買賣超股數(不含外資自營商)",
+            "外資自營商買進股數",
+            "外資自營商賣出股數",
+            "外資自營商買賣超股數",
+            "投信買進股數",
+            "投信賣出股數",
+            "投信買賣超股數",
+            "自營商買賣超股數",
+            "自營商買進股數(自行買賣)",
+            "自營商賣出股數(自行買賣)",
+            "自營商買賣超股數(自行買賣)",
+            "自營商買進股數(避險)",
+            "自營商賣出股數(避險)",
+            "自營商買賣超股數(避險)",
+            "三大法人買賣超股數"
           ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
+          "raw_row": [
+            "0050",
+            "元大台灣50      ",
+            "3,921,222",
+            "79,508,881",
+            "-75,587,659",
+            "0",
+            "0",
+            "0",
+            "3,300,000",
+            "0",
+            "3,300,000",
+            "-7,362,228",
+            "6,668,000",
+            "210,000",
+            "6,458,000",
+            "30,807,002",
+            "44,627,230",
+            "-13,820,228",
+            "-79,649,887"
+          ],
+          "col_idx": {
+            "foreign": 4,
+            "trust": 10,
+            "dealer": 11,
+            "total3": 18
+          },
+          "foreign_net_shares": -75587659,
+          "trust_net_shares": 3300000,
+          "dealer_net_shares": -7362228,
+          "total3_net_shares": -79649887
         },
         "twt72u": {
-          "dq": [
-            "TWT72U_EMPTY"
+          "dq": [],
+          "fields": [
+            "證券代號",
+            "證券名稱",
+            "前日借券餘額(1)股",
+            "本日異動股借券(2)",
+            "本日異動股還券(3)",
+            "本日借券餘額股(4)=(1)+(2)-(3)",
+            "本日收盤價(5)單位：元",
+            "借券餘額市值單位：元(6)=(4)*(5)",
+            "市場別"
           ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
+          "raw_row": [
+            "0050",
+            "元大台灣50",
+            "239,754,000",
+            "4,487,000",
+            "0",
+            "244,241,000",
+            "76.85",
+            "18,769,920,850",
+            "集中市場"
+          ],
+          "col_idx": {
+            "shares_end": 5,
+            "close": 6,
+            "mv": 7
+          },
+          "borrow_shares": 244241000,
+          "close": 76.85,
+          "borrow_mv_ntd": 18769920850.0
         }
       },
       {
@@ -444,195 +523,21 @@
           "close": 80.35,
           "borrow_mv_ntd": 16268464500.0
         }
-      },
-      {
-        "date": "20260301",
-        "dq": [
-          "NON_TRADING_OR_NO_DATA"
-        ],
-        "sources": {
-          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260301&selectType=ALLBUT0999",
-          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260301&selectType=SLBNLB"
-        },
-        "t86": {
-          "dq": [
-            "T86_EMPTY"
-          ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
-        },
-        "twt72u": {
-          "dq": [
-            "TWT72U_EMPTY"
-          ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
-        }
-      },
-      {
-        "date": "20260228",
-        "dq": [
-          "NON_TRADING_OR_NO_DATA"
-        ],
-        "sources": {
-          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260228&selectType=ALLBUT0999",
-          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260228&selectType=SLBNLB"
-        },
-        "t86": {
-          "dq": [
-            "T86_EMPTY"
-          ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
-        },
-        "twt72u": {
-          "dq": [
-            "TWT72U_EMPTY"
-          ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
-        }
-      },
-      {
-        "date": "20260227",
-        "dq": [
-          "NON_TRADING_OR_NO_DATA"
-        ],
-        "sources": {
-          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260227&selectType=ALLBUT0999",
-          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260227&selectType=SLBNLB"
-        },
-        "t86": {
-          "dq": [
-            "T86_EMPTY"
-          ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
-        },
-        "twt72u": {
-          "dq": [
-            "TWT72U_EMPTY"
-          ],
-          "fields": [],
-          "raw_row": null,
-          "col_idx": {}
-        }
-      },
-      {
-        "date": "20260226",
-        "dq": [],
-        "sources": {
-          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260226&selectType=ALLBUT0999",
-          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260226&selectType=SLBNLB"
-        },
-        "t86": {
-          "dq": [],
-          "fields": [
-            "證券代號",
-            "證券名稱",
-            "外陸資買進股數(不含外資自營商)",
-            "外陸資賣出股數(不含外資自營商)",
-            "外陸資買賣超股數(不含外資自營商)",
-            "外資自營商買進股數",
-            "外資自營商賣出股數",
-            "外資自營商買賣超股數",
-            "投信買進股數",
-            "投信賣出股數",
-            "投信買賣超股數",
-            "自營商買賣超股數",
-            "自營商買進股數(自行買賣)",
-            "自營商賣出股數(自行買賣)",
-            "自營商買賣超股數(自行買賣)",
-            "自營商買進股數(避險)",
-            "自營商賣出股數(避險)",
-            "自營商買賣超股數(避險)",
-            "三大法人買賣超股數"
-          ],
-          "raw_row": [
-            "0050",
-            "元大台灣50      ",
-            "7,182,828",
-            "26,508,955",
-            "-19,326,127",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "-40,997,085",
-            "273,000",
-            "4,490,384",
-            "-4,217,384",
-            "23,774,897",
-            "60,554,598",
-            "-36,779,701",
-            "-60,323,212"
-          ],
-          "col_idx": {
-            "foreign": 4,
-            "trust": 10,
-            "dealer": 11,
-            "total3": 18
-          },
-          "foreign_net_shares": -19326127,
-          "trust_net_shares": 0,
-          "dealer_net_shares": -40997085,
-          "total3_net_shares": -60323212
-        },
-        "twt72u": {
-          "dq": [],
-          "fields": [
-            "證券代號",
-            "證券名稱",
-            "前日借券餘額(1)股",
-            "本日異動股借券(2)",
-            "本日異動股還券(3)",
-            "本日借券餘額股(4)=(1)+(2)-(3)",
-            "本日收盤價(5)單位：元",
-            "借券餘額市值單位：元(6)=(4)*(5)",
-            "市場別"
-          ],
-          "raw_row": [
-            "0050",
-            "元大台灣50",
-            "177,565,000",
-            "2,165,000",
-            "3,119,000",
-            "176,611,000",
-            "81.15",
-            "14,331,982,650",
-            "集中市場"
-          ],
-          "col_idx": {
-            "shares_end": 5,
-            "close": 6,
-            "mv": 7
-          },
-          "borrow_shares": 176611000,
-          "close": 81.15,
-          "borrow_mv_ntd": 14331982650.0
-        }
       }
     ],
     "t86_agg": {
       "window_n": 5,
       "days_used": [
-        "20260226",
         "20260302",
         "20260303",
         "20260304",
-        "20260305"
+        "20260305",
+        "20260306"
       ],
-      "foreign_net_shares_sum": -468801377,
-      "trust_net_shares_sum": 10786000,
-      "dealer_net_shares_sum": -259422908,
-      "total3_net_shares_sum": -717438285
+      "foreign_net_shares_sum": -525062909,
+      "trust_net_shares_sum": 14086000,
+      "dealer_net_shares_sum": -225788051,
+      "total3_net_shares_sum": -736764960
     }
   }
 }
