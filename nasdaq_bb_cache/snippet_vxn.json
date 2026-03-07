@@ -1,6 +1,6 @@
 {
   "name": "VXN_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-03-06T15:20:42Z",
+  "generated_at_utc": "2026-03-07T12:54:40Z",
   "meta": {
     "attempt_errors": [],
     "selected_source": "cboe",
@@ -10,9 +10,9 @@
     "index_code": "VXN",
     "date_col": "DATE",
     "value_col": "CLOSE",
-    "rows": 4137,
+    "rows": 4138,
     "min_date": "2009-09-14",
-    "max_date": "2026-03-05"
+    "max_date": "2026-03-06"
   },
   "params": {
     "length": 60,
@@ -21,21 +21,21 @@
     "ddof": 0
   },
   "latest": {
-    "date": "2026-03-05",
-    "close": 26.0,
-    "bb_mid": 21.720150325917704,
-    "bb_lower": 16.804935326540598,
-    "bb_upper": 28.072998855008315,
-    "z": 1.4020163052366634,
+    "date": "2026-03-06",
+    "close": 31.44,
+    "bb_mid": 21.871097029278236,
+    "bb_lower": 16.643319731631102,
+    "bb_upper": 28.740953906869628,
+    "z": 2.657188880426359,
     "trigger_z_le_-2": false,
-    "trigger_z_ge_2": false,
-    "distance_to_lower_pct": 35.365633359459245,
-    "distance_to_upper_pct": 7.97307251926275,
-    "position_in_band": 0.8160288278663786,
-    "bandwidth_pct": 0.5187838647240867,
+    "trigger_z_ge_2": true,
+    "distance_to_lower_pct": 47.06323240575349,
+    "distance_to_upper_pct": -8.584752204613148,
+    "position_in_band": 1.0,
+    "bandwidth_pct": 0.553133396054334,
     "walk_lower_count": 0,
-    "walk_upper_count": 0,
-    "bandwidth_delta_pct": 1.2287686994521874
+    "walk_upper_count": 1,
+    "bandwidth_delta_pct": 6.621164162172999
   },
   "historical_simulation": {
     "C_poswatch": {
@@ -46,9 +46,9 @@
       "cooldown_bars": 20,
       "sample_size": 79,
       "p10": 0.0,
-      "p50": 0.10454943132108485,
+      "p50": 0.1181434599156117,
       "p90": 0.5801524392864553,
-      "mean": 0.20329622971875094,
+      "mean": 0.2059447204685075,
       "min": 0.0,
       "max": 1.7396510434485117,
       "gate": {
@@ -92,11 +92,11 @@
       "z_thresh": 2.0,
       "horizon_days": 20,
       "cooldown_bars": 20,
-      "sample_size": 54,
+      "sample_size": 55,
       "p10": 0.0,
-      "p50": 0.09522952372885085,
-      "p90": 0.6742893081394336,
-      "mean": 0.21293039504739258,
+      "p50": 0.09265734265734271,
+      "p90": 0.6605382368545328,
+      "mean": 0.21046040954087827,
       "min": 0.0,
       "max": 1.5807283274250725,
       "gate": {
@@ -111,6 +111,6 @@
       }
     }
   },
-  "action_output": "NEAR_UPPER_BAND (WATCH)",
-  "trigger_reason": "position_in_band>=0.8 (pos=0.816)"
+  "action_output": "UPPER_BAND_TOUCH (STRESS)",
+  "trigger_reason": "z>=2"
 }
