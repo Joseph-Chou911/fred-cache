@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py
+merge_0050_valuation_bb.py  (v1.3)
 
 Purpose
 -------
@@ -12,28 +12,15 @@ Merge two layers into one deterministic report:
 2) Execution map:
    current BB / regime / tranche references from tw0050_bb_cache/stats_latest.json
 
-Design principles
------------------
-- Audit-first: every output should be reproducible from explicit inputs.
-- No web calls in the script.
-- Keep valuation inputs configurable and slow-moving; keep BB inputs market-driven and fast-moving.
-- Separate gross price (before dividend-drag display adjustment) from net/display price.
-- Backward-compatible JSON schema:
-  * keep old keys: config_used / bb_summary / scenario_results / combined
-  * add new keys: meta / inputs / valuation_cases / bb_snapshot
-
-Notes
------
-- base_0050 is resolved in this priority order:
-  1) CLI --base-0050
-  2) config.base.base_0050 (if not null / not "auto")
-  3) bb-stats latest.price_used / close / adjclose
-  4) fallback default
-- base_tsmc is resolved in this priority order:
-  1) CLI --base-tsmc
-  2) config.base.base_tsmc
-  3) fallback default
-- eps_base remains a slow-moving scenario input. Do not update it daily.
+v1.3 changes
+------------
+- Add DQ-aware execution bias downgrade / veto logic
+- Add dividend_drag mode: off / light / heavy / custom
+- Add internal schema validation for bb-stats
+- Mark valuation zone as rough classification only
+- Keep backward-compatible JSON schema:
+  * old keys: config_used / bb_summary / scenario_results / combined
+  * new keys: meta / inputs / valuation_cases / bb_snapshot
 """
 
 from __future__ import annotations
@@ -49,7 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.2",
+        "config_version": "0050_merge_v1.3",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close."
@@ -62,8 +49,26 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "dividend_drag": {
         "enabled": True,
-        "points_per_year": 1.0,
-        "note": "Display-price sensitivity only. Keep total-return thinking separate.",
+        "mode": "light",  # off / light / heavy / custom
+        "points_per_year_light": 1.0,
+        "points_per_year_heavy": 2.5,
+        "points_per_year_custom": 1.0,
+        "note": (
+            "Display-price sensitivity only. "
+            "Use 'heavy' if you want to approximate the earlier pessimistic net-price style."
+        ),
+    },
+    "dq_policy": {
+        # Structural schema problems should fail fast before this policy is used.
+        # These are data-quality flags that should at least downgrade trust.
+        "caution_flags": [
+            "PRICE_SERIES_BREAK_DETECTED",
+            "FWD_MDD_CLEAN_APPLIED",
+            "RAW_OUTLIER_EXCLUDED_BY_CLEAN",
+            "FWD_MDD_OUTLIER_MIN_RAW_20D",
+        ],
+        # If future you adds more severe flags, put them here.
+        "veto_flags": [],
     },
     "scenario_groups": [
         {
@@ -184,7 +189,88 @@ def load_json(path: Path) -> Dict[str, Any]:
         return json.load(f)
 
 
+def safe_float(x: Any, default: float = float("nan")) -> float:
+    try:
+        return float(x)
+    except Exception:
+        return default
+
+
+def get_path(d: Dict[str, Any], dotted: str) -> Any:
+    cur: Any = d
+    for part in dotted.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            raise KeyError(dotted)
+        cur = cur[part]
+    return cur
+
+
+def has_path(d: Dict[str, Any], dotted: str) -> bool:
+    try:
+        get_path(d, dotted)
+        return True
+    except KeyError:
+        return False
+
+
+def validate_bb_stats_schema(stats: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Fail fast if required keys are missing.
+    This prevents silent downstream misinterpretation when stats schema changes.
+    """
+    required_paths = [
+        "latest.date",
+        "latest.state",
+        "latest.bb_z",
+        "regime.tag",
+        "regime.allowed",
+        "vol.rv_ann_pctl",
+        "pledge.decision.action_bucket",
+        "pledge.decision.pledge_policy",
+        "dq.flags",
+    ]
+    missing = [p for p in required_paths if not has_path(stats, p)]
+
+    latest_price_candidates = [
+        "latest.price_used",
+        "latest.close",
+        "latest.adjclose",
+    ]
+    if not any(has_path(stats, p) for p in latest_price_candidates):
+        missing.append("one_of(latest.price_used, latest.close, latest.adjclose)")
+
+    if missing:
+        raise SystemExit(
+            "ERROR: bb-stats schema validation failed; missing required keys: "
+            + ", ".join(missing)
+        )
+
+    levels = (
+        stats.get("pledge", {})
+        .get("unconditional_tranche_levels", {})
+        .get("levels", [])
+    )
+    if levels is not None and not isinstance(levels, list):
+        raise SystemExit(
+            "ERROR: bb-stats schema validation failed; "
+            "pledge.unconditional_tranche_levels.levels is not a list"
+        )
+
+    return {
+        "validated": True,
+        "required_paths_checked": required_paths,
+        "latest_price_candidates": latest_price_candidates,
+        "tranche_levels_present": isinstance(levels, list) and len(levels) > 0,
+    }
+
+
 def merge_config(user_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Intentionally shallow at the top level.
+    Note:
+    - dict keys like meta/base/dividend_drag/dq_policy will update shallowly
+    - scenario_groups, if provided, replace the default list as a whole
+    """
     cfg = deep_copy_jsonable(DEFAULT_CONFIG)
     if not user_cfg:
         return cfg
@@ -195,13 +281,6 @@ def merge_config(user_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         else:
             cfg[top_key] = value
     return cfg
-
-
-def safe_float(x: Any, default: float = float("nan")) -> float:
-    try:
-        return float(x)
-    except Exception:
-        return default
 
 
 def parse_bb_stats(stats: Dict[str, Any]) -> BBState:
@@ -246,7 +325,7 @@ def resolve_base_0050(cfg: Dict[str, Any], bb_stats: Dict[str, Any], cli_base_00
             if not math.isnan(v):
                 return v, f"bb_stats.latest.{key}"
 
-    fallback = safe_float(DEFAULT_CONFIG["base"]["base_0050"], 76.85) if DEFAULT_CONFIG["base"]["base_0050"] != "auto" else 76.85
+    fallback = 76.85
     return fallback, "default_fallback"
 
 
@@ -270,6 +349,25 @@ def resolve_tsmc_weight(cfg: Dict[str, Any], cli_tsmc_weight: Optional[float]) -
         return float(cfg_val), "config"
 
     return 0.6408, "default_fallback"
+
+
+def resolve_dividend_drag(cfg: Dict[str, Any]) -> Tuple[bool, str, float]:
+    dd = cfg.get("dividend_drag", {})
+    enabled = bool(dd.get("enabled", True))
+    mode = str(dd.get("mode", "light")).lower()
+
+    if not enabled or mode == "off":
+        return False, "off", 0.0
+
+    if mode == "light":
+        return True, "light", float(dd.get("points_per_year_light", dd.get("points_per_year", 1.0)))
+    if mode == "heavy":
+        return True, "heavy", float(dd.get("points_per_year_heavy", 2.5))
+    if mode == "custom":
+        return True, "custom", float(dd.get("points_per_year_custom", dd.get("points_per_year", 1.0)))
+
+    # backward-compatible fallback
+    return True, "legacy", float(dd.get("points_per_year", 1.0))
 
 
 def apply_resolved_bases(
@@ -327,12 +425,10 @@ def compute_0050_prices(
     return tsmc_ret, gross, net
 
 
-def build_results(cfg: Dict[str, Any]) -> List[ScenarioResult]:
+def build_results(cfg: Dict[str, Any], drag_enabled: bool, drag_pts: float) -> List[ScenarioResult]:
     base_0050 = float(cfg["base"]["base_0050"])
     base_tsmc = float(cfg["base"]["base_tsmc"])
     tsmc_weight = float(cfg["base"]["tsmc_weight"])
-    drag_enabled = bool(cfg["dividend_drag"].get("enabled", True))
-    drag_pts = float(cfg["dividend_drag"].get("points_per_year", 1.0))
 
     out: List[ScenarioResult] = []
     for group in cfg["scenario_groups"]:
@@ -413,10 +509,58 @@ def classify_price(current_price: float, xs: List[float]) -> Dict[str, Any]:
         "scenario_net_max": max(ordered) if ordered else None,
         "scenario_net_pctl": pctl,
         "zone": zone,
+        "note": "rough classification only; sparse scenario set => low percentile resolution",
     }
 
 
-def build_combined_view(bb: BBState, results: List[ScenarioResult]) -> Dict[str, Any]:
+def decide_execution_bias(
+    bb: BBState,
+    price_zone: str,
+    dq_policy: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    First decide base execution bias from price/regime/BB state.
+    Then apply DQ overlay to downgrade trust or veto if configured.
+    """
+    if bb.regime_allowed is False and "UPPER" in bb.state:
+        base_bias = "DEFENSIVE_NO_CHASE"
+    elif price_zone in {"LOWER_ZONE", "LOWER_MID_ZONE"} and bb.regime_allowed:
+        base_bias = "ALLOW_STAGED_ACCUMULATION"
+    else:
+        base_bias = "WAIT_FOR_BETTER_ALIGNMENT"
+
+    caution_flags = set(dq_policy.get("caution_flags", []))
+    veto_flags = set(dq_policy.get("veto_flags", []))
+    dq_set = set(bb.dq_flags)
+
+    matched_veto = sorted(list(dq_set & veto_flags))
+    matched_caution = sorted(list(dq_set & caution_flags))
+
+    if matched_veto:
+        final_bias = "DEFENSIVE_DQ_VETO"
+        dq_overlay = "VETO"
+    elif matched_caution:
+        if base_bias == "ALLOW_STAGED_ACCUMULATION":
+            final_bias = "CAUTION_DQ_PRESENT"
+        elif base_bias == "WAIT_FOR_BETTER_ALIGNMENT":
+            final_bias = "WAIT_WITH_DQ_CAUTION"
+        else:
+            final_bias = base_bias
+        dq_overlay = "CAUTION"
+    else:
+        final_bias = base_bias
+        dq_overlay = "NONE"
+
+    return {
+        "base_execution_bias": base_bias,
+        "dq_overlay": dq_overlay,
+        "matched_caution_flags": matched_caution,
+        "matched_veto_flags": matched_veto,
+        "combined_execution_bias": final_bias,
+    }
+
+
+def build_combined_view(bb: BBState, results: List[ScenarioResult], dq_policy: Dict[str, Any]) -> Dict[str, Any]:
     net_prices = [r.net_0050 for r in results]
     gross_prices = [r.gross_0050 for r in results]
     price_pos = classify_price(bb.price_used, net_prices)
@@ -432,12 +576,11 @@ def build_combined_view(bb: BBState, results: List[ScenarioResult]) -> Dict[str,
             }
         )
 
-    if bb.regime_allowed is False and "UPPER" in bb.state:
-        execution_bias = "DEFENSIVE_NO_CHASE"
-    elif price_pos["zone"] in {"LOWER_ZONE", "LOWER_MID_ZONE"} and bb.regime_allowed:
-        execution_bias = "ALLOW_STAGED_ACCUMULATION"
-    else:
-        execution_bias = "WAIT_FOR_BETTER_ALIGNMENT"
+    exec_info = decide_execution_bias(
+        bb=bb,
+        price_zone=price_pos["zone"],
+        dq_policy=dq_policy,
+    )
 
     return {
         "bb": dataclasses.asdict(bb),
@@ -449,10 +592,16 @@ def build_combined_view(bb: BBState, results: List[ScenarioResult]) -> Dict[str,
             "current_price_position": price_pos,
         },
         "tranche_reference": tranche_levels,
-        "combined_execution_bias": execution_bias,
+        "base_execution_bias": exec_info["base_execution_bias"],
+        "dq_overlay": exec_info["dq_overlay"],
+        "matched_caution_flags": exec_info["matched_caution_flags"],
+        "matched_veto_flags": exec_info["matched_veto_flags"],
+        "combined_execution_bias": exec_info["combined_execution_bias"],
         "how_to_read": {
             "layer_1": "Use valuation scenarios to decide whether the current zone is cheap / fair / expensive.",
             "layer_2": "Use BB/regime/tranche references to decide whether to act now or wait.",
+            "zone_note": "valuation zone is rough classification only; do not over-interpret sparse-percentile output.",
+            "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
         },
     }
@@ -484,6 +633,10 @@ def build_output_json(
     combined: Dict[str, Any],
     bb_stats_path: str,
     base_sources: Dict[str, str],
+    drag_enabled: bool,
+    drag_mode: str,
+    drag_pts: float,
+    schema_validation: Dict[str, Any],
 ) -> Dict[str, Any]:
     valuation_cases = [scenario_to_case(r) for r in results]
 
@@ -502,14 +655,16 @@ def build_output_json(
         "tsmc_weight": float(cfg["base"]["tsmc_weight"]),
         "base_sources": base_sources,
         "dividend_drag": {
-            "enabled": bool(cfg["dividend_drag"].get("enabled", True)),
-            "points_per_year": float(cfg["dividend_drag"].get("points_per_year", 1.0)),
-            "note": str(cfg["dividend_drag"].get("note", "")),
+            "enabled": drag_enabled,
+            "mode": drag_mode,
+            "points_per_year": drag_pts,
+            "note": str(cfg.get("dividend_drag", {}).get("note", "")),
         },
         "current_date": bb.date,
         "current_0050_price": bb.price_used,
         "current_bb_state": bb.state,
         "current_bb_z": bb.bb_z,
+        "schema_validation": schema_validation,
     }
 
     bb_snapshot = {
@@ -548,6 +703,10 @@ def markdown_report(
     results: List[ScenarioResult],
     combined: Dict[str, Any],
     base_sources: Dict[str, str],
+    drag_enabled: bool,
+    drag_mode: str,
+    drag_pts: float,
+    schema_validation: Dict[str, Any],
 ) -> str:
     lines: List[str] = []
     lines.append("# 0050 Valuation × BB Merged Report")
@@ -558,13 +717,22 @@ def markdown_report(
     lines.append(f"- bb_state: **{bb.state}**; bb_z=`{bb.bb_z:.4f}`")
     lines.append(f"- regime: **{bb.regime_tag}**; allowed=`{str(bb.regime_allowed).lower()}`")
     lines.append(f"- action_bucket: **{bb.action_bucket}**; pledge_policy=`{bb.pledge_policy}`")
+    lines.append(f"- base_execution_bias: **{combined['base_execution_bias']}**")
+    lines.append(f"- dq_overlay: **{combined['dq_overlay']}**")
     lines.append(f"- combined_execution_bias: **{combined['combined_execution_bias']}**")
+    if combined.get("matched_caution_flags"):
+        lines.append(f"- matched_caution_flags: `{', '.join(combined['matched_caution_flags'])}`")
+    if combined.get("matched_veto_flags"):
+        lines.append(f"- matched_veto_flags: `{', '.join(combined['matched_veto_flags'])}`")
+
     lines.append("")
     lines.append("## Base Inputs")
     lines.append(f"- base_0050: `{cfg['base']['base_0050']}` (source=`{base_sources['base_0050']}`)")
     lines.append(f"- base_tsmc: `{cfg['base']['base_tsmc']}` (source=`{base_sources['base_tsmc']}`)")
     lines.append(f"- tsmc_weight_in_0050: `{cfg['base']['tsmc_weight']}` (source=`{base_sources['tsmc_weight']}`)")
-    lines.append(f"- dividend_drag_points_per_year: `{cfg['dividend_drag']['points_per_year']}` (enabled=`{cfg['dividend_drag']['enabled']}`)")
+    lines.append(f"- dividend_drag_mode: `{drag_mode}`")
+    lines.append(f"- dividend_drag_points_per_year: `{drag_pts}` (enabled=`{drag_enabled}`)")
+
     lines.append("")
     lines.append("## Valuation Scenario Table")
     lines.append("")
@@ -582,6 +750,7 @@ def markdown_report(
     lines.append(f"- scenario_net_range: `{cp['scenario_net_min']:.2f}` ~ `{cp['scenario_net_max']:.2f}`")
     lines.append(f"- percentile_in_scenario_net_range: `{cp['scenario_net_pctl']:.2f}`")
     lines.append(f"- zone: **{cp['zone']}**")
+    lines.append(f"- zone_note: `{cp['note']}`")
 
     lines.append("")
     lines.append("## BB Tranche References")
@@ -604,9 +773,14 @@ def markdown_report(
         lines.append("- (none)")
 
     lines.append("")
+    lines.append("## Schema Validation")
+    lines.append(f"- validated: `{schema_validation.get('validated', False)}`")
+    lines.append(f"- tranche_levels_present: `{schema_validation.get('tranche_levels_present', False)}`")
+
+    lines.append("")
     lines.append("## How to Use")
     lines.append("- Step 1: Use the valuation table to decide whether current price is in a low / fair / high zone.")
-    lines.append("- Step 2: Use BB state, regime, and tranche references to decide whether to act now or wait.")
+    lines.append("- Step 2: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
     lines.append("- Step 3: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
 
     lines.append("")
@@ -614,6 +788,8 @@ def markdown_report(
     lines.append("- base_0050 is auto-resolved from bb-stats unless overridden.")
     lines.append("- base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.")
     lines.append("- eps_base is a slow-moving fundamental anchor; revise only when earnings/model basis changes.")
+    lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
+    lines.append("- DQ flags can downgrade execution bias even if valuation/regime otherwise look constructive.")
     lines.append("- Outputs are dynamic, not fixed. The rules can stay fixed, but the zone boundaries will move when market data or scenario assumptions change.")
 
     return "\n".join(lines) + "\n"
@@ -633,8 +809,11 @@ def main() -> None:
     bb_stats_path = Path(args.bb_stats)
     bb_stats = load_json(bb_stats_path)
 
+    schema_validation = validate_bb_stats_schema(bb_stats)
+
     user_cfg = load_json(Path(args.config)) if args.config else None
     cfg = merge_config(user_cfg)
+
     cfg, base_sources = apply_resolved_bases(
         cfg=cfg,
         bb_stats=bb_stats,
@@ -643,9 +822,15 @@ def main() -> None:
         cli_tsmc_weight=args.tsmc_weight,
     )
 
+    drag_enabled, drag_mode, drag_pts = resolve_dividend_drag(cfg)
+
     bb = parse_bb_stats(bb_stats)
-    results = build_results(cfg)
-    combined = build_combined_view(bb, results)
+    results = build_results(cfg, drag_enabled=drag_enabled, drag_pts=drag_pts)
+    combined = build_combined_view(
+        bb=bb,
+        results=results,
+        dq_policy=cfg.get("dq_policy", {}),
+    )
 
     out_json = build_output_json(
         cfg=cfg,
@@ -654,6 +839,10 @@ def main() -> None:
         combined=combined,
         bb_stats_path=str(bb_stats_path),
         base_sources=base_sources,
+        drag_enabled=drag_enabled,
+        drag_mode=drag_mode,
+        drag_pts=drag_pts,
+        schema_validation=schema_validation,
     )
 
     out_json_path = Path(args.out_json)
@@ -665,7 +854,19 @@ def main() -> None:
         json.dump(out_json, f, ensure_ascii=False, indent=2)
 
     with out_md_path.open("w", encoding="utf-8") as f:
-        f.write(markdown_report(cfg, bb, results, combined, base_sources))
+        f.write(
+            markdown_report(
+                cfg=cfg,
+                bb=bb,
+                results=results,
+                combined=combined,
+                base_sources=base_sources,
+                drag_enabled=drag_enabled,
+                drag_mode=drag_mode,
+                drag_pts=drag_pts,
+                schema_validation=schema_validation,
+            )
+        )
 
 
 if __name__ == "__main__":
