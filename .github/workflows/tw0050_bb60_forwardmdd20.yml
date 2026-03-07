@@ -2,6 +2,11 @@ name: tw0050-bb60-forwardmdd20
 
 on:
   workflow_dispatch:
+    inputs:
+      base_tsmc_override:
+        description: "Optional override for TSMC base price (e.g. 1925)"
+        required: false
+        default: ""
   schedule:
     - cron: "35 6 * * 1-5"
 
@@ -106,10 +111,27 @@ jobs:
             --tail_days 15 \
             --out tw0050_bb_cache/report.md
 
+      - name: Resolve base_tsmc
+        id: resolve_tsmc
+        shell: bash
+        env:
+          BASE_TSMC_OVERRIDE: ${{ github.event.inputs.base_tsmc_override || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${BASE_TSMC_OVERRIDE}" ]; then
+            echo "base_tsmc=${BASE_TSMC_OVERRIDE}" >> "$GITHUB_OUTPUT"
+            echo "Using manual override base_tsmc=${BASE_TSMC_OVERRIDE}"
+          else
+            echo "base_tsmc=1890" >> "$GITHUB_OUTPUT"
+            echo "Using fallback base_tsmc=1890"
+          fi
+
       - name: Build merged valuation + BB report
         run: |
           python tools/merge_0050_valuation_bb.py \
             --bb-stats tw0050_bb_cache/stats_latest.json \
+            --base-tsmc "${{ steps.resolve_tsmc.outputs.base_tsmc }}" \
             --out-json tw0050_bb_cache/merged_latest.json \
             --out-md tw0050_bb_cache/merged_report.md
 
