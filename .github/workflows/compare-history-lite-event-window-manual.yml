@@ -1,0 +1,164 @@
+name: Compare history_lite event window (manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "Input JSON path"
+        required: false
+        default: "cache/history_lite.json"
+      series:
+        description: "Optional series_id filter. Leave blank to compare ALL series."
+        required: false
+        default: ""
+      event_dates:
+        description: "Comma-separated event dates, e.g. 2025-04-07,2026-03-05"
+        required: true
+        default: "2025-04-07,2026-03-05"
+      pre_days:
+        description: "Number of calendar days before each event date"
+        required: true
+        default: "10"
+      post_days:
+        description: "Number of calendar days after each event date"
+        required: true
+        default: "10"
+      max_gap_days:
+        description: "Mark as STALE_MATCH if matched_date is older than this many days from target_date"
+        required: true
+        default: "7"
+      json_out:
+        description: "Output JSON path"
+        required: false
+        default: "cache/compare/compare_history_lite_event_window_out.json"
+      csv_out:
+        description: "Output CSV path"
+        required: false
+        default: "cache/compare/compare_history_lite_event_window_out.csv"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: compare-history-lite-event-window-manual
+  cancel-in-progress: false
+
+jobs:
+  run-compare-history-lite-event-window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Show inputs
+        shell: bash
+        run: |
+          echo "file=${{ github.event.inputs.file }}"
+          echo "series=${{ github.event.inputs.series }}"
+          echo "event_dates=${{ github.event.inputs.event_dates }}"
+          echo "pre_days=${{ github.event.inputs.pre_days }}"
+          echo "post_days=${{ github.event.inputs.post_days }}"
+          echo "max_gap_days=${{ github.event.inputs.max_gap_days }}"
+          echo "json_out=${{ github.event.inputs.json_out }}"
+          echo "csv_out=${{ github.event.inputs.csv_out }}"
+
+      - name: Validate script exists
+        shell: bash
+        run: |
+          test -f tools/compare_history_lite_event_window.py
+
+      - name: Create output directories
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "${{ github.event.inputs.json_out }}")"
+          mkdir -p "$(dirname "${{ github.event.inputs.csv_out }}")"
+
+      - name: Run compare_history_lite_event_window.py
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CMD=(
+            python tools/compare_history_lite_event_window.py
+            --file "${{ github.event.inputs.file }}"
+            --event-dates "${{ github.event.inputs.event_dates }}"
+            --pre-days "${{ github.event.inputs.pre_days }}"
+            --post-days "${{ github.event.inputs.post_days }}"
+            --max-gap-days "${{ github.event.inputs.max_gap_days }}"
+            --json-out "${{ github.event.inputs.json_out }}"
+            --csv-out "${{ github.event.inputs.csv_out }}"
+          )
+
+          if [ -n "${{ github.event.inputs.series }}" ]; then
+            CMD+=( --series "${{ github.event.inputs.series }}" )
+          fi
+
+          printf 'Running command:\n'
+          printf '%q ' "${CMD[@]}"
+          printf '\n\n'
+
+          "${CMD[@]}"
+
+      - name: Show output file info
+        shell: bash
+        run: |
+          echo "=== JSON output ==="
+          if [ -f "${{ github.event.inputs.json_out }}" ]; then
+            ls -lh "${{ github.event.inputs.json_out }}"
+          else
+            echo "JSON output not found"
+            exit 1
+          fi
+
+          echo "=== CSV output ==="
+          if [ -f "${{ github.event.inputs.csv_out }}" ]; then
+            ls -lh "${{ github.event.inputs.csv_out }}"
+          else
+            echo "CSV output not found"
+            exit 1
+          fi
+
+      - name: Preview output head
+        shell: bash
+        run: |
+          echo "=== JSON head ==="
+          head -n 40 "${{ github.event.inputs.json_out }}" || true
+
+          echo "=== CSV head ==="
+          head -n 20 "${{ github.event.inputs.csv_out }}" || true
+
+      - name: Commit outputs back to repo
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${{ github.event.inputs.json_out }}" "${{ github.event.inputs.csv_out }}"
+
+          if git diff --cached --quiet; then
+            echo "No output changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Add compare history_lite event window outputs"
+          git push
+
+      - name: Upload output artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-history-lite-event-window-output
+          path: |
+            ${{ github.event.inputs.json_out }}
+            ${{ github.event.inputs.csv_out }}
+          if-no-files-found: error
