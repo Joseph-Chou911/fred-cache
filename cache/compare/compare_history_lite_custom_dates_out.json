@@ -1,0 +1,506 @@
+{
+  "source_file": "cache/history_lite.json",
+  "series_filter": null,
+  "target_dates": [
+    "2025-04-02",
+    "2025-04-07",
+    "2025-04-10"
+  ],
+  "generated_at": "2026-03-08T06:15:47",
+  "results": {
+    "BAMLH0A0HYM2": [
+      {
+        "series_id": "BAMLH0A0HYM2",
+        "latest_date": "2026-03-05",
+        "latest_value": 3.0,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 3.42,
+        "abs_change": -0.41999999999999993,
+        "pct_change": -12.280701754385959,
+        "status": "OK"
+      },
+      {
+        "series_id": "BAMLH0A0HYM2",
+        "latest_date": "2026-03-05",
+        "latest_value": 3.0,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 4.61,
+        "abs_change": -1.6100000000000003,
+        "pct_change": -34.924078091106296,
+        "status": "OK"
+      },
+      {
+        "series_id": "BAMLH0A0HYM2",
+        "latest_date": "2026-03-05",
+        "latest_value": 3.0,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 4.42,
+        "abs_change": -1.42,
+        "pct_change": -32.126696832579185,
+        "status": "OK"
+      }
+    ],
+    "DCOILWTICO": [
+      {
+        "series_id": "DCOILWTICO",
+        "latest_date": "2026-03-02",
+        "latest_value": 71.13,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 72.12,
+        "abs_change": -0.9900000000000091,
+        "pct_change": -1.3727121464226388,
+        "status": "OK"
+      },
+      {
+        "series_id": "DCOILWTICO",
+        "latest_date": "2026-03-02",
+        "latest_value": 71.13,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 61.05,
+        "abs_change": 10.079999999999998,
+        "pct_change": 16.51105651105651,
+        "status": "OK"
+      },
+      {
+        "series_id": "DCOILWTICO",
+        "latest_date": "2026-03-02",
+        "latest_value": 71.13,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 60.57,
+        "abs_change": 10.559999999999995,
+        "pct_change": 17.434373452204042,
+        "status": "OK"
+      }
+    ],
+    "DGS10": [
+      {
+        "series_id": "DGS10",
+        "latest_date": "2026-03-05",
+        "latest_value": 4.13,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 4.2,
+        "abs_change": -0.07000000000000028,
+        "pct_change": -1.6666666666666718,
+        "status": "OK"
+      },
+      {
+        "series_id": "DGS10",
+        "latest_date": "2026-03-05",
+        "latest_value": 4.13,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 4.15,
+        "abs_change": -0.020000000000000462,
+        "pct_change": -0.48192771084338837,
+        "status": "OK"
+      },
+      {
+        "series_id": "DGS10",
+        "latest_date": "2026-03-05",
+        "latest_value": 4.13,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 4.4,
+        "abs_change": -0.27000000000000046,
+        "pct_change": -6.136363636363651,
+        "status": "OK"
+      }
+    ],
+    "DGS2": [
+      {
+        "series_id": "DGS2",
+        "latest_date": "2026-03-05",
+        "latest_value": 3.57,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 3.91,
+        "abs_change": -0.3400000000000003,
+        "pct_change": -8.695652173913048,
+        "status": "OK"
+      },
+      {
+        "series_id": "DGS2",
+        "latest_date": "2026-03-05",
+        "latest_value": 3.57,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 3.73,
+        "abs_change": -0.16000000000000014,
+        "pct_change": -4.289544235924936,
+        "status": "OK"
+      },
+      {
+        "series_id": "DGS2",
+        "latest_date": "2026-03-05",
+        "latest_value": 3.57,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 3.84,
+        "abs_change": -0.27,
+        "pct_change": -7.03125,
+        "status": "OK"
+      }
+    ],
+    "DJIA": [
+      {
+        "series_id": "DJIA",
+        "latest_date": "2026-03-06",
+        "latest_value": 47501.55,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 42225.32,
+        "abs_change": 5276.230000000003,
+        "pct_change": 12.49541744147824,
+        "status": "OK"
+      },
+      {
+        "series_id": "DJIA",
+        "latest_date": "2026-03-06",
+        "latest_value": 47501.55,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 37965.6,
+        "abs_change": 9535.950000000004,
+        "pct_change": 25.117343068461985,
+        "status": "OK"
+      },
+      {
+        "series_id": "DJIA",
+        "latest_date": "2026-03-06",
+        "latest_value": 47501.55,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 39593.66,
+        "abs_change": 7907.889999999999,
+        "pct_change": 19.97261682804772,
+        "status": "OK"
+      }
+    ],
+    "DTWEXBGS": [
+      {
+        "series_id": "DTWEXBGS",
+        "latest_date": "2026-02-27",
+        "latest_value": 117.8223,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 126.6284,
+        "abs_change": -8.8061,
+        "pct_change": -6.954285136667604,
+        "status": "OK"
+      },
+      {
+        "series_id": "DTWEXBGS",
+        "latest_date": "2026-02-27",
+        "latest_value": 117.8223,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 127.0629,
+        "abs_change": -9.2406,
+        "pct_change": -7.2724611196501865,
+        "status": "OK"
+      },
+      {
+        "series_id": "DTWEXBGS",
+        "latest_date": "2026-02-27",
+        "latest_value": 117.8223,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 125.3694,
+        "abs_change": -7.5471,
+        "pct_change": -6.01989002100991,
+        "status": "OK"
+      }
+    ],
+    "NASDAQCOM": [
+      {
+        "series_id": "NASDAQCOM",
+        "latest_date": "2026-03-06",
+        "latest_value": 22387.68,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 17601.05,
+        "abs_change": 4786.630000000001,
+        "pct_change": 27.195138926370888,
+        "status": "OK"
+      },
+      {
+        "series_id": "NASDAQCOM",
+        "latest_date": "2026-03-06",
+        "latest_value": 22387.68,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 15603.26,
+        "abs_change": 6784.42,
+        "pct_change": 43.48078542560978,
+        "status": "OK"
+      },
+      {
+        "series_id": "NASDAQCOM",
+        "latest_date": "2026-03-06",
+        "latest_value": 22387.68,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 16387.31,
+        "abs_change": 6000.369999999999,
+        "pct_change": 36.61595466247969,
+        "status": "OK"
+      }
+    ],
+    "NFCINONFINLEVERAGE": [
+      {
+        "series_id": "NFCINONFINLEVERAGE",
+        "latest_date": "2026-02-27",
+        "latest_value": -0.4627,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-03-28",
+        "gap_days": 5,
+        "past_value": -0.67823,
+        "abs_change": 0.21553,
+        "pct_change": -31.778305294664055,
+        "status": "OK"
+      },
+      {
+        "series_id": "NFCINONFINLEVERAGE",
+        "latest_date": "2026-02-27",
+        "latest_value": -0.4627,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-04",
+        "gap_days": 3,
+        "past_value": -0.67384,
+        "abs_change": 0.21114,
+        "pct_change": -31.33384779769678,
+        "status": "OK"
+      },
+      {
+        "series_id": "NFCINONFINLEVERAGE",
+        "latest_date": "2026-02-27",
+        "latest_value": -0.4627,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-04",
+        "gap_days": 6,
+        "past_value": -0.67384,
+        "abs_change": 0.21114,
+        "pct_change": -31.33384779769678,
+        "status": "OK"
+      }
+    ],
+    "SP500": [
+      {
+        "series_id": "SP500",
+        "latest_date": "2026-03-06",
+        "latest_value": 6740.02,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 5670.97,
+        "abs_change": 1069.0500000000002,
+        "pct_change": 18.85127235728632,
+        "status": "OK"
+      },
+      {
+        "series_id": "SP500",
+        "latest_date": "2026-03-06",
+        "latest_value": 6740.02,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 5062.25,
+        "abs_change": 1677.7700000000004,
+        "pct_change": 33.142772482591745,
+        "status": "OK"
+      },
+      {
+        "series_id": "SP500",
+        "latest_date": "2026-03-06",
+        "latest_value": 6740.02,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 5268.05,
+        "abs_change": 1471.9700000000003,
+        "pct_change": 27.941458414403808,
+        "status": "OK"
+      }
+    ],
+    "STLFSI4": [
+      {
+        "series_id": "STLFSI4",
+        "latest_date": "2026-02-27",
+        "latest_value": -0.4436,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-03-28",
+        "gap_days": 5,
+        "past_value": -0.6236,
+        "abs_change": 0.18000000000000005,
+        "pct_change": -28.864656831302128,
+        "status": "OK"
+      },
+      {
+        "series_id": "STLFSI4",
+        "latest_date": "2026-02-27",
+        "latest_value": -0.4436,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-04",
+        "gap_days": 3,
+        "past_value": 0.0994,
+        "abs_change": -0.543,
+        "pct_change": -546.2776659959759,
+        "status": "OK"
+      },
+      {
+        "series_id": "STLFSI4",
+        "latest_date": "2026-02-27",
+        "latest_value": -0.4436,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-04",
+        "gap_days": 6,
+        "past_value": 0.0994,
+        "abs_change": -0.543,
+        "pct_change": -546.2776659959759,
+        "status": "OK"
+      }
+    ],
+    "T10Y2Y": [
+      {
+        "series_id": "T10Y2Y",
+        "latest_date": "2026-03-06",
+        "latest_value": 0.59,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 0.29,
+        "abs_change": 0.3,
+        "pct_change": 103.44827586206895,
+        "status": "OK"
+      },
+      {
+        "series_id": "T10Y2Y",
+        "latest_date": "2026-03-06",
+        "latest_value": 0.59,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 0.42,
+        "abs_change": 0.16999999999999998,
+        "pct_change": 40.47619047619047,
+        "status": "OK"
+      },
+      {
+        "series_id": "T10Y2Y",
+        "latest_date": "2026-03-06",
+        "latest_value": 0.59,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 0.56,
+        "abs_change": 0.029999999999999916,
+        "pct_change": 5.357142857142838,
+        "status": "OK"
+      }
+    ],
+    "T10Y3M": [
+      {
+        "series_id": "T10Y3M",
+        "latest_date": "2026-03-06",
+        "latest_value": 0.46,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": -0.12,
+        "abs_change": 0.5800000000000001,
+        "pct_change": -483.33333333333337,
+        "status": "OK"
+      },
+      {
+        "series_id": "T10Y3M",
+        "latest_date": "2026-03-06",
+        "latest_value": 0.46,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": -0.14,
+        "abs_change": 0.6000000000000001,
+        "pct_change": -428.57142857142856,
+        "status": "OK"
+      },
+      {
+        "series_id": "T10Y3M",
+        "latest_date": "2026-03-06",
+        "latest_value": 0.46,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 0.06,
+        "abs_change": 0.4,
+        "pct_change": 666.6666666666667,
+        "status": "OK"
+      }
+    ],
+    "VIXCLS": [
+      {
+        "series_id": "VIXCLS",
+        "latest_date": "2026-03-05",
+        "latest_value": 23.75,
+        "target_date": "2025-04-02",
+        "matched_past_date": "2025-04-02",
+        "gap_days": 0,
+        "past_value": 21.51,
+        "abs_change": 2.2399999999999984,
+        "pct_change": 10.413761041376102,
+        "status": "OK"
+      },
+      {
+        "series_id": "VIXCLS",
+        "latest_date": "2026-03-05",
+        "latest_value": 23.75,
+        "target_date": "2025-04-07",
+        "matched_past_date": "2025-04-07",
+        "gap_days": 0,
+        "past_value": 46.98,
+        "abs_change": -23.229999999999997,
+        "pct_change": -49.44657300979139,
+        "status": "OK"
+      },
+      {
+        "series_id": "VIXCLS",
+        "latest_date": "2026-03-05",
+        "latest_value": 23.75,
+        "target_date": "2025-04-10",
+        "matched_past_date": "2025-04-10",
+        "gap_days": 0,
+        "past_value": 40.72,
+        "abs_change": -16.97,
+        "pct_change": -41.67485265225933,
+        "status": "OK"
+      }
+    ]
+  }
+}
