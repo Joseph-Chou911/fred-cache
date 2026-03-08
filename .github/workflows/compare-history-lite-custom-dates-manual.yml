@@ -16,16 +16,16 @@ on:
         required: true
         default: "2025-04-02,2025-04-07,2025-04-10"
       json_out:
-        description: "Optional JSON output path"
+        description: "Output JSON path"
         required: false
-        default: "cache/compare_history_lite_custom_dates_out.json"
+        default: "cache/compare/compare_history_lite_custom_dates_out.json"
       csv_out:
-        description: "Optional CSV output path"
+        description: "Output CSV path"
         required: false
-        default: "cache/compare_history_lite_custom_dates_out.csv"
+        default: "cache/compare/compare_history_lite_custom_dates_out.csv"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: compare-history-lite-custom-dates-manual
@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -96,6 +98,7 @@ jobs:
             ls -lh "${{ github.event.inputs.json_out }}"
           else
             echo "JSON output not found"
+            exit 1
           fi
 
           echo "=== CSV output ==="
@@ -103,7 +106,35 @@ jobs:
             ls -lh "${{ github.event.inputs.csv_out }}"
           else
             echo "CSV output not found"
+            exit 1
           fi
+
+      - name: Preview output head
+        shell: bash
+        run: |
+          echo "=== JSON head ==="
+          head -n 40 "${{ github.event.inputs.json_out }}" || true
+
+          echo "=== CSV head ==="
+          head -n 20 "${{ github.event.inputs.csv_out }}" || true
+
+      - name: Commit outputs back to repo
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${{ github.event.inputs.json_out }}" "${{ github.event.inputs.csv_out }}"
+
+          if git diff --cached --quiet; then
+            echo "No output changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Add compare history_lite custom dates outputs"
+          git push
 
       - name: Upload output artifacts
         uses: actions/upload-artifact@v4
@@ -112,4 +143,4 @@ jobs:
           path: |
             ${{ github.event.inputs.json_out }}
             ${{ github.event.inputs.csv_out }}
-          if-no-files-found: warn
+          if-no-files-found: error
