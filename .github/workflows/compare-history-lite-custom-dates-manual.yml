@@ -1,0 +1,115 @@
+name: Compare history_lite vs custom dates (manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "Input JSON path"
+        required: false
+        default: "cache/history_lite.json"
+      series:
+        description: "Optional series_id filter. Leave blank to compare ALL series."
+        required: false
+        default: ""
+      dates:
+        description: "Comma-separated target dates, e.g. 2025-04-02,2025-04-07,2025-04-10"
+        required: true
+        default: "2025-04-02,2025-04-07,2025-04-10"
+      json_out:
+        description: "Optional JSON output path"
+        required: false
+        default: "cache/compare_history_lite_custom_dates_out.json"
+      csv_out:
+        description: "Optional CSV output path"
+        required: false
+        default: "cache/compare_history_lite_custom_dates_out.csv"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compare-history-lite-custom-dates-manual
+  cancel-in-progress: false
+
+jobs:
+  run-compare-history-lite-custom-dates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Show inputs
+        shell: bash
+        run: |
+          echo "file=${{ github.event.inputs.file }}"
+          echo "series=${{ github.event.inputs.series }}"
+          echo "dates=${{ github.event.inputs.dates }}"
+          echo "json_out=${{ github.event.inputs.json_out }}"
+          echo "csv_out=${{ github.event.inputs.csv_out }}"
+
+      - name: Validate script exists
+        shell: bash
+        run: |
+          test -f tools/compare_history_lite_custom_dates.py
+
+      - name: Create output directories
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "${{ github.event.inputs.json_out }}")"
+          mkdir -p "$(dirname "${{ github.event.inputs.csv_out }}")"
+
+      - name: Run compare_history_lite_custom_dates.py
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CMD=(
+            python tools/compare_history_lite_custom_dates.py
+            --file "${{ github.event.inputs.file }}"
+            --dates "${{ github.event.inputs.dates }}"
+            --json-out "${{ github.event.inputs.json_out }}"
+            --csv-out "${{ github.event.inputs.csv_out }}"
+          )
+
+          if [ -n "${{ github.event.inputs.series }}" ]; then
+            CMD+=( --series "${{ github.event.inputs.series }}" )
+          fi
+
+          printf 'Running command:\n'
+          printf '%q ' "${CMD[@]}"
+          printf '\n\n'
+
+          "${CMD[@]}"
+
+      - name: Show output file info
+        shell: bash
+        run: |
+          echo "=== JSON output ==="
+          if [ -f "${{ github.event.inputs.json_out }}" ]; then
+            ls -lh "${{ github.event.inputs.json_out }}"
+          else
+            echo "JSON output not found"
+          fi
+
+          echo "=== CSV output ==="
+          if [ -f "${{ github.event.inputs.csv_out }}" ]; then
+            ls -lh "${{ github.event.inputs.csv_out }}"
+          else
+            echo "CSV output not found"
+          fi
+
+      - name: Upload output artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-history-lite-custom-dates-output
+          path: |
+            ${{ github.event.inputs.json_out }}
+            ${{ github.event.inputs.csv_out }}
+          if-no-files-found: warn
