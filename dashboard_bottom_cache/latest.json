@@ -1,9 +1,9 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-03-08T11:10:08.159441Z",
-  "as_of_ts": "2026-03-08T19:10:08.159459+08:00",
-  "data_commit_sha": "301359be65ae072db14a91780853552c0b277e37",
+  "generated_at_utc": "2026-03-08T15:42:24.282990Z",
+  "as_of_ts": "2026-03-08T23:42:24.283007+08:00",
+  "data_commit_sha": "147fa8b3b734ad6a12f5ca62e343d8498f1ad9ff",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
@@ -185,11 +185,11 @@
   "history_audit": {
     "history_load_status": "OK",
     "history_load_reason": "dict.items",
-    "loaded_items": 30,
+    "loaded_items": 31,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260308T111008Z.json",
-    "backup_bytes": 27978,
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260308T154224Z.json",
+    "backup_bytes": 28923,
     "backup_keep_n": 30,
     "backup_prune": {
       "prune_status": "OK",
@@ -197,8 +197,8 @@
       "deleted": 1
     },
     "history_file_exists": true,
-    "history_pre_items": 30,
-    "history_pre_unique_days": 30,
+    "history_pre_items": 31,
+    "history_pre_unique_days": 31,
     "history_post_items": 31,
     "history_post_unique_days": 31,
     "history_write_status": "OK",

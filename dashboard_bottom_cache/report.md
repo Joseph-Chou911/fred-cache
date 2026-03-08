@@ -1,15 +1,15 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.10`
-- as_of_ts (TPE): `2026-03-08T19:10:08.159459+08:00`
-- run_ts_utc: `2026-03-08T11:10:08.159441Z`
+- as_of_ts (TPE): `2026-03-08T23:42:24.283007+08:00`
+- run_ts_utc: `2026-03-08T15:42:24.282990Z`
 - bottom_state (Global): **PANIC_BUT_SYSTEMIC**  (streak=5)
 - market_cache_as_of_ts: `2026-03-08T03:18:53Z`
 - market_cache_generated_at_utc: `2026-03-08T03:18:53Z`
-- history_load_status: `OK`; reason: `dict.items`; loaded_items: `30`
-- history_pre_items: `30`; history_post_items: `31`; pre_unique_days: `30`; post_unique_days: `31`
+- history_load_status: `OK`; reason: `dict.items`; loaded_items: `31`
+- history_pre_items: `31`; history_post_items: `31`; pre_unique_days: `31`; post_unique_days: `31`
 - history_write: status=`OK`; reason=`ok`; allow_reset=`False`; allow_shrink=`False`
-- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260308T111008Z.json`; bytes=`27978`; keep_n=`30`; prune_deleted=`1`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260308T154224Z.json`; bytes=`28923`; keep_n=`30`; prune_deleted=`1`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `1`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -55,7 +55,7 @@
 | 2026-03-05 | 2026-03-05T00:00:21.791540+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-03-06 | 2026-03-06T23:56:26.230083+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-03-07 | 2026-03-07T23:41:21.273825+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
-| 2026-03-08 | 2026-03-08T19:10:08.159459+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-03-08 | 2026-03-08T23:42:24.283007+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`

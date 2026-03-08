@@ -872,9 +872,9 @@
       "margin_confidence": "DOWNGRADED"
     },
     {
-      "run_ts_utc": "2026-03-08T15:42:24.282990Z",
-      "as_of_ts": "2026-03-08T23:42:24.283007+08:00",
-      "data_commit_sha": "147fa8b3b734ad6a12f5ca62e343d8498f1ad9ff",
+      "run_ts_utc": "2026-03-08T11:10:08.159441Z",
+      "as_of_ts": "2026-03-08T19:10:08.159459+08:00",
+      "data_commit_sha": "301359be65ae072db14a91780853552c0b277e37",
       "bottom_state_global": "PANIC_BUT_SYSTEMIC",
       "triggers_global": {
         "TRIG_PANIC": 1,
