@@ -1,15 +1,15 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.10`
-- as_of_ts (TPE): `2026-03-07T23:41:21.273825+08:00`
-- run_ts_utc: `2026-03-07T15:41:21.273808Z`
-- bottom_state (Global): **PANIC_BUT_SYSTEMIC**  (streak=4)
-- market_cache_as_of_ts: `2026-03-07T08:50:22Z`
-- market_cache_generated_at_utc: `2026-03-07T08:50:22Z`
-- history_load_status: `OK`; reason: `dict.items`; loaded_items: `29`
-- history_pre_items: `29`; history_post_items: `30`; pre_unique_days: `29`; post_unique_days: `30`
+- as_of_ts (TPE): `2026-03-08T19:10:08.159459+08:00`
+- run_ts_utc: `2026-03-08T11:10:08.159441Z`
+- bottom_state (Global): **PANIC_BUT_SYSTEMIC**  (streak=5)
+- market_cache_as_of_ts: `2026-03-08T03:18:53Z`
+- market_cache_generated_at_utc: `2026-03-08T03:18:53Z`
+- history_load_status: `OK`; reason: `dict.items`; loaded_items: `30`
+- history_pre_items: `30`; history_post_items: `31`; pre_unique_days: `30`; post_unique_days: `31`
 - history_write: status=`OK`; reason=`ok`; allow_reset=`False`; allow_shrink=`False`
-- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260307T154121Z.json`; bytes=`27033`; keep_n=`30`; prune_deleted=`1`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260308T111008Z.json`; bytes=`27978`; keep_n=`30`; prune_deleted=`1`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `1`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
@@ -26,7 +26,7 @@
 - SP500.p252: `67.85714285714286`; equity_extreme(p252>=95): `0`
 
 ## TW Local Gate (roll25 + margin)
-- tw_state: **NONE**  (streak=30)
+- tw_state: **NONE**  (streak=31)
 - UsedDate: `2026-03-06`; run_day_tag: `WEEKEND`; used_date_status: `OK_LATEST`
 - Lookback: `20/20`
 - roll25_raw: DownDay=`True`; VolumeAmplified=`False`; VolAmplified=`False`; NewLow_N=`0`; ConsecutiveBreak=`1`
@@ -46,7 +46,6 @@
 ## Recent History (last 10 buckets)
 | tpe_day | as_of_ts | bottom_state | TRIG_PANIC | TRIG_VETO | TRIG_REV | tw_state | tw_panic | tw_heat | tw_rev | margin_final | margin_conf |
 |---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|
-| 2026-02-25 | 2026-02-25T00:32:15.907695+08:00 | BOTTOM_WATCH | 1 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-26 | 2026-02-26T00:38:32.185218+08:00 | NONE | 0 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-02-27 | 2026-02-27T23:55:12.066505+08:00 | NONE | 0 | 1 | 0 | NONE | 0 | 1 | 0 | ALERT | DOWNGRADED |
 | 2026-02-28 | 2026-02-28T23:40:26.856407+08:00 | NONE | 0 | 1 | 0 | NONE | 0 | 1 | 0 | ALERT | DOWNGRADED |
@@ -56,6 +55,7 @@
 | 2026-03-05 | 2026-03-05T00:00:21.791540+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-03-06 | 2026-03-06T23:56:26.230083+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-03-07 | 2026-03-07T23:41:21.273825+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-03-08 | 2026-03-08T19:10:08.159459+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`
