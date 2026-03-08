@@ -1,0 +1,93 @@
+name: Compare history_lite (manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "Input JSON path"
+        required: false
+        default: "cache/history_lite.json"
+      series:
+        description: "Optional series_id filter, e.g. BAMLH0A0HYM2"
+        required: false
+        default: ""
+      periods:
+        description: "Comma-separated lookback days"
+        required: false
+        default: "7,30,90,180,365"
+      json_out:
+        description: "Optional JSON output path"
+        required: false
+        default: "cache/compare_history_lite_out.json"
+      csv_out:
+        description: "Optional CSV output path"
+        required: false
+        default: "cache/compare_history_lite_out.csv"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compare-history-lite-manual
+  cancel-in-progress: false
+
+jobs:
+  run-compare-history-lite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Show inputs
+        shell: bash
+        run: |
+          echo "file=${{ github.event.inputs.file }}"
+          echo "series=${{ github.event.inputs.series }}"
+          echo "periods=${{ github.event.inputs.periods }}"
+          echo "json_out=${{ github.event.inputs.json_out }}"
+          echo "csv_out=${{ github.event.inputs.csv_out }}"
+
+      - name: Create output directories
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "${{ github.event.inputs.json_out }}")"
+          mkdir -p "$(dirname "${{ github.event.inputs.csv_out }}")"
+
+      - name: Run compare_history_lite.py
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CMD=(
+            python tools/compare_history_lite.py
+            --file "${{ github.event.inputs.file }}"
+            --periods "${{ github.event.inputs.periods }}"
+            --json-out "${{ github.event.inputs.json_out }}"
+            --csv-out "${{ github.event.inputs.csv_out }}"
+          )
+
+          if [ -n "${{ github.event.inputs.series }}" ]; then
+            CMD+=( --series "${{ github.event.inputs.series }}" )
+          fi
+
+          printf 'Running command:\n'
+          printf '%q ' "${CMD[@]}"
+          printf '\n\n'
+
+          "${CMD[@]}"
+
+      - name: Upload output artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-history-lite-output
+          path: |
+            ${{ github.event.inputs.json_out }}
+            ${{ github.event.inputs.csv_out }}
+          if-no-files-found: warn
