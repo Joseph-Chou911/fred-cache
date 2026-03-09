@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-07T12:55:58Z`
+- report_generated_at_utc: `2026-03-09T01:17:00Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-07T12:55:58.199Z`
+- overlay_generated_at_utc: `2026-03-09T01:17:00.169Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260306` vs price_last_date=`2026-03-06` => **ALIGNED**
@@ -513,7 +513,7 @@
 
 ## Margin Overlay（融資）
 
-- overlay_generated_at_utc: `2026-03-06T15:04:45Z`
+- overlay_generated_at_utc: `2026-03-08T14:51:02Z`
 - data_date: `2026-03-06`
 - params: window_n=5, threshold_yi=100.00
 - date_alignment: margin_latest_date=`2026-03-06` vs price_last_date=`2026-03-06` => **ALIGNED**
@@ -549,7 +549,7 @@
 | 2026-03-03 | 78.7500 | 78.7500 | 288356288 |
 | 2026-03-04 | 75.6000 | 75.6000 | 455564304 |
 | 2026-03-05 | 77.4000 | 77.4000 | 194777972 |
-| 2026-03-06 | 76.8500 | 76.8500 | 139697065 |
+| 2026-03-06 | 76.8500 | 76.8500 | 151611764 |
 
 ## Data Quality Flags
 
