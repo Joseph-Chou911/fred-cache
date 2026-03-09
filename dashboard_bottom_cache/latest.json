@@ -1,14 +1,14 @@
 {
   "schema_version": "bottom_cache_v1_1",
   "renderer_version": "v0.1.10",
-  "generated_at_utc": "2026-03-08T15:42:24.282990Z",
-  "as_of_ts": "2026-03-08T23:42:24.283007+08:00",
-  "data_commit_sha": "147fa8b3b734ad6a12f5ca62e343d8498f1ad9ff",
+  "generated_at_utc": "2026-03-09T16:30:16.829122Z",
+  "as_of_ts": "2026-03-10T00:30:16.829140+08:00",
+  "data_commit_sha": "b841d5f1393be3002c35b58826b52acd1e1cadf6",
   "inputs": {
     "market_cache_stats_path": "market_cache/stats_latest.json",
     "market_cache_ok": true,
-    "market_cache_generated_at_utc": "2026-03-08T03:18:53Z",
-    "market_cache_as_of_ts": "2026-03-08T03:18:53Z",
+    "market_cache_generated_at_utc": "2026-03-09T03:22:08Z",
+    "market_cache_as_of_ts": "2026-03-09T03:22:08Z",
     "market_cache_script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
     "market_cache_ret1_mode": "delta+percent(abs_prev_denominator)",
     "market_cache_percentile_method": "P = count(x<=latest)/n * 100",
@@ -34,8 +34,8 @@
   "tw_local_gate": {
     "tw_state": "NONE",
     "UsedDate": "2026-03-06",
-    "run_day_tag": "WEEKEND",
-    "used_date_status": "OK_LATEST",
+    "run_day_tag": "WEEKDAY",
+    "used_date_status": "DATA_NOT_UPDATED",
     "lookback_n_actual": 20,
     "lookback_n_target": 20,
     "pct_change": -0.217979,
@@ -55,19 +55,19 @@
       "stress_consec_pair_required": true
     },
     "margin": {
-      "data_date": "2026-03-06",
+      "data_date": "2026-03-09",
       "unit": "億",
       "flow_signal": "NONE",
       "flow_dbg": {
         "chg_last5_yi": [
+          -107.2,
           35.2,
           25.5,
           -77.4,
-          -71.6,
-          17.6
+          -71.6
         ],
-        "sum_last5_yi": -70.69999999999999,
-        "pos_days_last5": 3,
+        "sum_last5_yi": -195.5,
+        "pos_days_last5": 2,
         "rule": "WATCH(sum5>=100.0 & pos_days>=4); ALERT(sum5>=150.0 & pos_days>=4)"
       },
       "level_gate": null,
@@ -78,8 +78,8 @@
       },
       "final_signal": "NONE",
       "confidence": "DOWNGRADED",
-      "latest_balance_yi": 3826.8,
-      "latest_chg_yi": 35.2
+      "latest_balance_yi": 3719.6,
+      "latest_chg_yi": -107.2
     },
     "triggers": {
       "TRIG_TW_PANIC": 0,
@@ -99,7 +99,7 @@
       "latest": {
         "data_date": "2026-03-06",
         "value": 29.49,
-        "as_of_ts": "2026-03-08T03:18:53Z",
+        "as_of_ts": "2026-03-09T03:22:08Z",
         "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
       },
       "w60": {
@@ -121,7 +121,7 @@
       "latest": {
         "data_date": "2026-03-06",
         "value": 6740.02,
-        "as_of_ts": "2026-03-08T03:18:53Z",
+        "as_of_ts": "2026-03-09T03:22:08Z",
         "source_url": "https://stooq.com/q/d/l/?s=^spx&i=d"
       },
       "w60": {
@@ -143,7 +143,7 @@
       "latest": {
         "data_date": "2026-03-06",
         "value": 0.8261883780001037,
-        "as_of_ts": "2026-03-08T03:18:53Z",
+        "as_of_ts": "2026-03-09T03:22:08Z",
         "source_url": "DERIVED"
       },
       "w60": {
@@ -165,7 +165,7 @@
       "latest": {
         "data_date": "2026-03-04",
         "value": -1.19,
-        "as_of_ts": "2026-03-08T03:18:53Z",
+        "as_of_ts": "2026-03-09T03:22:08Z",
         "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv"
       },
       "w60": {
@@ -188,7 +188,7 @@
     "loaded_items": 31,
     "backup_status": "OK",
     "backup_reason": "copied_pre_write",
-    "backup_path": "dashboard_bottom_cache/history.json.bak.20260308T154224Z.json",
+    "backup_path": "dashboard_bottom_cache/history.json.bak.20260309T163016Z.json",
     "backup_bytes": 28923,
     "backup_keep_n": 30,
     "backup_prune": {
@@ -199,8 +199,8 @@
     "history_file_exists": true,
     "history_pre_items": 31,
     "history_pre_unique_days": 31,
-    "history_post_items": 31,
-    "history_post_unique_days": 31,
+    "history_post_items": 32,
+    "history_post_unique_days": 32,
     "history_write_status": "OK",
     "history_write_reason": "ok",
     "history_reset": false,
