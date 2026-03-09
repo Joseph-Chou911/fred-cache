@@ -1,18 +1,18 @@
 {
   "schema_version": "tw_margin_signals_latest_v1",
   "module": "taiwan_margin_financing",
-  "generated_at_utc": "2026-03-08T14:51:02Z",
+  "generated_at_utc": "2026-03-09T15:31:24Z",
   "generated_at_local": null,
-  "data_date": "2026-03-06",
+  "data_date": "2026-03-09",
   "state": "中性",
   "signal": "NONE",
   "margin_quality": "OK",
   "rationale": "no rule triggered",
   "resonance": "MARKET_SHOCK_ONLY",
   "resonance_display": "MARKET_SHOCK_ONLY",
-  "resonance_confidence": "OK",
-  "resonance_code": null,
-  "resonance_note": null,
+  "resonance_confidence": "DOWNGRADED",
+  "resonance_code": "ROLL25_STALE",
+  "resonance_note": "roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）",
   "thresholds": {
     "policy": "percentile",
     "calib_min_n": 60,
@@ -57,145 +57,145 @@
       "items": {
         "expansion20": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 33,
+          "sample_n": 34,
           "percentile": 90.0,
           "threshold": 8.0,
-          "reason": "insufficient samples (n=33 < calib_min_n=60)"
+          "reason": "insufficient samples (n=34 < calib_min_n=60)"
         },
         "contraction20": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 33,
+          "sample_n": 34,
           "percentile": 10.0,
           "threshold": -8.0,
-          "reason": "insufficient samples (n=33 < calib_min_n=60)"
+          "reason": "insufficient samples (n=34 < calib_min_n=60)"
         },
         "watch1d": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 52,
+          "sample_n": 53,
           "percentile": 90.0,
           "threshold": 0.8,
-          "reason": "insufficient samples (n=52 < calib_min_n=60)"
+          "reason": "insufficient samples (n=53 < calib_min_n=60)"
         },
         "watchspread20": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 33,
+          "sample_n": 34,
           "percentile": 90.0,
           "threshold": 3.0,
-          "reason": "insufficient samples (n=33 < calib_min_n=60)"
+          "reason": "insufficient samples (n=34 < calib_min_n=60)"
         },
         "watchaccel": {
           "status": "FALLBACK_FIXED",
-          "sample_n": 48,
+          "sample_n": 49,
           "percentile": 90.0,
           "threshold": 0.25,
-          "reason": "insufficient samples (n=48 < calib_min_n=60)"
+          "reason": "insufficient samples (n=49 < calib_min_n=60)"
         }
       },
       "mode": "percentile",
       "distributions": {
-        "total_series_rows": 53,
-        "dist_total_20d_pct_n": 33,
-        "dist_total_1d_pct_n": 52,
-        "dist_spread20_n": 33,
-        "dist_accel_n": 48
+        "total_series_rows": 54,
+        "dist_total_20d_pct_n": 34,
+        "dist_total_1d_pct_n": 53,
+        "dist_spread20_n": 34,
+        "dist_accel_n": 49
       }
     }
   },
   "margin": {
-    "twse_meta_date": "2026-03-06",
-    "tpex_meta_date": "2026-03-06",
+    "twse_meta_date": "2026-03-09",
+    "tpex_meta_date": "2026-03-09",
     "twse": {
-      "latest_balance_yi": 3826.8,
+      "latest_balance_yi": 3719.6,
       "h1": {
-        "delta": 35.100000000000364,
-        "pct": 0.9257061476382722,
-        "base_date": "2026-03-05",
-        "latest": 3826.8,
-        "base": 3791.7
+        "delta": -107.20000000000027,
+        "pct": -2.8012961220863457,
+        "base_date": "2026-03-06",
+        "latest": 3719.6,
+        "base": 3826.8
       },
       "h5": {
-        "delta": -71.79999999999973,
-        "pct": -1.841686759349503,
-        "base_date": "2026-02-26",
-        "latest": 3826.8,
-        "base": 3898.6
+        "delta": -196.5999999999999,
+        "pct": -5.020172616311728,
+        "base_date": "2026-03-02",
+        "latest": 3719.6,
+        "base": 3916.2
       },
       "h20": {
-        "delta": -0.5,
-        "pct": -0.013064039923706005,
-        "base_date": "2026-01-27",
-        "latest": 3826.8,
-        "base": 3827.3
+        "delta": -129.5999999999999,
+        "pct": -3.366933388756103,
+        "base_date": "2026-01-28",
+        "latest": 3719.6,
+        "base": 3849.2
       },
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg"
       },
-      "rows_series": 53,
+      "rows_series": 54,
       "rows_latest_table": 30
     },
     "tpex": {
-      "latest_balance_yi": 1393.1,
+      "latest_balance_yi": 1315.7,
       "h1": {
-        "delta": 9.199999999999818,
-        "pct": 0.6647879182021691,
-        "base_date": "2026-03-05",
-        "latest": 1393.1,
-        "base": 1383.9
+        "delta": -77.39999999999986,
+        "pct": -5.5559543464216405,
+        "base_date": "2026-03-06",
+        "latest": 1315.7,
+        "base": 1393.1
       },
       "h5": {
-        "delta": 14.599999999999909,
-        "pct": 1.059122234312652,
-        "base_date": "2026-02-26",
-        "latest": 1393.1,
-        "base": 1378.5
+        "delta": -73.39999999999986,
+        "pct": -5.283996832481453,
+        "base_date": "2026-03-02",
+        "latest": 1315.7,
+        "base": 1389.1
       },
       "h20": {
-        "delta": 58.59999999999991,
-        "pct": 4.391157736980135,
-        "base_date": "2026-01-27",
-        "latest": 1393.1,
-        "base": 1334.5
+        "delta": -43.0,
+        "pct": -3.164789872672407,
+        "base_date": "2026-01-28",
+        "latest": 1315.7,
+        "base": 1358.7
       },
       "source": {
         "vendor": "HiStock",
         "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI"
       },
-      "rows_series": 53,
+      "rows_series": 54,
       "rows_latest_table": 30
     },
     "total": {
       "h1": {
-        "delta": 44.29999999999927,
-        "pct": 0.85593940799133,
-        "base_date": "2026-03-05",
-        "latest": 5219.9,
-        "base": 5175.6,
+        "delta": -184.59999999999945,
+        "pct": -3.536466215827879,
+        "base_date": "2026-03-06",
+        "latest": 5035.3,
+        "base": 5219.9,
         "ok": true,
         "reason": ""
       },
       "h5": {
-        "delta": -57.20000000000073,
-        "pct": -1.0839286729453814,
-        "base_date": "2026-02-26",
-        "latest": 5219.9,
-        "base": 5277.1,
+        "delta": -269.9999999999991,
+        "pct": -5.089250372269224,
+        "base_date": "2026-03-02",
+        "latest": 5035.3,
+        "base": 5305.299999999999,
         "ok": true,
         "reason": ""
       },
       "h20": {
-        "delta": 58.099999999999454,
-        "pct": 1.1255763493354924,
-        "base_date": "2026-01-27",
-        "latest": 5219.9,
-        "base": 5161.8,
+        "delta": -172.59999999999945,
+        "pct": -3.314195741085648,
+        "base_date": "2026-01-28",
+        "latest": 5035.3,
+        "base": 5207.9,
         "ok": true,
         "reason": ""
       }
     },
     "derived": {
-      "accel": 1.0727251425804063,
-      "spread20": 4.404221776903841
+      "accel": -2.518616141374034,
+      "spread20": 0.20214351608369574
     }
   },
   "roll25": {
@@ -203,15 +203,15 @@
     "ok": true,
     "error": null,
     "used_date": "2026-03-06",
-    "used_date_status": "OK_LATEST",
-    "risk_level_display": "中(derived)",
+    "used_date_status": "DATA_NOT_UPDATED",
+    "risk_level_display": "中(derived)（stale）",
     "risk_level_raw": "NA",
-    "tag": "WEEKEND",
+    "tag": "WEEKDAY",
     "is_heated": true,
     "lookback_note": null,
-    "strict_same_day": true,
-    "strict_not_stale": true,
-    "strict_roll_match": true
+    "strict_same_day": false,
+    "strict_not_stale": false,
+    "strict_roll_match": false
   },
   "maint_ratio": {
     "policy": "PROXY_TREND_ONLY",
@@ -221,11 +221,11 @@
     "ok_latest": true,
     "ok_history": true,
     "latest": {
-      "data_date": "2026-03-06",
-      "maint_ratio_pct": 177.554105,
-      "maint_ratio_1d_delta_pctpt": -0.851128000000017,
-      "maint_ratio_1d_pct_change": -0.4770756920566433,
-      "trend_note": "trend_from: today=177.554105(2026-03-06), prev=178.405233(2026-03-05)"
+      "data_date": null,
+      "maint_ratio_pct": null,
+      "maint_ratio_1d_delta_pctpt": null,
+      "maint_ratio_1d_pct_change": null,
+      "trend_note": "maint_latest.maint_ratio_pct missing/non-numeric"
     },
     "history": {
       "rows": 21,
