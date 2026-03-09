@@ -1,6 +1,6 @@
 {
   "name": "VXN_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-03-09T15:39:32Z",
+  "generated_at_utc": "2026-03-09T23:07:41Z",
   "meta": {
     "attempt_errors": [],
     "selected_source": "cboe",
@@ -10,9 +10,9 @@
     "index_code": "VXN",
     "date_col": "DATE",
     "value_col": "CLOSE",
-    "rows": 4138,
+    "rows": 4139,
     "min_date": "2009-09-14",
-    "max_date": "2026-03-06"
+    "max_date": "2026-03-09"
   },
   "params": {
     "length": 60,
@@ -21,21 +21,21 @@
     "ddof": 0
   },
   "latest": {
-    "date": "2026-03-06",
-    "close": 31.44,
-    "bb_mid": 21.871097029278236,
-    "bb_lower": 16.643319731631102,
-    "bb_upper": 28.740953906869628,
-    "z": 2.657188880426359,
+    "date": "2026-03-09",
+    "close": 27.69,
+    "bb_mid": 21.976346505526056,
+    "bb_lower": 16.619717527166387,
+    "bb_upper": 29.059447306580704,
+    "z": 1.6544288536706775,
     "trigger_z_le_-2": false,
-    "trigger_z_ge_2": true,
-    "distance_to_lower_pct": 47.06323240575349,
-    "distance_to_upper_pct": -8.584752204613148,
-    "position_in_band": 1.0,
-    "bandwidth_pct": 0.553133396054334,
+    "trigger_z_ge_2": false,
+    "distance_to_lower_pct": 39.97935165342584,
+    "distance_to_upper_pct": 4.945638521418213,
+    "position_in_band": 0.8899134200771056,
+    "bandwidth_pct": 0.5660508572835931,
     "walk_lower_count": 0,
-    "walk_upper_count": 1,
-    "bandwidth_delta_pct": 6.621164162172999
+    "walk_upper_count": 0,
+    "bandwidth_delta_pct": 2.3353247736266125
   },
   "historical_simulation": {
     "C_poswatch": {
@@ -111,6 +111,6 @@
       }
     }
   },
-  "action_output": "UPPER_BAND_TOUCH (STRESS)",
-  "trigger_reason": "z>=2"
+  "action_output": "NEAR_UPPER_BAND (WATCH)",
+  "trigger_reason": "position_in_band>=0.8 (pos=0.890)"
 }
