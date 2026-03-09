@@ -637,6 +637,19 @@
         "SP500": "ALERT",
         "HYG_IEF_RATIO": "NONE"
       }
+    },
+    {
+      "run_ts_utc": "2026-03-09T16:11:16.022976+00:00",
+      "stats_as_of_ts": "2026-03-09T03:22:08Z",
+      "module": "market_cache",
+      "ruleset_id": "signals_v8",
+      "script_fingerprint": "render_dashboard_py_signals_v8@715ef1f",
+      "series_signals": {
+        "OFR_FSI": "ALERT",
+        "VIX": "ALERT",
+        "SP500": "ALERT",
+        "HYG_IEF_RATIO": "NONE"
+      }
     }
   ]
 }
