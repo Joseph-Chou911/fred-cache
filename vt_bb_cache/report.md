@@ -1,6 +1,6 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-03-06T23:43:06Z`
+- report_generated_at_utc: `2026-03-09T01:18:10Z`
 - data_date: `2026-03-06`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`, sidecar=`forward_mdd(10D)`
@@ -34,7 +34,7 @@
 ## forward_mdd(20D) 切片分布（閱讀用；不回填主欄位）
 
 - Slice A（pos≥0.80）：p50=-1.511%、p10=-5.421%、p5=-6.987%、min=-31.285% (n=1713, conf=HIGH, conf_decision=OK, min_n_required=200)
-- Slice B（dist_to_upper≤2.0%）：p50=-1.446%、p10=-5.476%、p5=-6.987%、min=-31.285% (n=1753, conf=HIGH, conf_decision=OK, min_n_required=200)
+- Slice B（dist_to_upper≤2.0%）：p50=-1.447%、p10=-5.476%、p5=-6.987%、min=-31.285% (n=1753, conf=HIGH, conf_decision=OK, min_n_required=200)
 - 注意：conf_decision 低於 OK 時，代表樣本數不足以支撐「拿來做決策」；仍可作為閱讀參考。
 
 ## forward_mdd(20D) 交集切片（bucket 內；閱讀用；不回填主欄位）
