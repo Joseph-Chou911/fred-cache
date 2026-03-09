@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-03-06T07:50:25Z",
+  "generated_at_utc": "2026-03-09T07:56:16Z",
   "schema_version": "v26.9",
   "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
   "inputs": {
@@ -18,9 +18,9 @@
         "idx": 1238,
         "break_date": "2014-01-02",
         "prev_date": "2013-12-31",
-        "prev_price": 37.41240692138672,
+        "prev_price": 37.41240310668945,
         "price": 9.329200744628906,
-        "ratio": 0.24936114814082944
+        "ratio": 0.24936117356654955
       }
     ],
     "break_samples_source": "detect_breaks_from_price",
@@ -76,7 +76,7 @@
     {
       "strategy_id": "bb_conditional",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:25Z",
+      "generated_at_utc": "2026-03-09T07:56:16Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -104,15 +104,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.024428534859147612,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.024428532582714584,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.04559444477176545,
+        "interest_paid_total": 0.04559443885656209,
         "trades": 22,
         "skipped_entries_on_forbidden": 18,
         "skipped_entries_on_nonpositive_equity": 0,
@@ -130,7 +130,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 0,
-        "equity_min": 0.5601198665273607,
+        "equity_min": 0.5601201406391305,
         "open_at_end": false,
         "forced_eod_close": 0,
         "exit_count_by_exit_z": 21,
@@ -154,24 +154,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.026944934726024657,
-        "exit_cost_total": 0.041574430281541695,
-        "cost_paid_total": 0.06851936500756635,
+        "entry_cost_total": 0.026944931587244245,
+        "exit_cost_total": 0.04157442681618625,
+        "cost_paid_total": 0.0685193584034305,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 1.0,
-          "end": 3.856663672811619,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.0843789600439826,
-          "vol_ann": 0.2772579771476732,
-          "sharpe0": 0.4874570009106873,
+          "end": 3.6978783194539417,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08160589424507148,
+          "vol_ann": 0.2774152416232147,
+          "sharpe0": 0.47808068463085124,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7142128665798135,
+          "mdd": -0.7142127001459743,
           "mdd_peak": "2011-06-01",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
@@ -179,26 +179,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.11814259304519716,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.010476190476190476,
+        "calmar_leverage": 0.11425993156995454,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.010471204188481676,
         "delta_vs_base": {
-          "cagr": 0.0017429036244771545,
-          "mdd": 0.059146238692121544,
-          "sharpe0": -0.01130712815260887
+          "cagr": 0.0018132300740352214,
+          "mdd": 0.05914631242847179,
+          "sharpe0": -0.011177709258379187
         }
       },
       "segmentation": {
@@ -217,11 +217,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:25Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -252,12 +252,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.024428534859147612,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.024428532582714584,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.0182044996825569,
+                "interest_paid_total": 0.018204497830813432,
                 "trades": 7,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -275,7 +275,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.912686327171685,
+                "equity_min": 0.9126864284956805,
                 "open_at_end": false,
                 "forced_eod_close": 0,
                 "exit_count_by_exit_z": 7,
@@ -299,9 +299,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.010895839735312189,
-                "exit_cost_total": 0.017058793411497113,
-                "cost_paid_total": 0.0279546331468093,
+                "entry_cost_total": 0.010895838450877816,
+                "exit_cost_total": 0.01705879209440486,
+                "cost_paid_total": 0.027954630545282678,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -315,15 +315,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.9535910781703518,
+                "end": 1.9535909428657143,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.14616791849706035,
-                "vol_ann": 0.27667664021673005,
-                "sharpe0": 0.6305287502187106,
+                "cagr": 0.14616790232526933,
+                "vol_ann": 0.27667656003203,
+                "sharpe0": 0.630528809782665,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.265819454752957,
+                "mdd": -0.2658193598703782,
                 "mdd_peak": "2011-06-01",
                 "mdd_trough": "2012-06-04",
                 "mdd_warning": null
@@ -331,41 +331,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.5498766771337468,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.5498768125713092,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.011308562197092083,
               "delta_vs_base": {
-                "cagr": 0.015428079037434816,
-                "mdd": -0.007724218509916336,
-                "sharpe0": 0.04016329004511787
+                "cagr": 0.015428107819202008,
+                "mdd": -0.007724122052969462,
+                "sharpe0": 0.040163349972332285
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:25Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -393,15 +393,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.05424366838368067,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.06081949273801388,
+                "interest_paid_total": 0.06081948938269703,
                 "trades": 15,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -419,7 +419,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9645634753905752,
+                "equity_min": 0.9645636823137487,
                 "open_at_end": false,
                 "forced_eod_close": 0,
                 "exit_count_by_exit_z": 14,
@@ -443,9 +443,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.03563708554581625,
-                "exit_cost_total": 0.05443707877942848,
-                "cost_paid_total": 0.09007416432524473,
+                "entry_cost_total": 0.03563708474916204,
+                "exit_cost_total": 0.05443707908205363,
+                "cost_paid_total": 0.09007416383121566,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -459,15 +459,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.284553399935696,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.1972282722817571,
-                "vol_ann": 0.2085117424252036,
-                "sharpe0": 0.9677654882273079,
+                "end": 7.93197007659905,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19266157615101154,
+                "vol_ann": 0.20889550622785263,
+                "sharpe0": 0.9480718439681306,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.4136536781776985,
+                "mdd": -0.4136534777729173,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -475,26 +475,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.4767956449719546,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.010131712259371834,
+              "calmar_leverage": 0.4657559684697651,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.010124873439082012,
               "delta_vs_base": {
-                "cagr": -0.000646476296686016,
-                "mdd": -0.07537728179069725,
-                "sharpe0": -0.10425266444385506
+                "cagr": -0.0006720898272947196,
+                "mdd": -0.07537713906616861,
+                "sharpe0": -0.10125262604051244
               }
             }
           }
@@ -504,22 +504,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.14616791849706035,
-              "sharpe0": 0.6305287502187106,
-              "mdd": -0.265819454752957,
-              "calmar": 0.5498766771337468
+              "cagr": 0.14616790232526933,
+              "sharpe0": 0.630528809782665,
+              "mdd": -0.2658193598703782,
+              "calmar": 0.5498768125713092
             },
             "post": {
-              "cagr": 0.1972282722817571,
-              "sharpe0": 0.9677654882273079,
-              "mdd": -0.4136536781776985,
-              "calmar": 0.4767956449719546
+              "cagr": 0.19266157615101154,
+              "sharpe0": 0.9480718439681306,
+              "mdd": -0.4136534777729173,
+              "calmar": 0.4657559684697651
             },
             "delta_post_minus_pre": {
-              "cagr": 0.051060353784696755,
-              "sharpe0": 0.3372367380085973,
-              "mdd": -0.1478342234247415,
-              "calmar": -0.07308103216179218
+              "cagr": 0.04649367382574221,
+              "sharpe0": 0.3175430341854656,
+              "mdd": -0.1478341179025391,
+              "calmar": -0.08412084410154408
             }
           },
           "notes": [
@@ -541,20 +541,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.1972282722817571,
-            "mdd": -0.4136536781776985,
-            "sharpe0": 0.9677654882273079
+            "cagr": 0.19266157615101154,
+            "mdd": -0.4136534777729173,
+            "sharpe0": 0.9480718439681306
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": -0.000646476296686016,
-            "sharpe0": -0.10425266444385506
+            "cagr": -0.0006720898272947196,
+            "sharpe0": -0.10125262604051244
           },
-          "delta_abs_mdd": 0.07537728179069725
+          "delta_abs_mdd": 0.07537713906616861
         },
         "reasons": [
           "all 3 post conditions met => stop / do not deploy"
@@ -583,7 +583,7 @@
     {
       "strategy_id": "always_leverage_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:25Z",
+      "generated_at_utc": "2026-03-09T07:56:16Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -611,15 +611,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.004885706971829527,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.004885706516542921,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.07395623405659522,
+        "interest_paid_total": 0.07404194144800268,
         "trades": 69,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 0,
@@ -637,7 +637,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 0,
-        "equity_min": 0.32461660323496844,
+        "equity_min": 0.3246167312992344,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -661,24 +661,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.01717299087999907,
-        "exit_cost_total": 0.02682233954306647,
-        "cost_paid_total": 0.043995330423065554,
+        "entry_cost_total": 0.017172989100305878,
+        "exit_cost_total": 0.026775892023414682,
+        "cost_paid_total": 0.04394888112372057,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 0.9998075,
-          "end": 3.8857105584593956,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08487991176491172,
-          "vol_ann": 0.3152037195572851,
-          "sharpe0": 0.5169114773638036,
+          "end": 3.711006919309831,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08184835133064339,
+          "vol_ann": 0.3153666386806646,
+          "sharpe0": 0.5078860593754944,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.836444768147454,
+          "mdd": -0.8364446560972657,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
@@ -686,26 +686,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.10147700720622897,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.03261904761904762,
+        "calmar_leverage": 0.09785268007154999,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.032603522132317944,
         "delta_vs_base": {
-          "cagr": 0.002243855345406276,
-          "mdd": -0.06308566287551898,
-          "sharpe0": 0.01814734830050746
+          "cagr": 0.0020556871596071336,
+          "mdd": -0.06308564352281965,
+          "sharpe0": 0.018627665486263933
         }
       },
       "segmentation": {
@@ -724,11 +724,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:25Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -759,12 +759,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.004885706971829527,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.004885706516542921,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.027013835532593775,
+                "interest_paid_total": 0.02701383319385234,
                 "trades": 21,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -782,7 +782,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9036235709999645,
+                "equity_min": 0.9036236824563597,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -806,9 +806,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.006485706027607538,
-                "exit_cost_total": 0.010068655728415208,
-                "cost_paid_total": 0.016554361756022744,
+                "entry_cost_total": 0.00648570538734392,
+                "exit_cost_total": 0.010068654844657451,
+                "cost_paid_total": 0.01655436023200137,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -822,15 +822,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 0.9998075,
-                "end": 1.8573699022853583,
+                "end": 1.8573695799046046,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13447951715444684,
-                "vol_ann": 0.29327502537316336,
-                "sharpe0": 0.5756195325683854,
+                "cagr": 0.134479477040238,
+                "vol_ann": 0.2932748996480157,
+                "sharpe0": 0.5756195449798256,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.2803309851845116,
+                "mdd": -0.28033097010199226,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -838,41 +838,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.47971692128836024,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.4797168040024639,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.033117932148626815,
               "delta_vs_base": {
-                "cagr": 0.0037396776948213084,
-                "mdd": -0.022235748941470956,
-                "sharpe0": -0.01474592760520732
+                "cagr": 0.003739682534170674,
+                "mdd": -0.02223573228458353,
+                "sharpe0": -0.014745914830507134
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:25Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -900,15 +900,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.010848733676736144,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.10256020157857931,
+                "interest_paid_total": 0.10276850884965137,
                 "trades": 49,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -926,7 +926,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9605912118185216,
+                "equity_min": 0.9605914394340125,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -950,9 +950,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.0243650772982207,
-                "exit_cost_total": 0.03918202827594823,
-                "cost_paid_total": 0.06354710557416893,
+                "entry_cost_total": 0.024365076939726303,
+                "exit_cost_total": 0.03907889707775856,
+                "cost_paid_total": 0.06344397401748486,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -966,15 +966,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 0.9998075,
-                "end": 8.909526568364132,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.2046839386240209,
-                "vol_ann": 0.19584534769565964,
-                "sharpe0": 1.0492136343604457,
+                "end": 8.521579205091067,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.1999788060856149,
+                "vol_ann": 0.19629193495343703,
+                "sharpe0": 1.027331691861529,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.3551951639637867,
+                "mdd": -0.3551950946712136,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -982,26 +982,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.576257672936361,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.03275920297196893,
+              "calmar_leverage": 0.5630111707221783,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.03273709078636517,
               "delta_vs_base": {
-                "cagr": 0.006809190045577784,
-                "mdd": -0.016918767576785454,
-                "sharpe0": -0.02280451831071728
+                "cagr": 0.006645140107308656,
+                "mdd": -0.016918755964464904,
+                "sharpe0": -0.02199277814711409
               }
             }
           }
@@ -1011,22 +1011,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.13447951715444684,
-              "sharpe0": 0.5756195325683854,
-              "mdd": -0.2803309851845116,
-              "calmar": 0.47971692128836024
+              "cagr": 0.134479477040238,
+              "sharpe0": 0.5756195449798256,
+              "mdd": -0.28033097010199226,
+              "calmar": 0.4797168040024639
             },
             "post": {
-              "cagr": 0.2046839386240209,
-              "sharpe0": 1.0492136343604457,
-              "mdd": -0.3551951639637867,
-              "calmar": 0.576257672936361
+              "cagr": 0.1999788060856149,
+              "sharpe0": 1.027331691861529,
+              "mdd": -0.3551950946712136,
+              "calmar": 0.5630111707221783
             },
             "delta_post_minus_pre": {
-              "cagr": 0.07020442146957406,
-              "sharpe0": 0.4735941017920603,
-              "mdd": -0.07486417877927509,
-              "calmar": 0.09654075164800074
+              "cagr": 0.06549932904537692,
+              "sharpe0": 0.45171214688170336,
+              "mdd": -0.07486412456922131,
+              "calmar": 0.08329436671971441
             }
           },
           "notes": [
@@ -1048,20 +1048,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.2046839386240209,
-            "mdd": -0.3551951639637867,
-            "sharpe0": 1.0492136343604457
+            "cagr": 0.1999788060856149,
+            "mdd": -0.3551950946712136,
+            "sharpe0": 1.027331691861529
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.006809190045577784,
-            "sharpe0": -0.02280451831071728
+            "cagr": 0.006645140107308656,
+            "sharpe0": -0.02199277814711409
           },
-          "delta_abs_mdd": 0.016918767576785454
+          "delta_abs_mdd": 0.016918755964464904
         },
         "reasons": [
           "all 3 post conditions met => stop / do not deploy"
@@ -1090,7 +1090,7 @@
     {
       "strategy_id": "always_leverage_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:25Z",
+      "generated_at_utc": "2026-03-09T07:56:16Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -1118,15 +1118,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.009771413943659043,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.009771413033085832,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.14791246811319045,
+        "interest_paid_total": 0.1480838828960048,
         "trades": 69,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 0,
@@ -1144,7 +1144,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 0,
-        "equity_min": 0.21484384482550645,
+        "equity_min": 0.21484404824622216,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -1168,24 +1168,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.034345981759998104,
-        "exit_cost_total": 0.05364467908613291,
-        "cost_paid_total": 0.08799066084613098,
+        "entry_cost_total": 0.034345978200611714,
+        "exit_cost_total": 0.0535517840468293,
+        "cost_paid_total": 0.08789776224744099,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 0.9996149999999999,
-          "end": 4.016755383617776,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08705417520879766,
-          "vol_ann": 0.3569216860532229,
-          "sharpe0": 0.5471714282299651,
+          "end": 3.8261339169940416,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08384534967686008,
+          "vol_ann": 0.357074171742334,
+          "sharpe0": 0.5387464823911838,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.8953442742717763,
+          "mdd": -0.8953441444848514,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
@@ -1193,26 +1193,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.09722983405417177,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.03261904761904762,
+        "calmar_leverage": 0.09364594630269421,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.032603522132317944,
         "delta_vs_base": {
-          "cagr": 0.004418118789292214,
-          "mdd": -0.12198516899984124,
-          "sharpe0": 0.04840729916666897
+          "cagr": 0.004052685505823828,
+          "mdd": -0.12198513191040539,
+          "sharpe0": 0.04948808850195341
         }
       },
       "segmentation": {
@@ -1231,11 +1231,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:25Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1266,12 +1266,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.009771413943659043,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.009771413033085832,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.05402767106518755,
+                "interest_paid_total": 0.054027666387704426,
                 "trades": 21,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -1289,7 +1289,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.8945608148282442,
+                "equity_min": 0.8945609364170388,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -1313,9 +1313,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.012971412055215063,
-                "exit_cost_total": 0.020137311456830394,
-                "cost_paid_total": 0.03310872351204545,
+                "entry_cost_total": 0.012971410774687825,
+                "exit_cost_total": 0.020137309689314882,
+                "cost_paid_total": 0.03310872046400269,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -1329,15 +1329,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 0.9996149999999999,
-                "end": 1.886879231283295,
+                "end": 1.8868789432303783,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13817303509026235,
-                "vol_ann": 0.31738715721959687,
-                "sharpe0": 0.5648964627933187,
+                "cagr": 0.13817299969319086,
+                "vol_ann": 0.3173870200887955,
+                "sharpe0": 0.5648964862089003,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.3010912430824324,
+                "mdd": -0.3010912125652647,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -1345,41 +1345,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.45890751811879665,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.45890744706885256,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.033117932148626815,
               "delta_vs_base": {
-                "cagr": 0.007433195630636824,
-                "mdd": -0.042996006839391754,
-                "sharpe0": -0.025468997380273972
+                "cagr": 0.007433205187123537,
+                "mdd": -0.04299597474785599,
+                "sharpe0": -0.02546897360143241
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1407,15 +1407,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.021697467353472263,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.20512040315715863,
+                "interest_paid_total": 0.20553701769930272,
                 "trades": 49,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -1433,7 +1433,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.956618948246468,
+                "equity_min": 0.9566191965542761,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -1457,9 +1457,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.048730154596441345,
-                "exit_cost_total": 0.07836405655189636,
-                "cost_paid_total": 0.1270942111483377,
+                "entry_cost_total": 0.048730153879452544,
+                "exit_cost_total": 0.07815779415551702,
+                "cost_paid_total": 0.12688794803496953,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -1473,15 +1473,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 0.9996149999999999,
-                "end": 9.481801471695084,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.21110549002713763,
-                "vol_ann": 0.2067797425684369,
-                "sharpe0": 1.0301065651514112,
+                "end": 9.05849058964288,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.2062526759982659,
+                "vol_ann": 0.20722618268719947,
+                "sharpe0": 1.008954166034766,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.3705350740567621,
+                "mdd": -0.3705349948711876,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -1489,26 +1489,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.5697314635180757,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.03275920297196893,
+              "calmar_leverage": 0.5566348087310009,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.03273709078636517,
               "delta_vs_base": {
-                "cagr": 0.013230741448694516,
-                "mdd": -0.03225867766976087,
-                "sharpe0": -0.04191158751975177
+                "cagr": 0.012919010019959654,
+                "mdd": -0.032258656164438904,
+                "sharpe0": -0.040370303973876975
               }
             }
           }
@@ -1518,22 +1518,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.13817303509026235,
-              "sharpe0": 0.5648964627933187,
-              "mdd": -0.3010912430824324,
-              "calmar": 0.45890751811879665
+              "cagr": 0.13817299969319086,
+              "sharpe0": 0.5648964862089003,
+              "mdd": -0.3010912125652647,
+              "calmar": 0.45890744706885256
             },
             "post": {
-              "cagr": 0.21110549002713763,
-              "sharpe0": 1.0301065651514112,
-              "mdd": -0.3705350740567621,
-              "calmar": 0.5697314635180757
+              "cagr": 0.2062526759982659,
+              "sharpe0": 1.008954166034766,
+              "mdd": -0.3705349948711876,
+              "calmar": 0.5566348087310009
             },
             "delta_post_minus_pre": {
-              "cagr": 0.07293245493687528,
-              "sharpe0": 0.46521010235809246,
-              "mdd": -0.06944383097432971,
-              "calmar": 0.11082394539927903
+              "cagr": 0.06807967630507505,
+              "sharpe0": 0.44405767982586575,
+              "mdd": -0.06944378230592285,
+              "calmar": 0.09772736166214835
             }
           },
           "notes": [
@@ -1555,20 +1555,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.21110549002713763,
-            "mdd": -0.3705350740567621,
-            "sharpe0": 1.0301065651514112
+            "cagr": 0.2062526759982659,
+            "mdd": -0.3705349948711876,
+            "sharpe0": 1.008954166034766
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.013230741448694516,
-            "sharpe0": -0.04191158751975177
+            "cagr": 0.012919010019959654,
+            "sharpe0": -0.040370303973876975
           },
-          "delta_abs_mdd": 0.03225867766976087
+          "delta_abs_mdd": 0.032258656164438904
         },
         "reasons": [
           "delta_cagr not below threshold"
@@ -1597,7 +1597,7 @@
     {
       "strategy_id": "always_leverage_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:26Z",
+      "generated_at_utc": "2026-03-09T07:56:16Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -1625,15 +1625,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.01465712091548857,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.014657119549628752,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.22186870216978943,
+        "interest_paid_total": 0.22212582434400796,
         "trades": 69,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 0,
@@ -1651,7 +1651,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 0,
-        "equity_min": 0.10507108641604623,
+        "equity_min": 0.10507136519320748,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -1675,24 +1675,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.05151897263999718,
-        "exit_cost_total": 0.08046701862919939,
-        "cost_paid_total": 0.13198599126919652,
+        "entry_cost_total": 0.05151896730091757,
+        "exit_cost_total": 0.08032767607024398,
+        "cost_paid_total": 0.13184664337116153,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
-          "start": 0.9994225000000003,
-          "end": 4.14780020877615,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08916318701520809,
-          "vol_ann": 0.42120538198654317,
-          "sharpe0": 0.5973282722626798,
+          "start": 0.9994225000000001,
+          "end": 3.941260914678255,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08578703903385976,
+          "vol_ann": 0.4213299290909374,
+          "sharpe0": 0.5898185220120125,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.9504609125396207,
+          "mdd": -0.9504607664453076,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
@@ -1700,26 +1700,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.09381047220233925,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.03261904761904762,
+        "calmar_leverage": 0.09025836947978452,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.032603522132317944,
         "delta_vs_base": {
-          "cagr": 0.006527130595702646,
-          "mdd": -0.17710180726768565,
-          "sharpe0": 0.09856414319938367
+          "cagr": 0.005994374862823504,
+          "mdd": -0.17710175387086158,
+          "sharpe0": 0.10056012812278203
         }
       },
       "segmentation": {
@@ -1738,11 +1738,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1773,12 +1773,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.01465712091548857,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.014657119549628752,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.08104150659778146,
+                "interest_paid_total": 0.08104149958155764,
                 "trades": 21,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -1796,7 +1796,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.885498058656524,
+                "equity_min": 0.8854981903777179,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -1820,9 +1820,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.019457118082822602,
-                "exit_cost_total": 0.0302059671852456,
-                "cost_paid_total": 0.049663085268068174,
+                "entry_cost_total": 0.01945711616203174,
+                "exit_cost_total": 0.03020596453397233,
+                "cost_paid_total": 0.04966308069600407,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -1835,16 +1835,16 @@
               },
               "perf_leverage": {
                 "ok": true,
-                "start": 0.9994225000000003,
-                "end": 1.9163885602812334,
+                "start": 0.9994225000000001,
+                "end": 1.9163883065561498,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.14182168514111448,
-                "vol_ann": 0.3413248972200184,
-                "sharpe0": 0.5572570319680661,
+                "cagr": 0.1418216543440738,
+                "vol_ann": 0.3413247478434298,
+                "sharpe0": 0.5572570647362535,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.32051815682414775,
+                "mdd": -0.32051811196591806,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -1852,41 +1852,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.44247629072360145,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.44247625656535206,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.033117932148626815,
               "delta_vs_base": {
-                "cagr": 0.011081845681488955,
-                "mdd": -0.0624229205811071,
-                "sharpe0": -0.03310842820552662
+                "cagr": 0.01108185983800647,
+                "mdd": -0.06242287414850933,
+                "sharpe0": -0.033108395074079255
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -1914,15 +1914,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.03254620103020841,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.30768060473573555,
+                "interest_paid_total": 0.30830552654895094,
                 "trades": 49,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -1940,7 +1940,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9526466846744144,
+                "equity_min": 0.9526469536745399,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -1964,9 +1964,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.07309523189466205,
-                "exit_cost_total": 0.1175460848278446,
-                "cost_paid_total": 0.19064131672250664,
+                "entry_cost_total": 0.07309523081917885,
+                "exit_cost_total": 0.11723669123327558,
+                "cost_paid_total": 0.19033192205245442,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -1980,15 +1980,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 0.9994225000000001,
-                "end": 10.054076375026057,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.2171830486472739,
-                "vol_ann": 0.21721318499446138,
-                "sharpe0": 1.0138690624219346,
+                "end": 9.595401974194688,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.21219634785278485,
+                "vol_ann": 0.2176579158701546,
+                "sharpe0": 0.9933763096295277,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.38450728235699627,
+                "mdd": -0.3845071946865779,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -1996,26 +1996,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.564834682235303,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.03275920297196893,
+              "calmar_leverage": 0.5518657408367919,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.03273709078636517,
               "delta_vs_base": {
-                "cagr": 0.019308300068830775,
-                "mdd": -0.04623088596999503,
-                "sharpe0": -0.05814909024922832
+                "cagr": 0.018862681874478593,
+                "mdd": -0.04623085597982923,
+                "sharpe0": -0.05594816037911532
               }
             }
           }
@@ -2025,22 +2025,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.14182168514111448,
-              "sharpe0": 0.5572570319680661,
-              "mdd": -0.32051815682414775,
-              "calmar": 0.44247629072360145
+              "cagr": 0.1418216543440738,
+              "sharpe0": 0.5572570647362535,
+              "mdd": -0.32051811196591806,
+              "calmar": 0.44247625656535206
             },
             "post": {
-              "cagr": 0.2171830486472739,
-              "sharpe0": 1.0138690624219346,
-              "mdd": -0.38450728235699627,
-              "calmar": 0.564834682235303
+              "cagr": 0.21219634785278485,
+              "sharpe0": 0.9933763096295277,
+              "mdd": -0.3845071946865779,
+              "calmar": 0.5518657408367919
             },
             "delta_post_minus_pre": {
-              "cagr": 0.0753613635061594,
-              "sharpe0": 0.45661203045386856,
-              "mdd": -0.06398912553284852,
-              "calmar": 0.12235839151170153
+              "cagr": 0.07037469350871106,
+              "sharpe0": 0.43611924489327425,
+              "mdd": -0.06398908272065984,
+              "calmar": 0.1093894842714398
             }
           },
           "notes": [
@@ -2062,20 +2062,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.2171830486472739,
-            "mdd": -0.38450728235699627,
-            "sharpe0": 1.0138690624219346
+            "cagr": 0.21219634785278485,
+            "mdd": -0.3845071946865779,
+            "sharpe0": 0.9933763096295277
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.019308300068830775,
-            "sharpe0": -0.05814909024922832
+            "cagr": 0.018862681874478593,
+            "sharpe0": -0.05594816037911532
           },
-          "delta_abs_mdd": 0.04623088596999503
+          "delta_abs_mdd": 0.04623085597982923
         },
         "reasons": [
           "delta_cagr not below threshold"
@@ -2104,7 +2104,7 @@
     {
       "strategy_id": "always_leverage_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:26Z",
+      "generated_at_utc": "2026-03-09T07:56:16Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -2132,15 +2132,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.024428534859147612,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.024428532582714584,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.3605926625970838,
+        "interest_paid_total": 0.36107339005829453,
         "trades": 65,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 272,
@@ -2158,7 +2158,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 422,
-        "equity_min": -0.11447443040287797,
+        "equity_min": -0.114474000912822,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -2182,24 +2182,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.08535146337751259,
-        "exit_cost_total": 0.13343853118511528,
-        "cost_paid_total": 0.2187899945626278,
+        "entry_cost_total": 0.08535145403358643,
+        "exit_cost_total": 0.13320629623903346,
+        "cost_paid_total": 0.21855775027261992,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 0.9990375,
-          "end": 4.456871203946425,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.09389636116706379,
-          "vol_ann": 48.94975042093962,
-          "sharpe0": -0.19653942986836678,
+          "end": 4.218445200324412,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.09024801013748918,
+          "vol_ann": 49.00644312679911,
+          "sharpe0": -0.19663842052427408,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -1.050715357099785,
+          "mdd": -1.0507151820624323,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": "equity went negative; mdd < -1.0 is arithmetically valid but may be misleading"
@@ -2207,26 +2207,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.0893642227008457,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.030714285714285715,
+        "calmar_leverage": 0.08589198260211942,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.030699666825321277,
         "delta_vs_base": {
-          "cagr": 0.011260304747558347,
-          "mdd": -0.27735625182784984,
-          "sharpe0": -0.695303558931663
+          "cagr": 0.010455345966452922,
+          "mdd": -0.27735616948798625,
+          "sharpe0": -0.6858968144135045
         }
       },
       "segmentation": {
@@ -2245,11 +2245,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2280,12 +2280,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.024428534859147612,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.024428532582714584,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.13506917766296805,
+                "interest_paid_total": 0.13506916596926258,
                 "trades": 21,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -2303,7 +2303,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.8673725463130828,
+                "equity_min": 0.8673726982990762,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -2327,9 +2327,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.03242853013803767,
-                "exit_cost_total": 0.050343278642075995,
-                "cost_paid_total": 0.08277180878011364,
+                "entry_cost_total": 0.03242852693671956,
+                "exit_cost_total": 0.05034327422328721,
+                "cost_paid_total": 0.08277180116000679,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -2343,15 +2343,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 0.9990375,
-                "end": 1.9754072182771067,
+                "end": 1.9754070332076927,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.14898927563842923,
-                "vol_ann": 0.3887777813784184,
-                "sharpe0": 0.5487103243225124,
+                "cagr": 0.14898925370912552,
+                "vol_ann": 0.38877760529405514,
+                "sharpe0": 0.5487103715818379,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.3558547540460095,
+                "mdd": -0.35585468335562587,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -2359,41 +2359,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.41868002027356915,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.41868004181985735,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.033117932148626815,
               "delta_vs_base": {
-                "cagr": 0.018249436178803702,
-                "mdd": -0.09775951780296888,
-                "sharpe0": -0.04165513585108027
+                "cagr": 0.018249459203058205,
+                "mdd": -0.09775944553821714,
+                "sharpe0": -0.04165508822849484
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2421,15 +2421,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.05424366838368067,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.5128010078928895,
+                "interest_paid_total": 0.5138425442482489,
                 "trades": 49,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -2447,7 +2447,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9447021575303074,
+                "equity_min": 0.9447024679150675,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -2471,9 +2471,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.12182538649110343,
-                "exit_cost_total": 0.195910141379741,
-                "cost_paid_total": 0.31773552787084425,
+                "entry_cost_total": 0.12182538469863143,
+                "exit_cost_total": 0.19539448538879262,
+                "cost_paid_total": 0.317219870087424,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -2487,15 +2487,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 0.9990375,
-                "end": 11.198626181687967,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.22844689496376436,
-                "vol_ann": 0.23677736837090663,
-                "sharpe0": 0.9877688083682389,
+                "end": 10.669224743298297,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.223226013823272,
+                "vol_ann": 0.23721551933170978,
+                "sharpe0": 0.9684241061467732,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.40902036218627025,
+                "mdd": -0.4090202608417438,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -2503,26 +2503,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.5585220592507527,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.03275920297196893,
+              "calmar_leverage": 0.5457578393888941,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.03273709078636517,
               "delta_vs_base": {
-                "cagr": 0.03057214638532124,
-                "mdd": -0.070743965799269,
-                "sharpe0": -0.08424934430292408
+                "cagr": 0.02989234784496575,
+                "mdd": -0.07074392213499514,
+                "sharpe0": -0.08090036386186983
               }
             }
           }
@@ -2532,22 +2532,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.14898927563842923,
-              "sharpe0": 0.5487103243225124,
-              "mdd": -0.3558547540460095,
-              "calmar": 0.41868002027356915
+              "cagr": 0.14898925370912552,
+              "sharpe0": 0.5487103715818379,
+              "mdd": -0.35585468335562587,
+              "calmar": 0.41868004181985735
             },
             "post": {
-              "cagr": 0.22844689496376436,
-              "sharpe0": 0.9877688083682389,
-              "mdd": -0.40902036218627025,
-              "calmar": 0.5585220592507527
+              "cagr": 0.223226013823272,
+              "sharpe0": 0.9684241061467732,
+              "mdd": -0.4090202608417438,
+              "calmar": 0.5457578393888941
             },
             "delta_post_minus_pre": {
-              "cagr": 0.07945761932533513,
-              "sharpe0": 0.43905848404572645,
-              "mdd": -0.05316560814026072,
-              "calmar": 0.13984203897718356
+              "cagr": 0.07423676011414648,
+              "sharpe0": 0.4197137345649353,
+              "mdd": -0.05316557748611794,
+              "calmar": 0.12707779756903675
             }
           },
           "notes": [
@@ -2569,20 +2569,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.22844689496376436,
-            "mdd": -0.40902036218627025,
-            "sharpe0": 0.9877688083682389
+            "cagr": 0.223226013823272,
+            "mdd": -0.4090202608417438,
+            "sharpe0": 0.9684241061467732
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.03057214638532124,
-            "sharpe0": -0.08424934430292408
+            "cagr": 0.02989234784496575,
+            "sharpe0": -0.08090036386186983
           },
-          "delta_abs_mdd": 0.070743965799269
+          "delta_abs_mdd": 0.07074392213499514
         },
         "reasons": [
           "delta_cagr not below threshold"
@@ -2603,12 +2603,12 @@
       "forbid_mask_applied": false,
       "hard_fail": true,
       "hard_fail_reasons": [
-        "full: equity_min<= 0.0 (equity_min=-0.11447443040287797)",
+        "full: equity_min<= 0.0 (equity_min=-0.114474000912822)",
         "full: equity_negative_days>0 (neg_days=422)"
       ],
       "suite_hard_fail": true,
       "suite_hard_fail_reasons": [
-        "full: equity_min<= 0.0 (equity_min=-0.11447443040287797)",
+        "full: equity_min<= 0.0 (equity_min=-0.114474000912822)",
         "full: equity_negative_days>0 (neg_days=422)"
       ],
       "equity_curve_csv": "equity_curve.0d3098298f__always_leverage_1.5x.csv",
@@ -2617,7 +2617,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.1x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:26Z",
+      "generated_at_utc": "2026-03-09T07:56:16Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -2645,15 +2645,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.004885706971829527,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.004885706516542921,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.049742981462460985,
+        "interest_paid_total": 0.04984197997027204,
         "trades": 139,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 0,
@@ -2671,7 +2671,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 0,
-        "equity_min": 0.2682790749422189,
+        "equity_min": 0.26827889071865063,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -2695,24 +2695,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.035646028582505936,
-        "exit_cost_total": 0.05466387329540331,
-        "cost_paid_total": 0.09030990187790922,
+        "entry_cost_total": 0.03564602516208098,
+        "exit_cost_total": 0.05461742359012973,
+        "cost_paid_total": 0.09026344875221073,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 1.0,
-          "end": 3.7856990952391847,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08317100660524135,
-          "vol_ann": 0.31956372914016457,
-          "sharpe0": 0.5289515120094866,
+          "end": 3.610982273906655,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08006416542222472,
+          "vol_ann": 0.31973509602735584,
+          "sharpe0": 0.5197989752305026,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.8626255224466318,
+          "mdd": -0.8626255640568775,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
@@ -2720,26 +2720,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.09641612083230114,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.06619047619047619,
+        "calmar_leverage": 0.09281450580445082,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.06615897191813422,
         "delta_vs_base": {
-          "cagr": 0.0005349501857359051,
-          "mdd": -0.08926641717469674,
-          "sharpe0": 0.0301873829461905
+          "cagr": 0.00027150125118846624,
+          "mdd": -0.08926655148243146,
+          "sharpe0": 0.030540581341272133
         }
       },
       "segmentation": {
@@ -2758,11 +2758,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2793,12 +2793,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.004885706971829527,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.004885706516542921,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.016334515745073275,
+                "interest_paid_total": 0.01633451481179408,
                 "trades": 47,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -2816,7 +2816,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.912686327171685,
+                "equity_min": 0.9126864284956805,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -2840,9 +2840,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.015166095391162322,
-                "exit_cost_total": 0.02311870235522933,
-                "cost_paid_total": 0.03828479774639164,
+                "entry_cost_total": 0.015166094354582762,
+                "exit_cost_total": 0.02311869998279761,
+                "cost_paid_total": 0.03828479433738038,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -2856,15 +2856,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.7985800125395126,
+                "end": 1.798579387568335,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.12702604711057486,
-                "vol_ann": 0.2748968248278088,
-                "sharpe0": 0.5714721791241608,
+                "cagr": 0.12702596733038218,
+                "vol_ann": 0.27489671032382285,
+                "sharpe0": 0.571472055559748,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.2754520175373433,
+                "mdd": -0.27545209786125746,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -2872,41 +2872,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.4611548982150905,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.46115447410519966,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.07592891760904685,
               "delta_vs_base": {
-                "cagr": -0.003713792349050671,
-                "mdd": -0.017356781294302626,
-                "sharpe0": -0.018893281049431887
+                "cagr": -0.003713827175685136,
+                "mdd": -0.017356860043848732,
+                "sharpe0": -0.018893404250584722
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:16Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -2934,15 +2934,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.010848733676736144,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.07411678045831853,
+                "interest_paid_total": 0.07433661607895191,
                 "trades": 92,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -2960,7 +2960,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9645634753905752,
+                "equity_min": 0.9645636823137487,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -2984,9 +2984,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.04547677937633979,
-                "exit_cost_total": 0.07094037531311365,
-                "cost_paid_total": 0.11641715468945343,
+                "entry_cost_total": 0.04547677832077296,
+                "exit_cost_total": 0.07083724511358692,
+                "cost_paid_total": 0.11631402343435987,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -3000,15 +3000,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.775536520330482,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.20311109554307283,
-                "vol_ann": 0.19072438351386986,
-                "sharpe0": 1.0653344298394416,
+                "end": 8.38757833194505,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.1983421372759362,
+                "vol_ann": 0.19120221060568235,
+                "sharpe0": 1.0423726959837418,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.34655818009234995,
+                "mdd": -0.3465580706301741,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -3016,26 +3016,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.5860808003116483,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.06214116852414725,
+              "calmar_leverage": 0.5723200643265208,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.062099223759703004,
               "delta_vs_base": {
-                "cagr": 0.005236346964629712,
-                "mdd": -0.008281783705348711,
-                "sharpe0": -0.0066837228317213615
+                "cagr": 0.005008471297629935,
+                "mdd": -0.008281731923425406,
+                "sharpe0": -0.006951774024901214
               }
             }
           }
@@ -3045,22 +3045,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.12702604711057486,
-              "sharpe0": 0.5714721791241608,
-              "mdd": -0.2754520175373433,
-              "calmar": 0.4611548982150905
+              "cagr": 0.12702596733038218,
+              "sharpe0": 0.571472055559748,
+              "mdd": -0.27545209786125746,
+              "calmar": 0.46115447410519966
             },
             "post": {
-              "cagr": 0.20311109554307283,
-              "sharpe0": 1.0653344298394416,
-              "mdd": -0.34655818009234995,
-              "calmar": 0.5860808003116483
+              "cagr": 0.1983421372759362,
+              "sharpe0": 1.0423726959837418,
+              "mdd": -0.3465580706301741,
+              "calmar": 0.5723200643265208
             },
             "delta_post_minus_pre": {
-              "cagr": 0.07608504843249797,
-              "sharpe0": 0.4938622507152808,
-              "mdd": -0.07110616255500668,
-              "calmar": 0.12492590209655785
+              "cagr": 0.07131616994555401,
+              "sharpe0": 0.4709006404239938,
+              "mdd": -0.07110597276891661,
+              "calmar": 0.11116559022132116
             }
           },
           "notes": [
@@ -3082,20 +3082,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.20311109554307283,
-            "mdd": -0.34655818009234995,
-            "sharpe0": 1.0653344298394416
+            "cagr": 0.1983421372759362,
+            "mdd": -0.3465580706301741,
+            "sharpe0": 1.0423726959837418
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.005236346964629712,
-            "sharpe0": -0.0066837228317213615
+            "cagr": 0.005008471297629935,
+            "sharpe0": -0.006951774024901214
           },
-          "delta_abs_mdd": 0.008281783705348711
+          "delta_abs_mdd": 0.008281731923425406
         },
         "reasons": [
           "all 3 post conditions met => stop / do not deploy"
@@ -3124,7 +3124,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.2x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:26Z",
+      "generated_at_utc": "2026-03-09T07:56:17Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -3152,15 +3152,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.009771413943659043,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.009771413033085832,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.09948596292492197,
+        "interest_paid_total": 0.09968395994054406,
         "trades": 139,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 0,
@@ -3178,7 +3178,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 0,
-        "equity_min": 0.10216878824000764,
+        "equity_min": 0.10216836708505411,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -3202,24 +3202,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.0712920571650118,
-        "exit_cost_total": 0.1093277465908065,
-        "cost_paid_total": 0.1806198037558183,
+        "entry_cost_total": 0.07129205032416186,
+        "exit_cost_total": 0.10923484718025935,
+        "cost_paid_total": 0.18052689750442125,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 1.0,
-          "end": 3.8167324571773533,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08370185047573919,
-          "vol_ann": 0.39038319073428757,
-          "sharpe0": 0.6005347610660907,
+          "end": 3.6260846261876885,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08033460136842763,
+          "vol_ann": 0.3905320308438268,
+          "sharpe0": 0.5923905337821892,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.9486373509891205,
+          "mdd": -0.9486375382441592,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
@@ -3227,26 +3227,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.08823377066954549,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.06619047619047619,
+        "calmar_leverage": 0.0846841898298897,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.06615897191813422,
         "delta_vs_base": {
-          "cagr": 0.0010657940562337487,
-          "mdd": -0.17527824571718542,
-          "sharpe0": 0.10177063200279457
+          "cagr": 0.0005419371973913734,
+          "mdd": -0.17527852566971314,
+          "sharpe0": 0.10313213989295877
         }
       },
       "segmentation": {
@@ -3265,11 +3265,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:17Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3300,12 +3300,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.009771413943659043,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.009771413033085832,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.03266903149014654,
+                "interest_paid_total": 0.032669029623588156,
                 "trades": 47,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -3323,7 +3323,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.912686327171685,
+                "equity_min": 0.9126864284956805,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -3347,9 +3347,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.030332190782324613,
-                "exit_cost_total": 0.04623740471045861,
-                "cost_paid_total": 0.0765695954927832,
+                "entry_cost_total": 0.030332188709165493,
+                "exit_cost_total": 0.046237399965595186,
+                "cost_paid_total": 0.07656958867476066,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -3363,15 +3363,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.7692994517916039,
+                "end": 1.7692985585578387,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.12326379528004083,
-                "vol_ann": 0.28116662234181866,
-                "sharpe0": 0.5529784512082864,
+                "cagr": 0.1232636797549076,
+                "vol_ann": 0.2811665087960066,
+                "sharpe0": 0.5529782064327602,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.2921759832120653,
+                "mdd": -0.292176142570855,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -3379,41 +3379,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.421882024405046,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.42188139890653525,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.07592891760904685,
               "delta_vs_base": {
-                "cagr": -0.0074760441795846955,
-                "mdd": -0.03408074696902463,
-                "sharpe0": -0.037387008965306334
+                "cagr": -0.007476114751159724,
+                "mdd": -0.03408090475344627,
+                "sharpe0": -0.03738725337757254
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:17Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3441,15 +3441,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.021697467353472263,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.14823356091663692,
+                "interest_paid_total": 0.14867323215790376,
                 "trades": 92,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -3467,7 +3467,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9645634753905752,
+                "equity_min": 0.9645636823137487,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -3491,9 +3491,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.09095355875267949,
-                "exit_cost_total": 0.14188075062622707,
-                "cost_paid_total": 0.23283430937890656,
+                "entry_cost_total": 0.09095355664154582,
+                "exit_cost_total": 0.14167449022717363,
+                "cost_paid_total": 0.23262804686871943,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -3507,15 +3507,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 9.213821375627782,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.20811342870419813,
-                "vol_ann": 0.19734156459693655,
-                "sharpe0": 1.0571605511116218,
+                "end": 8.790488843350843,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.2031351364156586,
+                "vol_ann": 0.19784691842985228,
+                "sharpe0": 1.0340906911008099,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.3544981281860734,
+                "mdd": -0.35449796669777445,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -3523,26 +3523,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.5870649579141387,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.06214116852414725,
+              "calmar_leverage": 0.5730220071723021,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.062099223759703004,
               "delta_vs_base": {
-                "cagr": 0.010238680125755018,
-                "mdd": -0.01622173179907216,
-                "sharpe0": -0.01485760155954119
+                "cagr": 0.009801470437352355,
+                "mdd": -0.016221627991025778,
+                "sharpe0": -0.015233778907833173
               }
             }
           }
@@ -3552,22 +3552,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.12326379528004083,
-              "sharpe0": 0.5529784512082864,
-              "mdd": -0.2921759832120653,
-              "calmar": 0.421882024405046
+              "cagr": 0.1232636797549076,
+              "sharpe0": 0.5529782064327602,
+              "mdd": -0.292176142570855,
+              "calmar": 0.42188139890653525
             },
             "post": {
-              "cagr": 0.20811342870419813,
-              "sharpe0": 1.0571605511116218,
-              "mdd": -0.3544981281860734,
-              "calmar": 0.5870649579141387
+              "cagr": 0.2031351364156586,
+              "sharpe0": 1.0340906911008099,
+              "mdd": -0.35449796669777445,
+              "calmar": 0.5730220071723021
             },
             "delta_post_minus_pre": {
-              "cagr": 0.0848496334241573,
-              "sharpe0": 0.5041820999033354,
-              "mdd": -0.06232214497400812,
-              "calmar": 0.1651829335090927
+              "cagr": 0.07987145666075102,
+              "sharpe0": 0.4811124846680497,
+              "mdd": -0.062321824126919445,
+              "calmar": 0.15114060826576686
             }
           },
           "notes": [
@@ -3582,30 +3582,30 @@
         "rule_id": "post_gonogo_v3",
         "applies": true,
         "ok": true,
-        "decision": "GO_OR_REVIEW",
+        "decision": "NO_GO",
         "interpretation": {
           "NO_GO": "All three post conditions met: stop / do not deploy / do not tune further.",
           "GO_OR_REVIEW": "Stop rule NOT triggered. This is NOT a PASS. It only means the specific immediate stop rule did not fire."
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.20811342870419813,
-            "mdd": -0.3544981281860734,
-            "sharpe0": 1.0571605511116218
+            "cagr": 0.2031351364156586,
+            "mdd": -0.35449796669777445,
+            "sharpe0": 1.0340906911008099
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.010238680125755018,
-            "sharpe0": -0.01485760155954119
+            "cagr": 0.009801470437352355,
+            "sharpe0": -0.015233778907833173
           },
-          "delta_abs_mdd": 0.01622173179907216
+          "delta_abs_mdd": 0.016221627991025778
         },
         "reasons": [
-          "delta_cagr not below threshold"
+          "all 3 post conditions met => stop / do not deploy"
         ],
         "thresholds": {
           "delta_sharpe0_lt": 0.0,
@@ -3616,7 +3616,7 @@
         "conditions": {
           "delta_sharpe0_lt_0.0": true,
           "delta_abs_mdd_gt_0.0": true,
-          "delta_cagr_lt_0.01": false
+          "delta_cagr_lt_0.01": true
         }
       },
       "forbid_mask_scope": "bb_only",
@@ -3631,7 +3631,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.3x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:26Z",
+      "generated_at_utc": "2026-03-09T07:56:17Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -3659,15 +3659,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.01465712091548857,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.014657119549628752,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.14837940042470685,
+        "interest_paid_total": 0.14867639583899153,
         "trades": 138,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 44,
@@ -3685,7 +3685,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 124,
-        "equity_min": -0.06394149846220487,
+        "equity_min": -0.06394215654854424,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -3709,24 +3709,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.10665036115302999,
-        "exit_cost_total": 0.16353325159755927,
-        "cost_paid_total": 0.2701836127505893,
+        "entry_cost_total": 0.10665035086475165,
+        "exit_cost_total": 0.16339390244268084,
+        "cost_paid_total": 0.2700442533074325,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 1.0,
-          "end": 3.842121670542263,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.0841331390176232,
-          "vol_ann": 5.869175731485898,
-          "sharpe0": -0.030730820293852032,
+          "end": 3.635542830745301,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08050342959431966,
+          "vol_ann": 5.876111765474217,
+          "sharpe0": -0.03127953089367056,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -1.0315693941997268,
+          "mdd": -1.0315697369714047,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": "equity went negative; mdd < -1.0 is arithmetically valid but may be misleading"
@@ -3734,26 +3734,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.08155839005178338,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.06571428571428571,
+        "calmar_leverage": 0.07803973566602529,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.06568300809138505,
         "delta_vs_base": {
-          "cagr": 0.0014970825981177605,
-          "mdd": -0.25821028892779174,
-          "sharpe0": -0.5294949493571481
+          "cagr": 0.0007107654232834104,
+          "mdd": -0.2582107243969587,
+          "sharpe0": -0.520537924782901
         }
       },
       "segmentation": {
@@ -3772,11 +3772,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:17Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3807,12 +3807,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.01465712091548857,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.014657119549628752,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.04900354723521968,
+                "interest_paid_total": 0.04900354443538232,
                 "trades": 47,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -3830,7 +3830,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.912686327171685,
+                "equity_min": 0.9126864284956805,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -3854,9 +3854,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.04549828617348693,
-                "exit_cost_total": 0.06935610706568797,
-                "cost_paid_total": 0.11485439323917485,
+                "entry_cost_total": 0.04549828306374824,
+                "exit_cost_total": 0.06935609994839283,
+                "cost_paid_total": 0.11485438301214104,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -3870,15 +3870,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.740018891043694,
+                "end": 1.7400177295473407,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.11945163374270495,
-                "vol_ann": 0.2877393961029243,
-                "sharpe0": 0.5349661156069909,
+                "cagr": 0.119451481512729,
+                "vol_ann": 0.2877392838434263,
+                "sharpe0": 0.5349657516645319,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.30830112166675616,
+                "mdd": -0.30830136016392795,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -3886,41 +3886,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.3874511811598943,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.38745038766359985,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.07592891760904685,
               "delta_vs_base": {
-                "cagr": -0.011288205716920574,
-                "mdd": -0.05020588542371551,
-                "sharpe0": -0.05539934456660178
+                "cagr": -0.011288312993338323,
+                "mdd": -0.05020612234651922,
+                "sharpe0": -0.05539970814580086
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:17Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -3948,15 +3948,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.03254620103020841,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.22235034137495596,
+                "interest_paid_total": 0.22300984823685585,
                 "trades": 92,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -3974,7 +3974,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9645634753905752,
+                "equity_min": 0.9645636823137487,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -3998,9 +3998,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.13643033812901928,
-                "exit_cost_total": 0.2128211259393407,
-                "cost_paid_total": 0.34925146406835994,
+                "entry_cost_total": 0.13643033496231882,
+                "exit_cost_total": 0.21251173534076057,
+                "cost_paid_total": 0.34894207030307944,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -4014,15 +4014,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 9.652106230925096,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.21290262216750255,
-                "vol_ann": 0.2041440273071261,
-                "sharpe0": 1.0480220642165732,
+                "end": 9.193399354756647,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.2077311973225,
+                "vol_ann": 0.2046719146488806,
+                "sharpe0": 1.0249671601058605,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.3621169769236553,
+                "mdd": -0.362116763321394,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -4030,26 +4030,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.5879388035772445,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.06214116852414725,
+              "calmar_leverage": 0.573658052770481,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.062099223759703004,
               "delta_vs_base": {
-                "cagr": 0.015027873589059437,
-                "mdd": -0.023840580536654055,
-                "sharpe0": -0.02399608845458978
+                "cagr": 0.014397531344193748,
+                "mdd": -0.023840424614645306,
+                "sharpe0": -0.02435730990278251
               }
             }
           }
@@ -4059,22 +4059,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.11945163374270495,
-              "sharpe0": 0.5349661156069909,
-              "mdd": -0.30830112166675616,
-              "calmar": 0.3874511811598943
+              "cagr": 0.119451481512729,
+              "sharpe0": 0.5349657516645319,
+              "mdd": -0.30830136016392795,
+              "calmar": 0.38745038766359985
             },
             "post": {
-              "cagr": 0.21290262216750255,
-              "sharpe0": 1.0480220642165732,
-              "mdd": -0.3621169769236553,
-              "calmar": 0.5879388035772445
+              "cagr": 0.2077311973225,
+              "sharpe0": 1.0249671601058605,
+              "mdd": -0.362116763321394,
+              "calmar": 0.573658052770481
             },
             "delta_post_minus_pre": {
-              "cagr": 0.0934509884247976,
-              "sharpe0": 0.5130559486095823,
-              "mdd": -0.05381585525689914,
-              "calmar": 0.2004876224173502
+              "cagr": 0.08827971580977101,
+              "sharpe0": 0.49000140844132867,
+              "mdd": -0.053815403157466024,
+              "calmar": 0.18620766510688114
             }
           },
           "notes": [
@@ -4096,20 +4096,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.21290262216750255,
-            "mdd": -0.3621169769236553,
-            "sharpe0": 1.0480220642165732
+            "cagr": 0.2077311973225,
+            "mdd": -0.362116763321394,
+            "sharpe0": 1.0249671601058605
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.015027873589059437,
-            "sharpe0": -0.02399608845458978
+            "cagr": 0.014397531344193748,
+            "sharpe0": -0.02435730990278251
           },
-          "delta_abs_mdd": 0.023840580536654055
+          "delta_abs_mdd": 0.023840424614645306
         },
         "reasons": [
           "delta_cagr not below threshold"
@@ -4130,12 +4130,12 @@
       "forbid_mask_applied": false,
       "hard_fail": true,
       "hard_fail_reasons": [
-        "full: equity_min<= 0.0 (equity_min=-0.06394149846220487)",
+        "full: equity_min<= 0.0 (equity_min=-0.06394215654854424)",
         "full: equity_negative_days>0 (neg_days=124)"
       ],
       "suite_hard_fail": true,
       "suite_hard_fail_reasons": [
-        "full: equity_min<= 0.0 (equity_min=-0.06394149846220487)",
+        "full: equity_min<= 0.0 (equity_min=-0.06394215654854424)",
         "full: equity_negative_days>0 (neg_days=124)"
       ],
       "equity_curve_csv": "equity_curve.0d3098298f__trend_leverage_price_gt_ma60_1.3x.csv",
@@ -4144,7 +4144,7 @@
     {
       "strategy_id": "trend_leverage_price_gt_ma60_1.5x",
       "ok": true,
-      "generated_at_utc": "2026-03-06T07:50:26Z",
+      "generated_at_utc": "2026-03-09T07:56:17Z",
       "schema_version": "v26.9",
       "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
       "params": {
@@ -4172,15 +4172,15 @@
         "maint_ratio_mode": "equity_over_lever_notional"
       },
       "audit": {
-        "rows": 4200,
+        "rows": 4202,
         "start_date": "2009-01-02",
-        "end_date": "2026-03-06",
-        "base_price_t0": 20.467866897583008,
-        "base_shares": 0.048857069718295225,
-        "lever_shares_target": 0.024428534859147612,
-        "bb_z_non_nan": 4141,
+        "end_date": "2026-03-09",
+        "base_price_t0": 20.46786880493164,
+        "base_shares": 0.04885706516542917,
+        "lever_shares_target": 0.024428532582714584,
+        "bb_z_non_nan": 4143,
         "bb_z_first_valid_date": "2009-04-07",
-        "interest_paid_total": 0.20861512015234573,
+        "interest_paid_total": 0.2091101190943986,
         "trades": 94,
         "skipped_entries_on_forbidden": 0,
         "skipped_entries_on_nonpositive_equity": 912,
@@ -4198,7 +4198,7 @@
           "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
         },
         "equity_negative_days": 1422,
-        "equity_min": -0.3961620718666279,
+        "equity_min": -0.3961632038157375,
         "open_at_end": true,
         "forced_eod_close": 1,
         "exit_count_by_exit_z": 0,
@@ -4222,24 +4222,24 @@
         "cost_on": "lever",
         "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
         "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-        "entry_cost_total": 0.14887395484550126,
-        "exit_cost_total": 0.22841135830561707,
-        "cost_paid_total": 0.3772853131511182,
+        "entry_cost_total": 0.1488739417795524,
+        "exit_cost_total": 0.2281791150544056,
+        "cost_paid_total": 0.3770530568339582,
         "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price"
       },
       "perf": {
         "leverage": {
           "ok": true,
           "start": 1.0,
-          "end": 3.920999166614788,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08545615123843042,
-          "vol_ann": 8.823376701868028,
-          "sharpe0": -0.19507420962574867,
+          "end": 3.6825579976968372,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.08133656761529617,
+          "vol_ann": 8.82404063707704,
+          "sharpe0": -0.19439330639958002,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -1.1888329105184612,
+          "mdd": -1.1888335888703914,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": "equity went negative; mdd < -1.0 is arithmetically valid but may be misleading"
@@ -4247,26 +4247,26 @@
         "base_only": {
           "ok": true,
           "start": 1.0,
-          "end": 3.754665733301016,
-          "n_days": 4200,
-          "years": 16.66269841269841,
-          "cagr": 0.08263605641950544,
-          "vol_ann": 0.28134053108770135,
-          "sharpe0": 0.49876412906329615,
+          "end": 3.5958799216256216,
+          "n_days": 4202,
+          "years": 16.67063492063492,
+          "cagr": 0.07979266417103625,
+          "vol_ann": 0.28150579944763526,
+          "sharpe0": 0.4892583938892304,
           "sharpe_note": "rf=0 assumed",
           "perf_ddof": 0,
-          "mdd": -0.7733591052719351,
+          "mdd": -0.7733590125744461,
           "mdd_peak": "2011-01-28",
           "mdd_trough": "2014-02-05",
           "mdd_warning": null
         },
-        "calmar_leverage": 0.07188239026892534,
-        "calmar_base_only": 0.10685340853451031,
-        "turnover_proxy": 0.04476190476190476,
+        "calmar_leverage": 0.06841711773350947,
+        "calmar_base_only": 0.10317674310849924,
+        "turnover_proxy": 0.0447405997144217,
         "delta_vs_base": {
-          "cagr": 0.0028200948189249786,
-          "mdd": -0.4154738052465261,
-          "sharpe0": -0.6938383386890448
+          "cagr": 0.0015439034442599198,
+          "mdd": -0.4154745762959453,
+          "sharpe0": -0.6836517002888105
         }
       },
       "segmentation": {
@@ -4285,11 +4285,11 @@
               "rows_clean": 1238,
               "start_date": "2009-01-02",
               "end_date": "2013-12-31",
-              "first_price": 20.467866897583008
+              "first_price": 20.46786880493164
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:17Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -4320,12 +4320,12 @@
                 "rows": 1238,
                 "start_date": "2009-01-02",
                 "end_date": "2013-12-31",
-                "base_price_t0": 20.467866897583008,
-                "base_shares": 0.048857069718295225,
-                "lever_shares_target": 0.024428534859147612,
+                "base_price_t0": 20.46786880493164,
+                "base_shares": 0.04885706516542917,
+                "lever_shares_target": 0.024428532582714584,
                 "bb_z_non_nan": 1179,
                 "bb_z_first_valid_date": "2009-04-07",
-                "interest_paid_total": 0.08167257872536535,
+                "interest_paid_total": 0.08167257405897105,
                 "trades": 47,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -4343,7 +4343,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.912686327171685,
+                "equity_min": 0.9126864284956805,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -4367,9 +4367,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.0758304769558115,
-                "exit_cost_total": 0.11559351177614653,
-                "cost_paid_total": 0.19142398873195807,
+                "entry_cost_total": 0.07583047177291372,
+                "exit_cost_total": 0.11559349991398796,
+                "cost_paid_total": 0.19142397168690176,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -4383,15 +4383,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.681457769547876,
+                "end": 1.681456071526348,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.11167143261045442,
-                "vol_ann": 0.30168215736651044,
-                "sharpe0": 0.5006013081872112,
+                "cagr": 0.11167120391123131,
+                "vol_ann": 0.3016820491871874,
+                "sharpe0": 0.5006007120913425,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.3388791211508779,
+                "mdd": -0.3388795176264626,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
@@ -4399,41 +4399,41 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 1.8278605732874218,
+                "end": 1.8278602165788314,
                 "n_days": 1238,
                 "years": 4.908730158730159,
-                "cagr": 0.13073983945962553,
-                "vol_ann": 0.2689624847382831,
-                "sharpe0": 0.5903654601735927,
+                "cagr": 0.13073979450606732,
+                "vol_ann": 0.26896236946267876,
+                "sharpe0": 0.5903654598103327,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.25809523624304065,
+                "mdd": -0.25809523781740873,
                 "mdd_peak": "2011-01-28",
                 "mdd_trough": "2011-12-19",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.329531758200988,
-              "calmar_base_only": 0.5065565771873127,
+              "calmar_leverage": 0.32953069779308214,
+              "calmar_base_only": 0.5065563999230396,
               "turnover_proxy": 0.07592891760904685,
               "delta_vs_base": {
-                "cagr": -0.019068406849171105,
-                "mdd": -0.08078388490783728,
-                "sharpe0": -0.08976415198638155
+                "cagr": -0.01906859059483601,
+                "mdd": -0.0807842798090539,
+                "sharpe0": -0.08976474771899023
               }
             }
           },
           "post": {
             "segment": {
               "name": "post",
-              "rows_raw": 2961,
-              "rows_clean": 2961,
+              "rows_raw": 2963,
+              "rows_clean": 2963,
               "start_date": "2014-01-03",
-              "end_date": "2026-03-06",
+              "end_date": "2026-03-09",
               "first_price": 9.217665672302246
             },
             "ok": true,
             "summary": {
-              "generated_at_utc": "2026-03-06T07:50:26Z",
+              "generated_at_utc": "2026-03-09T07:56:17Z",
               "schema_version": "v26.9",
               "script_fingerprint": "backtest_tw0050_leverage_mvp@2026-02-24.v26.9.cleanup_equity_curve_csvs",
               "params": {
@@ -4461,15 +4461,15 @@
                 "maint_ratio_mode": "equity_over_lever_notional"
               },
               "audit": {
-                "rows": 2961,
+                "rows": 2963,
                 "start_date": "2014-01-03",
-                "end_date": "2026-03-06",
+                "end_date": "2026-03-09",
                 "base_price_t0": 9.217665672302246,
                 "base_shares": 0.10848733676736134,
                 "lever_shares_target": 0.05424366838368067,
-                "bb_z_non_nan": 2902,
+                "bb_z_non_nan": 2904,
                 "bb_z_first_valid_date": "2014-04-08",
-                "interest_paid_total": 0.3705839022915898,
+                "interest_paid_total": 0.3716830803947552,
                 "trades": 92,
                 "skipped_entries_on_forbidden": 0,
                 "skipped_entries_on_nonpositive_equity": 0,
@@ -4487,7 +4487,7 @@
                   "note": "This is a defensive filter to avoid opening leverage in elevated realized vol regimes."
                 },
                 "equity_negative_days": 0,
-                "equity_min": 0.9645634753905752,
+                "equity_min": 0.9645636823137487,
                 "open_at_end": true,
                 "forced_eod_close": 1,
                 "exit_count_by_exit_z": 0,
@@ -4511,9 +4511,9 @@
                 "cost_on": "lever",
                 "cost_on_semantics": "cost_on='lever' charges costs on lever leg notional only. cost_on='all' charges costs on (base+lever) notional for entry/exit as a conservative upper bound; base leg is held (not liquidated) but still counted in cost_on='all'.",
                 "slippage_model": "cash penalty = notional * slip_rate per side; slip_rate = slip_bps * 1e-4",
-                "entry_cost_total": 0.22738389688169885,
-                "exit_cost_total": 0.3547018765655677,
-                "cost_paid_total": 0.5820857734472666,
+                "entry_cost_total": 0.22738389160386466,
+                "exit_cost_total": 0.3541862255679342,
+                "cost_paid_total": 0.5815701171717992,
                 "leverage_definition": "lever_shares_target = base_shares(t0) * leverage_frac; not rebalanced => effective leverage drifts with price",
                 "breaks_detected": 0,
                 "break_samples_first5": [],
@@ -4527,15 +4527,15 @@
               "perf_leverage": {
                 "ok": true,
                 "start": 1.0,
-                "end": 10.528675941519689,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.22191199502161085,
-                "vol_ann": 0.21813806006091688,
-                "sharpe0": 1.028302693439113,
+                "end": 9.999220377568225,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.21639540111294364,
+                "vol_ann": 0.21869860964121873,
+                "sharpe0": 1.0055350449603189,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.37646626135954486,
+                "mdd": -0.37646594377762677,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
@@ -4543,26 +4543,26 @@
               "perf_base_only": {
                 "ok": true,
                 "start": 1.0,
-                "end": 8.33725166503318,
-                "n_days": 2961,
-                "years": 11.746031746031745,
-                "cagr": 0.19787474857844312,
-                "vol_ann": 0.18434847570553967,
-                "sharpe0": 1.072018152671163,
+                "end": 7.984667820539256,
+                "n_days": 2963,
+                "years": 11.753968253968255,
+                "cagr": 0.19333366597830626,
+                "vol_ann": 0.18479308375303882,
+                "sharpe0": 1.049324470008643,
                 "sharpe_note": "rf=0 assumed",
                 "perf_ddof": 0,
-                "mdd": -0.33827639638700124,
+                "mdd": -0.33827633870674867,
                 "mdd_peak": "2022-01-17",
                 "mdd_trough": "2022-10-25",
                 "mdd_warning": null
               },
-              "calmar_leverage": 0.5894605116012597,
-              "calmar_base_only": 0.584949912828286,
-              "turnover_proxy": 0.06214116852414725,
+              "calmar_leverage": 0.5748073755132693,
+              "calmar_base_only": 0.5715258321567296,
+              "turnover_proxy": 0.062099223759703004,
               "delta_vs_base": {
-                "cagr": 0.024037246443167737,
-                "mdd": -0.03818986497254362,
-                "sharpe0": -0.04371545923204989
+                "cagr": 0.023061735134637384,
+                "mdd": -0.038189605070878097,
+                "sharpe0": -0.04378942504832417
               }
             }
           }
@@ -4572,22 +4572,22 @@
           "basis": "post_minus_pre",
           "metrics": {
             "pre": {
-              "cagr": 0.11167143261045442,
-              "sharpe0": 0.5006013081872112,
-              "mdd": -0.3388791211508779,
-              "calmar": 0.329531758200988
+              "cagr": 0.11167120391123131,
+              "sharpe0": 0.5006007120913425,
+              "mdd": -0.3388795176264626,
+              "calmar": 0.32953069779308214
             },
             "post": {
-              "cagr": 0.22191199502161085,
-              "sharpe0": 1.028302693439113,
-              "mdd": -0.37646626135954486,
-              "calmar": 0.5894605116012597
+              "cagr": 0.21639540111294364,
+              "sharpe0": 1.0055350449603189,
+              "mdd": -0.37646594377762677,
+              "calmar": 0.5748073755132693
             },
             "delta_post_minus_pre": {
-              "cagr": 0.11024056241115643,
-              "sharpe0": 0.5277013852519019,
-              "mdd": -0.037587140208666936,
-              "calmar": 0.25992875340027166
+              "cagr": 0.10472419720171233,
+              "sharpe0": 0.5049343328689764,
+              "mdd": -0.03758642615116414,
+              "calmar": 0.2452766777201872
             }
           },
           "notes": [
@@ -4609,20 +4609,20 @@
         },
         "inputs": {
           "post_leverage": {
-            "cagr": 0.22191199502161085,
-            "mdd": -0.37646626135954486,
-            "sharpe0": 1.028302693439113
+            "cagr": 0.21639540111294364,
+            "mdd": -0.37646594377762677,
+            "sharpe0": 1.0055350449603189
           },
           "post_base_only": {
-            "cagr": 0.19787474857844312,
-            "mdd": -0.33827639638700124,
-            "sharpe0": 1.072018152671163
+            "cagr": 0.19333366597830626,
+            "mdd": -0.33827633870674867,
+            "sharpe0": 1.049324470008643
           },
           "delta_vs_base": {
-            "cagr": 0.024037246443167737,
-            "sharpe0": -0.04371545923204989
+            "cagr": 0.023061735134637384,
+            "sharpe0": -0.04378942504832417
           },
-          "delta_abs_mdd": 0.03818986497254362
+          "delta_abs_mdd": 0.038189605070878097
         },
         "reasons": [
           "delta_cagr not below threshold"
@@ -4643,12 +4643,12 @@
       "forbid_mask_applied": false,
       "hard_fail": true,
       "hard_fail_reasons": [
-        "full: equity_min<= 0.0 (equity_min=-0.3961620718666279)",
+        "full: equity_min<= 0.0 (equity_min=-0.3961632038157375)",
         "full: equity_negative_days>0 (neg_days=1422)"
       ],
       "suite_hard_fail": true,
       "suite_hard_fail_reasons": [
-        "full: equity_min<= 0.0 (equity_min=-0.3961620718666279)",
+        "full: equity_min<= 0.0 (equity_min=-0.3961632038157375)",
         "full: equity_negative_days>0 (neg_days=1422)"
       ],
       "equity_curve_csv": "equity_curve.0d3098298f__trend_leverage_price_gt_ma60_1.5x.csv",
@@ -4663,24 +4663,24 @@
         "leverage_multiplier": 1.2,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.08370185047573919,
-        "full_mdd": -0.9486373509891205,
-        "full_sharpe0": 0.6005347610660907,
-        "full_calmar": 0.08823377066954549,
-        "full_turnover_proxy": 0.06619047619047619,
-        "full_delta_cagr_vs_base": 0.0010657940562337487,
-        "full_delta_mdd_vs_base": -0.17527824571718542,
-        "full_delta_sharpe0_vs_base": 0.10177063200279457,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08033460136842763,
+        "full_mdd": -0.9486375382441592,
+        "full_sharpe0": 0.5923905337821892,
+        "full_calmar": 0.0846841898298897,
+        "full_turnover_proxy": 0.06615897191813422,
+        "full_delta_cagr_vs_base": 0.0005419371973913734,
+        "full_delta_mdd_vs_base": -0.17527852566971314,
+        "full_delta_sharpe0_vs_base": 0.10313213989295877,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.20811342870419813,
-        "post_mdd": -0.3544981281860734,
-        "post_sharpe0": 1.0571605511116218,
-        "post_calmar": 0.5870649579141387,
-        "post_delta_cagr_vs_base": 0.010238680125755018,
-        "post_delta_sharpe0_vs_base": -0.01485760155954119,
-        "post_gonogo": "GO_OR_REVIEW",
+        "post_cagr": 0.2031351364156586,
+        "post_mdd": -0.35449796669777445,
+        "post_sharpe0": 1.0340906911008099,
+        "post_calmar": 0.5730220071723021,
+        "post_delta_cagr_vs_base": 0.009801470437352355,
+        "post_delta_sharpe0_vs_base": -0.015233778907833173,
+        "post_gonogo": "NO_GO",
         "rank_basis": "post",
         "hard_fail": false,
         "suite_hard_fail": false,
@@ -4693,23 +4693,23 @@
         "leverage_multiplier": 1.1,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.08317100660524135,
-        "full_mdd": -0.8626255224466318,
-        "full_sharpe0": 0.5289515120094866,
-        "full_calmar": 0.09641612083230114,
-        "full_turnover_proxy": 0.06619047619047619,
-        "full_delta_cagr_vs_base": 0.0005349501857359051,
-        "full_delta_mdd_vs_base": -0.08926641717469674,
-        "full_delta_sharpe0_vs_base": 0.0301873829461905,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08006416542222472,
+        "full_mdd": -0.8626255640568775,
+        "full_sharpe0": 0.5197989752305026,
+        "full_calmar": 0.09281450580445082,
+        "full_turnover_proxy": 0.06615897191813422,
+        "full_delta_cagr_vs_base": 0.00027150125118846624,
+        "full_delta_mdd_vs_base": -0.08926655148243146,
+        "full_delta_sharpe0_vs_base": 0.030540581341272133,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.20311109554307283,
-        "post_mdd": -0.34655818009234995,
-        "post_sharpe0": 1.0653344298394416,
-        "post_calmar": 0.5860808003116483,
-        "post_delta_cagr_vs_base": 0.005236346964629712,
-        "post_delta_sharpe0_vs_base": -0.0066837228317213615,
+        "post_cagr": 0.1983421372759362,
+        "post_mdd": -0.3465580706301741,
+        "post_sharpe0": 1.0423726959837418,
+        "post_calmar": 0.5723200643265208,
+        "post_delta_cagr_vs_base": 0.005008471297629935,
+        "post_delta_sharpe0_vs_base": -0.006951774024901214,
         "post_gonogo": "NO_GO",
         "rank_basis": "post",
         "hard_fail": false,
@@ -4723,23 +4723,23 @@
         "leverage_multiplier": 1.1,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.08487991176491172,
-        "full_mdd": -0.836444768147454,
-        "full_sharpe0": 0.5169114773638036,
-        "full_calmar": 0.10147700720622897,
-        "full_turnover_proxy": 0.03261904761904762,
-        "full_delta_cagr_vs_base": 0.002243855345406276,
-        "full_delta_mdd_vs_base": -0.06308566287551898,
-        "full_delta_sharpe0_vs_base": 0.01814734830050746,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08184835133064339,
+        "full_mdd": -0.8364446560972657,
+        "full_sharpe0": 0.5078860593754944,
+        "full_calmar": 0.09785268007154999,
+        "full_turnover_proxy": 0.032603522132317944,
+        "full_delta_cagr_vs_base": 0.0020556871596071336,
+        "full_delta_mdd_vs_base": -0.06308564352281965,
+        "full_delta_sharpe0_vs_base": 0.018627665486263933,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.2046839386240209,
-        "post_mdd": -0.3551951639637867,
-        "post_sharpe0": 1.0492136343604457,
-        "post_calmar": 0.576257672936361,
-        "post_delta_cagr_vs_base": 0.006809190045577784,
-        "post_delta_sharpe0_vs_base": -0.02280451831071728,
+        "post_cagr": 0.1999788060856149,
+        "post_mdd": -0.3551950946712136,
+        "post_sharpe0": 1.027331691861529,
+        "post_calmar": 0.5630111707221783,
+        "post_delta_cagr_vs_base": 0.006645140107308656,
+        "post_delta_sharpe0_vs_base": -0.02199277814711409,
         "post_gonogo": "NO_GO",
         "rank_basis": "post",
         "hard_fail": false,
@@ -4753,23 +4753,23 @@
         "leverage_multiplier": 1.2,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.08705417520879766,
-        "full_mdd": -0.8953442742717763,
-        "full_sharpe0": 0.5471714282299651,
-        "full_calmar": 0.09722983405417177,
-        "full_turnover_proxy": 0.03261904761904762,
-        "full_delta_cagr_vs_base": 0.004418118789292214,
-        "full_delta_mdd_vs_base": -0.12198516899984124,
-        "full_delta_sharpe0_vs_base": 0.04840729916666897,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08384534967686008,
+        "full_mdd": -0.8953441444848514,
+        "full_sharpe0": 0.5387464823911838,
+        "full_calmar": 0.09364594630269421,
+        "full_turnover_proxy": 0.032603522132317944,
+        "full_delta_cagr_vs_base": 0.004052685505823828,
+        "full_delta_mdd_vs_base": -0.12198513191040539,
+        "full_delta_sharpe0_vs_base": 0.04948808850195341,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.21110549002713763,
-        "post_mdd": -0.3705350740567621,
-        "post_sharpe0": 1.0301065651514112,
-        "post_calmar": 0.5697314635180757,
-        "post_delta_cagr_vs_base": 0.013230741448694516,
-        "post_delta_sharpe0_vs_base": -0.04191158751975177,
+        "post_cagr": 0.2062526759982659,
+        "post_mdd": -0.3705349948711876,
+        "post_sharpe0": 1.008954166034766,
+        "post_calmar": 0.5566348087310009,
+        "post_delta_cagr_vs_base": 0.012919010019959654,
+        "post_delta_sharpe0_vs_base": -0.040370303973876975,
         "post_gonogo": "GO_OR_REVIEW",
         "rank_basis": "post",
         "hard_fail": false,
@@ -4783,23 +4783,23 @@
         "leverage_multiplier": 1.3,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.08916318701520809,
-        "full_mdd": -0.9504609125396207,
-        "full_sharpe0": 0.5973282722626798,
-        "full_calmar": 0.09381047220233925,
-        "full_turnover_proxy": 0.03261904761904762,
-        "full_delta_cagr_vs_base": 0.006527130595702646,
-        "full_delta_mdd_vs_base": -0.17710180726768565,
-        "full_delta_sharpe0_vs_base": 0.09856414319938367,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08578703903385976,
+        "full_mdd": -0.9504607664453076,
+        "full_sharpe0": 0.5898185220120125,
+        "full_calmar": 0.09025836947978452,
+        "full_turnover_proxy": 0.032603522132317944,
+        "full_delta_cagr_vs_base": 0.005994374862823504,
+        "full_delta_mdd_vs_base": -0.17710175387086158,
+        "full_delta_sharpe0_vs_base": 0.10056012812278203,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.2171830486472739,
-        "post_mdd": -0.38450728235699627,
-        "post_sharpe0": 1.0138690624219346,
-        "post_calmar": 0.564834682235303,
-        "post_delta_cagr_vs_base": 0.019308300068830775,
-        "post_delta_sharpe0_vs_base": -0.05814909024922832,
+        "post_cagr": 0.21219634785278485,
+        "post_mdd": -0.3845071946865779,
+        "post_sharpe0": 0.9933763096295277,
+        "post_calmar": 0.5518657408367919,
+        "post_delta_cagr_vs_base": 0.018862681874478593,
+        "post_delta_sharpe0_vs_base": -0.05594816037911532,
         "post_gonogo": "GO_OR_REVIEW",
         "rank_basis": "post",
         "hard_fail": false,
@@ -4813,23 +4813,23 @@
         "leverage_multiplier": 1.5,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.0843789600439826,
-        "full_mdd": -0.7142128665798135,
-        "full_sharpe0": 0.4874570009106873,
-        "full_calmar": 0.11814259304519716,
-        "full_turnover_proxy": 0.010476190476190476,
-        "full_delta_cagr_vs_base": 0.0017429036244771545,
-        "full_delta_mdd_vs_base": 0.059146238692121544,
-        "full_delta_sharpe0_vs_base": -0.01130712815260887,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08160589424507148,
+        "full_mdd": -0.7142127001459743,
+        "full_sharpe0": 0.47808068463085124,
+        "full_calmar": 0.11425993156995454,
+        "full_turnover_proxy": 0.010471204188481676,
+        "full_delta_cagr_vs_base": 0.0018132300740352214,
+        "full_delta_mdd_vs_base": 0.05914631242847179,
+        "full_delta_sharpe0_vs_base": -0.011177709258379187,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.1972282722817571,
-        "post_mdd": -0.4136536781776985,
-        "post_sharpe0": 0.9677654882273079,
-        "post_calmar": 0.4767956449719546,
-        "post_delta_cagr_vs_base": -0.000646476296686016,
-        "post_delta_sharpe0_vs_base": -0.10425266444385506,
+        "post_cagr": 0.19266157615101154,
+        "post_mdd": -0.4136534777729173,
+        "post_sharpe0": 0.9480718439681306,
+        "post_calmar": 0.4657559684697651,
+        "post_delta_cagr_vs_base": -0.0006720898272947196,
+        "post_delta_sharpe0_vs_base": -0.10125262604051244,
         "post_gonogo": "NO_GO",
         "rank_basis": "post",
         "hard_fail": false,
@@ -4843,28 +4843,28 @@
         "leverage_multiplier": 1.5,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.09389636116706379,
-        "full_mdd": -1.050715357099785,
-        "full_sharpe0": -0.19653942986836678,
-        "full_calmar": 0.0893642227008457,
-        "full_turnover_proxy": 0.030714285714285715,
-        "full_delta_cagr_vs_base": 0.011260304747558347,
-        "full_delta_mdd_vs_base": -0.27735625182784984,
-        "full_delta_sharpe0_vs_base": -0.695303558931663,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.09024801013748918,
+        "full_mdd": -1.0507151820624323,
+        "full_sharpe0": -0.19663842052427408,
+        "full_calmar": 0.08589198260211942,
+        "full_turnover_proxy": 0.030699666825321277,
+        "full_delta_cagr_vs_base": 0.010455345966452922,
+        "full_delta_mdd_vs_base": -0.27735616948798625,
+        "full_delta_sharpe0_vs_base": -0.6858968144135045,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.22844689496376436,
-        "post_mdd": -0.40902036218627025,
-        "post_sharpe0": 0.9877688083682389,
-        "post_calmar": 0.5585220592507527,
-        "post_delta_cagr_vs_base": 0.03057214638532124,
-        "post_delta_sharpe0_vs_base": -0.08424934430292408,
+        "post_cagr": 0.223226013823272,
+        "post_mdd": -0.4090202608417438,
+        "post_sharpe0": 0.9684241061467732,
+        "post_calmar": 0.5457578393888941,
+        "post_delta_cagr_vs_base": 0.02989234784496575,
+        "post_delta_sharpe0_vs_base": -0.08090036386186983,
         "post_gonogo": "GO_OR_REVIEW",
         "rank_basis": "post",
         "hard_fail": true,
         "suite_hard_fail": true,
-        "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.11447443040287797); full: equity_negative_days>0 (neg_days=422)",
+        "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.114474000912822); full: equity_negative_days>0 (neg_days=422)",
         "ok": true
       },
       {
@@ -4873,28 +4873,28 @@
         "leverage_multiplier": 1.3,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.0841331390176232,
-        "full_mdd": -1.0315693941997268,
-        "full_sharpe0": -0.030730820293852032,
-        "full_calmar": 0.08155839005178338,
-        "full_turnover_proxy": 0.06571428571428571,
-        "full_delta_cagr_vs_base": 0.0014970825981177605,
-        "full_delta_mdd_vs_base": -0.25821028892779174,
-        "full_delta_sharpe0_vs_base": -0.5294949493571481,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08050342959431966,
+        "full_mdd": -1.0315697369714047,
+        "full_sharpe0": -0.03127953089367056,
+        "full_calmar": 0.07803973566602529,
+        "full_turnover_proxy": 0.06568300809138505,
+        "full_delta_cagr_vs_base": 0.0007107654232834104,
+        "full_delta_mdd_vs_base": -0.2582107243969587,
+        "full_delta_sharpe0_vs_base": -0.520537924782901,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.21290262216750255,
-        "post_mdd": -0.3621169769236553,
-        "post_sharpe0": 1.0480220642165732,
-        "post_calmar": 0.5879388035772445,
-        "post_delta_cagr_vs_base": 0.015027873589059437,
-        "post_delta_sharpe0_vs_base": -0.02399608845458978,
+        "post_cagr": 0.2077311973225,
+        "post_mdd": -0.362116763321394,
+        "post_sharpe0": 1.0249671601058605,
+        "post_calmar": 0.573658052770481,
+        "post_delta_cagr_vs_base": 0.014397531344193748,
+        "post_delta_sharpe0_vs_base": -0.02435730990278251,
         "post_gonogo": "GO_OR_REVIEW",
         "rank_basis": "post",
         "hard_fail": true,
         "suite_hard_fail": true,
-        "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.06394149846220487); full: equity_negative_days>0 (neg_days=124)",
+        "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.06394215654854424); full: equity_negative_days>0 (neg_days=124)",
         "ok": true
       },
       {
@@ -4903,28 +4903,28 @@
         "leverage_multiplier": 1.5,
         "maint_ratio_mode": "equity_over_lever_notional",
         "maintenance_margin": 0.0,
-        "full_base_price_t0": 20.467866897583008,
-        "full_cagr": 0.08545615123843042,
-        "full_mdd": -1.1888329105184612,
-        "full_sharpe0": -0.19507420962574867,
-        "full_calmar": 0.07188239026892534,
-        "full_turnover_proxy": 0.04476190476190476,
-        "full_delta_cagr_vs_base": 0.0028200948189249786,
-        "full_delta_mdd_vs_base": -0.4154738052465261,
-        "full_delta_sharpe0_vs_base": -0.6938383386890448,
+        "full_base_price_t0": 20.46786880493164,
+        "full_cagr": 0.08133656761529617,
+        "full_mdd": -1.1888335888703914,
+        "full_sharpe0": -0.19439330639958002,
+        "full_calmar": 0.06841711773350947,
+        "full_turnover_proxy": 0.0447405997144217,
+        "full_delta_cagr_vs_base": 0.0015439034442599198,
+        "full_delta_mdd_vs_base": -0.4154745762959453,
+        "full_delta_sharpe0_vs_base": -0.6836517002888105,
         "post_ok": true,
         "post_segment_start_price": 9.217665672302246,
-        "post_cagr": 0.22191199502161085,
-        "post_mdd": -0.37646626135954486,
-        "post_sharpe0": 1.028302693439113,
-        "post_calmar": 0.5894605116012597,
-        "post_delta_cagr_vs_base": 0.024037246443167737,
-        "post_delta_sharpe0_vs_base": -0.04371545923204989,
+        "post_cagr": 0.21639540111294364,
+        "post_mdd": -0.37646594377762677,
+        "post_sharpe0": 1.0055350449603189,
+        "post_calmar": 0.5748073755132693,
+        "post_delta_cagr_vs_base": 0.023061735134637384,
+        "post_delta_sharpe0_vs_base": -0.04378942504832417,
         "post_gonogo": "GO_OR_REVIEW",
         "rank_basis": "post",
         "hard_fail": true,
         "suite_hard_fail": true,
-        "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.3961620718666279); full: equity_negative_days>0 (neg_days=1422)",
+        "hard_fail_reason": "full: equity_min<= 0.0 (equity_min=-0.3961632038157375); full: equity_negative_days>0 (neg_days=1422)",
         "ok": true
       }
     ],
