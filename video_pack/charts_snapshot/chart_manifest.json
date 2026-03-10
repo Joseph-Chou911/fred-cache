@@ -1,22 +1,22 @@
 {
   "schema_version": "chart_manifest_v1",
   "script_fingerprint": "make_episode_charts@v1.6.zh_all_charts_roll25_rename_market_heat",
-  "generated_at_utc": "2026-03-04T03:29:10Z",
+  "generated_at_utc": "2026-03-10T23:57:08Z",
   "timezone": "Asia/Taipei",
-  "day_key_local": "2026-03-04",
-  "data_as_of": "2026-03-03",
+  "day_key_local": "2026-03-11",
+  "data_as_of": "2026-03-10",
   "input_files": {
     "episode_pack": "video_pack/episode_pack.json",
-    "episode_pack_sha256": "748be17fe82bb06aa0f9660cfeba79350b796ca50d86a1069fdb0f29d6475f85"
+    "episode_pack_sha256": "482df709aa7ea1dd6f9910ff64c8860f8ed502aa6712f371261da92ea9ad9720"
   },
   "pack_build_fingerprint": "build_video_pack@v1.3.data_md_out_and_tz_fix",
-  "pack_generated_at_local": "2026-03-04T11:29:08+08:00",
+  "pack_generated_at_local": "2026-03-11T07:57:06+08:00",
   "warnings": [],
   "charts": [
     {
       "file": "00_episode_snapshot.png",
       "path": "video_pack/charts_snapshot/00_episode_snapshot.png",
-      "sha256": "0aa9af8c28209550e42b28715103daf1db8087134d1e9b9c27045da6c4e1c678",
+      "sha256": "22f38e018171e38bf0d85146ed29b7ecc4b051717cdc4025fb9abb147273b513",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -27,7 +27,7 @@
     {
       "file": "01_roll25_percentile_bars.png",
       "path": "video_pack/charts_snapshot/01_roll25_percentile_bars.png",
-      "sha256": "ade0dbd291b56de3dd644155042889f2c49512fb5ef2500d11e78a3cfe834c38",
+      "sha256": "6388a728dad108813df100cad5af7a7964fe5c644d9c4b3125533c8f13ec63f2",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -38,7 +38,7 @@
     {
       "file": "02_margin_balance_bars.png",
       "path": "video_pack/charts_snapshot/02_margin_balance_bars.png",
-      "sha256": "e348b281ecc31d11c22d5569ece30afac6a36562c49d296d9afa9b605b9255e5",
+      "sha256": "e265cf4c8b34a28aae493f0400710c56f79f141996493920b41777331bfeb3b9",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -49,7 +49,7 @@
     {
       "file": "03_margin_change_bars.png",
       "path": "video_pack/charts_snapshot/03_margin_change_bars.png",
-      "sha256": "20f385e33ec90d650aedc12779a1b26b611e14146544cab1f82828c4b4b8526f",
+      "sha256": "a220a61ae05e6dcca99eb87e2d822735157ecd3fbbe15291227a170c1dfe70a9",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -60,7 +60,7 @@
     {
       "file": "04_0050_bb_band_gauge.png",
       "path": "video_pack/charts_snapshot/04_0050_bb_band_gauge.png",
-      "sha256": "5978b031255e9e57078a5e3721e940711b0ec901e654cccafc44f4e895276397",
+      "sha256": "c5f9e415a04459dbca39955ed9c0a44e0a823af4882708576af173b4e27b411d",
       "dpi": 160,
       "size_inches": [
         8.0,
@@ -71,7 +71,7 @@
     {
       "file": "episode_chart_ready.csv",
       "path": "video_pack/charts_snapshot/episode_chart_ready.csv",
-      "sha256": "a1534edab12de136371238ab1df7fe73b115beb1e0819eed79ec0868ea12f36e",
+      "sha256": "f1984a1a39fc0ae3b329ce67c21d76fd134ccf36d242bf4d1b36487a752fab9b",
       "title": "episode_chart_ready.csv (flat metrics table)"
     }
   ]
