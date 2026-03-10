@@ -1,13 +1,13 @@
 {
   "meta": {
-    "run_ts_utc": "2026-03-09T23:36:57.621Z",
+    "run_ts_utc": "2026-03-10T07:25:05.207Z",
     "script_fingerprint": "fetch_tw0050_chip_overlay@2026-02-19.v6",
     "stock_no": "0050",
     "window_n": 5,
     "timeout": 15.0,
     "retries": 3,
     "backoff": 1.5,
-    "aligned_last_date": "20260309"
+    "aligned_last_date": "20260310"
   },
   "sources": {
     "t86_tpl": "https://www.twse.com.tw/fund/T86?response=json&date={ymd}&selectType=ALLBUT0999",
@@ -35,6 +35,32 @@
       "dq": []
     },
     "per_day": [
+      {
+        "date": "20260310",
+        "dq": [
+          "NON_TRADING_OR_NO_DATA"
+        ],
+        "sources": {
+          "t86": "https://www.twse.com.tw/fund/T86?response=json&date=20260310&selectType=ALLBUT0999",
+          "twt72u": "https://www.twse.com.tw/exchangeReport/TWT72U?response=json&date=20260310&selectType=SLBNLB"
+        },
+        "t86": {
+          "dq": [
+            "T86_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        },
+        "twt72u": {
+          "dq": [
+            "TWT72U_EMPTY"
+          ],
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
+        }
+      },
       {
         "date": "20260309",
         "dq": [],
@@ -438,37 +464,12 @@
           "total3_net_shares": -256531039
         },
         "twt72u": {
-          "dq": [],
-          "fields": [
-            "證券代號",
-            "證券名稱",
-            "前日借券餘額(1)股",
-            "本日異動股借券(2)",
-            "本日異動股還券(3)",
-            "本日借券餘額股(4)=(1)+(2)-(3)",
-            "本日收盤價(5)單位：元",
-            "借券餘額市值單位：元(6)=(4)*(5)",
-            "市場別"
+          "dq": [
+            "TWT72U_EMPTY"
           ],
-          "raw_row": [
-            "0050",
-            "元大台灣50",
-            "221,489,000",
-            "31,070,000",
-            "15,289,000",
-            "237,270,000",
-            "75.60",
-            "17,937,612,000",
-            "集中市場"
-          ],
-          "col_idx": {
-            "shares_end": 5,
-            "close": 6,
-            "mv": 7
-          },
-          "borrow_shares": 237270000,
-          "close": 75.6,
-          "borrow_mv_ntd": 17937612000.0
+          "fields": [],
+          "raw_row": null,
+          "col_idx": {}
         }
       },
       {

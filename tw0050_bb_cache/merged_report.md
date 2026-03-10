@@ -1,9 +1,9 @@
 # 0050 Valuation × BB Merged Report
 
 ## Summary
-- current_date: `2026-03-09`
-- current_0050_price: `73.60`
-- bb_state: **IN_BAND**; bb_z=`0.7003`
+- current_date: `2026-03-10`
+- current_0050_price: `75.20`
+- bb_state: **IN_BAND**; bb_z=`0.9377`
 - regime: **RISK_OFF_OR_DEFENSIVE**; allowed=`false`
 - action_bucket: **VETO**; pledge_policy=`DISALLOW`
 - base_execution_bias: **WAIT_FOR_BETTER_ALIGNMENT**
@@ -12,7 +12,7 @@
 - matched_caution_flags: `FWD_MDD_CLEAN_APPLIED, FWD_MDD_OUTLIER_MIN_RAW_20D, PRICE_SERIES_BREAK_DETECTED, RAW_OUTLIER_EXCLUDED_BY_CLEAN`
 
 ## Base Inputs
-- base_0050: `73.5999984741211` (source=`bb_stats.latest.price_used`)
+- base_0050: `75.19999694824219` (source=`bb_stats.latest.price_used`)
 - base_tsmc: `1890.0` (source=`cli`)
 - tsmc_weight_in_0050: `0.6408` (source=`config`)
 - dividend_drag_mode: `light`
@@ -22,17 +22,17 @@
 
 | scenario | years | EPS_base | EPS_growth | FX_haircut | P/E | other_ret | TSMC | 0050_gross | 0050_net |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2026_壓力 | 1 | 66.25 | 20.0% | 6.0% | 18.0 | -15.0% | 1345.14 | 56.04 | 55.04 |
-| 2026_保守 | 1 | 66.25 | 20.0% | 3.0% | 20.0 | -8.0% | 1542.30 | 62.81 | 61.81 |
-| 2026_中性偏保守 | 1 | 66.25 | 25.0% | 3.0% | 22.0 | -3.0% | 1767.22 | 69.74 | 68.74 |
-| 2026_中性 | 1 | 66.25 | 25.0% | 0.0% | 24.0 | 0.0% | 1987.50 | 76.03 | 75.03 |
-| 2027_中性 | 2 | 66.25 | 25.0% | 6.0% | 22.0 | 2.0% | 2140.70 | 80.38 | 78.38 |
-| 2027_中性偏樂觀 | 2 | 66.25 | 25.0% | 0.0% | 24.0 | 5.0% | 2484.38 | 89.75 | 87.75 |
-| 2027_樂觀延續 | 2 | 66.25 | 30.0% | 0.0% | 24.0 | 5.0% | 2687.10 | 94.81 | 92.81 |
+| 2026_壓力 | 1 | 66.25 | 20.0% | 6.0% | 18.0 | -15.0% | 1345.14 | 57.26 | 56.26 |
+| 2026_保守 | 1 | 66.25 | 20.0% | 3.0% | 20.0 | -8.0% | 1542.30 | 64.17 | 63.17 |
+| 2026_中性偏保守 | 1 | 66.25 | 25.0% | 3.0% | 22.0 | -3.0% | 1767.22 | 71.26 | 70.26 |
+| 2026_中性 | 1 | 66.25 | 25.0% | 0.0% | 24.0 | 0.0% | 1987.50 | 77.69 | 76.69 |
+| 2027_中性 | 2 | 66.25 | 25.0% | 6.0% | 22.0 | 2.0% | 2140.70 | 82.13 | 80.13 |
+| 2027_中性偏樂觀 | 2 | 66.25 | 25.0% | 0.0% | 24.0 | 5.0% | 2484.38 | 91.70 | 89.70 |
+| 2027_樂觀延續 | 2 | 66.25 | 30.0% | 0.0% | 24.0 | 5.0% | 2687.10 | 96.87 | 94.87 |
 
 ## Current Price Position vs Scenario Net Range
-- current_0050_price: `73.60`
-- scenario_net_range: `55.04` ~ `92.81`
+- current_0050_price: `75.20`
+- scenario_net_range: `56.26` ~ `94.87`
 - percentile_in_scenario_net_range: `42.86`
 - zone: **MID_ZONE**
 - zone_note: `rough classification only; sparse scenario set => low percentile resolution`
@@ -41,10 +41,10 @@
 
 | label | price_level | vs_current_pct |
 |---|---:|---:|
-| 10D_p10_uncond | 70.07 | -4.80% |
-| 10D_p05_uncond | 68.96 | -6.30% |
-| 20D_p10_uncond | 68.55 | -6.87% |
-| 20D_p05_uncond | 66.78 | -9.26% |
+| 10D_p10_uncond | 71.59 | -4.80% |
+| 10D_p05_uncond | 70.46 | -6.30% |
+| 20D_p10_uncond | 70.04 | -6.86% |
+| 20D_p05_uncond | 68.23 | -9.26% |
 
 ## Data Quality
 - PRICE_SERIES_BREAK_DETECTED
