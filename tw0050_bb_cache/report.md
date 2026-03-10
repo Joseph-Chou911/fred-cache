@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-10T07:25:05Z`
+- report_generated_at_utc: `2026-03-10T23:05:56Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -27,8 +27,8 @@
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=29.58%; slope=6.40% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=33.6%; atr=1.9324 (2.57%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=96.34
-- margin(5D,thr=100.00億): TOTAL -269.00 億 => **DELEVERAGING**; TWSE -195.50 / TPEX -73.50; margin_date=2026-03-09, price_last_date=2026-03-10 (MISALIGNED); data_date=2026-03-09
-- chip_overlay(T86+TWT72U,5D): total3_5D=-961,996,196; foreign=-623,741,111; trust=15,820,000; dealer=-354,075,085; borrow_shares=241,916,000 (Δ1D=-2,325,000); borrow_mv(億)=178.1 (Δ1D=-9.6); asof=20260309; price_last_date=2026-03-10 (ALIGNED)
+- margin(5D,thr=100.00億): TOTAL -217.90 億 => **DELEVERAGING**; TWSE -161.10 / TPEX -56.80; margin_date=2026-03-10, price_last_date=2026-03-10 (ALIGNED); data_date=2026-03-10
+- chip_overlay(T86+TWT72U,5D): total3_5D=-816,110,300; foreign=-528,197,269; trust=17,763,000; dealer=-305,676,031; borrow_shares=243,676,000 (Δ1D=1,760,000); borrow_mv(億)=183.2 (Δ1D=5.2); asof=20260310; price_last_date=2026-03-10 (ALIGNED)
 
 ## forward_mdd_conditional (bb_z buckets)
 
@@ -265,10 +265,10 @@
 | min_entry_date | 2009-06-03 |
 | min_entry_price | 29.7584 |
 | min_future_date | 2009-06-17 |
-| min_future_price | 26.7571 |
+| min_future_price | 26.7570 |
 | dq_flags | (none) |
 
-- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7571`
+- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7570`
 
 ##### bucket: >=2 (raw_key=z_ge_2.0)
 
@@ -303,7 +303,7 @@
 | rv20_percentile | 96.34 |
 | rv_pctl_max | 60.00 |
 | dq_core | PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN |
-| margin_note | margin: MISALIGNED (ignored in overlay) |
+| margin_note | margin(aligned): total_state=DELEVERAGING, total_sum=-217.90000000000003 |
 | pledge_block_in_stats | true |
 | pledge_version | pledge_guidance_v1 |
 | pledge_scope | compute_only_no_margin_no_chip |
@@ -314,7 +314,7 @@
 |---|---:|
 | action_bucket_renderer | **HOLD_DEFENSIVE_ONLY** |
 | pledge_policy_renderer | **DISALLOW** |
-| pledge_veto_reasons_renderer | regime gate closed; action_bucket=HOLD_DEFENSIVE_ONLY |
+| pledge_veto_reasons_renderer | regime gate closed; action_bucket=HOLD_DEFENSIVE_ONLY; market deleveraging (margin 5D) |
 | action_bucket_stats | VETO |
 | pledge_policy_stats | DISALLOW |
 | pledge_veto_reasons_stats | regime_gate_closed |
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-10T07:25:05.207Z`
+- overlay_generated_at_utc: `2026-03-10T23:05:56.443Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260310` vs price_last_date=`2026-03-10` => **ALIGNED**
@@ -482,28 +482,28 @@
 
 | item | value |
 |---|---:|
-| asof_date | 20260309 |
-| borrow_shares | 241,916,000 |
-| borrow_shares_chg_1d | -2,325,000 |
-| borrow_mv_ntd(億) | 178.1 |
-| borrow_mv_ntd_chg_1d(億) | -9.6 |
+| asof_date | 20260310 |
+| borrow_shares | 243,676,000 |
+| borrow_shares_chg_1d | 1,760,000 |
+| borrow_mv_ntd(億) | 183.2 |
+| borrow_mv_ntd_chg_1d(億) | 5.2 |
 
 ### T86 Aggregate（法人：5D sum）
 
 | item | value |
 |---|---:|
-| days_used | 20260303, 20260304, 20260305, 20260306, 20260309 |
-| foreign_net_shares_sum | -623,741,111 |
-| trust_net_shares_sum | 15,820,000 |
-| dealer_net_shares_sum | -354,075,085 |
-| total3_net_shares_sum | -961,996,196 |
+| days_used | 20260304, 20260305, 20260306, 20260309, 20260310 |
+| foreign_net_shares_sum | -528,197,269 |
+| trust_net_shares_sum | 17,763,000 |
+| dealer_net_shares_sum | -305,676,031 |
+| total3_net_shares_sum | -816,110,300 |
 
 ### ETF Units（受益權單位）
 
 | item | value |
 |---|---:|
-| units_outstanding | 17,558,500,000 |
-| units_chg_1d | 345,500,000 |
+| units_outstanding | 17,626,500,000 |
+| units_chg_1d | 68,000,000 |
 | dq | (none) |
 
 ### Chip Overlay Sources
@@ -513,16 +513,16 @@
 
 ## Margin Overlay（融資）
 
-- overlay_generated_at_utc: `2026-03-09T23:07:01Z`
-- data_date: `2026-03-09`
+- overlay_generated_at_utc: `2026-03-10T23:01:05Z`
+- data_date: `2026-03-10`
 - params: window_n=5, threshold_yi=100.00
-- date_alignment: margin_latest_date=`2026-03-09` vs price_last_date=`2026-03-10` => **MISALIGNED**
+- date_alignment: margin_latest_date=`2026-03-10` vs price_last_date=`2026-03-10` => **ALIGNED**
 
 | scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |
 |---|---:|---:|---:|---:|---:|---:|
-| TWSE | 2026-03-09 | 3,719.6 | -107.2 | -195.5 | DELEVERAGING | 5 |
-| TPEX | 2026-03-09 | 1,315.7 | -77.4 | -73.5 | NEUTRAL | 5 |
-| TOTAL | 2026-03-09 | 5,035.3 | N/A | -269.0 | DELEVERAGING | N/A |
+| TWSE | 2026-03-10 | 3,682.4 | -37.2 | -161.1 | DELEVERAGING | 5 |
+| TPEX | 2026-03-10 | 1,322.1 | 6.3 | -56.8 | NEUTRAL | 5 |
+| TOTAL | 2026-03-10 | 5,004.5 | N/A | -217.9 | DELEVERAGING | N/A |
 
 ### Margin Sources
 
