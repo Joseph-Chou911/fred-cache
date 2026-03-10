@@ -13,8 +13,8 @@
     - watchspread20: status=FALLBACK_FIXED, sample_n=35, threshold=3.0, reason=insufficient samples (n=35 < calib_min_n=60)
     - watchaccel: status=FALLBACK_FIXED, sample_n=50, threshold=0.25, reason=insufficient samples (n=50 < calib_min_n=60)
 - 上游資料狀態（latest.json）：⚠️（NOTE）（top-level confidence/fetch_status/dq_reason 未提供；不做 PASS/FAIL）
-- 一致性判定（Margin × Roll25）：MARKET_SHOCK_ONLY
-  - rationale: roll25 heated but Margin not heated
+- 一致性判定（Margin × Roll25）：QUIET
+  - rationale: no resonance rule triggered
   - resonance_policy: latest
   - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
   - resonance_confidence: DOWNGRADED
@@ -59,12 +59,12 @@
 
 ## 2.1) 台股成交量/波動（roll25_cache；confirm-only）
 - roll25_path: roll25_cache/latest_report.json
-- UsedDate: 2026-03-09｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 中(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
-- summary: 今日資料未更新；UsedDate=2026-03-09：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
+- UsedDate: 2026-03-10｜UsedDateStatus: DATA_NOT_UPDATED｜risk_level: 低(derived)（stale）｜risk_level_raw: NA｜tag: WEEKDAY
+- summary: 今日資料未更新；UsedDate=2026-03-10：Mode=FULL；freshness_ok=True；daily endpoint has not published today's row yet
 - resonance_confidence: DOWNGRADED
 
 ## 2.2) 一致性判定（Margin × Roll25 共振）
-- 判定：MARKET_SHOCK_ONLY（roll25 heated but Margin not heated）
+- 判定：QUIET（no resonance rule triggered）
 - resonance_confidence: DOWNGRADED
 - resonance_note: roll25 stale，但依 LATEST_AVAILABLE 政策仍使用最新可用資料判定（信心降級）
 
@@ -90,10 +90,10 @@
 - Check-4 TPEX history rows>=21：✅（PASS）（rows_series=55）
 - Check-5 TWSE 20D base_date 存在於 series：✅（PASS）
 - Check-5 TPEX 20D base_date 存在於 series：✅（PASS）
-- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-03-09) vs TWSE(2026-03-10)）
+- Check-6 roll25 UsedDate 與 TWSE 最新日期一致（confirm-only）：⚠️（NOTE）（roll25 stale (UsedDateStatus=DATA_NOT_UPDATED) | UsedDate(2026-03-10) == TWSE(2026-03-10)）
 - Check-7 roll25 Lookback window（info）：⚠️（NOTE）（skipped: roll25 stale (DATA_NOT_UPDATED)）
 - Check-10 maint latest vs history[0] date（info）：✅（PASS）（OK）
 - Check-11 maint history head5 dates 嚴格遞減且無重複（info）：✅（PASS）（OK）
 - Check-12 OTC Guardrail（info-only）：⚠️（NOTE）（stage=NONE, label=NONE, prewatch_hit=False, otc_alert_hit=False）
 
-_generated_at_utc: 2026-03-10T23:01:05Z_
+_generated_at_utc: 2026-03-10T23:07:05Z_
