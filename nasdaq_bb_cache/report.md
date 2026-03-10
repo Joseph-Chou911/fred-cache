@@ -1,16 +1,16 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-03-10T15:43:55Z`
+- report_generated_at_utc: `2026-03-10T23:45:13Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-03-10 close=611.6000) → **NORMAL_RANGE** (reason=default); dist_to_lower=2.366%; dist_to_upper=3.483%; 20D forward_mdd: p50=-3.18%, p10=-14.47%, min=-24.99% (conf=HIGH)
-- **VXN** (2026-03-09 close=27.6900) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.890)); z=1.6544; pos=0.890; bwΔ=2.34%; Pos-WATCH (C) p90 runup=58.0% (n=79) (conf=MED)
+- **QQQ** (2026-03-10 close=607.7300) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.766%; dist_to_upper=4.144%; 20D forward_mdd: p50=-3.18%, p10=-14.47%, min=-24.99% (conf=HIGH)
+- **VXN** (2026-03-10 close=27.3300) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.842)); z=1.5002; pos=0.842; bwΔ=1.46%; Pos-WATCH (C) p90 runup=58.0% (n=79) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-10T15:43:54Z`
+- snippet.generated_at_utc: `2026-03-10T23:45:12Z`
 - data_as_of (meta.max_date): `2026-03-10`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
@@ -21,17 +21,17 @@
 | field | value |
 |---|---:|
 | date | `2026-03-10` |
-| close | `611.6000` |
-| bb_mid | `614.7578` |
-| bb_lower | `597.1326` |
-| bb_upper | `632.9033` |
-| z | `-0.3541` |
+| close | `607.7300` |
+| bb_mid | `614.6928` |
+| bb_lower | `596.9977` |
+| bb_upper | `632.9123` |
+| z | `-0.7800` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `2.366%` |
-| distance_to_upper_pct | `3.483%` |
-| position_in_band | `0.404` |
-| bandwidth_pct | `5.82%` |
-| bandwidth_delta_pct | `-1.50%` |
+| distance_to_lower_pct | `1.766%` |
+| distance_to_upper_pct | `4.144%` |
+| position_in_band | `0.299` |
+| bandwidth_pct | `5.84%` |
+| bandwidth_delta_pct | `-1.10%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
@@ -58,30 +58,30 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-10T15:43:54Z`
-- data_as_of (meta.max_date): `2026-03-09`  | staleness_days: `1`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-03-10T23:45:13Z`
+- data_as_of (meta.max_date): `2026-03-10`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
 - action_output: **`NEAR_UPPER_BAND (WATCH)`**
-- trigger_reason: `position_in_band>=0.8 (pos=0.890)`
+- trigger_reason: `position_in_band>=0.8 (pos=0.842)`
 
 ### Latest
 
 | field | value |
 |---|---:|
-| date | `2026-03-09` |
-| close | `27.6900` |
-| bb_mid | `21.9763` |
-| bb_lower | `16.6197` |
-| bb_upper | `29.0594` |
-| z | `1.6544` |
+| date | `2026-03-10` |
+| close | `27.3300` |
+| bb_mid | `22.0971` |
+| bb_lower | `16.6450` |
+| bb_upper | `29.3352` |
+| z | `1.5002` |
 | trigger_z_le_-2 (A_lowvol) | `False` |
 | trigger_z_ge_2 (B_highvol) | `False` |
-| distance_to_lower_pct | `39.979%` |
-| distance_to_upper_pct | `4.946%` |
-| position_in_band | `0.890` |
-| bandwidth_pct | `56.61%` |
-| bandwidth_delta_pct | `2.34%` |
+| distance_to_lower_pct | `39.096%` |
+| distance_to_upper_pct | `7.337%` |
+| position_in_band | `0.842` |
+| bandwidth_pct | `57.43%` |
+| bandwidth_delta_pct | `1.46%` |
 | walk_upper_count | 0 |
 ### Historical simulation (conditional)
 
@@ -100,7 +100,7 @@
 | p10 | 0.000000 |
 | p50 | 0.118143 |
 | p90 | 0.580152 |
-| mean | 0.205945 |
+| mean | 0.206843 |
 | min | 0.000000 |
 | max | 1.739651 |
 | gate | `{'field': 'position_in_band', 'op': '>=', 'value': 0.8}` |
@@ -108,7 +108,7 @@
 
 #### A) Low-Vol / Complacency (z <= threshold)
 
-- confidence: **`LOW`** (sample_size=29 (<30))
+- confidence: **`LOW`** (sample_size=28 (<30))
 
 | field | value |
 |---|---:|
@@ -117,13 +117,13 @@
 | z_thresh | -2.000000 |
 | horizon_days | 20 |
 | cooldown_bars | 20 |
-| sample_size | 29 |
-| p10 | 0.049227 |
-| p50 | 0.222656 |
-| p90 | 0.503378 |
-| mean | 0.247371 |
+| sample_size | 28 |
+| p10 | 0.048852 |
+| p50 | 0.191513 |
+| p90 | 0.444985 |
+| mean | 0.228846 |
 | min | 0.033597 |
-| max | 0.766071 |
+| max | 0.760994 |
 | gate | `{'field': 'z', 'op': '<=', 'value': -2.0}` |
 | condition | `{'field': 'z', 'op': '<=', 'value': -2.0}` |
 
@@ -140,9 +140,9 @@
 | cooldown_bars | 20 |
 | sample_size | 55 |
 | p10 | 0.000000 |
-| p50 | 0.092657 |
+| p50 | 0.097802 |
 | p90 | 0.660538 |
-| mean | 0.210460 |
+| mean | 0.213107 |
 | min | 0.000000 |
 | max | 1.580728 |
 | gate | `{'field': 'z', 'op': '>=', 'value': 2.0}` |
