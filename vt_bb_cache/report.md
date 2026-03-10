@@ -1,40 +1,40 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-03-09T23:43:37Z`
-- data_date: `2026-03-09`
+- report_generated_at_utc: `2026-03-10T23:43:01Z`
+- data_date: `2026-03-10`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`, sidecar=`forward_mdd(10D)`
 
 ## 15秒摘要
-- **VT** (2026-03-09 price_usd=143.2400) → **MID_BAND** (z=-0.4323, pos=0.3919, pos_raw=0.3919); dist_to_lower=2.767%; dist_to_upper=4.449%; 20D forward_mdd: p50=-1.634%, p10=-7.270%, p5=-10.125%, min=-31.571% (n=2901, conf=HIGH, conf_decision=OK, min_n_required=200)
+- **VT** (2026-03-10 price_usd=143.2200) → **MID_BAND** (z=-0.4601, pos=0.3850, pos_raw=0.3850); dist_to_lower=2.685%; dist_to_upper=4.443%; 20D forward_mdd: p50=-1.634%, p10=-7.270%, p5=-10.125%, min=-31.571% (n=2901, conf=HIGH, conf_decision=OK, min_n_required=200)
 
 ## Δ1D（一日變動；以前一個「可計算 BB 的交易日」為基準）
-- prev_bb_date: `2026-03-06`
-- Δprice_1d: 0.923%
-- Δz_1d: 0.4694
-- Δpos_1d: 0.1174
-- Δpos_raw_1d: 0.1174
-- Δband_width_1d: -0.185%
-- Δdist_to_upper_1d: -1.013%
+- prev_bb_date: `2026-03-09`
+- Δprice_1d: -0.014%
+- Δz_1d: -0.0279
+- Δpos_1d: -0.0070
+- Δpos_raw_1d: -0.0070
+- Δband_width_1d: -0.097%
+- Δdist_to_upper_1d: -0.006%
 
 ## 解讀重點（更詳盡）
-- **Band 位置**：pos=0.3919（clipped） / pos_raw=0.3919（未截斷；突破上下軌時用於稽核）
-- **距離上下軌**：dist_to_upper=4.449%；dist_to_lower=2.767%
-- **波動區間寬度（閱讀用）**：band_width≈7.421%（= upper/lower - 1；用於直覺理解，不作信號）
-- **streak（連續天數）**：bucket_streak=7；pos≥0.80 streak=0；dist_to_upper≤2.0% streak=0
+- **Band 位置**：pos=0.3850（clipped） / pos_raw=0.3850（未截斷；突破上下軌時用於稽核）
+- **距離上下軌**：dist_to_upper=4.443%；dist_to_lower=2.685%
+- **波動區間寬度（閱讀用）**：band_width≈7.324%（= upper/lower - 1；用於直覺理解，不作信號）
+- **streak（連續天數）**：bucket_streak=8；pos≥0.80 streak=0；dist_to_upper≤2.0% streak=0
 - **forward_mdd(20D)**（bucket=MID_BAND）：p50=-1.634%、p10=-7.270%、p5=-10.125%、min=-31.571%；n=2901（conf=HIGH；conf_decision=OK）
 
 ## pos_raw vs dist_to_upper 一致性檢查（提示用；不改數值）
 - status: `OK`
 - reason: `within_abs_or_rel_tolerance`
-- expected_dist_to_upper(logband): `4.449%`
+- expected_dist_to_upper(logband): `4.443%`
 - abs_err: `0.00000000`; abs_tol: `0.00010000`
 - rel_err: `0.000000`; rel_tolerance: `0.020000`
 
 ## forward_mdd(20D) 切片分布（閱讀用；不回填主欄位）
 
-- Slice A（pos≥0.80）：p50=-1.512%、p10=-5.420%、p5=-6.986%、min=-31.285% (n=1714, conf=HIGH, conf_decision=OK, min_n_required=200)
-- Slice B（dist_to_upper≤2.0%）：p50=-1.447%、p10=-5.474%、p5=-6.986%、min=-31.285% (n=1754, conf=HIGH, conf_decision=OK, min_n_required=200)
+- Slice A（pos≥0.80）：p50=-1.513%、p10=-5.418%、p5=-6.985%、min=-31.285% (n=1715, conf=HIGH, conf_decision=OK, min_n_required=200)
+- Slice B（dist_to_upper≤2.0%）：p50=-1.448%、p10=-5.472%、p5=-6.985%、min=-31.285% (n=1755, conf=HIGH, conf_decision=OK, min_n_required=200)
 - 注意：conf_decision 低於 OK 時，代表樣本數不足以支撐「拿來做決策」；仍可作為閱讀參考。
 
 ## forward_mdd(20D) 交集切片（bucket 內；閱讀用；不回填主欄位）
@@ -45,15 +45,15 @@
 
 ## forward_mdd(10D) 短窗旁路（閱讀用；不回填主欄位）
 - 用途：更貼近「維持率壓力/質押風險」的短期下行行為觀察；不作為主信號。
-- bucket=MID_BAND：p50=-0.991%、p10=-4.875%、p5=-6.651%、min=-27.590% (n=2907, conf=HIGH, conf_decision=OK)
-- inBucket ∩ pos≥0.80：p10=-3.566%、p5=-5.082% (n=643, conf_decision=OK)
-- inBucket ∩ dist_to_upper≤2.0%：p10=-3.277%、p5=-5.053% (n=725, conf_decision=OK)
+- bucket=MID_BAND：p50=-0.992%、p10=-4.871%、p5=-6.649%、min=-27.590% (n=2908, conf=HIGH, conf_decision=OK)
+- inBucket ∩ pos≥0.80：p10=-3.575%、p5=-5.082% (n=644, conf_decision=OK)
+- inBucket ∩ dist_to_upper≤2.0%：p10=-3.293%、p5=-5.050% (n=726, conf_decision=OK)
 
 ## band_width 分位數觀察（5-bin；獨立項目；不改 bucket / 不回填主欄位）
 
-- band_width_current: 7.421%; percentile≈25.11; current_bin=`B2(p20-40]`
-- quantiles: p20=6.876%, p40=8.959%, p50=9.839%, p60=11.418%, p80=16.679% (n_bw_samples=4393)
-- current_bin streak=12
+- band_width_current: 7.324%; percentile≈24.21; current_bin=`B2(p20-40]`
+- quantiles: p20=6.876%, p40=8.958%, p50=9.838%, p60=11.416%, p80=16.675% (n_bw_samples=4394)
+- current_bin streak=13
 
 ### forward_mdd(20D) × band_width（5-bin 全樣本；閱讀用）
 
@@ -61,8 +61,8 @@
 |---|---:|---:|---:|---:|---:|---|---|
 | B1(<=p20) | 879 | -1.425% | -6.022% | -8.092% | -11.751% | HIGH | OK |
 | B2(p20-40] | 866 | -1.253% | -5.347% | -8.357% | -31.571% | HIGH | OK |
-| B3(p40-60] | 871 | -1.817% | -6.436% | -8.666% | -28.032% | HIGH | OK |
-| B4(p60-80] | 878 | -1.972% | -8.096% | -9.719% | -31.146% | HIGH | OK |
+| B3(p40-60] | 871 | -1.821% | -6.436% | -8.666% | -28.032% | HIGH | OK |
+| B4(p60-80] | 879 | -1.969% | -8.096% | -9.718% | -31.146% | HIGH | OK |
 | B5(>p80) | 879 | -1.996% | -10.218% | -13.989% | -31.574% | HIGH | OK |
 
 ### forward_mdd(20D) × band_width（5-bin × bucket=MID_BAND 交集；閱讀用）
@@ -80,9 +80,9 @@
 | bw_bin | n | p50 | p10 | p5 | min | conf | conf_decision |
 |---|---:|---:|---:|---:|---:|---|---|
 | B1(<=p20) | 879 | -0.733% | -4.058% | -5.380% | -10.991% | HIGH | OK |
-| B2(p20-40] | 868 | -0.786% | -3.909% | -5.116% | -17.100% | HIGH | OK |
-| B3(p40-60] | 879 | -0.972% | -4.335% | -5.389% | -24.197% | HIGH | OK |
-| B4(p60-80] | 878 | -1.230% | -5.294% | -6.887% | -27.590% | HIGH | OK |
+| B2(p20-40] | 869 | -0.786% | -3.915% | -5.114% | -17.100% | HIGH | OK |
+| B3(p40-60] | 878 | -0.972% | -4.338% | -5.391% | -24.197% | HIGH | OK |
+| B4(p60-80] | 879 | -1.227% | -5.292% | -6.887% | -27.590% | HIGH | OK |
 | B5(>p80) | 879 | -1.450% | -7.003% | -10.543% | -23.785% | HIGH | OK |
 
 ### forward_mdd(10D) × band_width（5-bin × bucket=MID_BAND 交集；閱讀用）
@@ -90,7 +90,7 @@
 | bw_bin | n | p50 | p10 | p5 | min | conf | conf_decision |
 |---|---:|---:|---:|---:|---:|---|---|
 | B1(<=p20) | 572 | -0.789% | -4.017% | -5.512% | -10.991% | HIGH | OK |
-| B2(p20-40] | 570 | -0.730% | -4.097% | -5.299% | -17.100% | HIGH | OK |
+| B2(p20-40] | 571 | -0.735% | -4.097% | -5.293% | -17.100% | HIGH | OK |
 | B3(p40-60] | 576 | -1.106% | -4.646% | -5.421% | -10.740% | HIGH | OK |
 | B4(p60-80] | 571 | -1.214% | -5.029% | -7.185% | -27.590% | HIGH | OK |
 | B5(>p80) | 618 | -1.224% | -6.476% | -9.367% | -20.108% | HIGH | OK |
@@ -101,26 +101,26 @@
 
 | date | price_usd | z | pos | pos_raw | bucket | dist_to_upper |
 |---|---:|---:|---:|---:|---|---:|
-| 2026-03-03 | 144.0400 | -0.0300 | 0.4925 | 0.4925 | MID_BAND | 3.983% |
 | 2026-03-04 | 145.2600 | 0.3838 | 0.5960 | 0.5960 | MID_BAND | 3.105% |
 | 2026-03-05 | 143.5700 | -0.2584 | 0.4354 | 0.4354 | MID_BAND | 4.293% |
 | 2026-03-06 | 141.9300 | -0.9017 | 0.2746 | 0.2746 | MID_BAND | 5.462% |
 | 2026-03-09 | 143.2400 | -0.4323 | 0.3919 | 0.3919 | MID_BAND | 4.449% |
+| 2026-03-10 | 143.2200 | -0.4601 | 0.3850 | 0.3850 | MID_BAND | 4.443% |
 
 ## BB 詳細（可稽核欄位）
 
 | field | value | note |
 |---|---:|---|
-| price_usd | 143.2400 | adj_close |
-| close_usd | 143.2400 | raw close (for reference) |
-| z | -0.4323 | log(price) z-score vs BB mean/stdev |
-| pos_in_band | 0.3919 | clipped [0,1] for readability |
-| pos_raw | 0.3919 | NOT clipped; can be <0 or >1 when price breaks bands |
-| lower_usd | 139.2769 | exp(lower_log) |
-| upper_usd | 149.6128 | exp(upper_log) |
-| dist_to_lower | 2.767% | (price-lower)/price |
-| dist_to_upper | 4.449% | (upper-price)/price |
-| band_width | 7.421% | (upper/lower - 1) reading-only |
+| price_usd | 143.2200 | adj_close |
+| close_usd | 143.2200 | raw close (for reference) |
+| z | -0.4601 | log(price) z-score vs BB mean/stdev |
+| pos_in_band | 0.3850 | clipped [0,1] for readability |
+| pos_raw | 0.3850 | NOT clipped; can be <0 or >1 when price breaks bands |
+| lower_usd | 139.3752 | exp(lower_log) |
+| upper_usd | 149.5837 | exp(upper_log) |
+| dist_to_lower | 2.685% | (price-lower)/price |
+| dist_to_upper | 4.443% | (upper-price)/price |
+| band_width | 7.324% | (upper/lower - 1) reading-only |
 | bucket | MID_BAND | based on z thresholds |
 
 ## forward_mdd（分布解讀）
@@ -132,8 +132,8 @@
 ## FX (USD/TWD)（嚴格同日對齊 + 落後參考值）
 - fx_history_parse_status: `OK`
 - fx_strict_used_policy: `HISTORY_DATE_MATCH`
-- fx_rate_strict (for 2026-03-09): `31.9200`
-- derived price_twd (strict): `4572.22`
+- fx_rate_strict (for 2026-03-10): `31.8250`
+- derived price_twd (strict): `4557.98`
 
 ### Reference（僅供參考；使用落後 FX 且標註落後天數）
 - fx_ref: `NA` (strict match exists, or no usable reference rate)
