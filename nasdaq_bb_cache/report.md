@@ -1,17 +1,17 @@
 # Nasdaq BB Monitor Report (QQQ + VXN)
 
-- report_generated_at_utc: `2026-03-09T23:07:41Z`
+- report_generated_at_utc: `2026-03-10T15:43:55Z`
 
 ## 15秒摘要
 
-- **QQQ** (2026-03-09 close=607.7100) → **NORMAL_RANGE** (reason=default); dist_to_lower=1.742%; dist_to_upper=4.237%; 20D forward_mdd: p50=-3.18%, p10=-14.47%, min=-24.99% (conf=HIGH)
+- **QQQ** (2026-03-10 close=611.6000) → **NORMAL_RANGE** (reason=default); dist_to_lower=2.366%; dist_to_upper=3.483%; 20D forward_mdd: p50=-3.18%, p10=-14.47%, min=-24.99% (conf=HIGH)
 - **VXN** (2026-03-09 close=27.6900) → **NEAR_UPPER_BAND (WATCH)** (reason=position_in_band>=0.8 (pos=0.890)); z=1.6544; pos=0.890; bwΔ=2.34%; Pos-WATCH (C) p90 runup=58.0% (n=79) (conf=MED)
 
 
 ## QQQ (PRICE) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-09T23:07:40Z`
-- data_as_of (meta.max_date): `2026-03-09`  | staleness_days: `0`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-03-10T15:43:54Z`
+- data_as_of (meta.max_date): `2026-03-10`  | staleness_days: `0`  | staleness_flag: **`OK`**
 - source: `stooq`  | url: `https://stooq.com/q/d/l/?s=qqq.us&i=d`
 - action_output: **`NORMAL_RANGE`**
 - trigger_reason: `default`
@@ -20,18 +20,18 @@
 
 | field | value |
 |---|---:|
-| date | `2026-03-09` |
-| close | `607.7100` |
-| bb_mid | `615.0226` |
-| bb_lower | `597.1246` |
-| bb_upper | `633.4571` |
-| z | `-0.8100` |
+| date | `2026-03-10` |
+| close | `611.6000` |
+| bb_mid | `614.7578` |
+| bb_lower | `597.1326` |
+| bb_upper | `632.9033` |
+| z | `-0.3541` |
 | trigger_z_le_-2 | `False` |
-| distance_to_lower_pct | `1.742%` |
-| distance_to_upper_pct | `4.237%` |
-| position_in_band | `0.291` |
-| bandwidth_pct | `5.91%` |
-| bandwidth_delta_pct | `-0.40%` |
+| distance_to_lower_pct | `2.366%` |
+| distance_to_upper_pct | `3.483%` |
+| position_in_band | `0.404` |
+| bandwidth_pct | `5.82%` |
+| bandwidth_delta_pct | `-1.50%` |
 | walk_lower_count | 0 |
 
 ### Historical simulation (conditional)
@@ -58,8 +58,8 @@
 
 ## VXN (VOL) — BB(60,2) logclose
 
-- snippet.generated_at_utc: `2026-03-09T23:07:41Z`
-- data_as_of (meta.max_date): `2026-03-09`  | staleness_days: `0`  | staleness_flag: **`OK`**
+- snippet.generated_at_utc: `2026-03-10T15:43:54Z`
+- data_as_of (meta.max_date): `2026-03-09`  | staleness_days: `1`  | staleness_flag: **`OK`**
 - source: `cboe`  | url: `https://cdn.cboe.com/api/global/us_indices/daily_prices/VXN_History.csv`
 - selected_source: `cboe` | fallback_used: `False`
 - action_output: **`NEAR_UPPER_BAND (WATCH)`**
