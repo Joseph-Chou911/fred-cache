@@ -1,13 +1,13 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-03-11T19:06:47Z",
-  "generated_at_local": "2026-03-12T03:06:47.631739+08:00",
+  "generated_at_utc": "2026-03-11T22:57:09Z",
+  "generated_at_local": "2026-03-12T06:57:09.699010+08:00",
   "timezone": "Asia/Taipei",
-  "used_date": "2026-03-10",
+  "used_date": "2026-03-11",
   "run_day_tag": "WEEKDAY",
   "used_date_status": "DATA_NOT_UPDATED",
   "freshness_ok": true,
-  "freshness_age_days": 2,
+  "freshness_age_days": 1,
   "mode": "FULL",
   "ohlc_status": "OK",
   "backfill_months": 0,
@@ -21,84 +21,84 @@
   },
   "series": {
     "close": {
-      "asof": "2026-03-10",
+      "asof": "2026-03-11",
       "win60": {
-        "value": 32771.87,
+        "value": 34114.19,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 0.844454,
-        "p": 79.167
+        "z": 1.385579,
+        "p": 90.833
       },
       "win252": {
-        "value": 32771.87,
+        "value": 34114.19,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 1.872855,
-        "p": 95.04
+        "z": 2.179609,
+        "p": 97.817
       },
       "window_note": {
-        "n_total_available": 283
+        "n_total_available": 284
       }
     },
     "trade_value": {
-      "asof": "2026-03-10",
+      "asof": "2026-03-11",
       "win60": {
-        "value": 728225719000.0,
+        "value": 693435834178.0,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 0.11438,
-        "p": 54.167
+        "z": -0.086404,
+        "p": 44.167
       },
       "win252": {
-        "value": 728225719000.0,
+        "value": 693435834178.0,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 1.316534,
-        "p": 88.69
+        "z": 1.119393,
+        "p": 85.913
       },
       "window_note": {
-        "n_total_available": 298
+        "n_total_available": 299
       }
     },
     "pct_change": {
-      "asof": "2026-03-10",
+      "asof": "2026-03-11",
       "win60": {
-        "value": 2.0599232274134205,
+        "value": 4.095951802567262,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 1.230143,
-        "p": 92.5
+        "z": 2.477692,
+        "p": 99.167
       },
       "win252": {
-        "value": 2.0599232274134205,
+        "value": 4.095951802567262,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 1.204701,
-        "p": 93.452
+        "z": 2.445328,
+        "p": 99.008
       },
       "window_note": {
-        "n_total_available": 282,
+        "n_total_available": 283,
         "note": "pct_change needs D-1 close; with backfill_limit=252, max pct_change points are typically <=251."
       }
     },
     "amplitude_pct": {
-      "asof": "2026-03-10",
+      "asof": "2026-03-11",
       "win60": {
-        "value": 2.4960433404483706,
+        "value": 3.3265419397794678,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 1.520303,
-        "p": 94.167
+        "z": 2.546946,
+        "p": 97.5
       },
       "win252": {
-        "value": 2.4960433404483706,
+        "value": 3.3265419397794678,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 1.589745,
-        "p": 93.849
+        "z": 2.638852,
+        "p": 97.421
       },
       "window_note": {
-        "n_total_available": 282,
+        "n_total_available": 283,
         "note": "amplitude_pct needs high/low + D-1 close; if OHLC missing, series is sparse and windows may be incomplete."
       }
     }
@@ -106,7 +106,7 @@
   "derived": {
     "lookback_n_target": 20,
     "lookback_n_actual": 20,
-    "vol_multiplier_20": 0.856809,
+    "vol_multiplier_20": 0.82795,
     "volume_amplified": false,
     "new_low_n": 0,
     "consecutive_down_days": 0,
