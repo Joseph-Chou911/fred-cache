@@ -1104,7 +1104,7 @@
       }
     },
     {
-      "run_ts_utc": "2026-03-11T16:05:38.696748+00:00",
+      "run_ts_utc": "2026-03-11T23:09:55.279340+00:00",
       "stats_as_of_ts": "2026-03-11T15:07:13Z",
       "module": "snapshot_fast",
       "series_signals": {
