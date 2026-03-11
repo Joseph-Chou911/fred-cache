@@ -3,7 +3,7 @@
 ## Summary
 - current_date: `2026-03-11`
 - current_0050_price: `78.20`
-- bb_state: **NEAR_UPPER_BAND**; bb_z=`1.4226`
+- bb_state: **NEAR_UPPER_BAND**; bb_z=`1.3978`
 - regime: **RISK_OFF_OR_DEFENSIVE**; allowed=`false`
 - action_bucket: **VETO**; pledge_policy=`DISALLOW`
 - base_execution_bias: **DEFENSIVE_NO_CHASE**
@@ -41,8 +41,8 @@
 
 | label | price_level | vs_current_pct |
 |---|---:|---:|
-| 10D_p10_uncond | 74.45 | -4.80% |
-| 10D_p05_uncond | 73.27 | -6.30% |
+| 10D_p10_uncond | 74.44 | -4.80% |
+| 10D_p05_uncond | 73.26 | -6.32% |
 | 20D_p10_uncond | 72.83 | -6.86% |
 | 20D_p05_uncond | 70.96 | -9.26% |
 
