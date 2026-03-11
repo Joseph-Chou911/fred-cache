@@ -497,11 +497,11 @@
       }
     },
     {
-      "run_ts_utc": "2026-03-10T23:49:05.874348+00:00",
-      "stats_as_of_ts": "2026-03-11T07:49:02+08:00",
+      "run_ts_utc": "2026-03-11T09:01:53.290661+00:00",
+      "stats_as_of_ts": "2026-03-11T17:01:49+08:00",
       "module": "inflation_realrate_cache",
       "ruleset_id": "signals_v8",
-      "script_fingerprint": "render_dashboard_py_signals_v8@b868b64",
+      "script_fingerprint": "render_dashboard_py_signals_v8@312da31",
       "series_signals": {
         "DFII10": "NONE",
         "T10YIE": "NONE"
