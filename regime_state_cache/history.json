@@ -3528,7 +3528,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "NOMINAL_10Y",
     "data_date": "2026-03-10",
     "value": "4.15",
@@ -3536,7 +3536,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "REAL_10Y",
     "data_date": "2026-03-10",
     "value": "1.82",
@@ -3544,7 +3544,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "BE10Y_PROXY",
     "data_date": "2026-03-10",
     "value": "2.33",
@@ -3552,31 +3552,31 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "HYG_CLOSE",
     "data_date": "2026-03-10",
     "value": "80.04",
-    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20251111&d2=20260311&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=hyg.us&d1=20251112&d2=20260312&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "IEF_CLOSE",
     "data_date": "2026-03-10",
     "value": "96.44",
-    "source_url": "https://stooq.com/q/d/l/?s=ief.us&d1=20251111&d2=20260311&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=ief.us&d1=20251112&d2=20260312&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "TIP_CLOSE",
     "data_date": "2026-03-10",
     "value": "111.24",
-    "source_url": "https://stooq.com/q/d/l/?s=tip.us&d1=20251111&d2=20260311&i=d",
+    "source_url": "https://stooq.com/q/d/l/?s=tip.us&d1=20251112&d2=20260312&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "HYG_IEF_RATIO",
     "data_date": "2026-03-10",
     "value": "0.8299460804645377",
@@ -3584,7 +3584,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "TIP_IEF_RATIO",
     "data_date": "2026-03-10",
     "value": "1.1534632932393198",
@@ -3592,11 +3592,19 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-11T21:40:16.578204+08:00",
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
     "series_id": "VIX_PROXY",
     "data_date": "2026-03-10",
     "value": "24.93",
     "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-03-12T03:12:30.257310+08:00",
+    "series_id": "OFR_FSI",
+    "data_date": "2026-03-09",
+    "value": "-0.296",
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
     "notes": "NA"
   }
 ]
