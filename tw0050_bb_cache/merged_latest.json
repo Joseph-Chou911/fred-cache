@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-10T23:05:56Z",
+    "generated_at_utc": "2026-03-11T07:27:48Z",
     "script": "merge_0050_valuation_bb.py",
     "schema_version": "0050_merge_schema_v1_compat",
     "config_version": "0050_merge_v1.3",
@@ -8,7 +8,7 @@
   },
   "inputs": {
     "bb_stats_path": "tw0050_bb_cache/stats_latest.json",
-    "base_0050": 75.19999694824219,
+    "base_0050": 78.19999694824219,
     "base_tsmc": 1890.0,
     "tsmc_weight": 0.6408,
     "base_sources": {
@@ -22,10 +22,10 @@
       "points_per_year": 1.0,
       "note": "Display-price sensitivity only. Use 'heavy' if you want to approximate the earlier pessimistic net-price style."
     },
-    "current_date": "2026-03-10",
-    "current_0050_price": 75.19999694824219,
-    "current_bb_state": "IN_BAND",
-    "current_bb_z": 0.9377472242295124,
+    "current_date": "2026-03-11",
+    "current_0050_price": 78.19999694824219,
+    "current_bb_state": "NEAR_UPPER_BAND",
+    "current_bb_z": 1.4226428647633367,
     "schema_validation": {
       "validated": true,
       "required_paths_checked": [
@@ -61,8 +61,8 @@
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
       "tsmc_return_vs_base": -0.28828571428571437,
-      "gross_0050": 57.256263550718465,
-      "net_0050": 56.256263550718465
+      "gross_0050": 59.54042309357561,
+      "net_0050": 58.54042309357561
     },
     {
       "group_name": "2026_core",
@@ -77,8 +77,8 @@
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
       "tsmc_return_vs_base": -0.183968253968254,
-      "gross_0050": 64.17395853855678,
-      "net_0050": 63.173958538556775
+      "gross_0050": 66.73408996712821,
+      "net_0050": 65.73408996712821
     },
     {
       "group_name": "2026_core",
@@ -93,8 +93,8 @@
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
       "tsmc_return_vs_base": -0.06496362433862435,
-      "gross_0050": 71.2591643843591,
-      "net_0050": 70.2591643843591
+      "gross_0050": 74.10195031293051,
+      "net_0050": 73.10195031293051
     },
     {
       "group_name": "2026_core",
@@ -109,8 +109,8 @@
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
       "tsmc_return_vs_base": 0.051587301587301626,
-      "gross_0050": 77.68589399021694,
-      "net_0050": 76.68589399021694
+      "gross_0050": 80.78506541878836,
+      "net_0050": 79.78506541878836
     },
     {
       "group_name": "2027_core",
@@ -125,8 +125,8 @@
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
       "tsmc_return_vs_base": 0.13264715608465605,
-      "gross_0050": 82.13225584787043,
-      "net_0050": 80.13225584787043
+      "gross_0050": 85.40880874072757,
+      "net_0050": 83.40880874072757
     },
     {
       "group_name": "2027_core",
@@ -141,8 +141,8 @@
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
       "tsmc_return_vs_base": 0.314484126984127,
-      "gross_0050": 91.70499970700945,
-      "net_0050": 89.70499970700945
+      "gross_0050": 95.36344399272375,
+      "net_0050": 93.36344399272375
     },
     {
       "group_name": "2027_core",
@@ -157,18 +157,18 @@
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
       "tsmc_return_vs_base": 0.421746031746032,
-      "gross_0050": 96.87375332582312,
-      "net_0050": 94.87375332582312
+      "gross_0050": 100.73839789725169,
+      "net_0050": 98.73839789725169
     }
   ],
   "bb_snapshot": {
-    "date": "2026-03-10",
-    "price_used": 75.19999694824219,
-    "state": "IN_BAND",
-    "bb_z": 0.9377472242295124,
+    "date": "2026-03-11",
+    "price_used": 78.19999694824219,
+    "state": "NEAR_UPPER_BAND",
+    "bb_z": 1.4226428647633367,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
-    "rv20_percentile": 96.34233803490318,
+    "rv20_percentile": 96.67702605785321,
     "action_bucket": "VETO",
     "pledge_policy": "DISALLOW",
     "dq_flags": [
@@ -179,58 +179,58 @@
     ],
     "tranche_levels": [
       {
-        "drawdown": -0.047979578112139154,
+        "drawdown": -0.04797957222838445,
         "label": "10D_p10_uncond",
-        "price_level": 71.59193282063137
+        "price_level": 74.44799454640456
       },
       {
-        "drawdown": -0.0630158683943165,
+        "drawdown": -0.06301577661522782,
         "label": "10D_p05_uncond",
-        "price_level": 70.46120383729875
+        "price_level": 73.27216340924026
       },
       {
-        "drawdown": -0.06864997898061322,
+        "drawdown": -0.06864964055119786,
         "label": "20D_p10_uncond",
-        "price_level": 70.03751873840318
+        "price_level": 72.83159526664059
       },
       {
-        "drawdown": -0.09264445043853842,
+        "drawdown": -0.09264400722325657,
         "label": "20D_p05_uncond",
-        "price_level": 68.23313455799253
+        "price_level": 70.9552358661106
       }
     ]
   },
   "combined": {
     "bb": {
-      "date": "2026-03-10",
-      "price_used": 75.19999694824219,
-      "state": "IN_BAND",
-      "bb_z": 0.9377472242295124,
+      "date": "2026-03-11",
+      "price_used": 78.19999694824219,
+      "state": "NEAR_UPPER_BAND",
+      "bb_z": 1.4226428647633367,
       "regime_tag": "RISK_OFF_OR_DEFENSIVE",
       "regime_allowed": false,
-      "rv20_percentile": 96.34233803490318,
+      "rv20_percentile": 96.67702605785321,
       "action_bucket": "VETO",
       "pledge_policy": "DISALLOW",
       "tranche_levels": [
         {
-          "drawdown": -0.047979578112139154,
+          "drawdown": -0.04797957222838445,
           "label": "10D_p10_uncond",
-          "price_level": 71.59193282063137
+          "price_level": 74.44799454640456
         },
         {
-          "drawdown": -0.0630158683943165,
+          "drawdown": -0.06301577661522782,
           "label": "10D_p05_uncond",
-          "price_level": 70.46120383729875
+          "price_level": 73.27216340924026
         },
         {
-          "drawdown": -0.06864997898061322,
+          "drawdown": -0.06864964055119786,
           "label": "20D_p10_uncond",
-          "price_level": 70.03751873840318
+          "price_level": 72.83159526664059
         },
         {
-          "drawdown": -0.09264445043853842,
+          "drawdown": -0.09264400722325657,
           "label": "20D_p05_uncond",
-          "price_level": 68.23313455799253
+          "price_level": 70.9552358661106
         }
       ],
       "dq_flags": [
@@ -241,14 +241,14 @@
       ]
     },
     "valuation_range": {
-      "gross_min": 57.256263550718465,
-      "gross_max": 96.87375332582312,
-      "net_min": 56.256263550718465,
-      "net_max": 94.87375332582312,
+      "gross_min": 59.54042309357561,
+      "gross_max": 100.73839789725169,
+      "net_min": 58.54042309357561,
+      "net_max": 98.73839789725169,
       "current_price_position": {
-        "current_price": 75.19999694824219,
-        "scenario_net_min": 56.256263550718465,
-        "scenario_net_max": 94.87375332582312,
+        "current_price": 78.19999694824219,
+        "scenario_net_min": 58.54042309357561,
+        "scenario_net_max": 98.73839789725169,
         "scenario_net_pctl": 42.857142857142854,
         "zone": "MID_ZONE",
         "note": "rough classification only; sparse scenario set => low percentile resolution"
@@ -257,26 +257,26 @@
     "tranche_reference": [
       {
         "label": "10D_p10_uncond",
-        "price_level": 71.59193282063137,
-        "vs_current_pct": -4.7979578112139265
+        "price_level": 74.44799454640456,
+        "vs_current_pct": -4.797957222838445
       },
       {
         "label": "10D_p05_uncond",
-        "price_level": 70.46120383729875,
-        "vs_current_pct": -6.30158683943165
+        "price_level": 73.27216340924026,
+        "vs_current_pct": -6.3015776615227725
       },
       {
         "label": "20D_p10_uncond",
-        "price_level": 70.03751873840318,
-        "vs_current_pct": -6.864997898061331
+        "price_level": 72.83159526664059,
+        "vs_current_pct": -6.864964055119782
       },
       {
         "label": "20D_p05_uncond",
-        "price_level": 68.23313455799253,
-        "vs_current_pct": -9.264445043853831
+        "price_level": 70.9552358661106,
+        "vs_current_pct": -9.26440072232565
       }
     ],
-    "base_execution_bias": "WAIT_FOR_BETTER_ALIGNMENT",
+    "base_execution_bias": "DEFENSIVE_NO_CHASE",
     "dq_overlay": "CAUTION",
     "matched_caution_flags": [
       "FWD_MDD_CLEAN_APPLIED",
@@ -285,7 +285,7 @@
       "RAW_OUTLIER_EXCLUDED_BY_CLEAN"
     ],
     "matched_veto_flags": [],
-    "combined_execution_bias": "WAIT_WITH_DQ_CAUTION",
+    "combined_execution_bias": "DEFENSIVE_NO_CHASE",
     "how_to_read": {
       "layer_1": "Use valuation scenarios to decide whether the current zone is cheap / fair / expensive.",
       "layer_2": "Use BB/regime/tranche references to decide whether to act now or wait.",
@@ -300,7 +300,7 @@
       "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close."
     },
     "base": {
-      "base_0050": 75.19999694824219,
+      "base_0050": 78.19999694824219,
       "base_tsmc": 1890.0,
       "tsmc_weight": 0.6408
     },
@@ -393,35 +393,35 @@
     ]
   },
   "bb_summary": {
-    "date": "2026-03-10",
-    "price_used": 75.19999694824219,
-    "state": "IN_BAND",
-    "bb_z": 0.9377472242295124,
+    "date": "2026-03-11",
+    "price_used": 78.19999694824219,
+    "state": "NEAR_UPPER_BAND",
+    "bb_z": 1.4226428647633367,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
-    "rv20_percentile": 96.34233803490318,
+    "rv20_percentile": 96.67702605785321,
     "action_bucket": "VETO",
     "pledge_policy": "DISALLOW",
     "tranche_levels": [
       {
-        "drawdown": -0.047979578112139154,
+        "drawdown": -0.04797957222838445,
         "label": "10D_p10_uncond",
-        "price_level": 71.59193282063137
+        "price_level": 74.44799454640456
       },
       {
-        "drawdown": -0.0630158683943165,
+        "drawdown": -0.06301577661522782,
         "label": "10D_p05_uncond",
-        "price_level": 70.46120383729875
+        "price_level": 73.27216340924026
       },
       {
-        "drawdown": -0.06864997898061322,
+        "drawdown": -0.06864964055119786,
         "label": "20D_p10_uncond",
-        "price_level": 70.03751873840318
+        "price_level": 72.83159526664059
       },
       {
-        "drawdown": -0.09264445043853842,
+        "drawdown": -0.09264400722325657,
         "label": "20D_p05_uncond",
-        "price_level": 68.23313455799253
+        "price_level": 70.9552358661106
       }
     ],
     "dq_flags": [
@@ -445,8 +445,8 @@
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
       "tsmc_return_vs_base": -0.28828571428571437,
-      "gross_0050": 57.256263550718465,
-      "net_0050": 56.256263550718465
+      "gross_0050": 59.54042309357561,
+      "net_0050": 58.54042309357561
     },
     {
       "group_name": "2026_core",
@@ -461,8 +461,8 @@
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
       "tsmc_return_vs_base": -0.183968253968254,
-      "gross_0050": 64.17395853855678,
-      "net_0050": 63.173958538556775
+      "gross_0050": 66.73408996712821,
+      "net_0050": 65.73408996712821
     },
     {
       "group_name": "2026_core",
@@ -477,8 +477,8 @@
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
       "tsmc_return_vs_base": -0.06496362433862435,
-      "gross_0050": 71.2591643843591,
-      "net_0050": 70.2591643843591
+      "gross_0050": 74.10195031293051,
+      "net_0050": 73.10195031293051
     },
     {
       "group_name": "2026_core",
@@ -493,8 +493,8 @@
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
       "tsmc_return_vs_base": 0.051587301587301626,
-      "gross_0050": 77.68589399021694,
-      "net_0050": 76.68589399021694
+      "gross_0050": 80.78506541878836,
+      "net_0050": 79.78506541878836
     },
     {
       "group_name": "2027_core",
@@ -509,8 +509,8 @@
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
       "tsmc_return_vs_base": 0.13264715608465605,
-      "gross_0050": 82.13225584787043,
-      "net_0050": 80.13225584787043
+      "gross_0050": 85.40880874072757,
+      "net_0050": 83.40880874072757
     },
     {
       "group_name": "2027_core",
@@ -525,8 +525,8 @@
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
       "tsmc_return_vs_base": 0.314484126984127,
-      "gross_0050": 91.70499970700945,
-      "net_0050": 89.70499970700945
+      "gross_0050": 95.36344399272375,
+      "net_0050": 93.36344399272375
     },
     {
       "group_name": "2027_core",
@@ -541,8 +541,8 @@
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
       "tsmc_return_vs_base": 0.421746031746032,
-      "gross_0050": 96.87375332582312,
-      "net_0050": 94.87375332582312
+      "gross_0050": 100.73839789725169,
+      "net_0050": 98.73839789725169
     }
   ]
 }
