@@ -1,6 +1,6 @@
 # 0050 Tactical Cash Overlay Backtest
 
-- generated_at_utc: `2026-03-10T07:53:23Z`
+- generated_at_utc: `2026-03-11T07:52:38Z`
 - script_fingerprint: `backtest_tw0050_tactical_cash@2026-02-24.v2.3.fix_execdelay0_and_force_close`
 - price_csv: `tw0050_bb_cache/data.csv`
 
@@ -11,22 +11,22 @@
 
 ## Snapshot (audit)
 - rows: `2964`
-- date_range: `2014-01-03` ~ `2026-03-10`
+- date_range: `2014-01-03` ~ `2026-03-11`
 - time_in_market_pct (tactical leg): `0.6974`
 
 ## Performance (overlay vs base-only)
 
 | metric | overlay | base_only | delta_vs_base |
 |---|---:|---:|---:|
-| CAGR | 18.92% | 18.61% | 0.30% |
+| CAGR | 19.31% | 19.00% | 0.31% |
 | MDD | -32.73% | -32.81% | 0.08% |
-| Sharpe0 | 1.056 | 1.056 | 0.001 |
+| Sharpe0 | 1.071 | 1.070 | 0.001 |
 
 ## Trade KPIs (tactical leg)
 - n_trades: `77`
 - win_rate: `0.3506`
-- avg_net_pnl (per trade, equity units): `0.002945`
-- profit_factor: `2.8579`
+- avg_net_pnl (per trade, equity units): `0.003114`
+- profit_factor: `2.9647`
 - avg_hold_days: `26.86`
 
 ## Notes
