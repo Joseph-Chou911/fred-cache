@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-12T07:29:28Z`
+- report_generated_at_utc: `2026-03-12T14:12:09Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -28,7 +28,7 @@
 - vol_filter(RV20,ATR14): rv_ann=35.9%; atr=2.0172 (2.63%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=96.56
 - margin(5D,thr=100.00億): TOTAL -15.10 億 => **NEUTRAL**; TWSE -4.60 / TPEX -10.50; margin_date=2026-03-11, price_last_date=2026-03-12 (MISALIGNED); data_date=2026-03-11
-- chip_overlay(T86+TWT72U,5D): total3_5D=-583,493,541; foreign=-408,034,561; trust=17,415,000; dealer=-192,873,980; borrow_shares=243,676,000 (Δ1D=0); borrow_mv(億)=190.6 (Δ1D=7.3); asof=20260311; price_last_date=2026-03-12 (ALIGNED)
+- chip_overlay(T86+TWT72U,5D): total3_5D=-574,596,063; foreign=-407,526,160; trust=16,415,000; dealer=-183,484,903; borrow_shares=243,676,000 (Δ1D=0); borrow_mv(億)=186.7 (Δ1D=-3.9); asof=20260312; price_last_date=2026-03-12 (ALIGNED)
 
 ## forward_mdd_conditional (bb_z buckets)
 
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-12T07:29:28.598Z`
+- overlay_generated_at_utc: `2026-03-12T14:12:08.797Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260312` vs price_last_date=`2026-03-12` => **ALIGNED**
@@ -482,28 +482,28 @@
 
 | item | value |
 |---|---:|
-| asof_date | 20260311 |
+| asof_date | 20260312 |
 | borrow_shares | 243,676,000 |
 | borrow_shares_chg_1d | 0 |
-| borrow_mv_ntd(億) | 190.6 |
-| borrow_mv_ntd_chg_1d(億) | 7.3 |
+| borrow_mv_ntd(億) | 186.7 |
+| borrow_mv_ntd_chg_1d(億) | -3.9 |
 
 ### T86 Aggregate（法人：5D sum）
 
 | item | value |
 |---|---:|
-| days_used | 20260305, 20260306, 20260309, 20260310, 20260311 |
-| foreign_net_shares_sum | -408,034,561 |
-| trust_net_shares_sum | 17,415,000 |
-| dealer_net_shares_sum | -192,873,980 |
-| total3_net_shares_sum | -583,493,541 |
+| days_used | 20260306, 20260309, 20260310, 20260311, 20260312 |
+| foreign_net_shares_sum | -407,526,160 |
+| trust_net_shares_sum | 16,415,000 |
+| dealer_net_shares_sum | -183,484,903 |
+| total3_net_shares_sum | -574,596,063 |
 
 ### ETF Units（受益權單位）
 
 | item | value |
 |---|---:|
-| units_outstanding | 17,706,500,000 |
-| units_chg_1d | 80,000,000 |
+| units_outstanding | 17,753,500,000 |
+| units_chg_1d | 47,000,000 |
 | dq | (none) |
 
 ### Chip Overlay Sources
