@@ -1,8 +1,8 @@
 # Risk Dashboard Snapshot (snapshot_fast)
 
 - Summary: ALERT=0 / WATCH=0 / INFO=12 / NONE=0; CHANGED=0; WATCH_STREAK>=3=0
-- RUN_TS_UTC: `2026-03-12T16:17:57.688408+00:00`
-- SNAPSHOT.as_of_ts: `2026-03-12T15:10:58Z`
+- RUN_TS_UTC: `2026-03-12T23:05:08.528730+00:00`
+- SNAPSHOT.as_of_ts: `2026-03-12T23:02:27Z`
 - snapshot_script_version: `fallback_vA_official_no_key_lock+history_v2_retryfix`
 - stale_hours: `36.0`
 - input_snapshot: `fallback_cache/latest.json`
@@ -12,15 +12,15 @@
 
 | Signal | Tag | Near | PrevSignal | DeltaSignal | StreakWA | Series | DQ | age_h | data_date | value | change_pct_1d | notes | Source | as_of_ts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| INFO | NA | NA | INFO | SAME | 0 | BAMLH0A0HYM2 | OK | 1.12 | NA | NA | NA | ERR:timeout(attempts=3):fredgraph | https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2 | 2026-03-12T15:10:58Z |
-| INFO | nonofficial_datahub_oil_prices | NA | INFO | SAME | 0 | DCOILWTICO | OK | 1.12 | 2026-03-09 | 94.65 | NA | WARN:nonofficial_datahub_oil_prices(wti-daily) | https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv | 2026-03-12T15:10:58Z |
-| INFO | fallback_treasury_csv | NA | INFO | SAME | 0 | DGS10 | OK | 1.12 | 2026-03-11 | 4.21 | NA | WARN:fallback_treasury_csv | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T15:10:58Z |
-| INFO | fallback_treasury_csv | NA | INFO | SAME | 0 | DGS2 | OK | 1.12 | 2026-03-11 | 3.64 | NA | WARN:fallback_treasury_csv | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T15:10:58Z |
-| INFO | nonofficial_stooq | NA | INFO | SAME | 0 | DJIA | OK | 1.12 | 2026-03-12 | 46752.04 | -1.402928 | WARN:nonofficial_stooq(^dji);derived_1d_pct | https://stooq.com/q/d/l/?s=^dji&i=d | 2026-03-12T15:10:58Z |
-| INFO | nonofficial_stooq | NA | INFO | SAME | 0 | NASDAQCOM | OK | 1.12 | 2026-03-12 | 22315.77 | -1.762448 | WARN:nonofficial_stooq(^ndq);derived_1d_pct | https://stooq.com/q/d/l/?s=^ndq&i=d | 2026-03-12T15:10:58Z |
-| INFO | fallback_chicagofed_nfci | NA | INFO | SAME | 0 | NFCINONFINLEVERAGE | OK | 1.12 | 2026-03-06 | -0.458754 | NA | WARN:fallback_chicagofed_nfci(nonfinancial leverage) | https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv | 2026-03-12T15:10:58Z |
-| INFO | nonofficial_stooq | NA | INFO | SAME | 0 | SP500 | OK | 1.12 | 2026-03-12 | 6685.22 | -1.336816 | WARN:nonofficial_stooq(^spx);derived_1d_pct | https://stooq.com/q/d/l/?s=^spx&i=d | 2026-03-12T15:10:58Z |
-| INFO | derived_from_treasury | NA | INFO | SAME | 0 | T10Y2Y | OK | 1.12 | 2026-03-11 | 0.57 | NA | WARN:derived_from_treasury(10Y-2Y) | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T15:10:58Z |
-| INFO | derived_from_treasury | NA | INFO | SAME | 0 | T10Y3M | OK | 1.12 | 2026-03-11 | 0.5 | NA | WARN:derived_from_treasury(10Y-3M) | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T15:10:58Z |
-| INFO | fallback_treasury_csv | NA | INFO | SAME | 0 | UST3M | OK | 1.12 | 2026-03-11 | 3.71 | NA | WARN:fallback_treasury_csv | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T15:10:58Z |
-| INFO | fallback_cboe_vix | NA | INFO | SAME | 0 | VIXCLS | OK | 1.12 | 2026-03-11 | 24.23 | NA | WARN:fallback_cboe_vix | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | 2026-03-12T15:10:58Z |
+| INFO | NA | NA | INFO | SAME | 0 | BAMLH0A0HYM2 | OK | 0.04 | NA | NA | NA | ERR:timeout(attempts=3):fredgraph | https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2 | 2026-03-12T23:02:27Z |
+| INFO | nonofficial_datahub_oil_prices | NA | INFO | SAME | 0 | DCOILWTICO | OK | 0.04 | 2026-03-09 | 94.65 | NA | WARN:nonofficial_datahub_oil_prices(wti-daily) | https://datahub.io/core/oil-prices/_r/-/data/wti-daily.csv | 2026-03-12T23:02:27Z |
+| INFO | fallback_treasury_csv | NA | INFO | SAME | 0 | DGS10 | OK | 0.04 | 2026-03-12 | 4.27 | NA | WARN:fallback_treasury_csv | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T23:02:27Z |
+| INFO | fallback_treasury_csv | NA | INFO | SAME | 0 | DGS2 | OK | 0.04 | 2026-03-12 | 3.76 | NA | WARN:fallback_treasury_csv | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T23:02:27Z |
+| INFO | nonofficial_stooq | NA | INFO | SAME | 0 | DJIA | OK | 0.04 | 2026-03-12 | 46677.85 | -1.55939 | WARN:nonofficial_stooq(^dji);derived_1d_pct | https://stooq.com/q/d/l/?s=^dji&i=d | 2026-03-12T23:02:27Z |
+| INFO | nonofficial_stooq | NA | INFO | SAME | 0 | NASDAQCOM | OK | 0.04 | 2026-03-12 | 22311.98 | -1.779132 | WARN:nonofficial_stooq(^ndq);derived_1d_pct | https://stooq.com/q/d/l/?s=^ndq&i=d | 2026-03-12T23:02:27Z |
+| INFO | fallback_chicagofed_nfci | NA | INFO | SAME | 0 | NFCINONFINLEVERAGE | OK | 0.04 | 2026-03-06 | -0.458754 | NA | WARN:fallback_chicagofed_nfci(nonfinancial leverage) | https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv | 2026-03-12T23:02:27Z |
+| INFO | nonofficial_stooq | NA | INFO | SAME | 0 | SP500 | OK | 0.04 | 2026-03-12 | 6672.62 | -1.522772 | WARN:nonofficial_stooq(^spx);derived_1d_pct | https://stooq.com/q/d/l/?s=^spx&i=d | 2026-03-12T23:02:27Z |
+| INFO | derived_from_treasury | NA | INFO | SAME | 0 | T10Y2Y | OK | 0.04 | 2026-03-12 | 0.51 | NA | WARN:derived_from_treasury(10Y-2Y) | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T23:02:27Z |
+| INFO | derived_from_treasury | NA | INFO | SAME | 0 | T10Y3M | OK | 0.04 | 2026-03-12 | 0.55 | NA | WARN:derived_from_treasury(10Y-3M) | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T23:02:27Z |
+| INFO | fallback_treasury_csv | NA | INFO | SAME | 0 | UST3M | OK | 0.04 | 2026-03-12 | 3.72 | NA | WARN:fallback_treasury_csv | https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202603?_format=csv&field_tdr_date_value_month=202603&page=&type=daily_treasury_yield_curve | 2026-03-12T23:02:27Z |
+| INFO | fallback_cboe_vix | NA | INFO | SAME | 0 | VIXCLS | OK | 0.04 | 2026-03-11 | 24.23 | NA | WARN:fallback_cboe_vix | https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv | 2026-03-12T23:02:27Z |
