@@ -3608,7 +3608,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-12T21:38:20.598942+08:00",
+    "as_of_ts": "2026-03-13T03:13:35.350724+08:00",
     "series_id": "NOMINAL_10Y",
     "data_date": "2026-03-11",
     "value": "4.21",
@@ -3616,7 +3616,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-12T21:38:20.598942+08:00",
+    "as_of_ts": "2026-03-13T03:13:35.350724+08:00",
     "series_id": "REAL_10Y",
     "data_date": "2026-03-11",
     "value": "1.85",
@@ -3624,7 +3624,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-12T21:38:20.598942+08:00",
+    "as_of_ts": "2026-03-13T03:13:35.350724+08:00",
     "series_id": "BE10Y_PROXY",
     "data_date": "2026-03-11",
     "value": "2.36",
@@ -3632,7 +3632,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-12T21:38:20.598942+08:00",
+    "as_of_ts": "2026-03-13T03:13:35.350724+08:00",
     "series_id": "VIX_PROXY",
     "data_date": "2026-03-11",
     "value": "24.23",
@@ -3677,6 +3677,14 @@
     "data_date": "2026-03-11",
     "value": "1.1569791666666667",
     "source_url": "https://stooq.com/",
+    "notes": "NA"
+  },
+  {
+    "as_of_ts": "2026-03-13T03:13:35.350724+08:00",
+    "series_id": "OFR_FSI",
+    "data_date": "2026-03-10",
+    "value": "-1.458",
+    "source_url": "https://www.financialresearch.gov/financial-stress-index/data/fsi.csv",
     "notes": "NA"
   }
 ]
