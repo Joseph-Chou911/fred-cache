@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-12T14:12:09Z`
+- report_generated_at_utc: `2026-03-12T23:13:25Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -27,7 +27,7 @@
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=31.25%; slope=6.37% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=35.9%; atr=2.0172 (2.63%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=96.56
-- margin(5D,thr=100.00億): TOTAL -15.10 億 => **NEUTRAL**; TWSE -4.60 / TPEX -10.50; margin_date=2026-03-11, price_last_date=2026-03-12 (MISALIGNED); data_date=2026-03-11
+- margin(5D,thr=100.00億): TOTAL -29.10 億 => **NEUTRAL**; TWSE 2.10 / TPEX -31.20; margin_date=2026-03-12, price_last_date=2026-03-12 (ALIGNED); data_date=2026-03-12
 - chip_overlay(T86+TWT72U,5D): total3_5D=-574,596,063; foreign=-407,526,160; trust=16,415,000; dealer=-183,484,903; borrow_shares=243,676,000 (Δ1D=0); borrow_mv(億)=186.7 (Δ1D=-3.9); asof=20260312; price_last_date=2026-03-12 (ALIGNED)
 
 ## forward_mdd_conditional (bb_z buckets)
@@ -265,10 +265,10 @@
 | min_entry_date | 2009-06-03 |
 | min_entry_price | 29.7584 |
 | min_future_date | 2009-06-17 |
-| min_future_price | 26.7571 |
+| min_future_price | 26.7570 |
 | dq_flags | (none) |
 
-- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7571`
+- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7570`
 
 ##### bucket: >=2 (raw_key=z_ge_2.0)
 
@@ -303,7 +303,7 @@
 | rv20_percentile | 96.56 |
 | rv_pctl_max | 60.00 |
 | dq_core | PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN |
-| margin_note | margin: MISALIGNED (ignored in overlay) |
+| margin_note | margin(aligned): total_state=NEUTRAL, total_sum=-29.100000000000012 |
 | pledge_block_in_stats | true |
 | pledge_version | pledge_guidance_v1 |
 | pledge_scope | compute_only_no_margin_no_chip |
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-12T14:12:08.797Z`
+- overlay_generated_at_utc: `2026-03-12T23:13:24.970Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260312` vs price_last_date=`2026-03-12` => **ALIGNED**
@@ -513,16 +513,16 @@
 
 ## Margin Overlay（融資）
 
-- overlay_generated_at_utc: `2026-03-11T22:57:41Z`
-- data_date: `2026-03-11`
+- overlay_generated_at_utc: `2026-03-12T15:30:41Z`
+- data_date: `2026-03-12`
 - params: window_n=5, threshold_yi=100.00
-- date_alignment: margin_latest_date=`2026-03-11` vs price_last_date=`2026-03-12` => **MISALIGNED**
+- date_alignment: margin_latest_date=`2026-03-12` vs price_last_date=`2026-03-12` => **ALIGNED**
 
 | scope | latest_date | balance(億) | chg_today(億) | chg_ND_sum(億) | state_ND | rows_used |
 |---|---:|---:|---:|---:|---:|---:|
-| TWSE | 2026-03-11 | 3,761.5 | 79.1 | -4.6 | NEUTRAL | 5 |
-| TPEX | 2026-03-11 | 1,354.7 | 32.6 | -10.5 | NEUTRAL | 5 |
-| TOTAL | 2026-03-11 | 5,116.2 | N/A | -15.1 | NEUTRAL | N/A |
+| TWSE | 2026-03-12 | 3,793.7 | 32.2 | 2.1 | NEUTRAL | 5 |
+| TPEX | 2026-03-12 | 1,352.8 | -1.9 | -31.2 | NEUTRAL | 5 |
+| TOTAL | 2026-03-12 | 5,146.5 | N/A | -29.1 | NEUTRAL | N/A |
 
 ### Margin Sources
 
