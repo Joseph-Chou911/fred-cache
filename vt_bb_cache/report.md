@@ -1,33 +1,33 @@
 # VT BB Monitor Report (VT + optional USD/TWD)
 
-- report_generated_at_utc: `2026-03-12T14:32:55Z`
+- report_generated_at_utc: `2026-03-12T23:43:10Z`
 - data_date: `2026-03-12`
 - price_mode: `adj_close`
 - params: `BB(60,2.0) on log(price)`, `forward_mdd(20D)`, sidecar=`forward_mdd(10D)`
 
 ## 15秒摘要
-- **VT** (2026-03-12 price_usd=140.9050) → **MID_BAND** (z=-1.4237, pos=0.1441, pos_raw=0.1441); dist_to_lower=0.995%; dist_to_upper=6.123%; 20D forward_mdd: p50=-1.634%, p10=-7.270%, p5=-10.125%, min=-31.571% (n=2901, conf=HIGH, conf_decision=OK, min_n_required=200)
+- **VT** (2026-03-12 price_usd=140.5500) → **NEAR_LOWER_BAND** (z=-1.5609, pos=0.1098, pos_raw=0.1098); dist_to_lower=0.762%; dist_to_upper=6.400%; 20D forward_mdd: p50=-3.139%, p10=-8.865%, p5=-12.388%, min=-31.574% (n=170, conf=HIGH, conf_decision=LOW_FOR_DECISION, min_n_required=200)
 
 ## Δ1D（一日變動；以前一個「可計算 BB 的交易日」為基準）
 - prev_bb_date: `2026-03-11`
-- Δprice_1d: -1.493%
-- Δz_1d: -0.8766
-- Δpos_1d: -0.2192
-- Δpos_raw_1d: -0.2192
-- Δband_width_1d: -0.065%
-- Δdist_to_upper_1d: 1.562%
+- Δprice_1d: -1.741%
+- Δz_1d: -1.0139
+- Δpos_1d: -0.2535
+- Δpos_raw_1d: -0.2535
+- Δband_width_1d: -0.038%
+- Δdist_to_upper_1d: 1.839%
 
 ## 解讀重點（更詳盡）
-- **Band 位置**：pos=0.1441（clipped） / pos_raw=0.1441（未截斷；突破上下軌時用於稽核）
-- **距離上下軌**：dist_to_upper=6.123%；dist_to_lower=0.995%
-- **波動區間寬度（閱讀用）**：band_width≈7.190%（= upper/lower - 1；用於直覺理解，不作信號）
-- **streak（連續天數）**：bucket_streak=10；pos≥0.80 streak=0；dist_to_upper≤2.0% streak=0
-- **forward_mdd(20D)**（bucket=MID_BAND）：p50=-1.634%、p10=-7.270%、p5=-10.125%、min=-31.571%；n=2901（conf=HIGH；conf_decision=OK）
+- **Band 位置**：pos=0.1098（clipped） / pos_raw=0.1098（未截斷；突破上下軌時用於稽核）
+- **距離上下軌**：dist_to_upper=6.400%；dist_to_lower=0.762%
+- **波動區間寬度（閱讀用）**：band_width≈7.217%（= upper/lower - 1；用於直覺理解，不作信號）
+- **streak（連續天數）**：bucket_streak=1；pos≥0.80 streak=0；dist_to_upper≤2.0% streak=0
+- **forward_mdd(20D)**（bucket=NEAR_LOWER_BAND）：p50=-3.139%、p10=-8.865%、p5=-12.388%、min=-31.574%；n=170（conf=HIGH；conf_decision=LOW_FOR_DECISION）
 
 ## pos_raw vs dist_to_upper 一致性檢查（提示用；不改數值）
 - status: `OK`
 - reason: `within_abs_or_rel_tolerance`
-- expected_dist_to_upper(logband): `6.123%`
+- expected_dist_to_upper(logband): `6.400%`
 - abs_err: `0.00000000`; abs_tol: `0.00010000`
 - rel_err: `0.000000`; rel_tolerance: `0.020000`
 
@@ -39,19 +39,19 @@
 
 ## forward_mdd(20D) 交集切片（bucket 內；閱讀用；不回填主欄位）
 
-- Slice A_inBucket（bucket=MID_BAND ∩ pos≥0.80）：p50=-1.538%、p10=-5.182%、p5=-6.493%、min=-31.285% (n=641, conf=HIGH, conf_decision=OK, min_n_required=200)
-- Slice B_inBucket（bucket=MID_BAND ∩ dist_to_upper≤2.0%）：p50=-1.399%、p10=-5.321%、p5=-6.532%、min=-31.285% (n=722, conf=HIGH, conf_decision=OK, min_n_required=200)
+- Slice A_inBucket（bucket=NEAR_LOWER_BAND ∩ pos≥0.80）：p50=NA、p10=NA、p5=NA、min=NA (n=0, conf=NA, conf_decision=NA, min_n_required=200)
+- Slice B_inBucket（bucket=NEAR_LOWER_BAND ∩ dist_to_upper≤2.0%）：p50=NA、p10=NA、p5=NA、min=NA (n=0, conf=NA, conf_decision=NA, min_n_required=200)
 - 說明：交集切片用於回答「在同一個 bucket/regime 內，貼上緣時的 forward_mdd 分布」；避免全樣本切片混入不同 regime。
 
 ## forward_mdd(10D) 短窗旁路（閱讀用；不回填主欄位）
 - 用途：更貼近「維持率壓力/質押風險」的短期下行行為觀察；不作為主信號。
-- bucket=MID_BAND：p50=-0.992%、p10=-4.871%、p5=-6.649%、min=-27.590% (n=2908, conf=HIGH, conf_decision=OK)
-- inBucket ∩ pos≥0.80：p10=-3.575%、p5=-5.082% (n=644, conf_decision=OK)
-- inBucket ∩ dist_to_upper≤2.0%：p10=-3.293%、p5=-5.050% (n=726, conf_decision=OK)
+- bucket=NEAR_LOWER_BAND：p50=-1.978%、p10=-7.324%、p5=-12.096%、min=-25.941% (n=170, conf=HIGH, conf_decision=LOW_FOR_DECISION)
+- inBucket ∩ pos≥0.80：p10=NA、p5=NA (n=0, conf_decision=NA)
+- inBucket ∩ dist_to_upper≤2.0%：p10=NA、p5=NA (n=0, conf_decision=NA)
 
 ## band_width 分位數觀察（5-bin；獨立項目；不改 bucket / 不回填主欄位）
 
-- band_width_current: 7.190%; percentile≈22.70; current_bin=`B2(p20-40]`
+- band_width_current: 7.217%; percentile≈22.98; current_bin=`B2(p20-40]`
 - quantiles: p20=6.876%, p40=8.954%, p50=9.837%, p60=11.414%, p80=16.667% (n_bw_samples=4396)
 - current_bin streak=15
 
@@ -59,41 +59,41 @@
 
 | bw_bin | n | p50 | p10 | p5 | min | conf | conf_decision |
 |---|---:|---:|---:|---:|---:|---|---|
-| B1(<=p20) | 880 | -1.423% | -6.019% | -8.085% | -11.751% | HIGH | OK |
+| B1(<=p20) | 880 | -1.423% | -6.019% | -8.086% | -11.751% | HIGH | OK |
 | B2(p20-40] | 864 | -1.258% | -5.347% | -8.364% | -31.571% | HIGH | OK |
 | B3(p40-60] | 874 | -1.824% | -6.432% | -8.658% | -28.032% | HIGH | OK |
 | B4(p60-80] | 879 | -1.969% | -8.096% | -9.718% | -31.146% | HIGH | OK |
 | B5(>p80) | 879 | -1.996% | -10.218% | -13.989% | -31.574% | HIGH | OK |
 
-### forward_mdd(20D) × band_width（5-bin × bucket=MID_BAND 交集；閱讀用）
+### forward_mdd(20D) × band_width（5-bin × bucket=NEAR_LOWER_BAND 交集；閱讀用）
 
 | bw_bin | n | p50 | p10 | p5 | min | conf | conf_decision |
 |---|---:|---:|---:|---:|---:|---|---|
-| B1(<=p20) | 573 | -1.548% | -6.382% | -9.401% | -11.751% | HIGH | OK |
-| B2(p20-40] | 567 | -1.174% | -5.282% | -9.649% | -31.571% | HIGH | OK |
-| B3(p40-60] | 572 | -1.992% | -6.465% | -9.162% | -27.127% | HIGH | OK |
-| B4(p60-80] | 571 | -1.906% | -8.253% | -9.731% | -31.146% | HIGH | OK |
-| B5(>p80) | 618 | -1.613% | -9.898% | -13.430% | -25.288% | HIGH | OK |
+| B1(<=p20) | 27 | -3.120% | -5.979% | -7.849% | -8.749% | LOW | LOW_FOR_DECISION |
+| B2(p20-40] | 20 | -1.086% | -11.041% | -11.198% | -12.476% | LOW | LOW_FOR_DECISION |
+| B3(p40-60] | 19 | -0.811% | -6.577% | -7.153% | -8.196% | NA | LOW_FOR_DECISION |
+| B4(p60-80] | 38 | -4.970% | -7.924% | -11.574% | -28.985% | LOW | LOW_FOR_DECISION |
+| B5(>p80) | 66 | -3.061% | -12.227% | -15.388% | -31.574% | MED | LOW_FOR_DECISION |
 
 ### forward_mdd(10D) × band_width（5-bin 全樣本；閱讀用）
 
 | bw_bin | n | p50 | p10 | p5 | min | conf | conf_decision |
 |---|---:|---:|---:|---:|---:|---|---|
 | B1(<=p20) | 880 | -0.733% | -4.058% | -5.377% | -10.991% | HIGH | OK |
-| B2(p20-40] | 869 | -0.790% | -3.980% | -5.114% | -17.100% | HIGH | OK |
+| B2(p20-40] | 869 | -0.790% | -3.980% | -5.130% | -17.100% | HIGH | OK |
 | B3(p40-60] | 879 | -0.972% | -4.335% | -5.389% | -24.197% | HIGH | OK |
 | B4(p60-80] | 879 | -1.227% | -5.292% | -6.887% | -27.590% | HIGH | OK |
-| B5(>p80) | 879 | -1.450% | -7.003% | -10.542% | -23.785% | HIGH | OK |
+| B5(>p80) | 879 | -1.450% | -7.003% | -10.543% | -23.785% | HIGH | OK |
 
-### forward_mdd(10D) × band_width（5-bin × bucket=MID_BAND 交集；閱讀用）
+### forward_mdd(10D) × band_width（5-bin × bucket=NEAR_LOWER_BAND 交集；閱讀用）
 
 | bw_bin | n | p50 | p10 | p5 | min | conf | conf_decision |
 |---|---:|---:|---:|---:|---:|---|---|
-| B1(<=p20) | 573 | -0.785% | -4.013% | -5.509% | -10.991% | HIGH | OK |
-| B2(p20-40] | 569 | -0.735% | -4.097% | -5.304% | -17.100% | HIGH | OK |
-| B3(p40-60] | 577 | -1.101% | -4.641% | -5.421% | -10.740% | HIGH | OK |
-| B4(p60-80] | 571 | -1.214% | -5.029% | -7.185% | -27.590% | HIGH | OK |
-| B5(>p80) | 618 | -1.224% | -6.476% | -9.367% | -20.108% | HIGH | OK |
+| B1(<=p20) | 27 | -2.755% | -5.591% | -6.620% | -8.635% | LOW | LOW_FOR_DECISION |
+| B2(p20-40] | 20 | -1.031% | -10.941% | -11.103% | -12.476% | LOW | LOW_FOR_DECISION |
+| B3(p40-60] | 19 | -0.811% | -3.514% | -4.244% | -6.362% | NA | LOW_FOR_DECISION |
+| B4(p60-80] | 38 | -3.890% | -6.835% | -9.453% | -25.941% | LOW | LOW_FOR_DECISION |
+| B5(>p80) | 66 | -2.119% | -11.632% | -15.388% | -23.785% | MED | LOW_FOR_DECISION |
 
 - 說明：p5 通常比 min 更穩定；min 容易被單一極端日主宰。這些表格不作為信號，只用於「風險地形」閱讀。
 
@@ -105,23 +105,23 @@
 | 2026-03-09 | 143.2400 | -0.4323 | 0.3919 | 0.3919 | MID_BAND | 4.449% |
 | 2026-03-10 | 143.2200 | -0.4601 | 0.3850 | 0.3850 | MID_BAND | 4.443% |
 | 2026-03-11 | 143.0400 | -0.5470 | 0.3632 | 0.3632 | MID_BAND | 4.560% |
-| 2026-03-12 | 140.9050 | -1.4237 | 0.1441 | 0.1441 | MID_BAND | 6.123% |
+| 2026-03-12 | 140.5500 | -1.5609 | 0.1098 | 0.1098 | NEAR_LOWER_BAND | 6.400% |
 
 ## BB 詳細（可稽核欄位）
 
 | field | value | note |
 |---|---:|---|
-| price_usd | 140.9050 | adj_close |
-| close_usd | 140.9050 | raw close (for reference) |
-| z | -1.4237 | log(price) z-score vs BB mean/stdev |
-| pos_in_band | 0.1441 | clipped [0,1] for readability |
-| pos_raw | 0.1441 | NOT clipped; can be <0 or >1 when price breaks bands |
-| lower_usd | 139.5024 | exp(lower_log) |
-| upper_usd | 149.5324 | exp(upper_log) |
-| dist_to_lower | 0.995% | (price-lower)/price |
-| dist_to_upper | 6.123% | (upper-price)/price |
-| band_width | 7.190% | (upper/lower - 1) reading-only |
-| bucket | MID_BAND | based on z thresholds |
+| price_usd | 140.5500 | adj_close |
+| close_usd | 140.5500 | raw close (for reference) |
+| z | -1.5609 | log(price) z-score vs BB mean/stdev |
+| pos_in_band | 0.1098 | clipped [0,1] for readability |
+| pos_raw | 0.1098 | NOT clipped; can be <0 or >1 when price breaks bands |
+| lower_usd | 139.4790 | exp(lower_log) |
+| upper_usd | 149.5449 | exp(upper_log) |
+| dist_to_lower | 0.762% | (price-lower)/price |
+| dist_to_upper | 6.400% | (upper-price)/price |
+| band_width | 7.217% | (upper/lower - 1) reading-only |
+| bucket | NEAR_LOWER_BAND | based on z thresholds |
 
 ## forward_mdd（分布解讀）
 
@@ -131,21 +131,15 @@
 
 ## FX (USD/TWD)（嚴格同日對齊 + 落後參考值）
 - fx_history_parse_status: `OK`
-- fx_strict_used_policy: `NA`
-- fx_rate_strict (for 2026-03-12): `NA`
-- derived price_twd (strict): `NA`
+- fx_strict_used_policy: `HISTORY_DATE_MATCH`
+- fx_rate_strict (for 2026-03-12): `31.8500`
+- derived price_twd (strict): `4476.52`
 
 ### Reference（僅供參考；使用落後 FX 且標註落後天數）
-- fx_ref_source: `HISTORY`
-- fx_ref_date: `2026-03-11`
-- fx_ref_rate: `31.7300`
-- fx_ref_lag_days: `1`
-- fx_ref_status: `OK` (stale_threshold_days=30)
-- derived price_twd_ref: `4470.92`
-- 說明：Reference 不會回填 strict 欄位；它只是一個「在 FX 滯後下的閱讀參考價」。
+- fx_ref: `NA` (strict match exists, or no usable reference rate)
 
 ## Data Quality / Staleness 提示（不改數值，只提示狀態）
-- FX strict 缺值，已提供 Reference；lag_days=1。
+- FX strict 有值（同日對齊成立）或無可用參考。
 - 若遇到長假/休市期間，FX strict 為 NA 屬於正常現象；Reference 會明確標註落後天數。
 
 ## Notes

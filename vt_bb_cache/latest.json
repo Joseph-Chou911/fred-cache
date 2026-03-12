@@ -1,123 +1,123 @@
 {
   "band_width_observation": {
     "current": {
-      "band_width_pct": 0.07189863203757718,
+      "band_width_pct": 0.07216769281904867,
       "current_bin": "B2(p20-40]",
       "current_bin_streak": 15,
-      "percentile": 22.7024567788899
+      "percentile": 22.975432211101
     },
     "forward_mdd_main_bw_5bin": [
       {
         "bw_bin": "B1(<=p20)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.11750664643630004,
+        "min": -0.11750612739146338,
         "min_n_required": 200,
         "n": 880,
-        "p10": -0.060190364470530396,
-        "p5": -0.08085493964908169,
-        "p50": -0.014233641361247329
+        "p10": -0.060190483326124984,
+        "p5": -0.08085511956040493,
+        "p50": -0.01423344565671758
       },
       {
         "bw_bin": "B2(p20-40]",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.3157057980965967,
+        "min": -0.3157060141957808,
         "min_n_required": 200,
         "n": 864,
-        "p10": -0.05347380395731717,
-        "p5": -0.08364382222638579,
-        "p50": -0.012577609271826051
+        "p10": -0.05347402737544622,
+        "p5": -0.08364364720917113,
+        "p50": -0.012577274169306374
       },
       {
         "bw_bin": "B3(p40-60]",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.28031928237450787,
+        "min": -0.28031944561320266,
         "min_n_required": 200,
         "n": 874,
-        "p10": -0.0643228592875704,
-        "p5": -0.0865787455314204,
-        "p50": -0.018241840210022564
+        "p10": -0.06432280569192493,
+        "p5": -0.08657863619629287,
+        "p50": -0.018241713981286822
       },
       {
         "bw_bin": "B4(p60-80]",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.31146415748901113,
+        "min": -0.3114645293199314,
         "min_n_required": 200,
         "n": 879,
-        "p10": -0.08095596706162356,
-        "p5": -0.09717724018363708,
-        "p50": -0.01969446306219158
+        "p10": -0.08095565367128199,
+        "p5": -0.09717720510030652,
+        "p50": -0.019694459872246495
       },
       {
         "bw_bin": "B5(>p80)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.31574052476911374,
+        "min": -0.3157405892917575,
         "min_n_required": 200,
         "n": 879,
-        "p10": -0.1021760437803176,
-        "p5": -0.13988826868903606,
-        "p50": -0.01995529301154908
+        "p10": -0.10217608632771624,
+        "p5": -0.1398879474041465,
+        "p50": -0.01995521421575508
       }
     ],
     "forward_mdd_main_bw_5bin_in_bucket": [
       {
         "bw_bin": "B1(<=p20)",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.11750664643630004,
+        "conf": "LOW",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.0874894355342768,
         "min_n_required": 200,
-        "n": 573,
-        "p10": -0.06381517710566201,
-        "p5": -0.09401091467423864,
-        "p50": -0.015479464038506086
+        "n": 27,
+        "p10": -0.05978507673956883,
+        "p5": -0.07849442899063022,
+        "p50": -0.031204881724282263
       },
       {
         "bw_bin": "B2(p20-40]",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.3157057980965967,
+        "conf": "LOW",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.12476431329624904,
         "min_n_required": 200,
-        "n": 567,
-        "p10": -0.052816733347590204,
-        "p5": -0.09648538986400758,
-        "p50": -0.011736829894099632
+        "n": 20,
+        "p10": -0.11040637618025123,
+        "p5": -0.11198165452310256,
+        "p50": -0.010856755810134733
       },
       {
         "bw_bin": "B3(p40-60]",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.2712680354973347,
+        "conf": "NA",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.08195859793136451,
         "min_n_required": 200,
-        "n": 572,
-        "p10": -0.06465133170208615,
-        "p5": -0.09162342455875802,
-        "p50": -0.01992439448382921
+        "n": 19,
+        "p10": -0.06576854153808831,
+        "p5": -0.07152590162013943,
+        "p50": -0.008109132730455992
       },
       {
         "bw_bin": "B4(p60-80]",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.31146415748901113,
+        "conf": "LOW",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.2898501241570064,
         "min_n_required": 200,
-        "n": 571,
-        "p10": -0.08253180026517648,
-        "p5": -0.09730733763035454,
-        "p50": -0.019058080587314064
+        "n": 38,
+        "p10": -0.07923638032548505,
+        "p5": -0.11573809769047468,
+        "p50": -0.049698764241118576
       },
       {
         "bw_bin": "B5(>p80)",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.25287693653701804,
+        "conf": "MED",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.3157405892917575,
         "min_n_required": 200,
-        "n": 618,
-        "p10": -0.09897568120238222,
-        "p5": -0.13429629021019865,
-        "p50": -0.01612847320466093
+        "n": 66,
+        "p10": -0.12227431586966536,
+        "p5": -0.15387972632434646,
+        "p50": -0.030608411437589023
       }
     ],
     "forward_mdd_main_days": 20,
@@ -126,234 +126,234 @@
         "bw_bin": "B1(<=p20)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.1099113412478484,
+        "min": -0.10991127247914001,
         "min_n_required": 200,
         "n": 880,
-        "p10": -0.040575309373554067,
-        "p5": -0.05376624662449323,
-        "p50": -0.007326224763875899
+        "p10": -0.040575379497791816,
+        "p5": -0.05376649079016423,
+        "p50": -0.007326160783796332
       },
       {
         "bw_bin": "B2(p20-40]",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.1710033597198456,
+        "min": -0.17100291975715032,
         "min_n_required": 200,
         "n": 869,
-        "p10": -0.03980464253476279,
-        "p5": -0.0511401980730874,
-        "p50": -0.007902723144942114
+        "p10": -0.03980479907110788,
+        "p5": -0.0513022180003684,
+        "p50": -0.0079028585065547
       },
       {
         "bw_bin": "B3(p40-60]",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.24197371053370542,
+        "min": -0.2419738257647327,
         "min_n_required": 200,
         "n": 879,
-        "p10": -0.04335089318938161,
-        "p5": -0.05388866976259845,
-        "p50": -0.00971967215319347
+        "p10": -0.043351183402219905,
+        "p5": -0.05388867442709393,
+        "p50": -0.009719594584973623
       },
       {
         "bw_bin": "B4(p60-80]",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.2758998328184823,
+        "min": -0.2759002724913566,
         "min_n_required": 200,
         "n": 879,
-        "p10": -0.05291811682914449,
-        "p5": -0.06887160580616124,
-        "p50": -0.012271614434669842
+        "p10": -0.052918041296494245,
+        "p5": -0.06887170343419753,
+        "p50": -0.012271409749131212
       },
       {
         "bw_bin": "B5(>p80)",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.23785162824504535,
+        "min": -0.23785195085826405,
         "min_n_required": 200,
         "n": 879,
-        "p10": -0.07003444427466918,
-        "p5": -0.10542491814734953,
-        "p50": -0.014497364809537006
+        "p10": -0.07003484902175879,
+        "p5": -0.10542537744755034,
+        "p50": -0.014496889789150313
       }
     ],
     "forward_mdd_short_bw_5bin_in_bucket": [
       {
         "bw_bin": "B1(<=p20)",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.1099113412478484,
+        "conf": "LOW",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.08635222791247721,
         "min_n_required": 200,
-        "n": 573,
-        "p10": -0.0401296868804573,
-        "p5": -0.05509063378691099,
-        "p50": -0.007846714437322322
+        "n": 27,
+        "p10": -0.05591436783348889,
+        "p5": -0.06619949621183886,
+        "p50": -0.027550251043557905
       },
       {
         "bw_bin": "B2(p20-40]",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.1710033597198456,
+        "conf": "LOW",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.12476431329624904,
         "min_n_required": 200,
-        "n": 569,
-        "p10": -0.04097309727697827,
-        "p5": -0.053036232467805686,
-        "p50": -0.007351688990586358
+        "n": 20,
+        "p10": -0.10940734804323245,
+        "p5": -0.11102900842637874,
+        "p50": -0.010308277414790845
       },
       {
         "bw_bin": "B3(p40-60]",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.10739708781901158,
+        "conf": "NA",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.06362180335242829,
         "min_n_required": 200,
-        "n": 577,
-        "p10": -0.046408054403996514,
-        "p5": -0.05421475439765655,
-        "p50": -0.011005439285101781
+        "n": 19,
+        "p10": -0.03513667323825258,
+        "p5": -0.04244487221749529,
+        "p50": -0.008109132730455992
       },
       {
         "bw_bin": "B4(p60-80]",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.2758998328184823,
+        "conf": "LOW",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.25941288491106007,
         "min_n_required": 200,
-        "n": 571,
-        "p10": -0.050286549376089784,
-        "p5": -0.07185139319087691,
-        "p50": -0.012143925275272749
+        "n": 38,
+        "p10": -0.06834797305430121,
+        "p5": -0.09452996445731537,
+        "p50": -0.03889836323555962
       },
       {
         "bw_bin": "B5(>p80)",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.20108058054948352,
+        "conf": "MED",
+        "conf_decision": "LOW_FOR_DECISION",
+        "min": -0.23785195085826405,
         "min_n_required": 200,
-        "n": 618,
-        "p10": -0.06475504465596894,
-        "p5": -0.09366610578537819,
-        "p50": -0.012239402771832997
+        "n": 66,
+        "p10": -0.1163200890694226,
+        "p5": -0.15387972632434646,
+        "p50": -0.021190023309228312
       }
     ],
     "forward_mdd_short_days": 10,
     "note": "Independent observation only. Does NOT affect bucket rules nor main forward_mdd stats.",
     "quantiles": {
       "n_bw_samples": 4396,
-      "p20": 0.06876252813633177,
-      "p40": 0.08953696200087968,
-      "p50": 0.0983669216214893,
-      "p60": 0.11414383346679013,
-      "p80": 0.1666685678777453
+      "p20": 0.06876250814616314,
+      "p40": 0.08953703696852533,
+      "p50": 0.09836708498600055,
+      "p60": 0.11414385633381818,
+      "p80": 0.1666685687674807
     }
   },
   "bb": {
-    "band_width_pct": 0.07189863203757718,
-    "bucket": "MID_BAND",
-    "dist_to_lower": 0.009954201052664084,
-    "dist_to_upper": 0.06122873754619951,
-    "lower_usd": 139.50240209212237,
-    "pos_in_band": 0.14408554582710079,
-    "pos_raw": 0.14408554582710079,
+    "band_width_pct": 0.07216769281904867,
+    "bucket": "NEAR_LOWER_BAND",
+    "dist_to_lower": 0.0076198530816315386,
+    "dist_to_upper": 0.06399793252089576,
+    "lower_usd": 139.47903267788055,
+    "pos_in_band": 0.10976980805005597,
+    "pos_raw": 0.10976980805005597,
     "streak": {
-      "bucket_streak": 10,
+      "bucket_streak": 1,
       "dist_u_le_threshold_streak": 0,
       "dist_u_threshold": 0.02,
       "pos_ge_threshold_streak": 0,
       "pos_threshold": 0.8
     },
-    "upper_usd": 149.532433968502,
-    "z": -1.4236578166916016
+    "upper_usd": 149.5449126628759,
+    "z": -1.5609207677997674
   },
-  "close_usd": 140.90499877929688,
+  "close_usd": 140.5500030517578,
   "consistency_check": {
     "pos_vs_dist_to_upper": {
-      "abs_err": 2.220446049250313e-16,
+      "abs_err": 2.914335439641036e-16,
       "abs_tol": 0.0001,
-      "expected_dist_to_upper": 0.06122873754619973,
+      "expected_dist_to_upper": 0.06399793252089547,
       "model": "logband",
       "reason": "within_abs_or_rel_tolerance",
-      "rel_err": 3.62647694242412e-15,
+      "rel_err": 4.553796231916532e-15,
       "rel_tolerance": 0.02,
       "status": "OK"
     }
   },
   "data_date": "2026-03-12",
   "derived_twd": {
-    "close_twd": null,
-    "close_twd_ref": 4470.91561126709,
-    "price_twd": null,
-    "price_twd_ref": 4470.91561126709
+    "close_twd": 4476.517597198486,
+    "close_twd_ref": null,
+    "price_twd": 4476.517597198486,
+    "price_twd_ref": null
   },
   "forward_days": 20,
   "forward_days_short": 10,
   "forward_mdd20": {
     "conf": "HIGH",
-    "conf_decision": "OK",
-    "min": -0.3157057980965967,
+    "conf_decision": "LOW_FOR_DECISION",
+    "min": -0.3157405892917575,
     "min_n_required": 200,
-    "n": 2901,
-    "p10": -0.07270365033903148,
-    "p5": -0.10125361722603787,
-    "p50": -0.016344004039224758
+    "n": 170,
+    "p10": -0.08865355086164564,
+    "p5": -0.12388345772707152,
+    "p50": -0.0313850906102533
   },
   "forward_mdd20_slices": {
     "dist_to_upper<=2.0%": {
       "condition": "dist_to_upper<=0.0200",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128541686286819,
+      "min": -0.31285377940103787,
       "min_n_required": 200,
       "n": 1757,
-      "p10": -0.05467164216260205,
-      "p5": -0.06982490338489893,
-      "p50": -0.014478692148457095
+      "p10": -0.054671710567524553,
+      "p5": -0.06982496399708849,
+      "p50": -0.014478605419060875
     },
     "pos>=0.80": {
       "condition": "pos_in_band>=0.80",
       "conf": "HIGH",
       "conf_decision": "OK",
-      "min": -0.3128541686286819,
+      "min": -0.31285377940103787,
       "min_n_required": 200,
       "n": 1717,
-      "p10": -0.05415450802254111,
-      "p5": -0.06982490338489893,
-      "p50": -0.015154933171393714
+      "p10": -0.054154622666243955,
+      "p5": -0.06982496399708849,
+      "p50": -0.0151548454263144
     }
   },
   "forward_mdd20_slices_in_bucket": {
-    "bucket=MID_BAND ∩ dist_to_upper<=2.0%": {
-      "condition": "(bucket==MID_BAND) AND (dist_to_upper<=0.0200)",
-      "conf": "HIGH",
-      "conf_decision": "OK",
-      "min": -0.3128541686286819,
+    "bucket=NEAR_LOWER_BAND ∩ dist_to_upper<=2.0%": {
+      "condition": "(bucket==NEAR_LOWER_BAND) AND (dist_to_upper<=0.0200)",
+      "conf": "NA",
+      "conf_decision": "NA",
+      "min": null,
       "min_n_required": 200,
-      "n": 722,
-      "p10": -0.05321278116496516,
-      "p5": -0.06531913628475258,
-      "p50": -0.01399453674517187
+      "n": 0,
+      "p10": null,
+      "p5": null,
+      "p50": null
     },
-    "bucket=MID_BAND ∩ pos>=0.80": {
-      "condition": "(bucket==MID_BAND) AND (pos_in_band>=0.80)",
-      "conf": "HIGH",
-      "conf_decision": "OK",
-      "min": -0.3128541686286819,
+    "bucket=NEAR_LOWER_BAND ∩ pos>=0.80": {
+      "condition": "(bucket==NEAR_LOWER_BAND) AND (pos_in_band>=0.80)",
+      "conf": "NA",
+      "conf_decision": "NA",
+      "min": null,
       "min_n_required": 200,
-      "n": 641,
-      "p10": -0.05181730600471102,
-      "p5": -0.0649304629804428,
-      "p50": -0.015383596482210438
+      "n": 0,
+      "p10": null,
+      "p5": null,
+      "p50": null
     }
   },
   "forward_mdd_short": {
     "bucket": {
       "conf": "HIGH",
-      "conf_decision": "OK",
-      "min": -0.2758998328184823,
+      "conf_decision": "LOW_FOR_DECISION",
+      "min": -0.25941288491106007,
       "min_n_required": 200,
-      "n": 2908,
-      "p10": -0.048707390489454265,
-      "p5": -0.0664879096829817,
-      "p50": -0.009916520399890771
+      "n": 170,
+      "p10": -0.07324254016853284,
+      "p5": -0.12095786410577396,
+      "p50": -0.01977862437316319
     },
     "days": 10,
     "note": "Reading-only. Does NOT affect bucket rules nor main forward_mdd stats.",
@@ -362,47 +362,47 @@
         "condition": "dist_to_upper<=0.0200",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.10890298228740225,
+        "min": -0.10890250835208826,
         "min_n_required": 200,
         "n": 1764,
-        "p10": -0.03540177543217121,
-        "p5": -0.04745190070000214,
-        "p50": -0.008034537633769379
+        "p10": -0.03540206250580349,
+        "p5": -0.047451563165956605,
+        "p50": -0.008034661446674252
       },
       "pos>=0.80": {
         "condition": "pos_in_band>=0.80",
         "conf": "HIGH",
         "conf_decision": "OK",
-        "min": -0.10890298228740225,
+        "min": -0.10890250835208826,
         "min_n_required": 200,
         "n": 1723,
-        "p10": -0.03656362722698389,
-        "p5": -0.04777599171100799,
-        "p50": -0.00865579579718756
+        "p10": -0.03656358086268305,
+        "p5": -0.047775978491285585,
+        "p50": -0.008655795135220079
       }
     },
     "slices_in_bucket": {
-      "bucket=MID_BAND ∩ dist_to_upper<=2.0%": {
-        "condition": "(bucket==MID_BAND) AND (dist_to_upper<=0.0200)",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.10890298228740225,
+      "bucket=NEAR_LOWER_BAND ∩ dist_to_upper<=2.0%": {
+        "condition": "(bucket==NEAR_LOWER_BAND) AND (dist_to_upper<=0.0200)",
+        "conf": "NA",
+        "conf_decision": "NA",
+        "min": null,
         "min_n_required": 200,
-        "n": 726,
-        "p10": -0.03292760028794567,
-        "p5": -0.05050425911670833,
-        "p50": -0.007365376293268944
+        "n": 0,
+        "p10": null,
+        "p5": null,
+        "p50": null
       },
-      "bucket=MID_BAND ∩ pos>=0.80": {
-        "condition": "(bucket==MID_BAND) AND (pos_in_band>=0.80)",
-        "conf": "HIGH",
-        "conf_decision": "OK",
-        "min": -0.10890298228740225,
+      "bucket=NEAR_LOWER_BAND ∩ pos>=0.80": {
+        "condition": "(bucket==NEAR_LOWER_BAND) AND (pos_in_band>=0.80)",
+        "conf": "NA",
+        "conf_decision": "NA",
+        "min": null,
         "min_n_required": 200,
-        "n": 644,
-        "p10": -0.03574554477461793,
-        "p5": -0.05081561964667562,
-        "p50": -0.008749285843308807
+        "n": 0,
+        "p10": null,
+        "p5": null,
+        "p50": null
       }
     }
   },
@@ -410,20 +410,20 @@
     "detected_date_key": "date",
     "detected_rate_key": "mid",
     "parse_status": "OK",
-    "rate": null,
+    "rate": 31.85,
     "reference": {
       "history_status": "OK",
-      "lag_days": 1,
+      "lag_days": null,
       "latest_status": "OK",
-      "rate": 31.73,
-      "ref_date": "2026-03-11",
-      "ref_source": "HISTORY",
+      "rate": null,
+      "ref_date": null,
+      "ref_source": null,
       "stale_threshold_days": 30,
-      "status": "OK"
+      "status": null
     },
-    "used_policy": "NA"
+    "used_policy": "HISTORY_DATE_MATCH"
   },
-  "generated_at_utc": "2026-03-12T14:32:55Z",
+  "generated_at_utc": "2026-03-12T23:43:10Z",
   "k": 2.0,
   "min_n_required": 200,
   "module": "vt_bb_cache",
@@ -439,7 +439,7 @@
     "FX reference: if strict match missing, derived_twd.price_twd_ref may be computed using the most recent FX date <= data_date, with lag_days and source annotated."
   ],
   "price_mode": "adj_close",
-  "price_usd": 140.90499877929688,
+  "price_usd": 140.5500030517578,
   "schema_version": "vt_bb_cache.v1",
   "ticker": "VT",
   "window": 60
