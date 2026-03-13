@@ -1,9 +1,9 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T08:39:28Z",
+    "generated_at_utc": "2026-03-13T09:04:58Z",
     "script": "update_tsmc_quarterly_eps_tracker.py",
-    "script_version": "v1.3",
-    "source_policy": "bootstrap_seeds_plus_search_discovery",
+    "script_version": "v1.4",
+    "source_policy": "bootstrap_seeds_plus_official_then_cnyes_discovery",
     "entry_pages": [
       "search://2026Q1",
       "search://2026Q2",
@@ -21,18 +21,26 @@
     "notes": [
       "bootstrapped seeds=5",
       "search query ok: \"台積公司2026年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2026 Q1 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2026年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第一季每股盈餘\" 台積電 | results=2",
       "no discovered article parsed for 2026Q1",
       "search query ok: \"台積公司2026年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2026 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2026年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第二季每股盈餘\" 台積電 | results=2",
       "no discovered article parsed for 2026Q2",
       "search query ok: \"台積公司2026年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2026 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2026年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第三季每股盈餘\" 台積電 | results=2",
       "no discovered article parsed for 2026Q3",
       "search query ok: \"台積公司2026年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2026 Q4 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2026年第四季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第四季每股盈餘\" 台積電 | results=2",
       "no discovered article parsed for 2026Q4",
@@ -41,14 +49,20 @@
       "skip discovery for seeded quarter 2025Q3",
       "skip discovery for seeded quarter 2025Q4",
       "search query ok: \"台積公司2024年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2024 Q1 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2024年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第一季每股盈餘\" 台積電 | results=2",
       "no discovered article parsed for 2024Q1",
       "search query ok: \"台積公司2024年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2024 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2024年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第二季每股盈餘\" 台積電 | results=2",
       "no discovered article parsed for 2024Q2",
       "search query ok: \"台積公司2024年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2024 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2024年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第三季每股盈餘\" 台積電 | results=2",
       "no discovered article parsed for 2024Q3",
@@ -66,7 +80,11 @@
       "quarter_end_date": "December 31, 2024",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3201",
-      "fetched_at_utc": "2026-03-13T08:39:26Z"
+      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "data_origin": "bootstrap_seed",
+      "source_priority": 20,
+      "reference_source_type": "official_tsmc_chinese_news",
+      "reference_url_verified_this_run": false
     },
     {
       "quarter": "2025Q1",
@@ -78,7 +96,11 @@
       "quarter_end_date": "March 31, 2025",
       "quarter_word": "first",
       "page_url": "https://pr.tsmc.com/chinese/news/3222",
-      "fetched_at_utc": "2026-03-13T08:39:26Z"
+      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "data_origin": "bootstrap_seed",
+      "source_priority": 20,
+      "reference_source_type": "official_tsmc_chinese_news",
+      "reference_url_verified_this_run": false
     },
     {
       "quarter": "2025Q2",
@@ -90,7 +112,11 @@
       "quarter_end_date": "June 30, 2025",
       "quarter_word": "second",
       "page_url": "https://pr.tsmc.com/chinese/news/3249",
-      "fetched_at_utc": "2026-03-13T08:39:26Z"
+      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "data_origin": "bootstrap_seed",
+      "source_priority": 20,
+      "reference_source_type": "official_tsmc_chinese_news",
+      "reference_url_verified_this_run": false
     },
     {
       "quarter": "2025Q3",
@@ -102,7 +128,11 @@
       "quarter_end_date": "September 30, 2025",
       "quarter_word": "third",
       "page_url": "https://pr.tsmc.com/chinese/news/3264",
-      "fetched_at_utc": "2026-03-13T08:39:26Z"
+      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "data_origin": "bootstrap_seed",
+      "source_priority": 20,
+      "reference_source_type": "official_tsmc_chinese_news",
+      "reference_url_verified_this_run": false
     },
     {
       "quarter": "2025Q4",
@@ -114,7 +144,11 @@
       "quarter_end_date": "December 31, 2025",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3281",
-      "fetched_at_utc": "2026-03-13T08:39:26Z"
+      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "data_origin": "bootstrap_seed",
+      "source_priority": 20,
+      "reference_source_type": "official_tsmc_chinese_news",
+      "reference_url_verified_this_run": false
     }
   ]
 }
