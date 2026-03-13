@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-13T10:56:51Z`
+- report_generated_at_utc: `2026-03-13T11:37:53Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -21,9 +21,9 @@
 ## 快速摘要（非預測，僅狀態）
 - state: **IN_BAND**; bb_z=0.9511; pos=0.7378 (raw=0.7378); bw_geo=39.50%; bw_std=32.99%
 - dist_to_lower=22.57%; dist_to_upper=8.02%; above_upper=0.00%; below_lower=0.00%; DQ=PRICE_SERIES_BREAK_DETECTED, FWD_MDD_CLEAN_APPLIED, RAW_OUTLIER_EXCLUDED_BY_CLEAN; FWD_OUTLIER=20D
-- forward_mdd_clean_20D distribution (n=4166): p50=-0.0182; p10=-0.0686; p05=-0.0926; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4527) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
-- forward_mdd_clean_10D distribution (n=4186): p50=-0.0114; p10=-0.0481; p05=-0.0636; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4527) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]
-- forward_mdd_conditional[20D/clean](bucket_key=-1.5_to_1.5, canon=(-1.5,1.5), n=2633): p10=-0.0679; p05=-0.0913; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4527)
+- forward_mdd_clean_20D distribution (n=4166): p50=-0.0182; p10=-0.0686; p05=-0.0926; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN] [DQ:FWD_MDD_OUTLIER_MIN_RAW_20D]
+- forward_mdd_clean_10D distribution (n=4186): p50=-0.0114; p10=-0.0481; p05=-0.0636; min=-0.2400 (min_window: 2020-03-05->2020-03-19; 19.0173->14.4528) [DQ:RAW_OUTLIER_EXCLUDED_BY_CLEAN]
+- forward_mdd_conditional[20D/clean](bucket_key=-1.5_to_1.5, canon=(-1.5,1.5), n=2633): p10=-0.0679; p05=-0.0913; min=-0.2557 (min_window: 2020-02-19->2020-03-19; 19.4179->14.4528)
 - trend_filter(MA200,slope20D,thr=0.50%): price_vs_ma=29.79%; slope=6.33% => **TREND_UP**
 - vol_filter(RV20,ATR14): rv_ann=35.6%; atr=1.9874 (2.62%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=96.54
@@ -66,9 +66,9 @@
 | min_entry_date | 2020-02-19 |
 | min_entry_price | 19.4179 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 
-- min_window: `2020-02-19->2020-03-19`; `19.4179->14.4527`
+- min_window: `2020-02-19->2020-03-19`; `19.4179->14.4528`
 
 #### conditional quantiles by bucket (canonical order)
 
@@ -93,10 +93,10 @@
 | min_entry_date | 2020-03-02 |
 | min_entry_price | 18.4165 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 | dq_flags | (none) |
 
-- min_window: `2020-03-02->2020-03-19`; `18.4165->14.4527`
+- min_window: `2020-03-02->2020-03-19`; `18.4165->14.4528`
 
 ##### bucket: (-2,-1.5] (raw_key=-2.0_to_-1.5)
 
@@ -109,10 +109,10 @@
 | min_entry_date | 2020-02-27 |
 | min_entry_price | 18.6905 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 | dq_flags | (none) |
 
-- min_window: `2020-02-27->2020-03-19`; `18.6905->14.4527`
+- min_window: `2020-02-27->2020-03-19`; `18.6905->14.4528`
 
 ##### bucket: (-1.5,1.5) (raw_key=-1.5_to_1.5)
 
@@ -125,10 +125,10 @@
 | min_entry_date | 2020-02-19 |
 | min_entry_price | 19.4179 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 | dq_flags | (none) |
 
-- min_window: `2020-02-19->2020-03-19`; `19.4179->14.4527`
+- min_window: `2020-02-19->2020-03-19`; `19.4179->14.4528`
 
 ##### bucket: [1.5,2) (raw_key=1.5_to_2.0)
 
@@ -190,9 +190,9 @@
 | min_entry_date | 2020-03-05 |
 | min_entry_price | 19.0173 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 
-- min_window: `2020-03-05->2020-03-19`; `19.0173->14.4527`
+- min_window: `2020-03-05->2020-03-19`; `19.0173->14.4528`
 
 #### conditional quantiles by bucket (canonical order)
 
@@ -217,10 +217,10 @@
 | min_entry_date | 2020-03-10 |
 | min_entry_price | 18.1951 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 | dq_flags | (none) |
 
-- min_window: `2020-03-10->2020-03-19`; `18.1951->14.4527`
+- min_window: `2020-03-10->2020-03-19`; `18.1951->14.4528`
 
 ##### bucket: (-2,-1.5] (raw_key=-2.0_to_-1.5)
 
@@ -233,10 +233,10 @@
 | min_entry_date | 2020-03-06 |
 | min_entry_price | 18.6273 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 | dq_flags | (none) |
 
-- min_window: `2020-03-06->2020-03-19`; `18.6273->14.4527`
+- min_window: `2020-03-06->2020-03-19`; `18.6273->14.4528`
 
 ##### bucket: (-1.5,1.5) (raw_key=-1.5_to_1.5)
 
@@ -249,10 +249,10 @@
 | min_entry_date | 2020-03-05 |
 | min_entry_price | 19.0173 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 | dq_flags | (none) |
 
-- min_window: `2020-03-05->2020-03-19`; `19.0173->14.4527`
+- min_window: `2020-03-05->2020-03-19`; `19.0173->14.4528`
 
 ##### bucket: [1.5,2) (raw_key=1.5_to_2.0)
 
@@ -265,10 +265,10 @@
 | min_entry_date | 2009-06-03 |
 | min_entry_price | 29.7584 |
 | min_future_date | 2009-06-17 |
-| min_future_price | 26.7570 |
+| min_future_price | 26.7571 |
 | dq_flags | (none) |
 
-- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7570`
+- min_window: `2009-06-03->2009-06-17`; `29.7584->26.7571`
 
 ##### bucket: >=2 (raw_key=z_ge_2.0)
 
@@ -447,7 +447,7 @@
 | min_entry_date | 2020-02-19 |
 | min_entry_price | 19.4179 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 
 ### forward_mdd10 (primary)
 
@@ -469,11 +469,11 @@
 | min_entry_date | 2020-03-05 |
 | min_entry_price | 19.0173 |
 | min_future_date | 2020-03-19 |
-| min_future_price | 14.4527 |
+| min_future_price | 14.4528 |
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-13T10:56:50.919Z`
+- overlay_generated_at_utc: `2026-03-13T11:37:53.370Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260313` vs price_last_date=`2026-03-13` => **ALIGNED**

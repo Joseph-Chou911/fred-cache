@@ -1,65 +1,101 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T10:57:00Z",
+    "generated_at_utc": "2026-03-13T11:39:55Z",
     "script": "update_tsmc_quarterly_eps_tracker.py",
-    "script_version": "v2.0",
-    "source_policy": "bootstrap_seeds_plus_official_archive_first_then_direct_official_ir_then_pdf_then_search_fallback",
+    "script_version": "v3.0",
+    "source_policy": "seed_first_plus_sec_verification_then_direct_url_probe_no_search",
     "entry_pages": [
-      "https://pr.tsmc.com/chinese/news-archives",
-      "scan://2026Q1",
-      "scan://2026Q2",
-      "scan://2026Q3",
-      "scan://2026Q4",
-      "scan://2025Q1",
-      "scan://2025Q2",
-      "scan://2025Q3",
-      "scan://2025Q4",
-      "scan://2024Q1",
-      "scan://2024Q2",
-      "scan://2024Q3",
-      "scan://2024Q4"
+      "https://data.sec.gov/submissions/CIK0001046179.json"
     ],
     "notes": [
       "bootstrapped seeds=5",
       "optional pypdf installed=True",
-      "official archive fetch ok: https://pr.tsmc.com/chinese/news-archives | archive_eps_candidates=0",
-      "official archive html fetched",
-      "2026Q1: skipped active discovery because quarter not ended yet",
-      "2026Q2: skipped active discovery because quarter not ended yet",
-      "2026Q3: skipped active discovery because quarter not ended yet",
-      "2026Q4: skipped active discovery because quarter not ended yet",
-      "candidate parse failed: https://pr.tsmc.com/chinese/news/3222 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q1 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q1 | reason=eps_not_detected",
-      "no discovered article parsed for 2025Q1",
-      "candidate parse failed: https://pr.tsmc.com/chinese/news/3249 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q2 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q2 | reason=eps_not_detected",
-      "no discovered article parsed for 2025Q2",
-      "candidate parse failed: https://pr.tsmc.com/chinese/news/3264 | reason=quarter_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q3 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q3 | reason=eps_not_detected",
-      "no discovered article parsed for 2025Q3",
-      "candidate parse failed: https://pr.tsmc.com/chinese/news/3281 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q4 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q4 | reason=eps_not_detected",
-      "no discovered article parsed for 2025Q4",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q1 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q1 | reason=eps_not_detected",
-      "no discovered article parsed for 2024Q1",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q2 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q2 | reason=eps_not_detected",
-      "no discovered article parsed for 2024Q2",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q3 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q3 | reason=eps_not_detected",
-      "no discovered article parsed for 2024Q3",
-      "candidate parse failed: https://pr.tsmc.com/chinese/news/3201 | reason=quarter_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q4 | reason=eps_not_detected",
-      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q4 | reason=eps_not_detected",
-      "no discovered article parsed for 2024Q4"
+      "SEC verification enabled with cik=0001046179",
+      "2024Q4: SEC submissions queried: https://data.sec.gov/submissions/CIK0001046179.json | candidates=12",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000004/tsm-20250116x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000004/tsm-20250116x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000004/tsm-20250116x6k.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000006/tsmcnaagm2025120_6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000006/tsmcnaagm2025120_6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000006/tsmcnaagm2025120_6k.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000002/tsm-revenue20250110.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000002/tsm-revenue20250110.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000002/tsm-revenue20250110.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000008/tsm-monthend6kx20250123.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000008/tsm-monthend6kx20250123.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000008/tsm-monthend6kx20250123.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000010/a20250124-boddate.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000010/a20250124-boddate.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000010/a20250124-boddate.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617924000137/tsm-monthend6kx20241223.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000137/tsm-monthend6kx20241223.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000137/tsm-monthend6kx20241223.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000013/tsm-revenue20250210.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000013/tsm-revenue20250210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000013/tsm-revenue20250210.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000015/tsm-boardx20250212x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000015/tsm-boardx20250212x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000015/tsm-boardx20250212x6k.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617924000135/a20241219_changeofchiefinf.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000135/a20241219_changeofchiefinf.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000135/a20241219_changeofchiefinf.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617924000132/tsm-revenue20241210.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000132/tsm-revenue20241210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000132/tsm-revenue20241210.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000017/tsm-monthend6kx20250225.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000017/tsm-monthend6kx20250225.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000017/tsm-monthend6kx20250225.htm",
+      "2024Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000019/tsm-fsx20250227x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000019/tsm-fsx20250227x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000019/tsm-fsx20250227x6k.htm",
+      "2024Q4: verify failed via seed_article_url | url=https://pr.tsmc.com/chinese/news/3201 | reason=fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3201 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3201",
+      "2025Q1: SEC submissions queried: https://data.sec.gov/submissions/CIK0001046179.json | candidates=17",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000037/tsm_20250417.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000037/tsm_20250417.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000037/tsm_20250417.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000035/tsm-20250417x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000035/tsm-20250417x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000035/tsm-20250417x6k.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000039/a20250418.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000039/a20250418.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000039/a20250418.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000033/tsm-revenue20250410.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000033/tsm-revenue20250410.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000033/tsm-revenue20250410.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000050/tsm-monthend6kx20250425.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000050/tsm-monthend6kx20250425.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000050/tsm-monthend6kx20250425.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000052/tsm-revenue20250509.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000052/tsm-revenue20250509.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000052/tsm-revenue20250509.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000031/tsm-monthend6kx20250325.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000031/tsm-monthend6kx20250325.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000031/tsm-monthend6kx20250325.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000054/tsm-boardx20250513x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000054/tsm-boardx20250513x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000054/tsm-boardx20250513x6k.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000057/global-accountingofficer20.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000057/global-accountingofficer20.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000057/global-accountingofficer20.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000060/global-accountingofficer20.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000060/global-accountingofficer20.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000060/global-accountingofficer20.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000059/tsm-fsx20250515x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000059/tsm-fsx20250515x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000059/tsm-fsx20250515x6k.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000028/a20250317.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000028/a20250317.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000028/a20250317.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000062/tsm-monthend6kx20250523.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000062/tsm-monthend6kx20250523.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000062/tsm-monthend6kx20250523.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000026/tsm-revenue20250310.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000026/tsm-revenue20250310.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000026/tsm-revenue20250310.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000065/tsm-dividendadjustmentx202.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000065/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000065/tsm-dividendadjustmentx202.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm",
+      "2025Q1: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000021/tsm-dividendadjustmentx202.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000021/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000021/tsm-dividendadjustmentx202.htm",
+      "2025Q1: verify failed via seed_article_url | url=https://pr.tsmc.com/chinese/news/3222 | reason=fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3222 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3222",
+      "2025Q2: SEC submissions queried: https://data.sec.gov/submissions/CIK0001046179.json | candidates=15",
+      "2025Q2: verify failed via seed_manual_candidate | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000082/tsm-20250717x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000082/tsm-20250717x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000082/tsm-20250717x6k.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000084/tsm-20250721x6ka.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000084/tsm-20250721x6ka.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000084/tsm-20250721x6ka.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000080/tsm-revenue20250710.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000080/tsm-revenue20250710.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000080/tsm-revenue20250710.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000086/tsm-monthend6kx20250725.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000086/tsm-monthend6kx20250725.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000086/tsm-monthend6kx20250725.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000089/global-treasurer20250801.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000089/global-treasurer20250801.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000089/global-treasurer20250801.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000078/a20250701azdirectorchange.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000078/a20250701azdirectorchange.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000078/a20250701azdirectorchange.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000074/tsm-monthend6kx20250625.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000074/tsm-monthend6kx20250625.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000074/tsm-monthend6kx20250625.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000072/a20250625directorsresoluti.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000072/a20250625directorsresoluti.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000072/a20250625directorsresoluti.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000091/tsm-revenue20250808.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000091/tsm-revenue20250808.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000091/tsm-revenue20250808.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000095/a20250812directorsresoluti.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000095/a20250812directorsresoluti.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000095/a20250812directorsresoluti.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000097/tsm-fsx20250814x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000097/tsm-fsx20250814x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000097/tsm-fsx20250814x6k.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000070/tsm-revenue20250610.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000070/tsm-revenue20250610.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000070/tsm-revenue20250610.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000099/tsm-monthend6kx20250825.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000099/tsm-monthend6kx20250825.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000099/tsm-monthend6kx20250825.htm",
+      "2025Q2: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000067/tsm-agmx20250603x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000067/tsm-agmx20250603x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000067/tsm-agmx20250603x6k.htm",
+      "2025Q2: verify failed via seed_article_url | url=https://pr.tsmc.com/chinese/news/3249 | reason=fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3249 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3249",
+      "2025Q3: SEC submissions queried: https://data.sec.gov/submissions/CIK0001046179.json | candidates=15",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000116/tsm-20251016x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000116/tsm-20251016x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000116/tsm-20251016x6k.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000113/tsm-revenue20251009.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000113/tsm-revenue20251009.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000113/tsm-revenue20251009.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000118/tsm-monthend6kx20251023.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000118/tsm-monthend6kx20251023.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000118/tsm-monthend6kx20251023.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000121/a20251105changeofnaceo.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000121/a20251105changeofnaceo.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000121/a20251105changeofnaceo.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000110/tsm-monthend6kx20250925.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000110/tsm-monthend6kx20250925.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000110/tsm-monthend6kx20250925.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000107/a20250925changeofazceoandd.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000107/a20250925changeofazceoandd.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000107/a20250925changeofazceoandd.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000124/tsm-revenue20251110.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000124/tsm-revenue20251110.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000124/tsm-revenue20251110.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000126/tsm-boardx20251111x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000126/tsm-boardx20251111x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000126/tsm-boardx20251111x6k.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000128/tsm-fsx20251114x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000128/tsm-fsx20251114x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000128/tsm-fsx20251114x6k.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000105/tsm-revenue20250910.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000105/tsm-revenue20250910.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000105/tsm-revenue20250910.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000133/tsm-monthend6kx20251125.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000133/tsm-monthend6kx20251125.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000133/tsm-monthend6kx20251125.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000130/a20251125tsmcmediastatement.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000130/a20251125tsmcmediastatement.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000130/a20251125tsmcmediastatement.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000135/tsm-dividendadjustmentx202.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000135/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000135/tsm-dividendadjustmentx202.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000103/a20250901changeoftsmcdirec.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000103/a20250901changeoftsmcdirec.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000103/a20250901changeoftsmcdirec.htm",
+      "2025Q3: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000101/tsm-dividendadjustmentx202.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000101/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000101/tsm-dividendadjustmentx202.htm",
+      "2025Q3: verify failed via seed_article_url | url=https://pr.tsmc.com/chinese/news/3264 | reason=fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3264 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3264",
+      "2025Q4: SEC submissions queried: https://data.sec.gov/submissions/CIK0001046179.json | candidates=13",
+      "2025Q4: verify failed via seed_manual_candidate | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000005/tsm-revenue20260109.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000005/tsm-revenue20260109.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000005/tsm-revenue20260109.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000012/tsm-monthend6kx20260123.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000012/tsm-monthend6kx20260123.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000012/tsm-monthend6kx20260123.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000010/tsmcnaagm2026123_6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000010/tsmcnaagm2026123_6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000010/tsmcnaagm2026123_6k.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000002/a20260106changeofaztreasur.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000002/a20260106changeofaztreasur.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000002/a20260106changeofaztreasur.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000142/tsm-monthend6kx20251223.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000142/tsm-monthend6kx20251223.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000142/tsm-monthend6kx20251223.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000019/a20260210directorsresoluti.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000019/a20260210directorsresoluti.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000019/a20260210directorsresoluti.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000017/tsm-boardx20260210x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000017/tsm-boardx20260210x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000017/tsm-boardx20260210x6k.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000015/tsm-revenue20260210.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000015/tsm-revenue20260210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000015/tsm-revenue20260210.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000140/tsmcazagm20251219_6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000140/tsmcazagm20251219_6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000140/tsmcazagm20251219_6k.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617925000137/tsm-revenue20251210.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000137/tsm-revenue20251210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000137/tsm-revenue20251210.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000021/tsm-monthend6kx20260225.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000021/tsm-monthend6kx20260225.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000021/tsm-monthend6kx20260225.htm",
+      "2025Q4: verify failed via sec_recent_6k | url=https://www.sec.gov/Archives/edgar/data/1046179/000104617926000024/tsm-fsx20260226x6k.htm | reason=fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000024/tsm-fsx20260226x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000024/tsm-fsx20260226x6k.htm",
+      "2025Q4: verify failed via seed_article_url | url=https://pr.tsmc.com/chinese/news/3281 | reason=fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3281 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3281"
     ],
     "counts": {
-      "auto_discovered_count": 0,
+      "verified_count": 0,
       "bootstrap_seed_count": 5,
       "total_quarters": 5
     },
@@ -69,12 +105,1939 @@
   },
   "discovery_debug": [
     {
+      "quarter": "2024Q1",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE"
+    },
+    {
+      "quarter": "2024Q2",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE"
+    },
+    {
+      "quarter": "2024Q3",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE"
+    },
+    {
+      "quarter": "2024Q4",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000004/tsm-20250116x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000006/tsmcnaagm2025120_6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_5"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000002/tsm-revenue20250110.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_6"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000008/tsm-monthend6kx20250123.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000010/a20250124-boddate.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617924000137/tsm-monthend6kx20241223.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_24"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000013/tsm-revenue20250210.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_25"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000015/tsm-boardx20250212x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617924000135/a20241219_changeofchiefinf.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617924000132/tsm-revenue20241210.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_37"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000017/tsm-monthend6kx20250225.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_40"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000019/tsm-fsx20250227x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_42"
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3201",
+          "title": "https://pr.tsmc.com/chinese/news/3201",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000004/tsm-20250116x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000004/tsm-20250116x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000004/tsm-20250116x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000006/tsmcnaagm2025120_6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_5",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000006/tsmcnaagm2025120_6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000006/tsmcnaagm2025120_6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000002/tsm-revenue20250110.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_6",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000002/tsm-revenue20250110.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000002/tsm-revenue20250110.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000008/tsm-monthend6kx20250123.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000008/tsm-monthend6kx20250123.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000008/tsm-monthend6kx20250123.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000010/a20250124-boddate.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000010/a20250124-boddate.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000010/a20250124-boddate.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617924000137/tsm-monthend6kx20241223.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_24",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000137/tsm-monthend6kx20241223.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000137/tsm-monthend6kx20241223.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000013/tsm-revenue20250210.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_25",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000013/tsm-revenue20250210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000013/tsm-revenue20250210.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000015/tsm-boardx20250212x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000015/tsm-boardx20250212x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000015/tsm-boardx20250212x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617924000135/a20241219_changeofchiefinf.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000135/a20241219_changeofchiefinf.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000135/a20241219_changeofchiefinf.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617924000132/tsm-revenue20241210.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_37",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000132/tsm-revenue20241210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617924000132/tsm-revenue20241210.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000017/tsm-monthend6kx20250225.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_40",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000017/tsm-monthend6kx20250225.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000017/tsm-monthend6kx20250225.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000019/tsm-fsx20250227x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_42",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000019/tsm-fsx20250227x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000019/tsm-fsx20250227x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3201",
+          "title_hint": "https://pr.tsmc.com/chinese/news/3201",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3201 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3201",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2024Q4",
+          "expected_eps": 14.45,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        }
+      ],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "VERIFY_FAILED"
+    },
+    {
+      "quarter": "2025Q1",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000037/tsm_20250417.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000035/tsm-20250417x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000039/a20250418.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_1"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000033/tsm-revenue20250410.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000050/tsm-monthend6kx20250425.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000052/tsm-revenue20250509.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000031/tsm-monthend6kx20250325.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_23"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000054/tsm-boardx20250513x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000057/global-accountingofficer20.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000060/global-accountingofficer20.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000059/tsm-fsx20250515x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000028/a20250317.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_31"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000062/tsm-monthend6kx20250523.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_36"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000026/tsm-revenue20250310.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_38"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000065/tsm-dividendadjustmentx202.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_41"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_45"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000021/tsm-dividendadjustmentx202.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_45"
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3222",
+          "title": "https://pr.tsmc.com/chinese/news/3222",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000037/tsm_20250417.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000037/tsm_20250417.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000037/tsm_20250417.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000035/tsm-20250417x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000035/tsm-20250417x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000035/tsm-20250417x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000039/a20250418.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_1",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000039/a20250418.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000039/a20250418.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000033/tsm-revenue20250410.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000033/tsm-revenue20250410.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000033/tsm-revenue20250410.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000050/tsm-monthend6kx20250425.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000050/tsm-monthend6kx20250425.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000050/tsm-monthend6kx20250425.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000052/tsm-revenue20250509.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000052/tsm-revenue20250509.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000052/tsm-revenue20250509.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000031/tsm-monthend6kx20250325.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_23",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000031/tsm-monthend6kx20250325.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000031/tsm-monthend6kx20250325.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000054/tsm-boardx20250513x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000054/tsm-boardx20250513x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000054/tsm-boardx20250513x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000057/global-accountingofficer20.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000057/global-accountingofficer20.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000057/global-accountingofficer20.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000060/global-accountingofficer20.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000060/global-accountingofficer20.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000060/global-accountingofficer20.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000059/tsm-fsx20250515x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000059/tsm-fsx20250515x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000059/tsm-fsx20250515x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000028/a20250317.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_31",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000028/a20250317.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000028/a20250317.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000062/tsm-monthend6kx20250523.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_36",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000062/tsm-monthend6kx20250523.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000062/tsm-monthend6kx20250523.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000026/tsm-revenue20250310.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_38",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000026/tsm-revenue20250310.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000026/tsm-revenue20250310.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000065/tsm-dividendadjustmentx202.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_41",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000065/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000065/tsm-dividendadjustmentx202.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_45",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000021/tsm-dividendadjustmentx202.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_45",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000021/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000021/tsm-dividendadjustmentx202.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3222",
+          "title_hint": "https://pr.tsmc.com/chinese/news/3222",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3222 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3222",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q1",
+          "expected_eps": 13.94,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        }
+      ],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "VERIFY_FAILED"
+    },
+    {
+      "quarter": "2025Q2",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm",
+          "title": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm",
+          "src_hint": "seed_manual_candidate",
+          "accept_reason": "seed_manual_candidate"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000082/tsm-20250717x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000084/tsm-20250721x6ka.htm",
+          "title": "6-K/A",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_4"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000080/tsm-revenue20250710.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000086/tsm-monthend6kx20250725.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000089/global-treasurer20250801.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_15"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000078/a20250701azdirectorchange.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_16"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000074/tsm-monthend6kx20250625.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000072/a20250625directorsresoluti.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000091/tsm-revenue20250808.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000095/a20250812directorsresoluti.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000097/tsm-fsx20250814x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000070/tsm-revenue20250610.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_37"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000099/tsm-monthend6kx20250825.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_39"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000067/tsm-agmx20250603x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_44"
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3249",
+          "title": "https://pr.tsmc.com/chinese/news/3249",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm",
+          "title_hint": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm",
+          "src_hint": "seed_manual_candidate",
+          "accept_reason": "seed_manual_candidate",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000082/tsm-20250717x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000082/tsm-20250717x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000082/tsm-20250717x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000084/tsm-20250721x6ka.htm",
+          "title_hint": "6-K/A",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_4",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000084/tsm-20250721x6ka.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000084/tsm-20250721x6ka.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000080/tsm-revenue20250710.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000080/tsm-revenue20250710.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000080/tsm-revenue20250710.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000086/tsm-monthend6kx20250725.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000086/tsm-monthend6kx20250725.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000086/tsm-monthend6kx20250725.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000089/global-treasurer20250801.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_15",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000089/global-treasurer20250801.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000089/global-treasurer20250801.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000078/a20250701azdirectorchange.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_16",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000078/a20250701azdirectorchange.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000078/a20250701azdirectorchange.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000074/tsm-monthend6kx20250625.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000074/tsm-monthend6kx20250625.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000074/tsm-monthend6kx20250625.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000072/a20250625directorsresoluti.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000072/a20250625directorsresoluti.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000072/a20250625directorsresoluti.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000091/tsm-revenue20250808.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000091/tsm-revenue20250808.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000091/tsm-revenue20250808.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000095/a20250812directorsresoluti.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000095/a20250812directorsresoluti.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000095/a20250812directorsresoluti.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000097/tsm-fsx20250814x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_28",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000097/tsm-fsx20250814x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000097/tsm-fsx20250814x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000070/tsm-revenue20250610.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_37",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000070/tsm-revenue20250610.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000070/tsm-revenue20250610.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000099/tsm-monthend6kx20250825.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_39",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000099/tsm-monthend6kx20250825.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000099/tsm-monthend6kx20250825.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000067/tsm-agmx20250603x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_44",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000067/tsm-agmx20250603x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000067/tsm-agmx20250603x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3249",
+          "title_hint": "https://pr.tsmc.com/chinese/news/3249",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3249 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3249",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q2",
+          "expected_eps": 15.36,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        }
+      ],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "VERIFY_FAILED"
+    },
+    {
+      "quarter": "2025Q3",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000116/tsm-20251016x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000113/tsm-revenue20251009.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000118/tsm-monthend6kx20251023.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000121/a20251105changeofnaceo.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_20"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000110/tsm-monthend6kx20250925.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_21"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000107/a20250925changeofazceoandd.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000124/tsm-revenue20251110.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_25"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000126/tsm-boardx20251111x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000128/tsm-fsx20251114x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_29"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000105/tsm-revenue20250910.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_36"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000133/tsm-monthend6kx20251125.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_40"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000130/a20251125tsmcmediastatement.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_40"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000135/tsm-dividendadjustmentx202.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_41"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000103/a20250901changeoftsmcdirec.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_44"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000101/tsm-dividendadjustmentx202.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_44"
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3264",
+          "title": "https://pr.tsmc.com/chinese/news/3264",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000116/tsm-20251016x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_0",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000116/tsm-20251016x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000116/tsm-20251016x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000113/tsm-revenue20251009.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000113/tsm-revenue20251009.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000113/tsm-revenue20251009.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000118/tsm-monthend6kx20251023.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_7",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000118/tsm-monthend6kx20251023.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000118/tsm-monthend6kx20251023.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000121/a20251105changeofnaceo.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_20",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000121/a20251105changeofnaceo.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000121/a20251105changeofnaceo.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000110/tsm-monthend6kx20250925.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_21",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000110/tsm-monthend6kx20250925.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000110/tsm-monthend6kx20250925.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000107/a20250925changeofazceoandd.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_22",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000107/a20250925changeofazceoandd.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000107/a20250925changeofazceoandd.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000124/tsm-revenue20251110.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_25",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000124/tsm-revenue20251110.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000124/tsm-revenue20251110.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000126/tsm-boardx20251111x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000126/tsm-boardx20251111x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000126/tsm-boardx20251111x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000128/tsm-fsx20251114x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_29",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000128/tsm-fsx20251114x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000128/tsm-fsx20251114x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000105/tsm-revenue20250910.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_36",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000105/tsm-revenue20250910.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000105/tsm-revenue20250910.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000133/tsm-monthend6kx20251125.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_40",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000133/tsm-monthend6kx20251125.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000133/tsm-monthend6kx20251125.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000130/a20251125tsmcmediastatement.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_40",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000130/a20251125tsmcmediastatement.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000130/a20251125tsmcmediastatement.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000135/tsm-dividendadjustmentx202.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_41",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000135/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000135/tsm-dividendadjustmentx202.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000103/a20250901changeoftsmcdirec.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_44",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000103/a20250901changeoftsmcdirec.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000103/a20250901changeoftsmcdirec.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000101/tsm-dividendadjustmentx202.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_44",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000101/tsm-dividendadjustmentx202.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000101/tsm-dividendadjustmentx202.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3264",
+          "title_hint": "https://pr.tsmc.com/chinese/news/3264",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3264 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3264",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q3",
+          "expected_eps": 17.44,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        }
+      ],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "VERIFY_FAILED"
+    },
+    {
+      "quarter": "2025Q4",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "candidate_urls": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm",
+          "title": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm",
+          "src_hint": "seed_manual_candidate",
+          "accept_reason": "seed_manual_candidate"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000005/tsm-revenue20260109.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_6"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000012/tsm-monthend6kx20260123.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000010/tsmcnaagm2026123_6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000002/a20260106changeofaztreasur.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_9"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000142/tsm-monthend6kx20251223.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_23"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000019/a20260210directorsresoluti.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000017/tsm-boardx20260210x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000015/tsm-revenue20260210.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000140/tsmcazagm20251219_6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000137/tsm-revenue20251210.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_36"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000021/tsm-monthend6kx20260225.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_41"
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000024/tsm-fsx20260226x6k.htm",
+          "title": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_42"
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3281",
+          "title": "https://pr.tsmc.com/chinese/news/3281",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm",
+          "title_hint": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm",
+          "src_hint": "seed_manual_candidate",
+          "accept_reason": "seed_manual_candidate",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000005/tsm-revenue20260109.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_6",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000005/tsm-revenue20260109.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000005/tsm-revenue20260109.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000012/tsm-monthend6kx20260123.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000012/tsm-monthend6kx20260123.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000012/tsm-monthend6kx20260123.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000010/tsmcnaagm2026123_6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_8",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000010/tsmcnaagm2026123_6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000010/tsmcnaagm2026123_6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000002/a20260106changeofaztreasur.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_9",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000002/a20260106changeofaztreasur.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000002/a20260106changeofaztreasur.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000142/tsm-monthend6kx20251223.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_23",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000142/tsm-monthend6kx20251223.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000142/tsm-monthend6kx20251223.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000019/a20260210directorsresoluti.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000019/a20260210directorsresoluti.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000019/a20260210directorsresoluti.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000017/tsm-boardx20260210x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000017/tsm-boardx20260210x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000017/tsm-boardx20260210x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000015/tsm-revenue20260210.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_26",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000015/tsm-revenue20260210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000015/tsm-revenue20260210.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000140/tsmcazagm20251219_6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_27",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000140/tsmcazagm20251219_6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000140/tsmcazagm20251219_6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000137/tsm-revenue20251210.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_36",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000137/tsm-revenue20251210.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000137/tsm-revenue20251210.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000021/tsm-monthend6kx20260225.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_41",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000021/tsm-monthend6kx20260225.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000021/tsm-monthend6kx20260225.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000024/tsm-fsx20260226x6k.htm",
+          "title_hint": "6-K",
+          "src_hint": "sec_recent_6k",
+          "accept_reason": "sec_submissions_json_delta_42",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000024/tsm-fsx20260226x6k.htm | last_err=403 Client Error: Forbidden for url: https://www.sec.gov/Archives/edgar/data/1046179/000104617926000024/tsm-fsx20260226x6k.htm",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        },
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3281",
+          "title_hint": "https://pr.tsmc.com/chinese/news/3281",
+          "src_hint": "seed_article_url",
+          "accept_reason": "seed_article_url",
+          "fetch_ok": false,
+          "parse_ok": false,
+          "parse_reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3281 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3281",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "expected_quarter": "2025Q4",
+          "expected_eps": 19.5,
+          "matched_eps": false,
+          "match_ok": false,
+          "blocked_reason": null,
+          "excerpt": null,
+          "expanded_links_count": 0
+        }
+      ],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "VERIFY_FAILED"
+    },
+    {
       "quarter": "2026Q1",
       "publication_state": "NOT_ENDED_YET",
-      "archive_candidates": [],
-      "direct_candidates": [],
-      "queries": [],
-      "candidates": [],
+      "candidate_urls": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
@@ -83,10 +2046,7 @@
     {
       "quarter": "2026Q2",
       "publication_state": "NOT_ENDED_YET",
-      "archive_candidates": [],
-      "direct_candidates": [],
-      "queries": [],
-      "candidates": [],
+      "candidate_urls": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
@@ -95,10 +2055,7 @@
     {
       "quarter": "2026Q3",
       "publication_state": "NOT_ENDED_YET",
-      "archive_candidates": [],
-      "direct_candidates": [],
-      "queries": [],
-      "candidates": [],
+      "candidate_urls": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
@@ -107,1485 +2064,174 @@
     {
       "quarter": "2026Q4",
       "publication_state": "NOT_ENDED_YET",
-      "archive_candidates": [],
-      "direct_candidates": [],
-      "queries": [],
-      "candidates": [],
+      "candidate_urls": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
       "status": "NOT_ENDED_YET"
-    },
-    {
-      "quarter": "2025Q1",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3222",
-          "title": "台積公司2025年第一季每股盈餘新台幣13.94元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q1",
-          "title": "TSMC 2025Q1 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q1",
-          "title": "TSMC 2025Q1 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2025年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "Feedback",
-              "raw_url": "https://duckduckgo.com/feedback.html",
-              "normalized_url": "https://duckduckgo.com/feedback.html",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第一季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "Feedback",
-              "raw_url": "https://duckduckgo.com/feedback.html",
-              "normalized_url": "https://duckduckgo.com/feedback.html",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2025 Q1 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2025 Q1 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3222",
-          "title": "台積公司2025年第一季每股盈餘新台幣13.94元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q1",
-          "title": "TSMC 2025Q1 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q1",
-          "title": "TSMC 2025Q1 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3222",
-          "title_hint": "台積公司2025年第一季每股盈餘新台幣13.94元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q1",
-          "title_hint": "TSMC 2025Q1 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q1",
-          "title_hint": "TSMC 2025Q1 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
-    },
-    {
-      "quarter": "2025Q2",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3249",
-          "title": "台積公司2025年第二季每股盈餘新台幣15.36元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q2",
-          "title": "TSMC 2025Q2 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q2",
-          "title": "TSMC 2025Q2 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2025年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第二季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2025 Q2 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2025 Q2 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3249",
-          "title": "台積公司2025年第二季每股盈餘新台幣15.36元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q2",
-          "title": "TSMC 2025Q2 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q2",
-          "title": "TSMC 2025Q2 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3249",
-          "title_hint": "台積公司2025年第二季每股盈餘新台幣15.36元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q2",
-          "title_hint": "TSMC 2025Q2 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q2",
-          "title_hint": "TSMC 2025Q2 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
-    },
-    {
-      "quarter": "2025Q3",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3264",
-          "title": "台積公司2025年第三季每股盈餘新台幣17.44元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q3",
-          "title": "TSMC 2025Q3 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q3",
-          "title": "TSMC 2025Q3 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2025年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第三季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2025 Q3 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2025 Q3 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3264",
-          "title": "台積公司2025年第三季每股盈餘新台幣17.44元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q3",
-          "title": "TSMC 2025Q3 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q3",
-          "title": "TSMC 2025Q3 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3264",
-          "title_hint": "台積公司2025年第三季每股盈餘新台幣17.44元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "quarter_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q3",
-          "title_hint": "TSMC 2025Q3 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q3",
-          "title_hint": "TSMC 2025Q3 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
-    },
-    {
-      "quarter": "2025Q4",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3281",
-          "title": "台積公司2025年第四季每股盈餘新台幣19.50元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q4",
-          "title": "TSMC 2025Q4 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q4",
-          "title": "TSMC 2025Q4 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2025年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第四季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2025 Q4 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2025 Q4 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3281",
-          "title": "台積公司2025年第四季每股盈餘新台幣19.50元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q4",
-          "title": "TSMC 2025Q4 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q4",
-          "title": "TSMC 2025Q4 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3281",
-          "title_hint": "台積公司2025年第四季每股盈餘新台幣19.50元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q4",
-          "title_hint": "TSMC 2025Q4 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q4",
-          "title_hint": "TSMC 2025Q4 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
-    },
-    {
-      "quarter": "2024Q1",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q1",
-          "title": "TSMC 2024Q1 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q1",
-          "title": "TSMC 2024Q1 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2024年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第一季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2024 Q1 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2024 Q1 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q1",
-          "title": "TSMC 2024Q1 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q1",
-          "title": "TSMC 2024Q1 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q1",
-          "title_hint": "TSMC 2024Q1 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q1",
-          "title_hint": "TSMC 2024Q1 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
-    },
-    {
-      "quarter": "2024Q2",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q2",
-          "title": "TSMC 2024Q2 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q2",
-          "title": "TSMC 2024Q2 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2024年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第二季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2024 Q2 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2024 Q2 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q2",
-          "title": "TSMC 2024Q2 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q2",
-          "title": "TSMC 2024Q2 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q2",
-          "title_hint": "TSMC 2024Q2 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q2",
-          "title_hint": "TSMC 2024Q2 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
-    },
-    {
-      "quarter": "2024Q3",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q3",
-          "title": "TSMC 2024Q3 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q3",
-          "title": "TSMC 2024Q3 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2024年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第三季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2024 Q3 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2024 Q3 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q3",
-          "title": "TSMC 2024Q3 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q3",
-          "title": "TSMC 2024Q3 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q3",
-          "title_hint": "TSMC 2024Q3 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q3",
-          "title_hint": "TSMC 2024Q3 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
-    },
-    {
-      "quarter": "2024Q4",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "archive_candidates": [],
-      "direct_candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3201",
-          "title": "台積公司2024年第四季每股盈餘新台幣14.45元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q4",
-          "title": "TSMC 2024Q4 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q4",
-          "title": "TSMC 2024Q4 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "queries": [
-        {
-          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"TSMC 2024 Q4 earnings release\" site:investor.tsmc.com",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2024 Q4 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
-      "candidates": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3201",
-          "title": "台積公司2024年第四季每股盈餘新台幣14.45元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url"
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q4",
-          "title": "TSMC 2024Q4 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese"
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q4",
-          "title": "TSMC 2024Q4 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english"
-        }
-      ],
-      "attempts": [
-        {
-          "url": "https://pr.tsmc.com/chinese/news/3201",
-          "title_hint": "台積公司2024年第四季每股盈餘新台幣14.45元",
-          "src_hint": "existing_tracker",
-          "accept_reason": "existing_tracker_url",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "quarter_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q4",
-          "title_hint": "TSMC 2024Q4 official IR quarterly results (chinese)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_chinese",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        },
-        {
-          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q4",
-          "title_hint": "TSMC 2024Q4 official IR quarterly results (english)",
-          "src_hint": "official_ir_html",
-          "accept_reason": "direct_ir_html_english",
-          "fetch_ok": true,
-          "parse_ok": false,
-          "parse_reason": "eps_not_detected",
-          "parsed_quarter": null,
-          "parsed_eps": null,
-          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
-          "expanded_pdf_urls": []
-        }
-      ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "FETCH_OK_PARSE_FAILED"
     }
   ],
   "quarters": [
     {
       "quarter": "2024Q4",
       "eps": 14.45,
-      "source": "tsmc_official_chinese_news_seed",
+      "source": "tsmc_seed_record",
       "as_of_date": "2025-01-16",
       "article_title": "台積公司2024年第四季每股盈餘新台幣14.45元",
       "article_url": "https://pr.tsmc.com/chinese/news/3201",
       "quarter_end_date": "December 31, 2024",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3201",
-      "fetched_at_utc": "2026-03-13T10:56:51Z",
+      "fetched_at_utc": "2026-03-13T11:38:15Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
-      "reference_source_type": "official_tsmc_chinese_news",
-      "reference_url_verified_this_run": false
+      "reference_source_type": "bootstrap_seed",
+      "reference_url_verified_this_run": false,
+      "verification": {
+        "status": "VERIFY_FAILED",
+        "method": "seed_article_url",
+        "verified_url": "https://pr.tsmc.com/chinese/news/3201",
+        "reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3201 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3201",
+        "verified_quarter": null,
+        "verified_eps": null,
+        "verified_as_of_date": null,
+        "attempted_at_utc": "2026-03-13T11:38:15Z"
+      },
+      "verification_status": "VERIFY_FAILED",
+      "verification_method": "seed_article_url",
+      "verified_url": "https://pr.tsmc.com/chinese/news/3201",
+      "verified_eps": null,
+      "verified_as_of_date": null
     },
     {
       "quarter": "2025Q1",
       "eps": 13.94,
-      "source": "tsmc_official_chinese_news_seed",
+      "source": "tsmc_seed_record",
       "as_of_date": "2025-04-17",
       "article_title": "台積公司2025年第一季每股盈餘新台幣13.94元",
       "article_url": "https://pr.tsmc.com/chinese/news/3222",
       "quarter_end_date": "March 31, 2025",
       "quarter_word": "first",
       "page_url": "https://pr.tsmc.com/chinese/news/3222",
-      "fetched_at_utc": "2026-03-13T10:56:51Z",
+      "fetched_at_utc": "2026-03-13T11:38:43Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
-      "reference_source_type": "official_tsmc_chinese_news",
-      "reference_url_verified_this_run": false
+      "reference_source_type": "bootstrap_seed",
+      "reference_url_verified_this_run": false,
+      "verification": {
+        "status": "VERIFY_FAILED",
+        "method": "seed_article_url",
+        "verified_url": "https://pr.tsmc.com/chinese/news/3222",
+        "reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3222 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3222",
+        "verified_quarter": null,
+        "verified_eps": null,
+        "verified_as_of_date": null,
+        "attempted_at_utc": "2026-03-13T11:38:43Z"
+      },
+      "verification_status": "VERIFY_FAILED",
+      "verification_method": "seed_article_url",
+      "verified_url": "https://pr.tsmc.com/chinese/news/3222",
+      "verified_eps": null,
+      "verified_as_of_date": null
     },
     {
       "quarter": "2025Q2",
       "eps": 15.36,
-      "source": "tsmc_official_chinese_news_seed",
+      "source": "tsmc_seed_record",
       "as_of_date": "2025-07-17",
       "article_title": "台積公司2025年第二季每股盈餘新台幣15.36元",
       "article_url": "https://pr.tsmc.com/chinese/news/3249",
+      "page_url": "https://pr.tsmc.com/chinese/news/3249",
       "quarter_end_date": "June 30, 2025",
       "quarter_word": "second",
-      "page_url": "https://pr.tsmc.com/chinese/news/3249",
-      "fetched_at_utc": "2026-03-13T10:56:51Z",
+      "verification_candidates": [
+        "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm"
+      ],
+      "fetched_at_utc": "2026-03-13T11:39:08Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
-      "reference_source_type": "official_tsmc_chinese_news",
-      "reference_url_verified_this_run": false
+      "reference_source_type": "bootstrap_seed",
+      "reference_url_verified_this_run": false,
+      "verification": {
+        "status": "VERIFY_FAILED",
+        "method": "seed_article_url",
+        "verified_url": "https://pr.tsmc.com/chinese/news/3249",
+        "reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3249 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3249",
+        "verified_quarter": null,
+        "verified_eps": null,
+        "verified_as_of_date": null,
+        "attempted_at_utc": "2026-03-13T11:39:08Z"
+      },
+      "verification_status": "VERIFY_FAILED",
+      "verification_method": "seed_article_url",
+      "verified_url": "https://pr.tsmc.com/chinese/news/3249",
+      "verified_eps": null,
+      "verified_as_of_date": null
     },
     {
       "quarter": "2025Q3",
       "eps": 17.44,
-      "source": "tsmc_official_chinese_news_seed",
+      "source": "tsmc_seed_record",
       "as_of_date": "2025-10-16",
       "article_title": "台積公司2025年第三季每股盈餘新台幣17.44元",
       "article_url": "https://pr.tsmc.com/chinese/news/3264",
+      "page_url": "https://pr.tsmc.com/chinese/news/3264",
       "quarter_end_date": "September 30, 2025",
       "quarter_word": "third",
-      "page_url": "https://pr.tsmc.com/chinese/news/3264",
-      "fetched_at_utc": "2026-03-13T10:56:51Z",
+      "fetched_at_utc": "2026-03-13T11:39:33Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
-      "reference_source_type": "official_tsmc_chinese_news",
-      "reference_url_verified_this_run": false
+      "reference_source_type": "bootstrap_seed",
+      "reference_url_verified_this_run": false,
+      "verification": {
+        "status": "VERIFY_FAILED",
+        "method": "seed_article_url",
+        "verified_url": "https://pr.tsmc.com/chinese/news/3264",
+        "reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3264 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3264",
+        "verified_quarter": null,
+        "verified_eps": null,
+        "verified_as_of_date": null,
+        "attempted_at_utc": "2026-03-13T11:39:33Z"
+      },
+      "verification_status": "VERIFY_FAILED",
+      "verification_method": "seed_article_url",
+      "verified_url": "https://pr.tsmc.com/chinese/news/3264",
+      "verified_eps": null,
+      "verified_as_of_date": null
     },
     {
       "quarter": "2025Q4",
       "eps": 19.5,
-      "source": "tsmc_official_chinese_news_seed",
+      "source": "tsmc_seed_record",
       "as_of_date": "2026-01-15",
       "article_title": "台積公司2025年第四季每股盈餘新台幣19.50元",
       "article_url": "https://pr.tsmc.com/chinese/news/3281",
+      "page_url": "https://pr.tsmc.com/chinese/news/3281",
       "quarter_end_date": "December 31, 2025",
       "quarter_word": "fourth",
-      "page_url": "https://pr.tsmc.com/chinese/news/3281",
-      "fetched_at_utc": "2026-03-13T10:56:51Z",
+      "verification_candidates": [
+        "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm"
+      ],
+      "fetched_at_utc": "2026-03-13T11:39:55Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
-      "reference_source_type": "official_tsmc_chinese_news",
-      "reference_url_verified_this_run": false
+      "reference_source_type": "bootstrap_seed",
+      "reference_url_verified_this_run": false,
+      "verification": {
+        "status": "VERIFY_FAILED",
+        "method": "seed_article_url",
+        "verified_url": "https://pr.tsmc.com/chinese/news/3281",
+        "reason": "fetch_failed:GET failed after 3 attempts: https://pr.tsmc.com/chinese/news/3281 | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/chinese/news/3281",
+        "verified_quarter": null,
+        "verified_eps": null,
+        "verified_as_of_date": null,
+        "attempted_at_utc": "2026-03-13T11:39:55Z"
+      },
+      "verification_status": "VERIFY_FAILED",
+      "verification_method": "seed_article_url",
+      "verified_url": "https://pr.tsmc.com/chinese/news/3281",
+      "verified_eps": null,
+      "verified_as_of_date": null
     }
   ]
 }
