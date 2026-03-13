@@ -143,6 +143,65 @@ jobs:
             --tail_days 15 \
             --out tw0050_bb_cache/report.md
 
+      - name: Update TSMC quarterly EPS tracker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/update_tsmc_quarterly_eps_tracker.py \
+            --out tw0050_bb_cache/quarterly_eps_tracker.json
+
+      - name: Assert quarterly EPS tracker
+        run: |
+          python - << 'PY'
+          import json
+          import os
+
+          p = "tw0050_bb_cache/quarterly_eps_tracker.json"
+          if not os.path.exists(p):
+            raise SystemExit(f"ERROR: missing {p}")
+
+          j = json.load(open(p, "r", encoding="utf-8"))
+          if not isinstance(j, dict):
+            raise SystemExit("ERROR: quarterly_eps_tracker.json is not an object")
+
+          meta = j.get("meta", {})
+          quarters = j.get("quarters", None)
+
+          if not isinstance(meta, dict):
+            raise SystemExit("ERROR: quarterly_eps_tracker.json meta is not an object")
+          if not isinstance(quarters, list):
+            raise SystemExit("ERROR: quarterly_eps_tracker.json quarters is not a list")
+          if len(quarters) == 0:
+            raise SystemExit("ERROR: quarterly_eps_tracker.json quarters is empty")
+
+          for i, row in enumerate(quarters):
+            if not isinstance(row, dict):
+              raise SystemExit(f"ERROR: quarterly_eps_tracker row #{i} is not an object")
+            for k in ["quarter", "eps", "source", "as_of_date"]:
+              if k not in row:
+                raise SystemExit(f"ERROR: quarterly_eps_tracker row #{i} missing {k}")
+
+          print("OK: quarterly EPS tracker present and minimally valid.")
+          print("meta:", meta)
+          print("quarters_count:", len(quarters))
+          print("latest_quarter:", quarters[-1].get("quarter"))
+          print("latest_eps:", quarters[-1].get("eps"))
+          PY
+
+      - name: Debug quarterly EPS tracker
+        run: |
+          echo "---- quarterly_eps_tracker head ----"
+          python - << 'PY'
+          import json
+          p = "tw0050_bb_cache/quarterly_eps_tracker.json"
+          j = json.load(open(p, "r", encoding="utf-8"))
+          print("meta:", j.get("meta", {}))
+          qs = j.get("quarters", [])
+          print("quarters_count:", len(qs))
+          for row in qs[-6:]:
+            print(row)
+          PY
+
       - name: Resolve base_tsmc
         id: resolve_tsmc
         shell: bash
@@ -173,64 +232,66 @@ jobs:
         run: |
           set -euo pipefail
 
-          EXTRA_ARGS=""
+          ARGS=(
+            --bb-stats tw0050_bb_cache/stats_latest.json
+            --base-tsmc "${{ steps.resolve_tsmc.outputs.base_tsmc }}"
+            --quarterly-eps-json tw0050_bb_cache/quarterly_eps_tracker.json
+            --roll25-report roll25_cache/report.md
+            --out-json tw0050_bb_cache/merged_latest.json
+            --out-md tw0050_bb_cache/merged_report.md
+          )
+
           if [ -n "${TX_NIGHT_LAST_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --tx-night-last ${TX_NIGHT_LAST_INPUT}"
+            ARGS+=(--tx-night-last "${TX_NIGHT_LAST_INPUT}")
             echo "Using manual tx_night_last=${TX_NIGHT_LAST_INPUT}"
           else
             echo "No tx_night_last provided; pre-execution shock review will run without manual TX close."
           fi
 
           if [ -n "${EPS_BASE_OVERRIDE_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --eps-base-override ${EPS_BASE_OVERRIDE_INPUT}"
+            ARGS+=(--eps-base-override "${EPS_BASE_OVERRIDE_INPUT}")
             echo "Using manual eps_base_override=${EPS_BASE_OVERRIDE_INPUT}"
           else
             echo "No eps_base_override provided; active_eps_base will use config."
           fi
 
           if [ -n "${TSMC_WEIGHT_OVERRIDE_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --tsmc-weight ${TSMC_WEIGHT_OVERRIDE_INPUT}"
+            ARGS+=(--tsmc-weight "${TSMC_WEIGHT_OVERRIDE_INPUT}")
             echo "Using manual tsmc_weight_override=${TSMC_WEIGHT_OVERRIDE_INPUT}"
           else
             echo "No tsmc_weight_override provided; tsmc_weight will use config."
           fi
 
           if [ -n "${TSMC_WEIGHT_AS_OF_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --tsmc-weight-as-of ${TSMC_WEIGHT_AS_OF_INPUT}"
+            ARGS+=(--tsmc-weight-as-of "${TSMC_WEIGHT_AS_OF_INPUT}")
             echo "Using tsmc_weight_as_of=${TSMC_WEIGHT_AS_OF_INPUT}"
           else
             echo "No tsmc_weight_as_of provided; tsmc_weight metadata date will remain default."
           fi
 
           if [ -n "${SUGGESTED_EPS_BASE_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-base ${SUGGESTED_EPS_BASE_INPUT}"
+            ARGS+=(--suggested-eps-base "${SUGGESTED_EPS_BASE_INPUT}")
             echo "Using display-only suggested_eps_base=${SUGGESTED_EPS_BASE_INPUT}"
           else
             echo "No suggested_eps_base provided; display-only suggestion will remain empty."
           fi
 
           if [ -n "${SUGGESTED_EPS_SOURCE_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-source '${SUGGESTED_EPS_SOURCE_INPUT}'"
+            ARGS+=(--suggested-eps-source "${SUGGESTED_EPS_SOURCE_INPUT}")
             echo "Using suggested_eps_source=${SUGGESTED_EPS_SOURCE_INPUT}"
           fi
 
           if [ -n "${SUGGESTED_EPS_AS_OF_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-as-of ${SUGGESTED_EPS_AS_OF_INPUT}"
+            ARGS+=(--suggested-eps-as-of "${SUGGESTED_EPS_AS_OF_INPUT}")
             echo "Using suggested_eps_as_of=${SUGGESTED_EPS_AS_OF_INPUT}"
           fi
 
           if [ -n "${SUGGESTED_EPS_METHOD_INPUT}" ]; then
-            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-method '${SUGGESTED_EPS_METHOD_INPUT}'"
+            ARGS+=(--suggested-eps-method "${SUGGESTED_EPS_METHOD_INPUT}")
             echo "Using suggested_eps_method=${SUGGESTED_EPS_METHOD_INPUT}"
           fi
 
-          python tools/merge_0050_valuation_bb.py \
-            --bb-stats tw0050_bb_cache/stats_latest.json \
-            --base-tsmc "${{ steps.resolve_tsmc.outputs.base_tsmc }}" \
-            --roll25-report roll25_cache/report.md \
-            --out-json tw0050_bb_cache/merged_latest.json \
-            --out-md tw0050_bb_cache/merged_report.md \
-            ${EXTRA_ARGS}
+          python tools/merge_0050_valuation_bb.py "${ARGS[@]}"
 
       - name: Assert merged artifacts
         run: |
@@ -278,6 +339,10 @@ jobs:
             "suggested_eps_meta",
             "family_targets",
             "tsmc_weight_meta",
+            "eps_quarters_collected",
+            "annual_eps_candidate",
+            "annual_eps_candidate_complete",
+            "ready_to_replace_active_eps_base",
           ]:
             if k not in slow:
               raise SystemExit(f"ERROR: merged_latest.json missing slow_variable_review.{k}")
@@ -332,6 +397,10 @@ jobs:
             "suggested_eps_base": slow.get("suggested_eps_base"),
             "family_targets": slow.get("family_targets"),
             "tsmc_weight_meta": slow.get("tsmc_weight_meta"),
+            "eps_quarters_collected": slow.get("eps_quarters_collected"),
+            "annual_eps_candidate": slow.get("annual_eps_candidate"),
+            "annual_eps_candidate_complete": slow.get("annual_eps_candidate_complete"),
+            "ready_to_replace_active_eps_base": slow.get("ready_to_replace_active_eps_base"),
           })
           print("valuation_cases count:", len(vals))
           print("family_interpolation(top):", {
@@ -359,8 +428,19 @@ jobs:
           ls -al tw0050_bb_cache
           echo "---- report head ----"
           head -n 40 tw0050_bb_cache/report.md || true
+          echo "---- quarterly EPS tracker head ----"
+          python - << 'PY'
+          import json
+          p = "tw0050_bb_cache/quarterly_eps_tracker.json"
+          j = json.load(open(p, "r", encoding="utf-8"))
+          print("meta:", j.get("meta", {}))
+          qs = j.get("quarters", [])
+          print("quarters_count:", len(qs))
+          for row in qs[-6:]:
+            print(row)
+          PY
           echo "---- merged report head ----"
-          head -n 160 tw0050_bb_cache/merged_report.md || true
+          head -n 220 tw0050_bb_cache/merged_report.md || true
           echo "---- merged latest summary ----"
           python - << 'PY'
           import json
@@ -375,7 +455,8 @@ jobs:
           print("inputs.roll25_report_path:", j.get("inputs", {}).get("roll25_report_path"))
           print("inputs.tx_night_last:", j.get("inputs", {}).get("tx_night_last"))
 
-          print("slow_variable_review:", j.get("slow_variable_review", {}))
+          slow = j.get("slow_variable_review", {})
+          print("slow_variable_review:", slow)
 
           print("bb_snapshot:", {
             "date": j.get("bb_snapshot", {}).get("date"),
@@ -434,7 +515,7 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
 
             git add -A tw0050_bb_cache
-            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.5a"
+            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + quarterly EPS tracker + merged valuation report v1.6a"
 
             for i in 1 2 3; do
               echo "Attempt $i: fetch/rebase/push"
