@@ -7,6 +7,10 @@ on:
         description: "Optional override for TSMC base price (e.g. 1925)"
         required: false
         default: ""
+      tx_night_last:
+        description: "Optional TX night-session close (manual input, e.g. 32442)"
+        required: false
+        default: ""
   schedule:
     - cron: "35 6 * * 1-5"
 
@@ -69,7 +73,6 @@ jobs:
           print("OK: min-audit fields present.")
           PY
 
-      # compute 後、build report 前：抓 0050 籌碼 overlay（TWSE T86 + TWT72U）
       - name: Fetch 0050 chip overlay (TWSE T86 + TWT72U)
         shell: bash
         run: |
@@ -96,7 +99,6 @@ jobs:
           print("t86_agg:", data.get("t86_agg", {}))
           print("borrow_summary:", data.get("borrow_summary", {}))
 
-          # minimal sanity checks
           if "per_day" not in data:
             raise SystemExit("ERROR: chip_overlay missing data.per_day")
           bs = data.get("borrow_summary", {})
@@ -128,12 +130,27 @@ jobs:
           fi
 
       - name: Build merged valuation + BB report
+        shell: bash
+        env:
+          TX_NIGHT_LAST_INPUT: ${{ github.event.inputs.tx_night_last || '' }}
         run: |
+          set -euo pipefail
+
+          EXTRA_ARGS=""
+          if [ -n "${TX_NIGHT_LAST_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --tx-night-last ${TX_NIGHT_LAST_INPUT}"
+            echo "Using manual tx_night_last=${TX_NIGHT_LAST_INPUT}"
+          else
+            echo "No tx_night_last provided; pre-execution shock review will run without manual TX close."
+          fi
+
           python tools/merge_0050_valuation_bb.py \
             --bb-stats tw0050_bb_cache/stats_latest.json \
             --base-tsmc "${{ steps.resolve_tsmc.outputs.base_tsmc }}" \
+            --roll25-report roll25_cache/report.md \
             --out-json tw0050_bb_cache/merged_latest.json \
-            --out-md tw0050_bb_cache/merged_report.md
+            --out-md tw0050_bb_cache/merged_report.md \
+            ${EXTRA_ARGS}
 
       - name: Assert merged artifacts
         run: |
@@ -166,9 +183,21 @@ jobs:
             raise SystemExit("ERROR: valuation_cases is empty")
 
           combined = j.get("combined", {})
-          for k in ["base_execution_bias", "dq_overlay", "combined_execution_bias"]:
+          for k in [
+            "base_execution_bias",
+            "dq_overlay",
+            "combined_execution_bias",
+            "fast_shock_override",
+            "final_execution_bias",
+            "pre_execution_review",
+          ]:
             if k not in combined:
               raise SystemExit(f"ERROR: merged_latest.json missing combined.{k}")
+
+          pre = combined.get("pre_execution_review", {})
+          for k in ["available", "preopen_shock_flag", "shock_override"]:
+            if k not in pre:
+              raise SystemExit(f"ERROR: merged_latest.json missing combined.pre_execution_review.{k}")
 
           inputs = j.get("inputs", {})
           schema_validation = inputs.get("schema_validation", {})
@@ -191,6 +220,13 @@ jobs:
             "base_execution_bias": combined.get("base_execution_bias"),
             "dq_overlay": combined.get("dq_overlay"),
             "combined_execution_bias": combined.get("combined_execution_bias"),
+            "fast_shock_override": combined.get("fast_shock_override"),
+            "final_execution_bias": combined.get("final_execution_bias"),
+          })
+          print("pre_execution_review:", {
+            "available": pre.get("available"),
+            "preopen_shock_flag": pre.get("preopen_shock_flag"),
+            "shock_override": pre.get("shock_override"),
           })
           print("schema_validation:", schema_validation)
           PY
@@ -199,9 +235,9 @@ jobs:
         run: |
           ls -al tw0050_bb_cache
           echo "---- report head ----"
-          head -n 30 tw0050_bb_cache/report.md || true
+          head -n 40 tw0050_bb_cache/report.md || true
           echo "---- merged report head ----"
-          head -n 50 tw0050_bb_cache/merged_report.md || true
+          head -n 80 tw0050_bb_cache/merged_report.md || true
           echo "---- merged latest summary ----"
           python - << 'PY'
           import json
@@ -211,6 +247,8 @@ jobs:
           print("inputs.base_sources:", j.get("inputs", {}).get("base_sources", {}))
           print("inputs.dividend_drag:", j.get("inputs", {}).get("dividend_drag", {}))
           print("inputs.schema_validation:", j.get("inputs", {}).get("schema_validation", {}))
+          print("inputs.roll25_report_path:", j.get("inputs", {}).get("roll25_report_path"))
+          print("inputs.tx_night_last:", j.get("inputs", {}).get("tx_night_last"))
           print("bb_snapshot:", {
             "date": j.get("bb_snapshot", {}).get("date"),
             "price_used": j.get("bb_snapshot", {}).get("price_used"),
@@ -223,7 +261,11 @@ jobs:
             "base_execution_bias": j.get("combined", {}).get("base_execution_bias"),
             "dq_overlay": j.get("combined", {}).get("dq_overlay"),
             "combined_execution_bias": j.get("combined", {}).get("combined_execution_bias"),
+            "fast_shock_override": j.get("combined", {}).get("fast_shock_override"),
+            "final_execution_bias": j.get("combined", {}).get("final_execution_bias"),
+            "action_instruction": j.get("combined", {}).get("action_instruction"),
           })
+          print("pre_execution_review:", j.get("combined", {}).get("pre_execution_review", {}))
           print("valuation_cases_count:", len(j.get("valuation_cases", [])))
           PY
 
@@ -235,7 +277,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add -A tw0050_bb_cache
-            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.3"
+            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.4a"
             git push
           else
             echo "No changes to commit."
