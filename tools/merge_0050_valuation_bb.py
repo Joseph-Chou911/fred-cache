@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.4c)
+merge_0050_valuation_bb.py  (v1.4d)
 
 Purpose
 -------
@@ -14,15 +14,13 @@ Merge three layers into one deterministic report:
 3) Pre-execution shock review:
    read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.4c changes
+v1.4d changes
 -------------
-- Keep v1.4b structure and backward-compatible JSON schema
-- Add family range boundary status:
-  * BELOW_MIN / IN_RANGE / ABOVE_MAX
-- Add family min/max and status into JSON/Markdown for current price and target prices
-- Clarify mixed-horizon scenario percentile note:
-  * 1Y / 2Y scenarios are mixed, so this percentile is rough display-only
-- Fix markdown alignment for Family Target Price Positions table
+- Keep v1.4c structure and backward-compatible JSON schema
+- Add one minimal robustness-check family:
+  * 2027_defensive_family
+- Purpose:
+  * test whether current price still looks acceptable under a milder 2027 defensive setup
 - Keep family interpolation display-only; does NOT alter final_execution_bias
 
 Backward compatibility
@@ -33,7 +31,7 @@ Kept legacy top-level keys:
 - scenario_results
 - combined
 
-Also kept v1.4b newer keys:
+Also kept newer keys:
 - meta
 - inputs
 - valuation_cases
@@ -54,12 +52,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.4c",
+        "config_version": "0050_merge_v1.4d",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close. "
             "Pre-execution shock review is optional and report-only. "
-            "Family interpolation is display-only and does not alter final execution bias."
+            "Family interpolation is display-only and does not alter final execution bias. "
+            "Added 2027_defensive_family as a minimal robustness check."
         ),
     },
     "base": {
@@ -196,6 +195,17 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 "other_ret": 0.02,
                 "pe_start": 20.0,
                 "pe_end": 24.0,
+                "pe_step": 0.5,
+            },
+            {
+                "family_name": "2027_defensive_family",
+                "years_ahead": 2,
+                "eps_base": 66.25,
+                "eps_growth": 0.20,
+                "fx_haircut": 0.06,
+                "other_ret": 0.00,
+                "pe_start": 18.0,
+                "pe_end": 22.0,
                 "pe_step": 0.5,
             },
         ],
@@ -1061,6 +1071,7 @@ def build_combined_view(
             "zone_note": "valuation zone is rough classification only; do not over-interpret sparse or mixed-horizon percentile output.",
             "family_note": "family interpolation is display-only and does not alter final execution bias.",
             "family_boundary_note": "percentile=0 or 100 can simply mean the target is below family min or above family max.",
+            "family_robustness_note": "2027_defensive_family is a robustness check only; it does not alter execution bias.",
             "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
             "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
@@ -1107,7 +1118,7 @@ def build_output_json(
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1.4c_compat",
+        "schema_version": "0050_merge_schema_v1.4d_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
@@ -1154,7 +1165,6 @@ def build_output_json(
         "valuation_cases": valuation_cases,
         "family_interpolation": family_interp,
         "bb_snapshot": bb_snapshot,
-
         "combined": combined,
         "config_used": cfg,
         "bb_summary": dataclasses.asdict(bb),
@@ -1328,6 +1338,7 @@ def markdown_report(
         lines.append(f"- targets: `{', '.join([str(t) for t in fam_targets])}`")
         lines.append(f"- note: `{fam.get('note', '')}`")
         lines.append("- boundary_note: `0 or 100 can simply mean target price is below family min or above family max.`")
+        lines.append("- robustness_note: `2027_defensive_family is a display-only robustness check; it does not alter execution bias.`")
 
     lines.append("")
     lines.append("## BB Tranche References")
@@ -1375,9 +1386,10 @@ def markdown_report(
     lines.append("- Step 1: Use the valuation table to decide whether current price is in a low / fair / high zone.")
     lines.append("- Step 1b: Use family interpolation summary to refine valuation readability across fixed assumption families.")
     lines.append("- Step 2: Read current_status / target_status first. A percentile of 0 or 100 may simply mean out-of-range, not model failure.")
-    lines.append("- Step 3: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
-    lines.append("- Step 4: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
-    lines.append("- Step 5: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
+    lines.append("- Step 3: Use 2027_defensive_family only as a robustness check: ask whether the price still looks acceptable under milder defensive assumptions.")
+    lines.append("- Step 4: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
+    lines.append("- Step 5: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
+    lines.append("- Step 6: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
 
     lines.append("")
     lines.append("## Notes")
@@ -1387,6 +1399,7 @@ def markdown_report(
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
     lines.append("- Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.")
     lines.append("- Family interpolation is display-only and does not alter base_execution_bias / combined_execution_bias / final_execution_bias.")
+    lines.append("- 2027_defensive_family is a robustness check only; it does not introduce a new trading rule by itself.")
     lines.append("- DQ flags can downgrade execution bias even if valuation/regime otherwise look constructive.")
     lines.append("- Pre-execution review reads Band 1 / Band 2 from roll25 markdown report; if parsing fails, no shock override is applied.")
     lines.append("- TX night close is manual input and should be checked carefully before running the script.")
