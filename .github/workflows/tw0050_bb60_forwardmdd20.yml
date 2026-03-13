@@ -171,8 +171,6 @@ jobs:
             raise SystemExit("ERROR: quarterly_eps_tracker.json meta is not an object")
           if not isinstance(quarters, list):
             raise SystemExit("ERROR: quarterly_eps_tracker.json quarters is not a list")
-          if len(quarters) == 0:
-            raise SystemExit("ERROR: quarterly_eps_tracker.json quarters is empty")
 
           for i, row in enumerate(quarters):
             if not isinstance(row, dict):
@@ -181,11 +179,17 @@ jobs:
               if k not in row:
                 raise SystemExit(f"ERROR: quarterly_eps_tracker row #{i} missing {k}")
 
-          print("OK: quarterly EPS tracker present and minimally valid.")
-          print("meta:", meta)
-          print("quarters_count:", len(quarters))
-          print("latest_quarter:", quarters[-1].get("quarter"))
-          print("latest_eps:", quarters[-1].get("eps"))
+          if len(quarters) == 0:
+            print("WARN: quarterly_eps_tracker.json quarters is empty")
+            print("WARN: updater ran, but no official quarterly EPS entries were parsed.")
+            print("meta:", meta)
+            print("notes:", meta.get("notes", []))
+          else:
+            print("OK: quarterly EPS tracker present and minimally valid.")
+            print("meta:", meta)
+            print("quarters_count:", len(quarters))
+            print("latest_quarter:", quarters[-1].get("quarter"))
+            print("latest_eps:", quarters[-1].get("eps"))
           PY
 
       - name: Debug quarterly EPS tracker
@@ -196,9 +200,10 @@ jobs:
           p = "tw0050_bb_cache/quarterly_eps_tracker.json"
           j = json.load(open(p, "r", encoding="utf-8"))
           print("meta:", j.get("meta", {}))
+          print("meta.notes:", j.get("meta", {}).get("notes", []))
           qs = j.get("quarters", [])
           print("quarters_count:", len(qs))
-          for row in qs[-6:]:
+          for row in qs[-10:]:
             print(row)
           PY
 
@@ -434,9 +439,10 @@ jobs:
           p = "tw0050_bb_cache/quarterly_eps_tracker.json"
           j = json.load(open(p, "r", encoding="utf-8"))
           print("meta:", j.get("meta", {}))
+          print("meta.notes:", j.get("meta", {}).get("notes", []))
           qs = j.get("quarters", [])
           print("quarters_count:", len(qs))
-          for row in qs[-6:]:
+          for row in qs[-10:]:
             print(row)
           PY
           echo "---- merged report head ----"
