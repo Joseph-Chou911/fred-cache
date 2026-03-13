@@ -1,6 +1,6 @@
 {
   "name": "VXN_BB(len=60,k=2.0,log=True)",
-  "generated_at_utc": "2026-03-12T23:09:59Z",
+  "generated_at_utc": "2026-03-13T15:27:46Z",
   "meta": {
     "attempt_errors": [],
     "selected_source": "cboe",
@@ -25,14 +25,14 @@
     "close": 29.83,
     "bb_mid": 22.37361570839873,
     "bb_lower": 16.697969525034353,
-    "bb_upper": 29.97841618507065,
+    "bb_upper": 29.978416185070653,
     "z": 1.966075570942096,
     "trigger_z_le_-2": false,
     "trigger_z_ge_2": false,
     "distance_to_lower_pct": 44.022898005248564,
-    "distance_to_upper_pct": 0.4975400102938362,
-    "position_in_band": 0.9888244583281022,
-    "bandwidth_pct": 0.593576238777133,
+    "distance_to_upper_pct": 0.4975400102938482,
+    "position_in_band": 0.988824458328102,
+    "bandwidth_pct": 0.5935762387771331,
     "walk_lower_count": 0,
     "walk_upper_count": 0,
     "bandwidth_delta_pct": 3.286741468719856
