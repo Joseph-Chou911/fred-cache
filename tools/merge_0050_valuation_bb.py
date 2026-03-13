@@ -2,22 +2,23 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.3)
+merge_0050_valuation_bb.py  (v1.4a)
 
 Purpose
 -------
-Merge two layers into one deterministic report:
+Merge three layers into one deterministic report:
 1) Valuation map:
    EPS growth / FX haircut / P-E multiple -> TSMC fair price -> 0050 fair price
 2) Execution map:
    current BB / regime / tranche references from tw0050_bb_cache/stats_latest.json
+3) Pre-execution shock review:
+   read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.3 changes
-------------
-- Add DQ-aware execution bias downgrade / veto logic
-- Add dividend_drag mode: off / light / heavy / custom
-- Add internal schema validation for bb-stats
-- Mark valuation zone as rough classification only
+v1.4a changes
+-------------
+- Add optional pre-execution review from roll25 report markdown
+- Add optional manual input for TX night-session close
+- Add fast_shock_override and final_execution_bias
 - Keep backward-compatible JSON schema:
   * old keys: config_used / bb_summary / scenario_results / combined
   * new keys: meta / inputs / valuation_cases / bb_snapshot
@@ -36,10 +37,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.3",
+        "config_version": "0050_merge_v1.4a",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
-            "update fast variables daily after close."
+            "update fast variables daily after close. "
+            "Pre-execution shock review is optional and report-only."
         ),
     },
     "base": {
@@ -59,15 +61,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         ),
     },
     "dq_policy": {
-        # Structural schema problems should fail fast before this policy is used.
-        # These are data-quality flags that should at least downgrade trust.
         "caution_flags": [
             "PRICE_SERIES_BREAK_DETECTED",
             "FWD_MDD_CLEAN_APPLIED",
             "RAW_OUTLIER_EXCLUDED_BY_CLEAN",
             "FWD_MDD_OUTLIER_MIN_RAW_20D",
         ],
-        # If future you adds more severe flags, put them here.
         "veto_flags": [],
     },
     "scenario_groups": [
@@ -176,6 +175,21 @@ class ScenarioResult:
     net_0050: float
 
 
+@dataclasses.dataclass
+class PreExecutionReview:
+    available: bool
+    source_path: Optional[str]
+    band1: Optional[float]
+    band2: Optional[float]
+    tx_night_last: Optional[float]
+    tx_vs_band1: Optional[float]
+    tx_vs_band2: Optional[float]
+    preopen_shock_flag: str
+    shock_override: str
+    trigger_reasons: List[str]
+    parse_notes: List[str]
+
+
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -187,6 +201,11 @@ def deep_copy_jsonable(x: Any) -> Any:
 def load_json(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_text(path: Path) -> str:
+    with path.open("r", encoding="utf-8") as f:
+        return f.read()
 
 
 def safe_float(x: Any, default: float = float("nan")) -> float:
@@ -214,10 +233,6 @@ def has_path(d: Dict[str, Any], dotted: str) -> bool:
 
 
 def validate_bb_stats_schema(stats: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Fail fast if required keys are missing.
-    This prevents silent downstream misinterpretation when stats schema changes.
-    """
     required_paths = [
         "latest.date",
         "latest.state",
@@ -265,12 +280,6 @@ def validate_bb_stats_schema(stats: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def merge_config(user_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Intentionally shallow at the top level.
-    Note:
-    - dict keys like meta/base/dividend_drag/dq_policy will update shallowly
-    - scenario_groups, if provided, replace the default list as a whole
-    """
     cfg = deep_copy_jsonable(DEFAULT_CONFIG)
     if not user_cfg:
         return cfg
@@ -366,7 +375,6 @@ def resolve_dividend_drag(cfg: Dict[str, Any]) -> Tuple[bool, str, float]:
     if mode == "custom":
         return True, "custom", float(dd.get("points_per_year_custom", dd.get("points_per_year", 1.0)))
 
-    # backward-compatible fallback
     return True, "legacy", float(dd.get("points_per_year", 1.0))
 
 
@@ -560,7 +568,151 @@ def decide_execution_bias(
     }
 
 
-def build_combined_view(bb: BBState, results: List[ScenarioResult], dq_policy: Dict[str, Any]) -> Dict[str, Any]:
+def parse_roll25_bands_from_report(report_text: str) -> Tuple[Optional[float], Optional[float], List[str]]:
+    band1: Optional[float] = None
+    band2: Optional[float] = None
+    notes: List[str] = []
+
+    for line in report_text.splitlines():
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+
+        parts = [p.strip() for p in s.split("|")]
+        # Expect roughly:
+        # ['', 'Band 1 (normal)', '1', 'P*exp(-z*sigma)', '33057.836667', 'Close >= ...', '']
+        if len(parts) < 6:
+            continue
+
+        label = parts[1]
+        point_raw = parts[4] if len(parts) > 4 else ""
+        point_val = safe_float(point_raw, default=float("nan"))
+
+        if label.startswith("Band 1") and not math.isnan(point_val):
+            band1 = point_val
+        elif label.startswith("Band 2") and not math.isnan(point_val):
+            band2 = point_val
+
+    if band1 is None:
+        notes.append("Band 1 not found in roll25 report markdown.")
+    if band2 is None:
+        notes.append("Band 2 not found in roll25 report markdown.")
+
+    return band1, band2, notes
+
+
+def build_pre_execution_review(
+    roll25_report_path: Optional[str],
+    tx_night_last: Optional[float],
+) -> PreExecutionReview:
+    parse_notes: List[str] = []
+    band1: Optional[float] = None
+    band2: Optional[float] = None
+
+    if roll25_report_path:
+        p = Path(roll25_report_path)
+        if p.exists():
+            try:
+                report_text = load_text(p)
+                band1, band2, notes = parse_roll25_bands_from_report(report_text)
+                parse_notes.extend(notes)
+            except Exception as e:
+                parse_notes.append(f"Failed to parse roll25 report: {e}")
+        else:
+            parse_notes.append(f"roll25 report path does not exist: {roll25_report_path}")
+    else:
+        parse_notes.append("No roll25 report path provided.")
+
+    tx_vs_band1 = None
+    tx_vs_band2 = None
+    if tx_night_last is not None and band1 is not None:
+        tx_vs_band1 = tx_night_last - band1
+    if tx_night_last is not None and band2 is not None:
+        tx_vs_band2 = tx_night_last - band2
+
+    available = (tx_night_last is not None) and ((band1 is not None) or (band2 is not None))
+    trigger_reasons: List[str] = []
+    preopen_shock_flag = "NONE"
+    shock_override = "NONE"
+
+    if available:
+        if band2 is not None and tx_night_last < band2:
+            preopen_shock_flag = "HARD_STOP"
+            shock_override = "HARD_STOP_PREOPEN"
+            trigger_reasons.append("tx_night_last_below_band2")
+        elif band1 is not None and tx_night_last < band1:
+            preopen_shock_flag = "CAUTION"
+            shock_override = "OBSERVE_ONLY"
+            trigger_reasons.append("tx_night_last_below_band1")
+        else:
+            preopen_shock_flag = "NONE"
+            shock_override = "NONE"
+    else:
+        if tx_night_last is None:
+            parse_notes.append("No TX night close provided.")
+        if band1 is None and band2 is None:
+            parse_notes.append("No usable Band 1 / Band 2 extracted from roll25 report.")
+
+    return PreExecutionReview(
+        available=available,
+        source_path=roll25_report_path,
+        band1=band1,
+        band2=band2,
+        tx_night_last=tx_night_last,
+        tx_vs_band1=tx_vs_band1,
+        tx_vs_band2=tx_vs_band2,
+        preopen_shock_flag=preopen_shock_flag,
+        shock_override=shock_override,
+        trigger_reasons=trigger_reasons,
+        parse_notes=parse_notes,
+    )
+
+
+def bias_rank(label: str) -> int:
+    order = {
+        "NONE": 0,
+        "ALLOW_STAGED_ACCUMULATION": 10,
+        "WAIT_FOR_BETTER_ALIGNMENT": 50,
+        "DEFENSIVE_NO_CHASE": 55,
+        "CAUTION_DQ_PRESENT": 60,
+        "WAIT_WITH_DQ_CAUTION": 70,
+        "OBSERVE_ONLY": 80,
+        "DEFENSIVE_DQ_VETO": 90,
+        "HARD_STOP_PREOPEN": 100,
+    }
+    return order.get(label, 0)
+
+
+def decide_final_execution_bias(
+    combined_execution_bias: str,
+    shock_override: str,
+) -> str:
+    if bias_rank(shock_override) >= bias_rank(combined_execution_bias):
+        return shock_override if shock_override != "NONE" else combined_execution_bias
+    return combined_execution_bias
+
+
+def action_instruction_from_bias(label: str) -> str:
+    mapping = {
+        "HARD_STOP_PREOPEN": "完全停手；盤前 shock 未消化。",
+        "DEFENSIVE_DQ_VETO": "停手；資料品質 veto。",
+        "OBSERVE_ONLY": "只觀察，不執行。",
+        "WAIT_WITH_DQ_CAUTION": "觀察為主；等待更好對齊，且留意 DQ。",
+        "CAUTION_DQ_PRESENT": "若非必要不要動；最多極小額。",
+        "DEFENSIVE_NO_CHASE": "防守持有，不追價。",
+        "WAIT_FOR_BETTER_ALIGNMENT": "等待更好對齊。",
+        "ALLOW_STAGED_ACCUMULATION": "可分批累積。",
+        "NONE": "無額外動作。",
+    }
+    return mapping.get(label, "等待更好對齊。")
+
+
+def build_combined_view(
+    bb: BBState,
+    results: List[ScenarioResult],
+    dq_policy: Dict[str, Any],
+    pre_review: PreExecutionReview,
+) -> Dict[str, Any]:
     net_prices = [r.net_0050 for r in results]
     gross_prices = [r.gross_0050 for r in results]
     price_pos = classify_price(bb.price_used, net_prices)
@@ -582,6 +734,11 @@ def build_combined_view(bb: BBState, results: List[ScenarioResult], dq_policy: D
         dq_policy=dq_policy,
     )
 
+    final_execution_bias = decide_final_execution_bias(
+        combined_execution_bias=exec_info["combined_execution_bias"],
+        shock_override=pre_review.shock_override,
+    )
+
     return {
         "bb": dataclasses.asdict(bb),
         "valuation_range": {
@@ -592,16 +749,22 @@ def build_combined_view(bb: BBState, results: List[ScenarioResult], dq_policy: D
             "current_price_position": price_pos,
         },
         "tranche_reference": tranche_levels,
+        "pre_execution_review": dataclasses.asdict(pre_review),
         "base_execution_bias": exec_info["base_execution_bias"],
         "dq_overlay": exec_info["dq_overlay"],
         "matched_caution_flags": exec_info["matched_caution_flags"],
         "matched_veto_flags": exec_info["matched_veto_flags"],
-        "combined_execution_bias": exec_info["combined_execution_bias"],
+        "combined_execution_bias": exec_info["combined_execution_bias"],  # legacy: price/regime + dq only
+        "fast_shock_override": pre_review.shock_override,
+        "final_execution_bias": final_execution_bias,
+        "action_instruction": action_instruction_from_bias(final_execution_bias),
         "how_to_read": {
             "layer_1": "Use valuation scenarios to decide whether the current zone is cheap / fair / expensive.",
             "layer_2": "Use BB/regime/tranche references to decide whether to act now or wait.",
+            "layer_3": "Use pre-execution review to override action bias when TX night close breaches roll25 bands.",
             "zone_note": "valuation zone is rough classification only; do not over-interpret sparse-percentile output.",
             "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
+            "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
         },
     }
@@ -632,6 +795,8 @@ def build_output_json(
     results: List[ScenarioResult],
     combined: Dict[str, Any],
     bb_stats_path: str,
+    roll25_report_path: Optional[str],
+    tx_night_last: Optional[float],
     base_sources: Dict[str, str],
     drag_enabled: bool,
     drag_mode: str,
@@ -643,13 +808,15 @@ def build_output_json(
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1_compat",
+        "schema_version": "0050_merge_schema_v1.4a_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
 
     inputs = {
         "bb_stats_path": bb_stats_path,
+        "roll25_report_path": roll25_report_path,
+        "tx_night_last": tx_night_last,
         "base_0050": float(cfg["base"]["base_0050"]),
         "base_tsmc": float(cfg["base"]["base_tsmc"]),
         "tsmc_weight": float(cfg["base"]["tsmc_weight"]),
@@ -682,13 +849,11 @@ def build_output_json(
     }
 
     out_json = {
-        # new schema
         "meta": meta,
         "inputs": inputs,
         "valuation_cases": valuation_cases,
         "bb_snapshot": bb_snapshot,
 
-        # compatibility / richer sections
         "combined": combined,
         "config_used": cfg,
         "bb_summary": dataclasses.asdict(bb),
@@ -709,6 +874,8 @@ def markdown_report(
     schema_validation: Dict[str, Any],
 ) -> str:
     lines: List[str] = []
+    pre = combined.get("pre_execution_review", {}) or {}
+
     lines.append("# 0050 Valuation × BB Merged Report")
     lines.append("")
     lines.append("## Summary")
@@ -720,10 +887,15 @@ def markdown_report(
     lines.append(f"- base_execution_bias: **{combined['base_execution_bias']}**")
     lines.append(f"- dq_overlay: **{combined['dq_overlay']}**")
     lines.append(f"- combined_execution_bias: **{combined['combined_execution_bias']}**")
+    lines.append(f"- fast_shock_override: **{combined.get('fast_shock_override', 'NONE')}**")
+    lines.append(f"- final_execution_bias: **{combined.get('final_execution_bias', combined['combined_execution_bias'])}**")
+    lines.append(f"- action_instruction: `{combined.get('action_instruction', '')}`")
     if combined.get("matched_caution_flags"):
         lines.append(f"- matched_caution_flags: `{', '.join(combined['matched_caution_flags'])}`")
     if combined.get("matched_veto_flags"):
         lines.append(f"- matched_veto_flags: `{', '.join(combined['matched_veto_flags'])}`")
+    if pre.get("trigger_reasons"):
+        lines.append(f"- shock_trigger_reasons: `{', '.join(pre['trigger_reasons'])}`")
 
     lines.append("")
     lines.append("## Base Inputs")
@@ -765,6 +937,22 @@ def markdown_report(
         lines.append(f"| {t['label']} | {price_str} | {vsp_str} |")
 
     lines.append("")
+    lines.append("## Pre-Execution Review")
+    lines.append(f"- available: `{pre.get('available', False)}`")
+    lines.append(f"- roll25_report_path: `{pre.get('source_path')}`")
+    lines.append(f"- band1: `{pre.get('band1')}`")
+    lines.append(f"- band2: `{pre.get('band2')}`")
+    lines.append(f"- tx_night_last: `{pre.get('tx_night_last')}`")
+    lines.append(f"- tx_vs_band1: `{pre.get('tx_vs_band1')}`")
+    lines.append(f"- tx_vs_band2: `{pre.get('tx_vs_band2')}`")
+    lines.append(f"- preopen_shock_flag: **{pre.get('preopen_shock_flag', 'NONE')}**")
+    lines.append(f"- shock_override: **{pre.get('shock_override', 'NONE')}**")
+    if pre.get("trigger_reasons"):
+        lines.append(f"- trigger_reasons: `{', '.join(pre['trigger_reasons'])}`")
+    if pre.get("parse_notes"):
+        lines.append(f"- parse_notes: `{'; '.join(pre['parse_notes'])}`")
+
+    lines.append("")
     lines.append("## Data Quality")
     if bb.dq_flags:
         for flag in bb.dq_flags:
@@ -781,7 +969,8 @@ def markdown_report(
     lines.append("## How to Use")
     lines.append("- Step 1: Use the valuation table to decide whether current price is in a low / fair / high zone.")
     lines.append("- Step 2: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
-    lines.append("- Step 3: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
+    lines.append("- Step 3: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
+    lines.append("- Step 4: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
 
     lines.append("")
     lines.append("## Notes")
@@ -790,6 +979,8 @@ def markdown_report(
     lines.append("- eps_base is a slow-moving fundamental anchor; revise only when earnings/model basis changes.")
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
     lines.append("- DQ flags can downgrade execution bias even if valuation/regime otherwise look constructive.")
+    lines.append("- Pre-execution review reads Band 1 / Band 2 from roll25 markdown report; if parsing fails, no shock override is applied.")
+    lines.append("- TX night close is manual input and should be checked carefully before running the script.")
     lines.append("- Outputs are dynamic, not fixed. The rules can stay fixed, but the zone boundaries will move when market data or scenario assumptions change.")
 
     return "\n".join(lines) + "\n"
@@ -802,6 +993,8 @@ def main() -> None:
     parser.add_argument("--base-0050", type=float, required=False, help="Override base 0050 price")
     parser.add_argument("--base-tsmc", type=float, required=False, help="Override base TSMC price")
     parser.add_argument("--tsmc-weight", type=float, required=False, help="Override TSMC weight in 0050")
+    parser.add_argument("--roll25-report", required=False, help="Optional path to roll25 markdown report")
+    parser.add_argument("--tx-night-last", type=float, required=False, help="Optional manual TX night-session close")
     parser.add_argument("--out-json", required=True, help="Output JSON path")
     parser.add_argument("--out-md", required=True, help="Output Markdown path")
     args = parser.parse_args()
@@ -826,10 +1019,17 @@ def main() -> None:
 
     bb = parse_bb_stats(bb_stats)
     results = build_results(cfg, drag_enabled=drag_enabled, drag_pts=drag_pts)
+
+    pre_review = build_pre_execution_review(
+        roll25_report_path=args.roll25_report,
+        tx_night_last=args.tx_night_last,
+    )
+
     combined = build_combined_view(
         bb=bb,
         results=results,
         dq_policy=cfg.get("dq_policy", {}),
+        pre_review=pre_review,
     )
 
     out_json = build_output_json(
@@ -838,6 +1038,8 @@ def main() -> None:
         results=results,
         combined=combined,
         bb_stats_path=str(bb_stats_path),
+        roll25_report_path=args.roll25_report,
+        tx_night_last=args.tx_night_last,
         base_sources=base_sources,
         drag_enabled=drag_enabled,
         drag_mode=drag_mode,
