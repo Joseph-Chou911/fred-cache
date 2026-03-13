@@ -29,7 +29,7 @@
 - eps_base_note: `Active EPS base is a slow-moving valuation anchor. Revise only when earnings basis / model basis changes materially.`
 - suggested_eps_base: `66.24`
 - suggested_eps_source: `auto_quarterly_eps_sum_2025`
-- suggested_eps_as_of_date: `2026-01-15`
+- suggested_eps_as_of_date: `NA`
 - suggested_eps_method: `sum_complete_fiscal_year_quarters`
 - suggested_eps_note: `display-only; never auto-applied`
 - family_targets: `72.0, 71.0, 69.0`
@@ -47,8 +47,8 @@
 - annual_eps_candidate: `66.24`
 - annual_eps_candidate_complete: `true`
 - annual_eps_candidate_fiscal_year: `2025`
-- annual_eps_candidate_as_of_date: `2026-01-15`
-- ready_to_replace_active_eps_base: `true`
+- annual_eps_candidate_as_of_date: `NA`
+- ready_to_replace_active_eps_base: `false`
 - quarterly_eps_ready_diff_tolerance: `0.01`
 - quarterly_eps_tracker_note: `Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.`
 
@@ -96,7 +96,7 @@
 ### Family Interpolation Notes
 - enabled: `True`
 - targets: `72.0, 71.0, 69.0`
-- note: `Display-only. Single-axis dense interpolation within fixed assumption families. This section improves valuation readability but does not alter execution bias.`
+- note: `Display-only. Single-axis dense interpolation within fixed assumption families. This section improves valuation readability but does not alter final execution bias.`
 - boundary_note: `0 or 100 can simply mean target price is below family min or above family max.`
 - robustness_note: `2027_defensive_family is a display-only robustness check; it does not alter execution bias.`
 
@@ -112,11 +112,11 @@
 ## Pre-Execution Review
 - available: `True`
 - roll25_report_path: `roll25_cache/report.md`
-- band1: `33057.836667`
-- band2: `32541.990382`
-- tx_night_last: `32961.0`
-- tx_vs_band1: `-96.83666700000322`
-- tx_vs_band2: `419.00961800000005`
+- band1: `32891.104722`
+- band2: `32389.652849`
+- tx_night_last: `32815.0`
+- tx_vs_band1: `-76.1047219999964`
+- tx_vs_band2: `425.34715100000176`
 - preopen_shock_flag: **CAUTION**
 - shock_override: **OBSERVE_ONLY**
 - trigger_reasons: `tx_night_last_below_band1`
@@ -150,6 +150,8 @@
 - suggested_eps_base is display-only and never auto-applied.
 - annual_eps_candidate is derived from collected quarterly EPS using COMPLETE fiscal year quarters only.
 - ready_to_replace_active_eps_base does NOT auto-replace active_eps_base; it is a review flag only.
+- quarterly_eps_tracker filtering accepts tracker rows only when verification_status is VERIFIED or AUTO_DISCOVERED.
+- When available, verified_eps / verified_as_of_date are preferred over eps / as_of_date from the tracker.
 - tsmc_weight_meta is informative only; it does not change execution bias by itself.
 - valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.
 - Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.
