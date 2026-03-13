@@ -52,6 +52,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,7 +67,7 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy yfinance pytz requests
+          pip install pandas numpy yfinance pytz requests pypdf
 
       - name: Debug yfinance fetch (quick)
         run: |
@@ -148,13 +149,17 @@ jobs:
         run: |
           set -euo pipefail
           python tools/update_tsmc_quarterly_eps_tracker.py \
-            --out tw0050_bb_cache/quarterly_eps_tracker.json
+            --out tw0050_bb_cache/quarterly_eps_tracker.json \
+            --timeout 20 \
+            --retries 3 \
+            --sleep-sec 0.5
 
       - name: Assert quarterly EPS tracker
         run: |
           python - << 'PY'
           import json
           import os
+          from collections import Counter
 
           p = "tw0050_bb_cache/quarterly_eps_tracker.json"
           if not os.path.exists(p):
@@ -166,11 +171,14 @@ jobs:
 
           meta = j.get("meta", {})
           quarters = j.get("quarters", None)
+          discovery_debug = j.get("discovery_debug", None)
 
           if not isinstance(meta, dict):
             raise SystemExit("ERROR: quarterly_eps_tracker.json meta is not an object")
           if not isinstance(quarters, list):
             raise SystemExit("ERROR: quarterly_eps_tracker.json quarters is not a list")
+          if not isinstance(discovery_debug, list):
+            raise SystemExit("ERROR: quarterly_eps_tracker.json discovery_debug is not a list")
 
           for i, row in enumerate(quarters):
             if not isinstance(row, dict):
@@ -179,17 +187,33 @@ jobs:
               if k not in row:
                 raise SystemExit(f"ERROR: quarterly_eps_tracker row #{i} missing {k}")
 
+          for i, row in enumerate(discovery_debug):
+            if not isinstance(row, dict):
+              raise SystemExit(f"ERROR: discovery_debug row #{i} is not an object")
+            if "quarter" not in row:
+              raise SystemExit(f"ERROR: discovery_debug row #{i} missing quarter")
+            if "status" not in row:
+              raise SystemExit(f"ERROR: discovery_debug row #{i} missing status")
+
+          optional_features = meta.get("optional_features", {})
+          if optional_features and not isinstance(optional_features, dict):
+            raise SystemExit("ERROR: meta.optional_features is not an object")
+
+          status_counts = Counter(str(x.get("status", "NA")) for x in discovery_debug)
+
           if len(quarters) == 0:
             print("WARN: quarterly_eps_tracker.json quarters is empty")
             print("WARN: updater ran, but no official quarterly EPS entries were parsed.")
-            print("meta:", meta)
-            print("notes:", meta.get("notes", []))
           else:
             print("OK: quarterly EPS tracker present and minimally valid.")
-            print("meta:", meta)
             print("quarters_count:", len(quarters))
             print("latest_quarter:", quarters[-1].get("quarter"))
             print("latest_eps:", quarters[-1].get("eps"))
+
+          print("meta:", meta)
+          print("optional_features:", optional_features)
+          print("discovery_debug_count:", len(discovery_debug))
+          print("status_counts:", dict(status_counts))
           PY
 
       - name: Debug quarterly EPS tracker
@@ -197,14 +221,39 @@ jobs:
           echo "---- quarterly_eps_tracker head ----"
           python - << 'PY'
           import json
+          from collections import Counter
+
           p = "tw0050_bb_cache/quarterly_eps_tracker.json"
           j = json.load(open(p, "r", encoding="utf-8"))
+
           print("meta:", j.get("meta", {}))
           print("meta.notes:", j.get("meta", {}).get("notes", []))
+          print("meta.optional_features:", j.get("meta", {}).get("optional_features", {}))
+
           qs = j.get("quarters", [])
+          dbg = j.get("discovery_debug", [])
+
           print("quarters_count:", len(qs))
           for row in qs[-10:]:
             print(row)
+
+          print("discovery_debug_count:", len(dbg))
+          cnt = Counter(str(x.get("status", "NA")) for x in dbg if isinstance(x, dict))
+          print("discovery status counts:", dict(cnt))
+
+          print("---- latest discovery_debug tail ----")
+          for row in dbg[-12:]:
+            print({
+              "quarter": row.get("quarter"),
+              "publication_state": row.get("publication_state"),
+              "status": row.get("status"),
+              "archive_candidates": len(row.get("archive_candidates", [])),
+              "direct_candidates": len(row.get("direct_candidates", [])),
+              "candidates": len(row.get("candidates", [])),
+              "attempts": len(row.get("attempts", [])),
+              "discovered": row.get("discovered"),
+              "discovered_record_source": row.get("discovered_record_source"),
+            })
           PY
 
       - name: Resolve base_tsmc
@@ -433,20 +482,32 @@ jobs:
           ls -al tw0050_bb_cache
           echo "---- report head ----"
           head -n 40 tw0050_bb_cache/report.md || true
+
           echo "---- quarterly EPS tracker head ----"
           python - << 'PY'
           import json
+          from collections import Counter
+
           p = "tw0050_bb_cache/quarterly_eps_tracker.json"
           j = json.load(open(p, "r", encoding="utf-8"))
           print("meta:", j.get("meta", {}))
           print("meta.notes:", j.get("meta", {}).get("notes", []))
+          print("meta.optional_features:", j.get("meta", {}).get("optional_features", {}))
+
           qs = j.get("quarters", [])
+          dbg = j.get("discovery_debug", [])
           print("quarters_count:", len(qs))
           for row in qs[-10:]:
             print(row)
+
+          cnt = Counter(str(x.get("status", "NA")) for x in dbg if isinstance(x, dict))
+          print("discovery_debug_count:", len(dbg))
+          print("discovery status counts:", dict(cnt))
           PY
+
           echo "---- merged report head ----"
           head -n 220 tw0050_bb_cache/merged_report.md || true
+
           echo "---- merged latest summary ----"
           python - << 'PY'
           import json
@@ -521,7 +582,7 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
 
             git add -A tw0050_bb_cache
-            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + quarterly EPS tracker + merged valuation report v1.6a"
+            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + quarterly EPS tracker v2.0 + merged valuation report"
 
             for i in 1 2 3; do
               echo "Attempt $i: fetch/rebase/push"
