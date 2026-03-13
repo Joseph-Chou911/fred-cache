@@ -2,29 +2,38 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v3.2)
+update_tsmc_quarterly_eps_tracker.py  (v4.0-mops)
 
 Design goals
 ------------
 1) Seed-first
-   - Quarterly EPS values come from manually maintained seeds.
-   - The script no longer depends on front-end pages or sec.gov Archives HTML.
+   - Quarterly EPS values still come from manually maintained seeds.
+   - MOPS is used as the official verification path.
 
-2) Optional XBRL probe (non-blocking)
-   - Probe only data.sec.gov XBRL companyfacts JSON.
-   - Never fail the whole run if probing fails.
-   - Verification is additive metadata, not a prerequisite for output.
+2) Official Taiwan source
+   - Probe MOPS single-company income statement page:
+     /mops/web/t164sb04
+   - Submit historical quarter query to:
+     /mops/web/ajax_t164sb04
 
-3) Stricter quarter matching
-   - Exclude annual FY facts (fp == FY).
-   - Accept only exact-quarter candidates for verification.
-   - Exclude stale filed dates (default: >120 days from seed as_of_date).
-   - Do not fall back to old quarters when exact quarter is absent.
+3) Non-blocking verification
+   - Verification metadata is additive.
+   - Seeds remain the primary values if verification fails.
+
+4) Robust parsing
+   - No dependency on lxml/bs4.
+   - Built-in HTMLParser-based table extraction.
+   - Multiple fallbacks:
+       a) table row parse
+       b) regex over flattened text
 
 Dependencies
 ------------
 Required:
 - requests
+
+Optional:
+- none
 """
 
 from __future__ import annotations
@@ -35,23 +44,23 @@ import json
 import re
 import time
 from datetime import date, datetime, timedelta, timezone
+from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v3.2"
+SCRIPT_VERSION = "v4.0-mops"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_TIMEOUT = 20
-DEFAULT_SLEEP = 0.5
+DEFAULT_SLEEP = 0.8
 
-# TSMC
-DEFAULT_SEC_CIK = "0001046179"
-DEFAULT_SEC_USER_AGENT = "Joseph Chou joseph@example.com"
-DEFAULT_XBRL_TOLERANCE = 0.02       # EPS comparison tolerance
-DEFAULT_MAX_FILED_DELTA_DAYS = 120  # exact-quarter candidate must be filed near seed as_of_date
+DEFAULT_MOPS_BASE_URL = "https://mopsov.twse.com.tw/mops/web"
+DEFAULT_STOCK_NO = "2330"
+DEFAULT_XBRL_TOLERANCE = 0.02  # keep name for downstream compatibility
 
 SOURCE_PRIORITY = {
     "tsmc_seed_record": 20,
@@ -62,9 +71,6 @@ QUARTER_NUM_TO_CN = {1: "第一", 2: "第二", 3: "第三", 4: "第四"}
 QUARTER_CN_TO_NUM = {v: k for k, v in QUARTER_NUM_TO_CN.items()}
 QUARTER_NUM_TO_EN_WORD = {1: "first", 2: "second", 3: "third", 4: "fourth"}
 
-# --------------------------------------------------------------------
-# Seed-first data
-# --------------------------------------------------------------------
 BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
     {
         "quarter": "2024Q4",
@@ -123,25 +129,84 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
     },
 ]
 
-# Preferred concept names first; keep actual observed IFRS names too
-DIRECT_EPS_CONCEPTS = [
-    ("ifrs-full", "BasicAndDilutedEarningsPerShare"),
-    ("ifrs-full", "DilutedEarningsPerShare"),
-    ("ifrs-full", "BasicEarningsPerShare"),
-    ("ifrs-full", "DilutedEarningsLossPerShare"),
-    ("ifrs-full", "BasicEarningsLossPerShare"),
-    ("us-gaap", "EarningsPerShareDiluted"),
-    ("us-gaap", "EarningsPerShareBasicAndDiluted"),
-    ("us-gaap", "EarningsPerShareBasic"),
-]
-
 FAILURE_CLASS_HTTP = "HTTP_ERROR"
-FAILURE_CLASS_NO_DATA = "NO_XBRL_DATA"
-FAILURE_CLASS_NO_CANDIDATE = "NO_CANDIDATE"
-FAILURE_CLASS_NO_EXACT_QUARTER = "NO_EXACT_QUARTER_CANDIDATE"
-FAILURE_CLASS_MISMATCH = "EXACT_QUARTER_EPS_MISMATCH"
 FAILURE_CLASS_NOT_ENDED = "NOT_ENDED_YET"
 FAILURE_CLASS_NOT_PUBLISHED = "LIKELY_NOT_PUBLISHED_YET"
+FAILURE_CLASS_NOT_FOUND = "MOPS_NOT_FOUND"
+FAILURE_CLASS_PARSE = "MOPS_PARSE_FAILED"
+FAILURE_CLASS_MISMATCH = "EPS_MISMATCH"
+
+BASIC_LABEL_PATTERNS = [
+    re.compile(r"基本每股盈餘", re.I),
+    re.compile(r"基本每股(?:淨利|損失)", re.I),
+    re.compile(r"basic earnings per share", re.I),
+    re.compile(r"basic earnings loss per share", re.I),
+]
+
+DILUTED_LABEL_PATTERNS = [
+    re.compile(r"稀釋每股盈餘", re.I),
+    re.compile(r"稀釋每股(?:淨利|損失)", re.I),
+    re.compile(r"diluted earnings per share", re.I),
+    re.compile(r"diluted earnings loss per share", re.I),
+]
+
+NO_DATA_PATTERNS = [
+    re.compile(r"查無資料"),
+    re.compile(r"沒有符合條件"),
+    re.compile(r"無符合條件"),
+    re.compile(r"no data", re.I),
+]
+
+DATE_PATTERNS = [
+    re.compile(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})"),
+    re.compile(r"民國\s*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日"),
+]
+
+
+class SimpleHTMLTableParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tables: List[List[List[str]]] = []
+        self._in_table = False
+        self._in_tr = False
+        self._in_cell = False
+        self._current_table: List[List[str]] = []
+        self._current_row: List[str] = []
+        self._current_cell_chunks: List[str] = []
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        tag = tag.lower()
+        if tag == "table":
+            self._in_table = True
+            self._current_table = []
+        elif tag == "tr" and self._in_table:
+            self._in_tr = True
+            self._current_row = []
+        elif tag in {"td", "th"} and self._in_tr:
+            self._in_cell = True
+            self._current_cell_chunks = []
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag in {"td", "th"} and self._in_cell:
+            text = normalize_ws(unescape("".join(self._current_cell_chunks)))
+            self._current_row.append(text)
+            self._in_cell = False
+            self._current_cell_chunks = []
+        elif tag == "tr" and self._in_tr:
+            if self._current_row:
+                self._current_table.append(self._current_row)
+            self._current_row = []
+            self._in_tr = False
+        elif tag == "table" and self._in_table:
+            if self._current_table:
+                self.tables.append(self._current_table)
+            self._current_table = []
+            self._in_table = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_cell:
+            self._current_cell_chunks.append(data)
 
 
 def now_utc_iso() -> str:
@@ -190,6 +255,18 @@ def parse_iso_date(s: str) -> Optional[date]:
         return None
 
 
+def normalize_ws(s: str) -> str:
+    s = s.replace("\xa0", " ")
+    s = s.replace("\u3000", " ")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def normalize_text(s: Any) -> str:
+    if s is None:
+        return ""
+    return normalize_ws(str(s))
+
+
 def detect_source_priority(source: str) -> int:
     return SOURCE_PRIORITY.get(source, 0)
 
@@ -214,341 +291,229 @@ def build_session() -> requests.Session:
     return requests.Session()
 
 
-def sec_headers(sec_user_agent: str) -> Dict[str, str]:
+def mops_headers(page_url: str) -> Dict[str, str]:
     return {
-        "User-Agent": sec_user_agent,
-        "Accept": "application/json,text/plain,*/*",
-        "Accept-Language": "en-US,en;q=0.8",
-        "Referer": "https://www.sec.gov/",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/133.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": page_url,
+        "Origin": re.sub(r"/mops/web.*$", "", page_url),
         "Cache-Control": "no-cache",
         "Pragma": "no-cache",
     }
 
 
-def http_get_json(
+def http_post_text(
     session: requests.Session,
     url: str,
+    data: Dict[str, str],
     timeout: int,
     retries: int,
     sleep_sec: float,
     *,
     headers: Dict[str, str],
-) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+) -> Tuple[Optional[str], Optional[int], Optional[str]]:
     last_err: Optional[str] = None
+    last_status: Optional[int] = None
+
     for i in range(1, retries + 1):
         try:
-            r = session.get(url, timeout=timeout, headers=headers)
+            r = session.post(url, data=data, timeout=timeout, headers=headers)
+            last_status = r.status_code
             r.raise_for_status()
-            return r.json(), None
+            if not r.encoding:
+                r.encoding = r.apparent_encoding or "utf-8"
+            return r.text, r.status_code, None
         except Exception as e:
             last_err = str(e)
             if i < retries:
                 time.sleep(sleep_sec * i)
-    return None, last_err
+
+    return None, last_status, last_err
 
 
-def sec_companyfacts_url(cik: str) -> str:
-    return f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+def western_to_roc_year(year: int) -> int:
+    return year - 1911
 
 
-def unit_preference_score(unit_key: str) -> int:
-    u = (unit_key or "").lower()
-    score = 0
-    if "twd" in u:
-        score += 50
-    if "usd" in u:
-        score -= 25
-    if "share" in u:
-        score += 10
-    if u == "pure":
-        score -= 30
-    return score
-
-
-def concept_preference_score(taxonomy: str, concept: str) -> int:
-    c = concept.lower()
-    score = 0
-    if "basicanddiluted" in c:
-        score += 25
-    if "diluted" in c:
-        score += 20
-    elif "basic" in c:
-        score += 5
-    if "earnings" in c and "share" in c:
-        score += 15
-    if taxonomy == "ifrs-full":
-        score += 5
-    return score
-
-
-def is_eps_concept_name(concept: str) -> bool:
-    c = concept.lower()
-
-    negative_tokens = [
-        "weightedaverage",
-        "sharesoutstanding",
-        "numberofshares",
-        "sharecapital",
-        "ordinaryshares",
-        "authorizedshares",
-        "issuedshares",
-    ]
-    if any(tok in c for tok in negative_tokens):
-        return False
-
-    if c in {
-        "basicanddilutedearningspershare",
-        "dilutedearningspershare",
-        "basicearningspershare",
-        "dilutedearningslosspershare",
-        "basicearningslosspershare",
-        "earningspersharediluted",
-        "earningspersharebasicanddiluted",
-        "earningspersharebasic",
-    }:
-        return True
-
-    return ("earnings" in c and "share" in c) or ("eps" in c and "share" in c)
-
-
-def safe_float(x: Any) -> Optional[float]:
-    try:
-        return float(x)
-    except Exception:
+def safe_float_from_text(s: str) -> Optional[float]:
+    s = normalize_text(s)
+    if not s:
         return None
 
+    s = s.replace(",", "")
+    s = s.replace("(", "-").replace(")", "")
+    s = s.replace("−", "-")
+    s = s.replace("—", "-")
+    s = s.replace("–", "-")
 
-def parse_quarter_from_frame(frame: str) -> Optional[str]:
-    """
-    Examples that may appear in XBRL frame:
-      CY2025Q1I
-      CY2025Q2
-      CY2025Q3I
-    """
-    if not frame:
+    if s in {"-", "--", "—", "–", "NA", "N/A"}:
         return None
-    m = re.search(r"CY(\d{4})Q([1-4])", frame.upper())
-    if m:
-        return f"{m.group(1)}Q{m.group(2)}"
+
+    if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
+        try:
+            return float(s)
+        except Exception:
+            return None
     return None
 
 
-def infer_quarter_from_fact(
-    fact: Dict[str, Any],
-) -> Tuple[Optional[str], str]:
-    """
-    Returns:
-      (quarter_label_or_none, derivation_method)
-
-    Rules:
-    - Prefer fy/fp when fp is Q1~Q4
-    - Exclude FY as annual fact
-    - Then try frame parsing
-    - Then try end_date matching quarter end
-    """
-    fy = fact.get("fy")
-    fp = str(fact.get("fp", "") or "").upper().strip()
-
-    if fy is not None and fp in {"Q1", "Q2", "Q3", "Q4"}:
-        try:
-            return f"{int(fy)}{fp}", "fy_fp"
-        except Exception:
-            pass
-
-    if fp == "FY":
-        return None, "annual_fy"
-
-    frame = str(fact.get("frame", "") or "").strip()
-    q_from_frame = parse_quarter_from_frame(frame)
-    if q_from_frame:
-        return q_from_frame, "frame"
-
-    end_s = str(fact.get("end", "") or "")
-    end_d = parse_iso_date(end_s)
-    if end_d is not None:
-        for qn in (1, 2, 3, 4):
-            q_label = f"{end_d.year}Q{qn}"
-            if end_d == quarter_end_date_obj(end_d.year, qn):
-                return q_label, "end_date"
-
-    return None, "unknown"
+def detect_mops_no_data(html: str) -> bool:
+    text = normalize_text(re.sub(r"<[^>]+>", " ", html, flags=re.S))
+    return any(rx.search(text) for rx in NO_DATA_PATTERNS)
 
 
-def filed_delta_days(filed_s: str, expected_as_of_date: str) -> Optional[int]:
-    filed_d = parse_iso_date(str(filed_s or ""))
-    asof_d = parse_iso_date(str(expected_as_of_date or ""))
-    if filed_d is None or asof_d is None:
-        return None
-    return abs((filed_d - asof_d).days)
+def parse_as_of_date_from_text(text: str) -> Optional[str]:
+    text = normalize_text(text)
 
-
-def candidate_score(
-    candidate: Dict[str, Any],
-    *,
-    expected_quarter: str,
-    expected_as_of_date: str,
-    max_filed_delta_days: int,
-) -> int:
-    score = 0
-
-    derived_quarter = candidate.get("derived_quarter")
-    if derived_quarter == expected_quarter:
-        score += 100
-    elif derived_quarter is not None:
-        score -= 60
-
-    fp = str(candidate.get("fp", "") or "").upper()
-    if fp == "FY":
-        score -= 300
-
-    quarter_derivation = str(candidate.get("quarter_derivation", "") or "")
-    if quarter_derivation == "annual_fy":
-        score -= 300
-    elif quarter_derivation == "fy_fp":
-        score += 8
-    elif quarter_derivation == "frame":
-        score += 6
-    elif quarter_derivation == "end_date":
-        score += 3
-
-    delta = filed_delta_days(str(candidate.get("filed", "") or ""), expected_as_of_date)
-    candidate["filed_delta_days"] = delta
-    if delta is not None:
-        score += max(0, 25 - min(delta, 25))
-        if delta > max_filed_delta_days:
-            score -= 150
-
-    form = str(candidate.get("form", "") or "").upper()
-    if form == "6-K":
-        score += 25
-    elif form in {"20-F", "40-F"}:
-        score += 8
-    elif form in {"10-Q", "10-K"}:
-        score += 5
-
-    score += unit_preference_score(str(candidate.get("unit_key", "") or ""))
-    score += concept_preference_score(
-        str(candidate.get("taxonomy", "") or ""),
-        str(candidate.get("concept", "") or ""),
-    )
-    return score
-
-
-def collect_xbrl_eps_candidates(
-    companyfacts: Dict[str, Any],
-    *,
-    expected_quarter: str,
-    expected_as_of_date: str,
-    max_filed_delta_days: int,
-) -> List[Dict[str, Any]]:
-    facts_root = companyfacts.get("facts", {})
-    if not isinstance(facts_root, dict):
-        return []
-
-    candidates: List[Dict[str, Any]] = []
-    preferred_pairs = set(DIRECT_EPS_CONCEPTS)
-
-    for taxonomy, concepts in facts_root.items():
-        if not isinstance(concepts, dict):
+    for rx in DATE_PATTERNS:
+        m = rx.search(text)
+        if not m:
             continue
+        if rx.pattern.startswith("(\\d{4})"):
+            y = int(m.group(1))
+            mm = int(m.group(2))
+            dd = int(m.group(3))
+            return f"{y:04d}-{mm:02d}-{dd:02d}"
+        else:
+            roc_y = int(m.group(1))
+            y = roc_y + 1911
+            mm = int(m.group(2))
+            dd = int(m.group(3))
+            return f"{y:04d}-{mm:02d}-{dd:02d}"
+    return None
 
-        for concept, meta in concepts.items():
-            if not isinstance(meta, dict):
+
+def find_label_kind(cell_text: str) -> Optional[str]:
+    for rx in BASIC_LABEL_PATTERNS:
+        if rx.search(cell_text):
+            return "basic"
+    for rx in DILUTED_LABEL_PATTERNS:
+        if rx.search(cell_text):
+            return "diluted"
+    return None
+
+
+def extract_first_numeric_after_label(cells: List[str], label_idx: int) -> Optional[float]:
+    for x in cells[label_idx + 1 :]:
+        v = safe_float_from_text(x)
+        if v is not None:
+            return v
+    return None
+
+
+def parse_eps_from_tables(html: str) -> Dict[str, Any]:
+    parser = SimpleHTMLTableParser()
+    parser.feed(html)
+    tables = parser.tables
+
+    out: Dict[str, Any] = {
+        "tables_found": len(tables),
+        "basic_eps": None,
+        "diluted_eps": None,
+        "row_hits": [],
+        "as_of_date": None,
+        "table_preview": [],
+    }
+
+    flat_text = normalize_text(re.sub(r"<[^>]+>", " ", html, flags=re.S))
+    out["as_of_date"] = parse_as_of_date_from_text(flat_text)
+
+    preview_count = 0
+    for t_idx, table in enumerate(tables):
+        for r_idx, row in enumerate(table[:8]):
+            if preview_count >= 12:
+                break
+            out["table_preview"].append(
+                {
+                    "table_index": t_idx,
+                    "row_index": r_idx,
+                    "cells": [normalize_text(x) for x in row[:8]],
+                }
+            )
+            preview_count += 1
+        if preview_count >= 12:
+            break
+
+    for t_idx, table in enumerate(tables):
+        for r_idx, row in enumerate(table):
+            cells = [normalize_text(c) for c in row]
+            if not any(cells):
                 continue
 
-            pair = (taxonomy, concept)
-            if pair not in preferred_pairs and not is_eps_concept_name(concept):
+            label_idx: Optional[int] = None
+            label_kind: Optional[str] = None
+            label_text: Optional[str] = None
+
+            for idx, cell in enumerate(cells):
+                kind = find_label_kind(cell)
+                if kind:
+                    label_idx = idx
+                    label_kind = kind
+                    label_text = cell
+                    break
+
+            if label_idx is None or label_kind is None:
                 continue
 
-            units = meta.get("units", {})
-            if not isinstance(units, dict):
+            v = extract_first_numeric_after_label(cells, label_idx)
+            hit = {
+                "table_index": t_idx,
+                "row_index": r_idx,
+                "label_kind": label_kind,
+                "label_text": label_text,
+                "row_cells": cells[:12],
+                "current_quarter_value": v,
+            }
+            out["row_hits"].append(hit)
+
+            if v is None:
                 continue
 
-            for unit_key, rows in units.items():
-                if not isinstance(rows, list):
-                    continue
+            if label_kind == "basic" and out["basic_eps"] is None:
+                out["basic_eps"] = v
+            if label_kind == "diluted" and out["diluted_eps"] is None:
+                out["diluted_eps"] = v
 
-                for row in rows:
-                    if not isinstance(row, dict):
-                        continue
+    # Regex fallback if table parse did not yield value
+    if out["basic_eps"] is None:
+        m = re.search(r"基本每股盈餘[^0-9\-]{0,30}(-?\d+(?:\.\d+)?)", flat_text)
+        if m:
+            try:
+                out["basic_eps"] = float(m.group(1))
+            except Exception:
+                pass
 
-                    val = safe_float(row.get("val"))
-                    if val is None:
-                        continue
+    if out["diluted_eps"] is None:
+        m = re.search(r"稀釋每股盈餘[^0-9\-]{0,30}(-?\d+(?:\.\d+)?)", flat_text)
+        if m:
+            try:
+                out["diluted_eps"] = float(m.group(1))
+            except Exception:
+                pass
 
-                    fp = str(row.get("fp", "") or "").upper().strip()
-                    if fp == "FY":
-                        # Explicitly exclude annual EPS from quarterly verification
-                        continue
-
-                    derived_quarter, derivation = infer_quarter_from_fact(row)
-
-                    cand = {
-                        "taxonomy": taxonomy,
-                        "concept": concept,
-                        "label": meta.get("label"),
-                        "description": meta.get("description"),
-                        "unit_key": unit_key,
-                        "value": val,
-                        "fy": row.get("fy"),
-                        "fp": row.get("fp"),
-                        "form": row.get("form"),
-                        "filed": row.get("filed"),
-                        "end": row.get("end"),
-                        "frame": row.get("frame"),
-                        "accn": row.get("accn"),
-                        "derived_quarter": derived_quarter,
-                        "quarter_derivation": derivation,
-                    }
-                    cand["score"] = candidate_score(
-                        cand,
-                        expected_quarter=expected_quarter,
-                        expected_as_of_date=expected_as_of_date,
-                        max_filed_delta_days=max_filed_delta_days,
-                    )
-                    candidates.append(cand)
-
-    candidates.sort(
-        key=lambda x: (
-            -int(x.get("score", 0)),
-            str(x.get("filed", "")),
-            str(x.get("taxonomy", "")),
-            str(x.get("concept", "")),
-        )
-    )
-    return candidates
+    return out
 
 
-def pick_best_xbrl_candidate(
-    candidates: List[Dict[str, Any]],
-    *,
-    expected_quarter: str,
-    expected_eps: float,
-    tolerance: float,
-    max_filed_delta_days: int,
-) -> Tuple[Optional[Dict[str, Any]], str]:
-    if not candidates:
-        return None, "no_candidate"
+def choose_matching_eps(parsed: Dict[str, Any], expected_eps: float, tolerance: float) -> Tuple[Optional[float], Optional[str], str]:
+    basic = parsed.get("basic_eps")
+    diluted = parsed.get("diluted_eps")
 
-    exact_quarter = [
-        c for c in candidates
-        if c.get("derived_quarter") == expected_quarter
-    ]
+    if basic is not None and abs(float(basic) - expected_eps) <= tolerance:
+        return float(basic), "basic_eps", "exact_match_basic"
+    if diluted is not None and abs(float(diluted) - expected_eps) <= tolerance:
+        return float(diluted), "diluted_eps", "exact_match_diluted"
 
-    # exact quarter + recent filing only
-    exact_quarter = [
-        c for c in exact_quarter
-        if c.get("filed_delta_days") is not None and int(c["filed_delta_days"]) <= max_filed_delta_days
-    ]
+    if basic is not None:
+        return float(basic), "basic_eps", "mismatch_basic"
+    if diluted is not None:
+        return float(diluted), "diluted_eps", "mismatch_diluted"
 
-    if not exact_quarter:
-        return None, "no_exact_quarter_candidate"
-
-    best = exact_quarter[0]
-    if abs(float(best["value"]) - float(expected_eps)) <= tolerance:
-        return best, "exact_match"
-
-    return best, "exact_quarter_eps_mismatch"
+    return None, None, "no_eps_found"
 
 
 def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
@@ -556,8 +521,14 @@ def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
     return {
         "quarter": q,
         "publication_state": assess_publication_state(year, quarter_num, datetime.now().date()),
-        "probe_source": "sec_companyfacts_xbrl",
-        "candidate_count": 0,
+        "probe_source": "mops_single_company_income_statement",
+        "request": None,
+        "http_status": None,
+        "fetch_ok": False,
+        "tables_found": 0,
+        "parsed_basic_eps": None,
+        "parsed_diluted_eps": None,
+        "parsed_as_of_date": None,
         "candidate_preview": [],
         "attempts": [],
         "discovered": False,
@@ -566,88 +537,65 @@ def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
     }
 
 
-def summarize_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "taxonomy": c.get("taxonomy"),
-        "concept": c.get("concept"),
-        "unit_key": c.get("unit_key"),
-        "value": c.get("value"),
-        "fy": c.get("fy"),
-        "fp": c.get("fp"),
-        "form": c.get("form"),
-        "filed": c.get("filed"),
-        "filed_delta_days": c.get("filed_delta_days"),
-        "end": c.get("end"),
-        "frame": c.get("frame"),
-        "derived_quarter": c.get("derived_quarter"),
-        "quarter_derivation": c.get("quarter_derivation"),
-        "score": c.get("score"),
-        "accn": c.get("accn"),
-    }
-
-
 def choose_representative_failure(
     attempts: List[Dict[str, Any]]
 ) -> Tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     if not attempts:
-        return FAILURE_CLASS_NO_CANDIDATE, None, None
+        return FAILURE_CLASS_PARSE, None, None
 
     first = attempts[0]
     last = attempts[-1]
 
     priority = [
-        FAILURE_CLASS_NO_EXACT_QUARTER,
-        FAILURE_CLASS_MISMATCH,
         FAILURE_CLASS_HTTP,
-        FAILURE_CLASS_NO_DATA,
-        FAILURE_CLASS_NO_CANDIDATE,
+        FAILURE_CLASS_NOT_FOUND,
+        FAILURE_CLASS_PARSE,
+        FAILURE_CLASS_MISMATCH,
     ]
     for klass in priority:
         for a in attempts:
             if str(a.get("failure_class", "")) == klass:
                 return klass, first, last
 
-    return str(last.get("failure_class", FAILURE_CLASS_NO_CANDIDATE)), first, last
+    return str(last.get("failure_class", FAILURE_CLASS_PARSE)), first, last
 
 
 def update_record_with_verification(
     seed_record: Dict[str, Any],
     *,
-    verified_candidate: Optional[Dict[str, Any]],
-    companyfacts_url: str,
+    verified_eps: Optional[float],
+    verified_method_detail: Optional[str],
+    verified_as_of_date: Optional[str],
+    probe_url: str,
     attempts: List[Dict[str, Any]],
     tolerance: float,
+    parsed_basic_eps: Optional[float],
+    parsed_diluted_eps: Optional[float],
 ) -> Dict[str, Any]:
     out = copy.deepcopy(seed_record)
     out["fetched_at_utc"] = now_utc_iso()
 
     primary_failure_class, first_failure, last_failure = choose_representative_failure(attempts)
 
-    if verified_candidate is not None:
+    if verified_eps is not None:
         out["reference_url_verified_this_run"] = True
         out["verification_status"] = "VERIFIED"
-        out["verification_method"] = "xbrl_companyfacts"
-        out["verified_url"] = companyfacts_url
-        out["verified_eps"] = verified_candidate.get("value")
-        out["verified_as_of_date"] = verified_candidate.get("filed")
-        out["reference_source_type"] = "sec_companyfacts_xbrl"
+        out["verification_method"] = "mops_income_statement"
+        out["verified_url"] = probe_url
+        out["verified_eps"] = verified_eps
+        out["verified_as_of_date"] = verified_as_of_date
+        out["reference_source_type"] = "mops_income_statement"
         out["verification"] = {
             "status": "VERIFIED",
-            "method": "xbrl_companyfacts",
-            "verified_url": companyfacts_url,
-            "verified_eps": verified_candidate.get("value"),
-            "verified_quarter": verified_candidate.get("derived_quarter"),
-            "verified_as_of_date": verified_candidate.get("filed"),
-            "verified_concept": {
-                "taxonomy": verified_candidate.get("taxonomy"),
-                "concept": verified_candidate.get("concept"),
-                "unit_key": verified_candidate.get("unit_key"),
-                "form": verified_candidate.get("form"),
-                "accn": verified_candidate.get("accn"),
-                "score": verified_candidate.get("score"),
-                "filed_delta_days": verified_candidate.get("filed_delta_days"),
-            },
-            "reason": "seed_eps_matched_exact_quarter_xbrl_candidate_within_tolerance",
+            "method": "mops_income_statement",
+            "method_detail": verified_method_detail,
+            "verified_url": probe_url,
+            "verified_eps": verified_eps,
+            "verified_quarter": seed_record.get("quarter"),
+            "verified_as_of_date": verified_as_of_date,
+            "parsed_basic_eps": parsed_basic_eps,
+            "parsed_diluted_eps": parsed_diluted_eps,
+            "reason": "seed_eps_matched_mops_within_tolerance",
             "tolerance": tolerance,
             "attempted_at_utc": now_utc_iso(),
             "candidate_count_considered": len(attempts),
@@ -659,18 +607,20 @@ def update_record_with_verification(
 
     out["reference_url_verified_this_run"] = False
     out["verification_status"] = "VERIFY_FAILED"
-    out["verification_method"] = "xbrl_companyfacts"
-    out["verified_url"] = companyfacts_url
+    out["verification_method"] = "mops_income_statement"
+    out["verified_url"] = probe_url
     out["verified_eps"] = None
     out["verified_as_of_date"] = None
     out["verification"] = {
         "status": "VERIFY_FAILED",
-        "method": "xbrl_companyfacts",
-        "verified_url": companyfacts_url,
+        "method": "mops_income_statement",
+        "method_detail": None,
+        "verified_url": probe_url,
         "verified_eps": None,
         "verified_quarter": None,
         "verified_as_of_date": None,
-        "verified_concept": None,
+        "parsed_basic_eps": parsed_basic_eps,
+        "parsed_diluted_eps": parsed_diluted_eps,
         "reason": primary_failure_class,
         "tolerance": tolerance,
         "attempted_at_utc": now_utc_iso(),
@@ -682,37 +632,64 @@ def update_record_with_verification(
     return out
 
 
-def probe_seed_with_xbrl(
+def probe_seed_with_mops(
     seed_record: Dict[str, Any],
     *,
-    companyfacts: Optional[Dict[str, Any]],
-    companyfacts_url: str,
-    companyfacts_err: Optional[str],
+    session: requests.Session,
+    mops_base_url: str,
+    stock_no: str,
+    timeout: int,
+    retries: int,
+    sleep_sec: float,
     tolerance: float,
-    max_filed_delta_days: int,
     notes: List[str],
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     quarter = str(seed_record["quarter"])
     year = int(quarter[:4])
     qnum = int(quarter[-1])
+    roc_year = western_to_roc_year(year)
 
     debug = build_debug_quarter_entry(year, qnum)
     pub_state = debug["publication_state"]
+
+    page_url = f"{mops_base_url}/t164sb04"
+    ajax_url = f"{mops_base_url}/ajax_t164sb04"
+
+    payload = {
+        "encodeURIComponent": "1",
+        "step": "1",
+        "firstin": "1",
+        "off": "1",
+        "keyword4": "",
+        "code1": "",
+        "TYPEK2": "",
+        "checkbtn": "",
+        "queryName": "co_id",
+        "TYPEK": "all",
+        "isnew": "false",
+        "co_id": stock_no,
+        "year": str(roc_year),
+        "season": f"{qnum:02d}",
+    }
+    debug["request"] = {
+        "page_url": page_url,
+        "ajax_url": ajax_url,
+        "payload": payload,
+    }
 
     if pub_state == "NOT_ENDED_YET":
         debug["status"] = "NOT_ENDED_YET"
         record = copy.deepcopy(seed_record)
         record["verification_status"] = "NOT_ENDED_YET"
-        record["verification_method"] = "xbrl_companyfacts"
+        record["verification_method"] = "mops_income_statement"
         record["reference_url_verified_this_run"] = False
         record["verification"] = {
             "status": "NOT_ENDED_YET",
-            "method": "xbrl_companyfacts",
-            "verified_url": companyfacts_url,
+            "method": "mops_income_statement",
+            "verified_url": ajax_url,
             "verified_eps": None,
             "verified_quarter": None,
             "verified_as_of_date": None,
-            "verified_concept": None,
             "reason": FAILURE_CLASS_NOT_ENDED,
             "attempted_at_utc": now_utc_iso(),
             "candidate_count_considered": 0,
@@ -720,23 +697,22 @@ def probe_seed_with_xbrl(
             "first_failure": None,
             "last_failure": None,
         }
-        notes.append(f"{quarter}: skipped XBRL probe because quarter not ended yet")
+        notes.append(f"{quarter}: skipped MOPS probe because quarter not ended yet")
         return record, debug
 
     if pub_state == "LIKELY_NOT_PUBLISHED_YET":
         debug["status"] = "LIKELY_NOT_PUBLISHED_YET"
         record = copy.deepcopy(seed_record)
         record["verification_status"] = "LIKELY_NOT_PUBLISHED_YET"
-        record["verification_method"] = "xbrl_companyfacts"
+        record["verification_method"] = "mops_income_statement"
         record["reference_url_verified_this_run"] = False
         record["verification"] = {
             "status": "LIKELY_NOT_PUBLISHED_YET",
-            "method": "xbrl_companyfacts",
-            "verified_url": companyfacts_url,
+            "method": "mops_income_statement",
+            "verified_url": ajax_url,
             "verified_eps": None,
             "verified_quarter": None,
             "verified_as_of_date": None,
-            "verified_concept": None,
             "reason": FAILURE_CLASS_NOT_PUBLISHED,
             "attempted_at_utc": now_utc_iso(),
             "candidate_count_considered": 0,
@@ -744,158 +720,167 @@ def probe_seed_with_xbrl(
             "first_failure": None,
             "last_failure": None,
         }
-        notes.append(f"{quarter}: skipped XBRL probe because publication likely not ready yet")
+        notes.append(f"{quarter}: skipped MOPS probe because publication likely not ready yet")
         return record, debug
 
     attempts: List[Dict[str, Any]] = []
 
-    if companyfacts is None:
-        debug["status"] = "NO_XBRL_DATA"
-        attempt = {
-            "probe": "companyfacts_fetch",
-            "failure_class": FAILURE_CLASS_HTTP,
-            "reason": f"companyfacts_fetch_failed:{companyfacts_err}",
-            "companyfacts_url": companyfacts_url,
-        }
-        attempts.append(attempt)
-        debug["attempts"] = attempts
-        record = update_record_with_verification(
-            seed_record,
-            verified_candidate=None,
-            companyfacts_url=companyfacts_url,
-            attempts=attempts,
-            tolerance=tolerance,
-        )
-        notes.append(f"{quarter}: companyfacts unavailable | err={companyfacts_err}")
-        return record, debug
-
-    candidates = collect_xbrl_eps_candidates(
-        companyfacts,
-        expected_quarter=quarter,
-        expected_as_of_date=str(seed_record["as_of_date"]),
-        max_filed_delta_days=max_filed_delta_days,
+    html, http_status, err = http_post_text(
+        session=session,
+        url=ajax_url,
+        data=payload,
+        timeout=timeout,
+        retries=retries,
+        sleep_sec=sleep_sec,
+        headers=mops_headers(page_url),
     )
-    debug["candidate_count"] = len(candidates)
-    debug["candidate_preview"] = [summarize_candidate(c) for c in candidates[:12]]
 
-    if not candidates:
-        debug["status"] = "NO_XBRL_CANDIDATE"
+    debug["http_status"] = http_status
+
+    if html is None:
+        debug["status"] = "MOPS_FETCH_FAILED"
         attempts.append(
             {
-                "probe": "companyfacts_candidate_search",
-                "failure_class": FAILURE_CLASS_NO_CANDIDATE,
-                "reason": "no_eps_candidate_found_in_companyfacts",
-                "companyfacts_url": companyfacts_url,
+                "probe": "mops_fetch",
+                "failure_class": FAILURE_CLASS_HTTP,
+                "reason": f"mops_fetch_failed:{err}",
+                "url": ajax_url,
+                "payload": payload,
+                "http_status": http_status,
             }
         )
         debug["attempts"] = attempts
         record = update_record_with_verification(
             seed_record,
-            verified_candidate=None,
-            companyfacts_url=companyfacts_url,
+            verified_eps=None,
+            verified_method_detail=None,
+            verified_as_of_date=None,
+            probe_url=ajax_url,
             attempts=attempts,
             tolerance=tolerance,
+            parsed_basic_eps=None,
+            parsed_diluted_eps=None,
         )
-        notes.append(f"{quarter}: no XBRL EPS candidate found in companyfacts")
+        notes.append(f"{quarter}: MOPS fetch failed | err={err}")
         return record, debug
 
-    best, pick_reason = pick_best_xbrl_candidate(
-        candidates,
-        expected_quarter=quarter,
-        expected_eps=float(seed_record["eps"]),
-        tolerance=tolerance,
-        max_filed_delta_days=max_filed_delta_days,
-    )
+    debug["fetch_ok"] = True
 
-    if best is None:
-        if pick_reason == "no_exact_quarter_candidate":
-            debug["status"] = "NO_EXACT_QUARTER_CANDIDATE"
-            attempts.append(
-                {
-                    "probe": "companyfacts_exact_quarter_filter",
-                    "failure_class": FAILURE_CLASS_NO_EXACT_QUARTER,
-                    "reason": "no_exact_quarter_candidate_after_fy_and_staleness_filters",
-                    "expected_quarter": quarter,
-                    "expected_eps": seed_record["eps"],
-                    "max_filed_delta_days": max_filed_delta_days,
-                }
-            )
-            notes.append(f"{quarter}: NO_EXACT_QUARTER_CANDIDATE after FY/staleness filters")
-        else:
-            debug["status"] = "NO_XBRL_CANDIDATE"
-            attempts.append(
-                {
-                    "probe": "companyfacts_candidate_pick",
-                    "failure_class": FAILURE_CLASS_NO_CANDIDATE,
-                    "reason": "best_candidate_none",
-                    "companyfacts_url": companyfacts_url,
-                }
-            )
-            notes.append(f"{quarter}: best XBRL candidate is none")
-
+    if detect_mops_no_data(html):
+        debug["status"] = "MOPS_NOT_FOUND"
+        attempts.append(
+            {
+                "probe": "mops_no_data_check",
+                "failure_class": FAILURE_CLASS_NOT_FOUND,
+                "reason": "mops_returned_no_data",
+                "url": ajax_url,
+                "http_status": http_status,
+            }
+        )
         debug["attempts"] = attempts
         record = update_record_with_verification(
             seed_record,
-            verified_candidate=None,
-            companyfacts_url=companyfacts_url,
+            verified_eps=None,
+            verified_method_detail=None,
+            verified_as_of_date=None,
+            probe_url=ajax_url,
             attempts=attempts,
             tolerance=tolerance,
+            parsed_basic_eps=None,
+            parsed_diluted_eps=None,
         )
+        notes.append(f"{quarter}: MOPS returned no data")
         return record, debug
 
-    best_summary = summarize_candidate(best)
+    parsed = parse_eps_from_tables(html)
+    debug["tables_found"] = parsed.get("tables_found", 0)
+    debug["parsed_basic_eps"] = parsed.get("basic_eps")
+    debug["parsed_diluted_eps"] = parsed.get("diluted_eps")
+    debug["parsed_as_of_date"] = parsed.get("as_of_date")
+    debug["candidate_preview"] = parsed.get("row_hits", [])[:8]
 
-    if pick_reason == "exact_match":
+    matched_eps, matched_method, match_reason = choose_matching_eps(
+        parsed=parsed,
+        expected_eps=float(seed_record["eps"]),
+        tolerance=tolerance,
+    )
+
+    if matched_eps is not None and match_reason.startswith("exact_match"):
         attempts.append(
             {
-                "probe": "companyfacts_best_candidate",
+                "probe": "mops_eps_match",
                 "failure_class": None,
-                "reason": "exact_match",
-                "candidate": best_summary,
+                "reason": match_reason,
+                "matched_method": matched_method,
+                "matched_eps": matched_eps,
+                "parsed_basic_eps": parsed.get("basic_eps"),
+                "parsed_diluted_eps": parsed.get("diluted_eps"),
+                "as_of_date": parsed.get("as_of_date"),
             }
         )
         debug["attempts"] = attempts
         debug["discovered"] = True
-        debug["discovered_record_source"] = "xbrl_companyfacts"
+        debug["discovered_record_source"] = "mops_income_statement"
         debug["status"] = "VERIFIED"
+
         record = update_record_with_verification(
             seed_record,
-            verified_candidate=best,
-            companyfacts_url=companyfacts_url,
+            verified_eps=matched_eps,
+            verified_method_detail=matched_method,
+            verified_as_of_date=parsed.get("as_of_date"),
+            probe_url=ajax_url,
             attempts=attempts,
             tolerance=tolerance,
+            parsed_basic_eps=parsed.get("basic_eps"),
+            parsed_diluted_eps=parsed.get("diluted_eps"),
         )
         notes.append(
-            f"{quarter}: VERIFIED via companyfacts "
-            f"{best.get('taxonomy')}:{best.get('concept')} "
-            f"value={best.get('value')} filed={best.get('filed')}"
+            f"{quarter}: VERIFIED via MOPS | matched_method={matched_method} "
+            f"basic={parsed.get('basic_eps')} diluted={parsed.get('diluted_eps')}"
         )
         return record, debug
 
-    attempts.append(
-        {
-            "probe": "companyfacts_best_candidate",
-            "failure_class": FAILURE_CLASS_MISMATCH,
-            "reason": "exact_quarter_eps_mismatch",
-            "expected_quarter": quarter,
-            "expected_eps": seed_record["eps"],
-            "candidate": best_summary,
-        }
-    )
-    debug["attempts"] = attempts
-    debug["status"] = "VERIFY_FAILED"
+    if parsed.get("basic_eps") is None and parsed.get("diluted_eps") is None:
+        debug["status"] = "MOPS_PARSE_FAILED"
+        attempts.append(
+            {
+                "probe": "mops_parse",
+                "failure_class": FAILURE_CLASS_PARSE,
+                "reason": "eps_row_not_found_or_numeric_parse_failed",
+                "tables_found": parsed.get("tables_found"),
+                "as_of_date": parsed.get("as_of_date"),
+            }
+        )
+        notes.append(f"{quarter}: MOPS parse failed | no EPS row found")
+    else:
+        debug["status"] = "EPS_MISMATCH"
+        attempts.append(
+            {
+                "probe": "mops_eps_compare",
+                "failure_class": FAILURE_CLASS_MISMATCH,
+                "reason": "mops_eps_parsed_but_does_not_match_seed",
+                "expected_eps": seed_record["eps"],
+                "parsed_basic_eps": parsed.get("basic_eps"),
+                "parsed_diluted_eps": parsed.get("diluted_eps"),
+                "as_of_date": parsed.get("as_of_date"),
+            }
+        )
+        notes.append(
+            f"{quarter}: EPS_MISMATCH via MOPS | "
+            f"expected={seed_record['eps']} basic={parsed.get('basic_eps')} diluted={parsed.get('diluted_eps')}"
+        )
 
+    debug["attempts"] = attempts
     record = update_record_with_verification(
         seed_record,
-        verified_candidate=None,
-        companyfacts_url=companyfacts_url,
+        verified_eps=None,
+        verified_method_detail=None,
+        verified_as_of_date=None,
+        probe_url=ajax_url,
         attempts=attempts,
         tolerance=tolerance,
-    )
-    notes.append(
-        f"{quarter}: VERIFY_FAILED exact quarter XBRL candidate mismatch | "
-        f"candidate={best.get('taxonomy')}:{best.get('concept')} "
-        f"value={best.get('value')} quarter={best.get('derived_quarter')} filed={best.get('filed')}"
+        parsed_basic_eps=parsed.get("basic_eps"),
+        parsed_diluted_eps=parsed.get("diluted_eps"),
     )
     return record, debug
 
@@ -987,10 +972,20 @@ def build_output(
         for x in merged_quarters
         if x.get("verification_status") in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}
     )
-    no_exact_count = sum(
+    not_found_count = sum(
         1
         for x in merged_quarters
-        if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_NO_EXACT_QUARTER
+        if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_NOT_FOUND
+    )
+    parse_failed_count = sum(
+        1
+        for x in merged_quarters
+        if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_PARSE
+    )
+    mismatch_count = sum(
+        1
+        for x in merged_quarters
+        if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_MISMATCH
     )
     seed_count = sum(1 for x in merged_quarters if x.get("data_origin") == "bootstrap_seed")
 
@@ -999,22 +994,22 @@ def build_output(
             "generated_at_utc": now_utc_iso(),
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
-            "source_policy": "seed_first_plus_optional_data_sec_companyfacts_xbrl_probe_non_blocking_exact_quarter_only",
+            "source_policy": "seed_first_plus_official_mops_single_company_income_statement_probe_non_blocking",
             "entry_pages": entry_pages,
             "notes": notes,
             "counts": {
                 "verified_count": verified_count,
                 "verify_failed_count": failed_count,
                 "verify_skipped_count": skipped_count,
-                "no_exact_quarter_candidate_count": no_exact_count,
+                "mops_not_found_count": not_found_count,
+                "mops_parse_failed_count": parse_failed_count,
+                "eps_mismatch_count": mismatch_count,
                 "bootstrap_seed_count": seed_count,
                 "total_quarters": len(merged_quarters),
             },
             "optional_features": {
-                "xbrl_probe_enabled": True,
-                "exact_quarter_only": True,
-                "exclude_fy": True,
-                "max_filed_delta_days": DEFAULT_MAX_FILED_DELTA_DAYS,
+                "mops_probe_enabled": True,
+                "single_company_mode": True,
             },
         },
         "discovery_debug": discovery_debug,
@@ -1033,7 +1028,7 @@ def iter_target_quarters(start_year: int, end_year: int) -> List[Tuple[int, int]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Update TSMC quarterly EPS tracker (seed-first + optional exact-quarter XBRL probe)."
+        description="Update TSMC quarterly EPS tracker (seed-first + optional MOPS probe)."
     )
     parser.add_argument("--out", default=DEFAULT_OUT, help="Output tracker JSON path")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout seconds")
@@ -1041,23 +1036,13 @@ def main() -> None:
     parser.add_argument("--sleep-sec", type=float, default=DEFAULT_SLEEP, help="Sleep between retries")
     parser.add_argument("--start-year", type=int, default=datetime.now().year, help="Start year to scan")
     parser.add_argument("--end-year", type=int, default=max(datetime.now().year - 5, 2024), help="End year to scan")
-    parser.add_argument("--sec-cik", default=DEFAULT_SEC_CIK, help="SEC CIK, zero-padded")
+    parser.add_argument("--mops-base-url", default=DEFAULT_MOPS_BASE_URL, help="MOPS base URL, e.g. https://mopsov.twse.com.tw/mops/web")
+    parser.add_argument("--stock-no", default=DEFAULT_STOCK_NO, help="Stock number, default 2330")
     parser.add_argument(
-        "--sec-user-agent",
-        default=DEFAULT_SEC_USER_AGENT,
-        help="User-Agent for data.sec.gov requests; use a real contact identity if possible",
-    )
-    parser.add_argument(
-        "--xbrl-tolerance",
+        "--eps-tolerance",
         type=float,
         default=DEFAULT_XBRL_TOLERANCE,
-        help="Absolute EPS tolerance for XBRL verification match",
-    )
-    parser.add_argument(
-        "--max-filed-delta-days",
-        type=int,
-        default=DEFAULT_MAX_FILED_DELTA_DAYS,
-        help="Maximum allowed abs day delta between filed date and seed as_of_date for exact-quarter verification",
+        help="Absolute EPS tolerance for MOPS verification match",
     )
     args = parser.parse_args()
 
@@ -1083,27 +1068,15 @@ def main() -> None:
         seed_map[str(item["quarter"])] = item
 
     notes.append(f"bootstrapped seeds={len(seed_map)}")
-    notes.append("XBRL probe mode=companyfacts_only")
-    notes.append("XBRL rule=exact_quarter_only")
-    notes.append("XBRL rule=exclude_fp_FY")
-    notes.append(f"XBRL rule=max_filed_delta_days={args.max_filed_delta_days}")
-    notes.append(f"SEC companyfacts probe cik={args.sec_cik}")
+    notes.append("probe mode=mops_single_company_income_statement")
+    notes.append(f"mops_base_url={args.mops_base_url}")
+    notes.append(f"stock_no={args.stock_no}")
+    notes.append(f"eps_tolerance={args.eps_tolerance}")
 
-    companyfacts_url = sec_companyfacts_url(args.sec_cik)
-    entry_pages = [companyfacts_url]
-
-    companyfacts, companyfacts_err = http_get_json(
-        session,
-        companyfacts_url,
-        args.timeout,
-        args.retries,
-        args.sleep_sec,
-        headers=sec_headers(args.sec_user_agent),
-    )
-    if companyfacts is None:
-        notes.append(f"companyfacts fetch failed: {companyfacts_url} | err={companyfacts_err}")
-    else:
-        notes.append(f"companyfacts fetch ok: {companyfacts_url}")
+    entry_pages = [
+        f"{args.mops_base_url}/t164sb04",
+        f"{args.mops_base_url}/ajax_t164sb04",
+    ]
 
     target_quarters = {f"{y}Q{q}" for y, q in iter_target_quarters(args.start_year, args.end_year)}
     relevant_quarters = sorted(
@@ -1124,13 +1097,15 @@ def main() -> None:
         qnum = int(m.group(2))
 
         if quarter in seed_map:
-            updated, dbg = probe_seed_with_xbrl(
+            updated, dbg = probe_seed_with_mops(
                 seed_map[quarter],
-                companyfacts=companyfacts,
-                companyfacts_url=companyfacts_url,
-                companyfacts_err=companyfacts_err,
-                tolerance=args.xbrl_tolerance,
-                max_filed_delta_days=args.max_filed_delta_days,
+                session=session,
+                mops_base_url=args.mops_base_url,
+                stock_no=args.stock_no,
+                timeout=args.timeout,
+                retries=args.retries,
+                sleep_sec=args.sleep_sec,
+                tolerance=args.eps_tolerance,
                 notes=notes,
             )
             fetched.append(updated)
@@ -1165,16 +1140,9 @@ def main() -> None:
         for x in merged_quarters
         if x.get("verification_status") in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}
     )
-    no_exact_count = sum(
-        1
-        for x in merged_quarters
-        if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_NO_EXACT_QUARTER
-    )
-
     print(f"[INFO] verified_count={verified_count}")
     print(f"[INFO] verify_failed_count={failed_count}")
     print(f"[INFO] verify_skipped_count={skipped_count}")
-    print(f"[INFO] no_exact_quarter_candidate_count={no_exact_count}")
 
     for q in merged_quarters:
         print(
@@ -1192,7 +1160,10 @@ def main() -> None:
         print(
             f"  - {d.get('quarter')}: status={d.get('status')} | "
             f"pub_state={d.get('publication_state')} | "
-            f"candidate_count={d.get('candidate_count')} | "
+            f"http_status={d.get('http_status')} | "
+            f"tables_found={d.get('tables_found')} | "
+            f"parsed_basic_eps={d.get('parsed_basic_eps')} | "
+            f"parsed_diluted_eps={d.get('parsed_diluted_eps')} | "
             f"attempts={len(d.get('attempts', []))} | "
             f"discovered={d.get('discovered')}"
         )
