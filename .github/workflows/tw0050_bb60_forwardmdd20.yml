@@ -168,7 +168,7 @@ jobs:
 
           j = json.load(open(p_json, "r", encoding="utf-8"))
 
-          need_top = ["meta", "inputs", "valuation_cases", "bb_snapshot", "combined"]
+          need_top = ["meta", "inputs", "valuation_cases", "family_interpolation", "bb_snapshot", "combined"]
           miss_top = [k for k in need_top if k not in j]
           if miss_top:
             raise SystemExit(f"ERROR: merged_latest.json missing top-level keys: {miss_top}")
@@ -182,6 +182,12 @@ jobs:
           if not isinstance(vals, list) or len(vals) == 0:
             raise SystemExit("ERROR: valuation_cases is empty")
 
+          fam_top = j.get("family_interpolation", {})
+          if "enabled" not in fam_top:
+            raise SystemExit("ERROR: merged_latest.json missing family_interpolation.enabled")
+          if fam_top.get("enabled") is True and "families" not in fam_top:
+            raise SystemExit("ERROR: family_interpolation.enabled=True but families missing")
+
           combined = j.get("combined", {})
           for k in [
             "base_execution_bias",
@@ -190,6 +196,7 @@ jobs:
             "fast_shock_override",
             "final_execution_bias",
             "pre_execution_review",
+            "family_interpolation",
           ]:
             if k not in combined:
               raise SystemExit(f"ERROR: merged_latest.json missing combined.{k}")
@@ -198,6 +205,10 @@ jobs:
           for k in ["available", "preopen_shock_flag", "shock_override"]:
             if k not in pre:
               raise SystemExit(f"ERROR: merged_latest.json missing combined.pre_execution_review.{k}")
+
+          fam_combined = combined.get("family_interpolation", {})
+          if "enabled" not in fam_combined:
+            raise SystemExit("ERROR: merged_latest.json missing combined.family_interpolation.enabled")
 
           inputs = j.get("inputs", {})
           schema_validation = inputs.get("schema_validation", {})
@@ -216,6 +227,11 @@ jobs:
             "regime_allowed": bb.get("regime_allowed"),
           })
           print("valuation_cases count:", len(vals))
+          print("family_interpolation(top):", {
+            "enabled": fam_top.get("enabled"),
+            "family_count": len(fam_top.get("families", [])) if isinstance(fam_top.get("families"), list) else "N/A",
+            "targets": fam_top.get("targets"),
+          })
           print("combined:", {
             "base_execution_bias": combined.get("base_execution_bias"),
             "dq_overlay": combined.get("dq_overlay"),
@@ -237,18 +253,21 @@ jobs:
           echo "---- report head ----"
           head -n 40 tw0050_bb_cache/report.md || true
           echo "---- merged report head ----"
-          head -n 80 tw0050_bb_cache/merged_report.md || true
+          head -n 120 tw0050_bb_cache/merged_report.md || true
           echo "---- merged latest summary ----"
           python - << 'PY'
           import json
           p = "tw0050_bb_cache/merged_latest.json"
           j = json.load(open(p, "r", encoding="utf-8"))
+
           print("meta:", j.get("meta", {}))
           print("inputs.base_sources:", j.get("inputs", {}).get("base_sources", {}))
           print("inputs.dividend_drag:", j.get("inputs", {}).get("dividend_drag", {}))
+          print("inputs.family_interpolation_enabled:", j.get("inputs", {}).get("family_interpolation_enabled"))
           print("inputs.schema_validation:", j.get("inputs", {}).get("schema_validation", {}))
           print("inputs.roll25_report_path:", j.get("inputs", {}).get("roll25_report_path"))
           print("inputs.tx_night_last:", j.get("inputs", {}).get("tx_night_last"))
+
           print("bb_snapshot:", {
             "date": j.get("bb_snapshot", {}).get("date"),
             "price_used": j.get("bb_snapshot", {}).get("price_used"),
@@ -257,15 +276,42 @@ jobs:
             "regime_tag": j.get("bb_snapshot", {}).get("regime_tag"),
             "regime_allowed": j.get("bb_snapshot", {}).get("regime_allowed"),
           })
-          print("combined:", {
-            "base_execution_bias": j.get("combined", {}).get("base_execution_bias"),
-            "dq_overlay": j.get("combined", {}).get("dq_overlay"),
-            "combined_execution_bias": j.get("combined", {}).get("combined_execution_bias"),
-            "fast_shock_override": j.get("combined", {}).get("fast_shock_override"),
-            "final_execution_bias": j.get("combined", {}).get("final_execution_bias"),
-            "action_instruction": j.get("combined", {}).get("action_instruction"),
+
+          fam_top = j.get("family_interpolation", {})
+          print("family_interpolation(top):", {
+            "enabled": fam_top.get("enabled"),
+            "targets": fam_top.get("targets"),
+            "family_count": len(fam_top.get("families", [])) if isinstance(fam_top.get("families"), list) else "N/A",
+            "note": fam_top.get("note"),
           })
-          print("pre_execution_review:", j.get("combined", {}).get("pre_execution_review", {}))
+          if fam_top.get("families"):
+            first = fam_top["families"][0]
+            print("family_interpolation(first family):", {
+              "family_name": first.get("family_name"),
+              "years_ahead": first.get("years_ahead"),
+              "current_price_percentile": first.get("current_price_percentile"),
+              "current_zone": first.get("current_zone"),
+              "family_stats": first.get("family_stats"),
+            })
+
+          combined = j.get("combined", {})
+          print("combined:", {
+            "base_execution_bias": combined.get("base_execution_bias"),
+            "dq_overlay": combined.get("dq_overlay"),
+            "combined_execution_bias": combined.get("combined_execution_bias"),
+            "fast_shock_override": combined.get("fast_shock_override"),
+            "final_execution_bias": combined.get("final_execution_bias"),
+            "action_instruction": combined.get("action_instruction"),
+          })
+          print("pre_execution_review:", combined.get("pre_execution_review", {}))
+
+          fam_combined = combined.get("family_interpolation", {})
+          print("family_interpolation(combined):", {
+            "enabled": fam_combined.get("enabled"),
+            "targets": fam_combined.get("targets"),
+            "family_count": len(fam_combined.get("families", [])) if isinstance(fam_combined.get("families"), list) else "N/A",
+          })
+
           print("valuation_cases_count:", len(j.get("valuation_cases", [])))
           PY
 
@@ -277,7 +323,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add -A tw0050_bb_cache
-            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.4a"
+            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.4b"
             git push
           else
             echo "No changes to commit."
