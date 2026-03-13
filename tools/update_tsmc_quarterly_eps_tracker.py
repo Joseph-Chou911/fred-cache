@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v4.4-mops-auto-discovery-report-consistency)
+update_tsmc_quarterly_eps_tracker.py  (v4.5-mops-field-naming-cleanup)
 
 Design goals
 ------------
@@ -20,21 +20,24 @@ Design goals
    - Verification metadata is additive.
    - Seeds remain the primary values if verification fails.
 
-4) Q4 fix
+4) Q4 rule
    - Q1/Q2/Q3: verify against current-quarter EPS parsed from MOPS row layout.
    - Q4: verify against standalone Q4 EPS computed as:
        FY cumulative EPS - Q3 cumulative EPS
 
-5) Semantic cleanup
-   - Separate current-quarter EPS from cumulative EPS explicitly.
-   - Avoid ambiguous parsed_*_eps naming for Q4.
+5) Field naming cleanup
+   - Prefix MOPS-derived fields with mops_.
+   - Prefix Q4 derived fields with q4_.
+   - Keep naming consistent across:
+       parse result / discovery_debug / verification blocks / auto discovery blocks.
 
 6) Auto discovery
    - For quarters AFTER the latest seed, if MOPS has official data, auto-create records.
    - Q1/Q2/Q3 discovery basis:
-       diluted_current_eps -> basic_current_eps -> diluted_direct_value -> basic_direct_value
+       mops_diluted_current_eps -> mops_basic_current_eps
+       -> mops_diluted_direct_value -> mops_basic_direct_value
    - Q4 discovery basis:
-       q4_diluted_diff -> q4_basic_diff
+       q4_standalone_diluted_eps -> q4_standalone_basic_eps
 
 7) Report consistency
    - Add scan_quarter_count, debug_skipped_count, auto_discovery_candidate_quarters.
@@ -62,7 +65,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v4.4-mops-auto-discovery-report-consistency"
+SCRIPT_VERSION = "v4.5-mops-field-naming-cleanup"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_TIMEOUT = 20
@@ -228,10 +231,6 @@ def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def today_iso_utc() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
-
-
 def quarter_sort_key(q: str) -> Tuple[int, int]:
     m = re.match(r"^(\d{4})Q([1-4])$", q)
     if not m:
@@ -278,13 +277,6 @@ def assess_publication_state(year: int, quarter_num: int, today: date) -> str:
     if today < q_end + timedelta(days=21):
         return "LIKELY_NOT_PUBLISHED_YET"
     return "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE"
-
-
-def parse_iso_date(s: str) -> Optional[date]:
-    try:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    except Exception:
-        return None
 
 
 def normalize_ws(s: str) -> str:
@@ -399,7 +391,6 @@ def detect_mops_no_data(html: str) -> bool:
 
 def parse_as_of_date_from_text(text: str) -> Optional[str]:
     text = normalize_text(text)
-
     for rx in DATE_PATTERNS:
         m = rx.search(text)
         if not m:
@@ -441,7 +432,7 @@ def summarize_eps_layout(numeric_values: List[float], quarter_num: int) -> Dict[
     cumulative_eps: Optional[float] = None
     prior_current_eps: Optional[float] = None
     prior_cumulative_eps: Optional[float] = None
-    direct_first_numeric: Optional[float] = numeric_values[0] if numeric_values else None
+    direct_value: Optional[float] = numeric_values[0] if numeric_values else None
 
     if quarter_num == 1:
         if len(numeric_values) >= 1:
@@ -467,7 +458,7 @@ def summarize_eps_layout(numeric_values: List[float], quarter_num: int) -> Dict[
             prior_cumulative_eps = numeric_values[1]
 
     return {
-        "direct_first_numeric": direct_first_numeric,
+        "direct_value": direct_value,
         "current_eps": current_eps,
         "cumulative_eps": cumulative_eps,
         "prior_current_eps": prior_current_eps,
@@ -482,12 +473,12 @@ def parse_eps_from_tables(html: str, quarter_num: int) -> Dict[str, Any]:
 
     out: Dict[str, Any] = {
         "tables_found": len(tables),
-        "basic_direct_value": None,
-        "diluted_direct_value": None,
-        "basic_current_eps": None,
-        "diluted_current_eps": None,
-        "basic_cumulative_eps": None,
-        "diluted_cumulative_eps": None,
+        "mops_basic_direct_value": None,
+        "mops_diluted_direct_value": None,
+        "mops_basic_current_eps": None,
+        "mops_diluted_current_eps": None,
+        "mops_basic_cumulative_eps": None,
+        "mops_diluted_cumulative_eps": None,
         "as_of_date": None,
         "row_hits": [],
         "table_preview": [],
@@ -545,11 +536,11 @@ def parse_eps_from_tables(html: str, quarter_num: int) -> Dict[str, Any]:
                 "label_text": label_text,
                 "row_cells": cells[:12],
                 "numeric_values": numeric_values[:8],
-                "derived_direct_value": layout["direct_first_numeric"],
-                "derived_current_eps": layout["current_eps"],
-                "derived_cumulative_eps": layout["cumulative_eps"],
-                "derived_prior_current_eps": layout["prior_current_eps"],
-                "derived_prior_cumulative_eps": layout["prior_cumulative_eps"],
+                "parsed_direct_value": layout["direct_value"],
+                "parsed_current_eps": layout["current_eps"],
+                "parsed_cumulative_eps": layout["cumulative_eps"],
+                "parsed_prior_current_eps": layout["prior_current_eps"],
+                "parsed_prior_cumulative_eps": layout["prior_cumulative_eps"],
             }
             out["row_hits"].append(hit)
 
@@ -560,38 +551,38 @@ def parse_eps_from_tables(html: str, quarter_num: int) -> Dict[str, Any]:
     diluted_hit = best_hit_by_kind.get("diluted")
 
     if basic_hit:
-        out["basic_direct_value"] = basic_hit["derived_direct_value"]
-        out["basic_current_eps"] = basic_hit["derived_current_eps"]
-        out["basic_cumulative_eps"] = basic_hit["derived_cumulative_eps"]
+        out["mops_basic_direct_value"] = basic_hit["parsed_direct_value"]
+        out["mops_basic_current_eps"] = basic_hit["parsed_current_eps"]
+        out["mops_basic_cumulative_eps"] = basic_hit["parsed_cumulative_eps"]
 
     if diluted_hit:
-        out["diluted_direct_value"] = diluted_hit["derived_direct_value"]
-        out["diluted_current_eps"] = diluted_hit["derived_current_eps"]
-        out["diluted_cumulative_eps"] = diluted_hit["derived_cumulative_eps"]
+        out["mops_diluted_direct_value"] = diluted_hit["parsed_direct_value"]
+        out["mops_diluted_current_eps"] = diluted_hit["parsed_current_eps"]
+        out["mops_diluted_cumulative_eps"] = diluted_hit["parsed_cumulative_eps"]
 
-    if out["basic_direct_value"] is None:
+    if out["mops_basic_direct_value"] is None:
         m = re.search(r"基本每股盈餘[^0-9\-]{0,30}(-?\d+(?:\.\d+)?)", flat_text)
         if m:
             try:
-                out["basic_direct_value"] = float(m.group(1))
+                out["mops_basic_direct_value"] = float(m.group(1))
             except Exception:
                 pass
 
-    if out["diluted_direct_value"] is None:
+    if out["mops_diluted_direct_value"] is None:
         m = re.search(r"稀釋每股盈餘[^0-9\-]{0,30}(-?\d+(?:\.\d+)?)", flat_text)
         if m:
             try:
-                out["diluted_direct_value"] = float(m.group(1))
+                out["mops_diluted_direct_value"] = float(m.group(1))
             except Exception:
                 pass
 
     if quarter_num == 1:
-        if out["basic_current_eps"] is None and out["basic_direct_value"] is not None:
-            out["basic_current_eps"] = out["basic_direct_value"]
-            out["basic_cumulative_eps"] = out["basic_direct_value"]
-        if out["diluted_current_eps"] is None and out["diluted_direct_value"] is not None:
-            out["diluted_current_eps"] = out["diluted_direct_value"]
-            out["diluted_cumulative_eps"] = out["diluted_direct_value"]
+        if out["mops_basic_current_eps"] is None and out["mops_basic_direct_value"] is not None:
+            out["mops_basic_current_eps"] = out["mops_basic_direct_value"]
+            out["mops_basic_cumulative_eps"] = out["mops_basic_direct_value"]
+        if out["mops_diluted_current_eps"] is None and out["mops_diluted_direct_value"] is not None:
+            out["mops_diluted_current_eps"] = out["mops_diluted_direct_value"]
+            out["mops_diluted_cumulative_eps"] = out["mops_diluted_direct_value"]
 
     return out
 
@@ -631,20 +622,20 @@ def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
         "http_status": None,
         "fetch_ok": False,
         "tables_found": 0,
-        "parsed_basic_direct_value": None,
-        "parsed_diluted_direct_value": None,
-        "parsed_basic_current_eps": None,
-        "parsed_diluted_current_eps": None,
-        "parsed_basic_cumulative_eps": None,
-        "parsed_diluted_cumulative_eps": None,
+        "mops_basic_direct_value": None,
+        "mops_diluted_direct_value": None,
+        "mops_basic_current_eps": None,
+        "mops_diluted_current_eps": None,
+        "mops_basic_cumulative_eps": None,
+        "mops_diluted_cumulative_eps": None,
         "parsed_as_of_date": None,
-        "q4_dependency_quarter": None,
-        "q4_dependency_fetch_ok": False,
-        "q4_dependency_http_status": None,
-        "q4_dependency_basic_cumulative_eps": None,
-        "q4_dependency_diluted_cumulative_eps": None,
-        "computed_q4_basic_eps": None,
-        "computed_q4_diluted_eps": None,
+        "q4_prev_quarter": None,
+        "q4_prev_fetch_ok": False,
+        "q4_prev_http_status": None,
+        "q4_prev_basic_cumulative_eps": None,
+        "q4_prev_diluted_cumulative_eps": None,
+        "q4_standalone_basic_eps": None,
+        "q4_standalone_diluted_eps": None,
         "candidate_preview": [],
         "attempts": [],
         "discovered": False,
@@ -686,15 +677,15 @@ def update_record_with_verification(
     probe_url: str,
     attempts: List[Dict[str, Any]],
     tolerance: float,
-    parsed_basic_direct_value: Optional[float],
-    parsed_diluted_direct_value: Optional[float],
-    parsed_basic_current_eps: Optional[float],
-    parsed_diluted_current_eps: Optional[float],
-    parsed_basic_cumulative_eps: Optional[float],
-    parsed_diluted_cumulative_eps: Optional[float],
-    computed_q4_basic_eps: Optional[float],
-    computed_q4_diluted_eps: Optional[float],
-    q4_dependency_quarter: Optional[str],
+    mops_basic_direct_value: Optional[float],
+    mops_diluted_direct_value: Optional[float],
+    mops_basic_current_eps: Optional[float],
+    mops_diluted_current_eps: Optional[float],
+    mops_basic_cumulative_eps: Optional[float],
+    mops_diluted_cumulative_eps: Optional[float],
+    q4_standalone_basic_eps: Optional[float],
+    q4_standalone_diluted_eps: Optional[float],
+    q4_prev_quarter: Optional[str],
 ) -> Dict[str, Any]:
     out = copy.deepcopy(seed_record)
     out["fetched_at_utc"] = now_utc_iso()
@@ -718,15 +709,15 @@ def update_record_with_verification(
             "verified_eps": verified_eps,
             "verified_quarter": seed_record.get("quarter"),
             "verified_as_of_date": verified_as_of_date,
-            "parsed_basic_direct_value": parsed_basic_direct_value,
-            "parsed_diluted_direct_value": parsed_diluted_direct_value,
-            "parsed_basic_current_eps": parsed_basic_current_eps,
-            "parsed_diluted_current_eps": parsed_diluted_current_eps,
-            "parsed_basic_cumulative_eps": parsed_basic_cumulative_eps,
-            "parsed_diluted_cumulative_eps": parsed_diluted_cumulative_eps,
-            "computed_q4_basic_eps": computed_q4_basic_eps,
-            "computed_q4_diluted_eps": computed_q4_diluted_eps,
-            "q4_dependency_quarter": q4_dependency_quarter,
+            "mops_basic_direct_value": mops_basic_direct_value,
+            "mops_diluted_direct_value": mops_diluted_direct_value,
+            "mops_basic_current_eps": mops_basic_current_eps,
+            "mops_diluted_current_eps": mops_diluted_current_eps,
+            "mops_basic_cumulative_eps": mops_basic_cumulative_eps,
+            "mops_diluted_cumulative_eps": mops_diluted_cumulative_eps,
+            "q4_standalone_basic_eps": q4_standalone_basic_eps,
+            "q4_standalone_diluted_eps": q4_standalone_diluted_eps,
+            "q4_prev_quarter": q4_prev_quarter,
             "reason": "seed_eps_matched_mops_within_tolerance",
             "tolerance": tolerance,
             "attempted_at_utc": now_utc_iso(),
@@ -752,15 +743,15 @@ def update_record_with_verification(
         "verified_eps": None,
         "verified_quarter": None,
         "verified_as_of_date": None,
-        "parsed_basic_direct_value": parsed_basic_direct_value,
-        "parsed_diluted_direct_value": parsed_diluted_direct_value,
-        "parsed_basic_current_eps": parsed_basic_current_eps,
-        "parsed_diluted_current_eps": parsed_diluted_current_eps,
-        "parsed_basic_cumulative_eps": parsed_basic_cumulative_eps,
-        "parsed_diluted_cumulative_eps": parsed_diluted_cumulative_eps,
-        "computed_q4_basic_eps": computed_q4_basic_eps,
-        "computed_q4_diluted_eps": computed_q4_diluted_eps,
-        "q4_dependency_quarter": q4_dependency_quarter,
+        "mops_basic_direct_value": mops_basic_direct_value,
+        "mops_diluted_direct_value": mops_diluted_direct_value,
+        "mops_basic_current_eps": mops_basic_current_eps,
+        "mops_diluted_current_eps": mops_diluted_current_eps,
+        "mops_basic_cumulative_eps": mops_basic_cumulative_eps,
+        "mops_diluted_cumulative_eps": mops_diluted_cumulative_eps,
+        "q4_standalone_basic_eps": q4_standalone_basic_eps,
+        "q4_standalone_diluted_eps": q4_standalone_diluted_eps,
+        "q4_prev_quarter": q4_prev_quarter,
         "reason": primary_failure_class,
         "tolerance": tolerance,
         "attempted_at_utc": now_utc_iso(),
@@ -779,19 +770,19 @@ def build_auto_discovered_record(
     method_detail: str,
     verified_as_of_date: Optional[str],
     probe_url: str,
-    parsed_basic_direct_value: Optional[float],
-    parsed_diluted_direct_value: Optional[float],
-    parsed_basic_current_eps: Optional[float],
-    parsed_diluted_current_eps: Optional[float],
-    parsed_basic_cumulative_eps: Optional[float],
-    parsed_diluted_cumulative_eps: Optional[float],
-    computed_q4_basic_eps: Optional[float],
-    computed_q4_diluted_eps: Optional[float],
-    q4_dependency_quarter: Optional[str],
+    mops_basic_direct_value: Optional[float],
+    mops_diluted_direct_value: Optional[float],
+    mops_basic_current_eps: Optional[float],
+    mops_diluted_current_eps: Optional[float],
+    mops_basic_cumulative_eps: Optional[float],
+    mops_diluted_cumulative_eps: Optional[float],
+    q4_standalone_basic_eps: Optional[float],
+    q4_standalone_diluted_eps: Optional[float],
+    q4_prev_quarter: Optional[str],
 ) -> Dict[str, Any]:
     qnum = int(quarter[-1])
 
-    record = {
+    return {
         "quarter": quarter,
         "eps": round(float(discovered_eps), 2),
         "source": "mops_auto_discovered",
@@ -820,15 +811,15 @@ def build_auto_discovered_record(
             "verified_eps": round(float(discovered_eps), 2),
             "verified_quarter": quarter,
             "verified_as_of_date": verified_as_of_date,
-            "parsed_basic_direct_value": parsed_basic_direct_value,
-            "parsed_diluted_direct_value": parsed_diluted_direct_value,
-            "parsed_basic_current_eps": parsed_basic_current_eps,
-            "parsed_diluted_current_eps": parsed_diluted_current_eps,
-            "parsed_basic_cumulative_eps": parsed_basic_cumulative_eps,
-            "parsed_diluted_cumulative_eps": parsed_diluted_cumulative_eps,
-            "computed_q4_basic_eps": computed_q4_basic_eps,
-            "computed_q4_diluted_eps": computed_q4_diluted_eps,
-            "q4_dependency_quarter": q4_dependency_quarter,
+            "mops_basic_direct_value": mops_basic_direct_value,
+            "mops_diluted_direct_value": mops_diluted_direct_value,
+            "mops_basic_current_eps": mops_basic_current_eps,
+            "mops_diluted_current_eps": mops_diluted_current_eps,
+            "mops_basic_cumulative_eps": mops_basic_cumulative_eps,
+            "mops_diluted_cumulative_eps": mops_diluted_cumulative_eps,
+            "q4_standalone_basic_eps": q4_standalone_basic_eps,
+            "q4_standalone_diluted_eps": q4_standalone_diluted_eps,
+            "q4_prev_quarter": q4_prev_quarter,
             "reason": "auto_discovered_from_mops",
             "tolerance": None,
             "attempted_at_utc": now_utc_iso(),
@@ -838,7 +829,6 @@ def build_auto_discovered_record(
             "last_failure": None,
         },
     }
-    return record
 
 
 def status_rank(record: Dict[str, Any]) -> int:
@@ -935,12 +925,12 @@ def fetch_and_parse_mops_statement(
     result["parsed"] = parsed
 
     if (
-        parsed.get("basic_direct_value") is None
-        and parsed.get("diluted_direct_value") is None
-        and parsed.get("basic_current_eps") is None
-        and parsed.get("diluted_current_eps") is None
-        and parsed.get("basic_cumulative_eps") is None
-        and parsed.get("diluted_cumulative_eps") is None
+        parsed.get("mops_basic_direct_value") is None
+        and parsed.get("mops_diluted_direct_value") is None
+        and parsed.get("mops_basic_current_eps") is None
+        and parsed.get("mops_diluted_current_eps") is None
+        and parsed.get("mops_basic_cumulative_eps") is None
+        and parsed.get("mops_diluted_cumulative_eps") is None
     ):
         result["failure_class"] = FAILURE_CLASS_PARSE
         result["failure_reason"] = "eps_row_not_found_or_numeric_parse_failed"
@@ -969,7 +959,6 @@ def probe_seed_with_mops(
     debug = build_debug_quarter_entry(year, qnum)
     pub_state = debug["publication_state"]
 
-    page_url = f"{mops_base_url}/t164sb04"
     ajax_url = f"{mops_base_url}/ajax_t164sb04"
 
     if pub_state == "NOT_ENDED_YET":
@@ -1054,22 +1043,22 @@ def probe_seed_with_mops(
         )
         debug["attempts"] = attempts
         record = update_record_with_verification(
-            seed_record,
+            seed_record=seed_record,
             verified_eps=None,
             verified_method_detail=None,
             verified_as_of_date=None,
             probe_url=ajax_url,
             attempts=attempts,
             tolerance=tolerance,
-            parsed_basic_direct_value=None,
-            parsed_diluted_direct_value=None,
-            parsed_basic_current_eps=None,
-            parsed_diluted_current_eps=None,
-            parsed_basic_cumulative_eps=None,
-            parsed_diluted_cumulative_eps=None,
-            computed_q4_basic_eps=None,
-            computed_q4_diluted_eps=None,
-            q4_dependency_quarter=None,
+            mops_basic_direct_value=None,
+            mops_diluted_direct_value=None,
+            mops_basic_current_eps=None,
+            mops_diluted_current_eps=None,
+            mops_basic_cumulative_eps=None,
+            mops_diluted_cumulative_eps=None,
+            q4_standalone_basic_eps=None,
+            q4_standalone_diluted_eps=None,
+            q4_prev_quarter=None,
         )
         notes.append(f"{quarter}: MOPS fetch failed | err={main_stmt.get('failure_reason')}")
         return record, debug
@@ -1087,34 +1076,34 @@ def probe_seed_with_mops(
         )
         debug["attempts"] = attempts
         record = update_record_with_verification(
-            seed_record,
+            seed_record=seed_record,
             verified_eps=None,
             verified_method_detail=None,
             verified_as_of_date=None,
             probe_url=ajax_url,
             attempts=attempts,
             tolerance=tolerance,
-            parsed_basic_direct_value=None,
-            parsed_diluted_direct_value=None,
-            parsed_basic_current_eps=None,
-            parsed_diluted_current_eps=None,
-            parsed_basic_cumulative_eps=None,
-            parsed_diluted_cumulative_eps=None,
-            computed_q4_basic_eps=None,
-            computed_q4_diluted_eps=None,
-            q4_dependency_quarter=None,
+            mops_basic_direct_value=None,
+            mops_diluted_direct_value=None,
+            mops_basic_current_eps=None,
+            mops_diluted_current_eps=None,
+            mops_basic_cumulative_eps=None,
+            mops_diluted_cumulative_eps=None,
+            q4_standalone_basic_eps=None,
+            q4_standalone_diluted_eps=None,
+            q4_prev_quarter=None,
         )
         notes.append(f"{quarter}: MOPS returned no data")
         return record, debug
 
     parsed = main_stmt.get("parsed") or {}
     debug["tables_found"] = parsed.get("tables_found", 0)
-    debug["parsed_basic_direct_value"] = parsed.get("basic_direct_value")
-    debug["parsed_diluted_direct_value"] = parsed.get("diluted_direct_value")
-    debug["parsed_basic_current_eps"] = parsed.get("basic_current_eps")
-    debug["parsed_diluted_current_eps"] = parsed.get("diluted_current_eps")
-    debug["parsed_basic_cumulative_eps"] = parsed.get("basic_cumulative_eps")
-    debug["parsed_diluted_cumulative_eps"] = parsed.get("diluted_cumulative_eps")
+    debug["mops_basic_direct_value"] = parsed.get("mops_basic_direct_value")
+    debug["mops_diluted_direct_value"] = parsed.get("mops_diluted_direct_value")
+    debug["mops_basic_current_eps"] = parsed.get("mops_basic_current_eps")
+    debug["mops_diluted_current_eps"] = parsed.get("mops_diluted_current_eps")
+    debug["mops_basic_cumulative_eps"] = parsed.get("mops_basic_cumulative_eps")
+    debug["mops_diluted_cumulative_eps"] = parsed.get("mops_diluted_cumulative_eps")
     debug["parsed_as_of_date"] = parsed.get("as_of_date")
     debug["candidate_preview"] = parsed.get("row_hits", [])[:8]
 
@@ -1131,22 +1120,22 @@ def probe_seed_with_mops(
         )
         debug["attempts"] = attempts
         record = update_record_with_verification(
-            seed_record,
+            seed_record=seed_record,
             verified_eps=None,
             verified_method_detail=None,
             verified_as_of_date=None,
             probe_url=ajax_url,
             attempts=attempts,
             tolerance=tolerance,
-            parsed_basic_direct_value=debug["parsed_basic_direct_value"],
-            parsed_diluted_direct_value=debug["parsed_diluted_direct_value"],
-            parsed_basic_current_eps=debug["parsed_basic_current_eps"],
-            parsed_diluted_current_eps=debug["parsed_diluted_current_eps"],
-            parsed_basic_cumulative_eps=debug["parsed_basic_cumulative_eps"],
-            parsed_diluted_cumulative_eps=debug["parsed_diluted_cumulative_eps"],
-            computed_q4_basic_eps=None,
-            computed_q4_diluted_eps=None,
-            q4_dependency_quarter=None,
+            mops_basic_direct_value=debug["mops_basic_direct_value"],
+            mops_diluted_direct_value=debug["mops_diluted_direct_value"],
+            mops_basic_current_eps=debug["mops_basic_current_eps"],
+            mops_diluted_current_eps=debug["mops_diluted_current_eps"],
+            mops_basic_cumulative_eps=debug["mops_basic_cumulative_eps"],
+            mops_diluted_cumulative_eps=debug["mops_diluted_cumulative_eps"],
+            q4_standalone_basic_eps=None,
+            q4_standalone_diluted_eps=None,
+            q4_prev_quarter=None,
         )
         notes.append(f"{quarter}: MOPS parse failed | no EPS row found")
         return record, debug
@@ -1155,24 +1144,24 @@ def probe_seed_with_mops(
     matched_eps: Optional[float] = None
     matched_method: Optional[str] = None
     match_reason: str = "no_eps_found"
-    computed_q4_basic_eps: Optional[float] = None
-    computed_q4_diluted_eps: Optional[float] = None
-    q4_dependency_quarter: Optional[str] = None
+    q4_standalone_basic_eps: Optional[float] = None
+    q4_standalone_diluted_eps: Optional[float] = None
+    q4_prev_quarter: Optional[str] = None
 
     if qnum in {1, 2, 3}:
         matched_eps, matched_method, match_reason = pick_match_from_candidates(
             expected_eps=expected_eps,
             tolerance=tolerance,
             candidates=[
-                ("diluted_current_eps", parsed.get("diluted_current_eps")),
-                ("basic_current_eps", parsed.get("basic_current_eps")),
-                ("diluted_direct_value", parsed.get("diluted_direct_value")),
-                ("basic_direct_value", parsed.get("basic_direct_value")),
+                ("mops_diluted_current_eps", parsed.get("mops_diluted_current_eps")),
+                ("mops_basic_current_eps", parsed.get("mops_basic_current_eps")),
+                ("mops_diluted_direct_value", parsed.get("mops_diluted_direct_value")),
+                ("mops_basic_direct_value", parsed.get("mops_basic_direct_value")),
             ],
         )
     else:
-        q4_dependency_quarter = f"{year}Q3"
-        debug["q4_dependency_quarter"] = q4_dependency_quarter
+        q4_prev_quarter = f"{year}Q3"
+        debug["q4_prev_quarter"] = q4_prev_quarter
 
         q3_stmt = fetch_and_parse_mops_statement(
             session=session,
@@ -1186,26 +1175,26 @@ def probe_seed_with_mops(
             cache=statement_cache,
         )
 
-        debug["q4_dependency_http_status"] = q3_stmt.get("http_status")
-        debug["q4_dependency_fetch_ok"] = bool(q3_stmt.get("fetch_ok"))
+        debug["q4_prev_http_status"] = q3_stmt.get("http_status")
+        debug["q4_prev_fetch_ok"] = bool(q3_stmt.get("fetch_ok"))
 
         q3_parsed = q3_stmt.get("parsed") or {}
-        q3_basic_cum = q3_parsed.get("basic_cumulative_eps")
-        q3_diluted_cum = q3_parsed.get("diluted_cumulative_eps")
+        q3_basic_cum = q3_parsed.get("mops_basic_cumulative_eps")
+        q3_diluted_cum = q3_parsed.get("mops_diluted_cumulative_eps")
 
-        debug["q4_dependency_basic_cumulative_eps"] = q3_basic_cum
-        debug["q4_dependency_diluted_cumulative_eps"] = q3_diluted_cum
+        debug["q4_prev_basic_cumulative_eps"] = q3_basic_cum
+        debug["q4_prev_diluted_cumulative_eps"] = q3_diluted_cum
 
-        fy_basic_cum = parsed.get("basic_cumulative_eps")
-        fy_diluted_cum = parsed.get("diluted_cumulative_eps")
+        fy_basic_cum = parsed.get("mops_basic_cumulative_eps")
+        fy_diluted_cum = parsed.get("mops_diluted_cumulative_eps")
 
         if fy_basic_cum is not None and q3_basic_cum is not None:
-            computed_q4_basic_eps = round(float(fy_basic_cum) - float(q3_basic_cum), 2)
+            q4_standalone_basic_eps = round(float(fy_basic_cum) - float(q3_basic_cum), 2)
         if fy_diluted_cum is not None and q3_diluted_cum is not None:
-            computed_q4_diluted_eps = round(float(fy_diluted_cum) - float(q3_diluted_cum), 2)
+            q4_standalone_diluted_eps = round(float(fy_diluted_cum) - float(q3_diluted_cum), 2)
 
-        debug["computed_q4_basic_eps"] = computed_q4_basic_eps
-        debug["computed_q4_diluted_eps"] = computed_q4_diluted_eps
+        debug["q4_standalone_basic_eps"] = q4_standalone_basic_eps
+        debug["q4_standalone_diluted_eps"] = q4_standalone_diluted_eps
 
         if q3_stmt.get("failure_class") in {FAILURE_CLASS_HTTP, FAILURE_CLASS_NOT_FOUND, FAILURE_CLASS_PARSE}:
             debug["status"] = "Q4_DIFF_DEPENDENCY_FAILED"
@@ -1214,7 +1203,7 @@ def probe_seed_with_mops(
                     "probe": "q4_diff_dependency_q3",
                     "failure_class": FAILURE_CLASS_Q4_DEP,
                     "reason": "q3_dependency_fetch_or_parse_failed",
-                    "dependency_quarter": q4_dependency_quarter,
+                    "dependency_quarter": q4_prev_quarter,
                     "dependency_failure_class": q3_stmt.get("failure_class"),
                     "dependency_failure_reason": q3_stmt.get("failure_reason"),
                     "dependency_http_status": q3_stmt.get("http_status"),
@@ -1222,22 +1211,22 @@ def probe_seed_with_mops(
             )
             debug["attempts"] = attempts
             record = update_record_with_verification(
-                seed_record,
+                seed_record=seed_record,
                 verified_eps=None,
                 verified_method_detail=None,
                 verified_as_of_date=parsed.get("as_of_date"),
                 probe_url=ajax_url,
                 attempts=attempts,
                 tolerance=tolerance,
-                parsed_basic_direct_value=debug["parsed_basic_direct_value"],
-                parsed_diluted_direct_value=debug["parsed_diluted_direct_value"],
-                parsed_basic_current_eps=debug["parsed_basic_current_eps"],
-                parsed_diluted_current_eps=debug["parsed_diluted_current_eps"],
-                parsed_basic_cumulative_eps=debug["parsed_basic_cumulative_eps"],
-                parsed_diluted_cumulative_eps=debug["parsed_diluted_cumulative_eps"],
-                computed_q4_basic_eps=computed_q4_basic_eps,
-                computed_q4_diluted_eps=computed_q4_diluted_eps,
-                q4_dependency_quarter=q4_dependency_quarter,
+                mops_basic_direct_value=debug["mops_basic_direct_value"],
+                mops_diluted_direct_value=debug["mops_diluted_direct_value"],
+                mops_basic_current_eps=debug["mops_basic_current_eps"],
+                mops_diluted_current_eps=debug["mops_diluted_current_eps"],
+                mops_basic_cumulative_eps=debug["mops_basic_cumulative_eps"],
+                mops_diluted_cumulative_eps=debug["mops_diluted_cumulative_eps"],
+                q4_standalone_basic_eps=q4_standalone_basic_eps,
+                q4_standalone_diluted_eps=q4_standalone_diluted_eps,
+                q4_prev_quarter=q4_prev_quarter,
             )
             notes.append(
                 f"{quarter}: Q4_DIFF_DEPENDENCY_FAILED | "
@@ -1249,8 +1238,8 @@ def probe_seed_with_mops(
             expected_eps=expected_eps,
             tolerance=tolerance,
             candidates=[
-                ("q4_diluted_diff", computed_q4_diluted_eps),
-                ("q4_basic_diff", computed_q4_basic_eps),
+                ("q4_standalone_diluted_eps", q4_standalone_diluted_eps),
+                ("q4_standalone_basic_eps", q4_standalone_basic_eps),
             ],
         )
 
@@ -1262,15 +1251,15 @@ def probe_seed_with_mops(
                 "reason": match_reason,
                 "matched_method": matched_method,
                 "matched_eps": matched_eps,
-                "parsed_basic_direct_value": debug["parsed_basic_direct_value"],
-                "parsed_diluted_direct_value": debug["parsed_diluted_direct_value"],
-                "parsed_basic_current_eps": debug["parsed_basic_current_eps"],
-                "parsed_diluted_current_eps": debug["parsed_diluted_current_eps"],
-                "parsed_basic_cumulative_eps": debug["parsed_basic_cumulative_eps"],
-                "parsed_diluted_cumulative_eps": debug["parsed_diluted_cumulative_eps"],
-                "computed_q4_basic_eps": computed_q4_basic_eps,
-                "computed_q4_diluted_eps": computed_q4_diluted_eps,
-                "q4_dependency_quarter": q4_dependency_quarter,
+                "mops_basic_direct_value": debug["mops_basic_direct_value"],
+                "mops_diluted_direct_value": debug["mops_diluted_direct_value"],
+                "mops_basic_current_eps": debug["mops_basic_current_eps"],
+                "mops_diluted_current_eps": debug["mops_diluted_current_eps"],
+                "mops_basic_cumulative_eps": debug["mops_basic_cumulative_eps"],
+                "mops_diluted_cumulative_eps": debug["mops_diluted_cumulative_eps"],
+                "q4_standalone_basic_eps": q4_standalone_basic_eps,
+                "q4_standalone_diluted_eps": q4_standalone_diluted_eps,
+                "q4_prev_quarter": q4_prev_quarter,
                 "as_of_date": parsed.get("as_of_date"),
             }
         )
@@ -1280,36 +1269,36 @@ def probe_seed_with_mops(
         debug["status"] = STATUS_VERIFIED
 
         record = update_record_with_verification(
-            seed_record,
+            seed_record=seed_record,
             verified_eps=matched_eps,
             verified_method_detail=matched_method,
             verified_as_of_date=parsed.get("as_of_date"),
             probe_url=ajax_url,
             attempts=attempts,
             tolerance=tolerance,
-            parsed_basic_direct_value=debug["parsed_basic_direct_value"],
-            parsed_diluted_direct_value=debug["parsed_diluted_direct_value"],
-            parsed_basic_current_eps=debug["parsed_basic_current_eps"],
-            parsed_diluted_current_eps=debug["parsed_diluted_current_eps"],
-            parsed_basic_cumulative_eps=debug["parsed_basic_cumulative_eps"],
-            parsed_diluted_cumulative_eps=debug["parsed_diluted_cumulative_eps"],
-            computed_q4_basic_eps=computed_q4_basic_eps,
-            computed_q4_diluted_eps=computed_q4_diluted_eps,
-            q4_dependency_quarter=q4_dependency_quarter,
+            mops_basic_direct_value=debug["mops_basic_direct_value"],
+            mops_diluted_direct_value=debug["mops_diluted_direct_value"],
+            mops_basic_current_eps=debug["mops_basic_current_eps"],
+            mops_diluted_current_eps=debug["mops_diluted_current_eps"],
+            mops_basic_cumulative_eps=debug["mops_basic_cumulative_eps"],
+            mops_diluted_cumulative_eps=debug["mops_diluted_cumulative_eps"],
+            q4_standalone_basic_eps=q4_standalone_basic_eps,
+            q4_standalone_diluted_eps=q4_standalone_diluted_eps,
+            q4_prev_quarter=q4_prev_quarter,
         )
 
         if qnum == 4:
             notes.append(
                 f"{quarter}: VERIFIED via MOPS Q4 diff | matched_method={matched_method} "
-                f"fy_basic={parsed.get('basic_cumulative_eps')} fy_diluted={parsed.get('diluted_cumulative_eps')} "
-                f"q3_basic_cum={debug.get('q4_dependency_basic_cumulative_eps')} "
-                f"q3_diluted_cum={debug.get('q4_dependency_diluted_cumulative_eps')} "
-                f"q4_basic={computed_q4_basic_eps} q4_diluted={computed_q4_diluted_eps}"
+                f"fy_basic={parsed.get('mops_basic_cumulative_eps')} fy_diluted={parsed.get('mops_diluted_cumulative_eps')} "
+                f"q3_basic_cum={debug.get('q4_prev_basic_cumulative_eps')} "
+                f"q3_diluted_cum={debug.get('q4_prev_diluted_cumulative_eps')} "
+                f"q4_basic={q4_standalone_basic_eps} q4_diluted={q4_standalone_diluted_eps}"
             )
         else:
             notes.append(
                 f"{quarter}: VERIFIED via MOPS | matched_method={matched_method} "
-                f"current_basic={parsed.get('basic_current_eps')} current_diluted={parsed.get('diluted_current_eps')}"
+                f"current_basic={parsed.get('mops_basic_current_eps')} current_diluted={parsed.get('mops_diluted_current_eps')}"
             )
         return record, debug
 
@@ -1320,49 +1309,49 @@ def probe_seed_with_mops(
             "failure_class": FAILURE_CLASS_MISMATCH,
             "reason": "mops_eps_parsed_but_does_not_match_seed",
             "expected_eps": seed_record["eps"],
-            "parsed_basic_direct_value": debug["parsed_basic_direct_value"],
-            "parsed_diluted_direct_value": debug["parsed_diluted_direct_value"],
-            "parsed_basic_current_eps": debug["parsed_basic_current_eps"],
-            "parsed_diluted_current_eps": debug["parsed_diluted_current_eps"],
-            "parsed_basic_cumulative_eps": debug["parsed_basic_cumulative_eps"],
-            "parsed_diluted_cumulative_eps": debug["parsed_diluted_cumulative_eps"],
-            "computed_q4_basic_eps": computed_q4_basic_eps,
-            "computed_q4_diluted_eps": computed_q4_diluted_eps,
-            "q4_dependency_quarter": q4_dependency_quarter,
+            "mops_basic_direct_value": debug["mops_basic_direct_value"],
+            "mops_diluted_direct_value": debug["mops_diluted_direct_value"],
+            "mops_basic_current_eps": debug["mops_basic_current_eps"],
+            "mops_diluted_current_eps": debug["mops_diluted_current_eps"],
+            "mops_basic_cumulative_eps": debug["mops_basic_cumulative_eps"],
+            "mops_diluted_cumulative_eps": debug["mops_diluted_cumulative_eps"],
+            "q4_standalone_basic_eps": q4_standalone_basic_eps,
+            "q4_standalone_diluted_eps": q4_standalone_diluted_eps,
+            "q4_prev_quarter": q4_prev_quarter,
             "as_of_date": parsed.get("as_of_date"),
         }
     )
     debug["attempts"] = attempts
 
     record = update_record_with_verification(
-        seed_record,
+        seed_record=seed_record,
         verified_eps=None,
         verified_method_detail=None,
         verified_as_of_date=parsed.get("as_of_date"),
         probe_url=ajax_url,
         attempts=attempts,
         tolerance=tolerance,
-        parsed_basic_direct_value=debug["parsed_basic_direct_value"],
-        parsed_diluted_direct_value=debug["parsed_diluted_direct_value"],
-        parsed_basic_current_eps=debug["parsed_basic_current_eps"],
-        parsed_diluted_current_eps=debug["parsed_diluted_current_eps"],
-        parsed_basic_cumulative_eps=debug["parsed_basic_cumulative_eps"],
-        parsed_diluted_cumulative_eps=debug["parsed_diluted_cumulative_eps"],
-        computed_q4_basic_eps=computed_q4_basic_eps,
-        computed_q4_diluted_eps=computed_q4_diluted_eps,
-        q4_dependency_quarter=q4_dependency_quarter,
+        mops_basic_direct_value=debug["mops_basic_direct_value"],
+        mops_diluted_direct_value=debug["mops_diluted_direct_value"],
+        mops_basic_current_eps=debug["mops_basic_current_eps"],
+        mops_diluted_current_eps=debug["mops_diluted_current_eps"],
+        mops_basic_cumulative_eps=debug["mops_basic_cumulative_eps"],
+        mops_diluted_cumulative_eps=debug["mops_diluted_cumulative_eps"],
+        q4_standalone_basic_eps=q4_standalone_basic_eps,
+        q4_standalone_diluted_eps=q4_standalone_diluted_eps,
+        q4_prev_quarter=q4_prev_quarter,
     )
 
     if qnum == 4:
         notes.append(
             f"{quarter}: EPS_MISMATCH via MOPS Q4 diff | expected={seed_record['eps']} "
-            f"q4_basic={computed_q4_basic_eps} q4_diluted={computed_q4_diluted_eps} "
-            f"fy_basic={parsed.get('basic_cumulative_eps')} fy_diluted={parsed.get('diluted_cumulative_eps')}"
+            f"q4_basic={q4_standalone_basic_eps} q4_diluted={q4_standalone_diluted_eps} "
+            f"fy_basic={parsed.get('mops_basic_cumulative_eps')} fy_diluted={parsed.get('mops_diluted_cumulative_eps')}"
         )
     else:
         notes.append(
             f"{quarter}: EPS_MISMATCH via MOPS | expected={seed_record['eps']} "
-            f"current_basic={parsed.get('basic_current_eps')} current_diluted={parsed.get('diluted_current_eps')}"
+            f"current_basic={parsed.get('mops_basic_current_eps')} current_diluted={parsed.get('mops_diluted_current_eps')}"
         )
     return record, debug
 
@@ -1441,12 +1430,12 @@ def auto_discover_quarter_with_mops(
 
     parsed = main_stmt.get("parsed") or {}
     debug["tables_found"] = parsed.get("tables_found", 0)
-    debug["parsed_basic_direct_value"] = parsed.get("basic_direct_value")
-    debug["parsed_diluted_direct_value"] = parsed.get("diluted_direct_value")
-    debug["parsed_basic_current_eps"] = parsed.get("basic_current_eps")
-    debug["parsed_diluted_current_eps"] = parsed.get("diluted_current_eps")
-    debug["parsed_basic_cumulative_eps"] = parsed.get("basic_cumulative_eps")
-    debug["parsed_diluted_cumulative_eps"] = parsed.get("diluted_cumulative_eps")
+    debug["mops_basic_direct_value"] = parsed.get("mops_basic_direct_value")
+    debug["mops_diluted_direct_value"] = parsed.get("mops_diluted_direct_value")
+    debug["mops_basic_current_eps"] = parsed.get("mops_basic_current_eps")
+    debug["mops_diluted_current_eps"] = parsed.get("mops_diluted_current_eps")
+    debug["mops_basic_cumulative_eps"] = parsed.get("mops_basic_cumulative_eps")
+    debug["mops_diluted_cumulative_eps"] = parsed.get("mops_diluted_cumulative_eps")
     debug["parsed_as_of_date"] = parsed.get("as_of_date")
     debug["candidate_preview"] = parsed.get("row_hits", [])[:8]
 
@@ -1463,17 +1452,17 @@ def auto_discover_quarter_with_mops(
         notes.append(f"{quarter}: AUTO_DISCOVERY parse failed")
         return None, debug
 
-    computed_q4_basic_eps: Optional[float] = None
-    computed_q4_diluted_eps: Optional[float] = None
-    q4_dependency_quarter: Optional[str] = None
+    q4_standalone_basic_eps: Optional[float] = None
+    q4_standalone_diluted_eps: Optional[float] = None
+    q4_prev_quarter: Optional[str] = None
 
     if qnum in {1, 2, 3}:
         discovered_eps, matched_method = pick_first_available_candidate(
             [
-                ("diluted_current_eps", parsed.get("diluted_current_eps")),
-                ("basic_current_eps", parsed.get("basic_current_eps")),
-                ("diluted_direct_value", parsed.get("diluted_direct_value")),
-                ("basic_direct_value", parsed.get("basic_direct_value")),
+                ("mops_diluted_current_eps", parsed.get("mops_diluted_current_eps")),
+                ("mops_basic_current_eps", parsed.get("mops_basic_current_eps")),
+                ("mops_diluted_direct_value", parsed.get("mops_diluted_direct_value")),
+                ("mops_basic_direct_value", parsed.get("mops_basic_direct_value")),
             ]
         )
         if discovered_eps is None or matched_method is None:
@@ -1488,8 +1477,8 @@ def auto_discover_quarter_with_mops(
             notes.append(f"{quarter}: AUTO_DISCOVERY no candidate after parse")
             return None, debug
     else:
-        q4_dependency_quarter = f"{year}Q3"
-        debug["q4_dependency_quarter"] = q4_dependency_quarter
+        q4_prev_quarter = f"{year}Q3"
+        debug["q4_prev_quarter"] = q4_prev_quarter
 
         q3_stmt = fetch_and_parse_mops_statement(
             session=session,
@@ -1503,26 +1492,26 @@ def auto_discover_quarter_with_mops(
             cache=statement_cache,
         )
 
-        debug["q4_dependency_http_status"] = q3_stmt.get("http_status")
-        debug["q4_dependency_fetch_ok"] = bool(q3_stmt.get("fetch_ok"))
+        debug["q4_prev_http_status"] = q3_stmt.get("http_status")
+        debug["q4_prev_fetch_ok"] = bool(q3_stmt.get("fetch_ok"))
 
         q3_parsed = q3_stmt.get("parsed") or {}
-        q3_basic_cum = q3_parsed.get("basic_cumulative_eps")
-        q3_diluted_cum = q3_parsed.get("diluted_cumulative_eps")
+        q3_basic_cum = q3_parsed.get("mops_basic_cumulative_eps")
+        q3_diluted_cum = q3_parsed.get("mops_diluted_cumulative_eps")
 
-        debug["q4_dependency_basic_cumulative_eps"] = q3_basic_cum
-        debug["q4_dependency_diluted_cumulative_eps"] = q3_diluted_cum
+        debug["q4_prev_basic_cumulative_eps"] = q3_basic_cum
+        debug["q4_prev_diluted_cumulative_eps"] = q3_diluted_cum
 
-        fy_basic_cum = parsed.get("basic_cumulative_eps")
-        fy_diluted_cum = parsed.get("diluted_cumulative_eps")
+        fy_basic_cum = parsed.get("mops_basic_cumulative_eps")
+        fy_diluted_cum = parsed.get("mops_diluted_cumulative_eps")
 
         if fy_basic_cum is not None and q3_basic_cum is not None:
-            computed_q4_basic_eps = round(float(fy_basic_cum) - float(q3_basic_cum), 2)
+            q4_standalone_basic_eps = round(float(fy_basic_cum) - float(q3_basic_cum), 2)
         if fy_diluted_cum is not None and q3_diluted_cum is not None:
-            computed_q4_diluted_eps = round(float(fy_diluted_cum) - float(q3_diluted_cum), 2)
+            q4_standalone_diluted_eps = round(float(fy_diluted_cum) - float(q3_diluted_cum), 2)
 
-        debug["computed_q4_basic_eps"] = computed_q4_basic_eps
-        debug["computed_q4_diluted_eps"] = computed_q4_diluted_eps
+        debug["q4_standalone_basic_eps"] = q4_standalone_basic_eps
+        debug["q4_standalone_diluted_eps"] = q4_standalone_diluted_eps
 
         if q3_stmt.get("failure_class") in {FAILURE_CLASS_HTTP, FAILURE_CLASS_NOT_FOUND, FAILURE_CLASS_PARSE}:
             debug["status"] = "Q4_DIFF_DEPENDENCY_FAILED"
@@ -1531,7 +1520,7 @@ def auto_discover_quarter_with_mops(
                     "probe": "mops_auto_discovery_q4_dependency",
                     "failure_class": FAILURE_CLASS_Q4_DEP,
                     "reason": "q3_dependency_fetch_or_parse_failed",
-                    "dependency_quarter": q4_dependency_quarter,
+                    "dependency_quarter": q4_prev_quarter,
                     "dependency_failure_class": q3_stmt.get("failure_class"),
                 }
             ]
@@ -1543,8 +1532,8 @@ def auto_discover_quarter_with_mops(
 
         discovered_eps, matched_method = pick_first_available_candidate(
             [
-                ("q4_diluted_diff", computed_q4_diluted_eps),
-                ("q4_basic_diff", computed_q4_basic_eps),
+                ("q4_standalone_diluted_eps", q4_standalone_diluted_eps),
+                ("q4_standalone_basic_eps", q4_standalone_basic_eps),
             ]
         )
         if discovered_eps is None or matched_method is None:
@@ -1566,15 +1555,15 @@ def auto_discover_quarter_with_mops(
             "reason": "auto_discovered_from_mops",
             "matched_method": matched_method,
             "matched_eps": discovered_eps,
-            "parsed_basic_direct_value": debug["parsed_basic_direct_value"],
-            "parsed_diluted_direct_value": debug["parsed_diluted_direct_value"],
-            "parsed_basic_current_eps": debug["parsed_basic_current_eps"],
-            "parsed_diluted_current_eps": debug["parsed_diluted_current_eps"],
-            "parsed_basic_cumulative_eps": debug["parsed_basic_cumulative_eps"],
-            "parsed_diluted_cumulative_eps": debug["parsed_diluted_cumulative_eps"],
-            "computed_q4_basic_eps": computed_q4_basic_eps,
-            "computed_q4_diluted_eps": computed_q4_diluted_eps,
-            "q4_dependency_quarter": q4_dependency_quarter,
+            "mops_basic_direct_value": debug["mops_basic_direct_value"],
+            "mops_diluted_direct_value": debug["mops_diluted_direct_value"],
+            "mops_basic_current_eps": debug["mops_basic_current_eps"],
+            "mops_diluted_current_eps": debug["mops_diluted_current_eps"],
+            "mops_basic_cumulative_eps": debug["mops_basic_cumulative_eps"],
+            "mops_diluted_cumulative_eps": debug["mops_diluted_cumulative_eps"],
+            "q4_standalone_basic_eps": q4_standalone_basic_eps,
+            "q4_standalone_diluted_eps": q4_standalone_diluted_eps,
+            "q4_prev_quarter": q4_prev_quarter,
             "as_of_date": parsed.get("as_of_date"),
         }
     ]
@@ -1588,21 +1577,21 @@ def auto_discover_quarter_with_mops(
         method_detail=matched_method,
         verified_as_of_date=parsed.get("as_of_date"),
         probe_url=main_stmt["ajax_url"],
-        parsed_basic_direct_value=debug["parsed_basic_direct_value"],
-        parsed_diluted_direct_value=debug["parsed_diluted_direct_value"],
-        parsed_basic_current_eps=debug["parsed_basic_current_eps"],
-        parsed_diluted_current_eps=debug["parsed_diluted_current_eps"],
-        parsed_basic_cumulative_eps=debug["parsed_basic_cumulative_eps"],
-        parsed_diluted_cumulative_eps=debug["parsed_diluted_cumulative_eps"],
-        computed_q4_basic_eps=computed_q4_basic_eps,
-        computed_q4_diluted_eps=computed_q4_diluted_eps,
-        q4_dependency_quarter=q4_dependency_quarter,
+        mops_basic_direct_value=debug["mops_basic_direct_value"],
+        mops_diluted_direct_value=debug["mops_diluted_direct_value"],
+        mops_basic_current_eps=debug["mops_basic_current_eps"],
+        mops_diluted_current_eps=debug["mops_diluted_current_eps"],
+        mops_basic_cumulative_eps=debug["mops_basic_cumulative_eps"],
+        mops_diluted_cumulative_eps=debug["mops_diluted_cumulative_eps"],
+        q4_standalone_basic_eps=q4_standalone_basic_eps,
+        q4_standalone_diluted_eps=q4_standalone_diluted_eps,
+        q4_prev_quarter=q4_prev_quarter,
     )
 
     if qnum == 4:
         notes.append(
             f"{quarter}: AUTO_DISCOVERED via MOPS Q4 diff | matched_method={matched_method} "
-            f"discovered_eps={discovered_eps} q4_basic={computed_q4_basic_eps} q4_diluted={computed_q4_diluted_eps}"
+            f"discovered_eps={discovered_eps} q4_basic={q4_standalone_basic_eps} q4_diluted={q4_standalone_diluted_eps}"
         )
     else:
         notes.append(
@@ -1725,7 +1714,6 @@ def build_output(
     )
     seed_count = sum(1 for x in merged_quarters if x.get("data_origin") == "bootstrap_seed")
     auto_discovered_record_count = sum(1 for x in merged_quarters if x.get("data_origin") == "mops_auto_discovered")
-
     scan_quarter_count = len(discovery_debug)
     debug_skipped_count = sum(1 for d in discovery_debug if d.get("request") is None)
 
@@ -1736,7 +1724,7 @@ def build_output(
             "script_version": SCRIPT_VERSION,
             "source_policy": (
                 "seed_first_plus_official_mops_single_company_income_statement_"
-                "probe_non_blocking_q4_diff_semantic_cleanup_auto_discovery_report_consistency"
+                "probe_non_blocking_q4_diff_field_naming_cleanup_auto_discovery_report_consistency"
             ),
             "entry_pages": entry_pages,
             "latest_seed_quarter": latest_seed_quarter,
@@ -1761,7 +1749,7 @@ def build_output(
                 "mops_probe_enabled": True,
                 "single_company_mode": True,
                 "q4_diff_enabled": True,
-                "semantic_cleanup_enabled": True,
+                "field_naming_cleanup_enabled": True,
                 "auto_discovery_enabled": True,
                 "report_consistency_enabled": True,
             },
@@ -1788,7 +1776,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Update TSMC quarterly EPS tracker "
-            "(seed-first + MOPS verification + Q4 diff + semantic cleanup + auto discovery)."
+            "(seed-first + MOPS verification + Q4 diff + field naming cleanup + auto discovery)."
         )
     )
     parser.add_argument("--out", default=DEFAULT_OUT, help="Output tracker JSON path")
@@ -1838,7 +1826,7 @@ def main() -> None:
     notes.append(f"bootstrapped seeds={len(seed_map)}")
     notes.append("probe mode=mops_single_company_income_statement")
     notes.append("q4_rule=use_fy_cumulative_minus_q3_cumulative")
-    notes.append("semantic_cleanup=separate_current_vs_cumulative_fields")
+    notes.append("field_naming_cleanup=canonical_mops_and_q4_prefixes")
     notes.append("auto_discovery=enabled_for_quarters_after_latest_seed")
     notes.append(f"auto_discovery_floor_quarter={latest_seed_quarter}")
     notes.append("report_consistency=counts_and_discovery_debug_aligned")
@@ -1859,10 +1847,7 @@ def main() -> None:
         key=quarter_sort_key,
     )
 
-    auto_discovery_candidate_quarters = [
-        q for q in relevant_quarters if quarter_gt(q, latest_seed_quarter)
-    ]
-
+    auto_discovery_candidate_quarters = [q for q in relevant_quarters if quarter_gt(q, latest_seed_quarter)]
     existing_map = {str(x.get("quarter")): x for x in existing_quarters if x.get("quarter")}
 
     for quarter in relevant_quarters:
@@ -1875,7 +1860,7 @@ def main() -> None:
 
         if quarter in seed_map:
             updated, dbg = probe_seed_with_mops(
-                seed_map[quarter],
+                seed_record=seed_map[quarter],
                 session=session,
                 mops_base_url=args.mops_base_url,
                 stock_no=args.stock_no,
@@ -1892,7 +1877,7 @@ def main() -> None:
 
         if quarter_gt(quarter, latest_seed_quarter):
             discovered_record, dbg = auto_discover_quarter_with_mops(
-                quarter,
+                quarter=quarter,
                 session=session,
                 mops_base_url=args.mops_base_url,
                 stock_no=args.stock_no,
@@ -1965,12 +1950,12 @@ def main() -> None:
             f"pub_state={d.get('publication_state')} | "
             f"http_status={d.get('http_status')} | "
             f"tables_found={d.get('tables_found')} | "
-            f"parsed_basic_current_eps={d.get('parsed_basic_current_eps')} | "
-            f"parsed_diluted_current_eps={d.get('parsed_diluted_current_eps')} | "
-            f"parsed_basic_cumulative_eps={d.get('parsed_basic_cumulative_eps')} | "
-            f"parsed_diluted_cumulative_eps={d.get('parsed_diluted_cumulative_eps')} | "
-            f"computed_q4_basic_eps={d.get('computed_q4_basic_eps')} | "
-            f"computed_q4_diluted_eps={d.get('computed_q4_diluted_eps')} | "
+            f"mops_basic_current_eps={d.get('mops_basic_current_eps')} | "
+            f"mops_diluted_current_eps={d.get('mops_diluted_current_eps')} | "
+            f"mops_basic_cumulative_eps={d.get('mops_basic_cumulative_eps')} | "
+            f"mops_diluted_cumulative_eps={d.get('mops_diluted_cumulative_eps')} | "
+            f"q4_standalone_basic_eps={d.get('q4_standalone_basic_eps')} | "
+            f"q4_standalone_diluted_eps={d.get('q4_standalone_diluted_eps')} | "
             f"attempts={len(d.get('attempts', []))} | "
             f"discovered={d.get('discovered')}"
         )
