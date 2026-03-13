@@ -2,72 +2,56 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v3.0)
+update_tsmc_quarterly_eps_tracker.py  (v3.1)
 
 Design goals
 ------------
-1) Seed-first:
-   - Bootstrap seeds are the primary source of truth for quarterly EPS values.
-   - Script no longer relies on DuckDuckGo or front-end site discovery.
+1) Seed-first
+   - Quarterly EPS values come from manually maintained seeds.
+   - The script no longer depends on front-end pages or sec.gov Archives HTML.
 
-2) Verification, not discovery:
-   - Try to verify seed records via SEC data.sec.gov submissions JSON + 6-K documents.
-   - If seed already contains manual verification candidates, try those first.
-   - Then probe direct seed URLs (article_url / page_url / pdf_url) as low-priority fallback.
+2) Optional XBRL probe (non-blocking)
+   - Probe only data.sec.gov XBRL companyfacts JSON.
+   - Never fail the whole run if probing fails.
+   - Verification is additive metadata, not a prerequisite for output.
 
-3) Auditability:
-   - Keep per-quarter discovery_debug/attempt logs.
-   - Explicitly classify block pages (Cloudflare/security/captcha).
-   - Never overwrite seed EPS from scraped values; only mark verified / failed.
+3) Auditability
+   - Explicit verification status.
+   - Explicit primary failure class / first failure / last failure.
+   - Avoid misleading "verification_method" caused by the final failed attempt.
 
 Dependencies
 ------------
 Required:
 - requests
 
-Optional:
-- pypdf   (recommended, for PDF verification)
+No PDF / HTML parsing from blocked front-end pages is attempted in this version.
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
-import io
 import json
 import re
 import time
 from datetime import date, datetime, timedelta, timezone
-from html import unescape
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urljoin, urlparse
 
 import requests
 
-try:
-    from pypdf import PdfReader  # type: ignore
-    HAVE_PYPDF = True
-except Exception:
-    PdfReader = None  # type: ignore
-    HAVE_PYPDF = False
-
-
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v3.0"
+SCRIPT_VERSION = "v3.1"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_TIMEOUT = 20
 DEFAULT_SLEEP = 0.5
-DEFAULT_SEC_CIK = "0001046179"  # TSMC
-DEFAULT_SEC_USER_AGENT = "tsmc-eps-tracker/3.0 (personal research)"
-DEFAULT_SEC_LOOKBACK_DAYS = 45
 
-UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/133.0.0.0 Safari/537.36"
-)
+# TSMC
+DEFAULT_SEC_CIK = "0001046179"
+DEFAULT_SEC_USER_AGENT = "Joseph Chou joseph@example.com"
+DEFAULT_XBRL_TOLERANCE = 0.02  # EPS comparison tolerance
 
 SOURCE_PRIORITY = {
     "tsmc_seed_record": 20,
@@ -77,27 +61,9 @@ SOURCE_PRIORITY = {
 QUARTER_NUM_TO_CN = {1: "第一", 2: "第二", 3: "第三", 4: "第四"}
 QUARTER_CN_TO_NUM = {v: k for k, v in QUARTER_NUM_TO_CN.items()}
 QUARTER_NUM_TO_EN_WORD = {1: "first", 2: "second", 3: "third", 4: "fourth"}
-QUARTER_EN_WORD_TO_NUM = {v: k for k, v in QUARTER_NUM_TO_EN_WORD.items()}
-
-MONTH_NAME_TO_NUM = {
-    "january": 1,
-    "february": 2,
-    "march": 3,
-    "april": 4,
-    "may": 5,
-    "june": 6,
-    "july": 7,
-    "august": 8,
-    "september": 9,
-    "october": 10,
-    "november": 11,
-    "december": 12,
-}
 
 # --------------------------------------------------------------------
 # Seed-first data
-# - You can manually add verification_candidates for future quarters.
-# - verification_candidates should be direct SEC/official document URLs.
 # --------------------------------------------------------------------
 BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
     {
@@ -107,9 +73,9 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "as_of_date": "2025-01-16",
         "article_title": "台積公司2024年第四季每股盈餘新台幣14.45元",
         "article_url": "https://pr.tsmc.com/chinese/news/3201",
+        "page_url": "https://pr.tsmc.com/chinese/news/3201",
         "quarter_end_date": "December 31, 2024",
         "quarter_word": "fourth",
-        "page_url": "https://pr.tsmc.com/chinese/news/3201",
     },
     {
         "quarter": "2025Q1",
@@ -118,9 +84,9 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "as_of_date": "2025-04-17",
         "article_title": "台積公司2025年第一季每股盈餘新台幣13.94元",
         "article_url": "https://pr.tsmc.com/chinese/news/3222",
+        "page_url": "https://pr.tsmc.com/chinese/news/3222",
         "quarter_end_date": "March 31, 2025",
         "quarter_word": "first",
-        "page_url": "https://pr.tsmc.com/chinese/news/3222",
     },
     {
         "quarter": "2025Q2",
@@ -132,9 +98,6 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "page_url": "https://pr.tsmc.com/chinese/news/3249",
         "quarter_end_date": "June 30, 2025",
         "quarter_word": "second",
-        "verification_candidates": [
-            "https://www.sec.gov/Archives/edgar/data/1046179/000104617925000093/tsm-boardx20250812x6k.htm"
-        ],
     },
     {
         "quarter": "2025Q3",
@@ -157,75 +120,29 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "page_url": "https://pr.tsmc.com/chinese/news/3281",
         "quarter_end_date": "December 31, 2025",
         "quarter_word": "fourth",
-        "verification_candidates": [
-            "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000008/tsm-20260115x6k.htm"
-        ],
     },
 ]
 
-DATE_RE_LIST = [
-    re.compile(r"發佈日期\s*[:：]?\s*(\d{4}/\d{2}/\d{2})"),
-    re.compile(r"發言日期\s*[:：]?\s*(\d{4}/\d{2}/\d{2})"),
-    re.compile(r"公告日期\s*[:：]?\s*(\d{4}/\d{2}/\d{2})"),
-    re.compile(r"\b(\d{4}-\d{2}-\d{2})\b"),
-    re.compile(r"\b(\d{4}/\d{2}/\d{2})\b"),
+# Preferred concept names first; if absent, we fall back to heuristic scan.
+DIRECT_EPS_CONCEPTS = [
+    ("ifrs-full", "BasicAndDilutedEarningsPerShare"),
+    ("ifrs-full", "DilutedEarningsPerShare"),
+    ("ifrs-full", "BasicEarningsPerShare"),
+    ("us-gaap", "EarningsPerShareDiluted"),
+    ("us-gaap", "EarningsPerShareBasicAndDiluted"),
+    ("us-gaap", "EarningsPerShareBasic"),
 ]
 
-EN_DATE_RE_LIST = [
-    re.compile(
-        r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+"
-        r"(\d{1,2}),\s*(\d{4})\b",
-        re.I,
-    ),
-]
-
-OFFICIAL_TITLE_RE = re.compile(
-    r"台積公司(\d{4})年(第一|第二|第三|第四)季每股盈餘新台幣([0-9]+(?:\.[0-9]+)?)元"
-)
-CN_TITLE_RE = re.compile(r"台積公司(\d{4})年(第一|第二|第三|第四)季每股盈餘")
-QUARTER_CN_YEAR_RE = re.compile(r"(\d{4})年(第一|第二|第三|第四)季")
-QUARTER_Q_RE_1 = re.compile(r"(\d{4})\s*[Qq]([1-4])")
-QUARTER_Q_RE_2 = re.compile(r"[Qq]([1-4])\s*(?:FY|fy)?\s*(\d{4})")
-QUARTER_EN_YEAR_RE_1 = re.compile(r"\b(first|second|third|fourth)\s+quarter\s+(?:of\s+)?(\d{4})\b", re.I)
-QUARTER_EN_YEAR_RE_2 = re.compile(r"\b(\d{4})\s+(first|second|third|fourth)\s+quarter\b", re.I)
-QUARTER_EN_YEAR_RE_3 = re.compile(r"\b([1-4])Q\s*'?(\d{2,4})\b", re.I)
-
-COMPANY_HINT_RE = re.compile(r"(台積電|台積公司|TSMC|Taiwan Semiconductor)", re.I)
-
-EPS_PATTERNS = [
-    re.compile(r"每股盈餘(?:為)?新台幣\s*([0-9]+(?:\.[0-9]+)?)\s*元"),
-    re.compile(r"每股(?:盈餘|純益|稅後純益|獲利|賺(?:了|到)?)\D{0,20}([0-9]+(?:\.[0-9]+)?)\s*元"),
-    re.compile(r"稀釋每股(?:盈餘|純益)?\D{0,20}([0-9]+(?:\.[0-9]+)?)\s*元"),
-    re.compile(r"\bEPS\b\D{0,12}([0-9]+(?:\.[0-9]+)?)\s*元?", re.I),
-    re.compile(r"EPS達\D{0,8}([0-9]+(?:\.[0-9]+)?)\s*元", re.I),
-    re.compile(r"Q[1-4]\s*EPS\D{0,12}([0-9]+(?:\.[0-9]+)?)\s*元", re.I),
-    re.compile(r"diluted earnings per share(?: of)?\s*NT\$?\s*([0-9]+(?:\.[0-9]+)?)", re.I),
-    re.compile(r"diluted EPS(?: of)?\s*NT\$?\s*([0-9]+(?:\.[0-9]+)?)", re.I),
-    re.compile(r"earnings per share(?: of)?\s*NT\$?\s*([0-9]+(?:\.[0-9]+)?)", re.I),
-]
-
-PDF_EPS_PATTERNS = [
-    re.compile(r"diluted earnings per share(?: of)?\s*NT\$?\s*([0-9]+(?:\.[0-9]+)?)", re.I),
-    re.compile(r"EPS(?: of)?\s*NT\$?\s*([0-9]+(?:\.[0-9]+)?)", re.I),
-]
-
-TITLE_TAG_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
-H1_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
-A_RE = re.compile(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I | re.S)
-
-BLOCK_PATTERNS = [
-    ("cloudflare_challenge", re.compile(r"Just a moment\.\.\.|cf-browser-verification|Attention Required!|Cloudflare", re.I)),
-    ("security_block", re.compile(r"THE PAGE CANNOT BE ACCESSED|FOR SECURITY REASONS", re.I)),
-    ("captcha_block", re.compile(r"captcha|verify you are human|human verification", re.I)),
-]
+FAILURE_CLASS_HTTP = "HTTP_ERROR"
+FAILURE_CLASS_NO_DATA = "NO_XBRL_DATA"
+FAILURE_CLASS_NO_CANDIDATE = "NO_CANDIDATE"
+FAILURE_CLASS_MISMATCH = "BEST_CANDIDATE_MISMATCH"
+FAILURE_CLASS_NOT_ENDED = "NOT_ENDED_YET"
+FAILURE_CLASS_NOT_PUBLISHED = "LIKELY_NOT_PUBLISHED_YET"
 
 
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def today_local_date() -> date:
-    return datetime.now().date()
 
 
 def quarter_sort_key(q: str) -> Tuple[int, int]:
@@ -233,35 +150,6 @@ def quarter_sort_key(q: str) -> Tuple[int, int]:
     if not m:
         return (0, 0)
     return (int(m.group(1)), int(m.group(2)))
-
-
-def strip_tags(x: str) -> str:
-    return re.sub(r"<[^>]+>", " ", x or "", flags=re.S)
-
-
-def normalize_ws(x: str) -> str:
-    return re.sub(r"\s+", " ", (x or "")).strip()
-
-
-def clean_html_text(x: str) -> str:
-    return normalize_ws(unescape(strip_tags(x)))
-
-
-def canonical_host(host: str) -> str:
-    h = (host or "").lower().strip()
-    if h.startswith("www."):
-        h = h[4:]
-    if h.startswith("m."):
-        h = h[2:]
-    return h
-
-
-def detect_source_priority(source: str) -> int:
-    return SOURCE_PRIORITY.get(source, 0)
-
-
-def quarter_word_from_num(qnum: int) -> str:
-    return QUARTER_NUM_TO_EN_WORD.get(qnum, "NA")
 
 
 def quarter_end_date_obj(year: int, quarter_num: int) -> date:
@@ -278,10 +166,9 @@ def quarter_end_date_from_label(quarter: str) -> str:
     m = re.match(r"^(\d{4})Q([1-4])$", quarter)
     if not m:
         return "NA"
-    year = int(m.group(1))
+    y = int(m.group(1))
     q = int(m.group(2))
-    end = quarter_end_date_obj(year, q)
-    return end.strftime("%B %d, %Y")
+    return quarter_end_date_obj(y, q).strftime("%B %d, %Y")
 
 
 def assess_publication_state(year: int, quarter_num: int, today: date) -> str:
@@ -300,6 +187,10 @@ def parse_iso_date(s: str) -> Optional[date]:
         return None
 
 
+def detect_source_priority(source: str) -> int:
+    return SOURCE_PRIORITY.get(source, 0)
+
+
 def enrich_record(
     item: Dict[str, Any],
     *,
@@ -316,25 +207,15 @@ def enrich_record(
     return out
 
 
-def build_session(sec_user_agent: str) -> requests.Session:
+def build_session() -> requests.Session:
     s = requests.Session()
-    s.headers.update(
-        {
-            "User-Agent": UA,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-        }
-    )
-    s.headers["X-SEC-User-Agent"] = sec_user_agent
     return s
 
 
 def sec_headers(sec_user_agent: str) -> Dict[str, str]:
     return {
         "User-Agent": sec_user_agent,
-        "Accept": "application/json,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept": "application/json,text/plain,*/*",
         "Accept-Language": "en-US,en;q=0.8",
         "Referer": "https://www.sec.gov/",
         "Cache-Control": "no-cache",
@@ -342,289 +223,593 @@ def sec_headers(sec_user_agent: str) -> Dict[str, str]:
     }
 
 
-def http_get_text(
+def http_get_json(
     session: requests.Session,
     url: str,
     timeout: int,
     retries: int,
     sleep_sec: float,
     *,
-    headers: Optional[Dict[str, str]] = None,
-) -> str:
-    last_err: Optional[Exception] = None
+    headers: Dict[str, str],
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    last_err: Optional[str] = None
     for i in range(1, retries + 1):
         try:
             r = session.get(url, timeout=timeout, headers=headers)
             r.raise_for_status()
-            if r.encoding is None:
-                r.encoding = r.apparent_encoding or "utf-8"
-            return r.text
+            return r.json(), None
         except Exception as e:
-            last_err = e
+            last_err = str(e)
             if i < retries:
                 time.sleep(sleep_sec * i)
-    raise RuntimeError(f"GET failed after {retries} attempts: {url} | last_err={last_err}")
+    return None, last_err
 
 
-def http_get_bytes(
-    session: requests.Session,
-    url: str,
-    timeout: int,
-    retries: int,
-    sleep_sec: float,
-    *,
-    headers: Optional[Dict[str, str]] = None,
-) -> bytes:
-    last_err: Optional[Exception] = None
-    for i in range(1, retries + 1):
-        try:
-            r = session.get(url, timeout=timeout, headers=headers)
-            r.raise_for_status()
-            return r.content
-        except Exception as e:
-            last_err = e
-            if i < retries:
-                time.sleep(sleep_sec * i)
-    raise RuntimeError(f"GET bytes failed after {retries} attempts: {url} | last_err={last_err}")
+def sec_companyfacts_url(cik: str) -> str:
+    return f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 
 
-def detect_block_reason(text: str) -> Optional[str]:
-    for name, rx in BLOCK_PATTERNS:
-        if rx.search(text or ""):
-            return name
-    return None
+def unit_preference_score(unit_key: str) -> int:
+    u = (unit_key or "").lower()
+    score = 0
+    if "twd" in u:
+        score += 50
+    if "usd" in u:
+        score -= 25
+    if "share" in u:
+        score += 10
+    if u == "pure":
+        score -= 30
+    return score
 
 
-def find_title_text(html: str, fallback_url: str) -> str:
-    m = H1_RE.search(html or "")
-    if m:
-        return clean_html_text(m.group(1))
-    m = TITLE_TAG_RE.search(html or "")
-    if m:
-        return clean_html_text(m.group(1))
-    return fallback_url
+def concept_preference_score(taxonomy: str, concept: str) -> int:
+    c = concept.lower()
+    score = 0
+    if "basicanddiluted" in c:
+        score += 25
+    if "diluted" in c:
+        score += 20
+    elif "basic" in c:
+        score += 5
+    if "earnings" in c and "share" in c:
+        score += 15
+    if taxonomy == "ifrs-full":
+        score += 5
+    return score
 
 
-def infer_quarter_from_text(
-    title: str,
-    text: str,
-    expected_year: Optional[int],
-    expected_quarter_num: Optional[int],
-) -> Optional[str]:
-    combined = f"{title} {text}"
+def is_eps_concept_name(concept: str) -> bool:
+    c = concept.lower()
 
-    m = OFFICIAL_TITLE_RE.search(combined)
-    if m:
-        year = int(m.group(1))
-        qnum = QUARTER_CN_TO_NUM.get(m.group(2))
-        if qnum:
-            return f"{year}Q{qnum}"
+    negative_tokens = [
+        "weightedaverage",
+        "sharesoutstanding",
+        "numberofshares",
+        "sharecapital",
+        "ordinaryshares",
+        "authorizedshares",
+        "issuedshares",
+    ]
+    if any(tok in c for tok in negative_tokens):
+        return False
 
-    m = QUARTER_CN_YEAR_RE.search(combined)
-    if m:
-        year = int(m.group(1))
-        qnum = QUARTER_CN_TO_NUM.get(m.group(2))
-        if qnum:
-            return f"{year}Q{qnum}"
+    if c in {
+        "basicanddilutedearningspershare",
+        "dilutedearningspershare",
+        "basicearningspershare",
+        "earningspersharediluted",
+        "earningspersharebasicanddiluted",
+        "earningspersharebasic",
+    }:
+        return True
 
-    m = QUARTER_Q_RE_1.search(combined)
-    if m:
-        return f"{int(m.group(1))}Q{int(m.group(2))}"
-
-    m = QUARTER_Q_RE_2.search(combined)
-    if m:
-        return f"{int(m.group(2))}Q{int(m.group(1))}"
-
-    m = QUARTER_EN_YEAR_RE_1.search(combined)
-    if m:
-        qnum = QUARTER_EN_WORD_TO_NUM.get(m.group(1).lower())
-        year = int(m.group(2))
-        if qnum:
-            return f"{year}Q{qnum}"
-
-    m = QUARTER_EN_YEAR_RE_2.search(combined)
-    if m:
-        year = int(m.group(1))
-        qnum = QUARTER_EN_WORD_TO_NUM.get(m.group(2).lower())
-        if qnum:
-            return f"{year}Q{qnum}"
-
-    m = QUARTER_EN_YEAR_RE_3.search(combined)
-    if m:
-        qnum = int(m.group(1))
-        yy = m.group(2)
-        year = int(yy) if len(yy) == 4 else int("20" + yy)
-        return f"{year}Q{qnum}"
-
-    if expected_year is not None and expected_quarter_num is not None:
-        expected_cn = f"{expected_year}年{QUARTER_NUM_TO_CN[expected_quarter_num]}季"
-        q_token = f"Q{expected_quarter_num}"
-        quarter_en = QUARTER_NUM_TO_EN_WORD[expected_quarter_num]
-        if COMPANY_HINT_RE.search(combined):
-            if expected_cn in combined:
-                return f"{expected_year}Q{expected_quarter_num}"
-            if q_token in combined or q_token.lower() in combined.lower():
-                if str(expected_year) in combined or str(expected_year)[2:] in combined:
-                    return f"{expected_year}Q{expected_quarter_num}"
-            if quarter_en in combined.lower() and str(expected_year) in combined:
-                return f"{expected_year}Q{expected_quarter_num}"
-
-    return None
+    return ("earnings" in c and "share" in c) or ("eps" in c and "share" in c)
 
 
-def infer_eps_from_text(title: str, text: str) -> Optional[float]:
-    combined = f"{title} {text}"
-    m = OFFICIAL_TITLE_RE.search(combined)
-    if m:
-        return float(m.group(3))
-    for rx in EPS_PATTERNS:
-        m = rx.search(combined)
-        if m:
-            return float(m.group(1))
-    return None
-
-
-def infer_eps_from_pdf_text(text: str) -> Optional[float]:
-    for rx in PDF_EPS_PATTERNS:
-        m = rx.search(text)
-        if m:
-            return float(m.group(1))
-    return None
-
-
-def infer_date_from_text(text: str) -> str:
-    for rx in DATE_RE_LIST:
-        m = rx.search(text or "")
-        if m:
-            return m.group(1).replace("/", "-")
-    for rx in EN_DATE_RE_LIST:
-        m = rx.search(text or "")
-        if m:
-            month = MONTH_NAME_TO_NUM.get(m.group(1).lower())
-            day = int(m.group(2))
-            year = int(m.group(3))
-            if month:
-                return f"{year:04d}-{month:02d}-{day:02d}"
-    return "NA"
-
-
-def parse_html_record(
-    html: str,
-    url: str,
-    *,
-    expected_year: Optional[int],
-    expected_quarter_num: Optional[int],
-) -> Tuple[Optional[Dict[str, Any]], str]:
-    block_reason = detect_block_reason(html)
-    if block_reason:
-        return None, f"blocked:{block_reason}"
-
-    text = clean_html_text(html)
-    title = find_title_text(html, url)
-
-    quarter = infer_quarter_from_text(
-        title=title,
-        text=text,
-        expected_year=expected_year,
-        expected_quarter_num=expected_quarter_num,
-    )
-    if not quarter:
-        return None, "quarter_not_detected"
-
-    eps_val = infer_eps_from_text(title=title, text=text)
-    if eps_val is None:
-        return None, "eps_not_detected"
-
-    qnum = int(quarter[-1])
-    return {
-        "quarter": quarter,
-        "eps": eps_val,
-        "as_of_date": infer_date_from_text(text),
-        "article_title": title,
-        "article_url": url,
-        "quarter_end_date": quarter_end_date_from_label(quarter),
-        "quarter_word": quarter_word_from_num(qnum),
-    }, "ok"
-
-
-def parse_pdf_record(
-    pdf_bytes: bytes,
-    pdf_url: str,
-    *,
-    expected_year: Optional[int],
-    expected_quarter_num: Optional[int],
-) -> Tuple[Optional[Dict[str, Any]], str]:
-    if not HAVE_PYPDF:
-        return None, "pypdf_not_installed"
-
+def safe_float(x: Any) -> Optional[float]:
     try:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        text = "\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception as e:
-        return None, f"pdf_read_failed:{e}"
+        return float(x)
+    except Exception:
+        return None
 
-    clean_text = normalize_ws(text)
-    quarter = infer_quarter_from_text(
-        title=pdf_url,
-        text=clean_text,
-        expected_year=expected_year,
-        expected_quarter_num=expected_quarter_num,
+
+def infer_quarter_from_fact(
+    fact: Dict[str, Any],
+    *,
+    expected_quarter: str,
+) -> Tuple[Optional[str], str]:
+    """
+    Returns:
+      (quarter_label_or_none, derivation_method)
+    """
+    fy = fact.get("fy")
+    fp = str(fact.get("fp", "") or "").upper().strip()
+
+    if fy is not None and fp in {"Q1", "Q2", "Q3", "Q4"}:
+        try:
+            return f"{int(fy)}{fp}", "fy_fp"
+        except Exception:
+            pass
+
+    end_s = str(fact.get("end", "") or "")
+    end_d = parse_iso_date(end_s)
+    if end_d is not None:
+        for qn in (1, 2, 3, 4):
+            q_label = f"{end_d.year}Q{qn}"
+            if end_d == quarter_end_date_obj(end_d.year, qn):
+                return q_label, "end_date"
+    return None, "unknown"
+
+
+def candidate_score(
+    candidate: Dict[str, Any],
+    *,
+    expected_quarter: str,
+    expected_as_of_date: str,
+) -> int:
+    score = 0
+
+    if candidate.get("derived_quarter") == expected_quarter:
+        score += 100
+    elif candidate.get("derived_quarter") is not None:
+        score -= 60
+
+    filed_s = str(candidate.get("filed", "") or "")
+    filed_d = parse_iso_date(filed_s)
+    asof_d = parse_iso_date(expected_as_of_date)
+    if filed_d is not None and asof_d is not None:
+        delta = abs((filed_d - asof_d).days)
+        score += max(0, 25 - min(delta, 25))
+
+    form = str(candidate.get("form", "") or "").upper()
+    if form == "6-K":
+        score += 25
+    elif form in {"20-F", "40-F"}:
+        score += 8
+    elif form in {"10-Q", "10-K"}:
+        score += 5
+
+    score += unit_preference_score(str(candidate.get("unit_key", "") or ""))
+    score += concept_preference_score(
+        str(candidate.get("taxonomy", "") or ""),
+        str(candidate.get("concept", "") or ""),
     )
-    if not quarter:
-        return None, "quarter_not_detected_in_pdf"
 
-    eps_val = infer_eps_from_pdf_text(clean_text)
-    if eps_val is None:
-        eps_val = infer_eps_from_text(title=pdf_url, text=clean_text)
-    if eps_val is None:
-        return None, "eps_not_detected_in_pdf"
+    if str(candidate.get("quarter_derivation", "")) == "fy_fp":
+        score += 8
+    elif str(candidate.get("quarter_derivation", "")) == "end_date":
+        score += 3
 
-    qnum = int(quarter[-1])
+    return score
+
+
+def collect_xbrl_eps_candidates(
+    companyfacts: Dict[str, Any],
+    *,
+    expected_quarter: str,
+    expected_as_of_date: str,
+) -> List[Dict[str, Any]]:
+    facts_root = companyfacts.get("facts", {})
+    if not isinstance(facts_root, dict):
+        return []
+
+    candidates: List[Dict[str, Any]] = []
+
+    # 1) direct preferred concepts first
+    preferred_pairs = set(DIRECT_EPS_CONCEPTS)
+
+    for taxonomy, concepts in facts_root.items():
+        if not isinstance(concepts, dict):
+            continue
+
+        for concept, meta in concepts.items():
+            if not isinstance(meta, dict):
+                continue
+
+            pair = (taxonomy, concept)
+            if pair not in preferred_pairs and not is_eps_concept_name(concept):
+                continue
+
+            units = meta.get("units", {})
+            if not isinstance(units, dict):
+                continue
+
+            for unit_key, rows in units.items():
+                if not isinstance(rows, list):
+                    continue
+
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+
+                    val = safe_float(row.get("val"))
+                    if val is None:
+                        continue
+
+                    derived_quarter, derivation = infer_quarter_from_fact(
+                        row,
+                        expected_quarter=expected_quarter,
+                    )
+
+                    cand = {
+                        "taxonomy": taxonomy,
+                        "concept": concept,
+                        "label": meta.get("label"),
+                        "description": meta.get("description"),
+                        "unit_key": unit_key,
+                        "value": val,
+                        "fy": row.get("fy"),
+                        "fp": row.get("fp"),
+                        "form": row.get("form"),
+                        "filed": row.get("filed"),
+                        "end": row.get("end"),
+                        "frame": row.get("frame"),
+                        "accn": row.get("accn"),
+                        "derived_quarter": derived_quarter,
+                        "quarter_derivation": derivation,
+                    }
+                    cand["score"] = candidate_score(
+                        cand,
+                        expected_quarter=expected_quarter,
+                        expected_as_of_date=expected_as_of_date,
+                    )
+                    candidates.append(cand)
+
+    candidates.sort(
+        key=lambda x: (
+            -int(x.get("score", 0)),
+            str(x.get("filed", "")),
+            str(x.get("taxonomy", "")),
+            str(x.get("concept", "")),
+        )
+    )
+    return candidates
+
+
+def pick_best_xbrl_candidate(
+    candidates: List[Dict[str, Any]],
+    *,
+    expected_quarter: str,
+    expected_eps: float,
+    tolerance: float,
+) -> Tuple[Optional[Dict[str, Any]], str]:
+    if not candidates:
+        return None, "no_candidate"
+
+    # Prefer exact quarter candidates first
+    exact_quarter = [c for c in candidates if c.get("derived_quarter") == expected_quarter]
+    pool = exact_quarter if exact_quarter else candidates
+
+    best = pool[0]
+    if abs(float(best["value"]) - float(expected_eps)) <= tolerance and best.get("derived_quarter") == expected_quarter:
+        return best, "exact_match"
+
+    return best, "best_candidate_mismatch"
+
+
+def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
+    q = f"{year}Q{quarter_num}"
     return {
-        "quarter": quarter,
-        "eps": eps_val,
-        "as_of_date": infer_date_from_text(clean_text),
-        "article_title": f"TSMC {quarter} PDF",
-        "article_url": pdf_url,
-        "quarter_end_date": quarter_end_date_from_label(quarter),
-        "quarter_word": quarter_word_from_num(qnum),
-    }, "ok"
+        "quarter": q,
+        "publication_state": assess_publication_state(year, quarter_num, datetime.now().date()),
+        "probe_source": "sec_companyfacts_xbrl",
+        "candidate_count": 0,
+        "candidate_preview": [],
+        "attempts": [],
+        "discovered": False,
+        "discovered_record_source": None,
+        "status": "NOT_RUN",
+    }
 
 
-def extract_links(html: str, base_url: str) -> List[Tuple[str, str]]:
-    out: List[Tuple[str, str]] = []
-    seen: set[str] = set()
-    for href, inner in A_RE.findall(html or ""):
-        full = urljoin(base_url, unescape(href).strip())
-        if not full.startswith("http"):
-            continue
-        if full in seen:
-            continue
-        seen.add(full)
-        out.append((full, clean_html_text(inner)))
+def summarize_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "taxonomy": c.get("taxonomy"),
+        "concept": c.get("concept"),
+        "unit_key": c.get("unit_key"),
+        "value": c.get("value"),
+        "fy": c.get("fy"),
+        "fp": c.get("fp"),
+        "form": c.get("form"),
+        "filed": c.get("filed"),
+        "end": c.get("end"),
+        "derived_quarter": c.get("derived_quarter"),
+        "quarter_derivation": c.get("quarter_derivation"),
+        "score": c.get("score"),
+        "accn": c.get("accn"),
+    }
+
+
+def choose_representative_failure(attempts: List[Dict[str, Any]]) -> Tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    if not attempts:
+        return FAILURE_CLASS_NO_CANDIDATE, None, None
+
+    first = attempts[0]
+    last = attempts[-1]
+
+    # prioritize mismatch if we had actual candidates but mismatch
+    for a in attempts:
+        if str(a.get("failure_class", "")) == FAILURE_CLASS_MISMATCH:
+            return FAILURE_CLASS_MISMATCH, first, last
+
+    # then any HTTP-like issue
+    for a in attempts:
+        if str(a.get("failure_class", "")) == FAILURE_CLASS_HTTP:
+            return FAILURE_CLASS_HTTP, first, last
+
+    return str(last.get("failure_class", FAILURE_CLASS_NO_CANDIDATE)), first, last
+
+
+def update_record_with_verification(
+    seed_record: Dict[str, Any],
+    *,
+    verified_candidate: Optional[Dict[str, Any]],
+    companyfacts_url: str,
+    attempts: List[Dict[str, Any]],
+    tolerance: float,
+) -> Dict[str, Any]:
+    out = copy.deepcopy(seed_record)
+    out["fetched_at_utc"] = now_utc_iso()
+
+    primary_failure_class, first_failure, last_failure = choose_representative_failure(attempts)
+
+    if verified_candidate is not None:
+        out["reference_url_verified_this_run"] = True
+        out["verification_status"] = "VERIFIED"
+        out["verification_method"] = "xbrl_companyfacts"
+        out["verified_url"] = companyfacts_url
+        out["verified_eps"] = verified_candidate.get("value")
+        out["verified_as_of_date"] = verified_candidate.get("filed")
+        out["reference_source_type"] = "sec_companyfacts_xbrl"
+        out["verification"] = {
+            "status": "VERIFIED",
+            "method": "xbrl_companyfacts",
+            "verified_url": companyfacts_url,
+            "verified_eps": verified_candidate.get("value"),
+            "verified_quarter": verified_candidate.get("derived_quarter"),
+            "verified_as_of_date": verified_candidate.get("filed"),
+            "verified_concept": {
+                "taxonomy": verified_candidate.get("taxonomy"),
+                "concept": verified_candidate.get("concept"),
+                "unit_key": verified_candidate.get("unit_key"),
+                "form": verified_candidate.get("form"),
+                "accn": verified_candidate.get("accn"),
+                "score": verified_candidate.get("score"),
+            },
+            "reason": "seed_eps_matched_best_xbrl_candidate_within_tolerance",
+            "tolerance": tolerance,
+            "attempted_at_utc": now_utc_iso(),
+            "candidate_count_considered": len(attempts),
+            "primary_failure_class": None,
+            "first_failure": None,
+            "last_failure": None,
+        }
+        return out
+
+    out["reference_url_verified_this_run"] = False
+    out["verification_status"] = "VERIFY_FAILED"
+    out["verification_method"] = "xbrl_companyfacts"
+    out["verified_url"] = companyfacts_url
+    out["verified_eps"] = None
+    out["verified_as_of_date"] = None
+    out["verification"] = {
+        "status": "VERIFY_FAILED",
+        "method": "xbrl_companyfacts",
+        "verified_url": companyfacts_url,
+        "verified_eps": None,
+        "verified_quarter": None,
+        "verified_as_of_date": None,
+        "verified_concept": None,
+        "reason": primary_failure_class,
+        "tolerance": tolerance,
+        "attempted_at_utc": now_utc_iso(),
+        "candidate_count_considered": len(attempts),
+        "primary_failure_class": primary_failure_class,
+        "first_failure": first_failure,
+        "last_failure": last_failure,
+    }
     return out
 
 
-def score_sec_link(url: str, title: str) -> int:
-    hay = f"{url} {title}".lower()
-    score = 0
-    for token, pts in [
-        ("99.1", 50),
-        ("99-1", 50),
-        ("99_1", 50),
-        ("ex99", 40),
-        ("earnings", 35),
-        ("release", 35),
-        ("press", 25),
-        ("presentation", 15),
-        (".pdf", 10),
-        (".htm", 5),
-        (".html", 5),
-        ("financial", 5),
-    ]:
-        if token in hay:
-            score += pts
-    return score
+def probe_seed_with_xbrl(
+    seed_record: Dict[str, Any],
+    *,
+    companyfacts: Optional[Dict[str, Any]],
+    companyfacts_url: str,
+    companyfacts_err: Optional[str],
+    tolerance: float,
+    notes: List[str],
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    quarter = str(seed_record["quarter"])
+    year = int(quarter[:4])
+    qnum = int(quarter[-1])
+
+    debug = build_debug_quarter_entry(year, qnum)
+    pub_state = debug["publication_state"]
+
+    if pub_state == "NOT_ENDED_YET":
+        debug["status"] = "NOT_ENDED_YET"
+        record = copy.deepcopy(seed_record)
+        record["verification_status"] = "NOT_ENDED_YET"
+        record["verification_method"] = "xbrl_companyfacts"
+        record["reference_url_verified_this_run"] = False
+        record["verification"] = {
+            "status": "NOT_ENDED_YET",
+            "method": "xbrl_companyfacts",
+            "verified_url": companyfacts_url,
+            "verified_eps": None,
+            "verified_quarter": None,
+            "verified_as_of_date": None,
+            "verified_concept": None,
+            "reason": FAILURE_CLASS_NOT_ENDED,
+            "attempted_at_utc": now_utc_iso(),
+            "candidate_count_considered": 0,
+            "primary_failure_class": FAILURE_CLASS_NOT_ENDED,
+            "first_failure": None,
+            "last_failure": None,
+        }
+        notes.append(f"{quarter}: skipped XBRL probe because quarter not ended yet")
+        return record, debug
+
+    if pub_state == "LIKELY_NOT_PUBLISHED_YET":
+        debug["status"] = "LIKELY_NOT_PUBLISHED_YET"
+        record = copy.deepcopy(seed_record)
+        record["verification_status"] = "LIKELY_NOT_PUBLISHED_YET"
+        record["verification_method"] = "xbrl_companyfacts"
+        record["reference_url_verified_this_run"] = False
+        record["verification"] = {
+            "status": "LIKELY_NOT_PUBLISHED_YET",
+            "method": "xbrl_companyfacts",
+            "verified_url": companyfacts_url,
+            "verified_eps": None,
+            "verified_quarter": None,
+            "verified_as_of_date": None,
+            "verified_concept": None,
+            "reason": FAILURE_CLASS_NOT_PUBLISHED,
+            "attempted_at_utc": now_utc_iso(),
+            "candidate_count_considered": 0,
+            "primary_failure_class": FAILURE_CLASS_NOT_PUBLISHED,
+            "first_failure": None,
+            "last_failure": None,
+        }
+        notes.append(f"{quarter}: skipped XBRL probe because publication likely not ready yet")
+        return record, debug
+
+    attempts: List[Dict[str, Any]] = []
+
+    if companyfacts is None:
+        debug["status"] = "NO_XBRL_DATA"
+        attempt = {
+            "probe": "companyfacts_fetch",
+            "failure_class": FAILURE_CLASS_HTTP,
+            "reason": f"companyfacts_fetch_failed:{companyfacts_err}",
+            "companyfacts_url": companyfacts_url,
+        }
+        attempts.append(attempt)
+        debug["attempts"] = attempts
+        record = update_record_with_verification(
+            seed_record,
+            verified_candidate=None,
+            companyfacts_url=companyfacts_url,
+            attempts=attempts,
+            tolerance=tolerance,
+        )
+        notes.append(f"{quarter}: companyfacts unavailable | err={companyfacts_err}")
+        return record, debug
+
+    candidates = collect_xbrl_eps_candidates(
+        companyfacts,
+        expected_quarter=quarter,
+        expected_as_of_date=str(seed_record["as_of_date"]),
+    )
+    debug["candidate_count"] = len(candidates)
+    debug["candidate_preview"] = [summarize_candidate(c) for c in candidates[:12]]
+
+    if not candidates:
+        debug["status"] = "NO_XBRL_CANDIDATE"
+        attempts.append(
+            {
+                "probe": "companyfacts_candidate_search",
+                "failure_class": FAILURE_CLASS_NO_CANDIDATE,
+                "reason": "no_eps_candidate_found_in_companyfacts",
+                "companyfacts_url": companyfacts_url,
+            }
+        )
+        debug["attempts"] = attempts
+        record = update_record_with_verification(
+            seed_record,
+            verified_candidate=None,
+            companyfacts_url=companyfacts_url,
+            attempts=attempts,
+            tolerance=tolerance,
+        )
+        notes.append(f"{quarter}: no XBRL EPS candidate found in companyfacts")
+        return record, debug
+
+    best, pick_reason = pick_best_xbrl_candidate(
+        candidates,
+        expected_quarter=quarter,
+        expected_eps=float(seed_record["eps"]),
+        tolerance=tolerance,
+    )
+
+    if best is None:
+        debug["status"] = "NO_XBRL_CANDIDATE"
+        attempts.append(
+            {
+                "probe": "companyfacts_candidate_pick",
+                "failure_class": FAILURE_CLASS_NO_CANDIDATE,
+                "reason": "best_candidate_none",
+                "companyfacts_url": companyfacts_url,
+            }
+        )
+        debug["attempts"] = attempts
+        record = update_record_with_verification(
+            seed_record,
+            verified_candidate=None,
+            companyfacts_url=companyfacts_url,
+            attempts=attempts,
+            tolerance=tolerance,
+        )
+        notes.append(f"{quarter}: best XBRL candidate is none")
+        return record, debug
+
+    best_summary = summarize_candidate(best)
+
+    if pick_reason == "exact_match":
+        attempts.append(
+            {
+                "probe": "companyfacts_best_candidate",
+                "failure_class": None,
+                "reason": "exact_match",
+                "candidate": best_summary,
+            }
+        )
+        debug["attempts"] = attempts
+        debug["discovered"] = True
+        debug["discovered_record_source"] = "xbrl_companyfacts"
+        debug["status"] = "VERIFIED"
+        record = update_record_with_verification(
+            seed_record,
+            verified_candidate=best,
+            companyfacts_url=companyfacts_url,
+            attempts=attempts,
+            tolerance=tolerance,
+        )
+        notes.append(
+            f"{quarter}: VERIFIED via companyfacts "
+            f"{best.get('taxonomy')}:{best.get('concept')} "
+            f"value={best.get('value')} filed={best.get('filed')}"
+        )
+        return record, debug
+
+    attempts.append(
+        {
+            "probe": "companyfacts_best_candidate",
+            "failure_class": FAILURE_CLASS_MISMATCH,
+            "reason": "best_candidate_mismatch",
+            "expected_quarter": quarter,
+            "expected_eps": seed_record["eps"],
+            "candidate": best_summary,
+        }
+    )
+    debug["attempts"] = attempts
+    debug["status"] = "VERIFY_FAILED"
+
+    record = update_record_with_verification(
+        seed_record,
+        verified_candidate=None,
+        companyfacts_url=companyfacts_url,
+        attempts=attempts,
+        tolerance=tolerance,
+    )
+    notes.append(
+        f"{quarter}: VERIFY_FAILED best XBRL candidate mismatch | "
+        f"candidate={best.get('taxonomy')}:{best.get('concept')} "
+        f"value={best.get('value')} quarter={best.get('derived_quarter')} filed={best.get('filed')}"
+    )
+    return record, debug
 
 
 def choose_better_record(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
@@ -635,11 +820,11 @@ def choose_better_record(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, 
     if old_verified and not new_verified:
         return old
 
-    old_vstatus = str(old.get("verification", {}).get("status", ""))
-    new_vstatus = str(new.get("verification", {}).get("status", ""))
-    if new_vstatus.startswith("VERIFIED") and not old_vstatus.startswith("VERIFIED"):
+    old_status = str(old.get("verification_status", "") or "")
+    new_status = str(new.get("verification_status", "") or "")
+    if new_status == "VERIFIED" and old_status != "VERIFIED":
         return new
-    if old_vstatus.startswith("VERIFIED") and not new_vstatus.startswith("VERIFIED"):
+    if old_status == "VERIFIED" and new_status != "VERIFIED":
         return old
 
     old_pri = int(old.get("source_priority", detect_source_priority(str(old.get("source", "")))))
@@ -649,14 +834,11 @@ def choose_better_record(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, 
     if new_pri < old_pri:
         return old
 
-    new_origin = str(new.get("data_origin", ""))
-    old_origin = str(old.get("data_origin", ""))
-    if new_origin == "bootstrap_seed" and old_origin != "bootstrap_seed":
+    new_fetched = str(new.get("fetched_at_utc", "") or "")
+    old_fetched = str(old.get("fetched_at_utc", "") or "")
+    if new_fetched >= old_fetched:
         return new
-    if old_origin == "bootstrap_seed" and new_origin != "bootstrap_seed":
-        return old
-
-    return new
+    return old
 
 
 def load_existing_tracker(path: Path) -> Dict[str, Any]:
@@ -704,423 +886,6 @@ def merge_records(existing: List[Dict[str, Any]], fetched: List[Dict[str, Any]])
     return out
 
 
-def sec_submissions_url(cik: str) -> str:
-    return f"https://data.sec.gov/submissions/CIK{cik}.json"
-
-
-def fetch_sec_recent_6k_candidates(
-    session: requests.Session,
-    *,
-    cik: str,
-    sec_user_agent: str,
-    as_of_date: str,
-    timeout: int,
-    retries: int,
-    sleep_sec: float,
-    lookback_days: int,
-) -> Tuple[List[Dict[str, Any]], str]:
-    url = sec_submissions_url(cik)
-    raw = http_get_text(session, url, timeout, retries, sleep_sec, headers=sec_headers(sec_user_agent))
-    j = json.loads(raw)
-
-    recent = (((j.get("filings") or {}).get("recent")) or {})
-    forms = recent.get("form", []) or []
-    filing_dates = recent.get("filingDate", []) or []
-    accession_numbers = recent.get("accessionNumber", []) or []
-    primary_documents = recent.get("primaryDocument", []) or []
-    primary_doc_desc = recent.get("primaryDocDescription", []) or []
-
-    rows: List[Dict[str, Any]] = []
-    target_dt = parse_iso_date(as_of_date)
-    if target_dt is None:
-        return [], url
-
-    n = min(len(forms), len(filing_dates), len(accession_numbers), len(primary_documents))
-    cik_int = str(int(cik))  # remove leading zeros for archive URL path
-
-    for i in range(n):
-        form = str(forms[i] or "")
-        if "6-K" not in form.upper():
-            continue
-
-        filing_date = str(filing_dates[i] or "")
-        fd = parse_iso_date(filing_date)
-        if fd is None:
-            continue
-
-        delta = abs((fd - target_dt).days)
-        if delta > lookback_days:
-            continue
-
-        accession = str(accession_numbers[i] or "")
-        primary = str(primary_documents[i] or "")
-        if not accession or not primary:
-            continue
-
-        accession_nodash = accession.replace("-", "")
-        filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/{primary}"
-
-        rows.append(
-            {
-                "url": filing_url,
-                "title": str(primary_doc_desc[i] or primary or filing_url),
-                "filing_date": filing_date,
-                "accession_number": accession,
-                "form": form,
-                "src_hint": "sec_recent_6k",
-                "accept_reason": f"sec_submissions_json_delta_{delta}",
-                "delta_days": delta,
-            }
-        )
-
-    rows.sort(key=lambda x: (int(x["delta_days"]), x["filing_date"]))
-    return rows, url
-
-
-def build_seed_candidate_list(
-    seed: Dict[str, Any],
-    sec_candidates: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    seen: set[str] = set()
-
-    def add(url: str, title: str, src_hint: str, accept_reason: str) -> None:
-        u = (url or "").strip()
-        if not u or not u.startswith("http"):
-            return
-        if u in seen:
-            return
-        seen.add(u)
-        out.append(
-            {
-                "url": u,
-                "title": title or u,
-                "src_hint": src_hint,
-                "accept_reason": accept_reason,
-            }
-        )
-
-    for item in seed.get("verification_candidates", []) or []:
-        add(str(item), str(item), "seed_manual_candidate", "seed_manual_candidate")
-
-    for item in sec_candidates:
-        add(
-            item["url"],
-            item.get("title", item["url"]),
-            "sec_recent_6k",
-            item.get("accept_reason", "sec_recent_6k"),
-        )
-
-    for key, hint in [
-        ("pdf_url", "seed_pdf_url"),
-        ("article_url", "seed_article_url"),
-        ("page_url", "seed_page_url"),
-        ("sec_filing_url", "seed_sec_filing_url"),
-        ("sec_document_url", "seed_sec_document_url"),
-    ]:
-        val = str(seed.get(key, "")).strip()
-        if val:
-            add(val, val, hint, hint)
-
-    return out
-
-
-def verify_candidate_url(
-    session: requests.Session,
-    candidate: Dict[str, Any],
-    *,
-    expected_year: int,
-    expected_quarter_num: int,
-    expected_quarter: str,
-    expected_eps: float,
-    sec_user_agent: str,
-    timeout: int,
-    retries: int,
-    sleep_sec: float,
-    expand_sec_links: bool = True,
-) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
-    url = candidate["url"]
-    title_hint = candidate.get("title", url)
-    src_hint = candidate.get("src_hint", "unknown")
-    accept_reason = candidate.get("accept_reason", "unknown")
-
-    attempt: Dict[str, Any] = {
-        "url": url,
-        "title_hint": title_hint,
-        "src_hint": src_hint,
-        "accept_reason": accept_reason,
-        "fetch_ok": False,
-        "parse_ok": False,
-        "parse_reason": None,
-        "parsed_quarter": None,
-        "parsed_eps": None,
-        "expected_quarter": expected_quarter,
-        "expected_eps": expected_eps,
-        "matched_eps": False,
-        "match_ok": False,
-        "blocked_reason": None,
-        "excerpt": None,
-        "expanded_links_count": 0,
-    }
-
-    host = canonical_host(urlparse(url).netloc)
-    hdrs = sec_headers(sec_user_agent) if host.endswith("sec.gov") or host == "data.sec.gov" else None
-    path = urlparse(url).path.lower()
-
-    if path.endswith(".pdf"):
-        try:
-            pdf_bytes = http_get_bytes(session, url, timeout, retries, sleep_sec, headers=hdrs)
-            attempt["fetch_ok"] = True
-
-            rec, reason = parse_pdf_record(
-                pdf_bytes,
-                url,
-                expected_year=expected_year,
-                expected_quarter_num=expected_quarter_num,
-            )
-            if rec is None:
-                attempt["parse_reason"] = reason
-                return None, attempt
-
-            attempt["parse_ok"] = True
-            attempt["parsed_quarter"] = rec["quarter"]
-            attempt["parsed_eps"] = rec["eps"]
-            attempt["matched_eps"] = abs(float(rec["eps"]) - float(expected_eps)) <= 0.01
-            attempt["match_ok"] = (rec["quarter"] == expected_quarter) and attempt["matched_eps"]
-
-            if not attempt["match_ok"]:
-                attempt["parse_reason"] = f"quarter_or_eps_mismatch:{rec['quarter']}:{rec['eps']}"
-                return None, attempt
-
-            attempt["parse_reason"] = "ok"
-            return rec, attempt
-
-        except Exception as e:
-            attempt["parse_reason"] = f"pdf_fetch_failed:{e}"
-            return None, attempt
-
-    try:
-        html = http_get_text(session, url, timeout, retries, sleep_sec, headers=hdrs)
-        attempt["fetch_ok"] = True
-        attempt["excerpt"] = clean_html_text(html)[:220]
-    except Exception as e:
-        attempt["parse_reason"] = f"fetch_failed:{e}"
-        return None, attempt
-
-    block_reason = detect_block_reason(html)
-    if block_reason:
-        attempt["blocked_reason"] = block_reason
-
-    rec, reason = parse_html_record(
-        html,
-        url,
-        expected_year=expected_year,
-        expected_quarter_num=expected_quarter_num,
-    )
-
-    if rec is not None:
-        attempt["parse_ok"] = True
-        attempt["parsed_quarter"] = rec["quarter"]
-        attempt["parsed_eps"] = rec["eps"]
-        attempt["matched_eps"] = abs(float(rec["eps"]) - float(expected_eps)) <= 0.01
-        attempt["match_ok"] = (rec["quarter"] == expected_quarter) and attempt["matched_eps"]
-
-        if attempt["match_ok"]:
-            attempt["parse_reason"] = "ok"
-            return rec, attempt
-
-        attempt["parse_reason"] = f"quarter_or_eps_mismatch:{rec['quarter']}:{rec['eps']}"
-    else:
-        attempt["parse_reason"] = reason
-
-    # SEC filing pages often need one extra layer expansion to exhibits / linked docs.
-    if expand_sec_links and host.endswith("sec.gov"):
-        links = extract_links(html, url)
-        doc_links: List[Dict[str, Any]] = []
-
-        for full, title in links:
-            p = urlparse(full).path.lower()
-            if not full.startswith("https://www.sec.gov/Archives/edgar/data/"):
-                continue
-            if not (p.endswith(".htm") or p.endswith(".html") or p.endswith(".txt") or p.endswith(".pdf")):
-                continue
-            doc_links.append({"url": full, "title": title or full})
-
-        doc_links.sort(key=lambda x: (-score_sec_link(x["url"], x["title"]), x["url"]))
-        attempt["expanded_links_count"] = len(doc_links)
-
-        for child in doc_links[:12]:
-            child_rec, child_attempt = verify_candidate_url(
-                session,
-                {
-                    "url": child["url"],
-                    "title": child["title"],
-                    "src_hint": "sec_extracted_link",
-                    "accept_reason": f"expanded_from:{url}",
-                },
-                expected_year=expected_year,
-                expected_quarter_num=expected_quarter_num,
-                expected_quarter=expected_quarter,
-                expected_eps=expected_eps,
-                sec_user_agent=sec_user_agent,
-                timeout=timeout,
-                retries=retries,
-                sleep_sec=sleep_sec,
-                expand_sec_links=False,
-            )
-            if child_rec is not None:
-                child_attempt["parent_url"] = url
-                return child_rec, child_attempt
-
-    return None, attempt
-
-
-def update_record_with_verification(
-    seed_record: Dict[str, Any],
-    verified: Optional[Dict[str, Any]],
-    attempt: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
-    out = copy.deepcopy(seed_record)
-
-    if verified is not None and attempt is not None:
-        verification_status = "VERIFIED"
-        verification_method = str(attempt.get("src_hint") or "unknown")
-        verified_url = str(attempt.get("url") or "")
-        reason = "matched_seed_quarter_and_eps"
-        verified_eps = verified.get("eps")
-        verified_quarter = verified.get("quarter")
-        verified_as_of_date = verified.get("as_of_date")
-        out["reference_url_verified_this_run"] = True
-    else:
-        verification_status = "VERIFY_FAILED"
-        verification_method = str((attempt or {}).get("src_hint") or "NA")
-        verified_url = str((attempt or {}).get("url") or "")
-        reason = str((attempt or {}).get("parse_reason") or "no_attempt")
-        verified_eps = None
-        verified_quarter = None
-        verified_as_of_date = None
-        out["reference_url_verified_this_run"] = False
-
-    out["verification"] = {
-        "status": verification_status,
-        "method": verification_method,
-        "verified_url": verified_url,
-        "reason": reason,
-        "verified_quarter": verified_quarter,
-        "verified_eps": verified_eps,
-        "verified_as_of_date": verified_as_of_date,
-        "attempted_at_utc": now_utc_iso(),
-    }
-    out["verification_status"] = verification_status
-    out["verification_method"] = verification_method
-    out["verified_url"] = verified_url
-    out["verified_eps"] = verified_eps
-    out["verified_as_of_date"] = verified_as_of_date
-    out["fetched_at_utc"] = now_utc_iso()
-    return out
-
-
-def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
-    q = f"{year}Q{quarter_num}"
-    return {
-        "quarter": q,
-        "publication_state": assess_publication_state(year, quarter_num, today_local_date()),
-        "candidate_urls": [],
-        "attempts": [],
-        "discovered": False,
-        "discovered_record_source": None,
-        "status": "NOT_RUN",
-    }
-
-
-def verify_seed_record(
-    session: requests.Session,
-    seed_record: Dict[str, Any],
-    *,
-    sec_cik: str,
-    sec_user_agent: str,
-    timeout: int,
-    retries: int,
-    sleep_sec: float,
-    sec_lookback_days: int,
-    notes: List[str],
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    quarter = str(seed_record["quarter"])
-    year = int(quarter[:4])
-    qnum = int(quarter[-1])
-    expected_eps = float(seed_record["eps"])
-    debug = build_debug_quarter_entry(year, qnum)
-
-    submissions_url = None
-    sec_candidates: List[Dict[str, Any]] = []
-
-    try:
-        sec_candidates, submissions_url = fetch_sec_recent_6k_candidates(
-            session,
-            cik=sec_cik,
-            sec_user_agent=sec_user_agent,
-            as_of_date=str(seed_record["as_of_date"]),
-            timeout=timeout,
-            retries=retries,
-            sleep_sec=sleep_sec,
-            lookback_days=sec_lookback_days,
-        )
-        if submissions_url:
-            notes.append(f"{quarter}: SEC submissions queried: {submissions_url} | candidates={len(sec_candidates)}")
-    except Exception as e:
-        notes.append(f"{quarter}: SEC submissions query failed | err={e}")
-
-    candidates = build_seed_candidate_list(seed_record, sec_candidates)
-    debug["candidate_urls"] = candidates
-
-    if not candidates:
-        debug["status"] = "NO_CANDIDATES"
-        verified_record = update_record_with_verification(seed_record, None, None)
-        return verified_record, debug
-
-    last_attempt: Optional[Dict[str, Any]] = None
-
-    for candidate in candidates:
-        rec, attempt = verify_candidate_url(
-            session,
-            candidate,
-            expected_year=year,
-            expected_quarter_num=qnum,
-            expected_quarter=quarter,
-            expected_eps=expected_eps,
-            sec_user_agent=sec_user_agent,
-            timeout=timeout,
-            retries=retries,
-            sleep_sec=sleep_sec,
-            expand_sec_links=True,
-        )
-        debug["attempts"].append(attempt)
-        last_attempt = attempt
-
-        if rec is not None:
-            debug["discovered"] = True
-            debug["discovered_record_source"] = attempt.get("src_hint")
-            debug["status"] = "VERIFIED"
-            notes.append(
-                f"{quarter}: verified via {attempt.get('src_hint')} | "
-                f"url={attempt.get('url')} | eps={rec.get('eps')}"
-            )
-            return update_record_with_verification(seed_record, rec, attempt), debug
-
-        notes.append(
-            f"{quarter}: verify failed via {attempt.get('src_hint')} | "
-            f"url={attempt.get('url')} | reason={attempt.get('parse_reason')}"
-        )
-
-    pub_state = debug["publication_state"]
-    if pub_state in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}:
-        debug["status"] = pub_state
-    else:
-        debug["status"] = "VERIFY_FAILED"
-
-    return update_record_with_verification(seed_record, None, last_attempt), debug
-
-
 def build_output(
     merged_quarters: List[Dict[str, Any]],
     entry_pages: List[str],
@@ -1128,6 +893,12 @@ def build_output(
     discovery_debug: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     verified_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFIED")
+    failed_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFY_FAILED")
+    skipped_count = sum(
+        1
+        for x in merged_quarters
+        if x.get("verification_status") in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}
+    )
     seed_count = sum(1 for x in merged_quarters if x.get("data_origin") == "bootstrap_seed")
 
     return {
@@ -1135,16 +906,18 @@ def build_output(
             "generated_at_utc": now_utc_iso(),
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
-            "source_policy": "seed_first_plus_sec_verification_then_direct_url_probe_no_search",
+            "source_policy": "seed_first_plus_optional_data_sec_companyfacts_xbrl_probe_non_blocking",
             "entry_pages": entry_pages,
             "notes": notes,
             "counts": {
                 "verified_count": verified_count,
+                "verify_failed_count": failed_count,
+                "verify_skipped_count": skipped_count,
                 "bootstrap_seed_count": seed_count,
                 "total_quarters": len(merged_quarters),
             },
             "optional_features": {
-                "pypdf_installed": HAVE_PYPDF,
+                "xbrl_probe_enabled": True,
             },
         },
         "discovery_debug": discovery_debug,
@@ -1163,7 +936,7 @@ def iter_target_quarters(start_year: int, end_year: int) -> List[Tuple[int, int]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Update TSMC quarterly EPS tracker (seed-first + SEC verification)."
+        description="Update TSMC quarterly EPS tracker (seed-first + optional XBRL probe)."
     )
     parser.add_argument("--out", default=DEFAULT_OUT, help="Output tracker JSON path")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout seconds")
@@ -1171,29 +944,28 @@ def main() -> None:
     parser.add_argument("--sleep-sec", type=float, default=DEFAULT_SLEEP, help="Sleep between retries")
     parser.add_argument("--start-year", type=int, default=datetime.now().year, help="Start year to scan")
     parser.add_argument("--end-year", type=int, default=max(datetime.now().year - 5, 2024), help="End year to scan")
-    parser.add_argument("--sec-cik", default=DEFAULT_SEC_CIK, help="SEC CIK, zero-padded, e.g. 0001046179")
+    parser.add_argument("--sec-cik", default=DEFAULT_SEC_CIK, help="SEC CIK, zero-padded")
     parser.add_argument(
         "--sec-user-agent",
         default=DEFAULT_SEC_USER_AGENT,
-        help="User-Agent used for SEC requests",
+        help="User-Agent for data.sec.gov requests; use a real contact identity if possible",
     )
     parser.add_argument(
-        "--sec-lookback-days",
-        type=int,
-        default=DEFAULT_SEC_LOOKBACK_DAYS,
-        help="Max abs day distance from seed as_of_date when selecting recent 6-K candidates",
+        "--xbrl-tolerance",
+        type=float,
+        default=DEFAULT_XBRL_TOLERANCE,
+        help="Absolute EPS tolerance for XBRL verification match",
     )
     args = parser.parse_args()
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    session = build_session(args.sec_user_agent)
+    session = build_session()
     existing = load_existing_tracker(out_path)
     existing_quarters = existing.get("quarters", [])
 
     notes: List[str] = []
-    entry_pages: List[str] = [sec_submissions_url(args.sec_cik)]
     discovery_debug: List[Dict[str, Any]] = []
     fetched: List[Dict[str, Any]] = []
 
@@ -1208,8 +980,24 @@ def main() -> None:
         seed_map[str(item["quarter"])] = item
 
     notes.append(f"bootstrapped seeds={len(seed_map)}")
-    notes.append(f"optional pypdf installed={HAVE_PYPDF}")
-    notes.append(f"SEC verification enabled with cik={args.sec_cik}")
+    notes.append("XBRL probe mode=companyfacts_only")
+    notes.append(f"SEC companyfacts probe cik={args.sec_cik}")
+
+    companyfacts_url = sec_companyfacts_url(args.sec_cik)
+    entry_pages = [companyfacts_url]
+
+    companyfacts, companyfacts_err = http_get_json(
+        session,
+        companyfacts_url,
+        args.timeout,
+        args.retries,
+        args.sleep_sec,
+        headers=sec_headers(args.sec_user_agent),
+    )
+    if companyfacts is None:
+        notes.append(f"companyfacts fetch failed: {companyfacts_url} | err={companyfacts_err}")
+    else:
+        notes.append(f"companyfacts fetch ok: {companyfacts_url}")
 
     target_quarters = {f"{y}Q{q}" for y, q in iter_target_quarters(args.start_year, args.end_year)}
     relevant_quarters = sorted(
@@ -1230,18 +1018,15 @@ def main() -> None:
         qnum = int(m.group(2))
 
         if quarter in seed_map:
-            verified_record, dbg = verify_seed_record(
-                session,
+            updated, dbg = probe_seed_with_xbrl(
                 seed_map[quarter],
-                sec_cik=args.sec_cik,
-                sec_user_agent=args.sec_user_agent,
-                timeout=args.timeout,
-                retries=args.retries,
-                sleep_sec=args.sleep_sec,
-                sec_lookback_days=args.sec_lookback_days,
+                companyfacts=companyfacts,
+                companyfacts_url=companyfacts_url,
+                companyfacts_err=companyfacts_err,
+                tolerance=args.xbrl_tolerance,
                 notes=notes,
             )
-            fetched.append(verified_record)
+            fetched.append(updated)
             discovery_debug.append(dbg)
         else:
             dbg = build_debug_quarter_entry(year, qnum)
@@ -1265,10 +1050,17 @@ def main() -> None:
     print(f"[INFO] existing_quarters={len(existing_quarters)}")
     print(f"[INFO] fetched_quarters={len(fetched)}")
     print(f"[INFO] merged_quarters={len(merged_quarters)}")
-    print(f"[INFO] pypdf_installed={HAVE_PYPDF}")
 
     verified_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFIED")
+    failed_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFY_FAILED")
+    skipped_count = sum(
+        1
+        for x in merged_quarters
+        if x.get("verification_status") in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}
+    )
     print(f"[INFO] verified_count={verified_count}")
+    print(f"[INFO] verify_failed_count={failed_count}")
+    print(f"[INFO] verify_skipped_count={skipped_count}")
 
     for q in merged_quarters:
         print(
@@ -1277,6 +1069,7 @@ def main() -> None:
             f"origin={q.get('data_origin')} | pri={q.get('source_priority')} | "
             f"verified_this_run={q.get('reference_url_verified_this_run')} | "
             f"verification_status={q.get('verification_status')} | "
+            f"verification_method={q.get('verification_method')} | "
             f"verified_url={q.get('verified_url')}"
         )
 
@@ -1285,7 +1078,7 @@ def main() -> None:
         print(
             f"  - {d.get('quarter')}: status={d.get('status')} | "
             f"pub_state={d.get('publication_state')} | "
-            f"candidate_urls={len(d.get('candidate_urls', []))} | "
+            f"candidate_count={d.get('candidate_count')} | "
             f"attempts={len(d.get('attempts', []))} | "
             f"discovered={d.get('discovered')}"
         )
