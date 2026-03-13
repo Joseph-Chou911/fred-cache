@@ -11,6 +11,34 @@ on:
         description: "Optional TX night-session close (manual input, e.g. 32442)"
         required: false
         default: ""
+      eps_base_override:
+        description: "Optional active EPS base override for live valuation (e.g. 66.25)"
+        required: false
+        default: ""
+      tsmc_weight_override:
+        description: "Optional TSMC weight override in 0050 (e.g. 0.6408)"
+        required: false
+        default: ""
+      tsmc_weight_as_of:
+        description: "Optional as-of date for TSMC weight metadata (e.g. 2026-03-13)"
+        required: false
+        default: ""
+      suggested_eps_base:
+        description: "Optional display-only suggested EPS base (never auto-applied)"
+        required: false
+        default: ""
+      suggested_eps_source:
+        description: "Optional display-only suggested EPS source"
+        required: false
+        default: ""
+      suggested_eps_as_of:
+        description: "Optional display-only suggested EPS as-of date"
+        required: false
+        default: ""
+      suggested_eps_method:
+        description: "Optional display-only suggested EPS method"
+        required: false
+        default: ""
   schedule:
     - cron: "35 6 * * 1-5"
 
@@ -27,6 +55,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -133,6 +163,13 @@ jobs:
         shell: bash
         env:
           TX_NIGHT_LAST_INPUT: ${{ github.event.inputs.tx_night_last || '' }}
+          EPS_BASE_OVERRIDE_INPUT: ${{ github.event.inputs.eps_base_override || '' }}
+          TSMC_WEIGHT_OVERRIDE_INPUT: ${{ github.event.inputs.tsmc_weight_override || '' }}
+          TSMC_WEIGHT_AS_OF_INPUT: ${{ github.event.inputs.tsmc_weight_as_of || '' }}
+          SUGGESTED_EPS_BASE_INPUT: ${{ github.event.inputs.suggested_eps_base || '' }}
+          SUGGESTED_EPS_SOURCE_INPUT: ${{ github.event.inputs.suggested_eps_source || '' }}
+          SUGGESTED_EPS_AS_OF_INPUT: ${{ github.event.inputs.suggested_eps_as_of || '' }}
+          SUGGESTED_EPS_METHOD_INPUT: ${{ github.event.inputs.suggested_eps_method || '' }}
         run: |
           set -euo pipefail
 
@@ -142,6 +179,49 @@ jobs:
             echo "Using manual tx_night_last=${TX_NIGHT_LAST_INPUT}"
           else
             echo "No tx_night_last provided; pre-execution shock review will run without manual TX close."
+          fi
+
+          if [ -n "${EPS_BASE_OVERRIDE_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --eps-base-override ${EPS_BASE_OVERRIDE_INPUT}"
+            echo "Using manual eps_base_override=${EPS_BASE_OVERRIDE_INPUT}"
+          else
+            echo "No eps_base_override provided; active_eps_base will use config."
+          fi
+
+          if [ -n "${TSMC_WEIGHT_OVERRIDE_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --tsmc-weight ${TSMC_WEIGHT_OVERRIDE_INPUT}"
+            echo "Using manual tsmc_weight_override=${TSMC_WEIGHT_OVERRIDE_INPUT}"
+          else
+            echo "No tsmc_weight_override provided; tsmc_weight will use config."
+          fi
+
+          if [ -n "${TSMC_WEIGHT_AS_OF_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --tsmc-weight-as-of ${TSMC_WEIGHT_AS_OF_INPUT}"
+            echo "Using tsmc_weight_as_of=${TSMC_WEIGHT_AS_OF_INPUT}"
+          else
+            echo "No tsmc_weight_as_of provided; tsmc_weight metadata date will remain default."
+          fi
+
+          if [ -n "${SUGGESTED_EPS_BASE_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-base ${SUGGESTED_EPS_BASE_INPUT}"
+            echo "Using display-only suggested_eps_base=${SUGGESTED_EPS_BASE_INPUT}"
+          else
+            echo "No suggested_eps_base provided; display-only suggestion will remain empty."
+          fi
+
+          if [ -n "${SUGGESTED_EPS_SOURCE_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-source '${SUGGESTED_EPS_SOURCE_INPUT}'"
+            echo "Using suggested_eps_source=${SUGGESTED_EPS_SOURCE_INPUT}"
+          fi
+
+          if [ -n "${SUGGESTED_EPS_AS_OF_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-as-of ${SUGGESTED_EPS_AS_OF_INPUT}"
+            echo "Using suggested_eps_as_of=${SUGGESTED_EPS_AS_OF_INPUT}"
+          fi
+
+          if [ -n "${SUGGESTED_EPS_METHOD_INPUT}" ]; then
+            EXTRA_ARGS="${EXTRA_ARGS} --suggested-eps-method '${SUGGESTED_EPS_METHOD_INPUT}'"
+            echo "Using suggested_eps_method=${SUGGESTED_EPS_METHOD_INPUT}"
           fi
 
           python tools/merge_0050_valuation_bb.py \
@@ -168,7 +248,15 @@ jobs:
 
           j = json.load(open(p_json, "r", encoding="utf-8"))
 
-          need_top = ["meta", "inputs", "valuation_cases", "family_interpolation", "bb_snapshot", "combined"]
+          need_top = [
+            "meta",
+            "inputs",
+            "slow_variable_review",
+            "valuation_cases",
+            "family_interpolation",
+            "bb_snapshot",
+            "combined",
+          ]
           miss_top = [k for k in need_top if k not in j]
           if miss_top:
             raise SystemExit(f"ERROR: merged_latest.json missing top-level keys: {miss_top}")
@@ -181,6 +269,18 @@ jobs:
           vals = j.get("valuation_cases", [])
           if not isinstance(vals, list) or len(vals) == 0:
             raise SystemExit("ERROR: valuation_cases is empty")
+
+          slow = j.get("slow_variable_review", {})
+          for k in [
+            "active_eps_base",
+            "active_eps_base_source",
+            "eps_base_policy",
+            "suggested_eps_meta",
+            "family_targets",
+            "tsmc_weight_meta",
+          ]:
+            if k not in slow:
+              raise SystemExit(f"ERROR: merged_latest.json missing slow_variable_review.{k}")
 
           fam_top = j.get("family_interpolation", {})
           if "enabled" not in fam_top:
@@ -226,6 +326,13 @@ jobs:
             "regime_tag": bb.get("regime_tag"),
             "regime_allowed": bb.get("regime_allowed"),
           })
+          print("slow_variable_review:", {
+            "active_eps_base": slow.get("active_eps_base"),
+            "active_eps_base_source": slow.get("active_eps_base_source"),
+            "suggested_eps_base": slow.get("suggested_eps_base"),
+            "family_targets": slow.get("family_targets"),
+            "tsmc_weight_meta": slow.get("tsmc_weight_meta"),
+          })
           print("valuation_cases count:", len(vals))
           print("family_interpolation(top):", {
             "enabled": fam_top.get("enabled"),
@@ -253,7 +360,7 @@ jobs:
           echo "---- report head ----"
           head -n 40 tw0050_bb_cache/report.md || true
           echo "---- merged report head ----"
-          head -n 120 tw0050_bb_cache/merged_report.md || true
+          head -n 160 tw0050_bb_cache/merged_report.md || true
           echo "---- merged latest summary ----"
           python - << 'PY'
           import json
@@ -267,6 +374,8 @@ jobs:
           print("inputs.schema_validation:", j.get("inputs", {}).get("schema_validation", {}))
           print("inputs.roll25_report_path:", j.get("inputs", {}).get("roll25_report_path"))
           print("inputs.tx_night_last:", j.get("inputs", {}).get("tx_night_last"))
+
+          print("slow_variable_review:", j.get("slow_variable_review", {}))
 
           print("bb_snapshot:", {
             "date": j.get("bb_snapshot", {}).get("date"),
@@ -316,15 +425,34 @@ jobs:
           PY
 
       - name: Commit artifacts (if changed)
+        shell: bash
         run: |
-          set -e
-          git status --porcelain
-          if [ -n "$(git status --porcelain)" ]; then
+          set -euo pipefail
+
+          if [ -n "$(git status --porcelain tw0050_bb_cache)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
+
             git add -A tw0050_bb_cache
-            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.4b"
-            git push
+            git commit -m "Update 0050 BB(60,2) + forward_mdd(20D) + merged valuation report v1.5a"
+
+            for i in 1 2 3; do
+              echo "Attempt $i: fetch/rebase/push"
+              git fetch origin main
+
+              if git rebase origin/main; then
+                if git push origin HEAD:main; then
+                  echo "Push succeeded."
+                  exit 0
+                fi
+              fi
+
+              git rebase --abort || true
+              sleep 3
+            done
+
+            echo "Push failed after 3 attempts."
+            exit 1
           else
-            echo "No changes to commit."
+            echo "No changes to commit in tw0050_bb_cache."
           fi
