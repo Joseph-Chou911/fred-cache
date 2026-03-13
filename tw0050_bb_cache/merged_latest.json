@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T09:28:47Z",
+    "generated_at_utc": "2026-03-13T10:14:08Z",
     "script": "merge_0050_valuation_bb.py",
     "schema_version": "0050_merge_schema_v1.6a_compat",
     "config_version": "0050_merge_v1.6a",
@@ -28,7 +28,7 @@
     "current_date": "2026-03-13",
     "current_0050_price": 75.94999694824219,
     "current_bb_state": "IN_BAND",
-    "current_bb_z": 0.951134471001641,
+    "current_bb_z": 0.9511344710015877,
     "schema_validation": {
       "validated": true,
       "required_paths_checked": [
@@ -888,7 +888,7 @@
     "date": "2026-03-13",
     "price_used": 75.94999694824219,
     "state": "IN_BAND",
-    "bb_z": 0.951134471001641,
+    "bb_z": 0.9511344710015877,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.53607262302914,
@@ -902,24 +902,24 @@
     ],
     "tranche_levels": [
       {
-        "drawdown": -0.04812497636849533,
+        "drawdown": -0.048124754888811294,
         "label": "10D_p10_uncond",
-        "price_level": 72.29490513992074
+        "price_level": 72.29492196130207
       },
       {
-        "drawdown": -0.06361949705838563,
+        "drawdown": -0.06361930208955371,
         "label": "10D_p05_uncond",
-        "price_level": 71.11809634080909
+        "price_level": 71.11811114869128
       },
       {
-        "drawdown": -0.06863568364315131,
+        "drawdown": -0.06863573139525764,
         "label": "20D_p10_uncond",
-        "price_level": 70.73711698500433
+        "price_level": 70.737113358232
       },
       {
-        "drawdown": -0.09262784134101851,
+        "drawdown": -0.09262804361067434,
         "label": "20D_p05_uncond",
-        "price_level": 68.91491268106957
+        "price_level": 68.91489731868982
       }
     ]
   },
@@ -928,7 +928,7 @@
       "date": "2026-03-13",
       "price_used": 75.94999694824219,
       "state": "IN_BAND",
-      "bb_z": 0.951134471001641,
+      "bb_z": 0.9511344710015877,
       "regime_tag": "RISK_OFF_OR_DEFENSIVE",
       "regime_allowed": false,
       "rv20_percentile": 96.53607262302914,
@@ -936,24 +936,24 @@
       "pledge_policy": "DISALLOW",
       "tranche_levels": [
         {
-          "drawdown": -0.04812497636849533,
+          "drawdown": -0.048124754888811294,
           "label": "10D_p10_uncond",
-          "price_level": 72.29490513992074
+          "price_level": 72.29492196130207
         },
         {
-          "drawdown": -0.06361949705838563,
+          "drawdown": -0.06361930208955371,
           "label": "10D_p05_uncond",
-          "price_level": 71.11809634080909
+          "price_level": 71.11811114869128
         },
         {
-          "drawdown": -0.06863568364315131,
+          "drawdown": -0.06863573139525764,
           "label": "20D_p10_uncond",
-          "price_level": 70.73711698500433
+          "price_level": 70.737113358232
         },
         {
-          "drawdown": -0.09262784134101851,
+          "drawdown": -0.09262804361067434,
           "label": "20D_p05_uncond",
-          "price_level": 68.91491268106957
+          "price_level": 68.91489731868982
         }
       ],
       "dq_flags": [
@@ -1652,23 +1652,23 @@
     "tranche_reference": [
       {
         "label": "10D_p10_uncond",
-        "price_level": 72.29490513992074,
-        "vs_current_pct": -4.812497636849534
+        "price_level": 72.29492196130207,
+        "vs_current_pct": -4.812475488881129
       },
       {
         "label": "10D_p05_uncond",
-        "price_level": 71.11809634080909,
-        "vs_current_pct": -6.361949705838576
+        "price_level": 71.11811114869128,
+        "vs_current_pct": -6.361930208955369
       },
       {
         "label": "20D_p10_uncond",
-        "price_level": 70.73711698500433,
-        "vs_current_pct": -6.86356836431512
+        "price_level": 70.737113358232,
+        "vs_current_pct": -6.863573139525769
       },
       {
         "label": "20D_p05_uncond",
-        "price_level": 68.91491268106957,
-        "vs_current_pct": -9.262784134101853
+        "price_level": 68.91489731868982,
+        "vs_current_pct": -9.262804361067435
       }
     ],
     "pre_execution_review": {
@@ -1962,7 +1962,7 @@
     "date": "2026-03-13",
     "price_used": 75.94999694824219,
     "state": "IN_BAND",
-    "bb_z": 0.951134471001641,
+    "bb_z": 0.9511344710015877,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.53607262302914,
@@ -1970,24 +1970,24 @@
     "pledge_policy": "DISALLOW",
     "tranche_levels": [
       {
-        "drawdown": -0.04812497636849533,
+        "drawdown": -0.048124754888811294,
         "label": "10D_p10_uncond",
-        "price_level": 72.29490513992074
+        "price_level": 72.29492196130207
       },
       {
-        "drawdown": -0.06361949705838563,
+        "drawdown": -0.06361930208955371,
         "label": "10D_p05_uncond",
-        "price_level": 71.11809634080909
+        "price_level": 71.11811114869128
       },
       {
-        "drawdown": -0.06863568364315131,
+        "drawdown": -0.06863573139525764,
         "label": "20D_p10_uncond",
-        "price_level": 70.73711698500433
+        "price_level": 70.737113358232
       },
       {
-        "drawdown": -0.09262784134101851,
+        "drawdown": -0.09262804361067434,
         "label": "20D_p05_uncond",
-        "price_level": 68.91491268106957
+        "price_level": 68.91489731868982
       }
     ],
     "dq_flags": [

@@ -1,615 +1,194 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T09:28:46Z",
+    "generated_at_utc": "2026-03-13T10:14:08Z",
     "script": "update_tsmc_quarterly_eps_tracker.py",
-    "script_version": "v1.6",
-    "source_policy": "bootstrap_seeds_plus_official_then_cnyes_discovery_with_raw_result_debug",
+    "script_version": "v2.0",
+    "source_policy": "bootstrap_seeds_plus_official_archive_first_then_direct_official_ir_then_pdf_then_search_fallback",
     "entry_pages": [
-      "search://2026Q1",
-      "search://2026Q2",
-      "search://2026Q3",
-      "search://2026Q4",
-      "search://2025Q1",
-      "search://2025Q2",
-      "search://2025Q3",
-      "search://2025Q4",
-      "search://2024Q1",
-      "search://2024Q2",
-      "search://2024Q3",
-      "search://2024Q4"
+      "https://pr.tsmc.com/chinese/news-archives",
+      "scan://2026Q1",
+      "scan://2026Q2",
+      "scan://2026Q3",
+      "scan://2026Q4",
+      "scan://2025Q1",
+      "scan://2025Q2",
+      "scan://2025Q3",
+      "scan://2025Q4",
+      "scan://2024Q1",
+      "scan://2024Q2",
+      "scan://2024Q3",
+      "scan://2024Q4"
     ],
     "notes": [
       "bootstrapped seeds=5",
-      "search query ok: \"台積公司2026年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2026 Q1 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2026年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第一季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2026Q1",
-      "search query ok: \"台積公司2026年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2026 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2026年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第二季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2026Q2",
-      "search query ok: \"台積公司2026年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2026 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2026年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第三季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2026Q3",
-      "search query ok: \"台積公司2026年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2026 Q4 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2026年第四季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2026年第四季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2026Q4",
-      "search query ok: \"台積公司2025年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2025 Q1 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2025年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第一季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2025Q1",
-      "search query ok: \"台積公司2025年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2025 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2025年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第二季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2025Q2",
-      "search query ok: \"台積公司2025年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2025 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2025年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第三季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2025Q3",
-      "search query ok: \"台積公司2025年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2025 Q4 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2025年第四季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2025年第四季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2025Q4",
-      "search query ok: \"台積公司2024年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2024 Q1 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2024年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2024年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2024年第一季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2024Q1",
-      "search query ok: \"台積公司2024年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2024 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2024年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2024年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2024年第二季每股盈餘\" 台積電 | results=2",
-      "no candidate urls for 2024Q2",
-      "search query ok: \"台積公司2024年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
-      "search query ok: \"台積電 2024 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積電 2024年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2024年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=1",
-      "search query ok: \"台積公司2024年第三季每股盈餘\" 台積電 | results=1",
-      "no candidate urls for 2024Q3",
-      "search query ok: \"台積公司2024年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=1",
-      "search query ok: \"台積電 2024 Q4 EPS\" site:anuenews.cnyes.com/news/id | results=1",
-      "search query ok: \"台積電 2024年第四季 EPS\" site:anuenews.cnyes.com/news/id | results=1",
-      "search query ok: \"台積公司2024年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=1",
-      "search query ok: \"台積公司2024年第四季每股盈餘\" 台積電 | results=1",
-      "no candidate urls for 2024Q4"
+      "optional pypdf installed=False",
+      "official archive fetch ok: https://pr.tsmc.com/chinese/news-archives | archive_eps_candidates=0",
+      "official archive html fetched",
+      "2026Q1: skipped active discovery because quarter not ended yet",
+      "2026Q2: skipped active discovery because quarter not ended yet",
+      "2026Q3: skipped active discovery because quarter not ended yet",
+      "2026Q4: skipped active discovery because quarter not ended yet",
+      "candidate parse failed: https://pr.tsmc.com/chinese/news/3222 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q1 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q1 | reason=eps_not_detected",
+      "no discovered article parsed for 2025Q1",
+      "candidate parse failed: https://pr.tsmc.com/chinese/news/3249 | reason=quarter_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q2 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q2 | reason=eps_not_detected",
+      "no discovered article parsed for 2025Q2",
+      "candidate parse failed: https://pr.tsmc.com/chinese/news/3264 | reason=quarter_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q3 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q3 | reason=eps_not_detected",
+      "no discovered article parsed for 2025Q3",
+      "candidate parse failed: https://pr.tsmc.com/chinese/news/3281 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q4 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q4 | reason=eps_not_detected",
+      "no discovered article parsed for 2025Q4",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q1 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q1 | reason=eps_not_detected",
+      "no discovered article parsed for 2024Q1",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q2 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q2 | reason=eps_not_detected",
+      "no discovered article parsed for 2024Q2",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q3 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q3 | reason=eps_not_detected",
+      "no discovered article parsed for 2024Q3",
+      "candidate parse failed: https://pr.tsmc.com/chinese/news/3201 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q4 | reason=eps_not_detected",
+      "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q4 | reason=eps_not_detected",
+      "no discovered article parsed for 2024Q4"
     ],
     "counts": {
       "auto_discovered_count": 0,
       "bootstrap_seed_count": 5,
       "total_quarters": 5
+    },
+    "optional_features": {
+      "pypdf_installed": false
     }
   },
   "discovery_debug": [
     {
       "quarter": "2026Q1",
       "publication_state": "NOT_ENDED_YET",
-      "queries": [
-        {
-          "query": "\"台積公司2026年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "Feedback",
-              "raw_url": "https://duckduckgo.com/feedback.html",
-              "normalized_url": "https://duckduckgo.com/feedback.html",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026 Q1 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "Feedback",
-              "raw_url": "https://duckduckgo.com/feedback.html",
-              "normalized_url": "https://duckduckgo.com/feedback.html",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026年第一季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第一季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
+      "archive_candidates": [],
+      "direct_candidates": [],
+      "queries": [],
       "candidates": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "NOT_ENDED_YET"
     },
     {
       "quarter": "2026Q2",
       "publication_state": "NOT_ENDED_YET",
-      "queries": [
-        {
-          "query": "\"台積公司2026年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026 Q2 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026年第二季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第二季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
+      "archive_candidates": [],
+      "direct_candidates": [],
+      "queries": [],
       "candidates": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "NOT_ENDED_YET"
     },
     {
       "quarter": "2026Q3",
       "publication_state": "NOT_ENDED_YET",
-      "queries": [
-        {
-          "query": "\"台積公司2026年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026 Q3 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026年第三季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第三季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
+      "archive_candidates": [],
+      "direct_candidates": [],
+      "queries": [],
       "candidates": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "NOT_ENDED_YET"
     },
     {
       "quarter": "2026Q4",
       "publication_state": "NOT_ENDED_YET",
-      "queries": [
-        {
-          "query": "\"台積公司2026年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026 Q4 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2026年第四季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2026年第四季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        }
-      ],
+      "archive_candidates": [],
+      "direct_candidates": [],
+      "queries": [],
       "candidates": [],
       "attempts": [],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "NOT_ENDED_YET"
     },
     {
       "quarter": "2025Q1",
       "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3222",
+          "title": "台積公司2025年第一季每股盈餘新台幣13.94元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q1",
+          "title": "TSMC 2025Q1 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q1",
+          "title": "TSMC 2025Q1 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
       "queries": [
         {
           "query": "\"台積公司2025年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "Feedback",
+              "raw_url": "https://duckduckgo.com/feedback.html",
+              "normalized_url": "https://duckduckgo.com/feedback.html",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"台積公司2025年第一季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "Feedback",
+              "raw_url": "https://duckduckgo.com/feedback.html",
+              "normalized_url": "https://duckduckgo.com/feedback.html",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"TSMC 2025 Q1 earnings release\" site:investor.tsmc.com",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -653,89 +232,146 @@
               "reason": "still_ddg_redirect"
             }
           ]
-        },
-        {
-          "query": "\"台積電 2025年第一季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第一季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
         }
       ],
-      "candidates": [],
-      "attempts": [],
+      "candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3222",
+          "title": "台積公司2025年第一季每股盈餘新台幣13.94元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q1",
+          "title": "TSMC 2025Q1 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q1",
+          "title": "TSMC 2025Q1 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3222",
+          "title_hint": "台積公司2025年第一季每股盈餘新台幣13.94元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q1",
+          "title_hint": "TSMC 2025Q1 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q1",
+          "title_hint": "TSMC 2025Q1 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "FETCH_OK_PARSE_FAILED"
     },
     {
       "quarter": "2025Q2",
       "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3249",
+          "title": "台積公司2025年第二季每股盈餘新台幣15.36元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q2",
+          "title": "TSMC 2025Q2 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q2",
+          "title": "TSMC 2025Q2 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
       "queries": [
         {
           "query": "\"台積公司2025年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"台積公司2025年第二季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"TSMC 2025 Q2 earnings release\" site:investor.tsmc.com",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -779,89 +415,146 @@
               "reason": "still_ddg_redirect"
             }
           ]
-        },
-        {
-          "query": "\"台積電 2025年第二季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第二季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
         }
       ],
-      "candidates": [],
-      "attempts": [],
+      "candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3249",
+          "title": "台積公司2025年第二季每股盈餘新台幣15.36元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q2",
+          "title": "TSMC 2025Q2 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q2",
+          "title": "TSMC 2025Q2 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3249",
+          "title_hint": "台積公司2025年第二季每股盈餘新台幣15.36元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "quarter_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q2",
+          "title_hint": "TSMC 2025Q2 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q2",
+          "title_hint": "TSMC 2025Q2 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "FETCH_OK_PARSE_FAILED"
     },
     {
       "quarter": "2025Q3",
       "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3264",
+          "title": "台積公司2025年第三季每股盈餘新台幣17.44元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q3",
+          "title": "TSMC 2025Q3 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q3",
+          "title": "TSMC 2025Q3 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
       "queries": [
         {
           "query": "\"台積公司2025年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"台積公司2025年第三季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"TSMC 2025 Q3 earnings release\" site:investor.tsmc.com",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -905,89 +598,146 @@
               "reason": "still_ddg_redirect"
             }
           ]
-        },
-        {
-          "query": "\"台積電 2025年第三季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第三季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
         }
       ],
-      "candidates": [],
-      "attempts": [],
+      "candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3264",
+          "title": "台積公司2025年第三季每股盈餘新台幣17.44元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q3",
+          "title": "TSMC 2025Q3 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q3",
+          "title": "TSMC 2025Q3 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3264",
+          "title_hint": "台積公司2025年第三季每股盈餘新台幣17.44元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "quarter_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q3",
+          "title_hint": "TSMC 2025Q3 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q3",
+          "title_hint": "TSMC 2025Q3 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "FETCH_OK_PARSE_FAILED"
     },
     {
       "quarter": "2025Q4",
       "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3281",
+          "title": "台積公司2025年第四季每股盈餘新台幣19.50元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q4",
+          "title": "TSMC 2025Q4 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q4",
+          "title": "TSMC 2025Q4 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
       "queries": [
         {
           "query": "\"台積公司2025年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"台積公司2025年第四季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"TSMC 2025 Q4 earnings release\" site:investor.tsmc.com",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -1031,89 +781,140 @@
               "reason": "still_ddg_redirect"
             }
           ]
-        },
-        {
-          "query": "\"台積電 2025年第四季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2025年第四季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
         }
       ],
-      "candidates": [],
-      "attempts": [],
+      "candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3281",
+          "title": "台積公司2025年第四季每股盈餘新台幣19.50元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q4",
+          "title": "TSMC 2025Q4 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q4",
+          "title": "TSMC 2025Q4 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3281",
+          "title_hint": "台積公司2025年第四季每股盈餘新台幣19.50元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2025/q4",
+          "title_hint": "TSMC 2025Q4 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2025/q4",
+          "title_hint": "TSMC 2025Q4 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "FETCH_OK_PARSE_FAILED"
     },
     {
       "quarter": "2024Q1",
       "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q1",
+          "title": "TSMC 2024Q1 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q1",
+          "title": "TSMC 2024Q1 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
       "queries": [
         {
           "query": "\"台積公司2024年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"台積公司2024年第一季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"TSMC 2024 Q1 earnings release\" site:investor.tsmc.com",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -1157,89 +958,121 @@
               "reason": "still_ddg_redirect"
             }
           ]
-        },
-        {
-          "query": "\"台積電 2024年第一季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第一季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
         }
       ],
-      "candidates": [],
-      "attempts": [],
+      "candidates": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q1",
+          "title": "TSMC 2024Q1 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q1",
+          "title": "TSMC 2024Q1 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q1",
+          "title_hint": "TSMC 2024Q1 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q1",
+          "title_hint": "TSMC 2024Q1 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "FETCH_OK_PARSE_FAILED"
     },
     {
       "quarter": "2024Q2",
       "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q2",
+          "title": "TSMC 2024Q2 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q2",
+          "title": "TSMC 2024Q2 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
       "queries": [
         {
           "query": "\"台積公司2024年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"台積公司2024年第二季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"TSMC 2024 Q2 earnings release\" site:investor.tsmc.com",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -1283,89 +1116,121 @@
               "reason": "still_ddg_redirect"
             }
           ]
-        },
-        {
-          "query": "\"台積電 2024年第二季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第二季每股盈餘\" 台積電",
-          "result_count": 2,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "DuckDuckGo",
-              "raw_url": "/html/",
-              "normalized_url": "/html/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            },
-            {
-              "title": "here",
-              "raw_url": "https://duckduckgo.com/",
-              "normalized_url": "https://duckduckgo.com/",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "still_ddg_redirect"
-            }
-          ]
         }
       ],
-      "candidates": [],
-      "attempts": [],
+      "candidates": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q2",
+          "title": "TSMC 2024Q2 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q2",
+          "title": "TSMC 2024Q2 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q2",
+          "title_hint": "TSMC 2024Q2 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q2",
+          "title_hint": "TSMC 2024Q2 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "FETCH_OK_PARSE_FAILED"
     },
     {
       "quarter": "2024Q3",
       "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q3",
+          "title": "TSMC 2024Q3 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q3",
+          "title": "TSMC 2024Q3 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
       "queries": [
         {
           "query": "\"台積公司2024年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"台積公司2024年第三季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
+          "status": "OK",
+          "raw_results": [
+            {
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
+            }
+          ]
+        },
+        {
+          "query": "\"TSMC 2024 Q3 earnings release\" site:investor.tsmc.com",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -1409,9 +1274,81 @@
               "reason": "still_ddg_redirect"
             }
           ]
+        }
+      ],
+      "candidates": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q3",
+          "title": "TSMC 2024Q3 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
         },
         {
-          "query": "\"台積電 2024年第三季 EPS\" site:anuenews.cnyes.com/news/id",
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q3",
+          "title": "TSMC 2024Q3 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q3",
+          "title_hint": "TSMC 2024Q3 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q3",
+          "title_hint": "TSMC 2024Q3 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "FETCH_OK_PARSE_FAILED"
+    },
+    {
+      "quarter": "2024Q4",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "archive_candidates": [],
+      "direct_candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3201",
+          "title": "台積公司2024年第四季每股盈餘新台幣14.45元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q4",
+          "title": "TSMC 2024Q4 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q4",
+          "title": "TSMC 2024Q4 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "queries": [
+        {
+          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
           "result_count": 2,
           "status": "OK",
           "raw_results": [
@@ -1434,127 +1371,139 @@
           ]
         },
         {
-          "query": "\"台積公司2024年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 1,
+          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:investor.tsmc.com",
+          "result_count": 2,
           "status": "OK",
           "raw_results": [
             {
-              "title": "email us",
-              "raw_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "normalized_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
               "accepted": false,
               "src_hint": null,
               "reason": "non_http_url"
+            },
+            {
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
+              "accepted": false,
+              "src_hint": null,
+              "reason": "still_ddg_redirect"
             }
           ]
         },
         {
-          "query": "\"台積公司2024年第三季每股盈餘\" 台積電",
-          "result_count": 1,
+          "query": "\"TSMC 2024 Q4 earnings release\" site:investor.tsmc.com",
+          "result_count": 2,
           "status": "OK",
           "raw_results": [
             {
-              "title": "email us",
-              "raw_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "normalized_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
               "accepted": false,
               "src_hint": null,
               "reason": "non_http_url"
-            }
-          ]
-        }
-      ],
-      "candidates": [],
-      "attempts": [],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
-    },
-    {
-      "quarter": "2024Q4",
-      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
-      "queries": [
-        {
-          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
-          "result_count": 1,
-          "status": "OK",
-          "raw_results": [
+            },
             {
-              "title": "email us",
-              "raw_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "normalized_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
               "accepted": false,
               "src_hint": null,
-              "reason": "non_http_url"
+              "reason": "still_ddg_redirect"
             }
           ]
         },
         {
           "query": "\"台積電 2024 Q4 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 1,
+          "result_count": 2,
           "status": "OK",
           "raw_results": [
             {
-              "title": "email us",
-              "raw_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "normalized_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
+              "title": "DuckDuckGo",
+              "raw_url": "/html/",
+              "normalized_url": "/html/",
               "accepted": false,
               "src_hint": null,
               "reason": "non_http_url"
-            }
-          ]
-        },
-        {
-          "query": "\"台積電 2024年第四季 EPS\" site:anuenews.cnyes.com/news/id",
-          "result_count": 1,
-          "status": "OK",
-          "raw_results": [
+            },
             {
-              "title": "email us",
-              "raw_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "normalized_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
+              "title": "here",
+              "raw_url": "https://duckduckgo.com/",
+              "normalized_url": "https://duckduckgo.com/",
               "accepted": false,
               "src_hint": null,
-              "reason": "non_http_url"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
-          "result_count": 1,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "email us",
-              "raw_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "normalized_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
-            }
-          ]
-        },
-        {
-          "query": "\"台積公司2024年第四季每股盈餘\" 台積電",
-          "result_count": 1,
-          "status": "OK",
-          "raw_results": [
-            {
-              "title": "email us",
-              "raw_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "normalized_url": "mailto:error-lite+9318@duckduckgo.com?subject=Error getting results",
-              "accepted": false,
-              "src_hint": null,
-              "reason": "non_http_url"
+              "reason": "still_ddg_redirect"
             }
           ]
         }
       ],
-      "candidates": [],
-      "attempts": [],
+      "candidates": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3201",
+          "title": "台積公司2024年第四季每股盈餘新台幣14.45元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url"
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q4",
+          "title": "TSMC 2024Q4 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese"
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q4",
+          "title": "TSMC 2024Q4 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english"
+        }
+      ],
+      "attempts": [
+        {
+          "url": "https://pr.tsmc.com/chinese/news/3201",
+          "title_hint": "台積公司2024年第四季每股盈餘新台幣14.45元",
+          "src_hint": "existing_tracker",
+          "accept_reason": "existing_tracker_url",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/chinese/quarterly-results/2024/q4",
+          "title_hint": "TSMC 2024Q4 official IR quarterly results (chinese)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_chinese",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        },
+        {
+          "url": "https://investor.tsmc.com/english/quarterly-results/2024/q4",
+          "title_hint": "TSMC 2024Q4 official IR quarterly results (english)",
+          "src_hint": "official_ir_html",
+          "accept_reason": "direct_ir_html_english",
+          "fetch_ok": true,
+          "parse_ok": false,
+          "parse_reason": "eps_not_detected",
+          "parsed_quarter": null,
+          "parsed_eps": null,
+          "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
+          "expanded_pdf_urls": []
+        }
+      ],
       "discovered": false,
       "discovered_record_source": null,
-      "status": "SEARCH_NO_RESULT"
+      "status": "FETCH_OK_PARSE_FAILED"
     }
   ],
   "quarters": [
@@ -1568,7 +1517,7 @@
       "quarter_end_date": "December 31, 2024",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3201",
-      "fetched_at_utc": "2026-03-13T09:28:35Z",
+      "fetched_at_utc": "2026-03-13T10:14:00Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1584,7 +1533,7 @@
       "quarter_end_date": "March 31, 2025",
       "quarter_word": "first",
       "page_url": "https://pr.tsmc.com/chinese/news/3222",
-      "fetched_at_utc": "2026-03-13T09:28:35Z",
+      "fetched_at_utc": "2026-03-13T10:14:00Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1600,7 +1549,7 @@
       "quarter_end_date": "June 30, 2025",
       "quarter_word": "second",
       "page_url": "https://pr.tsmc.com/chinese/news/3249",
-      "fetched_at_utc": "2026-03-13T09:28:35Z",
+      "fetched_at_utc": "2026-03-13T10:14:00Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1616,7 +1565,7 @@
       "quarter_end_date": "September 30, 2025",
       "quarter_word": "third",
       "page_url": "https://pr.tsmc.com/chinese/news/3264",
-      "fetched_at_utc": "2026-03-13T09:28:35Z",
+      "fetched_at_utc": "2026-03-13T10:14:00Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1632,7 +1581,7 @@
       "quarter_end_date": "December 31, 2025",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3281",
-      "fetched_at_utc": "2026-03-13T09:28:35Z",
+      "fetched_at_utc": "2026-03-13T10:14:00Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
