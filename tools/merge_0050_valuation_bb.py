@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.4b)
+merge_0050_valuation_bb.py  (v1.4c)
 
 Purpose
 -------
@@ -14,14 +14,31 @@ Merge three layers into one deterministic report:
 3) Pre-execution shock review:
    read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.4b changes
+v1.4c changes
 -------------
-- Keep v1.4a pre-execution shock review
-- Add family interpolation lite (display-only; does NOT alter final_execution_bias)
-- Add family interpolation summary and target price positions into JSON/Markdown
-- Keep backward-compatible JSON schema:
-  * old keys: config_used / bb_summary / scenario_results / combined
-  * new keys: meta / inputs / valuation_cases / bb_snapshot / family_interpolation
+- Keep v1.4b structure and backward-compatible JSON schema
+- Add family range boundary status:
+  * BELOW_MIN / IN_RANGE / ABOVE_MAX
+- Add family min/max and status into JSON/Markdown for current price and target prices
+- Clarify mixed-horizon scenario percentile note:
+  * 1Y / 2Y scenarios are mixed, so this percentile is rough display-only
+- Fix markdown alignment for Family Target Price Positions table
+- Keep family interpolation display-only; does NOT alter final_execution_bias
+
+Backward compatibility
+----------------------
+Kept legacy top-level keys:
+- config_used
+- bb_summary
+- scenario_results
+- combined
+
+Also kept v1.4b newer keys:
+- meta
+- inputs
+- valuation_cases
+- bb_snapshot
+- family_interpolation
 """
 
 from __future__ import annotations
@@ -37,7 +54,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.4b",
+        "config_version": "0050_merge_v1.4c",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close. "
@@ -540,20 +557,6 @@ def percentile_rank(x: float, xs: List[float]) -> float:
     return 100.0 * (less + 0.5 * equal) / len(xs)
 
 
-def classify_price(current_price: float, xs: List[float]) -> Dict[str, Any]:
-    ordered = sorted(xs)
-    pctl = percentile_rank(current_price, ordered)
-    zone = zone_from_percentile(pctl)
-    return {
-        "current_price": current_price,
-        "scenario_net_min": min(ordered) if ordered else None,
-        "scenario_net_max": max(ordered) if ordered else None,
-        "scenario_net_pctl": pctl,
-        "zone": zone,
-        "note": "rough classification only; sparse scenario set => low percentile resolution",
-    }
-
-
 def zone_from_percentile(pctl: float) -> str:
     if math.isnan(pctl):
         return "N/A"
@@ -611,6 +614,62 @@ def generate_axis_values(start: float, end: float, step: float) -> List[float]:
         vals.append(round(cur, 6))
         cur += step
     return vals
+
+
+def classify_against_range(x: float, ordered: List[float]) -> str:
+    if not ordered:
+        return "N/A"
+    if x < ordered[0]:
+        return "BELOW_MIN"
+    if x > ordered[-1]:
+        return "ABOVE_MAX"
+    return "IN_RANGE"
+
+
+def gap_vs_range(x: float, ordered: List[float]) -> Dict[str, Optional[float]]:
+    if not ordered:
+        return {
+            "gap_vs_min": None,
+            "gap_vs_max": None,
+            "pct_vs_min": None,
+            "pct_vs_max": None,
+        }
+    mn = ordered[0]
+    mx = ordered[-1]
+    gap_min = x - mn
+    gap_max = x - mx
+    pct_min = ((x / mn) - 1.0) * 100.0 if mn not in (0, None) else None
+    pct_max = ((x / mx) - 1.0) * 100.0 if mx not in (0, None) else None
+    return {
+        "gap_vs_min": gap_min,
+        "gap_vs_max": gap_max,
+        "pct_vs_min": pct_min,
+        "pct_vs_max": pct_max,
+    }
+
+
+def classify_price(current_price: float, xs: List[float]) -> Dict[str, Any]:
+    ordered = sorted(xs)
+    pctl = percentile_rank(current_price, ordered)
+    zone = zone_from_percentile(pctl)
+    status = classify_against_range(current_price, ordered)
+    gaps = gap_vs_range(current_price, ordered)
+    return {
+        "current_price": current_price,
+        "scenario_net_min": min(ordered) if ordered else None,
+        "scenario_net_max": max(ordered) if ordered else None,
+        "scenario_net_pctl": pctl,
+        "position_status": status,
+        "gap_vs_min": gaps["gap_vs_min"],
+        "gap_vs_max": gaps["gap_vs_max"],
+        "pct_vs_min": gaps["pct_vs_min"],
+        "pct_vs_max": gaps["pct_vs_max"],
+        "zone": zone,
+        "note": (
+            "rough classification only; sparse scenario set and mixed 1Y/2Y horizons "
+            "=> low decision value"
+        ),
+    }
 
 
 def build_family_interpolation(
@@ -685,14 +744,26 @@ def build_family_interpolation(
 
         ordered = sorted(net_values)
         current_pctile = percentile_rank(current_price, ordered)
+        current_status = classify_against_range(current_price, ordered)
+        current_gaps = gap_vs_range(current_price, ordered)
+
         target_positions: List[Dict[str, Any]] = []
         for t in targets:
             p = percentile_rank(t, ordered)
+            status = classify_against_range(t, ordered)
+            gaps = gap_vs_range(t, ordered)
             target_positions.append(
                 {
                     "price": t,
                     "percentile": p,
                     "zone": zone_from_percentile_compact(p),
+                    "position_status": status,
+                    "family_net_min": ordered[0] if ordered else None,
+                    "family_net_max": ordered[-1] if ordered else None,
+                    "gap_vs_min": gaps["gap_vs_min"],
+                    "gap_vs_max": gaps["gap_vs_max"],
+                    "pct_vs_min": gaps["pct_vs_min"],
+                    "pct_vs_max": gaps["pct_vs_max"],
                 }
             )
 
@@ -727,6 +798,11 @@ def build_family_interpolation(
                 "family_stats": family_stats,
                 "current_price_percentile": current_pctile,
                 "current_zone": zone_from_percentile_compact(current_pctile),
+                "current_position_status": current_status,
+                "current_gap_vs_min": current_gaps["gap_vs_min"],
+                "current_gap_vs_max": current_gaps["gap_vs_max"],
+                "current_pct_vs_min": current_gaps["pct_vs_min"],
+                "current_pct_vs_max": current_gaps["pct_vs_max"],
                 "target_positions": target_positions,
                 "cases": cases,
             }
@@ -798,8 +874,6 @@ def parse_roll25_bands_from_report(report_text: str) -> Tuple[Optional[float], O
             continue
 
         parts = [p.strip() for p in s.split("|")]
-        # Expect roughly:
-        # ['', 'Band 1 (normal)', '1', 'P*exp(-z*sigma)', '33057.836667', 'Close >= ...', '']
         if len(parts) < 6:
             continue
 
@@ -975,7 +1049,7 @@ def build_combined_view(
         "dq_overlay": exec_info["dq_overlay"],
         "matched_caution_flags": exec_info["matched_caution_flags"],
         "matched_veto_flags": exec_info["matched_veto_flags"],
-        "combined_execution_bias": exec_info["combined_execution_bias"],  # legacy: price/regime + dq only
+        "combined_execution_bias": exec_info["combined_execution_bias"],
         "fast_shock_override": pre_review.shock_override,
         "final_execution_bias": final_execution_bias,
         "action_instruction": action_instruction_from_bias(final_execution_bias),
@@ -984,8 +1058,9 @@ def build_combined_view(
             "layer_1b": "Use family interpolation summary to improve valuation readability; this section is display-only.",
             "layer_2": "Use BB/regime/tranche references to decide whether to act now or wait.",
             "layer_3": "Use pre-execution review to override action bias when TX night close breaches roll25 bands.",
-            "zone_note": "valuation zone is rough classification only; do not over-interpret sparse-percentile output.",
+            "zone_note": "valuation zone is rough classification only; do not over-interpret sparse or mixed-horizon percentile output.",
             "family_note": "family interpolation is display-only and does not alter final execution bias.",
+            "family_boundary_note": "percentile=0 or 100 can simply mean the target is below family min or above family max.",
             "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
             "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
@@ -1032,7 +1107,7 @@ def build_output_json(
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1.4b_compat",
+        "schema_version": "0050_merge_schema_v1.4c_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
@@ -1086,6 +1161,26 @@ def build_output_json(
         "scenario_results": [dataclasses.asdict(r) for r in results],
     }
     return out_json
+
+
+def fmt_num(x: Any, digits: int = 2) -> str:
+    try:
+        v = float(x)
+    except Exception:
+        return "N/A"
+    if math.isnan(v):
+        return "N/A"
+    return f"{v:.{digits}f}"
+
+
+def fmt_pct(x: Any, digits: int = 2) -> str:
+    try:
+        v = float(x)
+    except Exception:
+        return "N/A"
+    if math.isnan(v):
+        return "N/A"
+    return f"{v:.{digits}f}%"
 
 
 def markdown_report(
@@ -1149,8 +1244,13 @@ def markdown_report(
     lines.append("## Current Price Position vs Scenario Net Range")
     cp = combined["valuation_range"]["current_price_position"]
     lines.append(f"- current_0050_price: `{cp['current_price']:.2f}`")
-    lines.append(f"- scenario_net_range: `{cp['scenario_net_min']:.2f}` ~ `{cp['scenario_net_max']:.2f}`")
-    lines.append(f"- percentile_in_scenario_net_range: `{cp['scenario_net_pctl']:.2f}`")
+    lines.append(f"- scenario_net_range: `{fmt_num(cp['scenario_net_min'])}` ~ `{fmt_num(cp['scenario_net_max'])}`")
+    lines.append(f"- percentile_in_scenario_net_range: `{fmt_num(cp['scenario_net_pctl'])}`")
+    lines.append(f"- position_status: **{cp.get('position_status', 'N/A')}**")
+    lines.append(f"- gap_vs_min: `{fmt_num(cp.get('gap_vs_min'))}`")
+    lines.append(f"- gap_vs_max: `{fmt_num(cp.get('gap_vs_max'))}`")
+    lines.append(f"- pct_vs_min: `{fmt_pct(cp.get('pct_vs_min'))}`")
+    lines.append(f"- pct_vs_max: `{fmt_pct(cp.get('pct_vs_max'))}`")
     lines.append(f"- zone: **{cp['zone']}**")
     lines.append(f"- zone_note: `{cp['note']}`")
 
@@ -1158,8 +1258,8 @@ def markdown_report(
         lines.append("")
         lines.append("## Family Interpolation Summary")
         lines.append("")
-        lines.append("| family | years | axis | count | p10 | p25 | p50 | p75 | p90 | current_pctile | current_zone |")
-        lines.append("|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|")
+        lines.append("| family | years | axis | count | min | max | p10 | p25 | p50 | p75 | p90 | current_pctile | current_zone | current_status |")
+        lines.append("|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|")
         for f in fam.get("families", []):
             axis = f.get("interpolation_axis", {})
             stats = f.get("family_stats", {})
@@ -1167,31 +1267,59 @@ def markdown_report(
                 f"| {f.get('family_name')} | {f.get('years_ahead')} | "
                 f"PE {axis.get('start')}~{axis.get('end')} step {axis.get('step')} | "
                 f"{axis.get('count')} | "
-                f"{stats.get('p10', float('nan')):.2f} | "
-                f"{stats.get('p25', float('nan')):.2f} | "
-                f"{stats.get('p50', float('nan')):.2f} | "
-                f"{stats.get('p75', float('nan')):.2f} | "
-                f"{stats.get('p90', float('nan')):.2f} | "
-                f"{f.get('current_price_percentile', float('nan')):.2f} | "
-                f"{f.get('current_zone')} |"
+                f"{fmt_num(stats.get('net_min'))} | "
+                f"{fmt_num(stats.get('net_max'))} | "
+                f"{fmt_num(stats.get('p10'))} | "
+                f"{fmt_num(stats.get('p25'))} | "
+                f"{fmt_num(stats.get('p50'))} | "
+                f"{fmt_num(stats.get('p75'))} | "
+                f"{fmt_num(stats.get('p90'))} | "
+                f"{fmt_num(f.get('current_price_percentile'))} | "
+                f"{f.get('current_zone')} | "
+                f"{f.get('current_position_status')} |"
             )
 
         if fam_targets:
             lines.append("")
             lines.append("## Family Target Price Positions")
-            headers = ["family", "current_pctile", "current_zone"] + [f"{t:.2f}_pctile" for t in fam_targets]
+            headers: List[str] = [
+                "family",
+                "current_pctile",
+                "current_zone",
+                "current_status",
+                "family_min",
+                "family_max",
+            ]
+            for t in fam_targets:
+                headers.extend([f"{t:.2f}_pctile", f"{t:.2f}_status"])
+
+            aligns: List[str] = ["---", "---:", "---", "---", "---:", "---:"]
+            for _ in fam_targets:
+                aligns.extend(["---:", "---"])
+
             lines.append("| " + " | ".join(headers) + " |")
-            lines.append("|" + "|".join(["---"] + ["---:"] * (len(headers) - 2) + ["---"]) + "|")
+            lines.append("| " + " | ".join(aligns) + " |")
+
             for f in fam.get("families", []):
+                stats = f.get("family_stats", {})
                 target_map = {float(tp["price"]): tp for tp in f.get("target_positions", [])}
                 row = [
                     str(f.get("family_name")),
-                    f"{f.get('current_price_percentile', float('nan')):.2f}",
+                    fmt_num(f.get("current_price_percentile")),
                     str(f.get("current_zone")),
+                    str(f.get("current_position_status")),
+                    fmt_num(stats.get("net_min")),
+                    fmt_num(stats.get("net_max")),
                 ]
                 for t in fam_targets:
                     tp = target_map.get(float(t))
-                    row.append("N/A" if tp is None or math.isnan(tp.get("percentile", float("nan"))) else f"{tp.get('percentile'):.2f}")
+                    if tp is None:
+                        row.extend(["N/A", "N/A"])
+                    else:
+                        row.extend([
+                            fmt_num(tp.get("percentile")),
+                            str(tp.get("position_status", "N/A")),
+                        ])
                 lines.append("| " + " | ".join(row) + " |")
 
         lines.append("")
@@ -1199,6 +1327,7 @@ def markdown_report(
         lines.append(f"- enabled: `{fam.get('enabled')}`")
         lines.append(f"- targets: `{', '.join([str(t) for t in fam_targets])}`")
         lines.append(f"- note: `{fam.get('note', '')}`")
+        lines.append("- boundary_note: `0 or 100 can simply mean target price is below family min or above family max.`")
 
     lines.append("")
     lines.append("## BB Tranche References")
@@ -1245,9 +1374,10 @@ def markdown_report(
     lines.append("## How to Use")
     lines.append("- Step 1: Use the valuation table to decide whether current price is in a low / fair / high zone.")
     lines.append("- Step 1b: Use family interpolation summary to refine valuation readability across fixed assumption families.")
-    lines.append("- Step 2: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
-    lines.append("- Step 3: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
-    lines.append("- Step 4: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
+    lines.append("- Step 2: Read current_status / target_status first. A percentile of 0 or 100 may simply mean out-of-range, not model failure.")
+    lines.append("- Step 3: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
+    lines.append("- Step 4: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
+    lines.append("- Step 5: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
 
     lines.append("")
     lines.append("## Notes")
@@ -1255,6 +1385,7 @@ def markdown_report(
     lines.append("- base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.")
     lines.append("- eps_base is a slow-moving fundamental anchor; revise only when earnings/model basis changes.")
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
+    lines.append("- Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.")
     lines.append("- Family interpolation is display-only and does not alter base_execution_bias / combined_execution_bias / final_execution_bias.")
     lines.append("- DQ flags can downgrade execution bias even if valuation/regime otherwise look constructive.")
     lines.append("- Pre-execution review reads Band 1 / Band 2 from roll25 markdown report; if parsing fails, no shock override is applied.")
