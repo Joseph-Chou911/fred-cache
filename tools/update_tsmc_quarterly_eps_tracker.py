@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v4.2-mops-semantic-cleanup)
+update_tsmc_quarterly_eps_tracker.py  (v4.3-mops-auto-discovery)
 
 Design goals
 ------------
 1) Seed-first
-   - Quarterly EPS values still come from manually maintained seeds.
+   - Quarterly EPS values can still come from manually maintained seeds.
    - MOPS is used as the official verification path.
 
 2) Official Taiwan source
@@ -29,7 +29,13 @@ Design goals
    - Separate current-quarter EPS from cumulative EPS explicitly.
    - Avoid ambiguous parsed_*_eps naming for Q4.
 
-6) Robust parsing
+6) Auto-discovery for future quarters
+   - Quarters AFTER the latest seeded quarter are eligible for discovery.
+   - If a future quarter is available on MOPS and no seed exists yet,
+     create an official auto-discovered record from MOPS.
+   - This allows, for example, 2026Q1 to appear automatically once published.
+
+7) Robust parsing
    - No dependency on lxml/bs4.
    - Built-in HTMLParser-based table extraction.
    - Multiple fallbacks:
@@ -58,7 +64,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v4.2-mops-semantic-cleanup"
+SCRIPT_VERSION = "v4.3-mops-auto-discovery"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_TIMEOUT = 20
@@ -70,7 +76,17 @@ DEFAULT_EPS_TOLERANCE = 0.02
 
 SOURCE_PRIORITY = {
     "tsmc_seed_record": 20,
+    "mops_discovered_record": 15,
     "tsmc_existing_record": 10,
+}
+
+STATUS_RANK = {
+    "VERIFIED": 40,
+    "DISCOVERED": 30,
+    "VERIFY_FAILED": 20,
+    "LIKELY_NOT_PUBLISHED_YET": 10,
+    "NOT_ENDED_YET": 5,
+    "": 0,
 }
 
 QUARTER_NUM_TO_CN = {1: "第一", 2: "第二", 3: "第三", 4: "第四"}
@@ -142,6 +158,7 @@ FAILURE_CLASS_NOT_FOUND = "MOPS_NOT_FOUND"
 FAILURE_CLASS_PARSE = "MOPS_PARSE_FAILED"
 FAILURE_CLASS_MISMATCH = "EPS_MISMATCH"
 FAILURE_CLASS_Q4_DEP = "Q4_DIFF_DEPENDENCY_FAILED"
+FAILURE_CLASS_NO_DISCOVERABLE = "NO_DISCOVERABLE_EPS"
 
 BASIC_LABEL_PATTERNS = [
     re.compile(r"基本每股盈餘", re.I),
@@ -227,6 +244,10 @@ def quarter_sort_key(q: str) -> Tuple[int, int]:
     return (int(m.group(1)), int(m.group(2)))
 
 
+def quarter_gt(a: str, b: str) -> bool:
+    return quarter_sort_key(a) > quarter_sort_key(b)
+
+
 def quarter_end_date_obj(year: int, quarter_num: int) -> date:
     if quarter_num == 1:
         return date(year, 3, 31)
@@ -276,6 +297,10 @@ def normalize_text(s: Any) -> str:
 
 def detect_source_priority(source: str) -> int:
     return SOURCE_PRIORITY.get(source, 0)
+
+
+def status_rank(status: str) -> int:
+    return STATUS_RANK.get(status or "", 0)
 
 
 def enrich_record(
@@ -554,7 +579,6 @@ def parse_eps_from_tables(html: str, quarter_num: int) -> Dict[str, Any]:
         out["diluted_current_eps"] = diluted_hit["derived_current_eps"]
         out["diluted_cumulative_eps"] = diluted_hit["derived_cumulative_eps"]
 
-    # Regex fallback only for first numeric after label
     if out["basic_direct_value"] is None:
         m = re.search(r"基本每股盈餘[^0-9\-]{0,30}(-?\d+(?:\.\d+)?)", flat_text)
         if m:
@@ -571,7 +595,6 @@ def parse_eps_from_tables(html: str, quarter_num: int) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    # Conservative fallback for Q1 only: current == cumulative == direct
     if quarter_num == 1:
         if out["basic_current_eps"] is None and out["basic_direct_value"] is not None:
             out["basic_current_eps"] = out["basic_direct_value"]
@@ -597,6 +620,15 @@ def pick_match_from_candidates(
     if first_available is not None:
         return float(first_available[1]), first_available[0], f"mismatch_{first_available[0]}"
     return None, None, "no_eps_found"
+
+
+def pick_first_available_candidate(
+    candidates: List[Tuple[str, Optional[float]]],
+) -> Tuple[Optional[float], Optional[str]]:
+    for method_name, value in candidates:
+        if value is not None:
+            return float(value), method_name
+    return None, None
 
 
 def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
@@ -646,6 +678,7 @@ def choose_representative_failure(
         FAILURE_CLASS_Q4_DEP,
         FAILURE_CLASS_PARSE,
         FAILURE_CLASS_MISMATCH,
+        FAILURE_CLASS_NO_DISCOVERABLE,
     ]
     for klass in priority:
         for a in attempts:
@@ -746,6 +779,79 @@ def update_record_with_verification(
         "primary_failure_class": primary_failure_class,
         "first_failure": first_failure,
         "last_failure": last_failure,
+    }
+    return out
+
+
+def build_discovered_record(
+    *,
+    quarter: str,
+    discovered_eps: float,
+    discovered_method_detail: str,
+    discovered_as_of_date: Optional[str],
+    probe_url: str,
+    tolerance: float,
+    parsed_basic_direct_value: Optional[float],
+    parsed_diluted_direct_value: Optional[float],
+    parsed_basic_current_eps: Optional[float],
+    parsed_diluted_current_eps: Optional[float],
+    parsed_basic_cumulative_eps: Optional[float],
+    parsed_diluted_cumulative_eps: Optional[float],
+    computed_q4_basic_eps: Optional[float],
+    computed_q4_diluted_eps: Optional[float],
+    q4_dependency_quarter: Optional[str],
+) -> Dict[str, Any]:
+    m = re.match(r"^(\d{4})Q([1-4])$", quarter)
+    year = int(m.group(1)) if m else 0
+    qnum = int(m.group(2)) if m else 0
+
+    base = {
+        "quarter": quarter,
+        "eps": round(float(discovered_eps), 2),
+        "source": "mops_discovered_record",
+        "as_of_date": discovered_as_of_date,
+        "article_title": None,
+        "article_url": None,
+        "page_url": probe_url,
+        "quarter_end_date": quarter_end_date_from_label(quarter),
+        "quarter_word": QUARTER_NUM_TO_EN_WORD.get(qnum),
+    }
+    out = enrich_record(
+        base,
+        data_origin="mops_discovery",
+        reference_source_type="mops_income_statement",
+        reference_url_verified_this_run=True,
+    )
+    out["verification_status"] = "DISCOVERED"
+    out["verification_method"] = "mops_income_statement"
+    out["verified_url"] = probe_url
+    out["verified_eps"] = round(float(discovered_eps), 2)
+    out["verified_as_of_date"] = discovered_as_of_date
+    out["verification"] = {
+        "status": "DISCOVERED",
+        "method": "mops_income_statement",
+        "method_detail": discovered_method_detail,
+        "verification_basis": discovered_method_detail,
+        "verified_url": probe_url,
+        "verified_eps": round(float(discovered_eps), 2),
+        "verified_quarter": quarter,
+        "verified_as_of_date": discovered_as_of_date,
+        "parsed_basic_direct_value": parsed_basic_direct_value,
+        "parsed_diluted_direct_value": parsed_diluted_direct_value,
+        "parsed_basic_current_eps": parsed_basic_current_eps,
+        "parsed_diluted_current_eps": parsed_diluted_current_eps,
+        "parsed_basic_cumulative_eps": parsed_basic_cumulative_eps,
+        "parsed_diluted_cumulative_eps": parsed_diluted_cumulative_eps,
+        "computed_q4_basic_eps": computed_q4_basic_eps,
+        "computed_q4_diluted_eps": computed_q4_diluted_eps,
+        "q4_dependency_quarter": q4_dependency_quarter,
+        "reason": "mops_auto_discovery_no_seed",
+        "tolerance": tolerance,
+        "attempted_at_utc": now_utc_iso(),
+        "candidate_count_considered": 1,
+        "primary_failure_class": None,
+        "first_failure": None,
+        "last_failure": None,
     }
     return out
 
@@ -1067,7 +1173,6 @@ def probe_seed_with_mops(
                 ("basic_direct_value", parsed.get("basic_direct_value")),
             ],
         )
-
     else:
         q4_dependency_quarter = f"{year}Q3"
         debug["q4_dependency_quarter"] = q4_dependency_quarter
@@ -1265,19 +1370,267 @@ def probe_seed_with_mops(
     return record, debug
 
 
-def choose_better_record(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
-    old_verified = bool(old.get("reference_url_verified_this_run", False))
-    new_verified = bool(new.get("reference_url_verified_this_run", False))
-    if new_verified and not old_verified:
-        return new
-    if old_verified and not new_verified:
-        return old
+def discover_quarter_with_mops(
+    *,
+    quarter: str,
+    session: requests.Session,
+    mops_base_url: str,
+    stock_no: str,
+    timeout: int,
+    retries: int,
+    sleep_sec: float,
+    tolerance: float,
+    notes: List[str],
+    statement_cache: Dict[str, Dict[str, Any]],
+) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    year = int(quarter[:4])
+    qnum = int(quarter[-1])
 
+    debug = build_debug_quarter_entry(year, qnum)
+    pub_state = debug["publication_state"]
+
+    page_url = f"{mops_base_url}/t164sb04"
+    ajax_url = f"{mops_base_url}/ajax_t164sb04"
+
+    if pub_state == "NOT_ENDED_YET":
+        debug["status"] = "NOT_ENDED_YET"
+        return None, debug
+
+    if pub_state == "LIKELY_NOT_PUBLISHED_YET":
+        debug["status"] = "LIKELY_NOT_PUBLISHED_YET"
+        return None, debug
+
+    attempts: List[Dict[str, Any]] = []
+
+    main_stmt = fetch_and_parse_mops_statement(
+        session=session,
+        mops_base_url=mops_base_url,
+        stock_no=stock_no,
+        year=year,
+        quarter_num=qnum,
+        timeout=timeout,
+        retries=retries,
+        sleep_sec=sleep_sec,
+        cache=statement_cache,
+    )
+
+    debug["request"] = {
+        "page_url": main_stmt["page_url"],
+        "ajax_url": main_stmt["ajax_url"],
+        "payload": main_stmt["payload"],
+    }
+    debug["http_status"] = main_stmt.get("http_status")
+    debug["fetch_ok"] = bool(main_stmt.get("fetch_ok"))
+
+    if main_stmt.get("failure_class") == FAILURE_CLASS_HTTP:
+        debug["status"] = "MOPS_FETCH_FAILED"
+        attempts.append(
+            {
+                "probe": "mops_fetch",
+                "failure_class": FAILURE_CLASS_HTTP,
+                "reason": main_stmt.get("failure_reason"),
+                "url": main_stmt.get("ajax_url"),
+                "payload": main_stmt.get("payload"),
+                "http_status": main_stmt.get("http_status"),
+            }
+        )
+        debug["attempts"] = attempts
+        return None, debug
+
+    if main_stmt.get("failure_class") == FAILURE_CLASS_NOT_FOUND:
+        debug["status"] = "MOPS_NOT_FOUND"
+        attempts.append(
+            {
+                "probe": "mops_no_data_check",
+                "failure_class": FAILURE_CLASS_NOT_FOUND,
+                "reason": main_stmt.get("failure_reason"),
+                "url": main_stmt.get("ajax_url"),
+                "http_status": main_stmt.get("http_status"),
+            }
+        )
+        debug["attempts"] = attempts
+        return None, debug
+
+    parsed = main_stmt.get("parsed") or {}
+    debug["tables_found"] = parsed.get("tables_found", 0)
+    debug["parsed_basic_direct_value"] = parsed.get("basic_direct_value")
+    debug["parsed_diluted_direct_value"] = parsed.get("diluted_direct_value")
+    debug["parsed_basic_current_eps"] = parsed.get("basic_current_eps")
+    debug["parsed_diluted_current_eps"] = parsed.get("diluted_current_eps")
+    debug["parsed_basic_cumulative_eps"] = parsed.get("basic_cumulative_eps")
+    debug["parsed_diluted_cumulative_eps"] = parsed.get("diluted_cumulative_eps")
+    debug["parsed_as_of_date"] = parsed.get("as_of_date")
+    debug["candidate_preview"] = parsed.get("row_hits", [])[:8]
+
+    if main_stmt.get("failure_class") == FAILURE_CLASS_PARSE:
+        debug["status"] = "MOPS_PARSE_FAILED"
+        attempts.append(
+            {
+                "probe": "mops_parse",
+                "failure_class": FAILURE_CLASS_PARSE,
+                "reason": main_stmt.get("failure_reason"),
+                "tables_found": parsed.get("tables_found"),
+                "as_of_date": parsed.get("as_of_date"),
+            }
+        )
+        debug["attempts"] = attempts
+        return None, debug
+
+    discovered_eps: Optional[float] = None
+    discovered_method: Optional[str] = None
+    computed_q4_basic_eps: Optional[float] = None
+    computed_q4_diluted_eps: Optional[float] = None
+    q4_dependency_quarter: Optional[str] = None
+
+    if qnum in {1, 2, 3}:
+        discovered_eps, discovered_method = pick_first_available_candidate(
+            [
+                ("diluted_current_eps", parsed.get("diluted_current_eps")),
+                ("basic_current_eps", parsed.get("basic_current_eps")),
+                ("diluted_direct_value", parsed.get("diluted_direct_value")),
+                ("basic_direct_value", parsed.get("basic_direct_value")),
+            ]
+        )
+    else:
+        q4_dependency_quarter = f"{year}Q3"
+        debug["q4_dependency_quarter"] = q4_dependency_quarter
+
+        q3_stmt = fetch_and_parse_mops_statement(
+            session=session,
+            mops_base_url=mops_base_url,
+            stock_no=stock_no,
+            year=year,
+            quarter_num=3,
+            timeout=timeout,
+            retries=retries,
+            sleep_sec=sleep_sec,
+            cache=statement_cache,
+        )
+
+        debug["q4_dependency_http_status"] = q3_stmt.get("http_status")
+        debug["q4_dependency_fetch_ok"] = bool(q3_stmt.get("fetch_ok"))
+
+        if q3_stmt.get("failure_class") in {FAILURE_CLASS_HTTP, FAILURE_CLASS_NOT_FOUND, FAILURE_CLASS_PARSE}:
+            debug["status"] = "Q4_DIFF_DEPENDENCY_FAILED"
+            attempts.append(
+                {
+                    "probe": "q4_diff_dependency_q3",
+                    "failure_class": FAILURE_CLASS_Q4_DEP,
+                    "reason": "q3_dependency_fetch_or_parse_failed",
+                    "dependency_quarter": q4_dependency_quarter,
+                    "dependency_failure_class": q3_stmt.get("failure_class"),
+                    "dependency_failure_reason": q3_stmt.get("failure_reason"),
+                    "dependency_http_status": q3_stmt.get("http_status"),
+                }
+            )
+            debug["attempts"] = attempts
+            return None, debug
+
+        q3_parsed = q3_stmt.get("parsed") or {}
+        q3_basic_cum = q3_parsed.get("basic_cumulative_eps")
+        q3_diluted_cum = q3_parsed.get("diluted_cumulative_eps")
+        debug["q4_dependency_basic_cumulative_eps"] = q3_basic_cum
+        debug["q4_dependency_diluted_cumulative_eps"] = q3_diluted_cum
+
+        fy_basic_cum = parsed.get("basic_cumulative_eps")
+        fy_diluted_cum = parsed.get("diluted_cumulative_eps")
+
+        if fy_basic_cum is not None and q3_basic_cum is not None:
+            computed_q4_basic_eps = round(float(fy_basic_cum) - float(q3_basic_cum), 2)
+        if fy_diluted_cum is not None and q3_diluted_cum is not None:
+            computed_q4_diluted_eps = round(float(fy_diluted_cum) - float(q3_diluted_cum), 2)
+
+        debug["computed_q4_basic_eps"] = computed_q4_basic_eps
+        debug["computed_q4_diluted_eps"] = computed_q4_diluted_eps
+
+        discovered_eps, discovered_method = pick_first_available_candidate(
+            [
+                ("q4_diluted_diff", computed_q4_diluted_eps),
+                ("q4_basic_diff", computed_q4_basic_eps),
+            ]
+        )
+
+    if discovered_eps is None or discovered_method is None:
+        debug["status"] = "NO_DISCOVERABLE_EPS"
+        attempts.append(
+            {
+                "probe": "mops_discovery",
+                "failure_class": FAILURE_CLASS_NO_DISCOVERABLE,
+                "reason": "no_usable_official_eps_value_found_for_discovery",
+                "q4_dependency_quarter": q4_dependency_quarter,
+            }
+        )
+        debug["attempts"] = attempts
+        return None, debug
+
+    attempts.append(
+        {
+            "probe": "mops_discovery",
+            "failure_class": None,
+            "reason": "official_mops_auto_discovery",
+            "matched_method": discovered_method,
+            "discovered_eps": discovered_eps,
+            "parsed_basic_direct_value": debug["parsed_basic_direct_value"],
+            "parsed_diluted_direct_value": debug["parsed_diluted_direct_value"],
+            "parsed_basic_current_eps": debug["parsed_basic_current_eps"],
+            "parsed_diluted_current_eps": debug["parsed_diluted_current_eps"],
+            "parsed_basic_cumulative_eps": debug["parsed_basic_cumulative_eps"],
+            "parsed_diluted_cumulative_eps": debug["parsed_diluted_cumulative_eps"],
+            "computed_q4_basic_eps": computed_q4_basic_eps,
+            "computed_q4_diluted_eps": computed_q4_diluted_eps,
+            "q4_dependency_quarter": q4_dependency_quarter,
+            "as_of_date": parsed.get("as_of_date"),
+        }
+    )
+    debug["attempts"] = attempts
+    debug["discovered"] = True
+    debug["discovered_record_source"] = "mops_income_statement"
+    debug["status"] = "DISCOVERED"
+
+    discovered_record = build_discovered_record(
+        quarter=quarter,
+        discovered_eps=discovered_eps,
+        discovered_method_detail=discovered_method,
+        discovered_as_of_date=parsed.get("as_of_date"),
+        probe_url=ajax_url,
+        tolerance=tolerance,
+        parsed_basic_direct_value=debug["parsed_basic_direct_value"],
+        parsed_diluted_direct_value=debug["parsed_diluted_direct_value"],
+        parsed_basic_current_eps=debug["parsed_basic_current_eps"],
+        parsed_diluted_current_eps=debug["parsed_diluted_current_eps"],
+        parsed_basic_cumulative_eps=debug["parsed_basic_cumulative_eps"],
+        parsed_diluted_cumulative_eps=debug["parsed_diluted_cumulative_eps"],
+        computed_q4_basic_eps=computed_q4_basic_eps,
+        computed_q4_diluted_eps=computed_q4_diluted_eps,
+        q4_dependency_quarter=q4_dependency_quarter,
+    )
+
+    if qnum == 4:
+        notes.append(
+            f"{quarter}: DISCOVERED via MOPS Q4 diff | method={discovered_method} "
+            f"fy_basic={parsed.get('basic_cumulative_eps')} fy_diluted={parsed.get('diluted_cumulative_eps')} "
+            f"q3_basic_cum={debug.get('q4_dependency_basic_cumulative_eps')} "
+            f"q3_diluted_cum={debug.get('q4_dependency_diluted_cumulative_eps')} "
+            f"q4_basic={computed_q4_basic_eps} q4_diluted={computed_q4_diluted_eps}"
+        )
+    else:
+        notes.append(
+            f"{quarter}: DISCOVERED via MOPS | method={discovered_method} "
+            f"current_basic={parsed.get('basic_current_eps')} current_diluted={parsed.get('diluted_current_eps')}"
+        )
+
+    return discovered_record, debug
+
+
+def choose_better_record(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
     old_status = str(old.get("verification_status", "") or "")
     new_status = str(new.get("verification_status", "") or "")
-    if new_status == "VERIFIED" and old_status != "VERIFIED":
+
+    old_rank = status_rank(old_status)
+    new_rank = status_rank(new_status)
+    if new_rank > old_rank:
         return new
-    if old_status == "VERIFIED" and new_status != "VERIFIED":
+    if old_rank > new_rank:
         return old
 
     old_pri = int(old.get("source_priority", detect_source_priority(str(old.get("source", "")))))
@@ -1285,6 +1638,13 @@ def choose_better_record(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, 
     if new_pri > old_pri:
         return new
     if new_pri < old_pri:
+        return old
+
+    new_verified = bool(new.get("reference_url_verified_this_run", False))
+    old_verified = bool(old.get("reference_url_verified_this_run", False))
+    if new_verified and not old_verified:
+        return new
+    if old_verified and not new_verified:
         return old
 
     new_fetched = str(new.get("fetched_at_utc", "") or "")
@@ -1346,6 +1706,7 @@ def build_output(
     discovery_debug: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     verified_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFIED")
+    discovered_count = sum(1 for x in merged_quarters if x.get("verification_status") == "DISCOVERED")
     failed_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFY_FAILED")
     skipped_count = sum(
         1
@@ -1372,6 +1733,7 @@ def build_output(
         for x in merged_quarters
         if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_Q4_DEP
     )
+    auto_discovered_record_count = sum(1 for x in merged_quarters if x.get("data_origin") == "mops_discovery")
     seed_count = sum(1 for x in merged_quarters if x.get("data_origin") == "bootstrap_seed")
 
     return {
@@ -1379,17 +1741,19 @@ def build_output(
             "generated_at_utc": now_utc_iso(),
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
-            "source_policy": "seed_first_plus_official_mops_single_company_income_statement_probe_non_blocking_q4_diff_semantic_cleanup",
+            "source_policy": "seed_first_plus_official_mops_single_company_income_statement_probe_non_blocking_q4_diff_semantic_cleanup_auto_discovery",
             "entry_pages": entry_pages,
             "notes": notes,
             "counts": {
                 "verified_count": verified_count,
+                "discovered_count": discovered_count,
                 "verify_failed_count": failed_count,
                 "verify_skipped_count": skipped_count,
                 "mops_not_found_count": not_found_count,
                 "mops_parse_failed_count": parse_failed_count,
                 "eps_mismatch_count": mismatch_count,
                 "q4_dependency_failed_count": q4_dep_failed_count,
+                "auto_discovered_record_count": auto_discovered_record_count,
                 "bootstrap_seed_count": seed_count,
                 "total_quarters": len(merged_quarters),
             },
@@ -1398,6 +1762,7 @@ def build_output(
                 "single_company_mode": True,
                 "q4_diff_enabled": True,
                 "semantic_cleanup_enabled": True,
+                "auto_discovery_enabled": True,
             },
         },
         "discovery_debug": discovery_debug,
@@ -1406,7 +1771,11 @@ def build_output(
 
 
 def iter_target_quarters(start_year: int, end_year: int) -> List[Tuple[int, int]]:
-    years = list(range(start_year, end_year - 1, -1)) if start_year >= end_year else list(range(start_year, end_year + 1))
+    years = (
+        list(range(start_year, end_year - 1, -1))
+        if start_year >= end_year
+        else list(range(start_year, end_year + 1))
+    )
     out: List[Tuple[int, int]] = []
     for y in years:
         for q in (1, 2, 3, 4):
@@ -1416,7 +1785,7 @@ def iter_target_quarters(start_year: int, end_year: int) -> List[Tuple[int, int]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Update TSMC quarterly EPS tracker (seed-first + optional MOPS probe + Q4 diff + semantic cleanup)."
+        description="Update TSMC quarterly EPS tracker (seed-first + MOPS verification + future auto-discovery)."
     )
     parser.add_argument("--out", default=DEFAULT_OUT, help="Output tracker JSON path")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout seconds")
@@ -1460,10 +1829,14 @@ def main() -> None:
         )
         seed_map[str(item["quarter"])] = item
 
+    latest_seed_quarter = max(seed_map.keys(), key=quarter_sort_key)
+
     notes.append(f"bootstrapped seeds={len(seed_map)}")
     notes.append("probe mode=mops_single_company_income_statement")
     notes.append("q4_rule=use_fy_cumulative_minus_q3_cumulative")
     notes.append("semantic_cleanup=separate_current_vs_cumulative_fields")
+    notes.append("auto_discovery=enabled_for_quarters_after_latest_seed")
+    notes.append(f"auto_discovery_floor_quarter={latest_seed_quarter}")
     notes.append(f"mops_base_url={args.mops_base_url}")
     notes.append(f"stock_no={args.stock_no}")
     notes.append(f"eps_tolerance={args.eps_tolerance}")
@@ -1506,13 +1879,32 @@ def main() -> None:
             )
             fetched.append(updated)
             discovery_debug.append(dbg)
-        else:
-            dbg = build_debug_quarter_entry(year, qnum)
-            if quarter in existing_map:
-                dbg["status"] = "NO_SEED_EXISTING_ONLY"
-            else:
-                dbg["status"] = dbg["publication_state"]
+            continue
+
+        if quarter_gt(quarter, latest_seed_quarter):
+            discovered_record, dbg = discover_quarter_with_mops(
+                quarter=quarter,
+                session=session,
+                mops_base_url=args.mops_base_url,
+                stock_no=args.stock_no,
+                timeout=args.timeout,
+                retries=args.retries,
+                sleep_sec=args.sleep_sec,
+                tolerance=args.eps_tolerance,
+                notes=notes,
+                statement_cache=statement_cache,
+            )
+            if discovered_record is not None:
+                fetched.append(discovered_record)
             discovery_debug.append(dbg)
+            continue
+
+        dbg = build_debug_quarter_entry(year, qnum)
+        if quarter in existing_map:
+            dbg["status"] = "NO_SEED_EXISTING_ONLY"
+        else:
+            dbg["status"] = dbg["publication_state"]
+        discovery_debug.append(dbg)
 
     merged_quarters = merge_records(existing_quarters, fetched)
     out = build_output(
@@ -1530,6 +1922,7 @@ def main() -> None:
     print(f"[INFO] merged_quarters={len(merged_quarters)}")
 
     verified_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFIED")
+    discovered_count = sum(1 for x in merged_quarters if x.get("verification_status") == "DISCOVERED")
     failed_count = sum(1 for x in merged_quarters if x.get("verification_status") == "VERIFY_FAILED")
     skipped_count = sum(
         1
@@ -1537,6 +1930,7 @@ def main() -> None:
         if x.get("verification_status") in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}
     )
     print(f"[INFO] verified_count={verified_count}")
+    print(f"[INFO] discovered_count={discovered_count}")
     print(f"[INFO] verify_failed_count={failed_count}")
     print(f"[INFO] verify_skipped_count={skipped_count}")
 
