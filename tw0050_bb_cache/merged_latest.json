@@ -1,15 +1,17 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T00:34:40Z",
+    "generated_at_utc": "2026-03-13T02:04:35Z",
     "script": "merge_0050_valuation_bb.py",
-    "schema_version": "0050_merge_schema_v1_compat",
-    "config_version": "0050_merge_v1.3",
-    "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close."
+    "schema_version": "0050_merge_schema_v1.4a_compat",
+    "config_version": "0050_merge_v1.4a",
+    "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only."
   },
   "inputs": {
     "bb_stats_path": "tw0050_bb_cache/stats_latest.json",
-    "base_0050": 76.5999984741211,
-    "base_tsmc": 1885.0,
+    "roll25_report_path": "roll25_cache/report.md",
+    "tx_night_last": 33393.0,
+    "base_0050": 75.69999694824219,
+    "base_tsmc": 1875.0,
     "tsmc_weight": 0.6408,
     "base_sources": {
       "base_0050": "bb_stats.latest.price_used",
@@ -22,10 +24,10 @@
       "points_per_year": 1.0,
       "note": "Display-price sensitivity only. Use 'heavy' if you want to approximate the earlier pessimistic net-price style."
     },
-    "current_date": "2026-03-12",
-    "current_0050_price": 76.5999984741211,
+    "current_date": "2026-03-13",
+    "current_0050_price": 75.69999694824219,
     "current_bb_state": "IN_BAND",
-    "current_bb_z": 1.092884270618623,
+    "current_bb_z": 0.9444238426623772,
     "schema_validation": {
       "validated": true,
       "required_paths_checked": [
@@ -60,9 +62,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
-      "tsmc_return_vs_base": -0.286397877984085,
-      "gross_0050": 58.41487080411583,
-      "net_0050": 57.41487080411583
+      "tsmc_return_vs_base": -0.28259200000000007,
+      "gross_0050": 57.91315067777831,
+      "net_0050": 56.91315067777831
     },
     {
       "group_name": "2026_core",
@@ -76,9 +78,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
-      "tsmc_return_vs_base": -0.18180371352785152,
-      "gross_0050": 65.47493491217898,
-      "net_0050": 64.47493491217898
+      "tsmc_return_vs_base": -0.17744000000000004,
+      "gross_0050": 64.9173232965332,
+      "net_0050": 63.9173232965332
     },
     {
       "group_name": "2026_core",
@@ -92,9 +94,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
-      "tsmc_return_vs_base": -0.062483421750663126,
-      "gross_0050": 72.7075406996698,
-      "net_0050": 71.7075406996698
+      "tsmc_return_vs_base": -0.05748333333333333,
+      "gross_0050": 72.0958201695404,
+      "net_0050": 71.0958201695404
     },
     {
       "group_name": "2026_core",
@@ -108,9 +110,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
-      "tsmc_return_vs_base": 0.054376657824933616,
-      "gross_0050": 79.26909189575358,
-      "net_0050": 78.26909189575358
+      "tsmc_return_vs_base": 0.06000000000000005,
+      "gross_0050": 78.6105104309082,
+      "net_0050": 77.6105104309082
     },
     {
       "group_name": "2027_core",
@@ -124,9 +126,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
-      "tsmc_return_vs_base": 0.13565152519893897,
-      "gross_0050": 83.80878582733837,
-      "net_0050": 81.80878582733837
+      "tsmc_return_vs_base": 0.14170833333333333,
+      "gross_0050": 83.1178926391983,
+      "net_0050": 81.1178926391983
     },
     {
       "group_name": "2027_core",
@@ -140,9 +142,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
-      "tsmc_return_vs_base": 0.317970822281167,
-      "gross_0050": 93.5834209793111,
-      "net_0050": 91.5834209793111
+      "tsmc_return_vs_base": 0.32499999999999996,
+      "gross_0050": 92.82485025787352,
+      "net_0050": 90.82485025787352
     },
     {
       "group_name": "2027_core",
@@ -156,19 +158,19 @@
       "eps_after_growth": 111.9625,
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
-      "tsmc_return_vs_base": 0.42551724137931046,
-      "gross_0050": 98.86236696858373,
-      "net_0050": 96.86236696858373
+      "tsmc_return_vs_base": 0.43312000000000017,
+      "gross_0050": 98.06959555363771,
+      "net_0050": 96.06959555363771
     }
   ],
   "bb_snapshot": {
-    "date": "2026-03-12",
-    "price_used": 76.5999984741211,
+    "date": "2026-03-13",
+    "price_used": 75.69999694824219,
     "state": "IN_BAND",
-    "bb_z": 1.092884270618623,
+    "bb_z": 0.9444238426623772,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
-    "rv20_percentile": 96.55913978494624,
+    "rv20_percentile": 96.63082437275986,
     "action_bucket": "VETO",
     "pledge_policy": "DISALLOW",
     "dq_flags": [
@@ -179,58 +181,58 @@
     ],
     "tranche_levels": [
       {
-        "drawdown": -0.048076940067123375,
+        "drawdown": -0.048076944112410924,
         "label": "10D_p10_uncond",
-        "price_level": 72.91730493833903
+        "price_level": 72.06057242565187
       },
       {
-        "drawdown": -0.06346381285822313,
+        "drawdown": -0.06346378550476303,
         "label": "10D_p05_uncond",
-        "price_level": 71.7386705060193
+        "price_level": 70.89578857920773
       },
       {
-        "drawdown": -0.06864042434181514,
+        "drawdown": -0.06864027422795356,
         "label": "20D_p10_uncond",
-        "price_level": 71.34214207427503
+        "price_level": 70.5039283986596
       },
       {
-        "drawdown": -0.09263298071685441,
+        "drawdown": -0.09263326618660943,
         "label": "20D_p05_uncond",
-        "price_level": 69.50431229255676
+        "price_level": 68.68765898061015
       }
     ]
   },
   "combined": {
     "bb": {
-      "date": "2026-03-12",
-      "price_used": 76.5999984741211,
+      "date": "2026-03-13",
+      "price_used": 75.69999694824219,
       "state": "IN_BAND",
-      "bb_z": 1.092884270618623,
+      "bb_z": 0.9444238426623772,
       "regime_tag": "RISK_OFF_OR_DEFENSIVE",
       "regime_allowed": false,
-      "rv20_percentile": 96.55913978494624,
+      "rv20_percentile": 96.63082437275986,
       "action_bucket": "VETO",
       "pledge_policy": "DISALLOW",
       "tranche_levels": [
         {
-          "drawdown": -0.048076940067123375,
+          "drawdown": -0.048076944112410924,
           "label": "10D_p10_uncond",
-          "price_level": 72.91730493833903
+          "price_level": 72.06057242565187
         },
         {
-          "drawdown": -0.06346381285822313,
+          "drawdown": -0.06346378550476303,
           "label": "10D_p05_uncond",
-          "price_level": 71.7386705060193
+          "price_level": 70.89578857920773
         },
         {
-          "drawdown": -0.06864042434181514,
+          "drawdown": -0.06864027422795356,
           "label": "20D_p10_uncond",
-          "price_level": 71.34214207427503
+          "price_level": 70.5039283986596
         },
         {
-          "drawdown": -0.09263298071685441,
+          "drawdown": -0.09263326618660943,
           "label": "20D_p05_uncond",
-          "price_level": 69.50431229255676
+          "price_level": 68.68765898061015
         }
       ],
       "dq_flags": [
@@ -241,14 +243,14 @@
       ]
     },
     "valuation_range": {
-      "gross_min": 58.41487080411583,
-      "gross_max": 98.86236696858373,
-      "net_min": 57.41487080411583,
-      "net_max": 96.86236696858373,
+      "gross_min": 57.91315067777831,
+      "gross_max": 98.06959555363771,
+      "net_min": 56.91315067777831,
+      "net_max": 96.06959555363771,
       "current_price_position": {
-        "current_price": 76.5999984741211,
-        "scenario_net_min": 57.41487080411583,
-        "scenario_net_max": 96.86236696858373,
+        "current_price": 75.69999694824219,
+        "scenario_net_min": 56.91315067777831,
+        "scenario_net_max": 96.06959555363771,
         "scenario_net_pctl": 42.857142857142854,
         "zone": "MID_ZONE",
         "note": "rough classification only; sparse scenario set => low percentile resolution"
@@ -257,25 +259,38 @@
     "tranche_reference": [
       {
         "label": "10D_p10_uncond",
-        "price_level": 72.91730493833903,
-        "vs_current_pct": -4.807694006712337
+        "price_level": 72.06057242565187,
+        "vs_current_pct": -4.807694411241092
       },
       {
         "label": "10D_p05_uncond",
-        "price_level": 71.7386705060193,
-        "vs_current_pct": -6.3463812858223
+        "price_level": 70.89578857920773,
+        "vs_current_pct": -6.346378550476295
       },
       {
         "label": "20D_p10_uncond",
-        "price_level": 71.34214207427503,
-        "vs_current_pct": -6.864042434181517
+        "price_level": 70.5039283986596,
+        "vs_current_pct": -6.86402742279536
       },
       {
         "label": "20D_p05_uncond",
-        "price_level": 69.50431229255676,
-        "vs_current_pct": -9.263298071685433
+        "price_level": 68.68765898061015,
+        "vs_current_pct": -9.263326618660939
       }
     ],
+    "pre_execution_review": {
+      "available": true,
+      "source_path": "roll25_cache/report.md",
+      "band1": 33057.836667,
+      "band2": 32541.990382,
+      "tx_night_last": 33393.0,
+      "tx_vs_band1": 335.1633329999968,
+      "tx_vs_band2": 851.009618,
+      "preopen_shock_flag": "NONE",
+      "shock_override": "NONE",
+      "trigger_reasons": [],
+      "parse_notes": []
+    },
     "base_execution_bias": "WAIT_FOR_BETTER_ALIGNMENT",
     "dq_overlay": "CAUTION",
     "matched_caution_flags": [
@@ -286,22 +301,27 @@
     ],
     "matched_veto_flags": [],
     "combined_execution_bias": "WAIT_WITH_DQ_CAUTION",
+    "fast_shock_override": "NONE",
+    "final_execution_bias": "WAIT_WITH_DQ_CAUTION",
+    "action_instruction": "觀察為主；等待更好對齊，且留意 DQ。",
     "how_to_read": {
       "layer_1": "Use valuation scenarios to decide whether the current zone is cheap / fair / expensive.",
       "layer_2": "Use BB/regime/tranche references to decide whether to act now or wait.",
+      "layer_3": "Use pre-execution review to override action bias when TX night close breaches roll25 bands.",
       "zone_note": "valuation zone is rough classification only; do not over-interpret sparse-percentile output.",
       "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
+      "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
       "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately."
     }
   },
   "config_used": {
     "meta": {
-      "config_version": "0050_merge_v1.3",
-      "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close."
+      "config_version": "0050_merge_v1.4a",
+      "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only."
     },
     "base": {
-      "base_0050": 76.5999984741211,
-      "base_tsmc": 1885.0,
+      "base_0050": 75.69999694824219,
+      "base_tsmc": 1875.0,
       "tsmc_weight": 0.6408
     },
     "dividend_drag": {
@@ -393,35 +413,35 @@
     ]
   },
   "bb_summary": {
-    "date": "2026-03-12",
-    "price_used": 76.5999984741211,
+    "date": "2026-03-13",
+    "price_used": 75.69999694824219,
     "state": "IN_BAND",
-    "bb_z": 1.092884270618623,
+    "bb_z": 0.9444238426623772,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
-    "rv20_percentile": 96.55913978494624,
+    "rv20_percentile": 96.63082437275986,
     "action_bucket": "VETO",
     "pledge_policy": "DISALLOW",
     "tranche_levels": [
       {
-        "drawdown": -0.048076940067123375,
+        "drawdown": -0.048076944112410924,
         "label": "10D_p10_uncond",
-        "price_level": 72.91730493833903
+        "price_level": 72.06057242565187
       },
       {
-        "drawdown": -0.06346381285822313,
+        "drawdown": -0.06346378550476303,
         "label": "10D_p05_uncond",
-        "price_level": 71.7386705060193
+        "price_level": 70.89578857920773
       },
       {
-        "drawdown": -0.06864042434181514,
+        "drawdown": -0.06864027422795356,
         "label": "20D_p10_uncond",
-        "price_level": 71.34214207427503
+        "price_level": 70.5039283986596
       },
       {
-        "drawdown": -0.09263298071685441,
+        "drawdown": -0.09263326618660943,
         "label": "20D_p05_uncond",
-        "price_level": 69.50431229255676
+        "price_level": 68.68765898061015
       }
     ],
     "dq_flags": [
@@ -444,9 +464,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
-      "tsmc_return_vs_base": -0.286397877984085,
-      "gross_0050": 58.41487080411583,
-      "net_0050": 57.41487080411583
+      "tsmc_return_vs_base": -0.28259200000000007,
+      "gross_0050": 57.91315067777831,
+      "net_0050": 56.91315067777831
     },
     {
       "group_name": "2026_core",
@@ -460,9 +480,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
-      "tsmc_return_vs_base": -0.18180371352785152,
-      "gross_0050": 65.47493491217898,
-      "net_0050": 64.47493491217898
+      "tsmc_return_vs_base": -0.17744000000000004,
+      "gross_0050": 64.9173232965332,
+      "net_0050": 63.9173232965332
     },
     {
       "group_name": "2026_core",
@@ -476,9 +496,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
-      "tsmc_return_vs_base": -0.062483421750663126,
-      "gross_0050": 72.7075406996698,
-      "net_0050": 71.7075406996698
+      "tsmc_return_vs_base": -0.05748333333333333,
+      "gross_0050": 72.0958201695404,
+      "net_0050": 71.0958201695404
     },
     {
       "group_name": "2026_core",
@@ -492,9 +512,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
-      "tsmc_return_vs_base": 0.054376657824933616,
-      "gross_0050": 79.26909189575358,
-      "net_0050": 78.26909189575358
+      "tsmc_return_vs_base": 0.06000000000000005,
+      "gross_0050": 78.6105104309082,
+      "net_0050": 77.6105104309082
     },
     {
       "group_name": "2027_core",
@@ -508,9 +528,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
-      "tsmc_return_vs_base": 0.13565152519893897,
-      "gross_0050": 83.80878582733837,
-      "net_0050": 81.80878582733837
+      "tsmc_return_vs_base": 0.14170833333333333,
+      "gross_0050": 83.1178926391983,
+      "net_0050": 81.1178926391983
     },
     {
       "group_name": "2027_core",
@@ -524,9 +544,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
-      "tsmc_return_vs_base": 0.317970822281167,
-      "gross_0050": 93.5834209793111,
-      "net_0050": 91.5834209793111
+      "tsmc_return_vs_base": 0.32499999999999996,
+      "gross_0050": 92.82485025787352,
+      "net_0050": 90.82485025787352
     },
     {
       "group_name": "2027_core",
@@ -540,9 +560,9 @@
       "eps_after_growth": 111.9625,
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
-      "tsmc_return_vs_base": 0.42551724137931046,
-      "gross_0050": 98.86236696858373,
-      "net_0050": 96.86236696858373
+      "tsmc_return_vs_base": 0.43312000000000017,
+      "gross_0050": 98.06959555363771,
+      "net_0050": 96.06959555363771
     }
   ]
 }
