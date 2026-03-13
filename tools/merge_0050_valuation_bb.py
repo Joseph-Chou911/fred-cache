@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.5a)
+merge_0050_valuation_bb.py  (v1.6a)
 
 Purpose
 -------
@@ -14,7 +14,7 @@ Merge three layers into one deterministic report:
 3) Pre-execution shock review:
    read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.5a changes
+v1.6a changes
 -------------
 - Keep single-file architecture
 - Centralize slow variables:
@@ -22,7 +22,13 @@ v1.5a changes
   * family_targets
   * tsmc_weight_meta
 - suggested_eps_base is display-only and NEVER auto-applied
-- Keep family interpolation display-only; does NOT alter final_execution_bias
+- Add quarterly EPS accumulation review:
+  * eps_quarters_collected
+  * annual_eps_candidate
+  * annual_eps_candidate_complete
+  * ready_to_replace_active_eps_base
+- Candidate annual EPS is derived from COMPLETE fiscal year quarters only
+- No auto replacement of active_eps_base
 
 Backward compatibility
 ----------------------
@@ -46,6 +52,7 @@ import argparse
 import dataclasses
 import json
 import math
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -56,13 +63,13 @@ FAMILY_TARGETS_TOKEN = "__FAMILY_TARGETS__"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.5a",
+        "config_version": "0050_merge_v1.6a",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close. "
             "Pre-execution shock review is optional and report-only. "
             "Family interpolation is display-only and does not alter final execution bias. "
-            "Added centralized slow variable management."
+            "Added quarterly EPS accumulation review without auto-replacing active_eps_base."
         ),
     },
     "slow_vars": {
@@ -85,6 +92,18 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "as_of_date": "NA",
             "update_policy": "low_frequency_review",
             "note": "TSMC weight is a structural observation; daily auto-refresh is unnecessary.",
+        },
+        "quarterly_eps_tracker": {
+            "enabled": True,
+            "path": "tw0050_bb_cache/quarterly_eps_tracker.json",
+            "annual_candidate_policy": "sum_complete_fiscal_year_only",
+            "candidate_replace_policy": "display_only_no_auto_replace",
+            "auto_fill_suggested_eps_base": True,
+            "ready_diff_tolerance": 0.01,
+            "note": (
+                "Quarterly EPS collection is used to derive a candidate annual EPS. "
+                "Candidate is display-only and does not auto-replace active_eps_base."
+            ),
         },
     },
     "base": {
@@ -329,6 +348,43 @@ def has_path(d: Dict[str, Any], dotted: str) -> bool:
         return False
 
 
+def normalize_quarter_label(x: str) -> Optional[str]:
+    s = str(x).strip().upper().replace(" ", "")
+    m = re.match(r"^(\d{4})[-_/]?Q([1-4])$", s)
+    if not m:
+        return None
+    return f"{m.group(1)}Q{m.group(2)}"
+
+
+def quarter_sort_key(q: str) -> Tuple[int, int]:
+    nq = normalize_quarter_label(q)
+    if nq is None:
+        return (0, 0)
+    year = int(nq[:4])
+    quarter = int(nq[-1])
+    return (year, quarter)
+
+
+def parse_eps_quarter_entry(s: str, default_source: str = "cli_manual", default_as_of: str = "NA") -> Dict[str, Any]:
+    raw = str(s).strip()
+    if "=" in raw:
+        left, right = raw.split("=", 1)
+    elif ":" in raw:
+        left, right = raw.split(":", 1)
+    else:
+        raise ValueError(f"Invalid --eps-quarter entry: {raw}. Expected format YYYYQn=eps")
+    q = normalize_quarter_label(left)
+    if q is None:
+        raise ValueError(f"Invalid quarter label in --eps-quarter: {left}")
+    v = float(right)
+    return {
+        "quarter": q,
+        "eps": v,
+        "source": default_source,
+        "as_of_date": default_as_of,
+    }
+
+
 def validate_bb_stats_schema(stats: Dict[str, Any]) -> Dict[str, Any]:
     required_paths = [
         "latest.date",
@@ -548,6 +604,228 @@ def resolve_family_targets(cfg: Dict[str, Any]) -> List[float]:
     if isinstance(raw, str) and raw == FAMILY_TARGETS_TOKEN:
         raw = cfg.get("slow_vars", {}).get("family_targets", [])
     return [float(v) for v in raw]
+
+
+def resolve_quarterly_eps_json_path(cfg: Dict[str, Any], cli_quarterly_eps_json: Optional[str]) -> Tuple[Optional[str], str]:
+    if cli_quarterly_eps_json:
+        return cli_quarterly_eps_json, "cli"
+
+    tracker = cfg.get("slow_vars", {}).get("quarterly_eps_tracker", {}) or {}
+    p = tracker.get("path")
+    if p:
+        return str(p), "config"
+
+    return None, "none"
+
+
+def load_quarterly_eps_entries_from_json(path: Optional[str]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    if not path:
+        return [], ["No quarterly EPS tracker path provided."]
+
+    p = Path(path)
+    if not p.exists():
+        return [], [f"Quarterly EPS tracker not found: {path}"]
+
+    try:
+        raw = load_json(p)
+    except Exception as e:
+        return [], [f"Failed to read quarterly EPS tracker: {e}"]
+
+    items: List[Any]
+    if isinstance(raw, dict):
+        if isinstance(raw.get("quarters"), list):
+            items = raw.get("quarters", [])
+        elif isinstance(raw.get("entries"), list):
+            items = raw.get("entries", [])
+        else:
+            items = []
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        return [], [f"Unsupported quarterly EPS tracker format at {path}"]
+
+    out: List[Dict[str, Any]] = []
+    notes: List[str] = []
+
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            notes.append(f"Skipped quarterly EPS item #{idx}: not an object")
+            continue
+
+        q_raw = item.get("quarter", item.get("fiscal_quarter", item.get("label", "")))
+        q = normalize_quarter_label(str(q_raw))
+        if q is None:
+            notes.append(f"Skipped quarterly EPS item #{idx}: invalid quarter label={q_raw}")
+            continue
+
+        eps = safe_float(item.get("eps", item.get("value", item.get("diluted_eps", float('nan')))))
+        if math.isnan(eps):
+            notes.append(f"Skipped quarterly EPS item #{idx}: invalid eps for quarter={q}")
+            continue
+
+        out.append(
+            {
+                "quarter": q,
+                "eps": eps,
+                "source": str(item.get("source", "json_tracker")),
+                "as_of_date": str(item.get("as_of_date", item.get("date", "NA"))),
+            }
+        )
+
+    return out, notes
+
+
+def merge_quarterly_eps_entries(
+    file_entries: List[Dict[str, Any]],
+    cli_entries: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+
+    for entry in file_entries:
+        merged[str(entry["quarter"])] = deep_copy_jsonable(entry)
+
+    for entry in cli_entries:
+        merged[str(entry["quarter"])] = deep_copy_jsonable(entry)
+
+    out = list(merged.values())
+    out.sort(key=lambda x: quarter_sort_key(str(x["quarter"])))
+    return out
+
+
+def build_quarterly_eps_review(
+    cfg: Dict[str, Any],
+    path: Optional[str],
+    path_source: str,
+    entries: List[Dict[str, Any]],
+    load_notes: List[str],
+) -> Dict[str, Any]:
+    tracker = cfg.get("slow_vars", {}).get("quarterly_eps_tracker", {}) or {}
+    tolerance = float(tracker.get("ready_diff_tolerance", 0.01))
+    active_eps_base = float(cfg.get("slow_vars", {}).get("active_eps_base", 66.25))
+
+    groups: Dict[int, Dict[int, Dict[str, Any]]] = {}
+    for e in entries:
+        q = str(e["quarter"])
+        year = int(q[:4])
+        qn = int(q[-1])
+        groups.setdefault(year, {})[qn] = e
+
+    complete_years = sorted([y for y, qmap in groups.items() if set(qmap.keys()) == {1, 2, 3, 4}])
+
+    annual_eps_candidate: Optional[float] = None
+    annual_eps_candidate_complete = False
+    annual_eps_candidate_fiscal_year: Optional[int] = None
+    annual_eps_candidate_as_of_date = "NA"
+    ready_to_replace_active_eps_base = False
+
+    if complete_years:
+        annual_eps_candidate_complete = True
+        annual_eps_candidate_fiscal_year = max(complete_years)
+        qmap = groups[annual_eps_candidate_fiscal_year]
+        annual_eps_candidate = sum(float(qmap[i]["eps"]) for i in [1, 2, 3, 4])
+
+        q4 = qmap.get(4)
+        if q4 is not None:
+            annual_eps_candidate_as_of_date = str(q4.get("as_of_date", "NA"))
+
+        if annual_eps_candidate is not None:
+            ready_to_replace_active_eps_base = abs(float(annual_eps_candidate) - active_eps_base) > tolerance
+
+    collected_labels = [str(e["quarter"]) for e in entries]
+    collected_display = [f"{str(e['quarter'])}={float(e['eps']):.2f}" for e in entries]
+
+    return {
+        "enabled": bool(tracker.get("enabled", True)),
+        "tracker_path": path,
+        "tracker_path_source": path_source,
+        "tracker_note": str(tracker.get("note", "")),
+        "annual_candidate_policy": str(tracker.get("annual_candidate_policy", "sum_complete_fiscal_year_only")),
+        "candidate_replace_policy": str(tracker.get("candidate_replace_policy", "display_only_no_auto_replace")),
+        "eps_quarters_collected": collected_labels,
+        "eps_quarters_collected_display": collected_display,
+        "eps_quarters_collected_count": len(entries),
+        "eps_quarters_collected_detail": deep_copy_jsonable(entries),
+        "annual_eps_candidate": annual_eps_candidate,
+        "annual_eps_candidate_complete": annual_eps_candidate_complete,
+        "annual_eps_candidate_fiscal_year": annual_eps_candidate_fiscal_year,
+        "annual_eps_candidate_as_of_date": annual_eps_candidate_as_of_date,
+        "ready_to_replace_active_eps_base": ready_to_replace_active_eps_base,
+        "ready_diff_tolerance": tolerance,
+        "load_notes": load_notes,
+    }
+
+
+def apply_quarterly_eps_review(
+    cfg: Dict[str, Any],
+    cli_quarterly_eps_json: Optional[str],
+    cli_eps_quarters: List[str],
+) -> Dict[str, Any]:
+    cfg2 = deep_copy_jsonable(cfg)
+    tracker = cfg2.get("slow_vars", {}).get("quarterly_eps_tracker", {}) or {}
+    enabled = bool(tracker.get("enabled", True))
+
+    if not enabled:
+        cfg2["slow_vars"]["quarterly_eps_review"] = {
+            "enabled": False,
+            "tracker_path": None,
+            "tracker_path_source": "none",
+            "tracker_note": "Quarterly EPS review disabled.",
+            "annual_candidate_policy": "disabled",
+            "candidate_replace_policy": "disabled",
+            "eps_quarters_collected": [],
+            "eps_quarters_collected_display": [],
+            "eps_quarters_collected_count": 0,
+            "eps_quarters_collected_detail": [],
+            "annual_eps_candidate": None,
+            "annual_eps_candidate_complete": False,
+            "annual_eps_candidate_fiscal_year": None,
+            "annual_eps_candidate_as_of_date": "NA",
+            "ready_to_replace_active_eps_base": False,
+            "ready_diff_tolerance": 0.0,
+            "load_notes": ["Quarterly EPS review disabled by config."],
+        }
+        return cfg2
+
+    path, path_source = resolve_quarterly_eps_json_path(cfg2, cli_quarterly_eps_json)
+    file_entries, load_notes = load_quarterly_eps_entries_from_json(path)
+
+    cli_entries: List[Dict[str, Any]] = []
+    for raw in cli_eps_quarters:
+        cli_entries.append(parse_eps_quarter_entry(raw))
+
+    merged_entries = merge_quarterly_eps_entries(file_entries, cli_entries)
+
+    review = build_quarterly_eps_review(
+        cfg=cfg2,
+        path=path,
+        path_source=path_source,
+        entries=merged_entries,
+        load_notes=load_notes,
+    )
+    cfg2["slow_vars"]["quarterly_eps_review"] = review
+
+    auto_fill = bool(tracker.get("auto_fill_suggested_eps_base", True))
+    suggested_is_empty = cfg2.get("slow_vars", {}).get("suggested_eps_base", None) is None
+
+    if (
+        auto_fill
+        and suggested_is_empty
+        and review.get("annual_eps_candidate_complete") is True
+        and review.get("annual_eps_candidate") is not None
+    ):
+        candidate = float(review["annual_eps_candidate"])
+        fy = review.get("annual_eps_candidate_fiscal_year")
+        as_of_date = str(review.get("annual_eps_candidate_as_of_date", "NA"))
+
+        cfg2["slow_vars"]["suggested_eps_base"] = candidate
+        cfg2["slow_vars"]["suggested_eps_meta"]["source"] = f"auto_quarterly_eps_sum_{fy}"
+        cfg2["slow_vars"]["suggested_eps_meta"]["as_of_date"] = as_of_date
+        cfg2["slow_vars"]["suggested_eps_meta"]["method"] = "sum_complete_fiscal_year_quarters"
+        cfg2["slow_vars"]["suggested_eps_meta"]["note"] = (
+            "Auto-filled from collected quarterly EPS; display-only and never auto-applied."
+        )
+
+    return cfg2
 
 
 def compute_tsmc_price(
@@ -1145,6 +1423,7 @@ def build_combined_view(
             "family_boundary_note": "percentile=0 or 100 can simply mean the target is below family min or above family max.",
             "family_robustness_note": "2027_defensive_family is a robustness check only; it does not alter execution bias.",
             "slow_var_note": "suggested_eps_base is display-only and never auto-applied; tsmc_weight_meta is informative only.",
+            "quarterly_eps_note": "annual_eps_candidate is derived from complete fiscal year quarters only; it does not auto-replace active_eps_base.",
             "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
             "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
@@ -1177,6 +1456,8 @@ def build_slow_variable_review(
     base_sources: Dict[str, str],
 ) -> Dict[str, Any]:
     slow = cfg.get("slow_vars", {})
+    qreview = deep_copy_jsonable(slow.get("quarterly_eps_review", {}))
+
     return {
         "active_eps_base": float(slow.get("active_eps_base", 66.25)),
         "active_eps_base_source": slow_var_sources.get("active_eps_base", "config"),
@@ -1189,6 +1470,21 @@ def build_slow_variable_review(
         "tsmc_weight": float(cfg.get("base", {}).get("tsmc_weight", 0.6408)),
         "tsmc_weight_source": base_sources.get("tsmc_weight", "config"),
         "tsmc_weight_meta": deep_copy_jsonable(slow.get("tsmc_weight_meta", {})),
+        "eps_quarters_collected": qreview.get("eps_quarters_collected", []),
+        "eps_quarters_collected_display": qreview.get("eps_quarters_collected_display", []),
+        "eps_quarters_collected_count": qreview.get("eps_quarters_collected_count", 0),
+        "annual_eps_candidate": qreview.get("annual_eps_candidate", None),
+        "annual_eps_candidate_complete": qreview.get("annual_eps_candidate_complete", False),
+        "annual_eps_candidate_fiscal_year": qreview.get("annual_eps_candidate_fiscal_year", None),
+        "annual_eps_candidate_as_of_date": qreview.get("annual_eps_candidate_as_of_date", "NA"),
+        "ready_to_replace_active_eps_base": qreview.get("ready_to_replace_active_eps_base", False),
+        "quarterly_eps_tracker_path": qreview.get("tracker_path", None),
+        "quarterly_eps_tracker_path_source": qreview.get("tracker_path_source", "none"),
+        "quarterly_eps_tracker_note": qreview.get("tracker_note", ""),
+        "quarterly_eps_load_notes": qreview.get("load_notes", []),
+        "quarterly_eps_candidate_policy": qreview.get("annual_candidate_policy", "NA"),
+        "quarterly_eps_replace_policy": qreview.get("candidate_replace_policy", "NA"),
+        "quarterly_eps_ready_diff_tolerance": qreview.get("ready_diff_tolerance", None),
     }
 
 
@@ -1214,7 +1510,7 @@ def build_output_json(
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1.5a_compat",
+        "schema_version": "0050_merge_schema_v1.6a_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
@@ -1290,6 +1586,10 @@ def fmt_pct(x: Any, digits: int = 2) -> str:
     return f"{v:.{digits}f}%"
 
 
+def fmt_bool(x: Any) -> str:
+    return str(bool(x)).lower()
+
+
 def markdown_report(
     cfg: Dict[str, Any],
     bb: BBState,
@@ -1354,6 +1654,24 @@ def markdown_report(
     lines.append(f"- tsmc_weight_meta_as_of_date: `{slow_review['tsmc_weight_meta'].get('as_of_date', 'NA')}`")
     lines.append(f"- tsmc_weight_meta_update_policy: `{slow_review['tsmc_weight_meta'].get('update_policy', 'NA')}`")
     lines.append(f"- tsmc_weight_meta_note: `{slow_review['tsmc_weight_meta'].get('note', '')}`")
+
+    lines.append("")
+    lines.append("## Quarterly EPS Accumulation Review")
+    lines.append(f"- quarterly_eps_tracker_path: `{slow_review.get('quarterly_eps_tracker_path')}`")
+    lines.append(f"- quarterly_eps_tracker_path_source: `{slow_review.get('quarterly_eps_tracker_path_source', 'NA')}`")
+    lines.append(f"- quarterly_eps_candidate_policy: `{slow_review.get('quarterly_eps_candidate_policy', 'NA')}`")
+    lines.append(f"- quarterly_eps_replace_policy: `{slow_review.get('quarterly_eps_replace_policy', 'NA')}`")
+    lines.append(f"- eps_quarters_collected: `{', '.join(slow_review.get('eps_quarters_collected_display', [])) if slow_review.get('eps_quarters_collected_display') else 'none'}`")
+    lines.append(f"- annual_eps_candidate: `{fmt_num(slow_review.get('annual_eps_candidate'))}`")
+    lines.append(f"- annual_eps_candidate_complete: `{fmt_bool(slow_review.get('annual_eps_candidate_complete', False))}`")
+    lines.append(f"- annual_eps_candidate_fiscal_year: `{slow_review.get('annual_eps_candidate_fiscal_year', 'NA')}`")
+    lines.append(f"- annual_eps_candidate_as_of_date: `{slow_review.get('annual_eps_candidate_as_of_date', 'NA')}`")
+    lines.append(f"- ready_to_replace_active_eps_base: `{fmt_bool(slow_review.get('ready_to_replace_active_eps_base', False))}`")
+    lines.append(f"- quarterly_eps_ready_diff_tolerance: `{fmt_num(slow_review.get('quarterly_eps_ready_diff_tolerance'))}`")
+    if slow_review.get("quarterly_eps_tracker_note"):
+        lines.append(f"- quarterly_eps_tracker_note: `{slow_review.get('quarterly_eps_tracker_note')}`")
+    if slow_review.get("quarterly_eps_load_notes"):
+        lines.append(f"- quarterly_eps_load_notes: `{'; '.join(slow_review.get('quarterly_eps_load_notes', []))}`")
 
     lines.append("")
     lines.append("## Valuation Scenario Table")
@@ -1503,9 +1821,11 @@ def markdown_report(
     lines.append("- Step 2: Read current_status / target_status first. A percentile of 0 or 100 may simply mean out-of-range, not model failure.")
     lines.append("- Step 3: Use 2027_defensive_family only as a robustness check: ask whether the price still looks acceptable under milder defensive assumptions.")
     lines.append("- Step 4: Treat suggested_eps_base as review material only; it never changes the live model automatically.")
-    lines.append("- Step 5: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
-    lines.append("- Step 6: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
-    lines.append("- Step 7: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
+    lines.append("- Step 5: Review quarterly EPS accumulation fields. `annual_eps_candidate_complete=true` means a complete fiscal year candidate exists.")
+    lines.append("- Step 6: `ready_to_replace_active_eps_base=true` means the complete annual candidate materially differs from active_eps_base, but replacement is still manual.")
+    lines.append("- Step 7: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
+    lines.append("- Step 8: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
+    lines.append("- Step 9: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
 
     lines.append("")
     lines.append("## Notes")
@@ -1513,6 +1833,8 @@ def markdown_report(
     lines.append("- base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.")
     lines.append("- active_eps_base is the live slow-moving valuation anchor; revise only when earnings/model basis changes.")
     lines.append("- suggested_eps_base is display-only and never auto-applied.")
+    lines.append("- annual_eps_candidate is derived from collected quarterly EPS using COMPLETE fiscal year quarters only.")
+    lines.append("- ready_to_replace_active_eps_base does NOT auto-replace active_eps_base; it is a review flag only.")
     lines.append("- tsmc_weight_meta is informative only; it does not change execution bias by itself.")
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
     lines.append("- Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.")
@@ -1539,6 +1861,8 @@ def main() -> None:
     parser.add_argument("--suggested-eps-source", required=False, help="Display-only suggested EPS source")
     parser.add_argument("--suggested-eps-as-of", required=False, help="Display-only suggested EPS as-of date")
     parser.add_argument("--suggested-eps-method", required=False, help="Display-only suggested EPS method")
+    parser.add_argument("--quarterly-eps-json", required=False, help="Optional quarterly EPS tracker JSON path")
+    parser.add_argument("--eps-quarter", action="append", default=[], help="Optional quarter EPS entry like 2025Q1=13.94; can be repeated")
     parser.add_argument("--roll25-report", required=False, help="Optional path to roll25 markdown report")
     parser.add_argument("--tx-night-last", type=float, required=False, help="Optional manual TX night-session close")
     parser.add_argument("--out-json", required=True, help="Output JSON path")
@@ -1561,6 +1885,12 @@ def main() -> None:
         cli_suggested_eps_as_of=args.suggested_eps_as_of,
         cli_suggested_eps_method=args.suggested_eps_method,
         cli_tsmc_weight_as_of=args.tsmc_weight_as_of,
+    )
+
+    cfg = apply_quarterly_eps_review(
+        cfg=cfg,
+        cli_quarterly_eps_json=args.quarterly_eps_json,
+        cli_eps_quarters=args.eps_quarter,
     )
 
     cfg, base_sources = apply_resolved_bases(
