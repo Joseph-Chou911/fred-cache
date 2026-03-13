@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v3.1)
+update_tsmc_quarterly_eps_tracker.py  (v3.2)
 
 Design goals
 ------------
@@ -15,17 +15,16 @@ Design goals
    - Never fail the whole run if probing fails.
    - Verification is additive metadata, not a prerequisite for output.
 
-3) Auditability
-   - Explicit verification status.
-   - Explicit primary failure class / first failure / last failure.
-   - Avoid misleading "verification_method" caused by the final failed attempt.
+3) Stricter quarter matching
+   - Exclude annual FY facts (fp == FY).
+   - Accept only exact-quarter candidates for verification.
+   - Exclude stale filed dates (default: >120 days from seed as_of_date).
+   - Do not fall back to old quarters when exact quarter is absent.
 
 Dependencies
 ------------
 Required:
 - requests
-
-No PDF / HTML parsing from blocked front-end pages is attempted in this version.
 """
 
 from __future__ import annotations
@@ -42,7 +41,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v3.1"
+SCRIPT_VERSION = "v3.2"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_TIMEOUT = 20
@@ -51,7 +50,8 @@ DEFAULT_SLEEP = 0.5
 # TSMC
 DEFAULT_SEC_CIK = "0001046179"
 DEFAULT_SEC_USER_AGENT = "Joseph Chou joseph@example.com"
-DEFAULT_XBRL_TOLERANCE = 0.02  # EPS comparison tolerance
+DEFAULT_XBRL_TOLERANCE = 0.02       # EPS comparison tolerance
+DEFAULT_MAX_FILED_DELTA_DAYS = 120  # exact-quarter candidate must be filed near seed as_of_date
 
 SOURCE_PRIORITY = {
     "tsmc_seed_record": 20,
@@ -123,11 +123,13 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
     },
 ]
 
-# Preferred concept names first; if absent, we fall back to heuristic scan.
+# Preferred concept names first; keep actual observed IFRS names too
 DIRECT_EPS_CONCEPTS = [
     ("ifrs-full", "BasicAndDilutedEarningsPerShare"),
     ("ifrs-full", "DilutedEarningsPerShare"),
     ("ifrs-full", "BasicEarningsPerShare"),
+    ("ifrs-full", "DilutedEarningsLossPerShare"),
+    ("ifrs-full", "BasicEarningsLossPerShare"),
     ("us-gaap", "EarningsPerShareDiluted"),
     ("us-gaap", "EarningsPerShareBasicAndDiluted"),
     ("us-gaap", "EarningsPerShareBasic"),
@@ -136,7 +138,8 @@ DIRECT_EPS_CONCEPTS = [
 FAILURE_CLASS_HTTP = "HTTP_ERROR"
 FAILURE_CLASS_NO_DATA = "NO_XBRL_DATA"
 FAILURE_CLASS_NO_CANDIDATE = "NO_CANDIDATE"
-FAILURE_CLASS_MISMATCH = "BEST_CANDIDATE_MISMATCH"
+FAILURE_CLASS_NO_EXACT_QUARTER = "NO_EXACT_QUARTER_CANDIDATE"
+FAILURE_CLASS_MISMATCH = "EXACT_QUARTER_EPS_MISMATCH"
 FAILURE_CLASS_NOT_ENDED = "NOT_ENDED_YET"
 FAILURE_CLASS_NOT_PUBLISHED = "LIKELY_NOT_PUBLISHED_YET"
 
@@ -208,8 +211,7 @@ def enrich_record(
 
 
 def build_session() -> requests.Session:
-    s = requests.Session()
-    return s
+    return requests.Session()
 
 
 def sec_headers(sec_user_agent: str) -> Dict[str, str]:
@@ -298,6 +300,8 @@ def is_eps_concept_name(concept: str) -> bool:
         "basicanddilutedearningspershare",
         "dilutedearningspershare",
         "basicearningspershare",
+        "dilutedearningslosspershare",
+        "basicearningslosspershare",
         "earningspersharediluted",
         "earningspersharebasicanddiluted",
         "earningspersharebasic",
@@ -314,14 +318,33 @@ def safe_float(x: Any) -> Optional[float]:
         return None
 
 
+def parse_quarter_from_frame(frame: str) -> Optional[str]:
+    """
+    Examples that may appear in XBRL frame:
+      CY2025Q1I
+      CY2025Q2
+      CY2025Q3I
+    """
+    if not frame:
+        return None
+    m = re.search(r"CY(\d{4})Q([1-4])", frame.upper())
+    if m:
+        return f"{m.group(1)}Q{m.group(2)}"
+    return None
+
+
 def infer_quarter_from_fact(
     fact: Dict[str, Any],
-    *,
-    expected_quarter: str,
 ) -> Tuple[Optional[str], str]:
     """
     Returns:
       (quarter_label_or_none, derivation_method)
+
+    Rules:
+    - Prefer fy/fp when fp is Q1~Q4
+    - Exclude FY as annual fact
+    - Then try frame parsing
+    - Then try end_date matching quarter end
     """
     fy = fact.get("fy")
     fp = str(fact.get("fp", "") or "").upper().strip()
@@ -332,6 +355,14 @@ def infer_quarter_from_fact(
         except Exception:
             pass
 
+    if fp == "FY":
+        return None, "annual_fy"
+
+    frame = str(fact.get("frame", "") or "").strip()
+    q_from_frame = parse_quarter_from_frame(frame)
+    if q_from_frame:
+        return q_from_frame, "frame"
+
     end_s = str(fact.get("end", "") or "")
     end_d = parse_iso_date(end_s)
     if end_d is not None:
@@ -339,7 +370,16 @@ def infer_quarter_from_fact(
             q_label = f"{end_d.year}Q{qn}"
             if end_d == quarter_end_date_obj(end_d.year, qn):
                 return q_label, "end_date"
+
     return None, "unknown"
+
+
+def filed_delta_days(filed_s: str, expected_as_of_date: str) -> Optional[int]:
+    filed_d = parse_iso_date(str(filed_s or ""))
+    asof_d = parse_iso_date(str(expected_as_of_date or ""))
+    if filed_d is None or asof_d is None:
+        return None
+    return abs((filed_d - asof_d).days)
 
 
 def candidate_score(
@@ -347,20 +387,36 @@ def candidate_score(
     *,
     expected_quarter: str,
     expected_as_of_date: str,
+    max_filed_delta_days: int,
 ) -> int:
     score = 0
 
-    if candidate.get("derived_quarter") == expected_quarter:
+    derived_quarter = candidate.get("derived_quarter")
+    if derived_quarter == expected_quarter:
         score += 100
-    elif candidate.get("derived_quarter") is not None:
+    elif derived_quarter is not None:
         score -= 60
 
-    filed_s = str(candidate.get("filed", "") or "")
-    filed_d = parse_iso_date(filed_s)
-    asof_d = parse_iso_date(expected_as_of_date)
-    if filed_d is not None and asof_d is not None:
-        delta = abs((filed_d - asof_d).days)
+    fp = str(candidate.get("fp", "") or "").upper()
+    if fp == "FY":
+        score -= 300
+
+    quarter_derivation = str(candidate.get("quarter_derivation", "") or "")
+    if quarter_derivation == "annual_fy":
+        score -= 300
+    elif quarter_derivation == "fy_fp":
+        score += 8
+    elif quarter_derivation == "frame":
+        score += 6
+    elif quarter_derivation == "end_date":
+        score += 3
+
+    delta = filed_delta_days(str(candidate.get("filed", "") or ""), expected_as_of_date)
+    candidate["filed_delta_days"] = delta
+    if delta is not None:
         score += max(0, 25 - min(delta, 25))
+        if delta > max_filed_delta_days:
+            score -= 150
 
     form = str(candidate.get("form", "") or "").upper()
     if form == "6-K":
@@ -375,12 +431,6 @@ def candidate_score(
         str(candidate.get("taxonomy", "") or ""),
         str(candidate.get("concept", "") or ""),
     )
-
-    if str(candidate.get("quarter_derivation", "")) == "fy_fp":
-        score += 8
-    elif str(candidate.get("quarter_derivation", "")) == "end_date":
-        score += 3
-
     return score
 
 
@@ -389,14 +439,13 @@ def collect_xbrl_eps_candidates(
     *,
     expected_quarter: str,
     expected_as_of_date: str,
+    max_filed_delta_days: int,
 ) -> List[Dict[str, Any]]:
     facts_root = companyfacts.get("facts", {})
     if not isinstance(facts_root, dict):
         return []
 
     candidates: List[Dict[str, Any]] = []
-
-    # 1) direct preferred concepts first
     preferred_pairs = set(DIRECT_EPS_CONCEPTS)
 
     for taxonomy, concepts in facts_root.items():
@@ -427,10 +476,12 @@ def collect_xbrl_eps_candidates(
                     if val is None:
                         continue
 
-                    derived_quarter, derivation = infer_quarter_from_fact(
-                        row,
-                        expected_quarter=expected_quarter,
-                    )
+                    fp = str(row.get("fp", "") or "").upper().strip()
+                    if fp == "FY":
+                        # Explicitly exclude annual EPS from quarterly verification
+                        continue
+
+                    derived_quarter, derivation = infer_quarter_from_fact(row)
 
                     cand = {
                         "taxonomy": taxonomy,
@@ -453,6 +504,7 @@ def collect_xbrl_eps_candidates(
                         cand,
                         expected_quarter=expected_quarter,
                         expected_as_of_date=expected_as_of_date,
+                        max_filed_delta_days=max_filed_delta_days,
                     )
                     candidates.append(cand)
 
@@ -473,19 +525,30 @@ def pick_best_xbrl_candidate(
     expected_quarter: str,
     expected_eps: float,
     tolerance: float,
+    max_filed_delta_days: int,
 ) -> Tuple[Optional[Dict[str, Any]], str]:
     if not candidates:
         return None, "no_candidate"
 
-    # Prefer exact quarter candidates first
-    exact_quarter = [c for c in candidates if c.get("derived_quarter") == expected_quarter]
-    pool = exact_quarter if exact_quarter else candidates
+    exact_quarter = [
+        c for c in candidates
+        if c.get("derived_quarter") == expected_quarter
+    ]
 
-    best = pool[0]
-    if abs(float(best["value"]) - float(expected_eps)) <= tolerance and best.get("derived_quarter") == expected_quarter:
+    # exact quarter + recent filing only
+    exact_quarter = [
+        c for c in exact_quarter
+        if c.get("filed_delta_days") is not None and int(c["filed_delta_days"]) <= max_filed_delta_days
+    ]
+
+    if not exact_quarter:
+        return None, "no_exact_quarter_candidate"
+
+    best = exact_quarter[0]
+    if abs(float(best["value"]) - float(expected_eps)) <= tolerance:
         return best, "exact_match"
 
-    return best, "best_candidate_mismatch"
+    return best, "exact_quarter_eps_mismatch"
 
 
 def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
@@ -513,7 +576,9 @@ def summarize_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
         "fp": c.get("fp"),
         "form": c.get("form"),
         "filed": c.get("filed"),
+        "filed_delta_days": c.get("filed_delta_days"),
         "end": c.get("end"),
+        "frame": c.get("frame"),
         "derived_quarter": c.get("derived_quarter"),
         "quarter_derivation": c.get("quarter_derivation"),
         "score": c.get("score"),
@@ -521,22 +586,26 @@ def summarize_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def choose_representative_failure(attempts: List[Dict[str, Any]]) -> Tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+def choose_representative_failure(
+    attempts: List[Dict[str, Any]]
+) -> Tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     if not attempts:
         return FAILURE_CLASS_NO_CANDIDATE, None, None
 
     first = attempts[0]
     last = attempts[-1]
 
-    # prioritize mismatch if we had actual candidates but mismatch
-    for a in attempts:
-        if str(a.get("failure_class", "")) == FAILURE_CLASS_MISMATCH:
-            return FAILURE_CLASS_MISMATCH, first, last
-
-    # then any HTTP-like issue
-    for a in attempts:
-        if str(a.get("failure_class", "")) == FAILURE_CLASS_HTTP:
-            return FAILURE_CLASS_HTTP, first, last
+    priority = [
+        FAILURE_CLASS_NO_EXACT_QUARTER,
+        FAILURE_CLASS_MISMATCH,
+        FAILURE_CLASS_HTTP,
+        FAILURE_CLASS_NO_DATA,
+        FAILURE_CLASS_NO_CANDIDATE,
+    ]
+    for klass in priority:
+        for a in attempts:
+            if str(a.get("failure_class", "")) == klass:
+                return klass, first, last
 
     return str(last.get("failure_class", FAILURE_CLASS_NO_CANDIDATE)), first, last
 
@@ -576,8 +645,9 @@ def update_record_with_verification(
                 "form": verified_candidate.get("form"),
                 "accn": verified_candidate.get("accn"),
                 "score": verified_candidate.get("score"),
+                "filed_delta_days": verified_candidate.get("filed_delta_days"),
             },
-            "reason": "seed_eps_matched_best_xbrl_candidate_within_tolerance",
+            "reason": "seed_eps_matched_exact_quarter_xbrl_candidate_within_tolerance",
             "tolerance": tolerance,
             "attempted_at_utc": now_utc_iso(),
             "candidate_count_considered": len(attempts),
@@ -619,6 +689,7 @@ def probe_seed_with_xbrl(
     companyfacts_url: str,
     companyfacts_err: Optional[str],
     tolerance: float,
+    max_filed_delta_days: int,
     notes: List[str],
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     quarter = str(seed_record["quarter"])
@@ -702,6 +773,7 @@ def probe_seed_with_xbrl(
         companyfacts,
         expected_quarter=quarter,
         expected_as_of_date=str(seed_record["as_of_date"]),
+        max_filed_delta_days=max_filed_delta_days,
     )
     debug["candidate_count"] = len(candidates)
     debug["candidate_preview"] = [summarize_candidate(c) for c in candidates[:12]]
@@ -732,18 +804,35 @@ def probe_seed_with_xbrl(
         expected_quarter=quarter,
         expected_eps=float(seed_record["eps"]),
         tolerance=tolerance,
+        max_filed_delta_days=max_filed_delta_days,
     )
 
     if best is None:
-        debug["status"] = "NO_XBRL_CANDIDATE"
-        attempts.append(
-            {
-                "probe": "companyfacts_candidate_pick",
-                "failure_class": FAILURE_CLASS_NO_CANDIDATE,
-                "reason": "best_candidate_none",
-                "companyfacts_url": companyfacts_url,
-            }
-        )
+        if pick_reason == "no_exact_quarter_candidate":
+            debug["status"] = "NO_EXACT_QUARTER_CANDIDATE"
+            attempts.append(
+                {
+                    "probe": "companyfacts_exact_quarter_filter",
+                    "failure_class": FAILURE_CLASS_NO_EXACT_QUARTER,
+                    "reason": "no_exact_quarter_candidate_after_fy_and_staleness_filters",
+                    "expected_quarter": quarter,
+                    "expected_eps": seed_record["eps"],
+                    "max_filed_delta_days": max_filed_delta_days,
+                }
+            )
+            notes.append(f"{quarter}: NO_EXACT_QUARTER_CANDIDATE after FY/staleness filters")
+        else:
+            debug["status"] = "NO_XBRL_CANDIDATE"
+            attempts.append(
+                {
+                    "probe": "companyfacts_candidate_pick",
+                    "failure_class": FAILURE_CLASS_NO_CANDIDATE,
+                    "reason": "best_candidate_none",
+                    "companyfacts_url": companyfacts_url,
+                }
+            )
+            notes.append(f"{quarter}: best XBRL candidate is none")
+
         debug["attempts"] = attempts
         record = update_record_with_verification(
             seed_record,
@@ -752,7 +841,6 @@ def probe_seed_with_xbrl(
             attempts=attempts,
             tolerance=tolerance,
         )
-        notes.append(f"{quarter}: best XBRL candidate is none")
         return record, debug
 
     best_summary = summarize_candidate(best)
@@ -788,7 +876,7 @@ def probe_seed_with_xbrl(
         {
             "probe": "companyfacts_best_candidate",
             "failure_class": FAILURE_CLASS_MISMATCH,
-            "reason": "best_candidate_mismatch",
+            "reason": "exact_quarter_eps_mismatch",
             "expected_quarter": quarter,
             "expected_eps": seed_record["eps"],
             "candidate": best_summary,
@@ -805,7 +893,7 @@ def probe_seed_with_xbrl(
         tolerance=tolerance,
     )
     notes.append(
-        f"{quarter}: VERIFY_FAILED best XBRL candidate mismatch | "
+        f"{quarter}: VERIFY_FAILED exact quarter XBRL candidate mismatch | "
         f"candidate={best.get('taxonomy')}:{best.get('concept')} "
         f"value={best.get('value')} quarter={best.get('derived_quarter')} filed={best.get('filed')}"
     )
@@ -899,6 +987,11 @@ def build_output(
         for x in merged_quarters
         if x.get("verification_status") in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}
     )
+    no_exact_count = sum(
+        1
+        for x in merged_quarters
+        if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_NO_EXACT_QUARTER
+    )
     seed_count = sum(1 for x in merged_quarters if x.get("data_origin") == "bootstrap_seed")
 
     return {
@@ -906,18 +999,22 @@ def build_output(
             "generated_at_utc": now_utc_iso(),
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
-            "source_policy": "seed_first_plus_optional_data_sec_companyfacts_xbrl_probe_non_blocking",
+            "source_policy": "seed_first_plus_optional_data_sec_companyfacts_xbrl_probe_non_blocking_exact_quarter_only",
             "entry_pages": entry_pages,
             "notes": notes,
             "counts": {
                 "verified_count": verified_count,
                 "verify_failed_count": failed_count,
                 "verify_skipped_count": skipped_count,
+                "no_exact_quarter_candidate_count": no_exact_count,
                 "bootstrap_seed_count": seed_count,
                 "total_quarters": len(merged_quarters),
             },
             "optional_features": {
                 "xbrl_probe_enabled": True,
+                "exact_quarter_only": True,
+                "exclude_fy": True,
+                "max_filed_delta_days": DEFAULT_MAX_FILED_DELTA_DAYS,
             },
         },
         "discovery_debug": discovery_debug,
@@ -936,7 +1033,7 @@ def iter_target_quarters(start_year: int, end_year: int) -> List[Tuple[int, int]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Update TSMC quarterly EPS tracker (seed-first + optional XBRL probe)."
+        description="Update TSMC quarterly EPS tracker (seed-first + optional exact-quarter XBRL probe)."
     )
     parser.add_argument("--out", default=DEFAULT_OUT, help="Output tracker JSON path")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout seconds")
@@ -955,6 +1052,12 @@ def main() -> None:
         type=float,
         default=DEFAULT_XBRL_TOLERANCE,
         help="Absolute EPS tolerance for XBRL verification match",
+    )
+    parser.add_argument(
+        "--max-filed-delta-days",
+        type=int,
+        default=DEFAULT_MAX_FILED_DELTA_DAYS,
+        help="Maximum allowed abs day delta between filed date and seed as_of_date for exact-quarter verification",
     )
     args = parser.parse_args()
 
@@ -981,6 +1084,9 @@ def main() -> None:
 
     notes.append(f"bootstrapped seeds={len(seed_map)}")
     notes.append("XBRL probe mode=companyfacts_only")
+    notes.append("XBRL rule=exact_quarter_only")
+    notes.append("XBRL rule=exclude_fp_FY")
+    notes.append(f"XBRL rule=max_filed_delta_days={args.max_filed_delta_days}")
     notes.append(f"SEC companyfacts probe cik={args.sec_cik}")
 
     companyfacts_url = sec_companyfacts_url(args.sec_cik)
@@ -1024,6 +1130,7 @@ def main() -> None:
                 companyfacts_url=companyfacts_url,
                 companyfacts_err=companyfacts_err,
                 tolerance=args.xbrl_tolerance,
+                max_filed_delta_days=args.max_filed_delta_days,
                 notes=notes,
             )
             fetched.append(updated)
@@ -1058,9 +1165,16 @@ def main() -> None:
         for x in merged_quarters
         if x.get("verification_status") in {"NOT_ENDED_YET", "LIKELY_NOT_PUBLISHED_YET"}
     )
+    no_exact_count = sum(
+        1
+        for x in merged_quarters
+        if str((x.get("verification") or {}).get("primary_failure_class", "")) == FAILURE_CLASS_NO_EXACT_QUARTER
+    )
+
     print(f"[INFO] verified_count={verified_count}")
     print(f"[INFO] verify_failed_count={failed_count}")
     print(f"[INFO] verify_skipped_count={skipped_count}")
+    print(f"[INFO] no_exact_quarter_candidate_count={no_exact_count}")
 
     for q in merged_quarters:
         print(
