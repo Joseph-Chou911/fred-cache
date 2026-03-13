@@ -1,6 +1,6 @@
 {
   "schema_version": "taiwan_margin_financing_history_v1",
-  "generated_at_utc": "2026-03-12T23:22:20Z",
+  "generated_at_utc": "2026-03-13T15:09:43Z",
   "items": [
     {
       "run_ts_utc": "2026-01-23T05:32:33Z",
@@ -1141,10 +1141,30 @@
       "data_date_canon": "2026-03-12",
       "balance_yi": 1352.8,
       "chg_yi": -1.9
+    },
+    {
+      "run_ts_utc": "2026-03-13T15:09:43Z",
+      "market": "TWSE",
+      "source": "HiStock",
+      "source_url": "https://histock.tw/stock/three.aspx?m=mg",
+      "data_date": "2026-03-13",
+      "data_date_canon": "2026-03-13",
+      "balance_yi": 3854.5,
+      "chg_yi": 60.8
+    },
+    {
+      "run_ts_utc": "2026-03-13T15:09:43Z",
+      "market": "TPEX",
+      "source": "HiStock",
+      "source_url": "https://histock.tw/stock/three.aspx?m=mg&no=TWOI",
+      "data_date": "2026-03-13",
+      "data_date_canon": "2026-03-13",
+      "balance_yi": 1355.3,
+      "chg_yi": 2.5
     }
   ],
   "audit": {
-    "generated_at_utc": "2026-03-12T23:22:20Z",
+    "generated_at_utc": "2026-03-13T15:09:43Z",
     "warnings": [
       "normalize: kept 80 non-canonical-date items without dedup",
       "normalize: kept 80 non-canonical-date items without dedup",
@@ -1155,10 +1175,10 @@
       "normalize: upgraded 80 legacy items by canonicalizing data_date"
     ],
     "stats": {
-      "run_ts_utc": "2026-03-12T23:22:20Z",
-      "history_items_before": 114,
-      "history_items_after_dedup": 114,
-      "history_items_final": 114,
+      "run_ts_utc": "2026-03-13T15:09:43Z",
+      "history_items_before": 116,
+      "history_items_after_dedup": 116,
+      "history_items_final": 116,
       "seed_added": 0,
       "seed_skipped_bad_date": 0,
       "append_added": 2,
