@@ -2,36 +2,21 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v1.5)
+update_tsmc_quarterly_eps_tracker.py  (v1.6)
 
 Purpose
 -------
 Automatically maintain TSMC quarterly EPS tracker.
 
-Key improvements vs v1.4
+Key improvements vs v1.5
 ------------------------
-1) Do NOT skip discovery just because a quarter already has bootstrap seed.
-   - discovery will still run
-   - higher-priority discovered records can replace seed records
-
-2) Stronger debug / audit trail
-   - add top-level discovery_debug
-   - each quarter stores:
-     * publication_state
-     * candidate URLs / titles
-     * fetch/parse attempt results
-     * failure classification
-
-3) Stronger parsing for mirrored/syndicated pages (e.g. Cnyes)
-   - broader quarter detection
-   - broader EPS detection
-   - more explicit parse reasons
-
-4) Explicit provenance
-   - data_origin
-   - source_priority
-   - reference_source_type
-   - reference_url_verified_this_run
+1) Keep discovery for all target quarters, including seeded quarters.
+2) Preserve full raw search-result audit trail.
+3) Relax candidate URL acceptance logic:
+   - official TSMC Chinese news pages
+   - broader Cnyes hosts (www / m / anuenews / news)
+   - host/path normalization before filtering
+4) Make rejection reasons explicit, so we can see exactly why results were discarded.
 
 Notes
 -----
@@ -57,7 +42,7 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 import requests
 
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v1.5"
+SCRIPT_VERSION = "v1.6"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_TIMEOUT = 20
@@ -204,6 +189,15 @@ def clean_html_text(x: str) -> str:
     return normalize_ws(unescape(strip_tags(x)))
 
 
+def canonical_host(host: str) -> str:
+    h = (host or "").lower().strip()
+    if h.startswith("www."):
+        h = h[4:]
+    if h.startswith("m."):
+        h = h[2:]
+    return h
+
+
 def detect_source_priority(source: str) -> int:
     return SOURCE_PRIORITY.get(source, 0)
 
@@ -335,14 +329,25 @@ def http_get_text(
 
 
 def unwrap_search_url(url: str) -> str:
+    url = unescape(url).strip()
     if url.startswith("//"):
         url = "https:" + url
+
     parsed = urlparse(url)
-    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+    if "duckduckgo.com" in (parsed.netloc or "") and parsed.path.startswith("/l/"):
         q = parse_qs(parsed.query)
         uddg = q.get("uddg")
         if uddg:
             return unquote(uddg[0])
+
+    return url
+
+
+def normalize_candidate_url(url: str) -> str:
+    url = unwrap_search_url(url)
+    url = unescape(url).strip()
+    if url.startswith("//"):
+        url = "https:" + url
     return url
 
 
@@ -360,7 +365,7 @@ def search_ddg_html(
     seen: set[str] = set()
 
     for href, inner_html in RESULT_A_RE.findall(html):
-        real_url = unwrap_search_url(href)
+        real_url = normalize_candidate_url(href)
         title = clean_html_text(inner_html)
         if real_url in seen:
             continue
@@ -369,7 +374,7 @@ def search_ddg_html(
 
     if not out:
         for href, inner_html in A_RE.findall(html):
-            real_url = unwrap_search_url(href)
+            real_url = normalize_candidate_url(href)
             title = clean_html_text(inner_html)
             if real_url in seen:
                 continue
@@ -483,9 +488,12 @@ def parse_article_record(
     quarter_word = quarter_word_from_num(qnum)
     quarter_end_date = quarter_end_date_from_label(quarter)
 
+    parsed = urlparse(url)
+    host = canonical_host(parsed.netloc)
+
     source = "tsmc_official_chinese_news"
     reference_source_type = "official_tsmc_chinese_news"
-    if "cnyes.com" in url:
+    if "cnyes.com" in host:
         source = "syndicated_official_announcement_cnyes"
         reference_source_type = "cnyes"
 
@@ -600,6 +608,63 @@ def build_debug_quarter_entry(year: int, quarter_num: int) -> Dict[str, Any]:
     }
 
 
+def result_likely_matches_quarter(title: str, expected_year: int, expected_quarter_num: int) -> bool:
+    t = normalize_ws(title)
+    if not t:
+        return False
+
+    quarter_cn = QUARTER_NUM_TO_CN[expected_quarter_num]
+    if str(expected_year) in t and quarter_cn in t:
+        return True
+
+    q_token = f"Q{expected_quarter_num}"
+    if q_token.lower() in t.lower() and str(expected_year) in t:
+        return True
+
+    return False
+
+
+def classify_candidate_result(
+    url: str,
+    title: str,
+    expected_year: int,
+    expected_quarter_num: int,
+) -> Tuple[bool, Optional[str], str, str]:
+    norm_url = normalize_candidate_url(url)
+    parsed = urlparse(norm_url)
+    host = canonical_host(parsed.netloc)
+    path = (parsed.path or "").lower()
+
+    if not parsed.scheme.startswith("http"):
+        return False, None, "non_http_url", norm_url
+
+    if "duckduckgo.com" in host:
+        return False, None, "still_ddg_redirect", norm_url
+
+    if not title:
+        title = ""
+
+    title_match = result_likely_matches_quarter(title, expected_year, expected_quarter_num)
+
+    # Official TSMC Chinese news
+    if host == "pr.tsmc.com":
+        if "/chinese/news/" in path or path.startswith("/chinese/news"):
+            return True, "official", "accepted_official_news_path", norm_url
+        if title_match and "/chinese/" in path:
+            return True, "official", "accepted_official_loose_title_match", norm_url
+        return False, None, "pr_tsmc_but_path_not_news", norm_url
+
+    # Cnyes family
+    if host.endswith("cnyes.com"):
+        if "/news/id/" in path or path.startswith("/news/id"):
+            return True, "cnyes", "accepted_cnyes_news_id_path", norm_url
+        if "/news/" in path and title_match:
+            return True, "cnyes", "accepted_cnyes_loose_title_match", norm_url
+        return False, None, "cnyes_host_but_path_not_supported", norm_url
+
+    return False, None, "host_not_supported", norm_url
+
+
 def search_one_quarter(
     session: requests.Session,
     year: int,
@@ -625,32 +690,63 @@ def search_one_quarter(
     seen: set[str] = set()
 
     for q in queries:
+        query_debug: Dict[str, Any] = {
+            "query": q,
+            "result_count": 0,
+            "status": "NOT_RUN",
+            "raw_results": [],
+        }
+
         try:
             results = search_ddg_html(session, q, timeout, retries, sleep_sec)
-            debug_entry["queries"].append({"query": q, "result_count": len(results), "status": "OK"})
+            query_debug["result_count"] = len(results)
+            query_debug["status"] = "OK"
             notes.append(f"search query ok: {q} | results={len(results)}")
         except Exception as e:
-            debug_entry["queries"].append({"query": q, "result_count": 0, "status": f"FAIL: {e}"})
+            query_debug["status"] = f"FAIL: {e}"
+            debug_entry["queries"].append(query_debug)
             notes.append(f"search query failed: {q} | err={e}")
             continue
 
         for item in results:
-            url = item["url"]
+            raw_url = item["url"]
             title = item["title"]
 
-            if (
-                "pr.tsmc.com/chinese/news/" not in url
-                and "anuenews.cnyes.com/news/id/" not in url
-                and "news.cnyes.com/news/id/" not in url
-            ):
+            accepted, src_hint, reason, norm_url = classify_candidate_result(
+                raw_url,
+                title,
+                year,
+                quarter_num,
+            )
+
+            query_debug["raw_results"].append(
+                {
+                    "title": title,
+                    "raw_url": raw_url,
+                    "normalized_url": norm_url,
+                    "accepted": accepted,
+                    "src_hint": src_hint,
+                    "reason": reason,
+                }
+            )
+
+            if not accepted:
                 continue
 
-            if url in seen:
+            if norm_url in seen:
                 continue
-            seen.add(url)
+            seen.add(norm_url)
 
-            src_hint = "official" if "pr.tsmc.com/chinese/news/" in url else "cnyes"
-            candidate_urls.append({"url": url, "title": title, "src_hint": src_hint})
+            candidate_urls.append(
+                {
+                    "url": norm_url,
+                    "title": title,
+                    "src_hint": src_hint or "unknown",
+                    "accept_reason": reason,
+                }
+            )
+
+        debug_entry["queries"].append(query_debug)
 
     candidate_urls.sort(key=lambda x: (0 if x["src_hint"] == "official" else 1, x["url"]))
     debug_entry["candidates"] = candidate_urls
@@ -667,6 +763,8 @@ def search_one_quarter(
         attempt: Dict[str, Any] = {
             "url": url,
             "title_hint": title_hint,
+            "src_hint": cand.get("src_hint"),
+            "accept_reason": cand.get("accept_reason"),
             "fetch_ok": False,
             "parse_ok": False,
             "parse_reason": None,
@@ -743,7 +841,7 @@ def build_output(
             "generated_at_utc": now_utc_iso(),
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
-            "source_policy": "bootstrap_seeds_plus_official_then_cnyes_discovery_with_debug",
+            "source_policy": "bootstrap_seeds_plus_official_then_cnyes_discovery_with_raw_result_debug",
             "entry_pages": entry_pages,
             "notes": notes,
             "counts": {
@@ -788,7 +886,6 @@ def main() -> None:
     discovery_debug: List[Dict[str, Any]] = []
     fetched: List[Dict[str, Any]] = []
 
-    # 1) bootstrap seeds
     for seed in BOOTSTRAP_SEEDS:
         item = enrich_record(
             seed,
@@ -799,7 +896,6 @@ def main() -> None:
         fetched.append(item)
     notes.append(f"bootstrapped seeds={len(BOOTSTRAP_SEEDS)}")
 
-    # 2) discovery for ALL target quarters (including seeded quarters)
     for year, quarter_num in iter_target_quarters(args.start_year, args.end_year):
         q = f"{year}Q{quarter_num}"
         entry_pages.append(f"search://{q}")
