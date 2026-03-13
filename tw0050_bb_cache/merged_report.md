@@ -40,7 +40,7 @@
 
 ## Quarterly EPS Accumulation Review
 - quarterly_eps_tracker_path: `tw0050_bb_cache/quarterly_eps_tracker.json`
-- quarterly_eps_tracker_path_source: `config`
+- quarterly_eps_tracker_path_source: `cli`
 - quarterly_eps_candidate_policy: `sum_complete_fiscal_year_only`
 - quarterly_eps_replace_policy: `display_only_no_auto_replace`
 - eps_quarters_collected: `none`
@@ -51,7 +51,6 @@
 - ready_to_replace_active_eps_base: `false`
 - quarterly_eps_ready_diff_tolerance: `0.01`
 - quarterly_eps_tracker_note: `Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.`
-- quarterly_eps_load_notes: `Quarterly EPS tracker not found: tw0050_bb_cache/quarterly_eps_tracker.json`
 
 ## Valuation Scenario Table
 
@@ -115,9 +114,9 @@
 - roll25_report_path: `roll25_cache/report.md`
 - band1: `33057.836667`
 - band2: `32541.990382`
-- tx_night_last: `33001.0`
-- tx_vs_band1: `-56.83666700000322`
-- tx_vs_band2: `459.00961800000005`
+- tx_night_last: `32919.0`
+- tx_vs_band1: `-138.83666700000322`
+- tx_vs_band2: `377.00961800000005`
 - preopen_shock_flag: **CAUTION**
 - shock_override: **OBSERVE_ONLY**
 - trigger_reasons: `tx_night_last_below_band1`

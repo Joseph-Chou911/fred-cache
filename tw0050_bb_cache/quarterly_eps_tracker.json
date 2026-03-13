@@ -1,0 +1,17 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-03-13T07:30:24Z",
+    "script": "update_tsmc_quarterly_eps_tracker.py",
+    "script_version": "v1.0",
+    "source_policy": "official_tsmc_press_center_only",
+    "entry_pages": [
+      "https://pr.tsmc.com/english/latest-news",
+      "https://pr.tsmc.com/english/news-archives"
+    ],
+    "notes": [
+      "Failed list page https://pr.tsmc.com/english/latest-news: GET failed after 3 attempts: https://pr.tsmc.com/english/latest-news | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/english/latest-news",
+      "Failed list page https://pr.tsmc.com/english/news-archives: GET failed after 3 attempts: https://pr.tsmc.com/english/news-archives | last_err=403 Client Error: Forbidden for url: https://pr.tsmc.com/english/news-archives"
+    ]
+  },
+  "quarters": []
+}
