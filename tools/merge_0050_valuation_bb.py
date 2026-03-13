@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.6a)
+merge_0050_valuation_bb.py  (v1.6b-minfix)
 
 Purpose
 -------
@@ -14,21 +14,22 @@ Merge three layers into one deterministic report:
 3) Pre-execution shock review:
    read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.6a changes
--------------
+v1.6b minimal fixes
+-------------------
 - Keep single-file architecture
-- Centralize slow variables:
-  * active_eps_base
-  * family_targets
-  * tsmc_weight_meta
-- suggested_eps_base is display-only and NEVER auto-applied
-- Add quarterly EPS accumulation review:
-  * eps_quarters_collected
-  * annual_eps_candidate
-  * annual_eps_candidate_complete
+- Keep valuation / BB / report logic unchanged
+- Fix floating-point comparison for:
   * ready_to_replace_active_eps_base
-- Candidate annual EPS is derived from COMPLETE fiscal year quarters only
-- No auto replacement of active_eps_base
+- Tighten quarterly tracker filtering:
+  * if tracker rows contain verification status, only accept:
+      VERIFIED / AUTO_DISCOVERED
+  * prefer verified_eps over eps when available
+  * prefer verified_as_of_date over as_of_date when available
+- No change to:
+  * sum_complete_fiscal_year_only
+  * display_only_no_auto_replace
+  * scenario logic
+  * family interpolation logic
 
 Backward compatibility
 ----------------------
@@ -60,16 +61,25 @@ from typing import Any, Dict, List, Optional, Tuple
 EPS_BASE_TOKEN = "__ACTIVE_EPS_BASE__"
 FAMILY_TARGETS_TOKEN = "__FAMILY_TARGETS__"
 
+STATUS_VERIFIED = "VERIFIED"
+STATUS_AUTO_DISCOVERED = "AUTO_DISCOVERED"
+STATUS_VERIFY_FAILED = "VERIFY_FAILED"
+
+TRACKER_ALLOWED_STATUSES = {
+    STATUS_VERIFIED,
+    STATUS_AUTO_DISCOVERED,
+}
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.6a",
+        "config_version": "0050_merge_v1.6b-minfix",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close. "
             "Pre-execution shock review is optional and report-only. "
             "Family interpolation is display-only and does not alter final execution bias. "
-            "Added quarterly EPS accumulation review without auto-replacing active_eps_base."
+            "Added quarterly EPS accumulation review without auto-replacing active_eps_base. "
+            "v1.6b applies minimal fixes to floating comparison and quarterly tracker filtering."
         ),
     },
     "slow_vars": {
@@ -206,7 +216,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "targets": FAMILY_TARGETS_TOKEN,
         "note": (
             "Display-only. Single-axis dense interpolation within fixed assumption families. "
-            "This section improves valuation readability but does not alter execution bias."
+            "This section improves valuation readability but does not alter final execution bias."
         ),
         "families": [
             {
@@ -618,6 +628,19 @@ def resolve_quarterly_eps_json_path(cfg: Dict[str, Any], cli_quarterly_eps_json:
     return None, "none"
 
 
+def exceeds_abs_tolerance(lhs: float, rhs: float, tolerance: float, epsilon: float = 1e-9) -> bool:
+    """
+    Strictly 'greater than tolerance', but resilient to float tail noise.
+
+    Example:
+    - lhs=66.25, rhs=66.24, tolerance=0.01
+      diff may become 0.010000000000005116 in binary float;
+      this helper treats that as NOT exceeding tolerance.
+    """
+    diff = abs(float(lhs) - float(rhs))
+    return diff > (float(tolerance) + float(epsilon))
+
+
 def load_quarterly_eps_entries_from_json(path: Optional[str]) -> Tuple[List[Dict[str, Any]], List[str]]:
     if not path:
         return [], ["No quarterly EPS tracker path provided."]
@@ -658,17 +681,34 @@ def load_quarterly_eps_entries_from_json(path: Optional[str]) -> Tuple[List[Dict
             notes.append(f"Skipped quarterly EPS item #{idx}: invalid quarter label={q_raw}")
             continue
 
-        eps = safe_float(item.get("eps", item.get("value", item.get("diluted_eps", float('nan')))))
+        has_tracker_verification = ("verification_status" in item) or isinstance(item.get("verification"), dict)
+        verification_status = str(
+            item.get("verification_status", (item.get("verification") or {}).get("status", ""))
+        ).strip()
+
+        if has_tracker_verification and verification_status not in TRACKER_ALLOWED_STATUSES:
+            notes.append(
+                f"Skipped quarterly EPS item #{idx}: quarter={q} verification_status={verification_status or 'N/A'}"
+            )
+            continue
+
+        eps_source_value = item.get("verified_eps", item.get("eps", item.get("value", item.get("diluted_eps", float('nan')))))
+        eps = safe_float(eps_source_value, default=float("nan"))
         if math.isnan(eps):
             notes.append(f"Skipped quarterly EPS item #{idx}: invalid eps for quarter={q}")
             continue
+
+        as_of_date_raw = item.get("verified_as_of_date", item.get("as_of_date", item.get("date", "NA")))
+        as_of_date = str(as_of_date_raw)
+        if as_of_date in {"", "None", "null"}:
+            as_of_date = "NA"
 
         out.append(
             {
                 "quarter": q,
                 "eps": eps,
                 "source": str(item.get("source", "json_tracker")),
-                "as_of_date": str(item.get("as_of_date", item.get("date", "NA"))),
+                "as_of_date": as_of_date,
             }
         )
 
@@ -729,7 +769,11 @@ def build_quarterly_eps_review(
             annual_eps_candidate_as_of_date = str(q4.get("as_of_date", "NA"))
 
         if annual_eps_candidate is not None:
-            ready_to_replace_active_eps_base = abs(float(annual_eps_candidate) - active_eps_base) > tolerance
+            ready_to_replace_active_eps_base = exceeds_abs_tolerance(
+                lhs=float(annual_eps_candidate),
+                rhs=active_eps_base,
+                tolerance=tolerance,
+            )
 
     collected_labels = [str(e["quarter"]) for e in entries]
     collected_display = [f"{str(e['quarter'])}={float(e['eps']):.2f}" for e in entries]
@@ -1510,7 +1554,7 @@ def build_output_json(
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1.6a_compat",
+        "schema_version": "0050_merge_schema_v1.6b_minfix_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
@@ -1835,6 +1879,8 @@ def markdown_report(
     lines.append("- suggested_eps_base is display-only and never auto-applied.")
     lines.append("- annual_eps_candidate is derived from collected quarterly EPS using COMPLETE fiscal year quarters only.")
     lines.append("- ready_to_replace_active_eps_base does NOT auto-replace active_eps_base; it is a review flag only.")
+    lines.append("- quarterly_eps_tracker filtering accepts tracker rows only when verification_status is VERIFIED or AUTO_DISCOVERED.")
+    lines.append("- When available, verified_eps / verified_as_of_date are preferred over eps / as_of_date from the tracker.")
     lines.append("- tsmc_weight_meta is informative only; it does not change execution bias by itself.")
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
     lines.append("- Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.")
