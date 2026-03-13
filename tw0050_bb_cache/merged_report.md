@@ -26,10 +26,14 @@
 ## Slow Variable Review
 - active_eps_base: `66.25` (source=`config`)
 - eps_base_policy: `manual_review_only`
+- eps_base_runtime_policy: `manual_review_only`
+- effective_eps_base: `66.25`
+- effective_eps_base_source: `slow_vars.active_eps_base`
+- effective_eps_base_reason: `manual_review_only`
 - eps_base_note: `Active EPS base is a slow-moving valuation anchor. Revise only when earnings basis / model basis changes materially.`
 - suggested_eps_base: `66.24`
 - suggested_eps_source: `auto_quarterly_eps_sum_2025`
-- suggested_eps_as_of_date: `NA`
+- suggested_eps_as_of_date: `2026-01-15`
 - suggested_eps_method: `sum_complete_fiscal_year_quarters`
 - suggested_eps_note: `display-only; never auto-applied`
 - family_targets: `72.0, 71.0, 69.0`
@@ -47,7 +51,7 @@
 - annual_eps_candidate: `66.24`
 - annual_eps_candidate_complete: `true`
 - annual_eps_candidate_fiscal_year: `2025`
-- annual_eps_candidate_as_of_date: `NA`
+- annual_eps_candidate_as_of_date: `2026-01-15`
 - ready_to_replace_active_eps_base: `false`
 - quarterly_eps_ready_diff_tolerance: `0.01`
 - quarterly_eps_tracker_note: `Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.`
@@ -138,20 +142,23 @@
 - Step 3: Use 2027_defensive_family only as a robustness check: ask whether the price still looks acceptable under milder defensive assumptions.
 - Step 4: Treat suggested_eps_base as review material only; it never changes the live model automatically.
 - Step 5: Review quarterly EPS accumulation fields. `annual_eps_candidate_complete=true` means a complete fiscal year candidate exists.
-- Step 6: `ready_to_replace_active_eps_base=true` means the complete annual candidate materially differs from active_eps_base, but replacement is still manual.
-- Step 7: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.
-- Step 8: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.
-- Step 9: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.
+- Step 6: `ready_to_replace_active_eps_base=true` only means there is a material difference review flag; it still does not overwrite active_eps_base.
+- Step 7: `effective_eps_base` is the actual runtime EPS used by valuation cases; it may equal annual_eps_candidate when runtime policy allows it.
+- Step 8: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.
+- Step 9: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.
+- Step 10: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.
 
 ## Notes
 - base_0050 is auto-resolved from bb-stats unless overridden.
 - base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.
-- active_eps_base is the live slow-moving valuation anchor; revise only when earnings/model basis changes.
+- active_eps_base is the live manually governed slow-moving valuation anchor.
+- effective_eps_base is the runtime EPS actually used by Scenario Table / family interpolation.
 - suggested_eps_base is display-only and never auto-applied.
 - annual_eps_candidate is derived from collected quarterly EPS using COMPLETE fiscal year quarters only.
 - ready_to_replace_active_eps_base does NOT auto-replace active_eps_base; it is a review flag only.
 - quarterly_eps_tracker filtering accepts tracker rows only when verification_status is VERIFIED or AUTO_DISCOVERED.
 - When available, verified_eps / verified_as_of_date are preferred over eps / as_of_date from the tracker.
+- If eps_base_runtime_policy=use_annual_candidate_if_complete and a complete annual candidate exists, effective_eps_base will use that candidate without overwriting active_eps_base.
 - tsmc_weight_meta is informative only; it does not change execution bias by itself.
 - valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.
 - Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.
