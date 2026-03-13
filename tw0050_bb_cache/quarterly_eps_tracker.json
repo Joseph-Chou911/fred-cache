@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T10:14:08Z",
+    "generated_at_utc": "2026-03-13T10:57:00Z",
     "script": "update_tsmc_quarterly_eps_tracker.py",
     "script_version": "v2.0",
     "source_policy": "bootstrap_seeds_plus_official_archive_first_then_direct_official_ir_then_pdf_then_search_fallback",
@@ -21,7 +21,7 @@
     ],
     "notes": [
       "bootstrapped seeds=5",
-      "optional pypdf installed=False",
+      "optional pypdf installed=True",
       "official archive fetch ok: https://pr.tsmc.com/chinese/news-archives | archive_eps_candidates=0",
       "official archive html fetched",
       "2026Q1: skipped active discovery because quarter not ended yet",
@@ -32,7 +32,7 @@
       "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q1 | reason=eps_not_detected",
       "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q1 | reason=eps_not_detected",
       "no discovered article parsed for 2025Q1",
-      "candidate parse failed: https://pr.tsmc.com/chinese/news/3249 | reason=quarter_not_detected",
+      "candidate parse failed: https://pr.tsmc.com/chinese/news/3249 | reason=eps_not_detected",
       "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2025/q2 | reason=eps_not_detected",
       "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2025/q2 | reason=eps_not_detected",
       "no discovered article parsed for 2025Q2",
@@ -53,7 +53,7 @@
       "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q3 | reason=eps_not_detected",
       "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q3 | reason=eps_not_detected",
       "no discovered article parsed for 2024Q3",
-      "candidate parse failed: https://pr.tsmc.com/chinese/news/3201 | reason=eps_not_detected",
+      "candidate parse failed: https://pr.tsmc.com/chinese/news/3201 | reason=quarter_not_detected",
       "candidate parse failed: https://investor.tsmc.com/chinese/quarterly-results/2024/q4 | reason=eps_not_detected",
       "candidate parse failed: https://investor.tsmc.com/english/quarterly-results/2024/q4 | reason=eps_not_detected",
       "no discovered article parsed for 2024Q4"
@@ -64,7 +64,7 @@
       "total_quarters": 5
     },
     "optional_features": {
-      "pypdf_installed": false
+      "pypdf_installed": true
     }
   },
   "discovery_debug": [
@@ -445,7 +445,7 @@
           "accept_reason": "existing_tracker_url",
           "fetch_ok": true,
           "parse_ok": false,
-          "parse_reason": "quarter_not_detected",
+          "parse_reason": "eps_not_detected",
           "parsed_quarter": null,
           "parsed_eps": null,
           "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
@@ -1468,7 +1468,7 @@
           "accept_reason": "existing_tracker_url",
           "fetch_ok": true,
           "parse_ok": false,
-          "parse_reason": "eps_not_detected",
+          "parse_reason": "quarter_not_detected",
           "parsed_quarter": null,
           "parsed_eps": null,
           "excerpt": "Just a moment... *{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%;color:#313131;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Aria",
@@ -1517,7 +1517,7 @@
       "quarter_end_date": "December 31, 2024",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3201",
-      "fetched_at_utc": "2026-03-13T10:14:00Z",
+      "fetched_at_utc": "2026-03-13T10:56:51Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1533,7 +1533,7 @@
       "quarter_end_date": "March 31, 2025",
       "quarter_word": "first",
       "page_url": "https://pr.tsmc.com/chinese/news/3222",
-      "fetched_at_utc": "2026-03-13T10:14:00Z",
+      "fetched_at_utc": "2026-03-13T10:56:51Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1549,7 +1549,7 @@
       "quarter_end_date": "June 30, 2025",
       "quarter_word": "second",
       "page_url": "https://pr.tsmc.com/chinese/news/3249",
-      "fetched_at_utc": "2026-03-13T10:14:00Z",
+      "fetched_at_utc": "2026-03-13T10:56:51Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1565,7 +1565,7 @@
       "quarter_end_date": "September 30, 2025",
       "quarter_word": "third",
       "page_url": "https://pr.tsmc.com/chinese/news/3264",
-      "fetched_at_utc": "2026-03-13T10:14:00Z",
+      "fetched_at_utc": "2026-03-13T10:56:51Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -1581,7 +1581,7 @@
       "quarter_end_date": "December 31, 2025",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3281",
-      "fetched_at_utc": "2026-03-13T10:14:00Z",
+      "fetched_at_utc": "2026-03-13T10:56:51Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
