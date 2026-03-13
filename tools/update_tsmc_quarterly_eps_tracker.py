@@ -2,59 +2,27 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v1.1)
+update_tsmc_quarterly_eps_tracker.py  (v1.2)
 
 Purpose
 -------
-Automatically fetch TSMC official quarterly diluted EPS from TSMC official
-Investor Relations quarterly-results pages and update a local tracker JSON.
+Automatically fetch TSMC official quarterly diluted EPS and update a local tracker JSON.
 
-Design
-------
-- Source priority:
-  1) https://investor.tsmc.com/english/quarterly-results/{year}/q{quarter}
-  2) Earnings Release PDF linked from each quarterly-results page
-- Only official TSMC investor pages / linked official PDFs are used.
-- This script updates tracker data only.
-- It does NOT modify active_eps_base directly.
-- Intended to work with merge_0050_valuation_bb.py v1.6a+.
+What changed vs v1.1
+--------------------
+- Keep official TSMC PDF as the primary data source
+- Add browser-like curl fallback when requests gets blocked
+- Add search-based discovery fallback to locate official PDF URLs when
+  quarterly-results pages return 403 in GitHub Actions
+- Prefer official Earnings Release PDF
+- Fallback to official Management Report PDF if Earnings Release PDF is not found
+- Keep tracker schema backward-compatible
 
-Dependencies
-------------
-- Python stdlib
-- requests
-
-Output schema
+Source policy
 -------------
-{
-  "meta": {
-    "generated_at_utc": "...",
-    "script": "update_tsmc_quarterly_eps_tracker.py",
-    "script_version": "v1.1",
-    "source_policy": "official_tsmc_investor_quarterly_results_pdf_only",
-    "entry_pages": [...],
-    "notes": [...]
-  },
-  "quarters": [
-    {
-      "quarter": "2025Q1",
-      "eps": 13.94,
-      "source": "tsmc_official_investor_earnings_release_pdf",
-      "as_of_date": "2025-04-17",
-      "article_title": "Financial Results -2025Q1 | Earnings Release",
-      "article_url": "...pdf",
-      "quarter_end_date": "March 31, 2025",
-      "quarter_word": "first",
-      "page_url": ".../2025/q1",
-      "fetched_at_utc": "..."
-    }
-  ]
-}
-
-Usage example
--------------
-python tools/update_tsmc_quarterly_eps_tracker.py \
-  --out tw0050_bb_cache/quarterly_eps_tracker.json
+- Primary data extraction must come from official TSMC investor PDFs
+- Search engine is used only as a discovery mechanism for official PDF URLs
+- If no official PDF can be fetched, the script records notes and leaves quarters empty
 """
 
 from __future__ import annotations
@@ -70,21 +38,22 @@ from datetime import datetime, timezone
 from html import unescape
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 
 import requests
 
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v1.1"
+SCRIPT_VERSION = "v1.2"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_BASE_URL = "https://investor.tsmc.com/english/quarterly-results"
 DEFAULT_TIMEOUT = 20
-DEFAULT_SLEEP = 0.2
+DEFAULT_SLEEP = 0.5
 
 UA = (
-    "Mozilla/5.0 (compatible; TSMCQuarterlyEPSUpdater/1.1; "
-    "+https://investor.tsmc.com/)"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/133.0.0.0 Safari/537.36"
 )
 
 QUARTER_WORD_TO_NUM = {
@@ -109,8 +78,23 @@ QUARTER_ENDED_RE = re.compile(
     re.I,
 )
 
+ANNUAL_EPS_RE = re.compile(
+    r"Diluted EPS was NT\$\s*([0-9]+(?:\.[0-9]+)?)",
+    re.I,
+)
+
 A_RE = re.compile(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I | re.S)
 H1_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
+
+RESULT_LINK_RE = re.compile(
+    r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+    re.I | re.S,
+)
+
+GENERIC_LINK_RE = re.compile(
+    r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+    re.I | re.S,
+)
 
 
 def now_utc_iso() -> str:
@@ -147,6 +131,10 @@ def iso_from_long_date(x: str) -> str:
         return "NA"
 
 
+def yy(year: int) -> str:
+    return f"{year % 100:02d}"
+
+
 def build_session() -> requests.Session:
     s = requests.Session()
     s.headers.update(
@@ -154,30 +142,55 @@ def build_session() -> requests.Session:
             "User-Agent": UA,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Referer": "https://www.google.com/",
         }
     )
     return s
 
 
-def http_get(
+def requests_get(
     session: requests.Session,
     url: str,
     timeout: int,
-    retries: int,
-    sleep_sec: float,
-    binary: bool = False,
 ) -> requests.Response:
-    last_err: Optional[Exception] = None
-    for i in range(1, retries + 1):
-        try:
-            r = session.get(url, timeout=timeout)
-            r.raise_for_status()
-            return r
-        except Exception as e:
-            last_err = e
-            if i < retries:
-                time.sleep(sleep_sec * i)
-    raise RuntimeError(f"GET failed after {retries} attempts: {url} | last_err={last_err}")
+    r = session.get(url, timeout=timeout)
+    r.raise_for_status()
+    return r
+
+
+def curl_get_bytes(url: str, timeout: int) -> bytes:
+    cmd = [
+        "curl",
+        "-L",
+        "--compressed",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        str(timeout),
+        "-A",
+        UA,
+        "-H",
+        "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "-H",
+        "Accept-Language: en-US,en;q=0.9",
+        "-H",
+        "Cache-Control: no-cache",
+        "-H",
+        "Pragma: no-cache",
+        "-e",
+        "https://www.google.com/",
+        url,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"curl failed rc={proc.returncode} url={url} stderr={proc.stderr.decode('utf-8', errors='ignore')[:300]}"
+        )
+    if not proc.stdout:
+        raise RuntimeError(f"curl returned empty body for url={url}")
+    return proc.stdout
 
 
 def http_get_text(
@@ -187,9 +200,22 @@ def http_get_text(
     retries: int,
     sleep_sec: float,
 ) -> str:
-    r = http_get(session, url, timeout, retries, sleep_sec, binary=False)
-    r.encoding = r.encoding or "utf-8"
-    return r.text
+    last_err: Optional[Exception] = None
+    for i in range(1, retries + 1):
+        try:
+            r = requests_get(session, url, timeout=timeout)
+            r.encoding = r.encoding or "utf-8"
+            return r.text
+        except Exception as e:
+            last_err = e
+            try:
+                raw = curl_get_bytes(url, timeout=timeout)
+                return raw.decode("utf-8", errors="ignore")
+            except Exception as e2:
+                last_err = e2
+                if i < retries:
+                    time.sleep(sleep_sec * i)
+    raise RuntimeError(f"GET failed after {retries} attempts: {url} | last_err={last_err}")
 
 
 def http_get_bytes(
@@ -199,8 +225,20 @@ def http_get_bytes(
     retries: int,
     sleep_sec: float,
 ) -> bytes:
-    r = http_get(session, url, timeout, retries, sleep_sec, binary=True)
-    return r.content
+    last_err: Optional[Exception] = None
+    for i in range(1, retries + 1):
+        try:
+            r = requests_get(session, url, timeout=timeout)
+            return r.content
+        except Exception as e:
+            last_err = e
+            try:
+                return curl_get_bytes(url, timeout=timeout)
+            except Exception as e2:
+                last_err = e2
+                if i < retries:
+                    time.sleep(sleep_sec * i)
+    raise RuntimeError(f"GET(bytes) failed after {retries} attempts: {url} | last_err={last_err}")
 
 
 def parse_page_title(page_html: str, page_url: str) -> str:
@@ -210,22 +248,135 @@ def parse_page_title(page_html: str, page_url: str) -> str:
     return page_url
 
 
-def find_earnings_release_pdf_url(page_html: str, page_url: str) -> Optional[str]:
-    candidates: List[Tuple[str, str]] = []
+def pdf_preference_score(url: str) -> int:
+    u = url.lower()
+    score = 0
+    if "earningsrelease.pdf" in u:
+        score += 100
+    if "management%20report.pdf" in u or "management report.pdf" in u:
+        score += 50
+    if "investor.tsmc.com" in u:
+        score += 20
+    return score
+
+
+def find_pdf_links_in_quarter_page(page_html: str, page_url: str) -> List[Tuple[str, str]]:
+    out: List[Tuple[str, str]] = []
+    seen: set[str] = set()
 
     for href, inner_html in A_RE.findall(page_html):
         text = clean_html_text(inner_html)
         abs_url = urljoin(page_url, href)
+        u = abs_url.lower()
 
-        if "earnings release" in text.lower():
-            return abs_url
+        if "investor.tsmc.com" not in u:
+            continue
 
-        if abs_url.lower().endswith(".pdf") and "earningsrelease" in abs_url.lower():
-            candidates.append((text, abs_url))
+        if "earnings release" in text.lower() or "management report" in text.lower():
+            if abs_url not in seen:
+                seen.add(abs_url)
+                out.append((text, abs_url))
+            continue
 
-    if candidates:
-        return candidates[0][1]
-    return None
+        if u.endswith(".pdf") and ("earningsrelease" in u or "management%20report" in u or "management report" in u):
+            if abs_url not in seen:
+                seen.add(abs_url)
+                out.append((text, abs_url))
+
+    out.sort(key=lambda x: pdf_preference_score(x[1]), reverse=True)
+    return out
+
+
+def unwrap_ddg_url(url: str) -> str:
+    if url.startswith("//"):
+        url = "https:" + url
+    parsed = urlparse(url)
+    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+        q = parse_qs(parsed.query)
+        uddg = q.get("uddg")
+        if uddg:
+            return unquote(uddg[0])
+    return url
+
+
+def search_ddg_html(
+    session: requests.Session,
+    query: str,
+    timeout: int,
+    retries: int,
+    sleep_sec: float,
+) -> List[Dict[str, str]]:
+    url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+    html = http_get_text(session, url, timeout, retries, sleep_sec)
+
+    results: List[Dict[str, str]] = []
+    seen: set[str] = set()
+
+    for href, inner_html in RESULT_LINK_RE.findall(html):
+        real_url = unwrap_ddg_url(href)
+        title = clean_html_text(inner_html)
+        if real_url in seen:
+            continue
+        seen.add(real_url)
+        results.append({"url": real_url, "title": title})
+
+    # fallback parse if DDG changes class names
+    if not results:
+        for href, inner_html in GENERIC_LINK_RE.findall(html):
+            real_url = unwrap_ddg_url(href)
+            if "investor.tsmc.com" not in real_url.lower():
+                continue
+            title = clean_html_text(inner_html)
+            if real_url in seen:
+                continue
+            seen.add(real_url)
+            results.append({"url": real_url, "title": title})
+
+    return results
+
+
+def discover_pdf_urls_via_search(
+    session: requests.Session,
+    year: int,
+    quarter_num: int,
+    timeout: int,
+    retries: int,
+    sleep_sec: float,
+) -> List[str]:
+    token = f"{quarter_num}Q{yy(year)}"
+    queries = [
+        f'"{token}EarningsRelease.pdf" site:investor.tsmc.com',
+        f'"{token} Management Report.pdf" site:investor.tsmc.com',
+        f'TSMC "{token}" Earnings Release PDF site:investor.tsmc.com',
+        f'TSMC "{token}" Management Report PDF site:investor.tsmc.com',
+    ]
+
+    found: List[str] = []
+    seen: set[str] = set()
+
+    for q in queries:
+        try:
+            results = search_ddg_html(session, q, timeout, retries, sleep_sec)
+        except Exception:
+            continue
+
+        for item in results:
+            url = item["url"]
+            lu = url.lower()
+            if "investor.tsmc.com" not in lu:
+                continue
+            if ".pdf" not in lu:
+                continue
+            if token.lower() not in lu:
+                continue
+            if "earningsrelease.pdf" not in lu and "management%20report.pdf" not in lu and "management report.pdf" not in lu:
+                continue
+            if url not in seen:
+                seen.add(url)
+                found.append(url)
+
+    found.sort(key=pdf_preference_score, reverse=True)
+    return found
 
 
 def try_extract_pdf_text_with_pypdf(pdf_bytes: bytes) -> Optional[str]:
@@ -334,17 +485,11 @@ def parse_pdf_detail(
         quarter_word = {1: "first", 2: "second", 3: "third", 4: "fourth"}.get(page_quarter_num)
         quarter = quarter_label(page_year, page_quarter_num)
 
-    month_hits = MONTH_RE.findall(text)
-    full_month_hits = MONTH_RE.finditer(text)
-    first_date = None
-    for m in full_month_hits:
-        first_date = m.group(0)
-        break
-
-    issued_on_iso = iso_from_long_date(first_date) if first_date else "NA"
+    first_date_match = MONTH_RE.search(text)
+    issued_on_iso = iso_from_long_date(first_date_match.group(0)) if first_date_match else "NA"
 
     return {
-        "article_title": f"{page_title} | Earnings Release",
+        "article_title": f"{page_title} | PDF",
         "article_url": pdf_url,
         "issued_on": issued_on_iso,
         "eps": eps_val,
@@ -365,11 +510,11 @@ def validate_record(rec: Dict[str, Any]) -> Tuple[bool, str]:
     return True, "ok"
 
 
-def normalize_record(rec: Dict[str, Any], page_url: str) -> Dict[str, Any]:
+def normalize_record(rec: Dict[str, Any], page_url: str, source_label: str) -> Dict[str, Any]:
     return {
         "quarter": str(rec["quarter"]),
         "eps": float(rec["eps"]),
-        "source": "tsmc_official_investor_earnings_release_pdf",
+        "source": source_label,
         "as_of_date": str(rec["issued_on"]),
         "article_title": str(rec.get("article_title", "NA")),
         "article_url": str(rec.get("article_url", "NA")),
@@ -417,7 +562,6 @@ def merge_records(existing: List[Dict[str, Any]], fetched: List[Dict[str, Any]])
 
 
 def iter_quarter_pages(start_year: int, end_year: int) -> List[Tuple[int, int]]:
-    years: List[int]
     if start_year >= end_year:
         years = list(range(start_year, end_year - 1, -1))
     else:
@@ -428,6 +572,85 @@ def iter_quarter_pages(start_year: int, end_year: int) -> List[Tuple[int, int]]:
         for q in (1, 2, 3, 4):
             out.append((y, q))
     return out
+
+
+def fetch_one_quarter_record(
+    session: requests.Session,
+    base_url: str,
+    year: int,
+    quarter_num: int,
+    timeout: int,
+    retries: int,
+    sleep_sec: float,
+    notes: List[str],
+) -> Optional[Dict[str, Any]]:
+    page_url = f"{base_url}/{year}/q{quarter_num}"
+    page_title = f"Financial Results - {year}Q{quarter_num}"
+    pdf_candidates: List[str] = []
+
+    # Step 1: try quarter page directly
+    try:
+        page_html = http_get_text(session, page_url, timeout, retries, sleep_sec)
+        page_title = parse_page_title(page_html, page_url)
+        page_links = find_pdf_links_in_quarter_page(page_html, page_url)
+        if page_links:
+            pdf_candidates.extend([u for _, u in page_links])
+            notes.append(f"Found {len(page_links)} PDF link(s) from quarter page {page_url}")
+        else:
+            notes.append(f"No PDF links found on quarter page {page_url}")
+    except Exception as e:
+        notes.append(f"Quarter page blocked or failed {page_url}: {e}")
+
+    # Step 2: search-based official PDF discovery
+    if not pdf_candidates:
+        discovered = discover_pdf_urls_via_search(session, year, quarter_num, timeout, retries, sleep_sec)
+        if discovered:
+            pdf_candidates.extend(discovered)
+            notes.append(f"Search discovery found {len(discovered)} official PDF candidate(s) for {year}Q{quarter_num}")
+        else:
+            notes.append(f"Search discovery found no official PDF for {year}Q{quarter_num}")
+
+    # de-dup + sort
+    seen: set[str] = set()
+    uniq_candidates: List[str] = []
+    for u in pdf_candidates:
+        if u not in seen:
+            seen.add(u)
+            uniq_candidates.append(u)
+    uniq_candidates.sort(key=pdf_preference_score, reverse=True)
+
+    for pdf_url in uniq_candidates:
+        try:
+            pdf_bytes = http_get_bytes(session, pdf_url, timeout, retries, sleep_sec)
+        except Exception as e:
+            notes.append(f"Failed official PDF fetch {pdf_url}: {e}")
+            continue
+
+        pdf_text = extract_pdf_text_best_effort(pdf_bytes)
+        if not pdf_text:
+            notes.append(f"Failed PDF text extraction {pdf_url}")
+            continue
+
+        detail = parse_pdf_detail(
+            pdf_text=pdf_text,
+            pdf_url=pdf_url,
+            page_year=year,
+            page_quarter_num=quarter_num,
+            page_title=page_title,
+        )
+        ok, reason = validate_record(detail)
+        if not ok:
+            notes.append(f"Skipped parsed PDF {pdf_url}: {reason}")
+            continue
+
+        source_label = "tsmc_official_investor_earnings_release_pdf"
+        if "management" in pdf_url.lower():
+            source_label = "tsmc_official_investor_management_report_pdf"
+
+        notes.append(f"Parsed {detail['quarter']} EPS={detail['eps']} from official PDF {pdf_url}")
+        return normalize_record(detail, page_url=page_url, source_label=source_label)
+
+    return None
 
 
 def fetch_all_quarterly_eps(
@@ -448,50 +671,26 @@ def fetch_all_quarterly_eps(
         page_url = f"{base_url}/{year}/q{quarter_num}"
         entry_pages.append(page_url)
 
-        try:
-            page_html = http_get_text(session, page_url, timeout, retries, sleep_sec)
-        except Exception as e:
-            notes.append(f"Skipped quarterly page {page_url}: {e}")
-            continue
-
-        page_title = parse_page_title(page_html, page_url)
-        pdf_url = find_earnings_release_pdf_url(page_html, page_url)
-
-        if not pdf_url:
-            notes.append(f"No Earnings Release PDF link found on quarterly page {page_url}")
-            continue
-
-        try:
-            pdf_bytes = http_get_bytes(session, pdf_url, timeout, retries, sleep_sec)
-        except Exception as e:
-            notes.append(f"Failed PDF fetch {pdf_url}: {e}")
-            continue
-
-        pdf_text = extract_pdf_text_best_effort(pdf_bytes)
-        if not pdf_text:
-            notes.append(f"Failed PDF text extraction {pdf_url}")
-            continue
-
-        detail = parse_pdf_detail(
-            pdf_text=pdf_text,
-            pdf_url=pdf_url,
-            page_year=year,
-            page_quarter_num=quarter_num,
-            page_title=page_title,
+        rec = fetch_one_quarter_record(
+            session=session,
+            base_url=base_url,
+            year=year,
+            quarter_num=quarter_num,
+            timeout=timeout,
+            retries=retries,
+            sleep_sec=sleep_sec,
+            notes=notes,
         )
-        ok, reason = validate_record(detail)
-        if not ok:
-            notes.append(f"Skipped PDF {pdf_url}: {reason}")
+        if rec is None:
             continue
 
-        q = str(detail["quarter"])
+        q = str(rec["quarter"])
         if q in seen_quarters:
-            notes.append(f"Duplicate quarter skipped from fetched set: {q} | {pdf_url}")
+            notes.append(f"Duplicate quarter skipped from fetched set: {q}")
             continue
 
         seen_quarters.add(q)
-        fetched.append(normalize_record(detail, page_url=page_url))
-        notes.append(f"Parsed {q} EPS={detail['eps']} from {pdf_url}")
+        fetched.append(rec)
 
     fetched.sort(key=lambda x: quarter_sort_key(str(x["quarter"])))
     return fetched, notes, entry_pages
@@ -507,7 +706,7 @@ def build_output(
             "generated_at_utc": now_utc_iso(),
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
-            "source_policy": "official_tsmc_investor_quarterly_results_pdf_only",
+            "source_policy": "official_tsmc_pdf_with_search_discovery_fallback",
             "entry_pages": entry_pages,
             "notes": notes,
         },
@@ -517,7 +716,7 @@ def build_output(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Fetch TSMC official quarterly diluted EPS from investor quarterly-results pages"
+        description="Fetch TSMC official quarterly diluted EPS from official PDFs"
     )
     parser.add_argument("--out", default=DEFAULT_OUT, help="Output tracker JSON path")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="TSMC investor quarterly results base URL")
@@ -570,6 +769,7 @@ def main() -> None:
     print(f"[INFO] existing_quarters={len(existing_quarters)}")
     print(f"[INFO] fetched_quarters={len(fetched_quarters)}")
     print(f"[INFO] merged_quarters={len(merged_quarters)}")
+
     for q in merged_quarters:
         print(
             f"  - {q.get('quarter')}: EPS={q.get('eps')} | "
