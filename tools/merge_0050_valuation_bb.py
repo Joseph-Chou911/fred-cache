@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.4a)
+merge_0050_valuation_bb.py  (v1.4b)
 
 Purpose
 -------
@@ -14,14 +14,14 @@ Merge three layers into one deterministic report:
 3) Pre-execution shock review:
    read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.4a changes
+v1.4b changes
 -------------
-- Add optional pre-execution review from roll25 report markdown
-- Add optional manual input for TX night-session close
-- Add fast_shock_override and final_execution_bias
+- Keep v1.4a pre-execution shock review
+- Add family interpolation lite (display-only; does NOT alter final_execution_bias)
+- Add family interpolation summary and target price positions into JSON/Markdown
 - Keep backward-compatible JSON schema:
   * old keys: config_used / bb_summary / scenario_results / combined
-  * new keys: meta / inputs / valuation_cases / bb_snapshot
+  * new keys: meta / inputs / valuation_cases / bb_snapshot / family_interpolation
 """
 
 from __future__ import annotations
@@ -37,11 +37,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.4a",
+        "config_version": "0050_merge_v1.4b",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close. "
-            "Pre-execution shock review is optional and report-only."
+            "Pre-execution shock review is optional and report-only. "
+            "Family interpolation is display-only and does not alter final execution bias."
         ),
     },
     "base": {
@@ -139,6 +140,49 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             ],
         },
     ],
+    "family_interpolation": {
+        "enabled": True,
+        "targets": [72.0, 71.0, 69.0],
+        "note": (
+            "Display-only. Single-axis dense interpolation within fixed assumption families. "
+            "This section improves valuation readability but does not alter execution bias."
+        ),
+        "families": [
+            {
+                "family_name": "2026_conservative_family",
+                "years_ahead": 1,
+                "eps_base": 66.25,
+                "eps_growth": 0.20,
+                "fx_haircut": 0.03,
+                "other_ret": -0.08,
+                "pe_start": 18.0,
+                "pe_end": 24.0,
+                "pe_step": 0.5,
+            },
+            {
+                "family_name": "2026_neutralish_family",
+                "years_ahead": 1,
+                "eps_base": 66.25,
+                "eps_growth": 0.25,
+                "fx_haircut": 0.03,
+                "other_ret": -0.03,
+                "pe_start": 20.0,
+                "pe_end": 24.0,
+                "pe_step": 0.5,
+            },
+            {
+                "family_name": "2027_neutral_family",
+                "years_ahead": 2,
+                "eps_base": 66.25,
+                "eps_growth": 0.25,
+                "fx_haircut": 0.06,
+                "other_ret": 0.02,
+                "pe_start": 20.0,
+                "pe_end": 24.0,
+                "pe_step": 0.5,
+            },
+        ],
+    },
 }
 
 
@@ -499,18 +543,7 @@ def percentile_rank(x: float, xs: List[float]) -> float:
 def classify_price(current_price: float, xs: List[float]) -> Dict[str, Any]:
     ordered = sorted(xs)
     pctl = percentile_rank(current_price, ordered)
-    if math.isnan(pctl):
-        zone = "N/A"
-    elif pctl <= 20:
-        zone = "LOWER_ZONE"
-    elif pctl <= 40:
-        zone = "LOWER_MID_ZONE"
-    elif pctl <= 60:
-        zone = "MID_ZONE"
-    elif pctl <= 80:
-        zone = "UPPER_MID_ZONE"
-    else:
-        zone = "UPPER_ZONE"
+    zone = zone_from_percentile(pctl)
     return {
         "current_price": current_price,
         "scenario_net_min": min(ordered) if ordered else None,
@@ -518,6 +551,192 @@ def classify_price(current_price: float, xs: List[float]) -> Dict[str, Any]:
         "scenario_net_pctl": pctl,
         "zone": zone,
         "note": "rough classification only; sparse scenario set => low percentile resolution",
+    }
+
+
+def zone_from_percentile(pctl: float) -> str:
+    if math.isnan(pctl):
+        return "N/A"
+    if pctl <= 20:
+        return "LOWER_ZONE"
+    if pctl <= 40:
+        return "LOWER_MID_ZONE"
+    if pctl <= 60:
+        return "MID_ZONE"
+    if pctl <= 80:
+        return "UPPER_MID_ZONE"
+    return "UPPER_ZONE"
+
+
+def zone_from_percentile_compact(pctl: float) -> str:
+    if math.isnan(pctl):
+        return "N/A"
+    if pctl <= 20:
+        return "CHEAP"
+    if pctl <= 40:
+        return "LOWER_MID"
+    if pctl <= 60:
+        return "MID"
+    if pctl <= 80:
+        return "UPPER_MID"
+    return "RICH"
+
+
+def quantile_linear(sorted_xs: List[float], q: float) -> float:
+    if not sorted_xs:
+        return float("nan")
+    if len(sorted_xs) == 1:
+        return sorted_xs[0]
+    if q <= 0:
+        return sorted_xs[0]
+    if q >= 1:
+        return sorted_xs[-1]
+
+    pos = (len(sorted_xs) - 1) * q
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return sorted_xs[lo]
+    w = pos - lo
+    return sorted_xs[lo] * (1.0 - w) + sorted_xs[hi] * w
+
+
+def generate_axis_values(start: float, end: float, step: float) -> List[float]:
+    if step <= 0:
+        raise ValueError("family interpolation step must be > 0")
+    vals: List[float] = []
+    cur = start
+    eps = step / 1000.0
+    while cur <= end + eps:
+        vals.append(round(cur, 6))
+        cur += step
+    return vals
+
+
+def build_family_interpolation(
+    cfg: Dict[str, Any],
+    current_price: float,
+    drag_enabled: bool,
+    drag_pts: float,
+) -> Dict[str, Any]:
+    fi_cfg = cfg.get("family_interpolation", {}) or {}
+    enabled = bool(fi_cfg.get("enabled", False))
+    note = str(fi_cfg.get("note", ""))
+
+    if not enabled:
+        return {
+            "enabled": False,
+            "targets": [],
+            "families": [],
+            "note": "disabled",
+        }
+
+    base_0050 = float(cfg["base"]["base_0050"])
+    base_tsmc = float(cfg["base"]["base_tsmc"])
+    tsmc_weight = float(cfg["base"]["tsmc_weight"])
+    targets = [float(x) for x in fi_cfg.get("targets", [])]
+
+    families_out: List[Dict[str, Any]] = []
+    for fam in fi_cfg.get("families", []):
+        family_name = str(fam["family_name"])
+        years_ahead = int(fam["years_ahead"])
+        eps_base = float(fam["eps_base"])
+        eps_growth = float(fam["eps_growth"])
+        fx_haircut = float(fam["fx_haircut"])
+        other_ret = float(fam["other_ret"])
+        pe_start = float(fam["pe_start"])
+        pe_end = float(fam["pe_end"])
+        pe_step = float(fam["pe_step"])
+
+        pe_values = generate_axis_values(pe_start, pe_end, pe_step)
+        cases: List[Dict[str, Any]] = []
+        net_values: List[float] = []
+
+        for pe in pe_values:
+            eps_after_growth, eps_after_fx, tsmc_price = compute_tsmc_price(
+                eps_base=eps_base,
+                eps_growth=eps_growth,
+                years_ahead=years_ahead,
+                fx_haircut=fx_haircut,
+                pe=pe,
+            )
+            tsmc_ret, gross, net = compute_0050_prices(
+                base_0050=base_0050,
+                base_tsmc=base_tsmc,
+                tsmc_weight=tsmc_weight,
+                tsmc_price=tsmc_price,
+                other_ret=other_ret,
+                years_ahead=years_ahead,
+                dividend_drag_points_per_year=drag_pts,
+                drag_enabled=drag_enabled,
+            )
+            net_values.append(net)
+            cases.append(
+                {
+                    "pe": pe,
+                    "eps_after_growth": eps_after_growth,
+                    "eps_after_fx": eps_after_fx,
+                    "tsmc_price": tsmc_price,
+                    "tsmc_return_vs_base": tsmc_ret,
+                    "gross_0050": gross,
+                    "net_0050": net,
+                }
+            )
+
+        ordered = sorted(net_values)
+        current_pctile = percentile_rank(current_price, ordered)
+        target_positions: List[Dict[str, Any]] = []
+        for t in targets:
+            p = percentile_rank(t, ordered)
+            target_positions.append(
+                {
+                    "price": t,
+                    "percentile": p,
+                    "zone": zone_from_percentile_compact(p),
+                }
+            )
+
+        family_stats = {
+            "net_min": min(ordered) if ordered else None,
+            "net_max": max(ordered) if ordered else None,
+            "p10": quantile_linear(ordered, 0.10),
+            "p25": quantile_linear(ordered, 0.25),
+            "p50": quantile_linear(ordered, 0.50),
+            "p75": quantile_linear(ordered, 0.75),
+            "p90": quantile_linear(ordered, 0.90),
+            "case_count": len(cases),
+        }
+
+        families_out.append(
+            {
+                "family_name": family_name,
+                "years_ahead": years_ahead,
+                "fixed_assumptions": {
+                    "eps_base": eps_base,
+                    "eps_growth": eps_growth,
+                    "fx_haircut": fx_haircut,
+                    "other_ret": other_ret,
+                },
+                "interpolation_axis": {
+                    "axis_name": "pe",
+                    "start": pe_start,
+                    "end": pe_end,
+                    "step": pe_step,
+                    "count": len(pe_values),
+                },
+                "family_stats": family_stats,
+                "current_price_percentile": current_pctile,
+                "current_zone": zone_from_percentile_compact(current_pctile),
+                "target_positions": target_positions,
+                "cases": cases,
+            }
+        )
+
+    return {
+        "enabled": True,
+        "targets": targets,
+        "families": families_out,
+        "note": note,
     }
 
 
@@ -712,6 +931,7 @@ def build_combined_view(
     results: List[ScenarioResult],
     dq_policy: Dict[str, Any],
     pre_review: PreExecutionReview,
+    family_interp: Dict[str, Any],
 ) -> Dict[str, Any]:
     net_prices = [r.net_0050 for r in results]
     gross_prices = [r.gross_0050 for r in results]
@@ -748,6 +968,7 @@ def build_combined_view(
             "net_max": max(net_prices) if net_prices else None,
             "current_price_position": price_pos,
         },
+        "family_interpolation": family_interp,
         "tranche_reference": tranche_levels,
         "pre_execution_review": dataclasses.asdict(pre_review),
         "base_execution_bias": exec_info["base_execution_bias"],
@@ -760,9 +981,11 @@ def build_combined_view(
         "action_instruction": action_instruction_from_bias(final_execution_bias),
         "how_to_read": {
             "layer_1": "Use valuation scenarios to decide whether the current zone is cheap / fair / expensive.",
+            "layer_1b": "Use family interpolation summary to improve valuation readability; this section is display-only.",
             "layer_2": "Use BB/regime/tranche references to decide whether to act now or wait.",
             "layer_3": "Use pre-execution review to override action bias when TX night close breaches roll25 bands.",
             "zone_note": "valuation zone is rough classification only; do not over-interpret sparse-percentile output.",
+            "family_note": "family interpolation is display-only and does not alter final execution bias.",
             "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
             "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
@@ -793,6 +1016,7 @@ def build_output_json(
     cfg: Dict[str, Any],
     bb: BBState,
     results: List[ScenarioResult],
+    family_interp: Dict[str, Any],
     combined: Dict[str, Any],
     bb_stats_path: str,
     roll25_report_path: Optional[str],
@@ -808,7 +1032,7 @@ def build_output_json(
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1.4a_compat",
+        "schema_version": "0050_merge_schema_v1.4b_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
@@ -827,6 +1051,7 @@ def build_output_json(
             "points_per_year": drag_pts,
             "note": str(cfg.get("dividend_drag", {}).get("note", "")),
         },
+        "family_interpolation_enabled": bool(cfg.get("family_interpolation", {}).get("enabled", False)),
         "current_date": bb.date,
         "current_0050_price": bb.price_used,
         "current_bb_state": bb.state,
@@ -852,6 +1077,7 @@ def build_output_json(
         "meta": meta,
         "inputs": inputs,
         "valuation_cases": valuation_cases,
+        "family_interpolation": family_interp,
         "bb_snapshot": bb_snapshot,
 
         "combined": combined,
@@ -875,6 +1101,8 @@ def markdown_report(
 ) -> str:
     lines: List[str] = []
     pre = combined.get("pre_execution_review", {}) or {}
+    fam = combined.get("family_interpolation", {}) or {}
+    fam_targets = [float(x) for x in fam.get("targets", [])]
 
     lines.append("# 0050 Valuation × BB Merged Report")
     lines.append("")
@@ -896,6 +1124,8 @@ def markdown_report(
         lines.append(f"- matched_veto_flags: `{', '.join(combined['matched_veto_flags'])}`")
     if pre.get("trigger_reasons"):
         lines.append(f"- shock_trigger_reasons: `{', '.join(pre['trigger_reasons'])}`")
+    if fam.get("enabled"):
+        lines.append("- family_interpolation: **ENABLED** (display-only; no impact on final_execution_bias)")
 
     lines.append("")
     lines.append("## Base Inputs")
@@ -923,6 +1153,52 @@ def markdown_report(
     lines.append(f"- percentile_in_scenario_net_range: `{cp['scenario_net_pctl']:.2f}`")
     lines.append(f"- zone: **{cp['zone']}**")
     lines.append(f"- zone_note: `{cp['note']}`")
+
+    if fam.get("enabled"):
+        lines.append("")
+        lines.append("## Family Interpolation Summary")
+        lines.append("")
+        lines.append("| family | years | axis | count | p10 | p25 | p50 | p75 | p90 | current_pctile | current_zone |")
+        lines.append("|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|")
+        for f in fam.get("families", []):
+            axis = f.get("interpolation_axis", {})
+            stats = f.get("family_stats", {})
+            lines.append(
+                f"| {f.get('family_name')} | {f.get('years_ahead')} | "
+                f"PE {axis.get('start')}~{axis.get('end')} step {axis.get('step')} | "
+                f"{axis.get('count')} | "
+                f"{stats.get('p10', float('nan')):.2f} | "
+                f"{stats.get('p25', float('nan')):.2f} | "
+                f"{stats.get('p50', float('nan')):.2f} | "
+                f"{stats.get('p75', float('nan')):.2f} | "
+                f"{stats.get('p90', float('nan')):.2f} | "
+                f"{f.get('current_price_percentile', float('nan')):.2f} | "
+                f"{f.get('current_zone')} |"
+            )
+
+        if fam_targets:
+            lines.append("")
+            lines.append("## Family Target Price Positions")
+            headers = ["family", "current_pctile", "current_zone"] + [f"{t:.2f}_pctile" for t in fam_targets]
+            lines.append("| " + " | ".join(headers) + " |")
+            lines.append("|" + "|".join(["---"] + ["---:"] * (len(headers) - 2) + ["---"]) + "|")
+            for f in fam.get("families", []):
+                target_map = {float(tp["price"]): tp for tp in f.get("target_positions", [])}
+                row = [
+                    str(f.get("family_name")),
+                    f"{f.get('current_price_percentile', float('nan')):.2f}",
+                    str(f.get("current_zone")),
+                ]
+                for t in fam_targets:
+                    tp = target_map.get(float(t))
+                    row.append("N/A" if tp is None or math.isnan(tp.get("percentile", float("nan"))) else f"{tp.get('percentile'):.2f}")
+                lines.append("| " + " | ".join(row) + " |")
+
+        lines.append("")
+        lines.append("### Family Interpolation Notes")
+        lines.append(f"- enabled: `{fam.get('enabled')}`")
+        lines.append(f"- targets: `{', '.join([str(t) for t in fam_targets])}`")
+        lines.append(f"- note: `{fam.get('note', '')}`")
 
     lines.append("")
     lines.append("## BB Tranche References")
@@ -968,6 +1244,7 @@ def markdown_report(
     lines.append("")
     lines.append("## How to Use")
     lines.append("- Step 1: Use the valuation table to decide whether current price is in a low / fair / high zone.")
+    lines.append("- Step 1b: Use family interpolation summary to refine valuation readability across fixed assumption families.")
     lines.append("- Step 2: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
     lines.append("- Step 3: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
     lines.append("- Step 4: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
@@ -978,6 +1255,7 @@ def markdown_report(
     lines.append("- base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.")
     lines.append("- eps_base is a slow-moving fundamental anchor; revise only when earnings/model basis changes.")
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
+    lines.append("- Family interpolation is display-only and does not alter base_execution_bias / combined_execution_bias / final_execution_bias.")
     lines.append("- DQ flags can downgrade execution bias even if valuation/regime otherwise look constructive.")
     lines.append("- Pre-execution review reads Band 1 / Band 2 from roll25 markdown report; if parsing fails, no shock override is applied.")
     lines.append("- TX night close is manual input and should be checked carefully before running the script.")
@@ -1019,6 +1297,12 @@ def main() -> None:
 
     bb = parse_bb_stats(bb_stats)
     results = build_results(cfg, drag_enabled=drag_enabled, drag_pts=drag_pts)
+    family_interp = build_family_interpolation(
+        cfg=cfg,
+        current_price=bb.price_used,
+        drag_enabled=drag_enabled,
+        drag_pts=drag_pts,
+    )
 
     pre_review = build_pre_execution_review(
         roll25_report_path=args.roll25_report,
@@ -1030,12 +1314,14 @@ def main() -> None:
         results=results,
         dq_policy=cfg.get("dq_policy", {}),
         pre_review=pre_review,
+        family_interp=family_interp,
     )
 
     out_json = build_output_json(
         cfg=cfg,
         bb=bb,
         results=results,
+        family_interp=family_interp,
         combined=combined,
         bb_stats_path=str(bb_stats_path),
         roll25_report_path=args.roll25_report,
