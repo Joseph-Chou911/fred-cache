@@ -26,10 +26,10 @@
 - active_eps_base: `66.25` (source=`config`)
 - eps_base_policy: `manual_review_only`
 - eps_base_note: `Active EPS base is a slow-moving valuation anchor. Revise only when earnings basis / model basis changes materially.`
-- suggested_eps_base: `N/A`
-- suggested_eps_source: `NA`
-- suggested_eps_as_of_date: `NA`
-- suggested_eps_method: `NA`
+- suggested_eps_base: `66.24`
+- suggested_eps_source: `auto_quarterly_eps_sum_2025`
+- suggested_eps_as_of_date: `2026-01-15`
+- suggested_eps_method: `sum_complete_fiscal_year_quarters`
 - suggested_eps_note: `display-only; never auto-applied`
 - family_targets: `72.0, 71.0, 69.0`
 - targets_note: `Display-only target price markers.`
@@ -42,12 +42,12 @@
 - quarterly_eps_tracker_path_source: `cli`
 - quarterly_eps_candidate_policy: `sum_complete_fiscal_year_only`
 - quarterly_eps_replace_policy: `display_only_no_auto_replace`
-- eps_quarters_collected: `none`
-- annual_eps_candidate: `N/A`
-- annual_eps_candidate_complete: `false`
-- annual_eps_candidate_fiscal_year: `None`
-- annual_eps_candidate_as_of_date: `NA`
-- ready_to_replace_active_eps_base: `false`
+- eps_quarters_collected: `2024Q4=14.45, 2025Q1=13.94, 2025Q2=15.36, 2025Q3=17.44, 2025Q4=19.50`
+- annual_eps_candidate: `66.24`
+- annual_eps_candidate_complete: `true`
+- annual_eps_candidate_fiscal_year: `2025`
+- annual_eps_candidate_as_of_date: `2026-01-15`
+- ready_to_replace_active_eps_base: `true`
 - quarterly_eps_ready_diff_tolerance: `0.01`
 - quarterly_eps_tracker_note: `Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.`
 

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T08:21:22Z",
+    "generated_at_utc": "2026-03-13T08:39:29Z",
     "script": "merge_0050_valuation_bb.py",
     "schema_version": "0050_merge_schema_v1.6a_compat",
     "config_version": "0050_merge_v1.6a",
@@ -28,7 +28,7 @@
     "current_date": "2026-03-13",
     "current_0050_price": 75.94999694824219,
     "current_bb_state": "IN_BAND",
-    "current_bb_z": 0.9511344710017355,
+    "current_bb_z": 0.9511344710017163,
     "schema_validation": {
       "validated": true,
       "required_paths_checked": [
@@ -55,12 +55,12 @@
     "active_eps_base_source": "config",
     "eps_base_policy": "manual_review_only",
     "eps_base_note": "Active EPS base is a slow-moving valuation anchor. Revise only when earnings basis / model basis changes materially.",
-    "suggested_eps_base": null,
+    "suggested_eps_base": 66.24,
     "suggested_eps_meta": {
-      "source": "NA",
-      "as_of_date": "NA",
-      "method": "NA",
-      "note": "Display-only suggestion; never auto-applied."
+      "source": "auto_quarterly_eps_sum_2025",
+      "as_of_date": "2026-01-15",
+      "method": "sum_complete_fiscal_year_quarters",
+      "note": "Auto-filled from collected quarterly EPS; display-only and never auto-applied."
     },
     "family_targets": [
       72.0,
@@ -75,14 +75,26 @@
       "update_policy": "low_frequency_review",
       "note": "TSMC weight is a structural observation; daily auto-refresh is unnecessary."
     },
-    "eps_quarters_collected": [],
-    "eps_quarters_collected_display": [],
-    "eps_quarters_collected_count": 0,
-    "annual_eps_candidate": null,
-    "annual_eps_candidate_complete": false,
-    "annual_eps_candidate_fiscal_year": null,
-    "annual_eps_candidate_as_of_date": "NA",
-    "ready_to_replace_active_eps_base": false,
+    "eps_quarters_collected": [
+      "2024Q4",
+      "2025Q1",
+      "2025Q2",
+      "2025Q3",
+      "2025Q4"
+    ],
+    "eps_quarters_collected_display": [
+      "2024Q4=14.45",
+      "2025Q1=13.94",
+      "2025Q2=15.36",
+      "2025Q3=17.44",
+      "2025Q4=19.50"
+    ],
+    "eps_quarters_collected_count": 5,
+    "annual_eps_candidate": 66.24,
+    "annual_eps_candidate_complete": true,
+    "annual_eps_candidate_fiscal_year": 2025,
+    "annual_eps_candidate_as_of_date": "2026-01-15",
+    "ready_to_replace_active_eps_base": true,
     "quarterly_eps_tracker_path": "tw0050_bb_cache/quarterly_eps_tracker.json",
     "quarterly_eps_tracker_path_source": "cli",
     "quarterly_eps_tracker_note": "Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.",
@@ -876,7 +888,7 @@
     "date": "2026-03-13",
     "price_used": 75.94999694824219,
     "state": "IN_BAND",
-    "bb_z": 0.9511344710017355,
+    "bb_z": 0.9511344710017163,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.53607262302914,
@@ -890,24 +902,24 @@
     ],
     "tranche_levels": [
       {
-        "drawdown": -0.04812486301149166,
+        "drawdown": -0.04812470848095807,
         "label": "10D_p10_uncond",
-        "price_level": 72.29491374938482
+        "price_level": 72.29492548597838
       },
       {
-        "drawdown": -0.06361949627463737,
+        "drawdown": -0.06361957565000514,
         "label": "10D_p05_uncond",
-        "price_level": 71.11809640033478
+        "price_level": 71.11809037177584
       },
       {
-        "drawdown": -0.0686357224607782,
+        "drawdown": -0.06863549790322354,
         "label": "20D_p10_uncond",
-        "price_level": 70.73711403680568
+        "price_level": 70.73713109195127
       },
       {
-        "drawdown": -0.09262779707361152,
+        "drawdown": -0.09262781731461175,
         "label": "20D_p05_uncond",
-        "price_level": 68.91491604317899
+        "price_level": 68.91491450587509
       }
     ]
   },
@@ -916,7 +928,7 @@
       "date": "2026-03-13",
       "price_used": 75.94999694824219,
       "state": "IN_BAND",
-      "bb_z": 0.9511344710017355,
+      "bb_z": 0.9511344710017163,
       "regime_tag": "RISK_OFF_OR_DEFENSIVE",
       "regime_allowed": false,
       "rv20_percentile": 96.53607262302914,
@@ -924,24 +936,24 @@
       "pledge_policy": "DISALLOW",
       "tranche_levels": [
         {
-          "drawdown": -0.04812486301149166,
+          "drawdown": -0.04812470848095807,
           "label": "10D_p10_uncond",
-          "price_level": 72.29491374938482
+          "price_level": 72.29492548597838
         },
         {
-          "drawdown": -0.06361949627463737,
+          "drawdown": -0.06361957565000514,
           "label": "10D_p05_uncond",
-          "price_level": 71.11809640033478
+          "price_level": 71.11809037177584
         },
         {
-          "drawdown": -0.0686357224607782,
+          "drawdown": -0.06863549790322354,
           "label": "20D_p10_uncond",
-          "price_level": 70.73711403680568
+          "price_level": 70.73713109195127
         },
         {
-          "drawdown": -0.09262779707361152,
+          "drawdown": -0.09262781731461175,
           "label": "20D_p05_uncond",
-          "price_level": 68.91491604317899
+          "price_level": 68.91491450587509
         }
       ],
       "dq_flags": [
@@ -1640,23 +1652,23 @@
     "tranche_reference": [
       {
         "label": "10D_p10_uncond",
-        "price_level": 72.29491374938482,
-        "vs_current_pct": -4.8124863011491765
+        "price_level": 72.29492548597838,
+        "vs_current_pct": -4.812470848095796
       },
       {
         "label": "10D_p05_uncond",
-        "price_level": 71.11809640033478,
-        "vs_current_pct": -6.361949627463737
+        "price_level": 71.11809037177584,
+        "vs_current_pct": -6.361957565000509
       },
       {
         "label": "20D_p10_uncond",
-        "price_level": 70.73711403680568,
-        "vs_current_pct": -6.8635722460778315
+        "price_level": 70.73713109195127,
+        "vs_current_pct": -6.863549790322365
       },
       {
         "label": "20D_p05_uncond",
-        "price_level": 68.91491604317899,
-        "vs_current_pct": -9.262779707361158
+        "price_level": 68.91491450587509,
+        "vs_current_pct": -9.262781731461178
       }
     ],
     "pre_execution_review": {
@@ -1712,12 +1724,12 @@
       "active_eps_base": 66.25,
       "eps_base_policy": "manual_review_only",
       "eps_base_note": "Active EPS base is a slow-moving valuation anchor. Revise only when earnings basis / model basis changes materially.",
-      "suggested_eps_base": null,
+      "suggested_eps_base": 66.24,
       "suggested_eps_meta": {
-        "source": "NA",
-        "as_of_date": "NA",
-        "method": "NA",
-        "note": "Display-only suggestion; never auto-applied."
+        "source": "auto_quarterly_eps_sum_2025",
+        "as_of_date": "2026-01-15",
+        "method": "sum_complete_fiscal_year_quarters",
+        "note": "Auto-filled from collected quarterly EPS; display-only and never auto-applied."
       },
       "family_targets": [
         72.0,
@@ -1746,15 +1758,58 @@
         "tracker_note": "Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.",
         "annual_candidate_policy": "sum_complete_fiscal_year_only",
         "candidate_replace_policy": "display_only_no_auto_replace",
-        "eps_quarters_collected": [],
-        "eps_quarters_collected_display": [],
-        "eps_quarters_collected_count": 0,
-        "eps_quarters_collected_detail": [],
-        "annual_eps_candidate": null,
-        "annual_eps_candidate_complete": false,
-        "annual_eps_candidate_fiscal_year": null,
-        "annual_eps_candidate_as_of_date": "NA",
-        "ready_to_replace_active_eps_base": false,
+        "eps_quarters_collected": [
+          "2024Q4",
+          "2025Q1",
+          "2025Q2",
+          "2025Q3",
+          "2025Q4"
+        ],
+        "eps_quarters_collected_display": [
+          "2024Q4=14.45",
+          "2025Q1=13.94",
+          "2025Q2=15.36",
+          "2025Q3=17.44",
+          "2025Q4=19.50"
+        ],
+        "eps_quarters_collected_count": 5,
+        "eps_quarters_collected_detail": [
+          {
+            "quarter": "2024Q4",
+            "eps": 14.45,
+            "source": "tsmc_official_chinese_news_seed",
+            "as_of_date": "2025-01-16"
+          },
+          {
+            "quarter": "2025Q1",
+            "eps": 13.94,
+            "source": "tsmc_official_chinese_news_seed",
+            "as_of_date": "2025-04-17"
+          },
+          {
+            "quarter": "2025Q2",
+            "eps": 15.36,
+            "source": "tsmc_official_chinese_news_seed",
+            "as_of_date": "2025-07-17"
+          },
+          {
+            "quarter": "2025Q3",
+            "eps": 17.44,
+            "source": "tsmc_official_chinese_news_seed",
+            "as_of_date": "2025-10-16"
+          },
+          {
+            "quarter": "2025Q4",
+            "eps": 19.5,
+            "source": "tsmc_official_chinese_news_seed",
+            "as_of_date": "2026-01-15"
+          }
+        ],
+        "annual_eps_candidate": 66.24,
+        "annual_eps_candidate_complete": true,
+        "annual_eps_candidate_fiscal_year": 2025,
+        "annual_eps_candidate_as_of_date": "2026-01-15",
+        "ready_to_replace_active_eps_base": true,
         "ready_diff_tolerance": 0.01,
         "load_notes": []
       }
@@ -1907,7 +1962,7 @@
     "date": "2026-03-13",
     "price_used": 75.94999694824219,
     "state": "IN_BAND",
-    "bb_z": 0.9511344710017355,
+    "bb_z": 0.9511344710017163,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.53607262302914,
@@ -1915,24 +1970,24 @@
     "pledge_policy": "DISALLOW",
     "tranche_levels": [
       {
-        "drawdown": -0.04812486301149166,
+        "drawdown": -0.04812470848095807,
         "label": "10D_p10_uncond",
-        "price_level": 72.29491374938482
+        "price_level": 72.29492548597838
       },
       {
-        "drawdown": -0.06361949627463737,
+        "drawdown": -0.06361957565000514,
         "label": "10D_p05_uncond",
-        "price_level": 71.11809640033478
+        "price_level": 71.11809037177584
       },
       {
-        "drawdown": -0.0686357224607782,
+        "drawdown": -0.06863549790322354,
         "label": "20D_p10_uncond",
-        "price_level": 70.73711403680568
+        "price_level": 70.73713109195127
       },
       {
-        "drawdown": -0.09262779707361152,
+        "drawdown": -0.09262781731461175,
         "label": "20D_p05_uncond",
-        "price_level": 68.91491604317899
+        "price_level": 68.91491450587509
       }
     ],
     "dq_flags": [
