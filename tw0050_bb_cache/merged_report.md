@@ -2,8 +2,8 @@
 
 ## Summary
 - current_date: `2026-03-13`
-- current_0050_price: `75.95`
-- bb_state: **IN_BAND**; bb_z=`0.9511`
+- current_0050_price: `75.85`
+- bb_state: **IN_BAND**; bb_z=`0.9345`
 - regime: **RISK_OFF_OR_DEFENSIVE**; allowed=`false`
 - action_bucket: **VETO**; pledge_policy=`DISALLOW`
 - base_execution_bias: **WAIT_FOR_BETTER_ALIGNMENT**
@@ -16,8 +16,8 @@
 - family_interpolation: **ENABLED** (display-only; no impact on final_execution_bias)
 
 ## Base Inputs
-- base_0050: `75.94999694824219` (source=`bb_stats.latest.price_used`)
-- base_tsmc: `1860.0` (source=`cli`)
+- base_0050: `75.8499984741211` (source=`bb_stats.latest.price_used`)
+- base_tsmc: `1865.0` (source=`cli`)
 - tsmc_weight_in_0050: `0.6408` (source=`config`)
 - dividend_drag_mode: `light`
 - dividend_drag_points_per_year: `1.0` (enabled=`True`)
@@ -41,23 +41,23 @@
 
 | scenario | years | EPS_base | EPS_growth | FX_haircut | P/E | other_ret | TSMC | 0050_gross | 0050_net |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2026_壓力 | 1 | 66.25 | 20.0% | 6.0% | 18.0 | -15.0% | 1345.14 | 58.39 | 57.39 |
-| 2026_保守 | 1 | 66.25 | 20.0% | 3.0% | 20.0 | -8.0% | 1542.30 | 65.45 | 64.45 |
-| 2026_中性偏保守 | 1 | 66.25 | 25.0% | 3.0% | 22.0 | -3.0% | 1767.22 | 72.70 | 71.70 |
-| 2026_中性 | 1 | 66.25 | 25.0% | 0.0% | 24.0 | 0.0% | 1987.50 | 79.29 | 78.29 |
-| 2027_中性 | 2 | 66.25 | 25.0% | 6.0% | 22.0 | 2.0% | 2140.70 | 83.84 | 81.84 |
-| 2027_中性偏樂觀 | 2 | 66.25 | 25.0% | 0.0% | 24.0 | 5.0% | 2484.38 | 93.65 | 91.65 |
-| 2027_樂觀延續 | 2 | 66.25 | 30.0% | 0.0% | 24.0 | 5.0% | 2687.10 | 98.96 | 96.96 |
+| 2026_壓力 | 1 | 66.25 | 20.0% | 6.0% | 18.0 | -15.0% | 1345.14 | 58.21 | 57.21 |
+| 2026_保守 | 1 | 66.25 | 20.0% | 3.0% | 20.0 | -8.0% | 1542.30 | 65.26 | 64.26 |
+| 2026_中性偏保守 | 1 | 66.25 | 25.0% | 3.0% | 22.0 | -3.0% | 1767.22 | 72.48 | 71.48 |
+| 2026_中性 | 1 | 66.25 | 25.0% | 0.0% | 24.0 | 0.0% | 1987.50 | 79.04 | 78.04 |
+| 2027_中性 | 2 | 66.25 | 25.0% | 6.0% | 22.0 | 2.0% | 2140.70 | 83.58 | 81.58 |
+| 2027_中性偏樂觀 | 2 | 66.25 | 25.0% | 0.0% | 24.0 | 5.0% | 2484.38 | 93.35 | 91.35 |
+| 2027_樂觀延續 | 2 | 66.25 | 30.0% | 0.0% | 24.0 | 5.0% | 2687.10 | 98.64 | 96.64 |
 
 ## Current Price Position vs Scenario Net Range
-- current_0050_price: `75.95`
-- scenario_net_range: `57.39` ~ `96.96`
+- current_0050_price: `75.85`
+- scenario_net_range: `57.21` ~ `96.64`
 - percentile_in_scenario_net_range: `42.86`
 - position_status: **IN_RANGE**
-- gap_vs_min: `18.56`
-- gap_vs_max: `-21.01`
-- pct_vs_min: `32.35%`
-- pct_vs_max: `-21.67%`
+- gap_vs_min: `18.64`
+- gap_vs_max: `-20.79`
+- pct_vs_min: `32.57%`
+- pct_vs_max: `-21.51%`
 - zone: **MID_ZONE**
 - zone_note: `rough classification only; sparse scenario set and mixed 1Y/2Y horizons => low decision value`
 
@@ -65,18 +65,18 @@
 
 | family | years | axis | count | min | max | p10 | p25 | p50 | p75 | p90 | current_pctile | current_zone | current_status |
 |---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| 2026_conservative_family | 1 | PE 18.0~24.0 step 0.5 | 13 | 60.42 | 72.53 | 61.63 | 63.45 | 66.47 | 69.50 | 71.32 | 100.00 | RICH | ABOVE_MAX |
-| 2026_neutralish_family | 1 | PE 20.0~24.0 step 0.5 | 9 | 67.50 | 75.91 | 68.34 | 69.60 | 71.70 | 73.81 | 75.07 | 100.00 | RICH | ABOVE_MAX |
-| 2027_neutral_family | 2 | PE 20.0~24.0 step 0.5 | 9 | 76.75 | 86.93 | 77.77 | 79.29 | 81.84 | 84.39 | 85.91 | 0.00 | CHEAP | BELOW_MIN |
-| 2027_defensive_family | 2 | PE 18.0~22.0 step 0.5 | 9 | 67.52 | 76.90 | 68.46 | 69.86 | 72.21 | 74.56 | 75.96 | 88.89 | RICH | IN_RANGE |
+| 2026_conservative_family | 1 | PE 18.0~24.0 step 0.5 | 13 | 60.24 | 72.30 | 61.45 | 63.26 | 66.27 | 69.28 | 71.09 | 100.00 | RICH | ABOVE_MAX |
+| 2026_neutralish_family | 1 | PE 20.0~24.0 step 0.5 | 9 | 67.30 | 75.67 | 68.13 | 69.39 | 71.48 | 73.58 | 74.83 | 100.00 | RICH | ABOVE_MAX |
+| 2027_neutral_family | 2 | PE 20.0~24.0 step 0.5 | 9 | 76.51 | 86.65 | 77.52 | 79.04 | 81.58 | 84.12 | 85.64 | 0.00 | CHEAP | BELOW_MIN |
+| 2027_defensive_family | 2 | PE 18.0~22.0 step 0.5 | 9 | 67.31 | 76.66 | 68.25 | 69.65 | 71.99 | 74.32 | 75.73 | 88.89 | RICH | IN_RANGE |
 
 ## Family Target Price Positions
 | family | current_pctile | current_zone | current_status | family_min | family_max | 72.00_pctile | 72.00_status | 71.00_pctile | 71.00_status | 69.00_pctile | 69.00_status |
 | --- | ---: | --- | --- | ---: | ---: | ---: | --- | ---: | --- | ---: | --- |
-| 2026_conservative_family | 100.00 | RICH | ABOVE_MAX | 60.42 | 72.53 | 92.31 | IN_RANGE | 84.62 | IN_RANGE | 69.23 | IN_RANGE |
-| 2026_neutralish_family | 100.00 | RICH | ABOVE_MAX | 67.50 | 75.91 | 55.56 | IN_RANGE | 44.44 | IN_RANGE | 22.22 | IN_RANGE |
-| 2027_neutral_family | 0.00 | CHEAP | BELOW_MIN | 76.75 | 86.93 | 0.00 | BELOW_MIN | 0.00 | BELOW_MIN | 0.00 | BELOW_MIN |
-| 2027_defensive_family | 88.89 | RICH | IN_RANGE | 67.52 | 76.90 | 44.44 | IN_RANGE | 33.33 | IN_RANGE | 22.22 | IN_RANGE |
+| 2026_conservative_family | 100.00 | RICH | ABOVE_MAX | 60.24 | 72.30 | 92.31 | IN_RANGE | 84.62 | IN_RANGE | 69.23 | IN_RANGE |
+| 2026_neutralish_family | 100.00 | RICH | ABOVE_MAX | 67.30 | 75.67 | 55.56 | IN_RANGE | 44.44 | IN_RANGE | 22.22 | IN_RANGE |
+| 2027_neutral_family | 0.00 | CHEAP | BELOW_MIN | 76.51 | 86.65 | 0.00 | BELOW_MIN | 0.00 | BELOW_MIN | 0.00 | BELOW_MIN |
+| 2027_defensive_family | 88.89 | RICH | IN_RANGE | 67.31 | 76.66 | 55.56 | IN_RANGE | 44.44 | IN_RANGE | 22.22 | IN_RANGE |
 
 ### Family Interpolation Notes
 - enabled: `True`
@@ -89,19 +89,19 @@
 
 | label | price_level | vs_current_pct |
 |---|---:|---:|
-| 10D_p10_uncond | 72.29 | -4.81% |
-| 10D_p05_uncond | 71.12 | -6.36% |
-| 20D_p10_uncond | 70.74 | -6.86% |
-| 20D_p05_uncond | 68.91 | -9.26% |
+| 10D_p10_uncond | 72.20 | -4.81% |
+| 10D_p05_uncond | 71.02 | -6.36% |
+| 20D_p10_uncond | 70.64 | -6.86% |
+| 20D_p05_uncond | 68.82 | -9.26% |
 
 ## Pre-Execution Review
 - available: `True`
 - roll25_report_path: `roll25_cache/report.md`
 - band1: `33057.836667`
 - band2: `32541.990382`
-- tx_night_last: `33253.0`
-- tx_vs_band1: `195.16333299999678`
-- tx_vs_band2: `711.009618`
+- tx_night_last: `33351.0`
+- tx_vs_band1: `293.1633329999968`
+- tx_vs_band2: `809.009618`
 - preopen_shock_flag: **NONE**
 - shock_override: **NONE**
 
