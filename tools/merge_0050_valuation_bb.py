@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.6b-minfix)
+merge_0050_valuation_bb.py  (v1.6c-runtime-eps-policy)
 
 Purpose
 -------
@@ -14,22 +14,22 @@ Merge three layers into one deterministic report:
 3) Pre-execution shock review:
    read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.6b minimal fixes
--------------------
+v1.6c changes
+-------------
 - Keep single-file architecture
-- Keep valuation / BB / report logic unchanged
-- Fix floating-point comparison for:
-  * ready_to_replace_active_eps_base
-- Tighten quarterly tracker filtering:
-  * if tracker rows contain verification status, only accept:
-      VERIFIED / AUTO_DISCOVERED
-  * prefer verified_eps over eps when available
-  * prefer verified_as_of_date over as_of_date when available
-- No change to:
-  * sum_complete_fiscal_year_only
-  * display_only_no_auto_replace
-  * scenario logic
-  * family interpolation logic
+- Keep valuation / BB / report logic largely unchanged
+- Keep v1.6b minimal fixes:
+  * floating-point comparison for ready_to_replace_active_eps_base
+  * tighter quarterly tracker filtering
+  * prefer verified_eps / verified_as_of_date when available
+- Add runtime EPS base policy:
+  * slow_vars.eps_base_runtime_policy
+      - manual_review_only
+      - use_annual_candidate_if_complete
+  * slow_vars.effective_eps_base
+      - actual EPS base used by Scenario Table / family interpolation
+  * active_eps_base remains the manually governed anchor
+  * annual_eps_candidate may drive effective_eps_base without overwriting active_eps_base
 
 Backward compatibility
 ----------------------
@@ -70,21 +70,25 @@ TRACKER_ALLOWED_STATUSES = {
     STATUS_AUTO_DISCOVERED,
 }
 
+POLICY_MANUAL_REVIEW_ONLY = "manual_review_only"
+POLICY_USE_ANNUAL_CANDIDATE_IF_COMPLETE = "use_annual_candidate_if_complete"
+
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.6b-minfix",
+        "config_version": "0050_merge_v1.6c-runtime-eps-policy",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close. "
             "Pre-execution shock review is optional and report-only. "
             "Family interpolation is display-only and does not alter final execution bias. "
             "Added quarterly EPS accumulation review without auto-replacing active_eps_base. "
-            "v1.6b applies minimal fixes to floating comparison and quarterly tracker filtering."
+            "v1.6c adds effective_eps_base runtime policy while keeping active_eps_base manual."
         ),
     },
     "slow_vars": {
         "active_eps_base": 66.25,
         "eps_base_policy": "manual_review_only",
+        "eps_base_runtime_policy": POLICY_MANUAL_REVIEW_ONLY,
         "eps_base_note": (
             "Active EPS base is a slow-moving valuation anchor. "
             "Revise only when earnings basis / model basis changes materially."
@@ -602,20 +606,6 @@ def apply_resolved_slow_vars(
     return cfg2, {"active_eps_base": active_src}
 
 
-def resolve_eps_base_value(x: Any, cfg: Dict[str, Any]) -> float:
-    if isinstance(x, str) and x == EPS_BASE_TOKEN:
-        return float(cfg.get("slow_vars", {}).get("active_eps_base", 66.25))
-    return float(x)
-
-
-def resolve_family_targets(cfg: Dict[str, Any]) -> List[float]:
-    fi_cfg = cfg.get("family_interpolation", {}) or {}
-    raw = fi_cfg.get("targets", [])
-    if isinstance(raw, str) and raw == FAMILY_TARGETS_TOKEN:
-        raw = cfg.get("slow_vars", {}).get("family_targets", [])
-    return [float(v) for v in raw]
-
-
 def resolve_quarterly_eps_json_path(cfg: Dict[str, Any], cli_quarterly_eps_json: Optional[str]) -> Tuple[Optional[str], str]:
     if cli_quarterly_eps_json:
         return cli_quarterly_eps_json, "cli"
@@ -631,14 +621,32 @@ def resolve_quarterly_eps_json_path(cfg: Dict[str, Any], cli_quarterly_eps_json:
 def exceeds_abs_tolerance(lhs: float, rhs: float, tolerance: float, epsilon: float = 1e-9) -> bool:
     """
     Strictly 'greater than tolerance', but resilient to float tail noise.
-
-    Example:
-    - lhs=66.25, rhs=66.24, tolerance=0.01
-      diff may become 0.010000000000005116 in binary float;
-      this helper treats that as NOT exceeding tolerance.
     """
     diff = abs(float(lhs) - float(rhs))
     return diff > (float(tolerance) + float(epsilon))
+
+
+def pick_first_valid_numeric(*candidates: Any) -> float:
+    for x in candidates:
+        if x is None:
+            continue
+        if isinstance(x, str) and x.strip() == "":
+            continue
+        v = safe_float(x, default=float("nan"))
+        if not math.isnan(v):
+            return v
+    return float("nan")
+
+
+def pick_first_valid_text(*candidates: Any, default: str = "NA") -> str:
+    for x in candidates:
+        if x is None:
+            continue
+        s = str(x).strip()
+        if s == "" or s.lower() in {"none", "null"}:
+            continue
+        return s
+    return default
 
 
 def load_quarterly_eps_entries_from_json(path: Optional[str]) -> Tuple[List[Dict[str, Any]], List[str]]:
@@ -692,16 +700,22 @@ def load_quarterly_eps_entries_from_json(path: Optional[str]) -> Tuple[List[Dict
             )
             continue
 
-        eps_source_value = item.get("verified_eps", item.get("eps", item.get("value", item.get("diluted_eps", float('nan')))))
-        eps = safe_float(eps_source_value, default=float("nan"))
+        eps = pick_first_valid_numeric(
+            item.get("verified_eps"),
+            item.get("eps"),
+            item.get("value"),
+            item.get("diluted_eps"),
+        )
         if math.isnan(eps):
             notes.append(f"Skipped quarterly EPS item #{idx}: invalid eps for quarter={q}")
             continue
 
-        as_of_date_raw = item.get("verified_as_of_date", item.get("as_of_date", item.get("date", "NA")))
-        as_of_date = str(as_of_date_raw)
-        if as_of_date in {"", "None", "null"}:
-            as_of_date = "NA"
+        as_of_date = pick_first_valid_text(
+            item.get("verified_as_of_date"),
+            item.get("as_of_date"),
+            item.get("date"),
+            default="NA",
+        )
 
         out.append(
             {
@@ -870,6 +884,75 @@ def apply_quarterly_eps_review(
         )
 
     return cfg2
+
+
+def resolve_effective_eps_base(cfg: Dict[str, Any]) -> Tuple[float, str, str, str]:
+    slow = cfg.get("slow_vars", {}) or {}
+    review = slow.get("quarterly_eps_review", {}) or {}
+
+    active_eps_base = float(slow.get("active_eps_base", 66.25))
+    raw_policy = str(slow.get("eps_base_runtime_policy", POLICY_MANUAL_REVIEW_ONLY)).strip()
+
+    if raw_policy not in {
+        POLICY_MANUAL_REVIEW_ONLY,
+        POLICY_USE_ANNUAL_CANDIDATE_IF_COMPLETE,
+    }:
+        return (
+            active_eps_base,
+            "slow_vars.active_eps_base",
+            "invalid_policy_fallback_to_manual",
+            POLICY_MANUAL_REVIEW_ONLY,
+        )
+
+    annual_candidate = review.get("annual_eps_candidate", None)
+    annual_complete = bool(review.get("annual_eps_candidate_complete", False))
+
+    if raw_policy == POLICY_USE_ANNUAL_CANDIDATE_IF_COMPLETE:
+        if annual_complete and annual_candidate is not None:
+            return (
+                float(annual_candidate),
+                "quarterly_eps_review.annual_eps_candidate",
+                "complete_fiscal_year_candidate",
+                raw_policy,
+            )
+        return (
+            active_eps_base,
+            "slow_vars.active_eps_base",
+            "candidate_not_complete",
+            raw_policy,
+        )
+
+    return (
+        active_eps_base,
+        "slow_vars.active_eps_base",
+        "manual_review_only",
+        raw_policy,
+    )
+
+
+def apply_effective_eps_base(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    cfg2 = deep_copy_jsonable(cfg)
+    effective_eps_base, effective_source, effective_reason, runtime_policy = resolve_effective_eps_base(cfg2)
+    cfg2["slow_vars"]["eps_base_runtime_policy"] = runtime_policy
+    cfg2["slow_vars"]["effective_eps_base"] = effective_eps_base
+    cfg2["slow_vars"]["effective_eps_base_source"] = effective_source
+    cfg2["slow_vars"]["effective_eps_base_reason"] = effective_reason
+    return cfg2
+
+
+def resolve_eps_base_value(x: Any, cfg: Dict[str, Any]) -> float:
+    if isinstance(x, str) and x == EPS_BASE_TOKEN:
+        slow = cfg.get("slow_vars", {}) or {}
+        return float(slow.get("effective_eps_base", slow.get("active_eps_base", 66.25)))
+    return float(x)
+
+
+def resolve_family_targets(cfg: Dict[str, Any]) -> List[float]:
+    fi_cfg = cfg.get("family_interpolation", {}) or {}
+    raw = fi_cfg.get("targets", [])
+    if isinstance(raw, str) and raw == FAMILY_TARGETS_TOKEN:
+        raw = cfg.get("slow_vars", {}).get("family_targets", [])
+    return [float(v) for v in raw]
 
 
 def compute_tsmc_price(
@@ -1467,7 +1550,7 @@ def build_combined_view(
             "family_boundary_note": "percentile=0 or 100 can simply mean the target is below family min or above family max.",
             "family_robustness_note": "2027_defensive_family is a robustness check only; it does not alter execution bias.",
             "slow_var_note": "suggested_eps_base is display-only and never auto-applied; tsmc_weight_meta is informative only.",
-            "quarterly_eps_note": "annual_eps_candidate is derived from complete fiscal year quarters only; it does not auto-replace active_eps_base.",
+            "quarterly_eps_note": "annual_eps_candidate is derived from complete fiscal year quarters only; effective_eps_base may optionally use it via runtime policy without overwriting active_eps_base.",
             "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
             "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
@@ -1506,6 +1589,10 @@ def build_slow_variable_review(
         "active_eps_base": float(slow.get("active_eps_base", 66.25)),
         "active_eps_base_source": slow_var_sources.get("active_eps_base", "config"),
         "eps_base_policy": str(slow.get("eps_base_policy", "manual_review_only")),
+        "eps_base_runtime_policy": str(slow.get("eps_base_runtime_policy", POLICY_MANUAL_REVIEW_ONLY)),
+        "effective_eps_base": float(slow.get("effective_eps_base", slow.get("active_eps_base", 66.25))),
+        "effective_eps_base_source": str(slow.get("effective_eps_base_source", "slow_vars.active_eps_base")),
+        "effective_eps_base_reason": str(slow.get("effective_eps_base_reason", "manual_review_only")),
         "eps_base_note": str(slow.get("eps_base_note", "")),
         "suggested_eps_base": slow.get("suggested_eps_base", None),
         "suggested_eps_meta": deep_copy_jsonable(slow.get("suggested_eps_meta", {})),
@@ -1554,7 +1641,7 @@ def build_output_json(
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1.6b_minfix_compat",
+        "schema_version": "0050_merge_schema_v1.6c_runtime_eps_policy_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
@@ -1687,6 +1774,10 @@ def markdown_report(
     lines.append("## Slow Variable Review")
     lines.append(f"- active_eps_base: `{fmt_num(slow_review['active_eps_base'])}` (source=`{slow_review['active_eps_base_source']}`)")
     lines.append(f"- eps_base_policy: `{slow_review['eps_base_policy']}`")
+    lines.append(f"- eps_base_runtime_policy: `{slow_review['eps_base_runtime_policy']}`")
+    lines.append(f"- effective_eps_base: `{fmt_num(slow_review['effective_eps_base'])}`")
+    lines.append(f"- effective_eps_base_source: `{slow_review['effective_eps_base_source']}`")
+    lines.append(f"- effective_eps_base_reason: `{slow_review['effective_eps_base_reason']}`")
     lines.append(f"- eps_base_note: `{slow_review['eps_base_note']}`")
     lines.append(f"- suggested_eps_base: `{fmt_num(slow_review['suggested_eps_base'])}`")
     lines.append(f"- suggested_eps_source: `{slow_review['suggested_eps_meta'].get('source', 'NA')}`")
@@ -1866,21 +1957,24 @@ def markdown_report(
     lines.append("- Step 3: Use 2027_defensive_family only as a robustness check: ask whether the price still looks acceptable under milder defensive assumptions.")
     lines.append("- Step 4: Treat suggested_eps_base as review material only; it never changes the live model automatically.")
     lines.append("- Step 5: Review quarterly EPS accumulation fields. `annual_eps_candidate_complete=true` means a complete fiscal year candidate exists.")
-    lines.append("- Step 6: `ready_to_replace_active_eps_base=true` means the complete annual candidate materially differs from active_eps_base, but replacement is still manual.")
-    lines.append("- Step 7: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
-    lines.append("- Step 8: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
-    lines.append("- Step 9: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
+    lines.append("- Step 6: `ready_to_replace_active_eps_base=true` only means there is a material difference review flag; it still does not overwrite active_eps_base.")
+    lines.append("- Step 7: `effective_eps_base` is the actual runtime EPS used by valuation cases; it may equal annual_eps_candidate when runtime policy allows it.")
+    lines.append("- Step 8: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
+    lines.append("- Step 9: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
+    lines.append("- Step 10: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
 
     lines.append("")
     lines.append("## Notes")
     lines.append("- base_0050 is auto-resolved from bb-stats unless overridden.")
     lines.append("- base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.")
-    lines.append("- active_eps_base is the live slow-moving valuation anchor; revise only when earnings/model basis changes.")
+    lines.append("- active_eps_base is the live manually governed slow-moving valuation anchor.")
+    lines.append("- effective_eps_base is the runtime EPS actually used by Scenario Table / family interpolation.")
     lines.append("- suggested_eps_base is display-only and never auto-applied.")
     lines.append("- annual_eps_candidate is derived from collected quarterly EPS using COMPLETE fiscal year quarters only.")
     lines.append("- ready_to_replace_active_eps_base does NOT auto-replace active_eps_base; it is a review flag only.")
     lines.append("- quarterly_eps_tracker filtering accepts tracker rows only when verification_status is VERIFIED or AUTO_DISCOVERED.")
     lines.append("- When available, verified_eps / verified_as_of_date are preferred over eps / as_of_date from the tracker.")
+    lines.append("- If eps_base_runtime_policy=use_annual_candidate_if_complete and a complete annual candidate exists, effective_eps_base will use that candidate without overwriting active_eps_base.")
     lines.append("- tsmc_weight_meta is informative only; it does not change execution bias by itself.")
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
     lines.append("- Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.")
@@ -1938,6 +2032,8 @@ def main() -> None:
         cli_quarterly_eps_json=args.quarterly_eps_json,
         cli_eps_quarters=args.eps_quarter,
     )
+
+    cfg = apply_effective_eps_base(cfg)
 
     cfg, base_sources = apply_resolved_bases(
         cfg=cfg,
