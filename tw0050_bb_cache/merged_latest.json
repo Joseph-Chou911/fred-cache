@@ -1,17 +1,17 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T03:13:10Z",
+    "generated_at_utc": "2026-03-13T03:37:19Z",
     "script": "merge_0050_valuation_bb.py",
-    "schema_version": "0050_merge_schema_v1.4c_compat",
-    "config_version": "0050_merge_v1.4c",
-    "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias."
+    "schema_version": "0050_merge_schema_v1.4d_compat",
+    "config_version": "0050_merge_v1.4d",
+    "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias. Added 2027_defensive_family as a minimal robustness check."
   },
   "inputs": {
     "bb_stats_path": "tw0050_bb_cache/stats_latest.json",
     "roll25_report_path": "roll25_cache/report.md",
-    "tx_night_last": 33408.0,
-    "base_0050": 76.0,
-    "base_tsmc": 1880.0,
+    "tx_night_last": 33284.0,
+    "base_0050": 76.05000305175781,
+    "base_tsmc": 1875.0,
     "tsmc_weight": 0.6408,
     "base_sources": {
       "base_0050": "bb_stats.latest.price_used",
@@ -26,9 +26,9 @@
     },
     "family_interpolation_enabled": true,
     "current_date": "2026-03-13",
-    "current_0050_price": 76.0,
+    "current_0050_price": 76.05000305175781,
     "current_bb_state": "IN_BAND",
-    "current_bb_z": 0.9940392315238753,
+    "current_bb_z": 1.0022967697178973,
     "schema_validation": {
       "validated": true,
       "required_paths_checked": [
@@ -63,9 +63,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
-      "tsmc_return_vs_base": -0.2845000000000001,
-      "gross_0050": 58.049742399999985,
-      "net_0050": 57.049742399999985
+      "tsmc_return_vs_base": -0.28259200000000007,
+      "gross_0050": 58.18091761342167,
+      "net_0050": 57.18091761342167
     },
     {
       "group_name": "2026_core",
@@ -79,9 +79,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
-      "tsmc_return_vs_base": -0.17962765957446813,
-      "gross_0050": 65.06805327659573,
-      "net_0050": 64.06805327659573
+      "tsmc_return_vs_base": -0.17744000000000004,
+      "gross_0050": 65.21747468746679,
+      "net_0050": 64.21747468746679
     },
     {
       "group_name": "2026_core",
@@ -95,9 +95,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
-      "tsmc_return_vs_base": -0.059990026595744705,
-      "gross_0050": 72.25946171276595,
-      "net_0050": 71.25946171276595
+      "tsmc_return_vs_base": -0.05748333333333333,
+      "gross_0050": 72.4291620204596,
+      "net_0050": 71.4291620204596
     },
     {
       "group_name": "2026_core",
@@ -111,9 +111,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
-      "tsmc_return_vs_base": 0.05718085106382986,
-      "gross_0050": 78.78475319148937,
-      "net_0050": 77.78475319148937
+      "tsmc_return_vs_base": 0.06000000000000005,
+      "gross_0050": 78.9739735690918,
+      "net_0050": 77.9739735690918
     },
     {
       "group_name": "2027_core",
@@ -127,9 +127,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
-      "tsmc_return_vs_base": 0.138671875,
-      "gross_0050": 83.29941525000001,
-      "net_0050": 81.29941525000001
+      "tsmc_return_vs_base": 0.14170833333333333,
+      "gross_0050": 83.5021960858017,
+      "net_0050": 81.5021960858017
     },
     {
       "group_name": "2027_core",
@@ -143,9 +143,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
-      "tsmc_return_vs_base": 0.32147606382978733,
-      "gross_0050": 93.02110148936171,
-      "net_0050": 91.02110148936171
+      "tsmc_return_vs_base": 0.32499999999999996,
+      "gross_0050": 93.25403474212645,
+      "net_0050": 91.25403474212645
     },
     {
       "group_name": "2027_core",
@@ -159,9 +159,9 @@
       "eps_after_growth": 111.9625,
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
-      "tsmc_return_vs_base": 0.4293085106382981,
-      "gross_0050": 98.27262791489362,
-      "net_0050": 96.27262791489362
+      "tsmc_return_vs_base": 0.43312000000000017,
+      "gross_0050": 98.52302961436231,
+      "net_0050": 96.52302961436231
     }
   ],
   "family_interpolation": {
@@ -189,58 +189,58 @@
           "count": 13
         },
         "family_stats": {
-          "net_min": 60.07277434893617,
-          "net_max": 72.05861113191489,
-          "p10": 61.27135802723404,
-          "p25": 63.06923354468084,
-          "p50": 66.06569274042553,
-          "p75": 69.06215193617021,
-          "p90": 70.86002745361702,
+          "net_min": 60.208906039569726,
+          "net_max": 72.23461198326093,
+          "p10": 61.41147663393885,
+          "p25": 63.21533252549253,
+          "p50": 66.22175901141534,
+          "p75": 69.22818549733813,
+          "p90": 71.03204138889183,
           "case_count": 13
         },
         "current_price_percentile": 100.0,
         "current_zone": "RICH",
         "current_position_status": "ABOVE_MAX",
-        "current_gap_vs_min": 15.927225651063829,
-        "current_gap_vs_max": 3.941388868085113,
-        "current_pct_vs_min": 26.51321804874471,
-        "current_pct_vs_max": 5.4696986330610375,
+        "current_gap_vs_min": 15.841097012188087,
+        "current_gap_vs_max": 3.8153910684968793,
+        "current_pct_vs_min": 26.310222281363504,
+        "current_pct_vs_max": 5.281943051595572,
         "target_positions": [
           {
             "price": 72.0,
             "percentile": 92.3076923076923,
             "zone": "RICH",
             "position_status": "IN_RANGE",
-            "family_net_min": 60.07277434893617,
-            "family_net_max": 72.05861113191489,
-            "gap_vs_min": 11.927225651063829,
-            "gap_vs_max": -0.05861113191488698,
-            "pct_vs_min": 19.854627625126575,
-            "pct_vs_max": -0.0813381371000732
+            "family_net_min": 60.208906039569726,
+            "family_net_max": 72.23461198326093,
+            "gap_vs_min": 11.791093960430274,
+            "gap_vs_max": -0.23461198326093324,
+            "pct_vs_min": 19.58363759786814,
+            "pct_vs_max": -0.3247916432572495
           },
           {
             "price": 71.0,
             "percentile": 84.61538461538461,
             "zone": "RICH",
             "position_status": "IN_RANGE",
-            "family_net_min": 60.07277434893617,
-            "family_net_max": 72.05861113191489,
-            "gap_vs_min": 10.927225651063829,
-            "gap_vs_max": -1.058611131914887,
-            "pct_vs_min": 18.18998001922203,
-            "pct_vs_max": -1.4690973296403564
+            "family_net_min": 60.208906039569726,
+            "family_net_max": 72.23461198326093,
+            "gap_vs_min": 10.791093960430274,
+            "gap_vs_max": -1.2346119832609332,
+            "pct_vs_min": 17.92275374234218,
+            "pct_vs_max": -1.7091695371008964
           },
           {
             "price": 69.0,
             "percentile": 69.23076923076923,
             "zone": "UPPER_MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 60.07277434893617,
-            "family_net_max": 72.05861113191489,
-            "gap_vs_min": 8.927225651063829,
-            "gap_vs_max": -3.058611131914887,
-            "pct_vs_min": 14.86068480741296,
-            "pct_vs_max": -4.244615714720901
+            "family_net_min": 60.208906039569726,
+            "family_net_max": 72.23461198326093,
+            "gap_vs_min": 8.791093960430274,
+            "gap_vs_max": -3.2346119832609332,
+            "pct_vs_min": 14.600986031290297,
+            "pct_vs_max": -4.477925324788201
           }
         ],
         "cases": [
@@ -249,117 +249,117 @@
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1388.07,
-            "tsmc_return_vs_base": -0.2616648936170213,
-            "gross_0050": 61.07277434893617,
-            "net_0050": 60.07277434893617
+            "tsmc_return_vs_base": -0.25969600000000004,
+            "gross_0050": 61.208906039569726,
+            "net_0050": 60.208906039569726
           },
           {
             "pe": 18.5,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1426.6274999999998,
-            "tsmc_return_vs_base": -0.24115558510638302,
-            "gross_0050": 62.071594080851064,
-            "net_0050": 61.071594080851064
+            "tsmc_return_vs_base": -0.23913200000000012,
+            "gross_0050": 62.21104820154399,
+            "net_0050": 61.21104820154399
           },
           {
             "pe": 19.0,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1465.185,
-            "tsmc_return_vs_base": -0.22064627659574476,
-            "gross_0050": 63.070413812765956,
-            "net_0050": 62.070413812765956
+            "tsmc_return_vs_base": -0.21856799999999998,
+            "gross_0050": 63.21319036351826,
+            "net_0050": 62.21319036351826
           },
           {
             "pe": 19.5,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1503.7424999999998,
-            "tsmc_return_vs_base": -0.2001369680851065,
-            "gross_0050": 64.06923354468084,
-            "net_0050": 63.06923354468084
+            "tsmc_return_vs_base": -0.19800400000000007,
+            "gross_0050": 64.21533252549253,
+            "net_0050": 63.21533252549253
           },
           {
             "pe": 20.0,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1542.3,
-            "tsmc_return_vs_base": -0.17962765957446813,
-            "gross_0050": 65.06805327659573,
-            "net_0050": 64.06805327659573
+            "tsmc_return_vs_base": -0.17744000000000004,
+            "gross_0050": 65.21747468746679,
+            "net_0050": 64.21747468746679
           },
           {
             "pe": 20.5,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1580.8574999999998,
-            "tsmc_return_vs_base": -0.15911835106382988,
-            "gross_0050": 66.06687300851064,
-            "net_0050": 65.06687300851064
+            "tsmc_return_vs_base": -0.15687600000000013,
+            "gross_0050": 66.21961684944105,
+            "net_0050": 65.21961684944105
           },
           {
             "pe": 21.0,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1619.415,
-            "tsmc_return_vs_base": -0.1386090425531915,
-            "gross_0050": 67.06569274042553,
-            "net_0050": 66.06569274042553
+            "tsmc_return_vs_base": -0.136312,
+            "gross_0050": 67.22175901141534,
+            "net_0050": 66.22175901141534
           },
           {
             "pe": 21.5,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1657.9724999999999,
-            "tsmc_return_vs_base": -0.11809973404255325,
-            "gross_0050": 68.06451247234043,
-            "net_0050": 67.06451247234043
+            "tsmc_return_vs_base": -0.11574800000000007,
+            "gross_0050": 68.2239011733896,
+            "net_0050": 67.2239011733896
           },
           {
             "pe": 22.0,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1696.53,
-            "tsmc_return_vs_base": -0.09759042553191488,
-            "gross_0050": 69.06333220425532,
-            "net_0050": 68.06333220425532
+            "tsmc_return_vs_base": -0.09518400000000005,
+            "gross_0050": 69.22604333536387,
+            "net_0050": 68.22604333536387
           },
           {
             "pe": 22.5,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1735.0874999999999,
-            "tsmc_return_vs_base": -0.07708111702127662,
-            "gross_0050": 70.06215193617021,
-            "net_0050": 69.06215193617021
+            "tsmc_return_vs_base": -0.07462000000000002,
+            "gross_0050": 70.22818549733813,
+            "net_0050": 69.22818549733813
           },
           {
             "pe": 23.0,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1773.645,
-            "tsmc_return_vs_base": -0.056571808510638255,
-            "gross_0050": 71.0609716680851,
-            "net_0050": 70.0609716680851
+            "tsmc_return_vs_base": -0.05405599999999999,
+            "gross_0050": 71.23032765931241,
+            "net_0050": 70.23032765931241
           },
           {
             "pe": 23.5,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1812.2024999999999,
-            "tsmc_return_vs_base": -0.03606250000000011,
-            "gross_0050": 72.0597914,
-            "net_0050": 71.0597914
+            "tsmc_return_vs_base": -0.03349200000000008,
+            "gross_0050": 72.23246982128667,
+            "net_0050": 71.23246982128667
           },
           {
             "pe": 24.0,
             "eps_after_growth": 79.5,
             "eps_after_fx": 77.115,
             "tsmc_price": 1850.7599999999998,
-            "tsmc_return_vs_base": -0.01555319148936185,
-            "gross_0050": 73.05861113191489,
-            "net_0050": 72.05861113191489
+            "tsmc_return_vs_base": -0.012928000000000162,
+            "gross_0050": 73.23461198326093,
+            "net_0050": 72.23461198326093
           }
         ]
       },
@@ -380,58 +380,58 @@
           "count": 9
         },
         "family_stats": {
-          "net_min": 67.09771282978724,
-          "net_max": 75.42121059574468,
-          "p10": 67.93006260638299,
-          "p25": 69.1785872712766,
-          "p50": 71.25946171276595,
-          "p75": 73.34033615425531,
-          "p90": 74.58886081914893,
+          "net_min": 67.25356967890015,
+          "net_max": 75.60475436201905,
+          "p10": 68.08868814721204,
+          "p25": 69.34136584967987,
+          "p50": 71.4291620204596,
+          "p75": 73.51695819123931,
+          "p90": 74.76963589370715,
           "case_count": 9
         },
         "current_price_percentile": 100.0,
         "current_zone": "RICH",
         "current_position_status": "ABOVE_MAX",
-        "current_gap_vs_min": 8.902287170212759,
-        "current_gap_vs_max": 0.5787894042553177,
-        "current_pct_vs_min": 13.267646235268838,
-        "current_pct_vs_max": 0.7674093264792736,
+        "current_gap_vs_min": 8.796433372857663,
+        "current_gap_vs_max": 0.4452486897387615,
+        "current_pct_vs_min": 13.079504054366087,
+        "current_pct_vs_max": 0.5889162573120332,
         "target_positions": [
           {
             "price": 72.0,
             "percentile": 55.55555555555556,
             "zone": "MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.09771282978724,
-            "family_net_max": 75.42121059574468,
-            "gap_vs_min": 4.902287170212759,
-            "gap_vs_max": -3.4212105957446823,
-            "pct_vs_min": 7.306191170254683,
-            "pct_vs_max": -4.536138532809108
+            "family_net_min": 67.25356967890015,
+            "family_net_max": 75.60475436201905,
+            "gap_vs_min": 4.746430321099851,
+            "gap_vs_max": -3.604754362019051,
+            "pct_vs_min": 7.057514335315607,
+            "pct_vs_max": -4.767893755409036
           },
           {
             "price": 71.0,
             "percentile": 44.44444444444444,
             "zone": "MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.09771282978724,
-            "family_net_max": 75.42121059574468,
-            "gap_vs_min": 3.902287170212759,
-            "gap_vs_max": -4.421210595744682,
-            "pct_vs_min": 5.81582740400115,
-            "pct_vs_max": -5.8620254976312065
+            "family_net_min": 67.25356967890015,
+            "family_net_max": 75.60475436201905,
+            "gap_vs_min": 3.746430321099851,
+            "gap_vs_max": -4.604754362019051,
+            "pct_vs_min": 5.570604413991775,
+            "pct_vs_max": -6.090561897695023
           },
           {
             "price": 69.0,
             "percentile": 22.22222222222222,
             "zone": "LOWER_MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.09771282978724,
-            "family_net_max": 75.42121059574468,
-            "gap_vs_min": 1.9022871702127588,
-            "gap_vs_max": -6.421210595744682,
-            "pct_vs_min": 2.8350998714940623,
-            "pct_vs_max": -8.513799427275393
+            "family_net_min": 67.25356967890015,
+            "family_net_max": 75.60475436201905,
+            "gap_vs_min": 1.7464303210998509,
+            "gap_vs_max": -6.604754362019051,
+            "pct_vs_min": 2.596784571344135,
+            "pct_vs_max": -8.735898182266999
           }
         ],
         "cases": [
@@ -440,81 +440,81 @@
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1606.5625,
-            "tsmc_return_vs_base": -0.1454454787234043,
-            "gross_0050": 68.09771282978724,
-            "net_0050": 67.09771282978724
+            "tsmc_return_vs_base": -0.14316666666666666,
+            "gross_0050": 68.25356967890015,
+            "net_0050": 67.25356967890015
           },
           {
             "pe": 20.5,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1646.7265625,
-            "tsmc_return_vs_base": -0.12408161569148934,
-            "gross_0050": 69.13815005053192,
-            "net_0050": 68.13815005053192
+            "tsmc_return_vs_base": -0.12174583333333333,
+            "gross_0050": 69.29746776429,
+            "net_0050": 68.29746776429
           },
           {
             "pe": 21.0,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1686.890625,
-            "tsmc_return_vs_base": -0.1027177526595745,
-            "gross_0050": 70.1785872712766,
-            "net_0050": 69.1785872712766
+            "tsmc_return_vs_base": -0.100325,
+            "gross_0050": 70.34136584967987,
+            "net_0050": 69.34136584967987
           },
           {
             "pe": 21.5,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1727.0546875,
-            "tsmc_return_vs_base": -0.08135388962765955,
-            "gross_0050": 71.21902449202128,
-            "net_0050": 70.21902449202128
+            "tsmc_return_vs_base": -0.07890416666666666,
+            "gross_0050": 71.38526393506973,
+            "net_0050": 70.38526393506973
           },
           {
             "pe": 22.0,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1767.21875,
-            "tsmc_return_vs_base": -0.059990026595744705,
-            "gross_0050": 72.25946171276595,
-            "net_0050": 71.25946171276595
+            "tsmc_return_vs_base": -0.05748333333333333,
+            "gross_0050": 72.4291620204596,
+            "net_0050": 71.4291620204596
           },
           {
             "pe": 22.5,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1807.3828125,
-            "tsmc_return_vs_base": -0.03862616356382975,
-            "gross_0050": 73.29989893351065,
-            "net_0050": 72.29989893351065
+            "tsmc_return_vs_base": -0.0360625,
+            "gross_0050": 73.47306010584946,
+            "net_0050": 72.47306010584946
           },
           {
             "pe": 23.0,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1847.546875,
-            "tsmc_return_vs_base": -0.01726230053191491,
-            "gross_0050": 74.34033615425531,
-            "net_0050": 73.34033615425531
+            "tsmc_return_vs_base": -0.014641666666666664,
+            "gross_0050": 74.51695819123931,
+            "net_0050": 73.51695819123931
           },
           {
             "pe": 23.5,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1887.7109375,
-            "tsmc_return_vs_base": 0.004101562500000044,
-            "gross_0050": 75.380773375,
-            "net_0050": 74.380773375
+            "tsmc_return_vs_base": 0.006779166666666558,
+            "gross_0050": 75.56085627662918,
+            "net_0050": 74.56085627662918
           },
           {
             "pe": 24.0,
             "eps_after_growth": 82.8125,
             "eps_after_fx": 80.328125,
             "tsmc_price": 1927.875,
-            "tsmc_return_vs_base": 0.025465425531914887,
-            "gross_0050": 76.42121059574468,
-            "net_0050": 75.42121059574468
+            "tsmc_return_vs_base": 0.028200000000000003,
+            "gross_0050": 76.60475436201905,
+            "net_0050": 75.60475436201905
           }
         ]
       },
@@ -535,58 +535,58 @@
           "count": 9
         },
         "family_stats": {
-          "net_min": 76.2581215,
-          "net_max": 86.340709,
-          "p10": 77.26638025,
-          "p25": 78.778768375,
-          "p50": 81.29941525000001,
-          "p75": 83.82006212499999,
-          "p90": 85.33245025000002,
+          "net_min": 76.44413319783021,
+          "net_max": 86.5602589737732,
+          "p10": 77.4557457754245,
+          "p25": 78.97316464181596,
+          "p50": 81.5021960858017,
+          "p75": 84.03122752978744,
+          "p90": 85.5486463961789,
           "case_count": 9
         },
         "current_price_percentile": 0.0,
         "current_zone": "CHEAP",
         "current_position_status": "BELOW_MIN",
-        "current_gap_vs_min": -0.25812150000000145,
-        "current_gap_vs_max": -10.340709000000004,
-        "current_pct_vs_min": -0.33848394757534095,
-        "current_pct_vs_max": -11.976632019549438,
+        "current_gap_vs_min": -0.39413014607239916,
+        "current_gap_vs_max": -10.51025592201539,
+        "current_pct_vs_min": -0.515579325168658,
+        "current_pct_vs_max": -12.142126244330997,
         "target_positions": [
           {
             "price": 72.0,
             "percentile": 0.0,
             "zone": "CHEAP",
             "position_status": "BELOW_MIN",
-            "family_net_min": 76.2581215,
-            "family_net_max": 86.340709,
-            "gap_vs_min": -4.2581215000000014,
-            "gap_vs_max": -14.340709000000004,
-            "pct_vs_min": -5.583826897702959,
-            "pct_vs_max": -16.609440860625778
+            "family_net_min": 76.44413319783021,
+            "family_net_max": 86.5602589737732,
+            "gap_vs_min": -4.444133197830212,
+            "gap_vs_max": -14.560258973773202,
+            "pct_vs_min": -5.813570004553803,
+            "pct_vs_max": -16.82095126146145
           },
           {
             "price": 71.0,
             "percentile": 0.0,
             "zone": "CHEAP",
             "position_status": "BELOW_MIN",
-            "family_net_min": 76.2581215,
-            "family_net_max": 86.340709,
-            "gap_vs_min": -5.2581215000000014,
-            "gap_vs_max": -15.340709000000004,
-            "pct_vs_min": -6.895162635234864,
-            "pct_vs_max": -17.767643070894866
+            "family_net_min": 76.44413319783021,
+            "family_net_max": 86.5602589737732,
+            "gap_vs_min": -5.444133197830212,
+            "gap_vs_max": -15.560258973773202,
+            "pct_vs_min": -7.121714865601669,
+            "pct_vs_max": -17.976215827274487
           },
           {
             "price": 69.0,
             "percentile": 0.0,
             "zone": "CHEAP",
             "position_status": "BELOW_MIN",
-            "family_net_min": 76.2581215,
-            "family_net_max": 86.340709,
-            "gap_vs_min": -7.2581215000000014,
-            "gap_vs_max": -17.340709000000004,
-            "pct_vs_min": -9.517834110298661,
-            "pct_vs_max": -20.084047491433044
+            "family_net_min": 76.44413319783021,
+            "family_net_max": 86.5602589737732,
+            "gap_vs_min": -7.444133197830212,
+            "gap_vs_max": -17.5602589737732,
+            "pct_vs_min": -9.738004587697391,
+            "pct_vs_max": -20.28674495890056
           }
         ],
         "cases": [
@@ -595,81 +595,236 @@
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 1946.09375,
-            "tsmc_return_vs_base": 0.03515625,
-            "gross_0050": 78.2581215,
-            "net_0050": 76.2581215
+            "tsmc_return_vs_base": 0.0379166666666666,
+            "gross_0050": 78.44413319783021,
+            "net_0050": 76.44413319783021
           },
           {
             "pe": 20.5,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 1994.74609375,
-            "tsmc_return_vs_base": 0.06103515625,
-            "gross_0050": 79.5184449375,
-            "net_0050": 77.5184449375
+            "tsmc_return_vs_base": 0.06386458333333334,
+            "gross_0050": 79.70864891982308,
+            "net_0050": 77.70864891982308
           },
           {
             "pe": 21.0,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2043.3984375,
-            "tsmc_return_vs_base": 0.0869140625,
-            "gross_0050": 80.778768375,
-            "net_0050": 78.778768375
+            "tsmc_return_vs_base": 0.08981250000000007,
+            "gross_0050": 80.97316464181596,
+            "net_0050": 78.97316464181596
           },
           {
             "pe": 21.5,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2092.05078125,
-            "tsmc_return_vs_base": 0.11279296875,
-            "gross_0050": 82.0390918125,
-            "net_0050": 80.0390918125
+            "tsmc_return_vs_base": 0.11576041666666659,
+            "gross_0050": 82.23768036380882,
+            "net_0050": 80.23768036380882
           },
           {
             "pe": 22.0,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2140.703125,
-            "tsmc_return_vs_base": 0.138671875,
-            "gross_0050": 83.29941525000001,
-            "net_0050": 81.29941525000001
+            "tsmc_return_vs_base": 0.14170833333333333,
+            "gross_0050": 83.5021960858017,
+            "net_0050": 81.5021960858017
           },
           {
             "pe": 22.5,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2189.35546875,
-            "tsmc_return_vs_base": 0.16455078125,
-            "gross_0050": 84.5597386875,
-            "net_0050": 82.5597386875
+            "tsmc_return_vs_base": 0.16765625000000006,
+            "gross_0050": 84.7667118077946,
+            "net_0050": 82.7667118077946
           },
           {
             "pe": 23.0,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2238.0078125,
-            "tsmc_return_vs_base": 0.1904296875,
-            "gross_0050": 85.82006212499999,
-            "net_0050": 83.82006212499999
+            "tsmc_return_vs_base": 0.19360416666666658,
+            "gross_0050": 86.03122752978744,
+            "net_0050": 84.03122752978744
           },
           {
             "pe": 23.5,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2286.66015625,
-            "tsmc_return_vs_base": 0.21630859375,
-            "gross_0050": 87.08038556250001,
-            "net_0050": 85.08038556250001
+            "tsmc_return_vs_base": 0.21955208333333331,
+            "gross_0050": 87.29574325178032,
+            "net_0050": 85.29574325178032
           },
           {
             "pe": 24.0,
             "eps_after_growth": 103.515625,
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2335.3125,
-            "tsmc_return_vs_base": 0.2421875,
-            "gross_0050": 88.340709,
-            "net_0050": 86.340709
+            "tsmc_return_vs_base": 0.24550000000000005,
+            "gross_0050": 88.5602589737732,
+            "net_0050": 86.5602589737732
+          }
+        ]
+      },
+      {
+        "family_name": "2027_defensive_family",
+        "years_ahead": 2,
+        "fixed_assumptions": {
+          "eps_base": 66.25,
+          "eps_growth": 0.2,
+          "fx_haircut": 0.06,
+          "other_ret": 0.0
+        },
+        "interpolation_axis": {
+          "axis_name": "pe",
+          "start": 18.0,
+          "end": 22.0,
+          "step": 0.5,
+          "count": 9
+        },
+        "family_stats": {
+          "net_min": 67.27075791418218,
+          "net_max": 76.59377942929126,
+          "p10": 68.2030600656931,
+          "p25": 69.60151329295944,
+          "p50": 71.93226867173671,
+          "p75": 74.26302405051398,
+          "p90": 75.66147727778034,
+          "case_count": 9
+        },
+        "current_price_percentile": 88.88888888888889,
+        "current_zone": "RICH",
+        "current_position_status": "IN_RANGE",
+        "current_gap_vs_min": 8.779245137575629,
+        "current_gap_vs_max": -0.5437763775334474,
+        "current_pct_vs_min": 13.050611305398663,
+        "current_pct_vs_max": -0.7099484861371019,
+        "target_positions": [
+          {
+            "price": 72.0,
+            "percentile": 55.55555555555556,
+            "zone": "MID",
+            "position_status": "IN_RANGE",
+            "family_net_min": 67.27075791418218,
+            "family_net_max": 76.59377942929126,
+            "gap_vs_min": 4.729242085817816,
+            "gap_vs_max": -4.59377942929126,
+            "pct_vs_min": 7.0301602545506325,
+            "pct_vs_max": -5.997588137731313
+          },
+          {
+            "price": 71.0,
+            "percentile": 44.44444444444444,
+            "zone": "MID",
+            "position_status": "IN_RANGE",
+            "family_net_min": 67.27075791418218,
+            "family_net_max": 76.59377942929126,
+            "gap_vs_min": 3.729242085817816,
+            "gap_vs_max": -5.59377942929126,
+            "pct_vs_min": 5.543630251015208,
+            "pct_vs_max": -7.303177191373933
+          },
+          {
+            "price": 69.0,
+            "percentile": 22.22222222222222,
+            "zone": "LOWER_MID",
+            "position_status": "IN_RANGE",
+            "family_net_min": 67.27075791418218,
+            "family_net_max": 76.59377942929126,
+            "gap_vs_min": 1.7292420858178161,
+            "gap_vs_max": -7.59377942929126,
+            "pct_vs_min": 2.570570243944359,
+            "pct_vs_max": -9.914355298659173
+          }
+        ],
+        "cases": [
+          {
+            "pe": 18.0,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1614.1679999999997,
+            "tsmc_return_vs_base": -0.1391104000000002,
+            "gross_0050": 69.27075791418218,
+            "net_0050": 67.27075791418218
+          },
+          {
+            "pe": 18.5,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1659.0059999999999,
+            "tsmc_return_vs_base": -0.1151968000000001,
+            "gross_0050": 70.43613560357082,
+            "net_0050": 68.43613560357082
+          },
+          {
+            "pe": 19.0,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1703.8439999999998,
+            "tsmc_return_vs_base": -0.09128320000000012,
+            "gross_0050": 71.60151329295944,
+            "net_0050": 69.60151329295944
+          },
+          {
+            "pe": 19.5,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1748.6819999999998,
+            "tsmc_return_vs_base": -0.06736960000000014,
+            "gross_0050": 72.76689098234807,
+            "net_0050": 70.76689098234807
+          },
+          {
+            "pe": 20.0,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1793.5199999999998,
+            "tsmc_return_vs_base": -0.04345600000000016,
+            "gross_0050": 73.93226867173671,
+            "net_0050": 71.93226867173671
+          },
+          {
+            "pe": 20.5,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1838.3579999999997,
+            "tsmc_return_vs_base": -0.019542400000000182,
+            "gross_0050": 75.09764636112534,
+            "net_0050": 73.09764636112534
+          },
+          {
+            "pe": 21.0,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1883.1959999999997,
+            "tsmc_return_vs_base": 0.0043711999999997975,
+            "gross_0050": 76.26302405051398,
+            "net_0050": 74.26302405051398
+          },
+          {
+            "pe": 21.5,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1928.0339999999997,
+            "tsmc_return_vs_base": 0.028284799999999777,
+            "gross_0050": 77.42840173990261,
+            "net_0050": 75.42840173990261
+          },
+          {
+            "pe": 22.0,
+            "eps_after_growth": 95.39999999999999,
+            "eps_after_fx": 89.67599999999999,
+            "tsmc_price": 1972.8719999999998,
+            "tsmc_return_vs_base": 0.05219839999999998,
+            "gross_0050": 78.59377942929126,
+            "net_0050": 76.59377942929126
           }
         ]
       }
@@ -678,9 +833,9 @@
   },
   "bb_snapshot": {
     "date": "2026-03-13",
-    "price_used": 76.0,
+    "price_used": 76.05000305175781,
     "state": "IN_BAND",
-    "bb_z": 0.9940392315238753,
+    "bb_z": 1.0022967697178973,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.63082437275986,
@@ -694,33 +849,33 @@
     ],
     "tranche_levels": [
       {
-        "drawdown": -0.048076944112410924,
+        "drawdown": -0.048076940067123375,
         "label": "10D_p10_uncond",
-        "price_level": 72.34615224745677
+        "price_level": 72.3937516129339
       },
       {
-        "drawdown": -0.06346393864353995,
+        "drawdown": -0.06346385525568118,
         "label": "10D_p05_uncond",
-        "price_level": 71.17674066309097
+        "price_level": 71.22357666588694
       },
       {
-        "drawdown": -0.0686402636496918,
+        "drawdown": -0.06864046384770923,
         "label": "20D_p10_uncond",
-        "price_level": 70.78333996262343
+        "price_level": 70.82989556666546
       },
       {
-        "drawdown": -0.09263342668754872,
+        "drawdown": -0.09263321379607567,
         "label": "20D_p05_uncond",
-        "price_level": 68.95985957174629
+        "price_level": 69.00524685987212
       }
     ]
   },
   "combined": {
     "bb": {
       "date": "2026-03-13",
-      "price_used": 76.0,
+      "price_used": 76.05000305175781,
       "state": "IN_BAND",
-      "bb_z": 0.9940392315238753,
+      "bb_z": 1.0022967697178973,
       "regime_tag": "RISK_OFF_OR_DEFENSIVE",
       "regime_allowed": false,
       "rv20_percentile": 96.63082437275986,
@@ -728,24 +883,24 @@
       "pledge_policy": "DISALLOW",
       "tranche_levels": [
         {
-          "drawdown": -0.048076944112410924,
+          "drawdown": -0.048076940067123375,
           "label": "10D_p10_uncond",
-          "price_level": 72.34615224745677
+          "price_level": 72.3937516129339
         },
         {
-          "drawdown": -0.06346393864353995,
+          "drawdown": -0.06346385525568118,
           "label": "10D_p05_uncond",
-          "price_level": 71.17674066309097
+          "price_level": 71.22357666588694
         },
         {
-          "drawdown": -0.0686402636496918,
+          "drawdown": -0.06864046384770923,
           "label": "20D_p10_uncond",
-          "price_level": 70.78333996262343
+          "price_level": 70.82989556666546
         },
         {
-          "drawdown": -0.09263342668754872,
+          "drawdown": -0.09263321379607567,
           "label": "20D_p05_uncond",
-          "price_level": 68.95985957174629
+          "price_level": 69.00524685987212
         }
       ],
       "dq_flags": [
@@ -756,20 +911,20 @@
       ]
     },
     "valuation_range": {
-      "gross_min": 58.049742399999985,
-      "gross_max": 98.27262791489362,
-      "net_min": 57.049742399999985,
-      "net_max": 96.27262791489362,
+      "gross_min": 58.18091761342167,
+      "gross_max": 98.52302961436231,
+      "net_min": 57.18091761342167,
+      "net_max": 96.52302961436231,
       "current_price_position": {
-        "current_price": 76.0,
-        "scenario_net_min": 57.049742399999985,
-        "scenario_net_max": 96.27262791489362,
+        "current_price": 76.05000305175781,
+        "scenario_net_min": 57.18091761342167,
+        "scenario_net_max": 96.52302961436231,
         "scenario_net_pctl": 42.857142857142854,
         "position_status": "IN_RANGE",
-        "gap_vs_min": 18.950257600000015,
-        "gap_vs_max": -20.27262791489362,
-        "pct_vs_min": 33.21707829481806,
-        "pct_vs_max": -21.057520038629164,
+        "gap_vs_min": 18.869085438336143,
+        "gap_vs_max": -20.473026562604502,
+        "pct_vs_min": 32.998920314470666,
+        "pct_vs_max": -21.210509703642977,
         "zone": "MID_ZONE",
         "note": "rough classification only; sparse scenario set and mixed 1Y/2Y horizons => low decision value"
       }
@@ -799,58 +954,58 @@
             "count": 13
           },
           "family_stats": {
-            "net_min": 60.07277434893617,
-            "net_max": 72.05861113191489,
-            "p10": 61.27135802723404,
-            "p25": 63.06923354468084,
-            "p50": 66.06569274042553,
-            "p75": 69.06215193617021,
-            "p90": 70.86002745361702,
+            "net_min": 60.208906039569726,
+            "net_max": 72.23461198326093,
+            "p10": 61.41147663393885,
+            "p25": 63.21533252549253,
+            "p50": 66.22175901141534,
+            "p75": 69.22818549733813,
+            "p90": 71.03204138889183,
             "case_count": 13
           },
           "current_price_percentile": 100.0,
           "current_zone": "RICH",
           "current_position_status": "ABOVE_MAX",
-          "current_gap_vs_min": 15.927225651063829,
-          "current_gap_vs_max": 3.941388868085113,
-          "current_pct_vs_min": 26.51321804874471,
-          "current_pct_vs_max": 5.4696986330610375,
+          "current_gap_vs_min": 15.841097012188087,
+          "current_gap_vs_max": 3.8153910684968793,
+          "current_pct_vs_min": 26.310222281363504,
+          "current_pct_vs_max": 5.281943051595572,
           "target_positions": [
             {
               "price": 72.0,
               "percentile": 92.3076923076923,
               "zone": "RICH",
               "position_status": "IN_RANGE",
-              "family_net_min": 60.07277434893617,
-              "family_net_max": 72.05861113191489,
-              "gap_vs_min": 11.927225651063829,
-              "gap_vs_max": -0.05861113191488698,
-              "pct_vs_min": 19.854627625126575,
-              "pct_vs_max": -0.0813381371000732
+              "family_net_min": 60.208906039569726,
+              "family_net_max": 72.23461198326093,
+              "gap_vs_min": 11.791093960430274,
+              "gap_vs_max": -0.23461198326093324,
+              "pct_vs_min": 19.58363759786814,
+              "pct_vs_max": -0.3247916432572495
             },
             {
               "price": 71.0,
               "percentile": 84.61538461538461,
               "zone": "RICH",
               "position_status": "IN_RANGE",
-              "family_net_min": 60.07277434893617,
-              "family_net_max": 72.05861113191489,
-              "gap_vs_min": 10.927225651063829,
-              "gap_vs_max": -1.058611131914887,
-              "pct_vs_min": 18.18998001922203,
-              "pct_vs_max": -1.4690973296403564
+              "family_net_min": 60.208906039569726,
+              "family_net_max": 72.23461198326093,
+              "gap_vs_min": 10.791093960430274,
+              "gap_vs_max": -1.2346119832609332,
+              "pct_vs_min": 17.92275374234218,
+              "pct_vs_max": -1.7091695371008964
             },
             {
               "price": 69.0,
               "percentile": 69.23076923076923,
               "zone": "UPPER_MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 60.07277434893617,
-              "family_net_max": 72.05861113191489,
-              "gap_vs_min": 8.927225651063829,
-              "gap_vs_max": -3.058611131914887,
-              "pct_vs_min": 14.86068480741296,
-              "pct_vs_max": -4.244615714720901
+              "family_net_min": 60.208906039569726,
+              "family_net_max": 72.23461198326093,
+              "gap_vs_min": 8.791093960430274,
+              "gap_vs_max": -3.2346119832609332,
+              "pct_vs_min": 14.600986031290297,
+              "pct_vs_max": -4.477925324788201
             }
           ],
           "cases": [
@@ -859,117 +1014,117 @@
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1388.07,
-              "tsmc_return_vs_base": -0.2616648936170213,
-              "gross_0050": 61.07277434893617,
-              "net_0050": 60.07277434893617
+              "tsmc_return_vs_base": -0.25969600000000004,
+              "gross_0050": 61.208906039569726,
+              "net_0050": 60.208906039569726
             },
             {
               "pe": 18.5,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1426.6274999999998,
-              "tsmc_return_vs_base": -0.24115558510638302,
-              "gross_0050": 62.071594080851064,
-              "net_0050": 61.071594080851064
+              "tsmc_return_vs_base": -0.23913200000000012,
+              "gross_0050": 62.21104820154399,
+              "net_0050": 61.21104820154399
             },
             {
               "pe": 19.0,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1465.185,
-              "tsmc_return_vs_base": -0.22064627659574476,
-              "gross_0050": 63.070413812765956,
-              "net_0050": 62.070413812765956
+              "tsmc_return_vs_base": -0.21856799999999998,
+              "gross_0050": 63.21319036351826,
+              "net_0050": 62.21319036351826
             },
             {
               "pe": 19.5,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1503.7424999999998,
-              "tsmc_return_vs_base": -0.2001369680851065,
-              "gross_0050": 64.06923354468084,
-              "net_0050": 63.06923354468084
+              "tsmc_return_vs_base": -0.19800400000000007,
+              "gross_0050": 64.21533252549253,
+              "net_0050": 63.21533252549253
             },
             {
               "pe": 20.0,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1542.3,
-              "tsmc_return_vs_base": -0.17962765957446813,
-              "gross_0050": 65.06805327659573,
-              "net_0050": 64.06805327659573
+              "tsmc_return_vs_base": -0.17744000000000004,
+              "gross_0050": 65.21747468746679,
+              "net_0050": 64.21747468746679
             },
             {
               "pe": 20.5,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1580.8574999999998,
-              "tsmc_return_vs_base": -0.15911835106382988,
-              "gross_0050": 66.06687300851064,
-              "net_0050": 65.06687300851064
+              "tsmc_return_vs_base": -0.15687600000000013,
+              "gross_0050": 66.21961684944105,
+              "net_0050": 65.21961684944105
             },
             {
               "pe": 21.0,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1619.415,
-              "tsmc_return_vs_base": -0.1386090425531915,
-              "gross_0050": 67.06569274042553,
-              "net_0050": 66.06569274042553
+              "tsmc_return_vs_base": -0.136312,
+              "gross_0050": 67.22175901141534,
+              "net_0050": 66.22175901141534
             },
             {
               "pe": 21.5,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1657.9724999999999,
-              "tsmc_return_vs_base": -0.11809973404255325,
-              "gross_0050": 68.06451247234043,
-              "net_0050": 67.06451247234043
+              "tsmc_return_vs_base": -0.11574800000000007,
+              "gross_0050": 68.2239011733896,
+              "net_0050": 67.2239011733896
             },
             {
               "pe": 22.0,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1696.53,
-              "tsmc_return_vs_base": -0.09759042553191488,
-              "gross_0050": 69.06333220425532,
-              "net_0050": 68.06333220425532
+              "tsmc_return_vs_base": -0.09518400000000005,
+              "gross_0050": 69.22604333536387,
+              "net_0050": 68.22604333536387
             },
             {
               "pe": 22.5,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1735.0874999999999,
-              "tsmc_return_vs_base": -0.07708111702127662,
-              "gross_0050": 70.06215193617021,
-              "net_0050": 69.06215193617021
+              "tsmc_return_vs_base": -0.07462000000000002,
+              "gross_0050": 70.22818549733813,
+              "net_0050": 69.22818549733813
             },
             {
               "pe": 23.0,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1773.645,
-              "tsmc_return_vs_base": -0.056571808510638255,
-              "gross_0050": 71.0609716680851,
-              "net_0050": 70.0609716680851
+              "tsmc_return_vs_base": -0.05405599999999999,
+              "gross_0050": 71.23032765931241,
+              "net_0050": 70.23032765931241
             },
             {
               "pe": 23.5,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1812.2024999999999,
-              "tsmc_return_vs_base": -0.03606250000000011,
-              "gross_0050": 72.0597914,
-              "net_0050": 71.0597914
+              "tsmc_return_vs_base": -0.03349200000000008,
+              "gross_0050": 72.23246982128667,
+              "net_0050": 71.23246982128667
             },
             {
               "pe": 24.0,
               "eps_after_growth": 79.5,
               "eps_after_fx": 77.115,
               "tsmc_price": 1850.7599999999998,
-              "tsmc_return_vs_base": -0.01555319148936185,
-              "gross_0050": 73.05861113191489,
-              "net_0050": 72.05861113191489
+              "tsmc_return_vs_base": -0.012928000000000162,
+              "gross_0050": 73.23461198326093,
+              "net_0050": 72.23461198326093
             }
           ]
         },
@@ -990,58 +1145,58 @@
             "count": 9
           },
           "family_stats": {
-            "net_min": 67.09771282978724,
-            "net_max": 75.42121059574468,
-            "p10": 67.93006260638299,
-            "p25": 69.1785872712766,
-            "p50": 71.25946171276595,
-            "p75": 73.34033615425531,
-            "p90": 74.58886081914893,
+            "net_min": 67.25356967890015,
+            "net_max": 75.60475436201905,
+            "p10": 68.08868814721204,
+            "p25": 69.34136584967987,
+            "p50": 71.4291620204596,
+            "p75": 73.51695819123931,
+            "p90": 74.76963589370715,
             "case_count": 9
           },
           "current_price_percentile": 100.0,
           "current_zone": "RICH",
           "current_position_status": "ABOVE_MAX",
-          "current_gap_vs_min": 8.902287170212759,
-          "current_gap_vs_max": 0.5787894042553177,
-          "current_pct_vs_min": 13.267646235268838,
-          "current_pct_vs_max": 0.7674093264792736,
+          "current_gap_vs_min": 8.796433372857663,
+          "current_gap_vs_max": 0.4452486897387615,
+          "current_pct_vs_min": 13.079504054366087,
+          "current_pct_vs_max": 0.5889162573120332,
           "target_positions": [
             {
               "price": 72.0,
               "percentile": 55.55555555555556,
               "zone": "MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.09771282978724,
-              "family_net_max": 75.42121059574468,
-              "gap_vs_min": 4.902287170212759,
-              "gap_vs_max": -3.4212105957446823,
-              "pct_vs_min": 7.306191170254683,
-              "pct_vs_max": -4.536138532809108
+              "family_net_min": 67.25356967890015,
+              "family_net_max": 75.60475436201905,
+              "gap_vs_min": 4.746430321099851,
+              "gap_vs_max": -3.604754362019051,
+              "pct_vs_min": 7.057514335315607,
+              "pct_vs_max": -4.767893755409036
             },
             {
               "price": 71.0,
               "percentile": 44.44444444444444,
               "zone": "MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.09771282978724,
-              "family_net_max": 75.42121059574468,
-              "gap_vs_min": 3.902287170212759,
-              "gap_vs_max": -4.421210595744682,
-              "pct_vs_min": 5.81582740400115,
-              "pct_vs_max": -5.8620254976312065
+              "family_net_min": 67.25356967890015,
+              "family_net_max": 75.60475436201905,
+              "gap_vs_min": 3.746430321099851,
+              "gap_vs_max": -4.604754362019051,
+              "pct_vs_min": 5.570604413991775,
+              "pct_vs_max": -6.090561897695023
             },
             {
               "price": 69.0,
               "percentile": 22.22222222222222,
               "zone": "LOWER_MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.09771282978724,
-              "family_net_max": 75.42121059574468,
-              "gap_vs_min": 1.9022871702127588,
-              "gap_vs_max": -6.421210595744682,
-              "pct_vs_min": 2.8350998714940623,
-              "pct_vs_max": -8.513799427275393
+              "family_net_min": 67.25356967890015,
+              "family_net_max": 75.60475436201905,
+              "gap_vs_min": 1.7464303210998509,
+              "gap_vs_max": -6.604754362019051,
+              "pct_vs_min": 2.596784571344135,
+              "pct_vs_max": -8.735898182266999
             }
           ],
           "cases": [
@@ -1050,81 +1205,81 @@
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1606.5625,
-              "tsmc_return_vs_base": -0.1454454787234043,
-              "gross_0050": 68.09771282978724,
-              "net_0050": 67.09771282978724
+              "tsmc_return_vs_base": -0.14316666666666666,
+              "gross_0050": 68.25356967890015,
+              "net_0050": 67.25356967890015
             },
             {
               "pe": 20.5,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1646.7265625,
-              "tsmc_return_vs_base": -0.12408161569148934,
-              "gross_0050": 69.13815005053192,
-              "net_0050": 68.13815005053192
+              "tsmc_return_vs_base": -0.12174583333333333,
+              "gross_0050": 69.29746776429,
+              "net_0050": 68.29746776429
             },
             {
               "pe": 21.0,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1686.890625,
-              "tsmc_return_vs_base": -0.1027177526595745,
-              "gross_0050": 70.1785872712766,
-              "net_0050": 69.1785872712766
+              "tsmc_return_vs_base": -0.100325,
+              "gross_0050": 70.34136584967987,
+              "net_0050": 69.34136584967987
             },
             {
               "pe": 21.5,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1727.0546875,
-              "tsmc_return_vs_base": -0.08135388962765955,
-              "gross_0050": 71.21902449202128,
-              "net_0050": 70.21902449202128
+              "tsmc_return_vs_base": -0.07890416666666666,
+              "gross_0050": 71.38526393506973,
+              "net_0050": 70.38526393506973
             },
             {
               "pe": 22.0,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1767.21875,
-              "tsmc_return_vs_base": -0.059990026595744705,
-              "gross_0050": 72.25946171276595,
-              "net_0050": 71.25946171276595
+              "tsmc_return_vs_base": -0.05748333333333333,
+              "gross_0050": 72.4291620204596,
+              "net_0050": 71.4291620204596
             },
             {
               "pe": 22.5,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1807.3828125,
-              "tsmc_return_vs_base": -0.03862616356382975,
-              "gross_0050": 73.29989893351065,
-              "net_0050": 72.29989893351065
+              "tsmc_return_vs_base": -0.0360625,
+              "gross_0050": 73.47306010584946,
+              "net_0050": 72.47306010584946
             },
             {
               "pe": 23.0,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1847.546875,
-              "tsmc_return_vs_base": -0.01726230053191491,
-              "gross_0050": 74.34033615425531,
-              "net_0050": 73.34033615425531
+              "tsmc_return_vs_base": -0.014641666666666664,
+              "gross_0050": 74.51695819123931,
+              "net_0050": 73.51695819123931
             },
             {
               "pe": 23.5,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1887.7109375,
-              "tsmc_return_vs_base": 0.004101562500000044,
-              "gross_0050": 75.380773375,
-              "net_0050": 74.380773375
+              "tsmc_return_vs_base": 0.006779166666666558,
+              "gross_0050": 75.56085627662918,
+              "net_0050": 74.56085627662918
             },
             {
               "pe": 24.0,
               "eps_after_growth": 82.8125,
               "eps_after_fx": 80.328125,
               "tsmc_price": 1927.875,
-              "tsmc_return_vs_base": 0.025465425531914887,
-              "gross_0050": 76.42121059574468,
-              "net_0050": 75.42121059574468
+              "tsmc_return_vs_base": 0.028200000000000003,
+              "gross_0050": 76.60475436201905,
+              "net_0050": 75.60475436201905
             }
           ]
         },
@@ -1145,58 +1300,58 @@
             "count": 9
           },
           "family_stats": {
-            "net_min": 76.2581215,
-            "net_max": 86.340709,
-            "p10": 77.26638025,
-            "p25": 78.778768375,
-            "p50": 81.29941525000001,
-            "p75": 83.82006212499999,
-            "p90": 85.33245025000002,
+            "net_min": 76.44413319783021,
+            "net_max": 86.5602589737732,
+            "p10": 77.4557457754245,
+            "p25": 78.97316464181596,
+            "p50": 81.5021960858017,
+            "p75": 84.03122752978744,
+            "p90": 85.5486463961789,
             "case_count": 9
           },
           "current_price_percentile": 0.0,
           "current_zone": "CHEAP",
           "current_position_status": "BELOW_MIN",
-          "current_gap_vs_min": -0.25812150000000145,
-          "current_gap_vs_max": -10.340709000000004,
-          "current_pct_vs_min": -0.33848394757534095,
-          "current_pct_vs_max": -11.976632019549438,
+          "current_gap_vs_min": -0.39413014607239916,
+          "current_gap_vs_max": -10.51025592201539,
+          "current_pct_vs_min": -0.515579325168658,
+          "current_pct_vs_max": -12.142126244330997,
           "target_positions": [
             {
               "price": 72.0,
               "percentile": 0.0,
               "zone": "CHEAP",
               "position_status": "BELOW_MIN",
-              "family_net_min": 76.2581215,
-              "family_net_max": 86.340709,
-              "gap_vs_min": -4.2581215000000014,
-              "gap_vs_max": -14.340709000000004,
-              "pct_vs_min": -5.583826897702959,
-              "pct_vs_max": -16.609440860625778
+              "family_net_min": 76.44413319783021,
+              "family_net_max": 86.5602589737732,
+              "gap_vs_min": -4.444133197830212,
+              "gap_vs_max": -14.560258973773202,
+              "pct_vs_min": -5.813570004553803,
+              "pct_vs_max": -16.82095126146145
             },
             {
               "price": 71.0,
               "percentile": 0.0,
               "zone": "CHEAP",
               "position_status": "BELOW_MIN",
-              "family_net_min": 76.2581215,
-              "family_net_max": 86.340709,
-              "gap_vs_min": -5.2581215000000014,
-              "gap_vs_max": -15.340709000000004,
-              "pct_vs_min": -6.895162635234864,
-              "pct_vs_max": -17.767643070894866
+              "family_net_min": 76.44413319783021,
+              "family_net_max": 86.5602589737732,
+              "gap_vs_min": -5.444133197830212,
+              "gap_vs_max": -15.560258973773202,
+              "pct_vs_min": -7.121714865601669,
+              "pct_vs_max": -17.976215827274487
             },
             {
               "price": 69.0,
               "percentile": 0.0,
               "zone": "CHEAP",
               "position_status": "BELOW_MIN",
-              "family_net_min": 76.2581215,
-              "family_net_max": 86.340709,
-              "gap_vs_min": -7.2581215000000014,
-              "gap_vs_max": -17.340709000000004,
-              "pct_vs_min": -9.517834110298661,
-              "pct_vs_max": -20.084047491433044
+              "family_net_min": 76.44413319783021,
+              "family_net_max": 86.5602589737732,
+              "gap_vs_min": -7.444133197830212,
+              "gap_vs_max": -17.5602589737732,
+              "pct_vs_min": -9.738004587697391,
+              "pct_vs_max": -20.28674495890056
             }
           ],
           "cases": [
@@ -1205,81 +1360,236 @@
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 1946.09375,
-              "tsmc_return_vs_base": 0.03515625,
-              "gross_0050": 78.2581215,
-              "net_0050": 76.2581215
+              "tsmc_return_vs_base": 0.0379166666666666,
+              "gross_0050": 78.44413319783021,
+              "net_0050": 76.44413319783021
             },
             {
               "pe": 20.5,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 1994.74609375,
-              "tsmc_return_vs_base": 0.06103515625,
-              "gross_0050": 79.5184449375,
-              "net_0050": 77.5184449375
+              "tsmc_return_vs_base": 0.06386458333333334,
+              "gross_0050": 79.70864891982308,
+              "net_0050": 77.70864891982308
             },
             {
               "pe": 21.0,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2043.3984375,
-              "tsmc_return_vs_base": 0.0869140625,
-              "gross_0050": 80.778768375,
-              "net_0050": 78.778768375
+              "tsmc_return_vs_base": 0.08981250000000007,
+              "gross_0050": 80.97316464181596,
+              "net_0050": 78.97316464181596
             },
             {
               "pe": 21.5,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2092.05078125,
-              "tsmc_return_vs_base": 0.11279296875,
-              "gross_0050": 82.0390918125,
-              "net_0050": 80.0390918125
+              "tsmc_return_vs_base": 0.11576041666666659,
+              "gross_0050": 82.23768036380882,
+              "net_0050": 80.23768036380882
             },
             {
               "pe": 22.0,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2140.703125,
-              "tsmc_return_vs_base": 0.138671875,
-              "gross_0050": 83.29941525000001,
-              "net_0050": 81.29941525000001
+              "tsmc_return_vs_base": 0.14170833333333333,
+              "gross_0050": 83.5021960858017,
+              "net_0050": 81.5021960858017
             },
             {
               "pe": 22.5,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2189.35546875,
-              "tsmc_return_vs_base": 0.16455078125,
-              "gross_0050": 84.5597386875,
-              "net_0050": 82.5597386875
+              "tsmc_return_vs_base": 0.16765625000000006,
+              "gross_0050": 84.7667118077946,
+              "net_0050": 82.7667118077946
             },
             {
               "pe": 23.0,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2238.0078125,
-              "tsmc_return_vs_base": 0.1904296875,
-              "gross_0050": 85.82006212499999,
-              "net_0050": 83.82006212499999
+              "tsmc_return_vs_base": 0.19360416666666658,
+              "gross_0050": 86.03122752978744,
+              "net_0050": 84.03122752978744
             },
             {
               "pe": 23.5,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2286.66015625,
-              "tsmc_return_vs_base": 0.21630859375,
-              "gross_0050": 87.08038556250001,
-              "net_0050": 85.08038556250001
+              "tsmc_return_vs_base": 0.21955208333333331,
+              "gross_0050": 87.29574325178032,
+              "net_0050": 85.29574325178032
             },
             {
               "pe": 24.0,
               "eps_after_growth": 103.515625,
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2335.3125,
-              "tsmc_return_vs_base": 0.2421875,
-              "gross_0050": 88.340709,
-              "net_0050": 86.340709
+              "tsmc_return_vs_base": 0.24550000000000005,
+              "gross_0050": 88.5602589737732,
+              "net_0050": 86.5602589737732
+            }
+          ]
+        },
+        {
+          "family_name": "2027_defensive_family",
+          "years_ahead": 2,
+          "fixed_assumptions": {
+            "eps_base": 66.25,
+            "eps_growth": 0.2,
+            "fx_haircut": 0.06,
+            "other_ret": 0.0
+          },
+          "interpolation_axis": {
+            "axis_name": "pe",
+            "start": 18.0,
+            "end": 22.0,
+            "step": 0.5,
+            "count": 9
+          },
+          "family_stats": {
+            "net_min": 67.27075791418218,
+            "net_max": 76.59377942929126,
+            "p10": 68.2030600656931,
+            "p25": 69.60151329295944,
+            "p50": 71.93226867173671,
+            "p75": 74.26302405051398,
+            "p90": 75.66147727778034,
+            "case_count": 9
+          },
+          "current_price_percentile": 88.88888888888889,
+          "current_zone": "RICH",
+          "current_position_status": "IN_RANGE",
+          "current_gap_vs_min": 8.779245137575629,
+          "current_gap_vs_max": -0.5437763775334474,
+          "current_pct_vs_min": 13.050611305398663,
+          "current_pct_vs_max": -0.7099484861371019,
+          "target_positions": [
+            {
+              "price": 72.0,
+              "percentile": 55.55555555555556,
+              "zone": "MID",
+              "position_status": "IN_RANGE",
+              "family_net_min": 67.27075791418218,
+              "family_net_max": 76.59377942929126,
+              "gap_vs_min": 4.729242085817816,
+              "gap_vs_max": -4.59377942929126,
+              "pct_vs_min": 7.0301602545506325,
+              "pct_vs_max": -5.997588137731313
+            },
+            {
+              "price": 71.0,
+              "percentile": 44.44444444444444,
+              "zone": "MID",
+              "position_status": "IN_RANGE",
+              "family_net_min": 67.27075791418218,
+              "family_net_max": 76.59377942929126,
+              "gap_vs_min": 3.729242085817816,
+              "gap_vs_max": -5.59377942929126,
+              "pct_vs_min": 5.543630251015208,
+              "pct_vs_max": -7.303177191373933
+            },
+            {
+              "price": 69.0,
+              "percentile": 22.22222222222222,
+              "zone": "LOWER_MID",
+              "position_status": "IN_RANGE",
+              "family_net_min": 67.27075791418218,
+              "family_net_max": 76.59377942929126,
+              "gap_vs_min": 1.7292420858178161,
+              "gap_vs_max": -7.59377942929126,
+              "pct_vs_min": 2.570570243944359,
+              "pct_vs_max": -9.914355298659173
+            }
+          ],
+          "cases": [
+            {
+              "pe": 18.0,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1614.1679999999997,
+              "tsmc_return_vs_base": -0.1391104000000002,
+              "gross_0050": 69.27075791418218,
+              "net_0050": 67.27075791418218
+            },
+            {
+              "pe": 18.5,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1659.0059999999999,
+              "tsmc_return_vs_base": -0.1151968000000001,
+              "gross_0050": 70.43613560357082,
+              "net_0050": 68.43613560357082
+            },
+            {
+              "pe": 19.0,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1703.8439999999998,
+              "tsmc_return_vs_base": -0.09128320000000012,
+              "gross_0050": 71.60151329295944,
+              "net_0050": 69.60151329295944
+            },
+            {
+              "pe": 19.5,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1748.6819999999998,
+              "tsmc_return_vs_base": -0.06736960000000014,
+              "gross_0050": 72.76689098234807,
+              "net_0050": 70.76689098234807
+            },
+            {
+              "pe": 20.0,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1793.5199999999998,
+              "tsmc_return_vs_base": -0.04345600000000016,
+              "gross_0050": 73.93226867173671,
+              "net_0050": 71.93226867173671
+            },
+            {
+              "pe": 20.5,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1838.3579999999997,
+              "tsmc_return_vs_base": -0.019542400000000182,
+              "gross_0050": 75.09764636112534,
+              "net_0050": 73.09764636112534
+            },
+            {
+              "pe": 21.0,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1883.1959999999997,
+              "tsmc_return_vs_base": 0.0043711999999997975,
+              "gross_0050": 76.26302405051398,
+              "net_0050": 74.26302405051398
+            },
+            {
+              "pe": 21.5,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1928.0339999999997,
+              "tsmc_return_vs_base": 0.028284799999999777,
+              "gross_0050": 77.42840173990261,
+              "net_0050": 75.42840173990261
+            },
+            {
+              "pe": 22.0,
+              "eps_after_growth": 95.39999999999999,
+              "eps_after_fx": 89.67599999999999,
+              "tsmc_price": 1972.8719999999998,
+              "tsmc_return_vs_base": 0.05219839999999998,
+              "gross_0050": 78.59377942929126,
+              "net_0050": 76.59377942929126
             }
           ]
         }
@@ -1289,23 +1599,23 @@
     "tranche_reference": [
       {
         "label": "10D_p10_uncond",
-        "price_level": 72.34615224745677,
-        "vs_current_pct": -4.807694411241092
+        "price_level": 72.3937516129339,
+        "vs_current_pct": -4.807694006712349
       },
       {
         "label": "10D_p05_uncond",
-        "price_level": 71.17674066309097,
-        "vs_current_pct": -6.346393864353994
+        "price_level": 71.22357666588694,
+        "vs_current_pct": -6.346385525568121
       },
       {
         "label": "20D_p10_uncond",
-        "price_level": 70.78333996262343,
-        "vs_current_pct": -6.864026364969167
+        "price_level": 70.82989556666546,
+        "vs_current_pct": -6.8640463847709166
       },
       {
         "label": "20D_p05_uncond",
-        "price_level": 68.95985957174629,
-        "vs_current_pct": -9.26334266875488
+        "price_level": 69.00524685987212,
+        "vs_current_pct": -9.26332137960758
       }
     ],
     "pre_execution_review": {
@@ -1313,9 +1623,9 @@
       "source_path": "roll25_cache/report.md",
       "band1": 33057.836667,
       "band2": 32541.990382,
-      "tx_night_last": 33408.0,
-      "tx_vs_band1": 350.1633329999968,
-      "tx_vs_band2": 866.009618,
+      "tx_night_last": 33284.0,
+      "tx_vs_band1": 226.16333299999678,
+      "tx_vs_band2": 742.009618,
       "preopen_shock_flag": "NONE",
       "shock_override": "NONE",
       "trigger_reasons": [],
@@ -1342,6 +1652,7 @@
       "zone_note": "valuation zone is rough classification only; do not over-interpret sparse or mixed-horizon percentile output.",
       "family_note": "family interpolation is display-only and does not alter final execution bias.",
       "family_boundary_note": "percentile=0 or 100 can simply mean the target is below family min or above family max.",
+      "family_robustness_note": "2027_defensive_family is a robustness check only; it does not alter execution bias.",
       "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
       "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
       "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately."
@@ -1349,12 +1660,12 @@
   },
   "config_used": {
     "meta": {
-      "config_version": "0050_merge_v1.4c",
-      "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias."
+      "config_version": "0050_merge_v1.4d",
+      "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias. Added 2027_defensive_family as a minimal robustness check."
     },
     "base": {
-      "base_0050": 76.0,
-      "base_tsmc": 1880.0,
+      "base_0050": 76.05000305175781,
+      "base_tsmc": 1875.0,
       "tsmc_weight": 0.6408
     },
     "dividend_drag": {
@@ -1485,15 +1796,26 @@
           "pe_start": 20.0,
           "pe_end": 24.0,
           "pe_step": 0.5
+        },
+        {
+          "family_name": "2027_defensive_family",
+          "years_ahead": 2,
+          "eps_base": 66.25,
+          "eps_growth": 0.2,
+          "fx_haircut": 0.06,
+          "other_ret": 0.0,
+          "pe_start": 18.0,
+          "pe_end": 22.0,
+          "pe_step": 0.5
         }
       ]
     }
   },
   "bb_summary": {
     "date": "2026-03-13",
-    "price_used": 76.0,
+    "price_used": 76.05000305175781,
     "state": "IN_BAND",
-    "bb_z": 0.9940392315238753,
+    "bb_z": 1.0022967697178973,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.63082437275986,
@@ -1501,24 +1823,24 @@
     "pledge_policy": "DISALLOW",
     "tranche_levels": [
       {
-        "drawdown": -0.048076944112410924,
+        "drawdown": -0.048076940067123375,
         "label": "10D_p10_uncond",
-        "price_level": 72.34615224745677
+        "price_level": 72.3937516129339
       },
       {
-        "drawdown": -0.06346393864353995,
+        "drawdown": -0.06346385525568118,
         "label": "10D_p05_uncond",
-        "price_level": 71.17674066309097
+        "price_level": 71.22357666588694
       },
       {
-        "drawdown": -0.0686402636496918,
+        "drawdown": -0.06864046384770923,
         "label": "20D_p10_uncond",
-        "price_level": 70.78333996262343
+        "price_level": 70.82989556666546
       },
       {
-        "drawdown": -0.09263342668754872,
+        "drawdown": -0.09263321379607567,
         "label": "20D_p05_uncond",
-        "price_level": 68.95985957174629
+        "price_level": 69.00524685987212
       }
     ],
     "dq_flags": [
@@ -1541,9 +1863,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
-      "tsmc_return_vs_base": -0.2845000000000001,
-      "gross_0050": 58.049742399999985,
-      "net_0050": 57.049742399999985
+      "tsmc_return_vs_base": -0.28259200000000007,
+      "gross_0050": 58.18091761342167,
+      "net_0050": 57.18091761342167
     },
     {
       "group_name": "2026_core",
@@ -1557,9 +1879,9 @@
       "eps_after_growth": 79.5,
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
-      "tsmc_return_vs_base": -0.17962765957446813,
-      "gross_0050": 65.06805327659573,
-      "net_0050": 64.06805327659573
+      "tsmc_return_vs_base": -0.17744000000000004,
+      "gross_0050": 65.21747468746679,
+      "net_0050": 64.21747468746679
     },
     {
       "group_name": "2026_core",
@@ -1573,9 +1895,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
-      "tsmc_return_vs_base": -0.059990026595744705,
-      "gross_0050": 72.25946171276595,
-      "net_0050": 71.25946171276595
+      "tsmc_return_vs_base": -0.05748333333333333,
+      "gross_0050": 72.4291620204596,
+      "net_0050": 71.4291620204596
     },
     {
       "group_name": "2026_core",
@@ -1589,9 +1911,9 @@
       "eps_after_growth": 82.8125,
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
-      "tsmc_return_vs_base": 0.05718085106382986,
-      "gross_0050": 78.78475319148937,
-      "net_0050": 77.78475319148937
+      "tsmc_return_vs_base": 0.06000000000000005,
+      "gross_0050": 78.9739735690918,
+      "net_0050": 77.9739735690918
     },
     {
       "group_name": "2027_core",
@@ -1605,9 +1927,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
-      "tsmc_return_vs_base": 0.138671875,
-      "gross_0050": 83.29941525000001,
-      "net_0050": 81.29941525000001
+      "tsmc_return_vs_base": 0.14170833333333333,
+      "gross_0050": 83.5021960858017,
+      "net_0050": 81.5021960858017
     },
     {
       "group_name": "2027_core",
@@ -1621,9 +1943,9 @@
       "eps_after_growth": 103.515625,
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
-      "tsmc_return_vs_base": 0.32147606382978733,
-      "gross_0050": 93.02110148936171,
-      "net_0050": 91.02110148936171
+      "tsmc_return_vs_base": 0.32499999999999996,
+      "gross_0050": 93.25403474212645,
+      "net_0050": 91.25403474212645
     },
     {
       "group_name": "2027_core",
@@ -1637,9 +1959,9 @@
       "eps_after_growth": 111.9625,
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
-      "tsmc_return_vs_base": 0.4293085106382981,
-      "gross_0050": 98.27262791489362,
-      "net_0050": 96.27262791489362
+      "tsmc_return_vs_base": 0.43312000000000017,
+      "gross_0050": 98.52302961436231,
+      "net_0050": 96.52302961436231
     }
   ]
 }
