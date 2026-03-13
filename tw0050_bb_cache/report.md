@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-13T09:16:47Z`
+- report_generated_at_utc: `2026-03-13T09:28:35Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -28,7 +28,7 @@
 - vol_filter(RV20,ATR14): rv_ann=35.6%; atr=1.9874 (2.62%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=96.54
 - margin(5D,thr=100.00億): TOTAL -29.10 億 => **NEUTRAL**; TWSE 2.10 / TPEX -31.20; margin_date=2026-03-12, price_last_date=2026-03-13 (MISALIGNED); data_date=2026-03-12
-- chip_overlay(T86+TWT72U,5D): total3_5D=-355,148,480; foreign=-327,752,272; trust=10,265,000; dealer=-37,661,208; borrow_shares=243,676,000 (Δ1D=0); borrow_mv(億)=186.7 (Δ1D=-3.9); asof=20260312; price_last_date=2026-03-13 (ALIGNED)
+- chip_overlay(T86+TWT72U,5D): total3_5D=-585,247,656; foreign=-408,837,316; trust=15,415,000; dealer=-191,825,340; borrow_shares=243,676,000 (Δ1D=0); borrow_mv(億)=186.7 (Δ1D=3.4); asof=20260312; price_last_date=2026-03-13 (ALIGNED)
 
 ## forward_mdd_conditional (bb_z buckets)
 
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-13T09:16:47.442Z`
+- overlay_generated_at_utc: `2026-03-13T09:28:34.783Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260313` vs price_last_date=`2026-03-13` => **ALIGNED**
@@ -486,17 +486,17 @@
 | borrow_shares | 243,676,000 |
 | borrow_shares_chg_1d | 0 |
 | borrow_mv_ntd(億) | 186.7 |
-| borrow_mv_ntd_chg_1d(億) | -3.9 |
+| borrow_mv_ntd_chg_1d(億) | 3.4 |
 
 ### T86 Aggregate（法人：5D sum）
 
 | item | value |
 |---|---:|
-| days_used | 20260305, 20260306, 20260310, 20260312, 20260313 |
-| foreign_net_shares_sum | -327,752,272 |
-| trust_net_shares_sum | 10,265,000 |
-| dealer_net_shares_sum | -37,661,208 |
-| total3_net_shares_sum | -355,148,480 |
+| days_used | 20260305, 20260309, 20260310, 20260311, 20260312 |
+| foreign_net_shares_sum | -408,837,316 |
+| trust_net_shares_sum | 15,415,000 |
+| dealer_net_shares_sum | -191,825,340 |
+| total3_net_shares_sum | -585,247,656 |
 
 ### ETF Units（受益權單位）
 
