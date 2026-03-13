@@ -1,6 +1,6 @@
 # 0050 BB(60,2) + forward_mdd Report
 
-- report_generated_at_utc: `2026-03-13T07:30:22Z`
+- report_generated_at_utc: `2026-03-13T08:05:11Z`
 - build_script_fingerprint: `build_tw0050_bb_report@2026-02-21.v17`
 - stats_path: `tw0050_bb_cache/stats_latest.json`
 - data_source: `yfinance_yahoo_or_twse_fallback`
@@ -28,7 +28,7 @@
 - vol_filter(RV20,ATR14): rv_ann=35.6%; atr=1.9874 (2.62%)
 - regime(relative_pctl): **RISK_OFF_OR_DEFENSIVE**; allowed=false; rv20_pctl=96.54
 - margin(5D,thr=100.00億): TOTAL -29.10 億 => **NEUTRAL**; TWSE 2.10 / TPEX -31.20; margin_date=2026-03-12, price_last_date=2026-03-13 (MISALIGNED); data_date=2026-03-12
-- chip_overlay(T86+TWT72U,5D): total3_5D=-574,596,063; foreign=-407,526,160; trust=16,415,000; dealer=-183,484,903; borrow_shares=243,676,000 (Δ1D=0); borrow_mv(億)=186.7 (Δ1D=-3.9); asof=20260312; price_last_date=2026-03-13 (ALIGNED)
+- chip_overlay(T86+TWT72U,5D): total3_5D=-574,596,063; foreign=-407,526,160; trust=16,415,000; dealer=-183,484,903; borrow_shares=243,676,000 (Δ1D=0); borrow_mv(億)=186.7 (Δ1D=3.4); asof=20260312; price_last_date=2026-03-13 (ALIGNED)
 
 ## forward_mdd_conditional (bb_z buckets)
 
@@ -473,7 +473,7 @@
 
 ## Chip Overlay（籌碼：TWSE T86 + TWT72U）
 
-- overlay_generated_at_utc: `2026-03-13T07:30:21.896Z`
+- overlay_generated_at_utc: `2026-03-13T08:05:11.272Z`
 - stock_no: `0050`
 - overlay_window_n: `5` (expect=5)
 - date_alignment: overlay_aligned_last_date=`20260313` vs price_last_date=`2026-03-13` => **ALIGNED**
@@ -486,7 +486,7 @@
 | borrow_shares | 243,676,000 |
 | borrow_shares_chg_1d | 0 |
 | borrow_mv_ntd(億) | 186.7 |
-| borrow_mv_ntd_chg_1d(億) | -3.9 |
+| borrow_mv_ntd_chg_1d(億) | 3.4 |
 
 ### T86 Aggregate（法人：5D sum）
 
