@@ -1,16 +1,16 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T05:35:30Z",
+    "generated_at_utc": "2026-03-13T06:59:39Z",
     "script": "merge_0050_valuation_bb.py",
-    "schema_version": "0050_merge_schema_v1.5a_compat",
-    "config_version": "0050_merge_v1.5a",
-    "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias. Added centralized slow variable management."
+    "schema_version": "0050_merge_schema_v1.6a_compat",
+    "config_version": "0050_merge_v1.6a",
+    "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias. Added quarterly EPS accumulation review without auto-replacing active_eps_base."
   },
   "inputs": {
     "bb_stats_path": "tw0050_bb_cache/stats_latest.json",
     "roll25_report_path": "roll25_cache/report.md",
-    "tx_night_last": 33351.0,
-    "base_0050": 75.8499984741211,
+    "tx_night_last": 33001.0,
+    "base_0050": 75.94999694824219,
     "base_tsmc": 1865.0,
     "tsmc_weight": 0.6408,
     "base_sources": {
@@ -26,9 +26,9 @@
     },
     "family_interpolation_enabled": true,
     "current_date": "2026-03-13",
-    "current_0050_price": 75.8499984741211,
+    "current_0050_price": 75.94999694824219,
     "current_bb_state": "IN_BAND",
-    "current_bb_z": 0.934456593379354,
+    "current_bb_z": 0.9511344710016058,
     "schema_validation": {
       "validated": true,
       "required_paths_checked": [
@@ -74,7 +74,24 @@
       "as_of_date": "NA",
       "update_policy": "low_frequency_review",
       "note": "TSMC weight is a structural observation; daily auto-refresh is unnecessary."
-    }
+    },
+    "eps_quarters_collected": [],
+    "eps_quarters_collected_display": [],
+    "eps_quarters_collected_count": 0,
+    "annual_eps_candidate": null,
+    "annual_eps_candidate_complete": false,
+    "annual_eps_candidate_fiscal_year": null,
+    "annual_eps_candidate_as_of_date": "NA",
+    "ready_to_replace_active_eps_base": false,
+    "quarterly_eps_tracker_path": "tw0050_bb_cache/quarterly_eps_tracker.json",
+    "quarterly_eps_tracker_path_source": "config",
+    "quarterly_eps_tracker_note": "Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.",
+    "quarterly_eps_load_notes": [
+      "Quarterly EPS tracker not found: tw0050_bb_cache/quarterly_eps_tracker.json"
+    ],
+    "quarterly_eps_candidate_policy": "sum_complete_fiscal_year_only",
+    "quarterly_eps_replace_policy": "display_only_no_auto_replace",
+    "quarterly_eps_ready_diff_tolerance": 0.01
   },
   "valuation_cases": [
     {
@@ -90,8 +107,8 @@
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
       "tsmc_return_vs_base": -0.278745308310992,
-      "gross_0050": 58.21487431693082,
-      "net_0050": 57.21487431693082
+      "gross_0050": 58.29162314646218,
+      "net_0050": 57.29162314646218
     },
     {
       "group_name": "2026_core",
@@ -106,8 +123,8 @@
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
       "tsmc_return_vs_base": -0.17302949061662198,
-      "gross_0050": 65.26033006517017,
-      "net_0050": 64.26033006517017
+      "gross_0050": 65.34636742256554,
+      "net_0050": 64.34636742256554
     },
     {
       "group_name": "2026_core",
@@ -122,8 +139,8 @@
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
       "tsmc_return_vs_base": -0.052429624664879326,
-      "gross_0050": 72.48431381247221,
-      "net_0050": 71.48431381247221
+      "gross_0050": 72.57987506395244,
+      "net_0050": 71.57987506395244
     },
     {
       "group_name": "2026_core",
@@ -138,8 +155,8 @@
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
       "tsmc_return_vs_base": 0.06568364611260047,
-      "gross_0050": 79.04253101043291,
-      "net_0050": 78.04253101043291
+      "gross_0050": 79.14673842837254,
+      "net_0050": 78.14673842837254
     },
     {
       "group_name": "2027_core",
@@ -154,8 +171,8 @@
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
       "tsmc_return_vs_base": 0.1478300938337802,
-      "gross_0050": 83.58013912377426,
-      "net_0050": 81.58013912377426
+      "gross_0050": 83.69032879480052,
+      "net_0050": 81.69032879480052
     },
     {
       "group_name": "2027_core",
@@ -170,8 +187,8 @@
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
       "tsmc_return_vs_base": 0.33210455764075064,
-      "gross_0050": 93.35409987266029,
-      "net_0050": 91.35409987266029
+      "gross_0050": 93.47717525470395,
+      "net_0050": 91.47717525470395
     },
     {
       "group_name": "2027_core",
@@ -186,8 +203,8 @@
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
       "tsmc_return_vs_base": 0.4408042895442361,
-      "gross_0050": 98.63741545163022,
-      "net_0050": 96.63741545163022
+      "gross_0050": 98.76745620620949,
+      "net_0050": 96.76745620620949
     }
   ],
   "family_interpolation": {
@@ -215,58 +232,58 @@
           "count": 13
         },
         "family_stats": {
-          "net_min": 60.240866448228346,
-          "net_max": 72.2992572990538,
-          "p10": 61.44670553331088,
-          "p25": 63.25546416093471,
-          "p50": 66.27006187364107,
-          "p75": 69.28465958634744,
-          "p90": 71.09341821397126,
+          "net_min": 60.321604659459375,
+          "net_max": 72.39589294877786,
+          "p10": 61.529033488391214,
+          "p25": 63.340176731788986,
+          "p50": 66.3587488041186,
+          "p75": 69.37732087644824,
+          "p90": 71.188464119846,
           "case_count": 13
         },
         "current_price_percentile": 100.0,
         "current_zone": "RICH",
         "current_position_status": "ABOVE_MAX",
-        "current_gap_vs_min": 15.609132025892748,
-        "current_gap_vs_max": 3.5507411750672873,
-        "current_pct_vs_min": 25.911201060342325,
-        "current_pct_vs_max": 4.911172407180109,
+        "current_gap_vs_min": 15.628392288782813,
+        "current_gap_vs_max": 3.5541039994643313,
+        "current_pct_vs_min": 25.90844918170132,
+        "current_pct_vs_max": 4.909261913488594,
         "target_positions": [
           {
             "price": 72.0,
             "percentile": 92.3076923076923,
             "zone": "RICH",
             "position_status": "IN_RANGE",
-            "family_net_min": 60.240866448228346,
-            "family_net_max": 72.2992572990538,
-            "gap_vs_min": 11.759133551771654,
-            "gap_vs_max": -0.2992572990538065,
-            "pct_vs_min": 19.520193259301124,
-            "pct_vs_max": -0.4139147623826611
+            "family_net_min": 60.321604659459375,
+            "family_net_max": 72.39589294877786,
+            "gap_vs_min": 11.678395340540625,
+            "gap_vs_max": -0.3958929487778562,
+            "pct_vs_min": 19.36021995182329,
+            "pct_vs_max": -0.5468444861339905
           },
           {
             "price": 71.0,
             "percentile": 84.61538461538461,
             "zone": "RICH",
             "position_status": "IN_RANGE",
-            "family_net_min": 60.240866448228346,
-            "family_net_max": 72.2992572990538,
-            "gap_vs_min": 10.759133551771654,
-            "gap_vs_max": -1.2992572990538065,
-            "pct_vs_min": 17.86019057514414,
-            "pct_vs_max": -1.797054835127343
+            "family_net_min": 60.321604659459375,
+            "family_net_max": 72.39589294877786,
+            "gap_vs_min": 10.678395340540625,
+            "gap_vs_max": -1.3958929487778562,
+            "pct_vs_min": 17.702439119159074,
+            "pct_vs_max": -1.928138312715455
           },
           {
             "price": 69.0,
             "percentile": 69.23076923076923,
             "zone": "UPPER_MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 60.240866448228346,
-            "family_net_max": 72.2992572990538,
-            "gap_vs_min": 8.759133551771654,
-            "gap_vs_max": -3.2992572990538065,
-            "pct_vs_min": 14.540185206830225,
-            "pct_vs_max": -4.563334980616718
+            "family_net_min": 60.321604659459375,
+            "family_net_max": 72.39589294877786,
+            "gap_vs_min": 8.678395340540625,
+            "gap_vs_max": -3.395892948777856,
+            "pct_vs_min": 14.38687745383065,
+            "pct_vs_max": -4.690725965878406
           }
         ],
         "cases": [
@@ -276,8 +293,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1388.07,
             "tsmc_return_vs_base": -0.2557265415549598,
-            "gross_0050": 61.240866448228346,
-            "net_0050": 60.240866448228346
+            "gross_0050": 61.321604659459375,
+            "net_0050": 60.321604659459375
           },
           {
             "pe": 18.5,
@@ -285,8 +302,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1426.6274999999998,
             "tsmc_return_vs_base": -0.23505227882037538,
-            "gross_0050": 62.24573235246379,
-            "net_0050": 61.24573235246379
+            "gross_0050": 62.3277953502359,
+            "net_0050": 61.3277953502359
           },
           {
             "pe": 19.0,
@@ -294,8 +311,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1465.185,
             "tsmc_return_vs_base": -0.21437801608579088,
-            "gross_0050": 63.250598256699256,
-            "net_0050": 62.250598256699256
+            "gross_0050": 63.33398604101245,
+            "net_0050": 62.33398604101245
           },
           {
             "pe": 19.5,
@@ -303,8 +320,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1503.7424999999998,
             "tsmc_return_vs_base": -0.1937037533512065,
-            "gross_0050": 64.25546416093471,
-            "net_0050": 63.25546416093471
+            "gross_0050": 64.34017673178899,
+            "net_0050": 63.340176731788986
           },
           {
             "pe": 20.0,
@@ -312,8 +329,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1542.3,
             "tsmc_return_vs_base": -0.17302949061662198,
-            "gross_0050": 65.26033006517017,
-            "net_0050": 64.26033006517017
+            "gross_0050": 65.34636742256554,
+            "net_0050": 64.34636742256554
           },
           {
             "pe": 20.5,
@@ -321,8 +338,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1580.8574999999998,
             "tsmc_return_vs_base": -0.1523552278820376,
-            "gross_0050": 66.26519596940562,
-            "net_0050": 65.26519596940562
+            "gross_0050": 66.35255811334207,
+            "net_0050": 65.35255811334207
           },
           {
             "pe": 21.0,
@@ -330,8 +347,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1619.415,
             "tsmc_return_vs_base": -0.1316809651474531,
-            "gross_0050": 67.27006187364107,
-            "net_0050": 66.27006187364107
+            "gross_0050": 67.3587488041186,
+            "net_0050": 66.3587488041186
           },
           {
             "pe": 21.5,
@@ -339,8 +356,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1657.9724999999999,
             "tsmc_return_vs_base": -0.1110067024128687,
-            "gross_0050": 68.27492777787653,
-            "net_0050": 67.27492777787653
+            "gross_0050": 68.36493949489515,
+            "net_0050": 67.36493949489515
           },
           {
             "pe": 22.0,
@@ -348,8 +365,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1696.53,
             "tsmc_return_vs_base": -0.0903324396782842,
-            "gross_0050": 69.27979368211199,
-            "net_0050": 68.27979368211199
+            "gross_0050": 69.37113018567169,
+            "net_0050": 68.37113018567169
           },
           {
             "pe": 22.5,
@@ -357,8 +374,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1735.0874999999999,
             "tsmc_return_vs_base": -0.0696581769436998,
-            "gross_0050": 70.28465958634744,
-            "net_0050": 69.28465958634744
+            "gross_0050": 70.37732087644824,
+            "net_0050": 69.37732087644824
           },
           {
             "pe": 23.0,
@@ -366,8 +383,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1773.645,
             "tsmc_return_vs_base": -0.0489839142091153,
-            "gross_0050": 71.2895254905829,
-            "net_0050": 70.2895254905829
+            "gross_0050": 71.38351156722479,
+            "net_0050": 70.38351156722479
           },
           {
             "pe": 23.5,
@@ -375,8 +392,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1812.2024999999999,
             "tsmc_return_vs_base": -0.028309651474530906,
-            "gross_0050": 72.29439139481835,
-            "net_0050": 71.29439139481835
+            "gross_0050": 72.38970225800131,
+            "net_0050": 71.38970225800131
           },
           {
             "pe": 24.0,
@@ -384,8 +401,8 @@
             "eps_after_fx": 77.115,
             "tsmc_price": 1850.7599999999998,
             "tsmc_return_vs_base": -0.007635388739946514,
-            "gross_0050": 73.2992572990538,
-            "net_0050": 72.2992572990538
+            "gross_0050": 73.39589294877786,
+            "net_0050": 72.39589294877786
           }
         ]
       },
@@ -406,58 +423,58 @@
           "count": 9
         },
         "family_stats": {
-          "net_min": 67.29737254482447,
-          "net_max": 75.67125508011995,
-          "p10": 68.13476079835402,
-          "p25": 69.39084317864834,
-          "p50": 71.48431381247221,
-          "p75": 73.57778444629606,
-          "p90": 74.8338668265904,
+          "net_min": 67.38741385238353,
+          "net_max": 75.77233627552138,
+          "p10": 68.22590609469731,
+          "p25": 69.48364445816799,
+          "p50": 71.57987506395244,
+          "p75": 73.6761056697369,
+          "p90": 74.93384403320759,
           "case_count": 9
         },
         "current_price_percentile": 100.0,
         "current_zone": "RICH",
         "current_position_status": "ABOVE_MAX",
-        "current_gap_vs_min": 8.552625929296624,
-        "current_gap_vs_max": 0.17874339400114536,
-        "current_pct_vs_min": 12.708707050338418,
-        "current_pct_vs_max": 0.23621042602226527,
+        "current_gap_vs_min": 8.562583095858656,
+        "current_gap_vs_max": 0.17766067272080477,
+        "current_pct_vs_min": 12.706502010324282,
+        "current_pct_vs_max": 0.23446640482984726,
         "target_positions": [
           {
             "price": 72.0,
             "percentile": 55.55555555555556,
             "zone": "MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.29737254482447,
-            "family_net_max": 75.67125508011995,
-            "gap_vs_min": 4.702627455175531,
-            "gap_vs_max": -3.6712550801199484,
-            "pct_vs_min": 6.987832180287978,
-            "pct_vs_max": -4.851584761258232
+            "family_net_min": 67.38741385238353,
+            "family_net_max": 75.77233627552138,
+            "gap_vs_min": 4.612586147616469,
+            "gap_vs_max": -3.7723362755213827,
+            "pct_vs_min": 6.844877824990636,
+            "pct_vs_max": -4.978513875835255
           },
           {
             "price": 71.0,
             "percentile": 44.44444444444444,
             "zone": "MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.29737254482447,
-            "family_net_max": 75.67125508011995,
-            "gap_vs_min": 3.7026274551755307,
-            "gap_vs_max": -4.671255080119948,
-            "pct_vs_min": 5.5018900666728765,
-            "pct_vs_max": -6.173090528462987
+            "family_net_min": 67.38741385238353,
+            "family_net_max": 75.77233627552138,
+            "gap_vs_min": 3.6125861476164687,
+            "gap_vs_max": -4.772336275521383,
+            "pct_vs_min": 5.3609211885324415,
+            "pct_vs_max": -6.298256738670882
           },
           {
             "price": 69.0,
             "percentile": 22.22222222222222,
             "zone": "LOWER_MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.29737254482447,
-            "family_net_max": 75.67125508011995,
-            "gap_vs_min": 1.7026274551755307,
-            "gap_vs_max": -6.671255080119948,
-            "pct_vs_min": 2.5300058394426506,
-            "pct_vs_max": -8.816102062872478
+            "family_net_min": 67.38741385238353,
+            "family_net_max": 75.77233627552138,
+            "gap_vs_min": 1.6125861476164687,
+            "gap_vs_max": -6.772336275521383,
+            "pct_vs_min": 2.39300791561603,
+            "pct_vs_max": -8.937742464342124
           }
         ],
         "cases": [
@@ -467,8 +484,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1606.5625,
             "tsmc_return_vs_base": -0.13857238605898126,
-            "gross_0050": 68.29737254482447,
-            "net_0050": 67.29737254482447
+            "gross_0050": 68.38741385238353,
+            "net_0050": 67.38741385238353
           },
           {
             "pe": 20.5,
@@ -476,8 +493,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1646.7265625,
             "tsmc_return_vs_base": -0.11703669571045572,
-            "gross_0050": 69.3441078617364,
-            "net_0050": 68.3441078617364
+            "gross_0050": 69.43552915527576,
+            "net_0050": 68.43552915527576
           },
           {
             "pe": 21.0,
@@ -485,8 +502,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1686.890625,
             "tsmc_return_vs_base": -0.09550100536193029,
-            "gross_0050": 70.39084317864834,
-            "net_0050": 69.39084317864834
+            "gross_0050": 70.48364445816799,
+            "net_0050": 69.48364445816799
           },
           {
             "pe": 21.5,
@@ -494,8 +511,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1727.0546875,
             "tsmc_return_vs_base": -0.07396531501340486,
-            "gross_0050": 71.43757849556027,
-            "net_0050": 70.43757849556027
+            "gross_0050": 71.53175976106021,
+            "net_0050": 70.53175976106021
           },
           {
             "pe": 22.0,
@@ -503,8 +520,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1767.21875,
             "tsmc_return_vs_base": -0.052429624664879326,
-            "gross_0050": 72.48431381247221,
-            "net_0050": 71.48431381247221
+            "gross_0050": 72.57987506395244,
+            "net_0050": 71.57987506395244
           },
           {
             "pe": 22.5,
@@ -512,8 +529,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1807.3828125,
             "tsmc_return_vs_base": -0.0308939343163539,
-            "gross_0050": 73.53104912938414,
-            "net_0050": 72.53104912938414
+            "gross_0050": 73.62799036684468,
+            "net_0050": 72.62799036684468
           },
           {
             "pe": 23.0,
@@ -521,8 +538,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1847.546875,
             "tsmc_return_vs_base": -0.009358243967828472,
-            "gross_0050": 74.57778444629606,
-            "net_0050": 73.57778444629606
+            "gross_0050": 74.6761056697369,
+            "net_0050": 73.6761056697369
           },
           {
             "pe": 23.5,
@@ -530,8 +547,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1887.7109375,
             "tsmc_return_vs_base": 0.012177446380696955,
-            "gross_0050": 75.624519763208,
-            "net_0050": 74.624519763208
+            "gross_0050": 75.72422097262914,
+            "net_0050": 74.72422097262914
           },
           {
             "pe": 24.0,
@@ -539,8 +556,8 @@
             "eps_after_fx": 80.328125,
             "tsmc_price": 1927.875,
             "tsmc_return_vs_base": 0.03371313672922249,
-            "gross_0050": 76.67125508011995,
-            "net_0050": 75.67125508011995
+            "gross_0050": 76.77233627552138,
+            "net_0050": 75.77233627552138
           }
         ]
       },
@@ -561,58 +578,58 @@
           "count": 9
         },
         "family_stats": {
-          "net_min": 76.508328825335,
-          "net_max": 86.65194942221353,
-          "p10": 77.52269088502285,
-          "p25": 79.04423397455463,
-          "p50": 81.58013912377426,
-          "p75": 84.11604427299389,
-          "p90": 85.63758736252566,
+          "net_min": 76.61183196635365,
+          "net_max": 86.76882562324742,
+          "p10": 77.62753133204302,
+          "p25": 79.15108038057707,
+          "p50": 81.69032879480052,
+          "p75": 84.22957720902397,
+          "p90": 85.75312625755802,
           "case_count": 9
         },
         "current_price_percentile": 0.0,
         "current_zone": "CHEAP",
         "current_position_status": "BELOW_MIN",
-        "current_gap_vs_min": -0.6583303512139054,
-        "current_gap_vs_max": -10.80195094809244,
-        "current_pct_vs_min": -0.8604688683199968,
-        "current_pct_vs_max": -12.465906445404585,
+        "current_gap_vs_min": -0.6618350181114607,
+        "current_gap_vs_max": -10.818828675005236,
+        "current_pct_vs_min": -0.8638809451810614,
+        "current_pct_vs_max": -12.468566443414685,
         "target_positions": [
           {
             "price": 72.0,
             "percentile": 0.0,
             "zone": "CHEAP",
             "position_status": "BELOW_MIN",
-            "family_net_min": 76.508328825335,
-            "family_net_max": 86.65194942221353,
-            "gap_vs_min": -4.508328825334999,
-            "gap_vs_max": -14.651949422213534,
-            "pct_vs_min": -5.892598746506805,
-            "pct_vs_max": -16.90896687254153
+            "family_net_min": 76.61183196635365,
+            "family_net_max": 86.76882562324742,
+            "gap_vs_min": -4.611831966353648,
+            "gap_vs_max": -14.768825623247423,
+            "pct_vs_min": -6.01973852861144,
+            "pct_vs_max": -17.02088914672426
           },
           {
             "price": 71.0,
             "percentile": 0.0,
             "zone": "CHEAP",
             "position_status": "BELOW_MIN",
-            "family_net_min": 76.508328825335,
-            "family_net_max": 86.65194942221353,
-            "gap_vs_min": -5.508328825334999,
-            "gap_vs_max": -15.651949422213534,
-            "pct_vs_min": -7.199645986138659,
-            "pct_vs_max": -18.06300899931179
+            "family_net_min": 76.61183196635365,
+            "family_net_max": 86.76882562324742,
+            "gap_vs_min": -5.611831966353648,
+            "gap_vs_max": -15.768825623247423,
+            "pct_vs_min": -7.3250199379362835,
+            "pct_vs_max": -18.1733767974642
           },
           {
             "price": 69.0,
             "percentile": 0.0,
             "zone": "CHEAP",
             "position_status": "BELOW_MIN",
-            "family_net_min": 76.508328825335,
-            "family_net_max": 86.65194942221353,
-            "gap_vs_min": -7.508328825334999,
-            "gap_vs_max": -17.651949422213534,
-            "pct_vs_min": -9.813740465402365,
-            "pct_vs_max": -20.3710932528523
+            "family_net_min": 76.61183196635365,
+            "family_net_max": 86.76882562324742,
+            "gap_vs_min": -7.611831966353648,
+            "gap_vs_max": -17.768825623247423,
+            "pct_vs_min": -9.93558275658597,
+            "pct_vs_max": -20.478352098944086
           }
         ],
         "cases": [
@@ -622,8 +639,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 1946.09375,
             "tsmc_return_vs_base": 0.043481903485254714,
-            "gross_0050": 78.508328825335,
-            "net_0050": 76.508328825335
+            "gross_0050": 78.61183196635365,
+            "net_0050": 76.61183196635365
           },
           {
             "pe": 20.5,
@@ -631,8 +648,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 1994.74609375,
             "tsmc_return_vs_base": 0.06956895107238603,
-            "gross_0050": 79.77628139994482,
-            "net_0050": 77.77628139994482
+            "gross_0050": 79.88145617346537,
+            "net_0050": 77.88145617346537
           },
           {
             "pe": 21.0,
@@ -640,8 +657,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2043.3984375,
             "tsmc_return_vs_base": 0.09565599865951735,
-            "gross_0050": 81.04423397455463,
-            "net_0050": 79.04423397455463
+            "gross_0050": 81.15108038057707,
+            "net_0050": 79.15108038057707
           },
           {
             "pe": 21.5,
@@ -649,8 +666,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2092.05078125,
             "tsmc_return_vs_base": 0.12174304624664889,
-            "gross_0050": 82.31218654916445,
-            "net_0050": 80.31218654916445
+            "gross_0050": 82.42070458768882,
+            "net_0050": 80.42070458768882
           },
           {
             "pe": 22.0,
@@ -658,8 +675,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2140.703125,
             "tsmc_return_vs_base": 0.1478300938337802,
-            "gross_0050": 83.58013912377426,
-            "net_0050": 81.58013912377426
+            "gross_0050": 83.69032879480052,
+            "net_0050": 81.69032879480052
           },
           {
             "pe": 22.5,
@@ -667,8 +684,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2189.35546875,
             "tsmc_return_vs_base": 0.17391714142091153,
-            "gross_0050": 84.84809169838408,
-            "net_0050": 82.84809169838408
+            "gross_0050": 84.95995300191225,
+            "net_0050": 82.95995300191225
           },
           {
             "pe": 23.0,
@@ -676,8 +693,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2238.0078125,
             "tsmc_return_vs_base": 0.20000418900804284,
-            "gross_0050": 86.11604427299389,
-            "net_0050": 84.11604427299389
+            "gross_0050": 86.22957720902397,
+            "net_0050": 84.22957720902397
           },
           {
             "pe": 23.5,
@@ -685,8 +702,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2286.66015625,
             "tsmc_return_vs_base": 0.22609123659517416,
-            "gross_0050": 87.3839968476037,
-            "net_0050": 85.3839968476037
+            "gross_0050": 87.49920141613568,
+            "net_0050": 85.49920141613568
           },
           {
             "pe": 24.0,
@@ -694,8 +711,8 @@
             "eps_after_fx": 97.3046875,
             "tsmc_price": 2335.3125,
             "tsmc_return_vs_base": 0.2521782841823057,
-            "gross_0050": 88.65194942221353,
-            "net_0050": 86.65194942221353
+            "gross_0050": 88.76882562324742,
+            "net_0050": 86.76882562324742
           }
         ]
       },
@@ -716,58 +733,58 @@
           "count": 9
         },
         "family_stats": {
-          "net_min": 67.3129427912789,
-          "net_max": 76.66130353336214,
-          "p10": 68.24777886548723,
-          "p25": 69.65003297679972,
-          "p50": 71.98712316232053,
-          "p75": 74.32421334784132,
-          "p90": 75.72646745915381,
+          "net_min": 67.40432299767845,
+          "net_max": 76.76500835187174,
+          "p10": 68.34039153309777,
+          "p25": 69.74449433622678,
+          "p50": 72.0846656747751,
+          "p75": 74.42483701332341,
+          "p90": 75.8289398164524,
           "case_count": 9
         },
         "current_price_percentile": 88.88888888888889,
         "current_zone": "RICH",
         "current_position_status": "IN_RANGE",
-        "current_gap_vs_min": 8.537055682842194,
-        "current_gap_vs_max": -0.8113050592410502,
-        "current_pct_vs_min": 12.682636249188416,
-        "current_pct_vs_max": -1.058298022401849,
+        "current_gap_vs_min": 8.545673950563739,
+        "current_gap_vs_max": -0.8150114036295548,
+        "current_pct_vs_min": 12.678228295324722,
+        "current_pct_vs_max": -1.061696495744191,
         "target_positions": [
           {
             "price": 72.0,
-            "percentile": 55.55555555555556,
+            "percentile": 44.44444444444444,
             "zone": "MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.3129427912789,
-            "family_net_max": 76.66130353336214,
-            "gap_vs_min": 4.6870572087211,
-            "gap_vs_max": -4.661303533362144,
-            "pct_vs_min": 6.963084682324072,
-            "pct_vs_max": -6.080386477296984
+            "family_net_min": 67.40432299767845,
+            "family_net_max": 76.76500835187174,
+            "gap_vs_min": 4.595677002321551,
+            "gap_vs_max": -4.765008351871742,
+            "pct_vs_min": 6.818074565454557,
+            "pct_vs_max": -6.20726611535053
           },
           {
             "price": 71.0,
             "percentile": 44.44444444444444,
             "zone": "MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.3129427912789,
-            "family_net_max": 76.66130353336214,
-            "gap_vs_min": 3.6870572087211,
-            "gap_vs_max": -5.661303533362144,
-            "pct_vs_min": 5.477486283958455,
-            "pct_vs_max": -7.384825554001184
+            "family_net_min": 67.40432299767845,
+            "family_net_max": 76.76500835187174,
+            "gap_vs_min": 3.595677002321551,
+            "gap_vs_max": -5.765008351871742,
+            "pct_vs_min": 5.334490196489905,
+            "pct_vs_max": -7.509942974859552
           },
           {
             "price": 69.0,
             "percentile": 22.22222222222222,
             "zone": "LOWER_MID",
             "position_status": "IN_RANGE",
-            "family_net_min": 67.3129427912789,
-            "family_net_max": 76.66130353336214,
-            "gap_vs_min": 1.6870572087211002,
-            "gap_vs_max": -7.661303533362144,
-            "pct_vs_min": 2.50628948722722,
-            "pct_vs_max": -9.993703707409606
+            "family_net_min": 67.40432299767845,
+            "family_net_max": 76.76500835187174,
+            "gap_vs_min": 1.5956770023215512,
+            "gap_vs_max": -7.765008351871742,
+            "pct_vs_min": 2.367321458560623,
+            "pct_vs_max": -10.115296693877596
           }
         ],
         "cases": [
@@ -777,8 +794,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1614.1679999999997,
             "tsmc_return_vs_base": -0.13449436997319053,
-            "gross_0050": 69.3129427912789,
-            "net_0050": 67.3129427912789
+            "gross_0050": 69.40432299767845,
+            "net_0050": 67.40432299767845
           },
           {
             "pe": 18.5,
@@ -786,8 +803,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1659.0059999999999,
             "tsmc_return_vs_base": -0.1104525469168901,
-            "gross_0050": 70.48148788403931,
-            "net_0050": 68.48148788403931
+            "gross_0050": 70.5744086669526,
+            "net_0050": 68.5744086669526
           },
           {
             "pe": 19.0,
@@ -795,8 +812,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1703.8439999999998,
             "tsmc_return_vs_base": -0.0864107238605899,
-            "gross_0050": 71.65003297679972,
-            "net_0050": 69.65003297679972
+            "gross_0050": 71.74449433622678,
+            "net_0050": 69.74449433622678
           },
           {
             "pe": 19.5,
@@ -804,8 +821,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1748.6819999999998,
             "tsmc_return_vs_base": -0.062368900804289695,
-            "gross_0050": 72.81857806956012,
-            "net_0050": 70.81857806956012
+            "gross_0050": 72.91458000550094,
+            "net_0050": 70.91458000550094
           },
           {
             "pe": 20.0,
@@ -813,8 +830,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1793.5199999999998,
             "tsmc_return_vs_base": -0.03832707774798938,
-            "gross_0050": 73.98712316232053,
-            "net_0050": 71.98712316232053
+            "gross_0050": 74.0846656747751,
+            "net_0050": 72.0846656747751
           },
           {
             "pe": 20.5,
@@ -822,8 +839,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1838.3579999999997,
             "tsmc_return_vs_base": -0.014285254691689175,
-            "gross_0050": 75.15566825508093,
-            "net_0050": 73.15566825508093
+            "gross_0050": 75.25475134404925,
+            "net_0050": 73.25475134404925
           },
           {
             "pe": 21.0,
@@ -831,8 +848,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1883.1959999999997,
             "tsmc_return_vs_base": 0.009756568364611029,
-            "gross_0050": 76.32421334784132,
-            "net_0050": 74.32421334784132
+            "gross_0050": 76.42483701332341,
+            "net_0050": 74.42483701332341
           },
           {
             "pe": 21.5,
@@ -840,8 +857,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1928.0339999999997,
             "tsmc_return_vs_base": 0.033798391420911233,
-            "gross_0050": 77.49275844060172,
-            "net_0050": 75.49275844060172
+            "gross_0050": 77.59492268259757,
+            "net_0050": 75.59492268259757
           },
           {
             "pe": 22.0,
@@ -849,8 +866,8 @@
             "eps_after_fx": 89.67599999999999,
             "tsmc_price": 1972.8719999999998,
             "tsmc_return_vs_base": 0.05784021447721166,
-            "gross_0050": 78.66130353336214,
-            "net_0050": 76.66130353336214
+            "gross_0050": 78.76500835187174,
+            "net_0050": 76.76500835187174
           }
         ]
       }
@@ -859,9 +876,9 @@
   },
   "bb_snapshot": {
     "date": "2026-03-13",
-    "price_used": 75.8499984741211,
+    "price_used": 75.94999694824219,
     "state": "IN_BAND",
-    "bb_z": 0.934456593379354,
+    "bb_z": 0.9511344710016058,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.53607262302914,
@@ -875,33 +892,33 @@
     ],
     "tranche_levels": [
       {
-        "drawdown": -0.048124978819606645,
+        "drawdown": -0.04812484581872972,
         "label": "10D_p10_uncond",
-        "price_level": 72.19971890408682
+        "price_level": 72.29491505517504
       },
       {
-        "drawdown": -0.06361938716922236,
+        "drawdown": -0.06361930639343608,
         "label": "10D_p05_uncond",
-        "price_level": 71.02446805441106
+        "price_level": 71.11811082181144
       },
       {
-        "drawdown": -0.06863558780201784,
+        "drawdown": -0.06863568157227151,
         "label": "20D_p10_uncond",
-        "price_level": 70.64398924406764
+        "price_level": 70.73711714228764
       },
       {
-        "drawdown": -0.09262781445144602,
+        "drawdown": -0.09262770007787802,
         "label": "20D_p05_uncond",
-        "price_level": 68.82417888931774
+        "price_level": 68.91492341000466
       }
     ]
   },
   "combined": {
     "bb": {
       "date": "2026-03-13",
-      "price_used": 75.8499984741211,
+      "price_used": 75.94999694824219,
       "state": "IN_BAND",
-      "bb_z": 0.934456593379354,
+      "bb_z": 0.9511344710016058,
       "regime_tag": "RISK_OFF_OR_DEFENSIVE",
       "regime_allowed": false,
       "rv20_percentile": 96.53607262302914,
@@ -909,24 +926,24 @@
       "pledge_policy": "DISALLOW",
       "tranche_levels": [
         {
-          "drawdown": -0.048124978819606645,
+          "drawdown": -0.04812484581872972,
           "label": "10D_p10_uncond",
-          "price_level": 72.19971890408682
+          "price_level": 72.29491505517504
         },
         {
-          "drawdown": -0.06361938716922236,
+          "drawdown": -0.06361930639343608,
           "label": "10D_p05_uncond",
-          "price_level": 71.02446805441106
+          "price_level": 71.11811082181144
         },
         {
-          "drawdown": -0.06863558780201784,
+          "drawdown": -0.06863568157227151,
           "label": "20D_p10_uncond",
-          "price_level": 70.64398924406764
+          "price_level": 70.73711714228764
         },
         {
-          "drawdown": -0.09262781445144602,
+          "drawdown": -0.09262770007787802,
           "label": "20D_p05_uncond",
-          "price_level": 68.82417888931774
+          "price_level": 68.91492341000466
         }
       ],
       "dq_flags": [
@@ -937,20 +954,20 @@
       ]
     },
     "valuation_range": {
-      "gross_min": 58.21487431693082,
-      "gross_max": 98.63741545163022,
-      "net_min": 57.21487431693082,
-      "net_max": 96.63741545163022,
+      "gross_min": 58.29162314646218,
+      "gross_max": 98.76745620620949,
+      "net_min": 57.29162314646218,
+      "net_max": 96.76745620620949,
       "current_price_position": {
-        "current_price": 75.8499984741211,
-        "scenario_net_min": 57.21487431693082,
-        "scenario_net_max": 96.63741545163022,
+        "current_price": 75.94999694824219,
+        "scenario_net_min": 57.29162314646218,
+        "scenario_net_max": 96.76745620620949,
         "scenario_net_pctl": 42.857142857142854,
         "position_status": "IN_RANGE",
-        "gap_vs_min": 18.635124157190276,
-        "gap_vs_max": -20.787416977509125,
-        "pct_vs_min": 32.57041875852873,
-        "pct_vs_max": -21.510733581149854,
+        "gap_vs_min": 18.65837380178001,
+        "gap_vs_max": -20.8174592579673,
+        "pct_vs_min": 32.56736810210654,
+        "pct_vs_max": -21.512872275577564,
         "zone": "MID_ZONE",
         "note": "rough classification only; sparse scenario set and mixed 1Y/2Y horizons => low decision value"
       }
@@ -980,58 +997,58 @@
             "count": 13
           },
           "family_stats": {
-            "net_min": 60.240866448228346,
-            "net_max": 72.2992572990538,
-            "p10": 61.44670553331088,
-            "p25": 63.25546416093471,
-            "p50": 66.27006187364107,
-            "p75": 69.28465958634744,
-            "p90": 71.09341821397126,
+            "net_min": 60.321604659459375,
+            "net_max": 72.39589294877786,
+            "p10": 61.529033488391214,
+            "p25": 63.340176731788986,
+            "p50": 66.3587488041186,
+            "p75": 69.37732087644824,
+            "p90": 71.188464119846,
             "case_count": 13
           },
           "current_price_percentile": 100.0,
           "current_zone": "RICH",
           "current_position_status": "ABOVE_MAX",
-          "current_gap_vs_min": 15.609132025892748,
-          "current_gap_vs_max": 3.5507411750672873,
-          "current_pct_vs_min": 25.911201060342325,
-          "current_pct_vs_max": 4.911172407180109,
+          "current_gap_vs_min": 15.628392288782813,
+          "current_gap_vs_max": 3.5541039994643313,
+          "current_pct_vs_min": 25.90844918170132,
+          "current_pct_vs_max": 4.909261913488594,
           "target_positions": [
             {
               "price": 72.0,
               "percentile": 92.3076923076923,
               "zone": "RICH",
               "position_status": "IN_RANGE",
-              "family_net_min": 60.240866448228346,
-              "family_net_max": 72.2992572990538,
-              "gap_vs_min": 11.759133551771654,
-              "gap_vs_max": -0.2992572990538065,
-              "pct_vs_min": 19.520193259301124,
-              "pct_vs_max": -0.4139147623826611
+              "family_net_min": 60.321604659459375,
+              "family_net_max": 72.39589294877786,
+              "gap_vs_min": 11.678395340540625,
+              "gap_vs_max": -0.3958929487778562,
+              "pct_vs_min": 19.36021995182329,
+              "pct_vs_max": -0.5468444861339905
             },
             {
               "price": 71.0,
               "percentile": 84.61538461538461,
               "zone": "RICH",
               "position_status": "IN_RANGE",
-              "family_net_min": 60.240866448228346,
-              "family_net_max": 72.2992572990538,
-              "gap_vs_min": 10.759133551771654,
-              "gap_vs_max": -1.2992572990538065,
-              "pct_vs_min": 17.86019057514414,
-              "pct_vs_max": -1.797054835127343
+              "family_net_min": 60.321604659459375,
+              "family_net_max": 72.39589294877786,
+              "gap_vs_min": 10.678395340540625,
+              "gap_vs_max": -1.3958929487778562,
+              "pct_vs_min": 17.702439119159074,
+              "pct_vs_max": -1.928138312715455
             },
             {
               "price": 69.0,
               "percentile": 69.23076923076923,
               "zone": "UPPER_MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 60.240866448228346,
-              "family_net_max": 72.2992572990538,
-              "gap_vs_min": 8.759133551771654,
-              "gap_vs_max": -3.2992572990538065,
-              "pct_vs_min": 14.540185206830225,
-              "pct_vs_max": -4.563334980616718
+              "family_net_min": 60.321604659459375,
+              "family_net_max": 72.39589294877786,
+              "gap_vs_min": 8.678395340540625,
+              "gap_vs_max": -3.395892948777856,
+              "pct_vs_min": 14.38687745383065,
+              "pct_vs_max": -4.690725965878406
             }
           ],
           "cases": [
@@ -1041,8 +1058,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1388.07,
               "tsmc_return_vs_base": -0.2557265415549598,
-              "gross_0050": 61.240866448228346,
-              "net_0050": 60.240866448228346
+              "gross_0050": 61.321604659459375,
+              "net_0050": 60.321604659459375
             },
             {
               "pe": 18.5,
@@ -1050,8 +1067,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1426.6274999999998,
               "tsmc_return_vs_base": -0.23505227882037538,
-              "gross_0050": 62.24573235246379,
-              "net_0050": 61.24573235246379
+              "gross_0050": 62.3277953502359,
+              "net_0050": 61.3277953502359
             },
             {
               "pe": 19.0,
@@ -1059,8 +1076,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1465.185,
               "tsmc_return_vs_base": -0.21437801608579088,
-              "gross_0050": 63.250598256699256,
-              "net_0050": 62.250598256699256
+              "gross_0050": 63.33398604101245,
+              "net_0050": 62.33398604101245
             },
             {
               "pe": 19.5,
@@ -1068,8 +1085,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1503.7424999999998,
               "tsmc_return_vs_base": -0.1937037533512065,
-              "gross_0050": 64.25546416093471,
-              "net_0050": 63.25546416093471
+              "gross_0050": 64.34017673178899,
+              "net_0050": 63.340176731788986
             },
             {
               "pe": 20.0,
@@ -1077,8 +1094,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1542.3,
               "tsmc_return_vs_base": -0.17302949061662198,
-              "gross_0050": 65.26033006517017,
-              "net_0050": 64.26033006517017
+              "gross_0050": 65.34636742256554,
+              "net_0050": 64.34636742256554
             },
             {
               "pe": 20.5,
@@ -1086,8 +1103,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1580.8574999999998,
               "tsmc_return_vs_base": -0.1523552278820376,
-              "gross_0050": 66.26519596940562,
-              "net_0050": 65.26519596940562
+              "gross_0050": 66.35255811334207,
+              "net_0050": 65.35255811334207
             },
             {
               "pe": 21.0,
@@ -1095,8 +1112,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1619.415,
               "tsmc_return_vs_base": -0.1316809651474531,
-              "gross_0050": 67.27006187364107,
-              "net_0050": 66.27006187364107
+              "gross_0050": 67.3587488041186,
+              "net_0050": 66.3587488041186
             },
             {
               "pe": 21.5,
@@ -1104,8 +1121,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1657.9724999999999,
               "tsmc_return_vs_base": -0.1110067024128687,
-              "gross_0050": 68.27492777787653,
-              "net_0050": 67.27492777787653
+              "gross_0050": 68.36493949489515,
+              "net_0050": 67.36493949489515
             },
             {
               "pe": 22.0,
@@ -1113,8 +1130,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1696.53,
               "tsmc_return_vs_base": -0.0903324396782842,
-              "gross_0050": 69.27979368211199,
-              "net_0050": 68.27979368211199
+              "gross_0050": 69.37113018567169,
+              "net_0050": 68.37113018567169
             },
             {
               "pe": 22.5,
@@ -1122,8 +1139,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1735.0874999999999,
               "tsmc_return_vs_base": -0.0696581769436998,
-              "gross_0050": 70.28465958634744,
-              "net_0050": 69.28465958634744
+              "gross_0050": 70.37732087644824,
+              "net_0050": 69.37732087644824
             },
             {
               "pe": 23.0,
@@ -1131,8 +1148,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1773.645,
               "tsmc_return_vs_base": -0.0489839142091153,
-              "gross_0050": 71.2895254905829,
-              "net_0050": 70.2895254905829
+              "gross_0050": 71.38351156722479,
+              "net_0050": 70.38351156722479
             },
             {
               "pe": 23.5,
@@ -1140,8 +1157,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1812.2024999999999,
               "tsmc_return_vs_base": -0.028309651474530906,
-              "gross_0050": 72.29439139481835,
-              "net_0050": 71.29439139481835
+              "gross_0050": 72.38970225800131,
+              "net_0050": 71.38970225800131
             },
             {
               "pe": 24.0,
@@ -1149,8 +1166,8 @@
               "eps_after_fx": 77.115,
               "tsmc_price": 1850.7599999999998,
               "tsmc_return_vs_base": -0.007635388739946514,
-              "gross_0050": 73.2992572990538,
-              "net_0050": 72.2992572990538
+              "gross_0050": 73.39589294877786,
+              "net_0050": 72.39589294877786
             }
           ]
         },
@@ -1171,58 +1188,58 @@
             "count": 9
           },
           "family_stats": {
-            "net_min": 67.29737254482447,
-            "net_max": 75.67125508011995,
-            "p10": 68.13476079835402,
-            "p25": 69.39084317864834,
-            "p50": 71.48431381247221,
-            "p75": 73.57778444629606,
-            "p90": 74.8338668265904,
+            "net_min": 67.38741385238353,
+            "net_max": 75.77233627552138,
+            "p10": 68.22590609469731,
+            "p25": 69.48364445816799,
+            "p50": 71.57987506395244,
+            "p75": 73.6761056697369,
+            "p90": 74.93384403320759,
             "case_count": 9
           },
           "current_price_percentile": 100.0,
           "current_zone": "RICH",
           "current_position_status": "ABOVE_MAX",
-          "current_gap_vs_min": 8.552625929296624,
-          "current_gap_vs_max": 0.17874339400114536,
-          "current_pct_vs_min": 12.708707050338418,
-          "current_pct_vs_max": 0.23621042602226527,
+          "current_gap_vs_min": 8.562583095858656,
+          "current_gap_vs_max": 0.17766067272080477,
+          "current_pct_vs_min": 12.706502010324282,
+          "current_pct_vs_max": 0.23446640482984726,
           "target_positions": [
             {
               "price": 72.0,
               "percentile": 55.55555555555556,
               "zone": "MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.29737254482447,
-              "family_net_max": 75.67125508011995,
-              "gap_vs_min": 4.702627455175531,
-              "gap_vs_max": -3.6712550801199484,
-              "pct_vs_min": 6.987832180287978,
-              "pct_vs_max": -4.851584761258232
+              "family_net_min": 67.38741385238353,
+              "family_net_max": 75.77233627552138,
+              "gap_vs_min": 4.612586147616469,
+              "gap_vs_max": -3.7723362755213827,
+              "pct_vs_min": 6.844877824990636,
+              "pct_vs_max": -4.978513875835255
             },
             {
               "price": 71.0,
               "percentile": 44.44444444444444,
               "zone": "MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.29737254482447,
-              "family_net_max": 75.67125508011995,
-              "gap_vs_min": 3.7026274551755307,
-              "gap_vs_max": -4.671255080119948,
-              "pct_vs_min": 5.5018900666728765,
-              "pct_vs_max": -6.173090528462987
+              "family_net_min": 67.38741385238353,
+              "family_net_max": 75.77233627552138,
+              "gap_vs_min": 3.6125861476164687,
+              "gap_vs_max": -4.772336275521383,
+              "pct_vs_min": 5.3609211885324415,
+              "pct_vs_max": -6.298256738670882
             },
             {
               "price": 69.0,
               "percentile": 22.22222222222222,
               "zone": "LOWER_MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.29737254482447,
-              "family_net_max": 75.67125508011995,
-              "gap_vs_min": 1.7026274551755307,
-              "gap_vs_max": -6.671255080119948,
-              "pct_vs_min": 2.5300058394426506,
-              "pct_vs_max": -8.816102062872478
+              "family_net_min": 67.38741385238353,
+              "family_net_max": 75.77233627552138,
+              "gap_vs_min": 1.6125861476164687,
+              "gap_vs_max": -6.772336275521383,
+              "pct_vs_min": 2.39300791561603,
+              "pct_vs_max": -8.937742464342124
             }
           ],
           "cases": [
@@ -1232,8 +1249,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1606.5625,
               "tsmc_return_vs_base": -0.13857238605898126,
-              "gross_0050": 68.29737254482447,
-              "net_0050": 67.29737254482447
+              "gross_0050": 68.38741385238353,
+              "net_0050": 67.38741385238353
             },
             {
               "pe": 20.5,
@@ -1241,8 +1258,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1646.7265625,
               "tsmc_return_vs_base": -0.11703669571045572,
-              "gross_0050": 69.3441078617364,
-              "net_0050": 68.3441078617364
+              "gross_0050": 69.43552915527576,
+              "net_0050": 68.43552915527576
             },
             {
               "pe": 21.0,
@@ -1250,8 +1267,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1686.890625,
               "tsmc_return_vs_base": -0.09550100536193029,
-              "gross_0050": 70.39084317864834,
-              "net_0050": 69.39084317864834
+              "gross_0050": 70.48364445816799,
+              "net_0050": 69.48364445816799
             },
             {
               "pe": 21.5,
@@ -1259,8 +1276,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1727.0546875,
               "tsmc_return_vs_base": -0.07396531501340486,
-              "gross_0050": 71.43757849556027,
-              "net_0050": 70.43757849556027
+              "gross_0050": 71.53175976106021,
+              "net_0050": 70.53175976106021
             },
             {
               "pe": 22.0,
@@ -1268,8 +1285,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1767.21875,
               "tsmc_return_vs_base": -0.052429624664879326,
-              "gross_0050": 72.48431381247221,
-              "net_0050": 71.48431381247221
+              "gross_0050": 72.57987506395244,
+              "net_0050": 71.57987506395244
             },
             {
               "pe": 22.5,
@@ -1277,8 +1294,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1807.3828125,
               "tsmc_return_vs_base": -0.0308939343163539,
-              "gross_0050": 73.53104912938414,
-              "net_0050": 72.53104912938414
+              "gross_0050": 73.62799036684468,
+              "net_0050": 72.62799036684468
             },
             {
               "pe": 23.0,
@@ -1286,8 +1303,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1847.546875,
               "tsmc_return_vs_base": -0.009358243967828472,
-              "gross_0050": 74.57778444629606,
-              "net_0050": 73.57778444629606
+              "gross_0050": 74.6761056697369,
+              "net_0050": 73.6761056697369
             },
             {
               "pe": 23.5,
@@ -1295,8 +1312,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1887.7109375,
               "tsmc_return_vs_base": 0.012177446380696955,
-              "gross_0050": 75.624519763208,
-              "net_0050": 74.624519763208
+              "gross_0050": 75.72422097262914,
+              "net_0050": 74.72422097262914
             },
             {
               "pe": 24.0,
@@ -1304,8 +1321,8 @@
               "eps_after_fx": 80.328125,
               "tsmc_price": 1927.875,
               "tsmc_return_vs_base": 0.03371313672922249,
-              "gross_0050": 76.67125508011995,
-              "net_0050": 75.67125508011995
+              "gross_0050": 76.77233627552138,
+              "net_0050": 75.77233627552138
             }
           ]
         },
@@ -1326,58 +1343,58 @@
             "count": 9
           },
           "family_stats": {
-            "net_min": 76.508328825335,
-            "net_max": 86.65194942221353,
-            "p10": 77.52269088502285,
-            "p25": 79.04423397455463,
-            "p50": 81.58013912377426,
-            "p75": 84.11604427299389,
-            "p90": 85.63758736252566,
+            "net_min": 76.61183196635365,
+            "net_max": 86.76882562324742,
+            "p10": 77.62753133204302,
+            "p25": 79.15108038057707,
+            "p50": 81.69032879480052,
+            "p75": 84.22957720902397,
+            "p90": 85.75312625755802,
             "case_count": 9
           },
           "current_price_percentile": 0.0,
           "current_zone": "CHEAP",
           "current_position_status": "BELOW_MIN",
-          "current_gap_vs_min": -0.6583303512139054,
-          "current_gap_vs_max": -10.80195094809244,
-          "current_pct_vs_min": -0.8604688683199968,
-          "current_pct_vs_max": -12.465906445404585,
+          "current_gap_vs_min": -0.6618350181114607,
+          "current_gap_vs_max": -10.818828675005236,
+          "current_pct_vs_min": -0.8638809451810614,
+          "current_pct_vs_max": -12.468566443414685,
           "target_positions": [
             {
               "price": 72.0,
               "percentile": 0.0,
               "zone": "CHEAP",
               "position_status": "BELOW_MIN",
-              "family_net_min": 76.508328825335,
-              "family_net_max": 86.65194942221353,
-              "gap_vs_min": -4.508328825334999,
-              "gap_vs_max": -14.651949422213534,
-              "pct_vs_min": -5.892598746506805,
-              "pct_vs_max": -16.90896687254153
+              "family_net_min": 76.61183196635365,
+              "family_net_max": 86.76882562324742,
+              "gap_vs_min": -4.611831966353648,
+              "gap_vs_max": -14.768825623247423,
+              "pct_vs_min": -6.01973852861144,
+              "pct_vs_max": -17.02088914672426
             },
             {
               "price": 71.0,
               "percentile": 0.0,
               "zone": "CHEAP",
               "position_status": "BELOW_MIN",
-              "family_net_min": 76.508328825335,
-              "family_net_max": 86.65194942221353,
-              "gap_vs_min": -5.508328825334999,
-              "gap_vs_max": -15.651949422213534,
-              "pct_vs_min": -7.199645986138659,
-              "pct_vs_max": -18.06300899931179
+              "family_net_min": 76.61183196635365,
+              "family_net_max": 86.76882562324742,
+              "gap_vs_min": -5.611831966353648,
+              "gap_vs_max": -15.768825623247423,
+              "pct_vs_min": -7.3250199379362835,
+              "pct_vs_max": -18.1733767974642
             },
             {
               "price": 69.0,
               "percentile": 0.0,
               "zone": "CHEAP",
               "position_status": "BELOW_MIN",
-              "family_net_min": 76.508328825335,
-              "family_net_max": 86.65194942221353,
-              "gap_vs_min": -7.508328825334999,
-              "gap_vs_max": -17.651949422213534,
-              "pct_vs_min": -9.813740465402365,
-              "pct_vs_max": -20.3710932528523
+              "family_net_min": 76.61183196635365,
+              "family_net_max": 86.76882562324742,
+              "gap_vs_min": -7.611831966353648,
+              "gap_vs_max": -17.768825623247423,
+              "pct_vs_min": -9.93558275658597,
+              "pct_vs_max": -20.478352098944086
             }
           ],
           "cases": [
@@ -1387,8 +1404,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 1946.09375,
               "tsmc_return_vs_base": 0.043481903485254714,
-              "gross_0050": 78.508328825335,
-              "net_0050": 76.508328825335
+              "gross_0050": 78.61183196635365,
+              "net_0050": 76.61183196635365
             },
             {
               "pe": 20.5,
@@ -1396,8 +1413,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 1994.74609375,
               "tsmc_return_vs_base": 0.06956895107238603,
-              "gross_0050": 79.77628139994482,
-              "net_0050": 77.77628139994482
+              "gross_0050": 79.88145617346537,
+              "net_0050": 77.88145617346537
             },
             {
               "pe": 21.0,
@@ -1405,8 +1422,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2043.3984375,
               "tsmc_return_vs_base": 0.09565599865951735,
-              "gross_0050": 81.04423397455463,
-              "net_0050": 79.04423397455463
+              "gross_0050": 81.15108038057707,
+              "net_0050": 79.15108038057707
             },
             {
               "pe": 21.5,
@@ -1414,8 +1431,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2092.05078125,
               "tsmc_return_vs_base": 0.12174304624664889,
-              "gross_0050": 82.31218654916445,
-              "net_0050": 80.31218654916445
+              "gross_0050": 82.42070458768882,
+              "net_0050": 80.42070458768882
             },
             {
               "pe": 22.0,
@@ -1423,8 +1440,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2140.703125,
               "tsmc_return_vs_base": 0.1478300938337802,
-              "gross_0050": 83.58013912377426,
-              "net_0050": 81.58013912377426
+              "gross_0050": 83.69032879480052,
+              "net_0050": 81.69032879480052
             },
             {
               "pe": 22.5,
@@ -1432,8 +1449,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2189.35546875,
               "tsmc_return_vs_base": 0.17391714142091153,
-              "gross_0050": 84.84809169838408,
-              "net_0050": 82.84809169838408
+              "gross_0050": 84.95995300191225,
+              "net_0050": 82.95995300191225
             },
             {
               "pe": 23.0,
@@ -1441,8 +1458,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2238.0078125,
               "tsmc_return_vs_base": 0.20000418900804284,
-              "gross_0050": 86.11604427299389,
-              "net_0050": 84.11604427299389
+              "gross_0050": 86.22957720902397,
+              "net_0050": 84.22957720902397
             },
             {
               "pe": 23.5,
@@ -1450,8 +1467,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2286.66015625,
               "tsmc_return_vs_base": 0.22609123659517416,
-              "gross_0050": 87.3839968476037,
-              "net_0050": 85.3839968476037
+              "gross_0050": 87.49920141613568,
+              "net_0050": 85.49920141613568
             },
             {
               "pe": 24.0,
@@ -1459,8 +1476,8 @@
               "eps_after_fx": 97.3046875,
               "tsmc_price": 2335.3125,
               "tsmc_return_vs_base": 0.2521782841823057,
-              "gross_0050": 88.65194942221353,
-              "net_0050": 86.65194942221353
+              "gross_0050": 88.76882562324742,
+              "net_0050": 86.76882562324742
             }
           ]
         },
@@ -1481,58 +1498,58 @@
             "count": 9
           },
           "family_stats": {
-            "net_min": 67.3129427912789,
-            "net_max": 76.66130353336214,
-            "p10": 68.24777886548723,
-            "p25": 69.65003297679972,
-            "p50": 71.98712316232053,
-            "p75": 74.32421334784132,
-            "p90": 75.72646745915381,
+            "net_min": 67.40432299767845,
+            "net_max": 76.76500835187174,
+            "p10": 68.34039153309777,
+            "p25": 69.74449433622678,
+            "p50": 72.0846656747751,
+            "p75": 74.42483701332341,
+            "p90": 75.8289398164524,
             "case_count": 9
           },
           "current_price_percentile": 88.88888888888889,
           "current_zone": "RICH",
           "current_position_status": "IN_RANGE",
-          "current_gap_vs_min": 8.537055682842194,
-          "current_gap_vs_max": -0.8113050592410502,
-          "current_pct_vs_min": 12.682636249188416,
-          "current_pct_vs_max": -1.058298022401849,
+          "current_gap_vs_min": 8.545673950563739,
+          "current_gap_vs_max": -0.8150114036295548,
+          "current_pct_vs_min": 12.678228295324722,
+          "current_pct_vs_max": -1.061696495744191,
           "target_positions": [
             {
               "price": 72.0,
-              "percentile": 55.55555555555556,
+              "percentile": 44.44444444444444,
               "zone": "MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.3129427912789,
-              "family_net_max": 76.66130353336214,
-              "gap_vs_min": 4.6870572087211,
-              "gap_vs_max": -4.661303533362144,
-              "pct_vs_min": 6.963084682324072,
-              "pct_vs_max": -6.080386477296984
+              "family_net_min": 67.40432299767845,
+              "family_net_max": 76.76500835187174,
+              "gap_vs_min": 4.595677002321551,
+              "gap_vs_max": -4.765008351871742,
+              "pct_vs_min": 6.818074565454557,
+              "pct_vs_max": -6.20726611535053
             },
             {
               "price": 71.0,
               "percentile": 44.44444444444444,
               "zone": "MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.3129427912789,
-              "family_net_max": 76.66130353336214,
-              "gap_vs_min": 3.6870572087211,
-              "gap_vs_max": -5.661303533362144,
-              "pct_vs_min": 5.477486283958455,
-              "pct_vs_max": -7.384825554001184
+              "family_net_min": 67.40432299767845,
+              "family_net_max": 76.76500835187174,
+              "gap_vs_min": 3.595677002321551,
+              "gap_vs_max": -5.765008351871742,
+              "pct_vs_min": 5.334490196489905,
+              "pct_vs_max": -7.509942974859552
             },
             {
               "price": 69.0,
               "percentile": 22.22222222222222,
               "zone": "LOWER_MID",
               "position_status": "IN_RANGE",
-              "family_net_min": 67.3129427912789,
-              "family_net_max": 76.66130353336214,
-              "gap_vs_min": 1.6870572087211002,
-              "gap_vs_max": -7.661303533362144,
-              "pct_vs_min": 2.50628948722722,
-              "pct_vs_max": -9.993703707409606
+              "family_net_min": 67.40432299767845,
+              "family_net_max": 76.76500835187174,
+              "gap_vs_min": 1.5956770023215512,
+              "gap_vs_max": -7.765008351871742,
+              "pct_vs_min": 2.367321458560623,
+              "pct_vs_max": -10.115296693877596
             }
           ],
           "cases": [
@@ -1542,8 +1559,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1614.1679999999997,
               "tsmc_return_vs_base": -0.13449436997319053,
-              "gross_0050": 69.3129427912789,
-              "net_0050": 67.3129427912789
+              "gross_0050": 69.40432299767845,
+              "net_0050": 67.40432299767845
             },
             {
               "pe": 18.5,
@@ -1551,8 +1568,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1659.0059999999999,
               "tsmc_return_vs_base": -0.1104525469168901,
-              "gross_0050": 70.48148788403931,
-              "net_0050": 68.48148788403931
+              "gross_0050": 70.5744086669526,
+              "net_0050": 68.5744086669526
             },
             {
               "pe": 19.0,
@@ -1560,8 +1577,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1703.8439999999998,
               "tsmc_return_vs_base": -0.0864107238605899,
-              "gross_0050": 71.65003297679972,
-              "net_0050": 69.65003297679972
+              "gross_0050": 71.74449433622678,
+              "net_0050": 69.74449433622678
             },
             {
               "pe": 19.5,
@@ -1569,8 +1586,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1748.6819999999998,
               "tsmc_return_vs_base": -0.062368900804289695,
-              "gross_0050": 72.81857806956012,
-              "net_0050": 70.81857806956012
+              "gross_0050": 72.91458000550094,
+              "net_0050": 70.91458000550094
             },
             {
               "pe": 20.0,
@@ -1578,8 +1595,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1793.5199999999998,
               "tsmc_return_vs_base": -0.03832707774798938,
-              "gross_0050": 73.98712316232053,
-              "net_0050": 71.98712316232053
+              "gross_0050": 74.0846656747751,
+              "net_0050": 72.0846656747751
             },
             {
               "pe": 20.5,
@@ -1587,8 +1604,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1838.3579999999997,
               "tsmc_return_vs_base": -0.014285254691689175,
-              "gross_0050": 75.15566825508093,
-              "net_0050": 73.15566825508093
+              "gross_0050": 75.25475134404925,
+              "net_0050": 73.25475134404925
             },
             {
               "pe": 21.0,
@@ -1596,8 +1613,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1883.1959999999997,
               "tsmc_return_vs_base": 0.009756568364611029,
-              "gross_0050": 76.32421334784132,
-              "net_0050": 74.32421334784132
+              "gross_0050": 76.42483701332341,
+              "net_0050": 74.42483701332341
             },
             {
               "pe": 21.5,
@@ -1605,8 +1622,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1928.0339999999997,
               "tsmc_return_vs_base": 0.033798391420911233,
-              "gross_0050": 77.49275844060172,
-              "net_0050": 75.49275844060172
+              "gross_0050": 77.59492268259757,
+              "net_0050": 75.59492268259757
             },
             {
               "pe": 22.0,
@@ -1614,8 +1631,8 @@
               "eps_after_fx": 89.67599999999999,
               "tsmc_price": 1972.8719999999998,
               "tsmc_return_vs_base": 0.05784021447721166,
-              "gross_0050": 78.66130353336214,
-              "net_0050": 76.66130353336214
+              "gross_0050": 78.76500835187174,
+              "net_0050": 76.76500835187174
             }
           ]
         }
@@ -1625,23 +1642,23 @@
     "tranche_reference": [
       {
         "label": "10D_p10_uncond",
-        "price_level": 72.19971890408682,
-        "vs_current_pct": -4.812497881960665
+        "price_level": 72.29491505517504,
+        "vs_current_pct": -4.812484581872978
       },
       {
         "label": "10D_p05_uncond",
-        "price_level": 71.02446805441106,
-        "vs_current_pct": -6.361938716922233
+        "price_level": 71.11811082181144,
+        "vs_current_pct": -6.361930639343594
       },
       {
         "label": "20D_p10_uncond",
-        "price_level": 70.64398924406764,
-        "vs_current_pct": -6.8635587802017834
+        "price_level": 70.73711714228764,
+        "vs_current_pct": -6.863568157227151
       },
       {
         "label": "20D_p05_uncond",
-        "price_level": 68.82417888931774,
-        "vs_current_pct": -9.262781445144608
+        "price_level": 68.91492341000466,
+        "vs_current_pct": -9.262770007787802
       }
     ],
     "pre_execution_review": {
@@ -1649,12 +1666,14 @@
       "source_path": "roll25_cache/report.md",
       "band1": 33057.836667,
       "band2": 32541.990382,
-      "tx_night_last": 33351.0,
-      "tx_vs_band1": 293.1633329999968,
-      "tx_vs_band2": 809.009618,
-      "preopen_shock_flag": "NONE",
-      "shock_override": "NONE",
-      "trigger_reasons": [],
+      "tx_night_last": 33001.0,
+      "tx_vs_band1": -56.83666700000322,
+      "tx_vs_band2": 459.00961800000005,
+      "preopen_shock_flag": "CAUTION",
+      "shock_override": "OBSERVE_ONLY",
+      "trigger_reasons": [
+        "tx_night_last_below_band1"
+      ],
       "parse_notes": []
     },
     "base_execution_bias": "WAIT_FOR_BETTER_ALIGNMENT",
@@ -1667,9 +1686,9 @@
     ],
     "matched_veto_flags": [],
     "combined_execution_bias": "WAIT_WITH_DQ_CAUTION",
-    "fast_shock_override": "NONE",
-    "final_execution_bias": "WAIT_WITH_DQ_CAUTION",
-    "action_instruction": "觀察為主；等待更好對齊，且留意 DQ。",
+    "fast_shock_override": "OBSERVE_ONLY",
+    "final_execution_bias": "OBSERVE_ONLY",
+    "action_instruction": "只觀察，不執行。",
     "how_to_read": {
       "layer_1": "Use valuation scenarios to decide whether the current zone is cheap / fair / expensive.",
       "layer_1b": "Use family interpolation summary to improve valuation readability; this section is display-only.",
@@ -1680,6 +1699,7 @@
       "family_boundary_note": "percentile=0 or 100 can simply mean the target is below family min or above family max.",
       "family_robustness_note": "2027_defensive_family is a robustness check only; it does not alter execution bias.",
       "slow_var_note": "suggested_eps_base is display-only and never auto-applied; tsmc_weight_meta is informative only.",
+      "quarterly_eps_note": "annual_eps_candidate is derived from complete fiscal year quarters only; it does not auto-replace active_eps_base.",
       "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
       "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
       "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately."
@@ -1687,8 +1707,8 @@
   },
   "config_used": {
     "meta": {
-      "config_version": "0050_merge_v1.5a",
-      "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias. Added centralized slow variable management."
+      "config_version": "0050_merge_v1.6a",
+      "note": "Fixed rules, moving outputs. Update slow variables deliberately; update fast variables daily after close. Pre-execution shock review is optional and report-only. Family interpolation is display-only and does not alter final execution bias. Added quarterly EPS accumulation review without auto-replacing active_eps_base."
     },
     "slow_vars": {
       "active_eps_base": 66.25,
@@ -1711,10 +1731,40 @@
         "as_of_date": "NA",
         "update_policy": "low_frequency_review",
         "note": "TSMC weight is a structural observation; daily auto-refresh is unnecessary."
+      },
+      "quarterly_eps_tracker": {
+        "enabled": true,
+        "path": "tw0050_bb_cache/quarterly_eps_tracker.json",
+        "annual_candidate_policy": "sum_complete_fiscal_year_only",
+        "candidate_replace_policy": "display_only_no_auto_replace",
+        "auto_fill_suggested_eps_base": true,
+        "ready_diff_tolerance": 0.01,
+        "note": "Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base."
+      },
+      "quarterly_eps_review": {
+        "enabled": true,
+        "tracker_path": "tw0050_bb_cache/quarterly_eps_tracker.json",
+        "tracker_path_source": "config",
+        "tracker_note": "Quarterly EPS collection is used to derive a candidate annual EPS. Candidate is display-only and does not auto-replace active_eps_base.",
+        "annual_candidate_policy": "sum_complete_fiscal_year_only",
+        "candidate_replace_policy": "display_only_no_auto_replace",
+        "eps_quarters_collected": [],
+        "eps_quarters_collected_display": [],
+        "eps_quarters_collected_count": 0,
+        "eps_quarters_collected_detail": [],
+        "annual_eps_candidate": null,
+        "annual_eps_candidate_complete": false,
+        "annual_eps_candidate_fiscal_year": null,
+        "annual_eps_candidate_as_of_date": "NA",
+        "ready_to_replace_active_eps_base": false,
+        "ready_diff_tolerance": 0.01,
+        "load_notes": [
+          "Quarterly EPS tracker not found: tw0050_bb_cache/quarterly_eps_tracker.json"
+        ]
       }
     },
     "base": {
-      "base_0050": 75.8499984741211,
+      "base_0050": 75.94999694824219,
       "base_tsmc": 1865.0,
       "tsmc_weight": 0.6408
     },
@@ -1859,9 +1909,9 @@
   },
   "bb_summary": {
     "date": "2026-03-13",
-    "price_used": 75.8499984741211,
+    "price_used": 75.94999694824219,
     "state": "IN_BAND",
-    "bb_z": 0.934456593379354,
+    "bb_z": 0.9511344710016058,
     "regime_tag": "RISK_OFF_OR_DEFENSIVE",
     "regime_allowed": false,
     "rv20_percentile": 96.53607262302914,
@@ -1869,24 +1919,24 @@
     "pledge_policy": "DISALLOW",
     "tranche_levels": [
       {
-        "drawdown": -0.048124978819606645,
+        "drawdown": -0.04812484581872972,
         "label": "10D_p10_uncond",
-        "price_level": 72.19971890408682
+        "price_level": 72.29491505517504
       },
       {
-        "drawdown": -0.06361938716922236,
+        "drawdown": -0.06361930639343608,
         "label": "10D_p05_uncond",
-        "price_level": 71.02446805441106
+        "price_level": 71.11811082181144
       },
       {
-        "drawdown": -0.06863558780201784,
+        "drawdown": -0.06863568157227151,
         "label": "20D_p10_uncond",
-        "price_level": 70.64398924406764
+        "price_level": 70.73711714228764
       },
       {
-        "drawdown": -0.09262781445144602,
+        "drawdown": -0.09262770007787802,
         "label": "20D_p05_uncond",
-        "price_level": 68.82417888931774
+        "price_level": 68.91492341000466
       }
     ],
     "dq_flags": [
@@ -1910,8 +1960,8 @@
       "eps_after_fx": 74.72999999999999,
       "tsmc_price": 1345.1399999999999,
       "tsmc_return_vs_base": -0.278745308310992,
-      "gross_0050": 58.21487431693082,
-      "net_0050": 57.21487431693082
+      "gross_0050": 58.29162314646218,
+      "net_0050": 57.29162314646218
     },
     {
       "group_name": "2026_core",
@@ -1926,8 +1976,8 @@
       "eps_after_fx": 77.115,
       "tsmc_price": 1542.3,
       "tsmc_return_vs_base": -0.17302949061662198,
-      "gross_0050": 65.26033006517017,
-      "net_0050": 64.26033006517017
+      "gross_0050": 65.34636742256554,
+      "net_0050": 64.34636742256554
     },
     {
       "group_name": "2026_core",
@@ -1942,8 +1992,8 @@
       "eps_after_fx": 80.328125,
       "tsmc_price": 1767.21875,
       "tsmc_return_vs_base": -0.052429624664879326,
-      "gross_0050": 72.48431381247221,
-      "net_0050": 71.48431381247221
+      "gross_0050": 72.57987506395244,
+      "net_0050": 71.57987506395244
     },
     {
       "group_name": "2026_core",
@@ -1958,8 +2008,8 @@
       "eps_after_fx": 82.8125,
       "tsmc_price": 1987.5,
       "tsmc_return_vs_base": 0.06568364611260047,
-      "gross_0050": 79.04253101043291,
-      "net_0050": 78.04253101043291
+      "gross_0050": 79.14673842837254,
+      "net_0050": 78.14673842837254
     },
     {
       "group_name": "2027_core",
@@ -1974,8 +2024,8 @@
       "eps_after_fx": 97.3046875,
       "tsmc_price": 2140.703125,
       "tsmc_return_vs_base": 0.1478300938337802,
-      "gross_0050": 83.58013912377426,
-      "net_0050": 81.58013912377426
+      "gross_0050": 83.69032879480052,
+      "net_0050": 81.69032879480052
     },
     {
       "group_name": "2027_core",
@@ -1990,8 +2040,8 @@
       "eps_after_fx": 103.515625,
       "tsmc_price": 2484.375,
       "tsmc_return_vs_base": 0.33210455764075064,
-      "gross_0050": 93.35409987266029,
-      "net_0050": 91.35409987266029
+      "gross_0050": 93.47717525470395,
+      "net_0050": 91.47717525470395
     },
     {
       "group_name": "2027_core",
@@ -2006,8 +2056,8 @@
       "eps_after_fx": 111.9625,
       "tsmc_price": 2687.1000000000004,
       "tsmc_return_vs_base": 0.4408042895442361,
-      "gross_0050": 98.63741545163022,
-      "net_0050": 96.63741545163022
+      "gross_0050": 98.76745620620949,
+      "net_0050": 96.76745620620949
     }
   ]
 }
