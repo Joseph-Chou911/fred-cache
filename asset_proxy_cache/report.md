@@ -1,11 +1,11 @@
 # Risk Dashboard (asset_proxy_cache)
 
 - Summary: ALERT=0 / WATCH=2 / INFO=0 / NONE=2; CHANGED=2; WATCH_STREAK>=3=0
-- SCRIPT_FINGERPRINT: `render_dashboard_py_signals_v8@08eb25c`
+- SCRIPT_FINGERPRINT: `render_dashboard_py_signals_v8@604a732`
 - RULESET_ID: `signals_v8`
-- RUN_TS_UTC: `2026-03-12T23:07:16.822862+00:00`
-- STATS.generated_at_utc: `2026-03-12T23:07:16Z`
-- STATS.as_of_ts: `2026-03-13T07:07:13+08:00`
+- RUN_TS_UTC: `2026-03-13T09:00:01.285928+00:00`
+- STATS.generated_at_utc: `2026-03-13T09:00:01Z`
+- STATS.as_of_ts: `2026-03-13T16:59:57+08:00`
 - script_version: `cycle_sidecars_stats_v1`
 - stale_hours: `36.0`
 - stats_path: `asset_proxy_cache/stats_latest.json`
@@ -19,7 +19,7 @@
 
 | Signal | Tag | Near | Dir | DirNote | PrevSignal | DeltaSignal | StreakHist | StreakWA | Series | DQ | age_h | data_date | value | z60 | p60 | p252 | z252 | z_poschg60 | p_poschg60 | ret1_pct1d_absPrev | Reason | Source | as_of_ts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| WATCH | JUMP_P | NEAR:ret1%1d | MOVE | MOVE_ONLY | INFO | INFO→WATCH | 0 | 1 | GLD.US_CLOSE | OK | 0 | 2026-03-12 | 466.98 | 0.77645 | 70 | 92.857143 | 1.875688 | -0.31407 | -18.135593 | -1.944398 | abs(PΔ60)>=15 | https://stooq.com/q/d/l/?s=gld.us&d1=20260210&d2=20260312&i=d | 2026-03-13T07:07:13+08:00 |
-| WATCH | JUMP_P | NEAR:ret1%1d | MOVE | MOVE_ONLY | INFO | INFO→WATCH | 0 | 1 | IAU.US_CLOSE | OK | 0 | 2026-03-12 | 95.67 | 0.78016 | 71.666667 | 93.253968 | 1.87688 | -0.311437 | -16.468927 | -1.927217 | abs(PΔ60)>=15 | https://stooq.com/q/d/l/?s=iau.us&d1=20260210&d2=20260312&i=d | 2026-03-13T07:07:13+08:00 |
-| NONE | NA | NA | MOVE | MOVE_ONLY | NONE | SAME | 0 | 0 | IYR.US_CLOSE | OK | 0 | 2026-03-12 | 97.33 | 0.141429 | 60 | 83.333333 | 0.784104 | -0.26006 | -2.711864 | -0.693807 | NA | https://stooq.com/q/d/l/?s=iyr.us&d1=20260210&d2=20260312&i=d | 2026-03-13T07:07:13+08:00 |
-| NONE | NA | NA | MOVE | MOVE_ONLY | NONE | SAME | 0 | 0 | VNQ.US_CLOSE | OK | 0 | 2026-03-12 | 91.985 | 0.175998 | 60 | 84.126984 | 0.825886 | -0.27057 | -6.101695 | -0.717755 | NA | https://stooq.com/q/d/l/?s=vnq.us&d1=20260210&d2=20260312&i=d | 2026-03-13T07:07:13+08:00 |
+| WATCH | JUMP_P | NEAR:ret1%1d | MOVE | MOVE_ONLY | INFO | INFO→WATCH | 0 | 1 | GLD.US_CLOSE | OK | 0 | 2026-03-12 | 466.88 | 0.77645 | 70 | 92.857143 | 1.875688 | -0.31407 | -18.135593 | -1.944398 | abs(PΔ60)>=15 | https://stooq.com/q/d/l/?s=gld.us&d1=20260211&d2=20260313&i=d | 2026-03-13T16:59:57+08:00 |
+| WATCH | JUMP_P | NEAR:ret1%1d | MOVE | MOVE_ONLY | INFO | INFO→WATCH | 0 | 1 | IAU.US_CLOSE | OK | 0 | 2026-03-12 | 95.65 | 0.78016 | 71.666667 | 93.253968 | 1.87688 | -0.311437 | -16.468927 | -1.927217 | abs(PΔ60)>=15 | https://stooq.com/q/d/l/?s=iau.us&d1=20260211&d2=20260313&i=d | 2026-03-13T16:59:57+08:00 |
+| NONE | NA | NA | MOVE | MOVE_ONLY | NONE | SAME | 0 | 0 | IYR.US_CLOSE | OK | 0 | 2026-03-12 | 97.32 | 0.141429 | 60 | 83.333333 | 0.784104 | -0.26006 | -2.711864 | -0.693807 | NA | https://stooq.com/q/d/l/?s=iyr.us&d1=20260211&d2=20260313&i=d | 2026-03-13T16:59:57+08:00 |
+| NONE | NA | NA | MOVE | MOVE_ONLY | NONE | SAME | 0 | 0 | VNQ.US_CLOSE | OK | 0 | 2026-03-12 | 92.01 | 0.175998 | 60 | 84.126984 | 0.825886 | -0.27057 | -6.101695 | -0.717755 | NA | https://stooq.com/q/d/l/?s=vnq.us&d1=20260211&d2=20260313&i=d | 2026-03-13T16:59:57+08:00 |
