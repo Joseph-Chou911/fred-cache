@@ -1,42 +1,42 @@
 # Bottom Cache Dashboard (v0.1)
 
 - renderer_version: `v0.1.10`
-- as_of_ts (TPE): `2026-03-13T00:32:11.552603+08:00`
-- run_ts_utc: `2026-03-12T16:32:11.552579Z`
-- bottom_state (Global): **PANIC_BUT_SYSTEMIC**  (streak=9)
-- market_cache_as_of_ts: `2026-03-12T03:18:55Z`
-- market_cache_generated_at_utc: `2026-03-12T03:18:55Z`
-- history_load_status: `OK`; reason: `dict.items`; loaded_items: `34`
-- history_pre_items: `34`; history_post_items: `35`; pre_unique_days: `34`; post_unique_days: `35`
+- as_of_ts (TPE): `2026-03-13T23:59:49.177133+08:00`
+- run_ts_utc: `2026-03-13T15:59:49.177119Z`
+- bottom_state (Global): **BOTTOM_WATCH**  (streak=1)
+- market_cache_as_of_ts: `2026-03-13T03:16:10Z`
+- market_cache_generated_at_utc: `2026-03-13T03:16:10Z`
+- history_load_status: `OK`; reason: `dict.items`; loaded_items: `35`
+- history_pre_items: `35`; history_post_items: `35`; pre_unique_days: `35`; post_unique_days: `35`
 - history_write: status=`OK`; reason=`ok`; allow_reset=`False`; allow_shrink=`False`
-- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260312T163211Z.json`; bytes=`31725`; keep_n=`30`; prune_deleted=`1`
+- history_backup: status=`OK`; reason=`copied_pre_write`; file=`dashboard_bottom_cache/history.json.bak.20260313T155949Z.json`; bytes=`32655`; keep_n=`30`; prune_deleted=`1`
 
 ## Rationale (Decision Chain) - Global
 - TRIG_PANIC = `1`  (VIX >= 20.0 OR SP500.ret1% <= -1.5)
-- TRIG_SYSTEMIC_VETO = `1`  (systemic veto via HYG_IEF_RATIO / OFR_FSI)
+- TRIG_SYSTEMIC_VETO = `0`  (systemic veto via HYG_IEF_RATIO / OFR_FSI)
 - TRIG_REVERSAL = `0`  (panic & NOT systemic & VIX cooling & SP500 stable)
 
 ## Distance to Triggers - Global
-- VIX panic gap: `-4.2300`
-- SP500 ret1% gap: `1.4162`
-- HYG veto gap(z): `1.1084`
-- OFR veto gap(z): `-2.4251`
+- VIX panic gap: `-7.2900`
+- SP500 ret1% gap: `-0.0228`
+- HYG veto gap(z): `0.7190`
+- OFR veto gap(z): `0.1443`
 
 ## Context (Non-trigger) - Global
-- SP500.p252: `69.04761904761905`; equity_extreme(p252>=95): `0`
+- SP500.p252: `59.523809523809526`; equity_extreme(p252>=95): `0`
 
 ## TW Local Gate (roll25 + margin)
 - tw_state: **NONE**  (streak=35)
-- UsedDate: `2026-03-11`; run_day_tag: `WEEKDAY`; used_date_status: `DATA_NOT_UPDATED`
+- UsedDate: `2026-03-12`; run_day_tag: `WEEKDAY`; used_date_status: `DATA_NOT_UPDATED`
 - Lookback: `20/20`
-- roll25_raw: DownDay=`False`; VolumeAmplified=`False`; VolAmplified=`False`; NewLow_N=`0`; ConsecutiveBreak=`0`
+- roll25_raw: DownDay=`True`; VolumeAmplified=`False`; VolAmplified=`False`; NewLow_N=`0`; ConsecutiveBreak=`1`
 - roll25_paired_basis: `False` (basis = VolumeAmplified OR VolAmplified OR (NewLow_N>=1))
 - margin_final_signal(TWSE): `NONE`; confidence: `DOWNGRADED`; unit: `億`
-- margin_balance(TWSE latest): `3793.7` 億
-- margin_chg(TWSE latest): `32.2` 億
-- margin_flow_audit: signal=`NONE`; sum_last5=`2.1`; pos_days_last5=`3`
+- margin_balance(TWSE latest): `3854.5` 億
+- margin_chg(TWSE latest): `60.8` 億
+- margin_flow_audit: signal=`NONE`; sum_last5=`27.7`; pos_days_last5=`3`
 - margin_level_gate_audit: gate=`NA`; points=`30/60`; p=`NA`; p_min=`95.0`
-- tw_panic_hit: `DownDay=False + Stress={}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1,ConsecutiveBreak>=2&paired}`
+- tw_panic_hit: `DownDay=True + Stress={}; Miss={VolumeAmplified,VolAmplified,NewLow_N>=1,ConsecutiveBreak>=2&paired}`
 
 ### TW Triggers (0/1/NA)
 - TRIG_TW_PANIC: `0`
@@ -55,7 +55,7 @@
 | 2026-03-10 | 2026-03-10T00:30:16.829140+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-03-11 | 2026-03-11T00:30:47.201420+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 | 2026-03-12 | 2026-03-12T00:07:22.009328+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
-| 2026-03-13 | 2026-03-13T00:32:11.552603+08:00 | PANIC_BUT_SYSTEMIC | 1 | 1 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
+| 2026-03-13 | 2026-03-13T23:59:49.177133+08:00 | BOTTOM_WATCH | 1 | 0 | 0 | NONE | 0 | 0 | 0 | NONE | DOWNGRADED |
 
 ## Data Sources
 - Global (single-source): `market_cache/stats_latest.json`
