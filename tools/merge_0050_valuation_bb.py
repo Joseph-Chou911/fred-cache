@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-merge_0050_valuation_bb.py  (v1.4d)
+merge_0050_valuation_bb.py  (v1.5a)
 
 Purpose
 -------
@@ -14,13 +14,14 @@ Merge three layers into one deterministic report:
 3) Pre-execution shock review:
    read Band 1 / Band 2 from roll25 markdown report and compare with manual TX night close
 
-v1.4d changes
+v1.5a changes
 -------------
-- Keep v1.4c structure and backward-compatible JSON schema
-- Add one minimal robustness-check family:
-  * 2027_defensive_family
-- Purpose:
-  * test whether current price still looks acceptable under a milder 2027 defensive setup
+- Keep single-file architecture
+- Centralize slow variables:
+  * active_eps_base
+  * family_targets
+  * tsmc_weight_meta
+- suggested_eps_base is display-only and NEVER auto-applied
 - Keep family interpolation display-only; does NOT alter final_execution_bias
 
 Backward compatibility
@@ -49,17 +50,42 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+EPS_BASE_TOKEN = "__ACTIVE_EPS_BASE__"
+FAMILY_TARGETS_TOKEN = "__FAMILY_TARGETS__"
+
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "meta": {
-        "config_version": "0050_merge_v1.4d",
+        "config_version": "0050_merge_v1.5a",
         "note": (
             "Fixed rules, moving outputs. Update slow variables deliberately; "
             "update fast variables daily after close. "
             "Pre-execution shock review is optional and report-only. "
             "Family interpolation is display-only and does not alter final execution bias. "
-            "Added 2027_defensive_family as a minimal robustness check."
+            "Added centralized slow variable management."
         ),
+    },
+    "slow_vars": {
+        "active_eps_base": 66.25,
+        "eps_base_policy": "manual_review_only",
+        "eps_base_note": (
+            "Active EPS base is a slow-moving valuation anchor. "
+            "Revise only when earnings basis / model basis changes materially."
+        ),
+        "suggested_eps_base": None,
+        "suggested_eps_meta": {
+            "source": "NA",
+            "as_of_date": "NA",
+            "method": "NA",
+            "note": "Display-only suggestion; never auto-applied.",
+        },
+        "family_targets": [72.0, 71.0, 69.0],
+        "targets_note": "Display-only target price markers.",
+        "tsmc_weight_meta": {
+            "as_of_date": "NA",
+            "update_policy": "low_frequency_review",
+            "note": "TSMC weight is a structural observation; daily auto-refresh is unnecessary.",
+        },
     },
     "base": {
         "base_0050": "auto",   # auto_from_bb_stats unless overridden
@@ -93,7 +119,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "scenarios": [
                 {
                     "name": "2026_壓力",
-                    "eps_base": 66.25,
+                    "eps_base": EPS_BASE_TOKEN,
                     "eps_growth": 0.20,
                     "fx_haircut": 0.06,
                     "pe": 18.0,
@@ -101,7 +127,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 },
                 {
                     "name": "2026_保守",
-                    "eps_base": 66.25,
+                    "eps_base": EPS_BASE_TOKEN,
                     "eps_growth": 0.20,
                     "fx_haircut": 0.03,
                     "pe": 20.0,
@@ -109,7 +135,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 },
                 {
                     "name": "2026_中性偏保守",
-                    "eps_base": 66.25,
+                    "eps_base": EPS_BASE_TOKEN,
                     "eps_growth": 0.25,
                     "fx_haircut": 0.03,
                     "pe": 22.0,
@@ -117,7 +143,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 },
                 {
                     "name": "2026_中性",
-                    "eps_base": 66.25,
+                    "eps_base": EPS_BASE_TOKEN,
                     "eps_growth": 0.25,
                     "fx_haircut": 0.00,
                     "pe": 24.0,
@@ -131,7 +157,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "scenarios": [
                 {
                     "name": "2027_中性",
-                    "eps_base": 66.25,
+                    "eps_base": EPS_BASE_TOKEN,
                     "eps_growth": 0.25,
                     "fx_haircut": 0.06,
                     "pe": 22.0,
@@ -139,7 +165,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 },
                 {
                     "name": "2027_中性偏樂觀",
-                    "eps_base": 66.25,
+                    "eps_base": EPS_BASE_TOKEN,
                     "eps_growth": 0.25,
                     "fx_haircut": 0.00,
                     "pe": 24.0,
@@ -147,7 +173,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 },
                 {
                     "name": "2027_樂觀延續",
-                    "eps_base": 66.25,
+                    "eps_base": EPS_BASE_TOKEN,
                     "eps_growth": 0.30,
                     "fx_haircut": 0.00,
                     "pe": 24.0,
@@ -158,7 +184,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     ],
     "family_interpolation": {
         "enabled": True,
-        "targets": [72.0, 71.0, 69.0],
+        "targets": FAMILY_TARGETS_TOKEN,
         "note": (
             "Display-only. Single-axis dense interpolation within fixed assumption families. "
             "This section improves valuation readability but does not alter execution bias."
@@ -167,7 +193,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             {
                 "family_name": "2026_conservative_family",
                 "years_ahead": 1,
-                "eps_base": 66.25,
+                "eps_base": EPS_BASE_TOKEN,
                 "eps_growth": 0.20,
                 "fx_haircut": 0.03,
                 "other_ret": -0.08,
@@ -178,7 +204,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             {
                 "family_name": "2026_neutralish_family",
                 "years_ahead": 1,
-                "eps_base": 66.25,
+                "eps_base": EPS_BASE_TOKEN,
                 "eps_growth": 0.25,
                 "fx_haircut": 0.03,
                 "other_ret": -0.03,
@@ -189,7 +215,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             {
                 "family_name": "2027_neutral_family",
                 "years_ahead": 2,
-                "eps_base": 66.25,
+                "eps_base": EPS_BASE_TOKEN,
                 "eps_growth": 0.25,
                 "fx_haircut": 0.06,
                 "other_ret": 0.02,
@@ -200,7 +226,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             {
                 "family_name": "2027_defensive_family",
                 "years_ahead": 2,
-                "eps_base": 66.25,
+                "eps_base": EPS_BASE_TOKEN,
                 "eps_growth": 0.20,
                 "fx_haircut": 0.06,
                 "other_ret": 0.00,
@@ -449,6 +475,15 @@ def resolve_dividend_drag(cfg: Dict[str, Any]) -> Tuple[bool, str, float]:
     return True, "legacy", float(dd.get("points_per_year", 1.0))
 
 
+def resolve_active_eps_base(cfg: Dict[str, Any], cli_eps_base_override: Optional[float]) -> Tuple[float, str]:
+    slow = cfg.get("slow_vars", {})
+    if cli_eps_base_override is not None:
+        return float(cli_eps_base_override), "cli"
+
+    v = slow.get("active_eps_base", 66.25)
+    return float(v), "config"
+
+
 def apply_resolved_bases(
     cfg: Dict[str, Any],
     bb_stats: Dict[str, Any],
@@ -472,6 +507,47 @@ def apply_resolved_bases(
         "tsmc_weight": src_weight,
     }
     return cfg2, sources
+
+
+def apply_resolved_slow_vars(
+    cfg: Dict[str, Any],
+    cli_eps_base_override: Optional[float],
+    cli_suggested_eps_base: Optional[float],
+    cli_suggested_eps_source: Optional[str],
+    cli_suggested_eps_as_of: Optional[str],
+    cli_suggested_eps_method: Optional[str],
+    cli_tsmc_weight_as_of: Optional[str],
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    cfg2 = deep_copy_jsonable(cfg)
+    active_eps, active_src = resolve_active_eps_base(cfg2, cli_eps_base_override)
+    cfg2["slow_vars"]["active_eps_base"] = active_eps
+
+    if cli_suggested_eps_base is not None:
+        cfg2["slow_vars"]["suggested_eps_base"] = float(cli_suggested_eps_base)
+    if cli_suggested_eps_source is not None:
+        cfg2["slow_vars"]["suggested_eps_meta"]["source"] = cli_suggested_eps_source
+    if cli_suggested_eps_as_of is not None:
+        cfg2["slow_vars"]["suggested_eps_meta"]["as_of_date"] = cli_suggested_eps_as_of
+    if cli_suggested_eps_method is not None:
+        cfg2["slow_vars"]["suggested_eps_meta"]["method"] = cli_suggested_eps_method
+    if cli_tsmc_weight_as_of is not None:
+        cfg2["slow_vars"]["tsmc_weight_meta"]["as_of_date"] = cli_tsmc_weight_as_of
+
+    return cfg2, {"active_eps_base": active_src}
+
+
+def resolve_eps_base_value(x: Any, cfg: Dict[str, Any]) -> float:
+    if isinstance(x, str) and x == EPS_BASE_TOKEN:
+        return float(cfg.get("slow_vars", {}).get("active_eps_base", 66.25))
+    return float(x)
+
+
+def resolve_family_targets(cfg: Dict[str, Any]) -> List[float]:
+    fi_cfg = cfg.get("family_interpolation", {}) or {}
+    raw = fi_cfg.get("targets", [])
+    if isinstance(raw, str) and raw == FAMILY_TARGETS_TOKEN:
+        raw = cfg.get("slow_vars", {}).get("family_targets", [])
+    return [float(v) for v in raw]
 
 
 def compute_tsmc_price(
@@ -514,7 +590,7 @@ def build_results(cfg: Dict[str, Any], drag_enabled: bool, drag_pts: float) -> L
         years_ahead = int(group["years_ahead"])
         group_name = str(group["group_name"])
         for s in group["scenarios"]:
-            eps_base = float(s["eps_base"])
+            eps_base = resolve_eps_base_value(s["eps_base"], cfg)
             eps_growth = float(s["eps_growth"])
             fx_haircut = float(s["fx_haircut"])
             pe = float(s["pe"])
@@ -703,13 +779,13 @@ def build_family_interpolation(
     base_0050 = float(cfg["base"]["base_0050"])
     base_tsmc = float(cfg["base"]["base_tsmc"])
     tsmc_weight = float(cfg["base"]["tsmc_weight"])
-    targets = [float(x) for x in fi_cfg.get("targets", [])]
+    targets = resolve_family_targets(cfg)
 
     families_out: List[Dict[str, Any]] = []
     for fam in fi_cfg.get("families", []):
         family_name = str(fam["family_name"])
         years_ahead = int(fam["years_ahead"])
-        eps_base = float(fam["eps_base"])
+        eps_base = resolve_eps_base_value(fam["eps_base"], cfg)
         eps_growth = float(fam["eps_growth"])
         fx_haircut = float(fam["fx_haircut"])
         other_ret = float(fam["other_ret"])
@@ -831,10 +907,6 @@ def decide_execution_bias(
     price_zone: str,
     dq_policy: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    First decide base execution bias from price/regime/BB state.
-    Then apply DQ overlay to downgrade trust or veto if configured.
-    """
     if bb.regime_allowed is False and "UPPER" in bb.state:
         base_bias = "DEFENSIVE_NO_CHASE"
     elif price_zone in {"LOWER_ZONE", "LOWER_MID_ZONE"} and bb.regime_allowed:
@@ -1072,6 +1144,7 @@ def build_combined_view(
             "family_note": "family interpolation is display-only and does not alter final execution bias.",
             "family_boundary_note": "percentile=0 or 100 can simply mean the target is below family min or above family max.",
             "family_robustness_note": "2027_defensive_family is a robustness check only; it does not alter execution bias.",
+            "slow_var_note": "suggested_eps_base is display-only and never auto-applied; tsmc_weight_meta is informative only.",
             "dq_note": "DQ flags can downgrade or veto action bias even when valuation or regime otherwise look acceptable.",
             "shock_note": "Pre-execution review is optional. If no roll25 report or TX night close is provided, no shock override is applied.",
             "note": "Rules fixed, outputs dynamic. Fast variables update daily; slow assumptions should be revised deliberately.",
@@ -1098,6 +1171,27 @@ def scenario_to_case(r: ScenarioResult) -> Dict[str, Any]:
     }
 
 
+def build_slow_variable_review(
+    cfg: Dict[str, Any],
+    slow_var_sources: Dict[str, str],
+    base_sources: Dict[str, str],
+) -> Dict[str, Any]:
+    slow = cfg.get("slow_vars", {})
+    return {
+        "active_eps_base": float(slow.get("active_eps_base", 66.25)),
+        "active_eps_base_source": slow_var_sources.get("active_eps_base", "config"),
+        "eps_base_policy": str(slow.get("eps_base_policy", "manual_review_only")),
+        "eps_base_note": str(slow.get("eps_base_note", "")),
+        "suggested_eps_base": slow.get("suggested_eps_base", None),
+        "suggested_eps_meta": deep_copy_jsonable(slow.get("suggested_eps_meta", {})),
+        "family_targets": [float(v) for v in slow.get("family_targets", [])],
+        "targets_note": str(slow.get("targets_note", "")),
+        "tsmc_weight": float(cfg.get("base", {}).get("tsmc_weight", 0.6408)),
+        "tsmc_weight_source": base_sources.get("tsmc_weight", "config"),
+        "tsmc_weight_meta": deep_copy_jsonable(slow.get("tsmc_weight_meta", {})),
+    }
+
+
 def build_output_json(
     cfg: Dict[str, Any],
     bb: BBState,
@@ -1108,17 +1202,19 @@ def build_output_json(
     roll25_report_path: Optional[str],
     tx_night_last: Optional[float],
     base_sources: Dict[str, str],
+    slow_var_sources: Dict[str, str],
     drag_enabled: bool,
     drag_mode: str,
     drag_pts: float,
     schema_validation: Dict[str, Any],
 ) -> Dict[str, Any]:
     valuation_cases = [scenario_to_case(r) for r in results]
+    slow_review = build_slow_variable_review(cfg, slow_var_sources, base_sources)
 
     meta = {
         "generated_at_utc": now_utc_iso(),
         "script": "merge_0050_valuation_bb.py",
-        "schema_version": "0050_merge_schema_v1.4d_compat",
+        "schema_version": "0050_merge_schema_v1.5a_compat",
         "config_version": cfg.get("meta", {}).get("config_version", "unknown"),
         "note": cfg.get("meta", {}).get("note", ""),
     }
@@ -1162,6 +1258,7 @@ def build_output_json(
     out_json = {
         "meta": meta,
         "inputs": inputs,
+        "slow_variable_review": slow_review,
         "valuation_cases": valuation_cases,
         "family_interpolation": family_interp,
         "bb_snapshot": bb_snapshot,
@@ -1199,6 +1296,7 @@ def markdown_report(
     results: List[ScenarioResult],
     combined: Dict[str, Any],
     base_sources: Dict[str, str],
+    slow_var_sources: Dict[str, str],
     drag_enabled: bool,
     drag_mode: str,
     drag_pts: float,
@@ -1208,6 +1306,7 @@ def markdown_report(
     pre = combined.get("pre_execution_review", {}) or {}
     fam = combined.get("family_interpolation", {}) or {}
     fam_targets = [float(x) for x in fam.get("targets", [])]
+    slow_review = build_slow_variable_review(cfg, slow_var_sources, base_sources)
 
     lines.append("# 0050 Valuation × BB Merged Report")
     lines.append("")
@@ -1239,6 +1338,22 @@ def markdown_report(
     lines.append(f"- tsmc_weight_in_0050: `{cfg['base']['tsmc_weight']}` (source=`{base_sources['tsmc_weight']}`)")
     lines.append(f"- dividend_drag_mode: `{drag_mode}`")
     lines.append(f"- dividend_drag_points_per_year: `{drag_pts}` (enabled=`{drag_enabled}`)")
+
+    lines.append("")
+    lines.append("## Slow Variable Review")
+    lines.append(f"- active_eps_base: `{fmt_num(slow_review['active_eps_base'])}` (source=`{slow_review['active_eps_base_source']}`)")
+    lines.append(f"- eps_base_policy: `{slow_review['eps_base_policy']}`")
+    lines.append(f"- eps_base_note: `{slow_review['eps_base_note']}`")
+    lines.append(f"- suggested_eps_base: `{fmt_num(slow_review['suggested_eps_base'])}`")
+    lines.append(f"- suggested_eps_source: `{slow_review['suggested_eps_meta'].get('source', 'NA')}`")
+    lines.append(f"- suggested_eps_as_of_date: `{slow_review['suggested_eps_meta'].get('as_of_date', 'NA')}`")
+    lines.append(f"- suggested_eps_method: `{slow_review['suggested_eps_meta'].get('method', 'NA')}`")
+    lines.append("- suggested_eps_note: `display-only; never auto-applied`")
+    lines.append(f"- family_targets: `{', '.join([str(v) for v in slow_review['family_targets']])}`")
+    lines.append(f"- targets_note: `{slow_review['targets_note']}`")
+    lines.append(f"- tsmc_weight_meta_as_of_date: `{slow_review['tsmc_weight_meta'].get('as_of_date', 'NA')}`")
+    lines.append(f"- tsmc_weight_meta_update_policy: `{slow_review['tsmc_weight_meta'].get('update_policy', 'NA')}`")
+    lines.append(f"- tsmc_weight_meta_note: `{slow_review['tsmc_weight_meta'].get('note', '')}`")
 
     lines.append("")
     lines.append("## Valuation Scenario Table")
@@ -1387,15 +1502,18 @@ def markdown_report(
     lines.append("- Step 1b: Use family interpolation summary to refine valuation readability across fixed assumption families.")
     lines.append("- Step 2: Read current_status / target_status first. A percentile of 0 or 100 may simply mean out-of-range, not model failure.")
     lines.append("- Step 3: Use 2027_defensive_family only as a robustness check: ask whether the price still looks acceptable under milder defensive assumptions.")
-    lines.append("- Step 4: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
-    lines.append("- Step 5: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
-    lines.append("- Step 6: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
+    lines.append("- Step 4: Treat suggested_eps_base as review material only; it never changes the live model automatically.")
+    lines.append("- Step 5: Use BB state, regime, tranche references, and DQ overlay to decide whether to act now or wait.")
+    lines.append("- Step 6: Use pre-execution review to override the action bias when TX night close breaches roll25 bands.")
+    lines.append("- Step 7: Keep rules fixed. Update fast variables daily after close; update slow assumptions only when fundamentals or policy materially change.")
 
     lines.append("")
     lines.append("## Notes")
     lines.append("- base_0050 is auto-resolved from bb-stats unless overridden.")
     lines.append("- base_tsmc is slow-fast hybrid: usually update when market anchor changes meaningfully, or pass via CLI.")
-    lines.append("- eps_base is a slow-moving fundamental anchor; revise only when earnings/model basis changes.")
+    lines.append("- active_eps_base is the live slow-moving valuation anchor; revise only when earnings/model basis changes.")
+    lines.append("- suggested_eps_base is display-only and never auto-applied.")
+    lines.append("- tsmc_weight_meta is informative only; it does not change execution bias by itself.")
     lines.append("- valuation zone is a rough classification only; do not over-interpret sparse scenario percentiles.")
     lines.append("- Mixed-horizon scenario percentile combines 1Y and 2Y cases; treat it as display-only, not primary execution input.")
     lines.append("- Family interpolation is display-only and does not alter base_execution_bias / combined_execution_bias / final_execution_bias.")
@@ -1415,6 +1533,12 @@ def main() -> None:
     parser.add_argument("--base-0050", type=float, required=False, help="Override base 0050 price")
     parser.add_argument("--base-tsmc", type=float, required=False, help="Override base TSMC price")
     parser.add_argument("--tsmc-weight", type=float, required=False, help="Override TSMC weight in 0050")
+    parser.add_argument("--tsmc-weight-as-of", required=False, help="Optional as-of date for TSMC weight metadata")
+    parser.add_argument("--eps-base-override", type=float, required=False, help="Override active EPS base used in calculations")
+    parser.add_argument("--suggested-eps-base", type=float, required=False, help="Display-only suggested EPS base; never auto-applied")
+    parser.add_argument("--suggested-eps-source", required=False, help="Display-only suggested EPS source")
+    parser.add_argument("--suggested-eps-as-of", required=False, help="Display-only suggested EPS as-of date")
+    parser.add_argument("--suggested-eps-method", required=False, help="Display-only suggested EPS method")
     parser.add_argument("--roll25-report", required=False, help="Optional path to roll25 markdown report")
     parser.add_argument("--tx-night-last", type=float, required=False, help="Optional manual TX night-session close")
     parser.add_argument("--out-json", required=True, help="Output JSON path")
@@ -1428,6 +1552,16 @@ def main() -> None:
 
     user_cfg = load_json(Path(args.config)) if args.config else None
     cfg = merge_config(user_cfg)
+
+    cfg, slow_var_sources = apply_resolved_slow_vars(
+        cfg=cfg,
+        cli_eps_base_override=args.eps_base_override,
+        cli_suggested_eps_base=args.suggested_eps_base,
+        cli_suggested_eps_source=args.suggested_eps_source,
+        cli_suggested_eps_as_of=args.suggested_eps_as_of,
+        cli_suggested_eps_method=args.suggested_eps_method,
+        cli_tsmc_weight_as_of=args.tsmc_weight_as_of,
+    )
 
     cfg, base_sources = apply_resolved_bases(
         cfg=cfg,
@@ -1471,6 +1605,7 @@ def main() -> None:
         roll25_report_path=args.roll25_report,
         tx_night_last=args.tx_night_last,
         base_sources=base_sources,
+        slow_var_sources=slow_var_sources,
         drag_enabled=drag_enabled,
         drag_mode=drag_mode,
         drag_pts=drag_pts,
@@ -1493,6 +1628,7 @@ def main() -> None:
                 results=results,
                 combined=combined,
                 base_sources=base_sources,
+                slow_var_sources=slow_var_sources,
                 drag_enabled=drag_enabled,
                 drag_mode=drag_mode,
                 drag_pts=drag_pts,
