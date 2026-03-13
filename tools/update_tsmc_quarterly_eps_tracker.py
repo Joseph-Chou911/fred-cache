@@ -2,33 +2,36 @@
 # -*- coding: utf-8 -*-
 
 """
-update_tsmc_quarterly_eps_tracker.py  (v1.3)
+update_tsmc_quarterly_eps_tracker.py  (v1.4)
 
 Purpose
 -------
 Automatically maintain TSMC quarterly EPS tracker.
 
-Strategy
---------
-1) Bootstrap with known-good recent quarters (official TSMC Chinese news pages).
-   This avoids an always-empty tracker in restricted CI environments.
-2) Try to auto-discover newer quarters via search:
-   - official TSMC Chinese news pages first
-   - Cnyes announcement pages second
-3) Parse EPS / date / quarter from article text.
-4) Merge with existing tracker and keep sorted.
+What changed vs v1.3
+--------------------
+1) Make provenance explicit:
+   - data_origin
+   - source_priority
+   - reference_source_type
+   - reference_url_verified_this_run
+2) Strengthen Cnyes parsing:
+   - allow title/body patterns like 台積電 / Q1 / EPS / 每股盈餘
+3) Merge by source priority:
+   official discovered > cnyes discovered > bootstrap seed
+4) Keep bootstrap seeds as fallback so tracker is never empty in restricted CI
 
 Notes
 -----
 - This script does NOT change active_eps_base directly.
-- It is designed for reliability in GitHub Actions where direct crawling of
-  TSMC list pages may be blocked.
-- Seeds are only a bootstrap; future quarters still rely on discovery.
+- Seeds are bootstrap reference values, not proof of live fetch success.
+- Discovery still tries official first, then Cnyes.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import subprocess
@@ -42,7 +45,7 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 import requests
 
 SCRIPT_NAME = "update_tsmc_quarterly_eps_tracker.py"
-SCRIPT_VERSION = "v1.3"
+SCRIPT_VERSION = "v1.4"
 
 DEFAULT_OUT = "tw0050_bb_cache/quarterly_eps_tracker.json"
 DEFAULT_TIMEOUT = 20
@@ -61,6 +64,14 @@ QUARTER_NUM_TO_CN = {
     4: "第四",
 }
 
+QUARTER_CN_TO_NUM = {v: k for k, v in QUARTER_NUM_TO_CN.items()}
+
+SOURCE_PRIORITY = {
+    "tsmc_official_chinese_news": 100,
+    "syndicated_official_announcement_cnyes": 60,
+    "tsmc_official_chinese_news_seed": 20,
+}
+
 # Bootstrap seeds from recent known-good official pages.
 BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
     {
@@ -73,7 +84,6 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "quarter_end_date": "December 31, 2024",
         "quarter_word": "fourth",
         "page_url": "https://pr.tsmc.com/chinese/news/3201",
-        "fetched_at_utc": None,
     },
     {
         "quarter": "2025Q1",
@@ -85,7 +95,6 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "quarter_end_date": "March 31, 2025",
         "quarter_word": "first",
         "page_url": "https://pr.tsmc.com/chinese/news/3222",
-        "fetched_at_utc": None,
     },
     {
         "quarter": "2025Q2",
@@ -97,7 +106,6 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "quarter_end_date": "June 30, 2025",
         "quarter_word": "second",
         "page_url": "https://pr.tsmc.com/chinese/news/3249",
-        "fetched_at_utc": None,
     },
     {
         "quarter": "2025Q3",
@@ -109,7 +117,6 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "quarter_end_date": "September 30, 2025",
         "quarter_word": "third",
         "page_url": "https://pr.tsmc.com/chinese/news/3264",
-        "fetched_at_utc": None,
     },
     {
         "quarter": "2025Q4",
@@ -121,19 +128,35 @@ BOOTSTRAP_SEEDS: List[Dict[str, Any]] = [
         "quarter_end_date": "December 31, 2025",
         "quarter_word": "fourth",
         "page_url": "https://pr.tsmc.com/chinese/news/3281",
-        "fetched_at_utc": None,
     },
 ]
 
 # Parsing patterns
 DATE_RE_1 = re.compile(r"發佈日期\s*[:：]?\s*(\d{4}/\d{2}/\d{2})")
 DATE_RE_2 = re.compile(r"發言日期\s*[:：]?\s*(\d{4}/\d{2}/\d{2})")
-EPS_RE = re.compile(r"每股盈餘(?:為)?新台幣\s*([0-9]+(?:\.[0-9]+)?)\s*元")
-TITLE_RE = re.compile(r"台積公司(\d{4})年(第一|第二|第三|第四)季每股盈餘新台幣([0-9]+(?:\.[0-9]+)?)元")
+DATE_RE_3 = re.compile(r"(\d{4}/\d{2}/\d{2})")
+
+# Official page style:
+OFFICIAL_TITLE_RE = re.compile(
+    r"台積公司(\d{4})年(第一|第二|第三|第四)季每股盈餘新台幣([0-9]+(?:\.[0-9]+)?)元"
+)
+
+# More flexible body/title patterns for Cnyes or mirrored pages:
+EPS_RE_1 = re.compile(r"每股盈餘(?:為)?新台幣\s*([0-9]+(?:\.[0-9]+)?)\s*元")
+EPS_RE_2 = re.compile(r"\bEPS\b[^0-9]{0,12}([0-9]+(?:\.[0-9]+)?)\s*元?", re.I)
+EPS_RE_3 = re.compile(r"每股(?:純益|盈餘)[^0-9]{0,12}([0-9]+(?:\.[0-9]+)?)\s*元")
+
+QUARTER_CN_YEAR_RE = re.compile(r"(\d{4})年(第一|第二|第三|第四)季")
+QUARTER_Q_RE_1 = re.compile(r"(\d{4})\s*[Qq]([1-4])")
+QUARTER_Q_RE_2 = re.compile(r"[Qq]([1-4])")
+QUARTER_TITLE_FALLBACK_RE = re.compile(r"台積電|台積公司|TSMC", re.I)
+
 H1_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
 TITLE_TAG_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 A_RE = re.compile(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', re.I | re.S)
-RESULT_A_RE = re.compile(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', re.I | re.S)
+RESULT_A_RE = re.compile(
+    r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', re.I | re.S
+)
 
 
 def now_utc_iso() -> str:
@@ -157,6 +180,46 @@ def normalize_ws(x: str) -> str:
 
 def clean_html_text(x: str) -> str:
     return normalize_ws(unescape(strip_tags(x)))
+
+
+def quarter_word_from_num(qnum: int) -> str:
+    return {
+        1: "first",
+        2: "second",
+        3: "third",
+        4: "fourth",
+    }.get(qnum, "NA")
+
+
+def quarter_end_date_from_label(quarter: str) -> str:
+    quarter_end_date_map = {
+        "Q1": "March 31",
+        "Q2": "June 30",
+        "Q3": "September 30",
+        "Q4": "December 31",
+    }
+    q_suffix = quarter[-2:]
+    return f"{quarter_end_date_map.get(q_suffix, 'NA')}, {quarter[:4]}" if q_suffix in quarter_end_date_map else "NA"
+
+
+def detect_source_priority(source: str) -> int:
+    return SOURCE_PRIORITY.get(source, 0)
+
+
+def enrich_record(
+    item: Dict[str, Any],
+    *,
+    data_origin: str,
+    reference_source_type: str,
+    reference_url_verified_this_run: bool,
+) -> Dict[str, Any]:
+    out = copy.deepcopy(item)
+    out["fetched_at_utc"] = now_utc_iso()
+    out["data_origin"] = data_origin
+    out["source_priority"] = detect_source_priority(str(out.get("source", "")))
+    out["reference_source_type"] = reference_source_type
+    out["reference_url_verified_this_run"] = bool(reference_url_verified_this_run)
+    return out
 
 
 def build_session() -> requests.Session:
@@ -285,65 +348,98 @@ def find_title_text(html: str, fallback_url: str) -> str:
     return fallback_url
 
 
-def parse_article_record(html: str, url: str) -> Optional[Dict[str, Any]]:
+def infer_quarter_from_text(
+    title: str,
+    text: str,
+    fallback_year: Optional[int] = None,
+    fallback_quarter_num: Optional[int] = None,
+) -> Optional[str]:
+    combined = f"{title} {text}"
+
+    m = OFFICIAL_TITLE_RE.search(combined)
+    if m:
+        year = int(m.group(1))
+        quarter_cn = m.group(2)
+        qnum = QUARTER_CN_TO_NUM.get(quarter_cn)
+        if qnum:
+            return f"{year}Q{qnum}"
+
+    m = QUARTER_CN_YEAR_RE.search(combined)
+    if m:
+        year = int(m.group(1))
+        quarter_cn = m.group(2)
+        qnum = QUARTER_CN_TO_NUM.get(quarter_cn)
+        if qnum:
+            return f"{year}Q{qnum}"
+
+    m = QUARTER_Q_RE_1.search(combined)
+    if m:
+        return f"{int(m.group(1))}Q{int(m.group(2))}"
+
+    if fallback_year is not None and fallback_quarter_num is not None:
+        if QUARTER_TITLE_FALLBACK_RE.search(combined):
+            return f"{fallback_year}Q{fallback_quarter_num}"
+
+    return None
+
+
+def infer_eps_from_text(title: str, text: str) -> Optional[float]:
+    combined = f"{title} {text}"
+
+    m = OFFICIAL_TITLE_RE.search(combined)
+    if m:
+        return float(m.group(3))
+
+    for rx in (EPS_RE_1, EPS_RE_2, EPS_RE_3):
+        m = rx.search(combined)
+        if m:
+            return float(m.group(1))
+
+    return None
+
+
+def infer_date_from_text(text: str) -> str:
+    for rx in (DATE_RE_1, DATE_RE_2, DATE_RE_3):
+        m = rx.search(text)
+        if m:
+            return m.group(1).replace("/", "-")
+    return "NA"
+
+
+def parse_article_record(
+    html: str,
+    url: str,
+    *,
+    expected_year: Optional[int] = None,
+    expected_quarter_num: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
     text = clean_html_text(html)
     title = find_title_text(html, url)
 
-    m_title = TITLE_RE.search(text)
-    if not m_title:
-        m_title = TITLE_RE.search(title)
-
-    year: Optional[int] = None
-    quarter_cn: Optional[str] = None
-    quarter: Optional[str] = None
-
-    if m_title:
-        year = int(m_title.group(1))
-        quarter_cn = m_title.group(2)
-        qnum = {v: k for k, v in QUARTER_NUM_TO_CN.items()}.get(quarter_cn)
-        if qnum:
-            quarter = f"{year}Q{qnum}"
-
-    m_eps = EPS_RE.search(text)
-    if not m_eps:
-        m_eps = TITLE_RE.search(text)
-        if m_eps:
-            eps_val = float(m_eps.group(3))
-        else:
-            return None
-    else:
-        eps_val = float(m_eps.group(1))
-
-    m_date = DATE_RE_1.search(text)
-    if not m_date:
-        m_date = DATE_RE_2.search(text)
-
-    as_of_date = "NA"
-    if m_date:
-        as_of_date = m_date.group(1).replace("/", "-")
-
+    quarter = infer_quarter_from_text(
+        title=title,
+        text=text,
+        fallback_year=expected_year,
+        fallback_quarter_num=expected_quarter_num,
+    )
     if not quarter:
         return None
 
-    quarter_word = {
-        "第一": "first",
-        "第二": "second",
-        "第三": "third",
-        "第四": "fourth",
-    }.get(quarter_cn or "", "NA")
+    eps_val = infer_eps_from_text(title=title, text=text)
+    if eps_val is None:
+        return None
 
-    quarter_end_date_map = {
-        "Q1": "March 31",
-        "Q2": "June 30",
-        "Q3": "September 30",
-        "Q4": "December 31",
-    }
-    q_suffix = quarter[-2:]
-    quarter_end_date = f"{quarter_end_date_map.get(q_suffix, 'NA')}, {quarter[:4]}" if q_suffix in quarter_end_date_map else "NA"
+    as_of_date = infer_date_from_text(text)
+
+    qnum = int(quarter[-1])
+    quarter_word = quarter_word_from_num(qnum)
+    quarter_end_date = quarter_end_date_from_label(quarter)
 
     source = "tsmc_official_chinese_news"
+    reference_source_type = "official_tsmc_chinese_news"
     if "cnyes.com" in url:
         source = "syndicated_official_announcement_cnyes"
+        reference_source_type = "cnyes"
 
     return {
         "quarter": quarter,
@@ -355,6 +451,10 @@ def parse_article_record(html: str, url: str) -> Optional[Dict[str, Any]]:
         "quarter_end_date": quarter_end_date,
         "quarter_word": quarter_word,
         "page_url": url,
+        "data_origin": "auto_discovered",
+        "source_priority": detect_source_priority(source),
+        "reference_source_type": reference_source_type,
+        "reference_url_verified_this_run": True,
         "fetched_at_utc": now_utc_iso(),
     }
 
@@ -372,6 +472,8 @@ def search_one_quarter(
 
     queries = [
         f'"台積公司{year}年{quarter_cn}季每股盈餘新台幣" site:pr.tsmc.com/chinese/news',
+        f'"台積電 {year} Q{quarter_num} EPS" site:anuenews.cnyes.com/news/id',
+        f'"台積電 {year}年{quarter_cn}季 EPS" site:anuenews.cnyes.com/news/id',
         f'"台積公司{year}年{quarter_cn}季每股盈餘新台幣" site:anuenews.cnyes.com/news/id',
         f'"台積公司{year}年{quarter_cn}季每股盈餘" 台積電',
     ]
@@ -389,7 +491,11 @@ def search_one_quarter(
 
         for item in results:
             url = item["url"]
-            if "pr.tsmc.com/chinese/news/" not in url and "anuenews.cnyes.com/news/id/" not in url and "news.cnyes.com/news/id/" not in url:
+            if (
+                "pr.tsmc.com/chinese/news/" not in url
+                and "anuenews.cnyes.com/news/id/" not in url
+                and "news.cnyes.com/news/id/" not in url
+            ):
                 continue
             if url in seen:
                 continue
@@ -411,16 +517,22 @@ def search_one_quarter(
             notes.append(f"candidate fetch failed: {url} | err={e}")
             continue
 
-        rec = parse_article_record(html, url)
+        rec = parse_article_record(
+            html,
+            url,
+            expected_year=year,
+            expected_quarter_num=quarter_num,
+        )
         if rec is None:
             notes.append(f"candidate parse failed: {url}")
             continue
 
-        if rec["quarter"] != f"{year}Q{quarter_num}":
-            notes.append(f"candidate quarter mismatch: {url} -> {rec['quarter']}")
+        expected_quarter = f"{year}Q{quarter_num}"
+        if rec["quarter"] != expected_quarter:
+            notes.append(f"candidate quarter mismatch: {url} -> {rec['quarter']} expected={expected_quarter}")
             continue
 
-        notes.append(f"parsed quarter {rec['quarter']} eps={rec['eps']} from {url}")
+        notes.append(f"parsed quarter {rec['quarter']} eps={rec['eps']} from {url} source={rec['source']}")
         return rec
 
     notes.append(f"no discovered article parsed for {year}Q{quarter_num}")
@@ -446,17 +558,59 @@ def load_existing_tracker(path: Path) -> Dict[str, Any]:
     return {"meta": {}, "quarters": []}
 
 
+def choose_better_record(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
+    old_pri = int(old.get("source_priority", detect_source_priority(str(old.get("source", "")))))
+    new_pri = int(new.get("source_priority", detect_source_priority(str(new.get("source", "")))))
+
+    if new_pri > old_pri:
+        return new
+    if new_pri < old_pri:
+        return old
+
+    old_verified = bool(old.get("reference_url_verified_this_run", False))
+    new_verified = bool(new.get("reference_url_verified_this_run", False))
+    if new_verified and not old_verified:
+        return new
+    if old_verified and not new_verified:
+        return old
+
+    old_origin = str(old.get("data_origin", ""))
+    new_origin = str(new.get("data_origin", ""))
+    if new_origin == "auto_discovered" and old_origin != "auto_discovered":
+        return new
+    if old_origin == "auto_discovered" and new_origin != "auto_discovered":
+        return old
+
+    # last write wins only when same quality
+    return new
+
+
 def merge_records(existing: List[Dict[str, Any]], fetched: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     merged: Dict[str, Dict[str, Any]] = {}
 
     for item in existing:
         q = str(item.get("quarter", "")).strip()
-        if q:
-            merged[q] = item
+        if not q:
+            continue
+
+        if "source_priority" not in item:
+            item["source_priority"] = detect_source_priority(str(item.get("source", "")))
+        if "data_origin" not in item:
+            item["data_origin"] = "unknown"
+        if "reference_source_type" not in item:
+            item["reference_source_type"] = "unknown"
+        if "reference_url_verified_this_run" not in item:
+            item["reference_url_verified_this_run"] = False
+
+        merged[q] = item
 
     for item in fetched:
-        q = str(item["quarter"]).strip()
-        if q:
+        q = str(item.get("quarter", "")).strip()
+        if not q:
+            continue
+        if q in merged:
+            merged[q] = choose_better_record(merged[q], item)
+        else:
             merged[q] = item
 
     out = list(merged.values())
@@ -474,7 +628,7 @@ def build_output(
             "generated_at_utc": now_utc_iso(),
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
-            "source_policy": "bootstrap_seeds_plus_search_discovery",
+            "source_policy": "bootstrap_seeds_plus_official_then_cnyes_discovery",
             "entry_pages": entry_pages,
             "notes": notes,
         },
@@ -514,8 +668,12 @@ def main() -> None:
 
     # 1) bootstrap seeds
     for seed in BOOTSTRAP_SEEDS:
-        item = dict(seed)
-        item["fetched_at_utc"] = now_utc_iso()
+        item = enrich_record(
+            seed,
+            data_origin="bootstrap_seed",
+            reference_source_type="official_tsmc_chinese_news",
+            reference_url_verified_this_run=False,
+        )
         fetched.append(item)
     notes.append(f"bootstrapped seeds={len(BOOTSTRAP_SEEDS)}")
 
@@ -554,7 +712,10 @@ def main() -> None:
     for q in merged_quarters:
         print(
             f"  - {q.get('quarter')}: EPS={q.get('eps')} | "
-            f"as_of={q.get('as_of_date')} | source={q.get('source')} | url={q.get('article_url')}"
+            f"as_of={q.get('as_of_date')} | source={q.get('source')} | "
+            f"origin={q.get('data_origin')} | pri={q.get('source_priority')} | "
+            f"verified_this_run={q.get('reference_url_verified_this_run')} | "
+            f"url={q.get('article_url')}"
         )
 
     print("[INFO] notes:")
