@@ -1,9 +1,9 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T09:04:58Z",
+    "generated_at_utc": "2026-03-13T09:16:59Z",
     "script": "update_tsmc_quarterly_eps_tracker.py",
-    "script_version": "v1.4",
-    "source_policy": "bootstrap_seeds_plus_official_then_cnyes_discovery",
+    "script_version": "v1.5",
+    "source_policy": "bootstrap_seeds_plus_official_then_cnyes_discovery_with_debug",
     "entry_pages": [
       "search://2026Q1",
       "search://2026Q2",
@@ -25,50 +25,514 @@
       "search query ok: \"台積電 2026年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第一季每股盈餘\" 台積電 | results=2",
-      "no discovered article parsed for 2026Q1",
+      "no candidate urls for 2026Q1",
       "search query ok: \"台積公司2026年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
       "search query ok: \"台積電 2026 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積電 2026年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第二季每股盈餘\" 台積電 | results=2",
-      "no discovered article parsed for 2026Q2",
+      "no candidate urls for 2026Q2",
       "search query ok: \"台積公司2026年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
       "search query ok: \"台積電 2026 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積電 2026年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第三季每股盈餘\" 台積電 | results=2",
-      "no discovered article parsed for 2026Q3",
+      "no candidate urls for 2026Q3",
       "search query ok: \"台積公司2026年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
       "search query ok: \"台積電 2026 Q4 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積電 2026年第四季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2026年第四季每股盈餘\" 台積電 | results=2",
-      "no discovered article parsed for 2026Q4",
-      "skip discovery for seeded quarter 2025Q1",
-      "skip discovery for seeded quarter 2025Q2",
-      "skip discovery for seeded quarter 2025Q3",
-      "skip discovery for seeded quarter 2025Q4",
+      "no candidate urls for 2026Q4",
+      "search query ok: \"台積公司2025年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2025 Q1 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2025年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第一季每股盈餘\" 台積電 | results=2",
+      "no candidate urls for 2025Q1",
+      "search query ok: \"台積公司2025年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2025 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2025年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第二季每股盈餘\" 台積電 | results=2",
+      "no candidate urls for 2025Q2",
+      "search query ok: \"台積公司2025年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2025 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2025年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第三季每股盈餘\" 台積電 | results=2",
+      "no candidate urls for 2025Q3",
+      "search query ok: \"台積公司2025年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
+      "search query ok: \"台積電 2025 Q4 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積電 2025年第四季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
+      "search query ok: \"台積公司2025年第四季每股盈餘\" 台積電 | results=2",
+      "no candidate urls for 2025Q4",
       "search query ok: \"台積公司2024年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
       "search query ok: \"台積電 2024 Q1 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積電 2024年第一季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第一季每股盈餘\" 台積電 | results=2",
-      "no discovered article parsed for 2024Q1",
+      "no candidate urls for 2024Q1",
       "search query ok: \"台積公司2024年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
       "search query ok: \"台積電 2024 Q2 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積電 2024年第二季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積公司2024年第二季每股盈餘\" 台積電 | results=2",
-      "no discovered article parsed for 2024Q2",
+      "no candidate urls for 2024Q2",
       "search query ok: \"台積公司2024年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=2",
       "search query ok: \"台積電 2024 Q3 EPS\" site:anuenews.cnyes.com/news/id | results=2",
       "search query ok: \"台積電 2024年第三季 EPS\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2024年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=2",
-      "search query ok: \"台積公司2024年第三季每股盈餘\" 台積電 | results=2",
-      "no discovered article parsed for 2024Q3",
-      "skip discovery for seeded quarter 2024Q4"
-    ]
+      "search query ok: \"台積公司2024年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=1",
+      "search query ok: \"台積公司2024年第三季每股盈餘\" 台積電 | results=1",
+      "no candidate urls for 2024Q3",
+      "search query ok: \"台積公司2024年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news | results=1",
+      "search query ok: \"台積電 2024 Q4 EPS\" site:anuenews.cnyes.com/news/id | results=1",
+      "search query ok: \"台積電 2024年第四季 EPS\" site:anuenews.cnyes.com/news/id | results=1",
+      "search query ok: \"台積公司2024年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id | results=1",
+      "search query ok: \"台積公司2024年第四季每股盈餘\" 台積電 | results=1",
+      "no candidate urls for 2024Q4"
+    ],
+    "counts": {
+      "auto_discovered_count": 0,
+      "bootstrap_seed_count": 5,
+      "total_quarters": 5
+    }
   },
+  "discovery_debug": [
+    {
+      "quarter": "2026Q1",
+      "publication_state": "NOT_ENDED_YET",
+      "queries": [
+        {
+          "query": "\"台積公司2026年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026 Q1 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026年第一季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第一季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2026Q2",
+      "publication_state": "NOT_ENDED_YET",
+      "queries": [
+        {
+          "query": "\"台積公司2026年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026 Q2 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026年第二季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第二季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2026Q3",
+      "publication_state": "NOT_ENDED_YET",
+      "queries": [
+        {
+          "query": "\"台積公司2026年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026 Q3 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026年第三季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第三季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2026Q4",
+      "publication_state": "NOT_ENDED_YET",
+      "queries": [
+        {
+          "query": "\"台積公司2026年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026 Q4 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2026年第四季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2026年第四季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2025Q1",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2025年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025 Q1 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025年第一季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第一季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2025Q2",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2025年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025 Q2 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025年第二季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第二季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2025Q3",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2025年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025 Q3 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025年第三季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第三季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2025Q4",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2025年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025 Q4 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2025年第四季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2025年第四季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2024Q1",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2024年第一季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024 Q1 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024年第一季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第一季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第一季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2024Q2",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2024年第二季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024 Q2 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024年第二季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第二季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第二季每股盈餘\" 台積電",
+          "result_count": 2,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2024Q3",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2024年第三季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024 Q3 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024年第三季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 2,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第三季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 1,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第三季每股盈餘\" 台積電",
+          "result_count": 1,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    },
+    {
+      "quarter": "2024Q4",
+      "publication_state": "SHOULD_BE_PUBLISHED_OR_DISCOVERABLE",
+      "queries": [
+        {
+          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:pr.tsmc.com/chinese/news",
+          "result_count": 1,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024 Q4 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 1,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積電 2024年第四季 EPS\" site:anuenews.cnyes.com/news/id",
+          "result_count": 1,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第四季每股盈餘新台幣\" site:anuenews.cnyes.com/news/id",
+          "result_count": 1,
+          "status": "OK"
+        },
+        {
+          "query": "\"台積公司2024年第四季每股盈餘\" 台積電",
+          "result_count": 1,
+          "status": "OK"
+        }
+      ],
+      "candidates": [],
+      "attempts": [],
+      "discovered": false,
+      "discovered_record_source": null,
+      "status": "SEARCH_NO_RESULT"
+    }
+  ],
   "quarters": [
     {
       "quarter": "2024Q4",
@@ -80,7 +544,7 @@
       "quarter_end_date": "December 31, 2024",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3201",
-      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "fetched_at_utc": "2026-03-13T09:16:47Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -96,7 +560,7 @@
       "quarter_end_date": "March 31, 2025",
       "quarter_word": "first",
       "page_url": "https://pr.tsmc.com/chinese/news/3222",
-      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "fetched_at_utc": "2026-03-13T09:16:47Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -112,7 +576,7 @@
       "quarter_end_date": "June 30, 2025",
       "quarter_word": "second",
       "page_url": "https://pr.tsmc.com/chinese/news/3249",
-      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "fetched_at_utc": "2026-03-13T09:16:47Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -128,7 +592,7 @@
       "quarter_end_date": "September 30, 2025",
       "quarter_word": "third",
       "page_url": "https://pr.tsmc.com/chinese/news/3264",
-      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "fetched_at_utc": "2026-03-13T09:16:47Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
@@ -144,7 +608,7 @@
       "quarter_end_date": "December 31, 2025",
       "quarter_word": "fourth",
       "page_url": "https://pr.tsmc.com/chinese/news/3281",
-      "fetched_at_utc": "2026-03-13T09:04:56Z",
+      "fetched_at_utc": "2026-03-13T09:16:47Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "official_tsmc_chinese_news",
