@@ -1,9 +1,9 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-13T13:54:39Z",
+    "generated_at_utc": "2026-03-13T14:15:00Z",
     "script": "update_tsmc_quarterly_eps_tracker.py",
-    "script_version": "v4.0-mops",
-    "source_policy": "seed_first_plus_official_mops_single_company_income_statement_probe_non_blocking",
+    "script_version": "v4.1-mops-q4-diff",
+    "source_policy": "seed_first_plus_official_mops_single_company_income_statement_probe_non_blocking_q4_diff",
     "entry_pages": [
       "https://mopsov.twse.com.tw/mops/web/t164sb04",
       "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04"
@@ -11,28 +11,31 @@
     "notes": [
       "bootstrapped seeds=5",
       "probe mode=mops_single_company_income_statement",
+      "q4_rule=use_fy_cumulative_minus_q3_cumulative",
       "mops_base_url=https://mopsov.twse.com.tw/mops/web",
       "stock_no=2330",
       "eps_tolerance=0.02",
-      "2024Q4: EPS_MISMATCH via MOPS | expected=14.45 basic=45.25 diluted=45.25",
-      "2025Q1: VERIFIED via MOPS | matched_method=basic_eps basic=13.95 diluted=13.94",
-      "2025Q2: VERIFIED via MOPS | matched_method=basic_eps basic=15.36 diluted=15.36",
-      "2025Q3: VERIFIED via MOPS | matched_method=basic_eps basic=17.44 diluted=17.44",
-      "2025Q4: EPS_MISMATCH via MOPS | expected=19.5 basic=66.26 diluted=66.25"
+      "2024Q4: VERIFIED via MOPS Q4 diff | matched_method=q4_diluted_diff fy_basic=45.25 fy_diluted=45.25 q3_basic_cum=30.8 q3_diluted_cum=30.8 q4_basic=14.45 q4_diluted=14.45",
+      "2025Q1: VERIFIED via MOPS | matched_method=diluted_eps current_basic=13.95 current_diluted=13.94",
+      "2025Q2: VERIFIED via MOPS | matched_method=diluted_eps current_basic=15.36 current_diluted=15.36",
+      "2025Q3: VERIFIED via MOPS | matched_method=diluted_eps current_basic=17.44 current_diluted=17.44",
+      "2025Q4: VERIFIED via MOPS Q4 diff | matched_method=q4_diluted_diff fy_basic=66.26 fy_diluted=66.25 q3_basic_cum=46.75 q3_diluted_cum=46.75 q4_basic=19.51 q4_diluted=19.5"
     ],
     "counts": {
-      "verified_count": 3,
-      "verify_failed_count": 2,
+      "verified_count": 5,
+      "verify_failed_count": 0,
       "verify_skipped_count": 0,
       "mops_not_found_count": 0,
       "mops_parse_failed_count": 0,
-      "eps_mismatch_count": 2,
+      "eps_mismatch_count": 0,
+      "q4_dependency_failed_count": 0,
       "bootstrap_seed_count": 5,
       "total_quarters": 5
     },
     "optional_features": {
       "mops_probe_enabled": true,
-      "single_company_mode": true
+      "single_company_mode": true,
+      "q4_diff_enabled": true
     }
   },
   "discovery_debug": [
@@ -46,7 +49,16 @@
       "tables_found": 0,
       "parsed_basic_eps": null,
       "parsed_diluted_eps": null,
+      "parsed_basic_cumulative_eps": null,
+      "parsed_diluted_cumulative_eps": null,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [],
       "attempts": [],
       "discovered": false,
@@ -63,7 +75,16 @@
       "tables_found": 0,
       "parsed_basic_eps": null,
       "parsed_diluted_eps": null,
+      "parsed_basic_cumulative_eps": null,
+      "parsed_diluted_cumulative_eps": null,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [],
       "attempts": [],
       "discovered": false,
@@ -80,7 +101,16 @@
       "tables_found": 0,
       "parsed_basic_eps": null,
       "parsed_diluted_eps": null,
+      "parsed_basic_cumulative_eps": null,
+      "parsed_diluted_cumulative_eps": null,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [],
       "attempts": [],
       "discovered": false,
@@ -116,7 +146,16 @@
       "tables_found": 2,
       "parsed_basic_eps": 45.25,
       "parsed_diluted_eps": 45.25,
+      "parsed_basic_cumulative_eps": 45.25,
+      "parsed_diluted_cumulative_eps": 45.25,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": "2024Q3",
+      "q4_dependency_fetch_ok": true,
+      "q4_dependency_http_status": 200,
+      "q4_dependency_basic_cumulative_eps": 30.8,
+      "q4_dependency_diluted_cumulative_eps": 30.8,
+      "computed_q4_basic_eps": 14.45,
+      "computed_q4_diluted_eps": 14.45,
       "candidate_preview": [
         {
           "table_index": 1,
@@ -130,7 +169,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -144,7 +188,15 @@
             "32.34",
             ""
           ],
-          "current_quarter_value": 45.25
+          "numeric_values": [
+            45.25,
+            32.34
+          ],
+          "derived_direct": 45.25,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": 45.25,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": 32.34
         },
         {
           "table_index": 1,
@@ -158,7 +210,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -172,23 +229,37 @@
             "32.34",
             ""
           ],
-          "current_quarter_value": 45.25
+          "numeric_values": [
+            45.25,
+            32.34
+          ],
+          "derived_direct": 45.25,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": 45.25,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": 32.34
         }
       ],
       "attempts": [
         {
-          "probe": "mops_eps_compare",
-          "failure_class": "EPS_MISMATCH",
-          "reason": "mops_eps_parsed_but_does_not_match_seed",
-          "expected_eps": 14.45,
+          "probe": "mops_eps_match",
+          "failure_class": null,
+          "reason": "exact_match_q4_diluted_diff",
+          "matched_method": "q4_diluted_diff",
+          "matched_eps": 14.45,
           "parsed_basic_eps": 45.25,
           "parsed_diluted_eps": 45.25,
+          "parsed_basic_cumulative_eps": 45.25,
+          "parsed_diluted_cumulative_eps": 45.25,
+          "computed_q4_basic_eps": 14.45,
+          "computed_q4_diluted_eps": 14.45,
+          "q4_dependency_quarter": "2024Q3",
           "as_of_date": null
         }
       ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "EPS_MISMATCH"
+      "discovered": true,
+      "discovered_record_source": "mops_income_statement",
+      "status": "VERIFIED"
     },
     {
       "quarter": "2025Q1",
@@ -219,7 +290,16 @@
       "tables_found": 2,
       "parsed_basic_eps": 13.95,
       "parsed_diluted_eps": 13.94,
+      "parsed_basic_cumulative_eps": 13.95,
+      "parsed_diluted_cumulative_eps": 13.94,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [
         {
           "table_index": 1,
@@ -233,7 +313,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -247,7 +332,15 @@
             "8.70",
             ""
           ],
-          "current_quarter_value": 13.95
+          "numeric_values": [
+            13.95,
+            8.7
+          ],
+          "derived_direct": 13.95,
+          "derived_current_eps": 13.95,
+          "derived_cumulative_eps": 13.95,
+          "derived_prior_current_eps": 8.7,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -261,7 +354,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -275,18 +373,31 @@
             "8.70",
             ""
           ],
-          "current_quarter_value": 13.94
+          "numeric_values": [
+            13.94,
+            8.7
+          ],
+          "derived_direct": 13.94,
+          "derived_current_eps": 13.94,
+          "derived_cumulative_eps": 13.94,
+          "derived_prior_current_eps": 8.7,
+          "derived_prior_cumulative_eps": null
         }
       ],
       "attempts": [
         {
           "probe": "mops_eps_match",
           "failure_class": null,
-          "reason": "exact_match_basic",
-          "matched_method": "basic_eps",
-          "matched_eps": 13.95,
+          "reason": "exact_match_diluted_eps",
+          "matched_method": "diluted_eps",
+          "matched_eps": 13.94,
           "parsed_basic_eps": 13.95,
           "parsed_diluted_eps": 13.94,
+          "parsed_basic_cumulative_eps": 13.95,
+          "parsed_diluted_cumulative_eps": 13.94,
+          "computed_q4_basic_eps": null,
+          "computed_q4_diluted_eps": null,
+          "q4_dependency_quarter": null,
           "as_of_date": null
         }
       ],
@@ -323,7 +434,16 @@
       "tables_found": 2,
       "parsed_basic_eps": 15.36,
       "parsed_diluted_eps": 15.36,
+      "parsed_basic_cumulative_eps": 29.31,
+      "parsed_diluted_cumulative_eps": 29.3,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [
         {
           "table_index": 1,
@@ -341,7 +461,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -359,7 +484,17 @@
             "18.25",
             ""
           ],
-          "current_quarter_value": 15.36
+          "numeric_values": [
+            15.36,
+            9.56,
+            29.31,
+            18.25
+          ],
+          "derived_direct": 15.36,
+          "derived_current_eps": 15.36,
+          "derived_cumulative_eps": 29.31,
+          "derived_prior_current_eps": 9.56,
+          "derived_prior_cumulative_eps": 18.25
         },
         {
           "table_index": 1,
@@ -377,7 +512,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -395,18 +535,33 @@
             "18.25",
             ""
           ],
-          "current_quarter_value": 15.36
+          "numeric_values": [
+            15.36,
+            9.56,
+            29.3,
+            18.25
+          ],
+          "derived_direct": 15.36,
+          "derived_current_eps": 15.36,
+          "derived_cumulative_eps": 29.3,
+          "derived_prior_current_eps": 9.56,
+          "derived_prior_cumulative_eps": 18.25
         }
       ],
       "attempts": [
         {
           "probe": "mops_eps_match",
           "failure_class": null,
-          "reason": "exact_match_basic",
-          "matched_method": "basic_eps",
+          "reason": "exact_match_diluted_eps",
+          "matched_method": "diluted_eps",
           "matched_eps": 15.36,
           "parsed_basic_eps": 15.36,
           "parsed_diluted_eps": 15.36,
+          "parsed_basic_cumulative_eps": 29.31,
+          "parsed_diluted_cumulative_eps": 29.3,
+          "computed_q4_basic_eps": null,
+          "computed_q4_diluted_eps": null,
+          "q4_dependency_quarter": null,
           "as_of_date": null
         }
       ],
@@ -443,7 +598,16 @@
       "tables_found": 2,
       "parsed_basic_eps": 17.44,
       "parsed_diluted_eps": 17.44,
+      "parsed_basic_cumulative_eps": 46.75,
+      "parsed_diluted_cumulative_eps": 46.75,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [
         {
           "table_index": 1,
@@ -461,7 +625,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -479,7 +648,17 @@
             "30.80",
             ""
           ],
-          "current_quarter_value": 17.44
+          "numeric_values": [
+            17.44,
+            12.55,
+            46.75,
+            30.8
+          ],
+          "derived_direct": 17.44,
+          "derived_current_eps": 17.44,
+          "derived_cumulative_eps": 46.75,
+          "derived_prior_current_eps": 12.55,
+          "derived_prior_cumulative_eps": 30.8
         },
         {
           "table_index": 1,
@@ -497,7 +676,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -515,18 +699,33 @@
             "30.80",
             ""
           ],
-          "current_quarter_value": 17.44
+          "numeric_values": [
+            17.44,
+            12.54,
+            46.75,
+            30.8
+          ],
+          "derived_direct": 17.44,
+          "derived_current_eps": 17.44,
+          "derived_cumulative_eps": 46.75,
+          "derived_prior_current_eps": 12.54,
+          "derived_prior_cumulative_eps": 30.8
         }
       ],
       "attempts": [
         {
           "probe": "mops_eps_match",
           "failure_class": null,
-          "reason": "exact_match_basic",
-          "matched_method": "basic_eps",
+          "reason": "exact_match_diluted_eps",
+          "matched_method": "diluted_eps",
           "matched_eps": 17.44,
           "parsed_basic_eps": 17.44,
           "parsed_diluted_eps": 17.44,
+          "parsed_basic_cumulative_eps": 46.75,
+          "parsed_diluted_cumulative_eps": 46.75,
+          "computed_q4_basic_eps": null,
+          "computed_q4_diluted_eps": null,
+          "q4_dependency_quarter": null,
           "as_of_date": null
         }
       ],
@@ -563,7 +762,16 @@
       "tables_found": 2,
       "parsed_basic_eps": 66.26,
       "parsed_diluted_eps": 66.25,
+      "parsed_basic_cumulative_eps": 66.26,
+      "parsed_diluted_cumulative_eps": 66.25,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": "2025Q3",
+      "q4_dependency_fetch_ok": true,
+      "q4_dependency_http_status": 200,
+      "q4_dependency_basic_cumulative_eps": 46.75,
+      "q4_dependency_diluted_cumulative_eps": 46.75,
+      "computed_q4_basic_eps": 19.51,
+      "computed_q4_diluted_eps": 19.5,
       "candidate_preview": [
         {
           "table_index": 1,
@@ -577,7 +785,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -591,7 +804,15 @@
             "45.25",
             ""
           ],
-          "current_quarter_value": 66.26
+          "numeric_values": [
+            66.26,
+            45.25
+          ],
+          "derived_direct": 66.26,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": 66.26,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": 45.25
         },
         {
           "table_index": 1,
@@ -605,7 +826,12 @@
             "",
             ""
           ],
-          "current_quarter_value": null
+          "numeric_values": [],
+          "derived_direct": null,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": null,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": null
         },
         {
           "table_index": 1,
@@ -619,23 +845,37 @@
             "45.25",
             ""
           ],
-          "current_quarter_value": 66.25
+          "numeric_values": [
+            66.25,
+            45.25
+          ],
+          "derived_direct": 66.25,
+          "derived_current_eps": null,
+          "derived_cumulative_eps": 66.25,
+          "derived_prior_current_eps": null,
+          "derived_prior_cumulative_eps": 45.25
         }
       ],
       "attempts": [
         {
-          "probe": "mops_eps_compare",
-          "failure_class": "EPS_MISMATCH",
-          "reason": "mops_eps_parsed_but_does_not_match_seed",
-          "expected_eps": 19.5,
+          "probe": "mops_eps_match",
+          "failure_class": null,
+          "reason": "exact_match_q4_diluted_diff",
+          "matched_method": "q4_diluted_diff",
+          "matched_eps": 19.5,
           "parsed_basic_eps": 66.26,
           "parsed_diluted_eps": 66.25,
+          "parsed_basic_cumulative_eps": 66.26,
+          "parsed_diluted_cumulative_eps": 66.25,
+          "computed_q4_basic_eps": 19.51,
+          "computed_q4_diluted_eps": 19.5,
+          "q4_dependency_quarter": "2025Q3",
           "as_of_date": null
         }
       ],
-      "discovered": false,
-      "discovered_record_source": null,
-      "status": "EPS_MISMATCH"
+      "discovered": true,
+      "discovered_record_source": "mops_income_statement",
+      "status": "VERIFIED"
     },
     {
       "quarter": "2026Q1",
@@ -647,7 +887,16 @@
       "tables_found": 0,
       "parsed_basic_eps": null,
       "parsed_diluted_eps": null,
+      "parsed_basic_cumulative_eps": null,
+      "parsed_diluted_cumulative_eps": null,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [],
       "attempts": [],
       "discovered": false,
@@ -664,7 +913,16 @@
       "tables_found": 0,
       "parsed_basic_eps": null,
       "parsed_diluted_eps": null,
+      "parsed_basic_cumulative_eps": null,
+      "parsed_diluted_cumulative_eps": null,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [],
       "attempts": [],
       "discovered": false,
@@ -681,7 +939,16 @@
       "tables_found": 0,
       "parsed_basic_eps": null,
       "parsed_diluted_eps": null,
+      "parsed_basic_cumulative_eps": null,
+      "parsed_diluted_cumulative_eps": null,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [],
       "attempts": [],
       "discovered": false,
@@ -698,7 +965,16 @@
       "tables_found": 0,
       "parsed_basic_eps": null,
       "parsed_diluted_eps": null,
+      "parsed_basic_cumulative_eps": null,
+      "parsed_diluted_cumulative_eps": null,
       "parsed_as_of_date": null,
+      "q4_dependency_quarter": null,
+      "q4_dependency_fetch_ok": false,
+      "q4_dependency_http_status": null,
+      "q4_dependency_basic_cumulative_eps": null,
+      "q4_dependency_diluted_cumulative_eps": null,
+      "computed_q4_basic_eps": null,
+      "computed_q4_diluted_eps": null,
       "candidate_preview": [],
       "attempts": [],
       "discovered": false,
@@ -717,49 +993,38 @@
       "page_url": "https://pr.tsmc.com/chinese/news/3201",
       "quarter_end_date": "December 31, 2024",
       "quarter_word": "fourth",
-      "fetched_at_utc": "2026-03-13T13:54:36Z",
+      "fetched_at_utc": "2026-03-13T14:14:51Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
-      "reference_source_type": "bootstrap_seed",
-      "reference_url_verified_this_run": false,
-      "verification_status": "VERIFY_FAILED",
+      "reference_source_type": "mops_income_statement",
+      "reference_url_verified_this_run": true,
+      "verification_status": "VERIFIED",
       "verification_method": "mops_income_statement",
       "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
-      "verified_eps": null,
+      "verified_eps": 14.45,
       "verified_as_of_date": null,
       "verification": {
-        "status": "VERIFY_FAILED",
+        "status": "VERIFIED",
         "method": "mops_income_statement",
-        "method_detail": null,
+        "method_detail": "q4_diluted_diff",
         "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
-        "verified_eps": null,
-        "verified_quarter": null,
+        "verified_eps": 14.45,
+        "verified_quarter": "2024Q4",
         "verified_as_of_date": null,
         "parsed_basic_eps": 45.25,
         "parsed_diluted_eps": 45.25,
-        "reason": "EPS_MISMATCH",
+        "parsed_basic_cumulative_eps": 45.25,
+        "parsed_diluted_cumulative_eps": 45.25,
+        "computed_q4_basic_eps": 14.45,
+        "computed_q4_diluted_eps": 14.45,
+        "q4_dependency_quarter": "2024Q3",
+        "reason": "seed_eps_matched_mops_within_tolerance",
         "tolerance": 0.02,
-        "attempted_at_utc": "2026-03-13T13:54:36Z",
+        "attempted_at_utc": "2026-03-13T14:14:51Z",
         "candidate_count_considered": 1,
-        "primary_failure_class": "EPS_MISMATCH",
-        "first_failure": {
-          "probe": "mops_eps_compare",
-          "failure_class": "EPS_MISMATCH",
-          "reason": "mops_eps_parsed_but_does_not_match_seed",
-          "expected_eps": 14.45,
-          "parsed_basic_eps": 45.25,
-          "parsed_diluted_eps": 45.25,
-          "as_of_date": null
-        },
-        "last_failure": {
-          "probe": "mops_eps_compare",
-          "failure_class": "EPS_MISMATCH",
-          "reason": "mops_eps_parsed_but_does_not_match_seed",
-          "expected_eps": 14.45,
-          "parsed_basic_eps": 45.25,
-          "parsed_diluted_eps": 45.25,
-          "as_of_date": null
-        }
+        "primary_failure_class": null,
+        "first_failure": null,
+        "last_failure": null
       }
     },
     {
@@ -772,7 +1037,7 @@
       "page_url": "https://pr.tsmc.com/chinese/news/3222",
       "quarter_end_date": "March 31, 2025",
       "quarter_word": "first",
-      "fetched_at_utc": "2026-03-13T13:54:37Z",
+      "fetched_at_utc": "2026-03-13T14:14:55Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "mops_income_statement",
@@ -780,21 +1045,26 @@
       "verification_status": "VERIFIED",
       "verification_method": "mops_income_statement",
       "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
-      "verified_eps": 13.95,
+      "verified_eps": 13.94,
       "verified_as_of_date": null,
       "verification": {
         "status": "VERIFIED",
         "method": "mops_income_statement",
-        "method_detail": "basic_eps",
+        "method_detail": "diluted_eps",
         "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
-        "verified_eps": 13.95,
+        "verified_eps": 13.94,
         "verified_quarter": "2025Q1",
         "verified_as_of_date": null,
         "parsed_basic_eps": 13.95,
         "parsed_diluted_eps": 13.94,
+        "parsed_basic_cumulative_eps": 13.95,
+        "parsed_diluted_cumulative_eps": 13.94,
+        "computed_q4_basic_eps": null,
+        "computed_q4_diluted_eps": null,
+        "q4_dependency_quarter": null,
         "reason": "seed_eps_matched_mops_within_tolerance",
         "tolerance": 0.02,
-        "attempted_at_utc": "2026-03-13T13:54:37Z",
+        "attempted_at_utc": "2026-03-13T14:14:55Z",
         "candidate_count_considered": 1,
         "primary_failure_class": null,
         "first_failure": null,
@@ -811,7 +1081,7 @@
       "page_url": "https://pr.tsmc.com/chinese/news/3249",
       "quarter_end_date": "June 30, 2025",
       "quarter_word": "second",
-      "fetched_at_utc": "2026-03-13T13:54:38Z",
+      "fetched_at_utc": "2026-03-13T14:14:56Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "mops_income_statement",
@@ -824,16 +1094,21 @@
       "verification": {
         "status": "VERIFIED",
         "method": "mops_income_statement",
-        "method_detail": "basic_eps",
+        "method_detail": "diluted_eps",
         "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
         "verified_eps": 15.36,
         "verified_quarter": "2025Q2",
         "verified_as_of_date": null,
         "parsed_basic_eps": 15.36,
         "parsed_diluted_eps": 15.36,
+        "parsed_basic_cumulative_eps": 29.31,
+        "parsed_diluted_cumulative_eps": 29.3,
+        "computed_q4_basic_eps": null,
+        "computed_q4_diluted_eps": null,
+        "q4_dependency_quarter": null,
         "reason": "seed_eps_matched_mops_within_tolerance",
         "tolerance": 0.02,
-        "attempted_at_utc": "2026-03-13T13:54:38Z",
+        "attempted_at_utc": "2026-03-13T14:14:56Z",
         "candidate_count_considered": 1,
         "primary_failure_class": null,
         "first_failure": null,
@@ -850,7 +1125,7 @@
       "page_url": "https://pr.tsmc.com/chinese/news/3264",
       "quarter_end_date": "September 30, 2025",
       "quarter_word": "third",
-      "fetched_at_utc": "2026-03-13T13:54:39Z",
+      "fetched_at_utc": "2026-03-13T14:14:56Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
       "reference_source_type": "mops_income_statement",
@@ -863,16 +1138,21 @@
       "verification": {
         "status": "VERIFIED",
         "method": "mops_income_statement",
-        "method_detail": "basic_eps",
+        "method_detail": "diluted_eps",
         "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
         "verified_eps": 17.44,
         "verified_quarter": "2025Q3",
         "verified_as_of_date": null,
         "parsed_basic_eps": 17.44,
         "parsed_diluted_eps": 17.44,
+        "parsed_basic_cumulative_eps": 46.75,
+        "parsed_diluted_cumulative_eps": 46.75,
+        "computed_q4_basic_eps": null,
+        "computed_q4_diluted_eps": null,
+        "q4_dependency_quarter": null,
         "reason": "seed_eps_matched_mops_within_tolerance",
         "tolerance": 0.02,
-        "attempted_at_utc": "2026-03-13T13:54:39Z",
+        "attempted_at_utc": "2026-03-13T14:14:56Z",
         "candidate_count_considered": 1,
         "primary_failure_class": null,
         "first_failure": null,
@@ -889,49 +1169,38 @@
       "page_url": "https://pr.tsmc.com/chinese/news/3281",
       "quarter_end_date": "December 31, 2025",
       "quarter_word": "fourth",
-      "fetched_at_utc": "2026-03-13T13:54:39Z",
+      "fetched_at_utc": "2026-03-13T14:15:00Z",
       "data_origin": "bootstrap_seed",
       "source_priority": 20,
-      "reference_source_type": "bootstrap_seed",
-      "reference_url_verified_this_run": false,
-      "verification_status": "VERIFY_FAILED",
+      "reference_source_type": "mops_income_statement",
+      "reference_url_verified_this_run": true,
+      "verification_status": "VERIFIED",
       "verification_method": "mops_income_statement",
       "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
-      "verified_eps": null,
+      "verified_eps": 19.5,
       "verified_as_of_date": null,
       "verification": {
-        "status": "VERIFY_FAILED",
+        "status": "VERIFIED",
         "method": "mops_income_statement",
-        "method_detail": null,
+        "method_detail": "q4_diluted_diff",
         "verified_url": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb04",
-        "verified_eps": null,
-        "verified_quarter": null,
+        "verified_eps": 19.5,
+        "verified_quarter": "2025Q4",
         "verified_as_of_date": null,
         "parsed_basic_eps": 66.26,
         "parsed_diluted_eps": 66.25,
-        "reason": "EPS_MISMATCH",
+        "parsed_basic_cumulative_eps": 66.26,
+        "parsed_diluted_cumulative_eps": 66.25,
+        "computed_q4_basic_eps": 19.51,
+        "computed_q4_diluted_eps": 19.5,
+        "q4_dependency_quarter": "2025Q3",
+        "reason": "seed_eps_matched_mops_within_tolerance",
         "tolerance": 0.02,
-        "attempted_at_utc": "2026-03-13T13:54:39Z",
+        "attempted_at_utc": "2026-03-13T14:15:00Z",
         "candidate_count_considered": 1,
-        "primary_failure_class": "EPS_MISMATCH",
-        "first_failure": {
-          "probe": "mops_eps_compare",
-          "failure_class": "EPS_MISMATCH",
-          "reason": "mops_eps_parsed_but_does_not_match_seed",
-          "expected_eps": 19.5,
-          "parsed_basic_eps": 66.26,
-          "parsed_diluted_eps": 66.25,
-          "as_of_date": null
-        },
-        "last_failure": {
-          "probe": "mops_eps_compare",
-          "failure_class": "EPS_MISMATCH",
-          "reason": "mops_eps_parsed_but_does_not_match_seed",
-          "expected_eps": 19.5,
-          "parsed_basic_eps": 66.26,
-          "parsed_diluted_eps": 66.25,
-          "as_of_date": null
-        }
+        "primary_failure_class": null,
+        "first_failure": null,
+        "last_failure": null
       }
     }
   ]
