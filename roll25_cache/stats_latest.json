@@ -1,11 +1,11 @@
 {
   "schema_version": "twse_stats_v1",
-  "generated_at_utc": "2026-03-13T09:53:56Z",
-  "generated_at_local": "2026-03-13T17:53:56.199991+08:00",
+  "generated_at_utc": "2026-03-13T18:58:28Z",
+  "generated_at_local": "2026-03-14T02:58:28.048380+08:00",
   "timezone": "Asia/Taipei",
-  "used_date": "2026-03-12",
-  "run_day_tag": "WEEKDAY",
-  "used_date_status": "DATA_NOT_UPDATED",
+  "used_date": "2026-03-13",
+  "run_day_tag": "WEEKEND",
+  "used_date_status": "OK_LATEST",
   "freshness_ok": true,
   "freshness_age_days": 1,
   "mode": "FULL",
@@ -14,91 +14,94 @@
   "backfill_limit": 252,
   "store_cap": 400,
   "fetch": {
-    "fetch_plan": "openapi_primary",
+    "fetch_plan": "monthly_fallback_current_month",
     "cache_only_mode": false,
     "cache_only_reason": "",
-    "notes": []
+    "notes": [
+      "openapi_skipped_weekend",
+      "monthly_fallback_used:yyyymm01=20260301"
+    ]
   },
   "series": {
     "close": {
-      "asof": "2026-03-12",
+      "asof": "2026-03-13",
       "win60": {
-        "value": 33581.86,
+        "value": 33400.32,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 1.116512,
-        "p": 82.5
+        "z": 1.003814,
+        "p": 80.833
       },
       "win252": {
-        "value": 33581.86,
+        "value": 33400.32,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 2.021288,
-        "p": 95.833
+        "z": 1.952598,
+        "p": 95.437
       },
       "window_note": {
-        "n_total_available": 285
+        "n_total_available": 286
       }
     },
     "trade_value": {
-      "asof": "2026-03-12",
+      "asof": "2026-03-13",
       "win60": {
-        "value": 784007384475.0,
+        "value": 752682671944.0,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 0.361191,
-        "p": 62.5
+        "z": 0.170278,
+        "p": 55.833
       },
       "win252": {
-        "value": 784007384475.0,
+        "value": 752682671944.0,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 1.593681,
-        "p": 91.071
+        "z": 1.41526,
+        "p": 89.484
       },
       "window_note": {
-        "n_total_available": 300
+        "n_total_available": 301
       }
     },
     "pct_change": {
-      "asof": "2026-03-12",
+      "asof": "2026-03-13",
       "win60": {
-        "value": -1.5604357013899544,
+        "value": -0.5405894730071559,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": -1.234185,
-        "p": 7.5
+        "z": -0.553102,
+        "p": 22.5
       },
       "win252": {
-        "value": -1.5604357013899544,
+        "value": -0.5405894730071559,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": -1.065615,
-        "p": 7.738
+        "z": -0.435728,
+        "p": 26.786
       },
       "window_note": {
-        "n_total_available": 284,
+        "n_total_available": 285,
         "note": "pct_change needs D-1 close; with backfill_limit=252, max pct_change points are typically <=251."
       }
     },
     "amplitude_pct": {
-      "asof": "2026-03-12",
+      "asof": "2026-03-13",
       "win60": {
-        "value": 1.644007962668918,
+        "value": 1.8632678475820015,
         "window_n_target": 60,
         "window_n_actual": 60,
-        "z": 0.178936,
-        "p": 59.167
+        "z": 0.466446,
+        "p": 67.5
       },
       "win252": {
-        "value": 1.644007962668918,
+        "value": 1.8632678475820015,
         "window_n_target": 252,
         "window_n_actual": 252,
-        "z": 0.442226,
-        "p": 80.754
+        "z": 0.728001,
+        "p": 85.516
       },
       "window_note": {
-        "n_total_available": 284,
+        "n_total_available": 285,
         "note": "amplitude_pct needs high/low + D-1 close; if OHLC missing, series is sparse and windows may be incomplete."
       }
     }
@@ -106,10 +109,10 @@
   "derived": {
     "lookback_n_target": 20,
     "lookback_n_actual": 20,
-    "vol_multiplier_20": 0.935388,
+    "vol_multiplier_20": 0.901721,
     "volume_amplified": false,
     "new_low_n": 0,
-    "consecutive_down_days": 1,
+    "consecutive_down_days": 2,
     "definition": {
       "vol_win": 20,
       "vol_threshold": 1.5,
