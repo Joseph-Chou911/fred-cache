@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.7)
+build_private_credit_monitor.py (v1.8b)
 
 Purpose
 -------
@@ -17,14 +17,14 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.7 changes
-------------
-- Keep v1.6 structure
-- Add nav_asof_date extraction from filing text/snippets
-- Use nav_asof_date (when available) for nav_age_days / fresh_for_rule
-- Keep filing_date separately for auditability
-- Add nav_date_source / nav_asof_match_text fields to report and JSON
-- Fallback to filing_date only when no reliable as-of date is found
+v1.8b changes
+-------------
+- Keep v1.7 structure
+- Replace pd.Timestamp.utcnow() usage with UTC_NOW()-based timestamp construction
+- Guard fresh_for_rule against negative nav_age_days
+- Harden choose_effective_nav_date() so future dates are rejected
+  using filing_date / market_date / today_utc guardrails
+- Preserve nav_asof_date extraction / audit fields from v1.7
 
 Outputs
 -------
@@ -60,7 +60,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.7"
+SCRIPT_VERSION = "v1.8b"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -244,7 +244,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
 
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.7 contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.8b contact@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     return p.parse_args()
 
@@ -888,17 +888,30 @@ def extract_nav_candidates_from_text(
     return trimmed
 
 
-def choose_effective_nav_date(nav_asof_date: Optional[pd.Timestamp], filing_date: Optional[pd.Timestamp]) -> Tuple[Optional[pd.Timestamp], str]:
+def choose_effective_nav_date(
+    nav_asof_date: Optional[pd.Timestamp],
+    filing_date: Optional[pd.Timestamp],
+    market_date: Optional[pd.Timestamp],
+    today_utc: Optional[pd.Timestamp],
+) -> Tuple[Optional[pd.Timestamp], str]:
     """
-    Prefer NAV as-of date when available and not after the filing date.
-    Otherwise fall back to filing date.
+    Prefer NAV as-of date when available and not in the future versus
+    filing_date / market_date / today_utc.
+    Otherwise fall back to filing_date only if filing_date itself is not future.
     """
+
+    upper_bounds_for_asof = [d for d in [filing_date, market_date, today_utc] if d is not None]
     if nav_asof_date is not None:
-        if filing_date is None or nav_asof_date <= filing_date:
+        if all(nav_asof_date <= ub for ub in upper_bounds_for_asof):
             return nav_asof_date, "nav_asof_extracted"
+
+    upper_bounds_for_filing = [d for d in [market_date, today_utc] if d is not None]
     if filing_date is not None:
-        return filing_date, "filing_date_fallback"
-    return nav_asof_date, "nav_date_unknown"
+        if all(filing_date <= ub for ub in upper_bounds_for_filing):
+            return filing_date, "filing_date_fallback"
+        return None, "nav_date_future_rejected"
+
+    return None, "nav_date_unknown"
 
 
 def make_nav_overlay_row(
@@ -925,7 +938,11 @@ def make_nav_overlay_row(
     fresh_for_rule = False
     if valid_for_stats and nav_date is not None and market_date is not None:
         nav_age_days = int((market_date - nav_date).days)
-        fresh_for_rule = bool(nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None)
+        fresh_for_rule = bool(
+            nav_age_days is not None
+            and 0 <= nav_age_days <= nav_fresh_max_days
+            and premium_discount_pct is not None
+        )
 
     row = {
         "ticker": ticker,
@@ -1153,13 +1170,14 @@ def fetch_auto_nav_rows_from_sec(
     notes: List[str] = []
     attempted = 0
     found = 0
+    today_utc = pd.Timestamp(UTC_NOW()).normalize()
 
     try:
         ticker_map = get_sec_ticker_to_cik_map(session, timeout=timeout)
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v4",
+            "source": "sec_filings_regex_v4_guarded",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -1188,6 +1206,7 @@ def fetch_auto_nav_rows_from_sec(
 
         chosen_row: Optional[Dict[str, Any]] = None
         fallback_review_row: Optional[Dict[str, Any]] = None
+        market_date = parse_date((latest_price_by_ticker.get(ticker) or {}).get("data_date"))
 
         for filing in filings[:max(1, nav_auto_max_filings)]:
             filing_date = parse_date(filing.get("filing_date"))
@@ -1210,7 +1229,12 @@ def fetch_auto_nav_rows_from_sec(
 
             for cand in candidates:
                 extracted_asof = parse_date(cand.get("nav_asof_date"))
-                effective_nav_date, nav_date_source = choose_effective_nav_date(extracted_asof, filing_date)
+                effective_nav_date, nav_date_source = choose_effective_nav_date(
+                    nav_asof_date=extracted_asof,
+                    filing_date=filing_date,
+                    market_date=market_date,
+                    today_utc=today_utc,
+                )
 
                 row = make_nav_overlay_row(
                     ticker=ticker,
@@ -1279,7 +1303,7 @@ def fetch_auto_nav_rows_from_sec(
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v4",
+        "source": "sec_filings_regex_v4_guarded",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -1970,7 +1994,7 @@ def main() -> None:
     if not proxy_tickers:
         proxy_tickers = DEFAULT_PROXY_TICKERS.copy()
 
-    end_date = pd.Timestamp.utcnow().normalize()
+    end_date = pd.Timestamp(UTC_NOW()).normalize()
     start_date = end_date - pd.Timedelta(days=args.lookback_calendar_days)
 
     price_rows: List[Dict[str, Any]] = []
@@ -2051,7 +2075,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v4 + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v4_guarded + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -2100,6 +2124,7 @@ def main() -> None:
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
             "When available, nav_asof_date extracted from filing text is used for nav_age_days / fresh_for_rule; filing_date is retained for audit.",
+            "v1.8b hard guards reject future effective NAV dates and require non-negative nav_age_days for fresh_for_rule.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
