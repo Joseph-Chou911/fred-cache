@@ -1,9 +1,9 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-14T06:17:27Z`
+- generated_at_utc: `2026-03-14T06:26:25Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.2`
+- script_version: `v1.3`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
 - structural_signal: **NONE**
@@ -73,9 +73,9 @@
 
 | series | source_module | signal | value | data_date | reason | tag |
 | --- | --- | --- | --- | --- | --- | --- |
-| BAMLH0A0HYM2 | fallback_recursive_no_signal | NA_SOURCE_MISSING | 3.170000 | 2026-03-12 | abs(Z60)>=2 | EXTREME_Z |
-| HYG_IEF_RATIO | fallback_recursive_no_signal | NA_SOURCE_MISSING | 0.828539 | 2026-03-13 | NA | NA |
-| OFR_FSI | fallback_recursive_no_signal | NA_SOURCE_MISSING | -0.925000 | 2026-03-11 | abs(Z60)>=2;abs(Z60)>=2.5;abs(ZΔ60)>=0.75;abs(ret1%1d)>=2 | EXTREME_Z,JUMP_ZD,JUMP_RET |
+| BAMLH0A0HYM2 | fred_cache | WATCH | 3.170000 | 2026-03-12 | abs(Z60)>=2 | EXTREME_Z |
+| HYG_IEF_RATIO | market_cache | NONE | 0.828539 | 2026-03-13 | NA | NA |
+| OFR_FSI | market_cache | ALERT | -0.925000 | 2026-03-11 | abs(Z60)>=2;abs(Z60)>=2.5;abs(ZΔ60)>=0.75;abs(ret1%1d)>=2 | EXTREME_Z,JUMP_ZD,JUMP_RET |
 
 ## 5) Confidence / DQ
 - price_confidence: `OK`
