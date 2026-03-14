@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-03-14T00:20:45Z",
-  "as_of_ts": "2026-03-14T00:20:45Z",
+  "generated_at_utc": "2026-03-14T03:14:13Z",
+  "as_of_ts": "2026-03-14T03:14:13Z",
   "script_version": "market_cache_v2_2_stats_zp_w60_w252_ret1_delta_pctAbs_deltas_dq_lite400",
   "dq": "OK",
   "checks": [
@@ -52,8 +52,8 @@
       "series_id": "VIX",
       "check": "staleness_days",
       "status": "OK",
-      "staleness_days": 2,
-      "latest_date": "2026-03-12",
+      "staleness_days": 1,
+      "latest_date": "2026-03-13",
       "threshold_warn_days": 3,
       "threshold_err_days": 7
     },
@@ -87,8 +87,8 @@
       "series_id": "VIX",
       "check": "bad_tick_ret1_delta_vs_std60",
       "status": "OK",
-      "ret1_delta": 3.0599999999999987,
-      "std60": 3.5195196010566865,
+      "ret1_delta": -0.09999999999999787,
+      "std60": 3.700833370862418,
       "threshold": "8*std60"
     },
     {
