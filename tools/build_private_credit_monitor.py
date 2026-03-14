@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.11)
+build_private_credit_monitor.py (v1.11b)
 
 Purpose
 -------
@@ -17,17 +17,17 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.11 changes
--------------
-- Keep v1.10 structure / audit philosophy
-- Add SEC retry/backoff + local cache
-- Scan filing index and score multiple candidate docs per filing
-  instead of reading only primaryDocument
-- Improve HTML-to-text conversion for table/paragraph preservation
-- Expand NAV regex coverage modestly
-- If NAV date is inferred only from filing date:
-  keep as display/review row, but EXCLUDE from structural stats
-- Add doc_name / doc_score fields for auditability
+v1.11b changes
+--------------
+- Keep v1.11 structure / audit philosophy
+- Add doc_period_anchor extraction for table-like filings / exhibits
+- Add candidate_value_role / date_binding_mode audit fields
+- Improve direct candidate handling for:
+  * multi-value table rows (e.g. "NAV per share 27.39 26.92")
+  * comparison sentences (e.g. "NAV of X, compared to Y as of ...")
+- Allow doc-period-anchor date binding when local NAV date is absent or likely belongs
+  to comparison values rather than the current matched NAV
+- Keep filing-date-only fallback as REVIEW_ONLY
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.11"
+SCRIPT_VERSION = "v1.11b"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -322,6 +322,39 @@ NAV_REF_DATE_REGEX_SPECS = [
     ),
 ]
 
+DOC_PERIOD_DATE_REGEX_SPECS = [
+    (
+        "doc_period_ended_monthname",
+        re.compile(
+            r"\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            re.I,
+        ),
+    ),
+    (
+        "doc_as_of_monthname",
+        re.compile(
+            r"\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            re.I,
+        ),
+    ),
+    (
+        "doc_period_ended_numeric",
+        re.compile(
+            r"\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            re.I,
+        ),
+    ),
+    (
+        "doc_as_of_numeric",
+        re.compile(
+            r"\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            re.I,
+        ),
+    ),
+]
+
 HARD_SKIP_CONTEXT_REGEX_SPECS = [
     ("example_context", re.compile(r"\bfor (?:example|instance)\b", re.I)),
     ("hypothetical_nav_if", re.compile(r"\bif the (?:most recently computed|current) nav(?: per share)?\b", re.I)),
@@ -352,6 +385,8 @@ HTML_BLOCK_BREAK_RE = re.compile(r"</?(?:br|p|div|tr|li|ul|ol|table|section|arti
 HTML_CELL_BREAK_RE = re.compile(r"</?(?:td|th)\b[^>]*>", re.I)
 WHITESPACE_RE = re.compile(r"\s+")
 YEAR_RE = re.compile(r"\b20[0-9]{2}\b")
+NUMERIC_TOKEN_RE = re.compile(r"\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)")
+COMPARISON_PHRASE_RE = re.compile(r"\b(compared to|compares to|versus|vs\.?)\b", re.I)
 
 AUTO_NAV_MIN_MATCH_SCORE = 3.0
 AUTO_NAV_REVIEW_PREMIUM_PCT = 15.0
@@ -375,7 +410,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11 your_email@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11b your_email@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     p.add_argument("--sec-max-docs-per-filing", type=int, default=5, help="Max SEC docs to scan per filing after document scoring")
     p.add_argument("--sec-use-cache", action="store_true", help="Use local SEC response cache")
@@ -855,6 +890,39 @@ def extract_best_date_from_ctx(
     return best_ts, best_label, best_text
 
 
+def extract_best_date_from_ctx_latest(
+    ctx: str,
+    specs: List[Tuple[str, re.Pattern]],
+) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
+    best_ts: Optional[pd.Timestamp] = None
+    best_label: Optional[str] = None
+    best_text: Optional[str] = None
+    best_priority: Optional[int] = None
+
+    for idx, (label, pat) in enumerate(specs):
+        for m in pat.finditer(ctx):
+            ts = parse_date_match(label, m)
+            if ts is None:
+                continue
+            if best_ts is None:
+                best_ts = ts
+                best_label = label
+                best_text = clean_snippet(m.group(0), max_len=140)
+                best_priority = idx
+            else:
+                if ts > best_ts:
+                    best_ts = ts
+                    best_label = label
+                    best_text = clean_snippet(m.group(0), max_len=140)
+                    best_priority = idx
+                elif ts == best_ts and best_priority is not None and idx < best_priority:
+                    best_label = label
+                    best_text = clean_snippet(m.group(0), max_len=140)
+                    best_priority = idx
+
+    return best_ts, best_label, best_text
+
+
 def extract_nav_asof_date(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
     lo = max(0, start - 500)
     hi = min(len(text), end + 500)
@@ -871,6 +939,57 @@ def extract_nav_ref_date_for_implied(text: str, start: int, end: int) -> Tuple[O
     lo = max(0, start - 240)
     hi = min(len(text), end + 650)
     return extract_best_date_from_ctx(text[lo:hi], NAV_REF_DATE_REGEX_SPECS)
+
+
+def extract_doc_period_anchor(text: str) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
+    if not text:
+        return None, None, None
+    ctx = text[:12000]
+    return extract_best_date_from_ctx_latest(ctx, DOC_PERIOD_DATE_REGEX_SPECS)
+
+
+def infer_candidate_value_role(
+    snippet: str,
+    matched_value: Optional[float],
+    pattern_label: str,
+) -> Tuple[str, bool, bool]:
+    snippet_lower = (snippet or "").lower()
+
+    comparison_context_flag = bool(COMPARISON_PHRASE_RE.search(snippet_lower))
+    numeric_tokens = NUMERIC_TOKEN_RE.findall(snippet or "")
+    multi_value_row_flag = len(numeric_tokens) >= 2
+
+    role = "ambiguous"
+
+    if matched_value is not None:
+        value_token = str(safe_num(matched_value, 4)).rstrip("0").rstrip(".")
+    else:
+        value_token = ""
+
+    compare_match = COMPARISON_PHRASE_RE.search(snippet_lower)
+    compare_pos = compare_match.start() if compare_match else -1
+
+    local_value_pos = -1
+    if value_token:
+        local_value_pos = snippet.find(value_token)
+
+    if comparison_context_flag:
+        if local_value_pos >= 0 and compare_pos >= 0 and local_value_pos < compare_pos:
+            role = "current"
+        elif local_value_pos >= 0 and compare_pos >= 0 and local_value_pos > compare_pos:
+            role = "comparison"
+        else:
+            role = "ambiguous"
+    else:
+        if multi_value_row_flag:
+            if pattern_label in {"nav_value_after_phrase", "strict_nav_with_dollar"}:
+                role = "current_first_column"
+            else:
+                role = "current_table_like"
+        else:
+            role = "current_single_value"
+
+    return role, comparison_context_flag, multi_value_row_flag
 
 
 def analyze_candidate_context(text: str, start: int, end: int, extraction_method: str) -> Dict[str, Any]:
@@ -933,6 +1052,9 @@ def score_direct_nav_candidate(
     context_penalty_total: float,
     section_bonus_total: float,
     hard_skip_context_flag: bool,
+    candidate_value_role: str,
+    comparison_context_flag: bool,
+    multi_value_row_flag: bool,
 ) -> float:
     snippet_lower = snippet.lower()
     score = float(PATTERN_BASE_SCORE.get(pattern_label, 3.0))
@@ -949,6 +1071,13 @@ def score_direct_nav_candidate(
         score += 0.4
     else:
         score -= 0.5
+
+    if candidate_value_role in {"current_first_column", "current_table_like", "current_single_value", "current"}:
+        score += 0.4
+    if multi_value_row_flag:
+        score += 0.3
+    if comparison_context_flag and candidate_value_role == "comparison":
+        score -= 1.2
 
     score += float(section_bonus_total)
     score -= float(context_penalty_total)
@@ -1042,7 +1171,19 @@ def extract_nav_candidates_from_text(
             date_component_flag = is_date_component_near_number(text, m.start(1), m.end(1))
             dollar_near_value = "$" in text[max(0, m.start(1) - 6):m.start(1)]
 
+            candidate_value_role, comparison_context_flag, multi_value_row_flag = infer_candidate_value_role(
+                snippet=snippet,
+                matched_value=float(val),
+                pattern_label=pattern_label,
+            )
+
             nav_ref_date, nav_ref_date_source, nav_ref_match_text = extract_nav_asof_date(text, m.start(), m.end())
+
+            if comparison_context_flag and candidate_value_role == "current":
+                nav_ref_date = None
+                nav_ref_date_source = None
+                nav_ref_match_text = None
+
             context_info = analyze_candidate_context(text, m.start(), m.end(), extraction_method="direct")
 
             score = score_direct_nav_candidate(
@@ -1058,6 +1199,9 @@ def extract_nav_candidates_from_text(
                 context_penalty_total=float(context_info["context_penalty_total"]),
                 section_bonus_total=float(context_info["section_bonus_total"]),
                 hard_skip_context_flag=bool(context_info["hard_skip_context_flag"]),
+                candidate_value_role=candidate_value_role,
+                comparison_context_flag=comparison_context_flag,
+                multi_value_row_flag=multi_value_row_flag,
             )
 
             premium_discount_est = None
@@ -1092,6 +1236,10 @@ def extract_nav_candidates_from_text(
                 "context_penalty_tags": context_info["context_penalty_tags"],
                 "section_bonus_total": context_info["section_bonus_total"],
                 "section_bonus_tags": context_info["section_bonus_tags"],
+                "candidate_value_role": candidate_value_role,
+                "comparison_context_flag": comparison_context_flag,
+                "multi_value_row_flag": multi_value_row_flag,
+                "date_binding_mode": "local_nav_ref" if nav_ref_date is not None else "none_yet",
             })
 
     for pattern_label, pat in IMPLIED_NAV_REGEX_SPECS:
@@ -1166,6 +1314,10 @@ def extract_nav_candidates_from_text(
                 "context_penalty_tags": context_info["context_penalty_tags"],
                 "section_bonus_total": context_info["section_bonus_total"],
                 "section_bonus_tags": context_info["section_bonus_tags"],
+                "candidate_value_role": "current_implied",
+                "comparison_context_flag": False,
+                "multi_value_row_flag": False,
+                "date_binding_mode": "local_nav_ref" if nav_ref_date is not None else "none_yet",
             })
 
     candidates = sorted(
@@ -1191,23 +1343,42 @@ def choose_effective_nav_date(
     filing_date: Optional[pd.Timestamp],
     market_date: Optional[pd.Timestamp],
     today_utc: Optional[pd.Timestamp],
-) -> Tuple[Optional[pd.Timestamp], str]:
+    doc_period_anchor: Optional[pd.Timestamp] = None,
+    candidate_value_role: Optional[str] = None,
+    comparison_context_flag: bool = False,
+    multi_value_row_flag: bool = False,
+) -> Tuple[Optional[pd.Timestamp], str, str]:
     nav_ref_date = normalize_ts_naive(nav_ref_date)
     filing_date = normalize_ts_naive(filing_date)
     market_date = normalize_ts_naive(market_date)
     today_utc = normalize_ts_naive(today_utc)
+    doc_period_anchor = normalize_ts_naive(doc_period_anchor)
 
     upper_bounds_for_ref = [d for d in [filing_date, market_date, today_utc] if d is not None]
     if nav_ref_date is not None and all(nav_ref_date <= ub for ub in upper_bounds_for_ref):
-        return nav_ref_date, "nav_ref_extracted"
+        return nav_ref_date, "nav_ref_extracted", "local_nav_ref"
+
+    can_use_doc_anchor = candidate_value_role in {
+        "current",
+        "current_first_column",
+        "current_table_like",
+        "current_single_value",
+        "current_implied",
+    } or (multi_value_row_flag and candidate_value_role not in {"comparison"})
+
+    upper_bounds_for_doc = [d for d in [filing_date, market_date, today_utc] if d is not None]
+    if doc_period_anchor is not None and can_use_doc_anchor and all(doc_period_anchor <= ub for ub in upper_bounds_for_doc):
+        if comparison_context_flag:
+            return doc_period_anchor, "doc_period_anchor_extracted", "doc_period_anchor_after_comparison_guard"
+        return doc_period_anchor, "doc_period_anchor_extracted", "doc_period_anchor"
 
     upper_bounds_for_filing = [d for d in [market_date, today_utc] if d is not None]
     if filing_date is not None:
         if all(filing_date <= ub for ub in upper_bounds_for_filing):
-            return filing_date, "filing_date_inferred_review_only"
-        return None, "nav_date_future_rejected"
+            return filing_date, "filing_date_inferred_review_only", "filing_date_fallback"
+        return None, "nav_date_future_rejected", "invalid_future_date"
 
-    return None, "nav_date_unknown"
+    return None, "nav_date_unknown", "unknown"
 
 
 def make_nav_overlay_row(
@@ -1233,7 +1404,7 @@ def make_nav_overlay_row(
 
     nav_age_days = None
     fresh_for_rule = False
-    structurally_reliable_nav_date = nav_date_source in {"manual_input", "nav_ref_extracted"}
+    structurally_reliable_nav_date = nav_date_source in {"manual_input", "nav_ref_extracted", "doc_period_anchor_extracted"}
 
     if valid_for_stats and nav_date is not None and market_date is not None:
         nav_age_days = int((market_date - nav_date).days)
@@ -1298,6 +1469,13 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("section_bonus_tags", [])
         row.setdefault("doc_name", None)
         row.setdefault("doc_score", None)
+        row.setdefault("doc_period_anchor", None)
+        row.setdefault("doc_period_anchor_source", None)
+        row.setdefault("doc_period_anchor_match_text", None)
+        row.setdefault("candidate_value_role", "manual")
+        row.setdefault("comparison_context_flag", False)
+        row.setdefault("multi_value_row_flag", False)
+        row.setdefault("date_binding_mode", "manual_input")
         return row
 
     used = bool(row.get("valid_for_stats"))
@@ -1305,6 +1483,8 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
     flags: List[str] = []
 
     nav_date_source = str(row.get("nav_date_source") or "")
+    candidate_value_role = str(row.get("candidate_value_role") or "")
+
     if nav_date_source == "filing_date_inferred_review_only":
         used = False
         dq_status = "REVIEW_NAV_DATE_INFERRED"
@@ -1313,6 +1493,12 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         used = False
         dq_status = "EXCLUDED_NAV_DATE_INVALID"
         flags.append(f"NAV_DATE_STATUS_{norm_flag_token(nav_date_source)}")
+
+    if candidate_value_role == "comparison":
+        used = False
+        if dq_status == "OK":
+            dq_status = "REVIEW_COMPARISON_VALUE"
+        flags.append("CANDIDATE_VALUE_IS_COMPARISON")
 
     hard_skip_tags = list(row.get("hard_skip_context_tags") or [])
     if row.get("hard_skip_context_flag"):
@@ -1408,6 +1594,13 @@ def load_manual_nav_rows(
                 "section_bonus_tags": [],
                 "doc_name": None,
                 "doc_score": None,
+                "doc_period_anchor": None,
+                "doc_period_anchor_source": None,
+                "doc_period_anchor_match_text": None,
+                "candidate_value_role": "manual",
+                "comparison_context_flag": False,
+                "multi_value_row_flag": False,
+                "date_binding_mode": "manual_input",
             },
         )
         row = finalize_nav_row_dq(row)
@@ -1742,7 +1935,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v7_docscan",
+            "source": "sec_filings_regex_v7_docscan_v11b",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -1822,6 +2015,8 @@ def fetch_auto_nav_rows_from_sec(
                     )
                     continue
 
+                doc_period_anchor, doc_period_anchor_source, doc_period_anchor_match_text = extract_doc_period_anchor(text)
+
                 candidates = extract_nav_candidates_from_text(
                     text=text,
                     market_close=market_close,
@@ -1834,11 +2029,15 @@ def fetch_auto_nav_rows_from_sec(
 
                 for cand in candidates:
                     nav_ref_date = parse_date(cand.get("nav_ref_date"))
-                    effective_nav_date, nav_date_source = choose_effective_nav_date(
+                    effective_nav_date, nav_date_source, date_binding_mode = choose_effective_nav_date(
                         nav_ref_date=nav_ref_date,
                         filing_date=filing_date,
                         market_date=market_date,
                         today_utc=today_utc,
+                        doc_period_anchor=doc_period_anchor,
+                        candidate_value_role=str(cand.get("candidate_value_role") or ""),
+                        comparison_context_flag=bool(cand.get("comparison_context_flag")),
+                        multi_value_row_flag=bool(cand.get("multi_value_row_flag")),
                     )
 
                     row = make_nav_overlay_row(
@@ -1885,6 +2084,13 @@ def fetch_auto_nav_rows_from_sec(
                             "doc_name": doc.get("doc_name"),
                             "doc_score": doc.get("doc_score"),
                             "doc_source": doc.get("doc_source"),
+                            "doc_period_anchor": doc_period_anchor.strftime("%Y-%m-%d") if doc_period_anchor is not None else None,
+                            "doc_period_anchor_source": doc_period_anchor_source,
+                            "doc_period_anchor_match_text": doc_period_anchor_match_text,
+                            "candidate_value_role": cand.get("candidate_value_role"),
+                            "comparison_context_flag": cand.get("comparison_context_flag"),
+                            "multi_value_row_flag": cand.get("multi_value_row_flag"),
+                            "date_binding_mode": date_binding_mode,
                         },
                     )
                     row = finalize_nav_row_dq(row)
@@ -1922,7 +2128,8 @@ def fetch_auto_nav_rows_from_sec(
                 f"{ticker}:OK:{chosen_row.get('filing_form')}:{chosen_row.get('filing_date')}:"
                 f"doc={chosen_row.get('doc_name')}:doc_score={chosen_row.get('doc_score')}:"
                 f"score={chosen_row.get('match_score')}:dq={chosen_row.get('dq_status')}:"
-                f"method={chosen_row.get('extraction_method')}:nav_date_source={chosen_row.get('nav_date_source')}"
+                f"method={chosen_row.get('extraction_method')}:nav_date_source={chosen_row.get('nav_date_source')}:"
+                f"date_binding_mode={chosen_row.get('date_binding_mode')}"
             )
         elif fallback_review_row is not None:
             out_rows.append(fallback_review_row)
@@ -1931,14 +2138,15 @@ def fetch_auto_nav_rows_from_sec(
                 f"{ticker}:REVIEW_ONLY:{fallback_review_row.get('filing_form')}:{fallback_review_row.get('filing_date')}:"
                 f"doc={fallback_review_row.get('doc_name')}:doc_score={fallback_review_row.get('doc_score')}:"
                 f"score={fallback_review_row.get('match_score')}:dq={fallback_review_row.get('dq_status')}:"
-                f"method={fallback_review_row.get('extraction_method')}:nav_date_source={fallback_review_row.get('nav_date_source')}"
+                f"method={fallback_review_row.get('extraction_method')}:nav_date_source={fallback_review_row.get('nav_date_source')}:"
+                f"date_binding_mode={fallback_review_row.get('date_binding_mode')}"
             )
         else:
             notes.append(f"{ticker}:ERR:no_nav_match")
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v7_docscan",
+        "source": "sec_filings_regex_v7_docscan_v11b",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -2446,6 +2654,9 @@ def build_report(latest: Dict[str, Any]) -> str:
             ("source_kind", "source_kind"),
             ("doc_name", "doc_name"),
             ("doc_score", "doc_score"),
+            ("doc_period_anchor", "doc_period_anchor"),
+            ("candidate_role", "candidate_value_role"),
+            ("date_binding_mode", "date_binding_mode"),
             ("extraction_method", "extraction_method"),
             ("used_in_stats", "used_in_stats"),
             ("dq_status", "dq_status"),
@@ -2475,6 +2686,7 @@ def build_report(latest: Dict[str, Any]) -> str:
             lines.append(
                 f"- {r.get('ticker')} | used_in_stats={r.get('used_in_stats')} | "
                 f"dq_status={r.get('dq_status')} | doc={r.get('doc_name')} | doc_score={r.get('doc_score')} | "
+                f"candidate_role={r.get('candidate_value_role')} | date_binding_mode={r.get('date_binding_mode')} | "
                 f"score={r.get('match_score')} | pattern={r.get('matched_pattern')} | method={r.get('extraction_method')}"
             )
             lines.append(f"  - snippet: `{sanitize_inline_code_text(r.get('matched_snippet'))}`")
@@ -2482,6 +2694,8 @@ def build_report(latest: Dict[str, Any]) -> str:
                 lines.append(f"  - price_obs_match: `{sanitize_inline_code_text(r.get('price_obs_match_text'))}`")
             if r.get("nav_ref_match_text"):
                 lines.append(f"  - nav_ref_match: `{sanitize_inline_code_text(r.get('nav_ref_match_text'))}`")
+            if r.get("doc_period_anchor_match_text"):
+                lines.append(f"  - doc_period_anchor_match: `{sanitize_inline_code_text(r.get('doc_period_anchor_match_text'))}`")
             if r.get("hard_skip_context_tags"):
                 lines.append(f"  - context_hard_skip: `{sanitize_inline_code_text(','.join(r.get('hard_skip_context_tags') or []))}`")
             if r.get("context_penalty_tags"):
@@ -2657,7 +2871,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan_v11b + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -2708,10 +2922,12 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.11 adds SEC retry/backoff and optional cache for better fetch stability.",
-            "v1.11 scans filing index and scores multiple docs per filing instead of only primaryDocument.",
-            "v1.11 improves HTML-to-text normalization for table/paragraph preservation.",
-            "v1.11 treats filing-date-only NAV dating as REVIEW_ONLY, excluding it from structural stats.",
+            "v1.11b keeps SEC retry/backoff and optional cache for fetch stability.",
+            "v1.11b keeps filing index doc scan instead of primaryDocument-only logic.",
+            "v1.11b adds doc_period_anchor extraction for table-like NAV rows.",
+            "v1.11b adds candidate_value_role and date_binding_mode for auditability.",
+            "v1.11b tries to avoid binding comparison dates to current NAV values in multi-value disclosures.",
+            "v1.11b keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
