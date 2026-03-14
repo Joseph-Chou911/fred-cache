@@ -1,15 +1,15 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-14T11:59:40Z`
+- generated_at_utc: `2026-03-14T12:58:44Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.10`
+- script_version: `v1.10b`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
 - structural_signal: **NONE**
 - combined_signal: **WATCH**
 - signal_basis: `PROXY_ONLY`
-- overall_confidence: `PARTIAL`
+- overall_confidence: `PROXY_ONLY`
 - reasons: `proxy:bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%`
 - tags: `proxy:MARKET_PROXY_WEAK`
 
@@ -38,76 +38,43 @@
 ## 2) NAV Overlay (manual + auto SEC, optional)
 - path: `private_credit_cache/inputs/manual_nav.json`
 - as_of_date: `YYYY-MM-DD`
-- confidence: `PARTIAL`
+- confidence: `TEMPLATE_ONLY`
 - raw_row_count: `1`
 - template_excluded_count: `1`
 - manual_valid_count: `0`
 - auto_enabled: `True`
-- auto_source: `sec_filings_regex_v6_contextfilter`
+- auto_source: `sec_filings_regex_v7_recallplus`
 - auto_attempted_count: `5`
-- auto_found_count: `5`
+- auto_found_count: `0`
 - manual_override_tickers: `[]`
-- coverage_total: `2`
-- coverage_fresh: `2`
-- median_discount_pct_fresh: `-18.243683`
-- median_discount_pct_all: `-18.243683`
+- coverage_total: `0`
+- coverage_fresh: `0`
+- median_discount_pct_fresh: `None`
+- median_discount_pct_all: `None`
 
 ### Coverage decomposition
-- auto_total_count: `5`
-- auto_used_in_stats_count: `2`
+- auto_total_count: `0`
+- auto_used_in_stats_count: `0`
 - auto_review_count: `0`
-- auto_excluded_count: `3`
-- auto_review_only_count: `3`
+- auto_excluded_count: `0`
+- auto_review_only_count: `0`
 - manual_used_in_stats_count: `0`
 - manual_invalid_count: `1`
-- effective_auto_count: `2`
+- effective_auto_count: `0`
 - effective_manual_count: `0`
-- effective_structural_count: `2`
-- effective_structural_fresh_count: `2`
+- effective_structural_count: `0`
+- effective_structural_fresh_count: `0`
 
 | ticker | source_kind | extraction_method | used_in_stats | dq_status | review_flag | match_score | matched_pattern | price_obs_date | nav_ref_date | nav_date_used | nav_date_source | filing_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | source | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ARCC | auto_sec | implied_from_price_and_rel | True | OK | NONE | 12.300000 | closing_price_discount_to_nav | 2026-01-29 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-04 | 17.860000 | 2026-03-13 | -10.434227 | 72 | True | https://www.sec.gov/Archives/edgar/data/1287750/000128775026000006/arcc-20251231.htm | auto_sec:10-K:2026-02-04:candidate_rank=1 |
-| OBDC | auto_sec | implied_from_price_and_rel | True | OK | NONE | 12.400000 | closing_price_discount_to_nav | 2026-02-11 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-18 | 10.950000 | 2026-03-13 | -26.053140 | 72 | True | https://www.sec.gov/Archives/edgar/data/1655888/000165588826000010/obdc-20251231.htm | auto_sec:10-K:2026-02-18:candidate_rank=1 |
 | ARCC | manual | manual | False | MANUAL_INVALID | NONE | NA | NA | NA | NA | NA | manual_input | NA | 17.860000 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
-| BXSL | auto_sec | direct | False | EXCLUDED_CONTEXT_HARD_SKIP | CONTEXT_HARD_SKIP_EXAMPLE_CONTEXT\|CONTEXT_HARD_SKIP_HYPOTHETICAL_NAV_IF\|LOW_MATCH_SCORE_LT_3.0\|SUSPICIOUS_SNIPPET_TERMS | 1.700000 | strict_nav_with_dollar | NA | NA | 2026-02-25 | filing_date_fallback | 2026-02-25 | 23.650000 | 2026-03-13 | -5.400000 | 16 | True | https://www.sec.gov/Archives/edgar/data/1736035/000173603526000004/bxsl-20251231.htm | auto_sec:10-K:2026-02-25:candidate_rank=1 |
-| FSK | auto_sec | direct | False | EXCLUDED_PREMIUM_TOO_HIGH | LOW_MATCH_SCORE_LT_3.0\|PREMIUM_GT_25 | 1.600000 | nav_value_after_phrase | NA | NA | 2026-02-25 | filing_date_fallback | 2026-02-25 | 10.090000 | 2026-03-13 | 909.000000 | 16 | True | https://www.sec.gov/Archives/edgar/data/1422183/000162828026011734/fsk-20251231.htm | auto_sec:10-K:2026-02-25:candidate_rank=1 |
-| PSEC | auto_sec | direct | False | EXCLUDED_CONTEXT_HARD_SKIP | CONTEXT_HARD_SKIP_SELL_BELOW_NAV\|CONTEXT_HARD_SKIP_STOCKHOLDER_APPROVAL_BELOW_NAV\|LOW_MATCH_SCORE_LT_3.0\|DISCOUNT_LE_-45\|PERCENT_NEAR_MATCH\|SUSPICIOUS_SNIPPET_TERMS | -7.500000 | nav_value_after_phrase | NA | NA | 2026-02-09 | filing_date_fallback | 2026-02-09 | 2.560000 | 2026-03-13 | -53.454545 | 32 | True | https://www.sec.gov/Archives/edgar/data/1287032/000128703226000045/psec-20251231.htm | auto_sec:10-Q:2026-02-09:candidate_rank=1 |
-
-### NAV auto match snippets
-- ARCC | used_in_stats=True | dq_status=OK | score=12.3 | pattern=closing_price_discount_to_nav | method=implied_from_price_and_rel
-  - snippet: `ue, divided by net asset value (in each case, as of the applicable quarter). (3) Represents the dividend or distribution declared in the relevant quarter. On January 29, 2026, the last reported closing sales price of our common stock on The NASDAQ Global Select Market was $20.16 per share, which represented a premium o...`
-  - price_obs_match: `On January 29, 2026, the last reported closing sales price`
-  - nav_ref_match: `net asset value per share reported by us as of December 31, 2025`
-  - section_bonus: `nav_section`
-  - implied_from: price=20.16 | rel=premium | pct=1.1
-- OBDC | used_in_stats=True | dq_status=OK | score=12.4 | pattern=closing_price_discount_to_nav | method=implied_from_price_and_rel
-  - snippet: `re. See “ ITEM 1A. RISK FACTORS — Risks Related to an Investment in Our Common Stock —The market value of our common stock may fluctuate significantly .” On February 11, 2026, the last reported closing sales price of our common stock on the NYSE was $11.95 per share, which represented a discount of approximately 19.3% ...`
-  - price_obs_match: `On February 11, 2026, the last reported closing sales price`
-  - nav_ref_match: `net asset value per share reported by us as of December 31, 2025`
-  - context_penalties: `risk_factors`
-  - section_bonus: `nav_section,shareholder_returns`
-  - implied_from: price=11.95 | rel=discount | pct=19.3
-- BXSL | used_in_stats=False | dq_status=EXCLUDED_CONTEXT_HARD_SKIP | score=1.7 | pattern=strict_nav_with_dollar | method=direct
-  - snippet: `r share is $25.00 and the market price on the payment date of a cash dividend is $24.00 per share, the Company will issue shares at $24.00 per share. If the most recently computed NAV per share is $25.00 and the market price on the payment date of a cash dividend is $27.00 per share, the Company will issue shares at $2...`
-  - context_hard_skip: `example_context,hypothetical_nav_if`
-  - section_bonus: `nav_section`
-- FSK | used_in_stats=False | dq_status=EXCLUDED_PREMIUM_TOO_HIGH | score=1.6 | pattern=nav_value_after_phrase | method=direct
-  - snippet: `Closing Sales Price Premium / (Discount) of High Sales Price to NAV (2) Premium / (Discount) of Low Sales Price to NAV (2) For the Three Months Ended (unless otherwise indicated) NAV per Share (1) High Low Fiscal Year Ending December 31, 2026 First Quarter of 2026 (through February 20, 2026) N/A* $ 14.93 $ 12.75 N/A* N...`
-  - context_penalties: `risk_factors`
-  - section_bonus: `nav_section`
-- PSEC | used_in_stats=False | dq_status=EXCLUDED_CONTEXT_HARD_SKIP | score=-7.5 | pattern=nav_value_after_phrase | method=direct
-  - snippet: `aintain any stockholder approval that may be required under the 1940 Act to permit us to sell our common stock below net asset value if the 5-day VWAP represents a discount to our net asset value per share of common stock. For the 5.50 % Preferred Stock and 6.50 % Preferred Stock, “IOC Settlement Amount” means (A) the ...`
-  - context_hard_skip: `sell_below_nav,stockholder_approval_below_nav`
-  - context_penalties: `reg_1940_act,preferred_stock,vwap_context,settlement_amount`
-  - section_bonus: `nav_section`
 
 ### NAV auto fetch notes
-- ARCC:OK:10-K:2026-02-04:score=12.3:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted
-- BXSL:REVIEW_ONLY:10-K:2026-02-25:score=1.7:dq=EXCLUDED_CONTEXT_HARD_SKIP:method=direct:nav_date_source=filing_date_fallback
-- OBDC:OK:10-K:2026-02-18:score=12.4:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted
-- FSK:REVIEW_ONLY:10-K:2026-02-25:score=1.6:dq=EXCLUDED_PREMIUM_TOO_HIGH:method=direct:nav_date_source=filing_date_fallback
-- PSEC:REVIEW_ONLY:10-Q:2026-02-09:score=-7.5:dq=EXCLUDED_CONTEXT_HARD_SKIP:method=direct:nav_date_source=filing_date_fallback
+- ARCC:ERR:no_nav_match
+- BXSL:ERR:no_nav_match
+- OBDC:ERR:no_nav_match
+- FSK:ERR:no_nav_match
+- PSEC:ERR:no_nav_match
 
 ## 3) Event Overlay (manual, optional)
 - path: `private_credit_cache/inputs/manual_events.json`
@@ -138,10 +105,10 @@
 
 ## 5) Confidence / DQ
 - price_confidence: `OK`
-- nav_confidence: `PARTIAL`
+- nav_confidence: `TEMPLATE_ONLY`
 - event_confidence: `TEMPLATE_ONLY`
-- structural_confidence: `PARTIAL`
-- overall_confidence: `PARTIAL`
+- structural_confidence: `PROXY_ONLY`
+- overall_confidence: `PROXY_ONLY`
 - basket_coverage: `5`
 
 ## 6) Notes
@@ -153,8 +120,9 @@
 - Public Credit Context mirrors unified signal from preferred source modules when available.
 - Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.
 - Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.
-- v1.10 adds hard-skip filters for hypothetical / boilerplate contexts before they can pass into structural stats.
-- v1.10 adds section/context bonus-penalty scoring so cleaner disclosure zones outrank footnotes and boilerplate.
-- v1.10 keeps price_obs_date / nav_ref_date split, while nav_date remains the effective date used in stats.
-- v1.10 keeps markdown-safe table escaping and NAV coverage decomposition for auditability.
+- v1.10b expands implied regex recall and adds direct price-to-NAV pattern support for alternate BDC wording.
+- v1.10b adds local N/A hard-skip filters and fixes the dead '(n) Represents' footnote penalty regex.
+- v1.10b prioritizes 8-K / 8-KA earlier in filing scan order and increases default nav_auto_max_filings to 10.
+- v1.10b keeps price_obs_date / nav_ref_date split, while nav_date remains the effective date used in stats.
+- v1.10b keeps markdown-safe table escaping and NAV coverage decomposition for auditability.
 - data_fetch_notes: all price fetches OK
