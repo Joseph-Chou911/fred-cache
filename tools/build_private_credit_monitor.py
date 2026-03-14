@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.5)
+build_private_credit_monitor.py (v1.6)
 
 Purpose
 -------
@@ -17,19 +17,13 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.5 changes
+v1.6 changes
 ------------
-- Keep v1.4 structure
-- Improve auto NAV auditability and safety:
-  * add matched_snippet
-  * add match_score / matched_pattern / candidate_rank / candidate_count
-  * add review_flag / dq_status / used_in_stats
-  * exclude suspicious auto NAV from stats by default
-- Reduce wrong picks like FSK=7.00 by:
-  * removing "closest to market price wins" as primary rule
-  * scoring phrase quality / snippet quality first
-  * penalizing suspicious premium outcomes and suspicious snippet context
-  * allowing review-only rows to display but not count in structural stats
+- Keep v1.5 structure
+- Add hard exclusion for date-component contamination (e.g. Dec 31, 2025 -> 31)
+- REVIEW rows are no longer included in structural stats
+- Add implied NAV extractor from price + premium/discount sentence
+- Keep matched_snippet / review_flag / dq_status / used_in_stats for auditability
 
 Outputs
 -------
@@ -39,13 +33,6 @@ All outputs go to a dedicated folder (default: private_credit_cache/):
 - report.md
 - inputs/manual_events.json   (template created if absent)
 - inputs/manual_nav.json      (template created if absent)
-
-Data layers
------------
-1) BDC market proxy (auto)
-2) NAV overlay (manual + optional auto SEC)
-3) Event overlay (manual, optional)
-4) Optional public-credit context (reference-only, no recomputation)
 
 Dependencies
 ------------
@@ -72,7 +59,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.5"
+SCRIPT_VERSION = "v1.6"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -93,7 +80,6 @@ EVENT_CATEGORIES = {
 }
 SEVERITY_ORDER = {"NONE": 0, "WATCH": 1, "ALERT": 2}
 
-# Public Credit Context preferred module mapping
 PREFERRED_CONTEXT_MODULES: Dict[str, List[str]] = {
     "BAMLH0A0HYM2": ["fred_cache", "market_cache"],
     "HYG_IEF_RATIO": ["market_cache", "fred_cache"],
@@ -106,30 +92,52 @@ SEC_ARCHIVES_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik_int}/{acces
 
 AUTO_NAV_ALLOWED_FORMS = {"10-Q", "10-Q/A", "10-K", "10-K/A", "8-K", "8-K/A"}
 
-NAV_REGEX_SPECS = [
+DIRECT_NAV_REGEX_SPECS = [
     (
-        "net_asset_value_per_share",
-        re.compile(r"net asset value per share[^0-9$]{0,120}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)", re.I),
+        "strict_nav_with_dollar",
+        re.compile(
+            r"(?:net asset value per share|net assets per share|nav per share)"
+            r"[^0-9$]{0,60}\$([0-9]{1,3}(?:\.[0-9]{1,4})?)",
+            re.I,
+        ),
     ),
     (
-        "net_assets_per_share",
-        re.compile(r"net assets per share[^0-9$]{0,120}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)", re.I),
-    ),
-    (
-        "nav_per_share",
-        re.compile(r"nav per share[^0-9$]{0,120}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)", re.I),
+        "nav_value_after_phrase",
+        re.compile(
+            r"(?:net asset value per share|net assets per share|nav per share)"
+            r"[^0-9$]{0,30}(?:was|of|:|=)?[^0-9$]{0,10}([0-9]{1,3}(?:\.[0-9]{1,4})?)",
+            re.I,
+        ),
     ),
     (
         "net_asset_value_of_x_per_share",
-        re.compile(r"net asset value[^0-9$]{0,80}of[^0-9$]{0,40}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share", re.I),
+        re.compile(
+            r"net asset value[^0-9$]{0,80}of[^0-9$]{0,40}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share",
+            re.I,
+        ),
+    ),
+]
+
+# Example:
+# "... closing sales price ... was $11.95 per share, which represented a discount of approximately 19.3% to net asset value per share ..."
+IMPLIED_NAV_REGEX_SPECS = [
+    (
+        "closing_price_discount_to_nav",
+        re.compile(
+            r"(?:closing sales price|last reported closing sales price|closing price)[^$]{0,120}"
+            r"\$([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share"
+            r"[^%]{0,220}?(discount|premium)\s+of\s+(?:approximately\s+)?([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*%"
+            r"[^.]{0,180}?net asset value per share",
+            re.I,
+        ),
     ),
 ]
 
 PATTERN_BASE_SCORE = {
-    "net_asset_value_per_share": 4.8,
-    "net_assets_per_share": 4.2,
-    "nav_per_share": 3.4,
-    "net_asset_value_of_x_per_share": 4.6,
+    "strict_nav_with_dollar": 6.0,
+    "nav_value_after_phrase": 4.2,
+    "net_asset_value_of_x_per_share": 5.6,
+    "closing_price_discount_to_nav": 8.5,
 }
 
 SUSPICIOUS_SNIPPET_TERMS = [
@@ -148,7 +156,12 @@ SUSPICIOUS_SNIPPET_TERMS = [
     "secured notes",
     "senior notes",
     "convertible notes",
-    "maturity",
+    "preferred stock",
+    "preferred shares",
+    "vwap",
+    "settlement amount",
+    "ioc settlement amount",
+    "stockholders approved the sale of shares",
 ]
 
 MONTH_HINTS = [
@@ -160,7 +173,6 @@ HTML_TAG_RE = re.compile(r"<[^>]+>")
 WHITESPACE_RE = re.compile(r"\s+")
 YEAR_RE = re.compile(r"\b20[0-9]{2}\b")
 
-# Conservative auto NAV guardrails
 AUTO_NAV_MIN_MATCH_SCORE = 3.0
 AUTO_NAV_REVIEW_PREMIUM_PCT = 15.0
 AUTO_NAV_EXCLUDE_PREMIUM_PCT = 25.0
@@ -183,9 +195,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
 
-    # auto NAV from SEC
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.5 contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.6 contact@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     return p.parse_args()
 
@@ -346,10 +357,6 @@ def make_requests_session(user_agent: Optional[str] = None) -> requests.Session:
 
 
 def fetch_stooq_daily(symbol: str, start_date: pd.Timestamp, end_date: pd.Timestamp, timeout: int) -> Tuple[pd.DataFrame, str, Optional[str]]:
-    """
-    Returns (df, source_url, error_note)
-    Expected CSV columns: Date,Open,High,Low,Close,Volume
-    """
     ticker = f"{symbol.lower()}.us"
     d1 = start_date.strftime("%Y%m%d")
     d2 = end_date.strftime("%Y%m%d")
@@ -578,7 +585,15 @@ def has_suspicious_terms(snippet_lower: str) -> bool:
     return any(term in snippet_lower for term in SUSPICIOUS_SNIPPET_TERMS)
 
 
-def score_nav_candidate(
+def is_date_component_near_number(text: str, num_start: int, num_end: int) -> bool:
+    left = text[max(0, num_start - 25):num_start].lower()
+    right = text[num_end:min(len(text), num_end + 15)].lower()
+    has_month_left = any(m in left for m in MONTH_HINTS)
+    has_year_right = bool(re.search(r",?\s*20[0-9]{2}", right))
+    return bool(has_month_left and has_year_right)
+
+
+def score_direct_nav_candidate(
     *,
     value: float,
     pattern_label: str,
@@ -586,33 +601,47 @@ def score_nav_candidate(
     market_close: Optional[float],
     percent_context_flag: bool,
     suspicious_terms_flag: bool,
+    date_component_flag: bool,
+    dollar_near_value: bool,
 ) -> float:
     snippet_lower = snippet.lower()
     score = float(PATTERN_BASE_SCORE.get(pattern_label, 3.0))
 
-    if "$" in snippet:
-        score += 0.6
+    if dollar_near_value:
+        score += 1.0
     if "net asset value per share" in snippet_lower:
         score += 0.8
     elif "nav per share" in snippet_lower:
         score += 0.4
     if has_month_or_asof_hint(snippet_lower):
-        score += 0.8
+        score += 0.5
 
     if percent_context_flag:
-        score -= 2.4
+        score -= 1.5
     if suspicious_terms_flag:
         score -= 2.0
+    if date_component_flag:
+        score -= 5.0
 
     if market_close is not None and market_close > 0 and value > 0:
         prem = (market_close / value - 1.0) * 100.0
         if prem > AUTO_NAV_EXCLUDE_PREMIUM_PCT:
-            score -= 2.5
+            score -= 2.0
         elif prem > AUTO_NAV_REVIEW_PREMIUM_PCT:
-            score -= 1.0
-        elif prem <= AUTO_NAV_REVIEW_DISCOUNT_PCT:
-            score -= 0.3
+            score -= 0.8
 
+    return round(score, 3)
+
+
+def score_implied_nav_candidate(snippet: str) -> float:
+    snippet_lower = snippet.lower()
+    score = float(PATTERN_BASE_SCORE.get("closing_price_discount_to_nav", 8.0))
+    if "discount" in snippet_lower or "premium" in snippet_lower:
+        score += 0.8
+    if "closing sales price" in snippet_lower or "closing price" in snippet_lower:
+        score += 0.6
+    if "net asset value per share" in snippet_lower:
+        score += 0.8
     return round(score, 3)
 
 
@@ -627,7 +656,8 @@ def extract_nav_candidates_from_text(
     candidates: List[Dict[str, Any]] = []
     seen = set()
 
-    for pattern_label, pat in NAV_REGEX_SPECS:
+    # 1) Direct NAV candidates
+    for pattern_label, pat in DIRECT_NAV_REGEX_SPECS:
         for m in pat.finditer(text):
             val = to_float(m.group(1))
             if val is None:
@@ -638,47 +668,103 @@ def extract_nav_candidates_from_text(
             snippet = extract_local_snippet(text, m.start(), m.end(), radius=180)
             snippet_lower = snippet.lower()
 
-            num_lo = max(0, m.start(1) - 20)
+            num_lo = max(0, m.start(1) - 25)
             num_hi = min(len(text), m.end(1) + 20)
             num_context = clean_snippet(text[num_lo:num_hi], max_len=120)
             num_context_lower = num_context.lower()
 
             percent_context_flag = ("%" in num_context) or (" percent" in num_context_lower)
             suspicious_terms_flag = has_suspicious_terms(snippet_lower)
+            date_component_flag = is_date_component_near_number(text, m.start(1), m.end(1))
+            dollar_near_value = "$" in text[max(0, m.start(1) - 5):m.start(1)]
 
-            score = score_nav_candidate(
+            score = score_direct_nav_candidate(
                 value=float(val),
                 pattern_label=pattern_label,
                 snippet=snippet,
                 market_close=market_close,
                 percent_context_flag=percent_context_flag,
                 suspicious_terms_flag=suspicious_terms_flag,
+                date_component_flag=date_component_flag,
+                dollar_near_value=dollar_near_value,
             )
 
             premium_discount_est = None
             if market_close is not None and market_close > 0:
                 premium_discount_est = safe_num((market_close / float(val) - 1.0) * 100.0)
 
-            key = (round(float(val), 4), pattern_label, snippet[:140])
+            key = ("direct", round(float(val), 4), pattern_label, snippet[:140])
             if key in seen:
                 continue
             seen.add(key)
 
             candidates.append({
+                "extraction_method": "direct",
                 "nav": round(float(val), 6),
                 "matched_pattern": pattern_label,
                 "matched_snippet": snippet,
                 "num_context": num_context,
                 "percent_context_flag": percent_context_flag,
                 "suspicious_terms_flag": suspicious_terms_flag,
+                "date_component_flag": date_component_flag,
                 "match_score": score,
                 "premium_discount_est": premium_discount_est,
+            })
+
+    # 2) Implied NAV candidates from price + discount/premium sentence
+    for pattern_label, pat in IMPLIED_NAV_REGEX_SPECS:
+        for m in pat.finditer(text):
+            price = to_float(m.group(1))
+            rel = str(m.group(2) or "").lower().strip()
+            pct = to_float(m.group(3))
+            if price is None or pct is None:
+                continue
+            if price <= 0 or pct < 0 or pct >= 95:
+                continue
+
+            if rel == "discount":
+                nav = price / (1.0 - pct / 100.0)
+            elif rel == "premium":
+                nav = price / (1.0 + pct / 100.0)
+            else:
+                continue
+
+            if not (0.5 <= nav <= 100.0):
+                continue
+
+            snippet = extract_local_snippet(text, m.start(), m.end(), radius=180)
+            score = score_implied_nav_candidate(snippet)
+
+            premium_discount_est = None
+            if market_close is not None and market_close > 0:
+                premium_discount_est = safe_num((market_close / float(nav) - 1.0) * 100.0)
+
+            key = ("implied", round(float(nav), 4), pattern_label, snippet[:140])
+            if key in seen:
+                continue
+            seen.add(key)
+
+            candidates.append({
+                "extraction_method": "implied_from_price_and_rel",
+                "nav": round(float(nav), 6),
+                "matched_pattern": pattern_label,
+                "matched_snippet": snippet,
+                "num_context": clean_snippet(snippet, max_len=160),
+                "percent_context_flag": False,
+                "suspicious_terms_flag": False,
+                "date_component_flag": False,
+                "match_score": score,
+                "premium_discount_est": premium_discount_est,
+                "derived_from_price": safe_num(price),
+                "derived_from_rel": rel,
+                "derived_from_pct": safe_num(pct),
             })
 
     candidates = sorted(
         candidates,
         key=lambda x: (
             -(float(x.get("match_score") or -999)),
+            0 if x.get("extraction_method") == "implied_from_price_and_rel" else 1,
             x.get("matched_pattern") or "",
             -(float(x.get("nav") or 0)),
         )
@@ -753,6 +839,8 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("candidate_count", None)
         row.setdefault("percent_context_flag", False)
         row.setdefault("suspicious_terms_flag", False)
+        row.setdefault("date_component_flag", False)
+        row.setdefault("extraction_method", "manual")
         return row
 
     used = bool(row.get("valid_for_stats"))
@@ -765,32 +853,41 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         dq_status = "EXCLUDED_LOW_MATCH_SCORE"
         flags.append(f"LOW_MATCH_SCORE_LT_{AUTO_NAV_MIN_MATCH_SCORE}")
 
+    if bool(row.get("date_component_flag")):
+        used = False
+        dq_status = "EXCLUDED_DATE_COMPONENT"
+        flags.append("DATE_COMPONENT_NEAR_MATCH")
+
     premium_discount_pct = to_float(row.get("premium_discount_pct"))
     if premium_discount_pct is not None:
         if premium_discount_pct > AUTO_NAV_EXCLUDE_PREMIUM_PCT:
             used = False
             dq_status = "EXCLUDED_PREMIUM_TOO_HIGH"
             flags.append(f"PREMIUM_GT_{int(AUTO_NAV_EXCLUDE_PREMIUM_PCT)}")
-        elif premium_discount_pct > AUTO_NAV_REVIEW_PREMIUM_PCT and not dq_status.startswith("EXCLUDED"):
+        elif premium_discount_pct > AUTO_NAV_REVIEW_PREMIUM_PCT:
+            used = False
             dq_status = "REVIEW_PREMIUM_HIGH"
             flags.append(f"PREMIUM_GT_{int(AUTO_NAV_REVIEW_PREMIUM_PCT)}")
-        elif premium_discount_pct <= AUTO_NAV_REVIEW_DISCOUNT_PCT and not dq_status.startswith("EXCLUDED"):
+        elif premium_discount_pct <= AUTO_NAV_REVIEW_DISCOUNT_PCT:
+            used = False
             dq_status = "REVIEW_DISCOUNT_DEEP"
             flags.append(f"DISCOUNT_LE_{int(AUTO_NAV_REVIEW_DISCOUNT_PCT)}")
 
-    if bool(row.get("percent_context_flag")) and not dq_status.startswith("EXCLUDED"):
+    if bool(row.get("percent_context_flag")):
+        used = False
         if dq_status == "OK":
             dq_status = "REVIEW_PERCENT_CONTEXT"
         flags.append("PERCENT_NEAR_MATCH")
 
-    if bool(row.get("suspicious_terms_flag")) and not dq_status.startswith("EXCLUDED"):
+    if bool(row.get("suspicious_terms_flag")):
+        used = False
         if dq_status == "OK":
             dq_status = "REVIEW_SNIPPET_TERMS"
         flags.append("SUSPICIOUS_SNIPPET_TERMS")
 
     row["review_flag"] = "|".join(flags) if flags else "NONE"
     row["dq_status"] = dq_status
-    row["used_in_stats"] = bool(used and row.get("valid_for_stats"))
+    row["used_in_stats"] = bool(used and row.get("valid_for_stats") and dq_status == "OK")
     return row
 
 
@@ -930,7 +1027,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v2",
+            "source": "sec_filings_regex_v3",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -998,6 +1095,11 @@ def fetch_auto_nav_rows_from_sec(
                         "candidate_count": cand.get("candidate_count"),
                         "percent_context_flag": cand.get("percent_context_flag"),
                         "suspicious_terms_flag": cand.get("suspicious_terms_flag"),
+                        "date_component_flag": cand.get("date_component_flag"),
+                        "extraction_method": cand.get("extraction_method"),
+                        "derived_from_price": cand.get("derived_from_price"),
+                        "derived_from_rel": cand.get("derived_from_rel"),
+                        "derived_from_pct": cand.get("derived_from_pct"),
                         "nav_date_source": "filing_date_fallback",
                     },
                 )
@@ -1023,21 +1125,23 @@ def fetch_auto_nav_rows_from_sec(
             found += 1
             notes.append(
                 f"{ticker}:OK:{chosen_row.get('filing_form')}:{chosen_row.get('filing_date')}:"
-                f"score={chosen_row.get('match_score')}:dq={chosen_row.get('dq_status')}"
+                f"score={chosen_row.get('match_score')}:dq={chosen_row.get('dq_status')}:"
+                f"method={chosen_row.get('extraction_method')}"
             )
         elif fallback_review_row is not None:
             out_rows.append(fallback_review_row)
             found += 1
             notes.append(
                 f"{ticker}:REVIEW_ONLY:{fallback_review_row.get('filing_form')}:{fallback_review_row.get('filing_date')}:"
-                f"score={fallback_review_row.get('match_score')}:dq={fallback_review_row.get('dq_status')}"
+                f"score={fallback_review_row.get('match_score')}:dq={fallback_review_row.get('dq_status')}:"
+                f"method={fallback_review_row.get('extraction_method')}"
             )
         else:
             notes.append(f"{ticker}:ERR:no_nav_match")
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v2",
+        "source": "sec_filings_regex_v3",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -1586,6 +1690,7 @@ def build_report(latest: Dict[str, Any]) -> str:
         [
             ("ticker", "ticker"),
             ("source_kind", "source_kind"),
+            ("extraction_method", "extraction_method"),
             ("used_in_stats", "used_in_stats"),
             ("dq_status", "dq_status"),
             ("review_flag", "review_flag"),
@@ -1610,10 +1715,15 @@ def build_report(latest: Dict[str, Any]) -> str:
             lines.append(
                 f"- {r.get('ticker')} | used_in_stats={r.get('used_in_stats')} | "
                 f"dq_status={r.get('dq_status')} | score={r.get('match_score')} | "
-                f"pattern={r.get('matched_pattern')}"
+                f"pattern={r.get('matched_pattern')} | method={r.get('extraction_method')}"
             )
             snippet = r.get("matched_snippet")
             lines.append(f"  - snippet: `{snippet if snippet else 'NA'}`")
+            if r.get("derived_from_price") is not None:
+                lines.append(
+                    f"  - implied_from: price={r.get('derived_from_price')} | "
+                    f"rel={r.get('derived_from_rel')} | pct={r.get('derived_from_pct')}"
+                )
     if nav.get("auto_notes"):
         lines.append("")
         lines.append("### NAV auto fetch notes")
@@ -1799,7 +1909,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v2 + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v3 + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -1817,7 +1927,7 @@ def main() -> None:
             },
         },
         "summary": {
-            "signal": combined_signal_info["combined_signal"],  # backward compatibility
+            "signal": combined_signal_info["combined_signal"],
             "proxy_signal": proxy_signal_info["signal"],
             "structural_signal": structural_signal_info["signal"],
             "combined_signal": combined_signal_info["combined_signal"],
@@ -1845,7 +1955,8 @@ def main() -> None:
             "Template / invalid manual rows are excluded from coverage/count/median statistics.",
             "combined_signal should be interpreted together with signal_basis and structural_confidence.",
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
-            "Auto NAV from SEC now records matched snippets, review flags, and excludes suspicious auto rows from structural stats by default.",
+            "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
+            "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
