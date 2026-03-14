@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.0)
+build_private_credit_monitor.py (v1.1)
 
 Purpose
 -------
@@ -16,6 +16,19 @@ Design principles
 - Use deterministic rules and explicit NA handling.
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
+
+v1.1 changes
+------------
+- Exclude template / invalid manual rows from coverage/count/median statistics
+- Split signal into:
+  * proxy_signal
+  * structural_signal
+  * combined_signal
+  * signal_basis
+- Make overall confidence more conservative; add structural_confidence
+- Improve public-credit context extraction by collecting multiple candidates
+  and selecting the richest match
+- Clarify report so that PROXY_ONLY cases do not look like full structural evidence
 
 Outputs
 -------
@@ -64,10 +77,9 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -75,7 +87,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.0"
+SCRIPT_VERSION = "v1.1"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -144,6 +156,7 @@ def create_manual_event_template(path: Path) -> None:
             "Manual event overlay for private-credit-specific stress.",
             "Valid severity: NONE / WATCH / ALERT",
             "Valid category: redemption_gate, withdrawal_limit, nav_markdown, warehouse_tightening, bank_pullback, default_restructuring, pik_stress, valuation_delay, semi_liquid_stress, other",
+            "Template rows are excluded from counts/statistics until they become valid.",
         ],
         "events": [
             {
@@ -170,6 +183,7 @@ def create_manual_nav_template(path: Path) -> None:
             "Manual NAV overlay for selected BDC / proxy names.",
             "nav_date should be the date the reported NAV applies to, e.g. quarter-end.",
             "This script will compare latest market close vs provided NAV.",
+            "Template rows are excluded from counts/statistics until they become valid.",
         ],
         "items": [
             {
@@ -243,6 +257,17 @@ def safe_num(x: Any, digits: int = 6) -> Any:
         return x
 
 
+def is_nonempty_str(x: Any) -> bool:
+    return isinstance(x, str) and x.strip() != ""
+
+
+def pick_first(row: Dict[str, Any], keys: List[str]) -> Any:
+    for k in keys:
+        if k in row and row.get(k) not in [None, ""]:
+            return row.get(k)
+    return None
+
+
 def fetch_stooq_daily(symbol: str, start_date: pd.Timestamp, end_date: pd.Timestamp, timeout: int) -> Tuple[pd.DataFrame, str, Optional[str]]:
     """
     Returns (df, source_url, error_note)
@@ -305,12 +330,10 @@ def compute_price_stats(df: pd.DataFrame, z_window: int, p_window: int) -> Dict[
     ma20 = float(closes.tail(min(20, len(closes))).mean()) if len(closes) >= 5 else None
     price_vs_ma20_pct = safe_pct(last_close, ma20) if ma20 else None
 
-    # trailing drawdown vs rolling 20D max, evaluated on last day
     if len(closes) >= 20:
         peak20 = float(closes.tail(20).max())
         dd20 = safe_pct(last_close, peak20)
     else:
-        peak20 = None
         dd20 = None
 
     return {
@@ -378,21 +401,35 @@ def compute_basket_summary(rows: List[Dict[str, Any]], basket_tickers: List[str]
 def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
     raw = read_json(path, default={}) or {}
     events = raw.get("events", []) if isinstance(raw, dict) else []
+
     today = UTC_NOW().date()
     recent_cutoff = pd.Timestamp(today) - pd.Timedelta(days=recent_days)
+
     out_rows: List[Dict[str, Any]] = []
 
     for ev in events:
         if not isinstance(ev, dict):
             continue
+
         sev = str(ev.get("severity", "WATCH")).upper().strip()
         cat = str(ev.get("category", "other")).strip()
         event_date = parse_date(ev.get("event_date"))
-        is_recent = bool(event_date is not None and event_date >= recent_cutoff)
+
         if sev not in SEVERITY_ORDER:
             sev = "WATCH"
         if cat not in EVENT_CATEGORIES:
             cat = "other"
+
+        has_meaningful_text = any([
+            is_nonempty_str(ev.get("entity")),
+            is_nonempty_str(ev.get("title")),
+            is_nonempty_str(ev.get("source_url")),
+            is_nonempty_str(ev.get("note")),
+        ])
+
+        valid_for_stats = bool(event_date is not None and has_meaningful_text)
+        is_recent = bool(valid_for_stats and event_date >= recent_cutoff)
+
         out_rows.append({
             "event_date": event_date.strftime("%Y-%m-%d") if event_date is not None else None,
             "category": cat,
@@ -402,9 +439,13 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
             "source_url": ev.get("source_url"),
             "note": ev.get("note"),
             "is_recent": is_recent,
+            "valid_for_stats": valid_for_stats,
+            "template_excluded": not valid_for_stats,
         })
 
-    recent_rows = [r for r in out_rows if r.get("is_recent")]
+    valid_rows = [r for r in out_rows if r.get("valid_for_stats")]
+    recent_rows = [r for r in valid_rows if r.get("is_recent")]
+
     alert_recent = sum(1 for r in recent_rows if r.get("severity") == "ALERT")
     watch_recent = sum(1 for r in recent_rows if r.get("severity") == "WATCH")
 
@@ -414,13 +455,19 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
     if dated_recent:
         latest_recent_date = max(dated_recent).strftime("%Y-%m-%d")
 
+    raw_row_count = len(out_rows)
+    valid_count = len(valid_rows)
+    template_excluded_count = raw_row_count - valid_count
+
     return {
         "path": str(path),
         "schema_version": raw.get("schema_version") if isinstance(raw, dict) else None,
         "as_of_date": raw.get("as_of_date") if isinstance(raw, dict) else None,
         "notes": raw.get("notes") if isinstance(raw, dict) else None,
         "recent_window_days": recent_days,
-        "event_count_total": len(out_rows),
+        "raw_row_count": raw_row_count,
+        "template_excluded_count": template_excluded_count,
+        "event_count_total": valid_count,
         "event_count_recent": len(recent_rows),
         "alert_recent_count": alert_recent,
         "watch_recent_count": watch_recent,
@@ -437,18 +484,23 @@ def load_manual_nav(path: Path, latest_price_by_ticker: Dict[str, Dict[str, Any]
     for item in items:
         if not isinstance(item, dict):
             continue
+
         ticker = str(item.get("ticker", "")).upper().strip()
         nav = to_float(item.get("nav"))
         nav_date = parse_date(item.get("nav_date"))
         px = latest_price_by_ticker.get(ticker, {})
         market_close = to_float(px.get("close"))
         market_date = parse_date(px.get("data_date"))
-        premium_discount_pct = safe_pct(market_close, nav) if (market_close is not None and nav is not None) else None
+
+        valid_for_stats = bool(ticker and nav is not None and nav > 0 and nav_date is not None)
+        premium_discount_pct = safe_pct(market_close, nav) if (valid_for_stats and market_close is not None) else None
+
         nav_age_days = None
         fresh_for_rule = False
-        if nav_date is not None and market_date is not None:
+        if valid_for_stats and nav_date is not None and market_date is not None:
             nav_age_days = int((market_date - nav_date).days)
-            fresh_for_rule = nav_age_days <= nav_fresh_max_days
+            fresh_for_rule = bool(nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None)
+
         out_rows.append({
             "ticker": ticker,
             "nav": safe_num(nav),
@@ -458,19 +510,31 @@ def load_manual_nav(path: Path, latest_price_by_ticker: Dict[str, Dict[str, Any]
             "premium_discount_pct": safe_num(premium_discount_pct),
             "nav_age_days": nav_age_days,
             "fresh_for_rule": fresh_for_rule,
+            "valid_for_stats": valid_for_stats,
+            "template_excluded": not valid_for_stats,
             "source_url": item.get("source_url"),
             "note": item.get("note"),
         })
 
-    fresh_rows = [r for r in out_rows if r.get("fresh_for_rule") and r.get("premium_discount_pct") is not None]
-    all_rows_with_val = [r for r in out_rows if r.get("premium_discount_pct") is not None]
+    valid_rows = [r for r in out_rows if r.get("valid_for_stats")]
+    rows_with_discount = [r for r in valid_rows if r.get("premium_discount_pct") is not None]
+    fresh_rows = [r for r in rows_with_discount if r.get("fresh_for_rule")]
+
     median_discount_fresh = np.median([float(r["premium_discount_pct"]) for r in fresh_rows]) if fresh_rows else None
-    median_discount_all = np.median([float(r["premium_discount_pct"]) for r in all_rows_with_val]) if all_rows_with_val else None
+    median_discount_all = np.median([float(r["premium_discount_pct"]) for r in rows_with_discount]) if rows_with_discount else None
+
+    raw_row_count = len(out_rows)
+    valid_count = len(valid_rows)
+    template_excluded_count = raw_row_count - valid_count
 
     if len(fresh_rows) >= 3:
         nav_confidence = "OK"
     elif len(fresh_rows) >= 1:
         nav_confidence = "PARTIAL"
+    elif len(valid_rows) >= 1:
+        nav_confidence = "LIMITED"
+    elif raw_row_count > 0:
+        nav_confidence = "TEMPLATE_ONLY"
     else:
         nav_confidence = "NA"
 
@@ -479,7 +543,9 @@ def load_manual_nav(path: Path, latest_price_by_ticker: Dict[str, Dict[str, Any]
         "schema_version": raw.get("schema_version") if isinstance(raw, dict) else None,
         "as_of_date": raw.get("as_of_date") if isinstance(raw, dict) else None,
         "nav_fresh_max_days": nav_fresh_max_days,
-        "coverage_total": len(out_rows),
+        "raw_row_count": raw_row_count,
+        "template_excluded_count": template_excluded_count,
+        "coverage_total": valid_count,
         "coverage_fresh": len(fresh_rows),
         "median_discount_pct_fresh": safe_num(median_discount_fresh),
         "median_discount_pct_all": safe_num(median_discount_all),
@@ -488,21 +554,44 @@ def load_manual_nav(path: Path, latest_price_by_ticker: Dict[str, Dict[str, Any]
     }
 
 
-def nested_find_series(obj: Any, target_series: str) -> Optional[Dict[str, Any]]:
-    """Search recursively for a dict with key 'series' == target_series."""
+def collect_series_candidates(obj: Any, target_series: str, out: List[Dict[str, Any]]) -> None:
     if isinstance(obj, dict):
         if str(obj.get("series", "")).upper() == target_series.upper():
-            return obj
+            out.append(obj)
         for v in obj.values():
-            found = nested_find_series(v, target_series)
-            if found is not None:
-                return found
+            collect_series_candidates(v, target_series, out)
     elif isinstance(obj, list):
         for item in obj:
-            found = nested_find_series(item, target_series)
-            if found is not None:
-                return found
-    return None
+            collect_series_candidates(item, target_series, out)
+
+
+def score_series_candidate(row: Dict[str, Any]) -> int:
+    score = 0
+    if row.get("signal") not in [None, ""]:
+        score += 6
+    if row.get("fred_signal") not in [None, ""]:
+        score += 5
+    if row.get("status") not in [None, ""]:
+        score += 4
+    if row.get("value") not in [None, ""]:
+        score += 3
+    if row.get("data_date") not in [None, ""]:
+        score += 2
+    if row.get("reason") not in [None, ""]:
+        score += 1
+    if row.get("tag") not in [None, ""]:
+        score += 1
+    return score
+
+
+def normalize_context_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "signal": pick_first(row, ["signal", "fred_signal", "status", "state"]),
+        "value": pick_first(row, ["value", "close", "last", "last_value"]),
+        "data_date": pick_first(row, ["data_date", "date", "last_date"]),
+        "reason": pick_first(row, ["reason", "notes"]),
+        "tag": pick_first(row, ["tag", "tags"]),
+    }
 
 
 def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
@@ -515,20 +604,19 @@ def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
         }
 
     raw = read_json(unified_json_path, default={}) or {}
-    refs = {}
+    refs: Dict[str, Any] = {}
+
     for series in ["BAMLH0A0HYM2", "HYG_IEF_RATIO", "OFR_FSI"]:
-        row = nested_find_series(raw, series)
-        if row is None:
+        candidates: List[Dict[str, Any]] = []
+        collect_series_candidates(raw, series, candidates)
+
+        if not candidates:
             refs[series] = {"found": False}
-        else:
-            refs[series] = {
-                "found": True,
-                "signal": row.get("signal"),
-                "value": row.get("value"),
-                "data_date": row.get("data_date"),
-                "reason": row.get("reason"),
-                "tag": row.get("tag"),
-            }
+            continue
+
+        best = sorted(candidates, key=score_series_candidate, reverse=True)[0]
+        refs[series] = {"found": True, **normalize_context_row(best)}
+
     return {
         "enabled": True,
         "reference_only": True,
@@ -537,10 +625,8 @@ def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
     }
 
 
-def determine_module_signal(
+def determine_proxy_signal(
     basket_summary: Dict[str, Any],
-    nav_info: Dict[str, Any],
-    event_info: Dict[str, Any],
     proxy_rows: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     reasons: List[str] = []
@@ -549,29 +635,76 @@ def determine_module_signal(
 
     median_ret5 = basket_summary.get("median_ret5_pct")
     extreme_z_share = basket_summary.get("extreme_z_share")
-    median_discount_fresh = nav_info.get("median_discount_pct_fresh")
-    nav_cov_fresh = int(nav_info.get("coverage_fresh") or 0)
-    alert_recent = int(event_info.get("alert_recent_count") or 0)
-    watch_recent = int(event_info.get("watch_recent_count") or 0)
+    ret5_bad_share = basket_summary.get("ret5_le_minus5_share")
+    below_ma20_share = basket_summary.get("below_ma20_share")
 
     bizd = next((r for r in proxy_rows if r.get("ticker") == "BIZD"), None)
     bizd_z60 = bizd.get("z60") if bizd else None
     bizd_ret5 = bizd.get("ret5_pct") if bizd else None
 
-    # ALERT rules
-    if alert_recent >= 1:
-        signal = "ALERT"
-        reasons.append(f"recent_manual_event_alert_count={alert_recent}")
-        tags.append("EVENT_ALERT")
-    elif (
+    if (
         median_ret5 is not None
         and median_ret5 <= -8.0
         and extreme_z_share is not None
         and extreme_z_share >= 50.0
+        and below_ma20_share is not None
+        and below_ma20_share >= 80.0
     ):
         signal = "ALERT"
-        reasons.append("bdc_basket_median_ret5<=-8 AND extreme_z_share>=50%")
+        reasons.append("bdc_basket_median_ret5<=-8 AND extreme_z_share>=50% AND below_ma20_share>=80%")
         tags.append("MARKET_PROXY_STRESS")
+
+    if signal != "ALERT":
+        if (
+            median_ret5 is not None
+            and median_ret5 <= -4.0
+            and below_ma20_share is not None
+            and below_ma20_share >= 80.0
+        ):
+            signal = "WATCH"
+            reasons.append("bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%")
+            tags.append("MARKET_PROXY_WEAK")
+        elif extreme_z_share is not None and extreme_z_share >= 40.0:
+            signal = "WATCH"
+            reasons.append("bdc_basket_extreme_z_share>=40%")
+            tags.append("BREADTH_WEAK")
+        elif ret5_bad_share is not None and ret5_bad_share >= 40.0:
+            signal = "WATCH"
+            reasons.append("bdc_basket_ret5_le_minus5_share>=40%")
+            tags.append("BREADTH_WEAK")
+        elif bizd_z60 is not None and bizd_z60 <= -2.0:
+            signal = "WATCH"
+            reasons.append("BIZD z60<=-2")
+            tags.append("ETF_PROXY_WEAK")
+        elif bizd_ret5 is not None and bizd_ret5 <= -5.0:
+            signal = "WATCH"
+            reasons.append("BIZD ret5<=-5")
+            tags.append("ETF_PROXY_WEAK")
+
+    return {
+        "signal": signal,
+        "reasons": reasons or ["no_proxy_rule_triggered"],
+        "tags": tags or ["NONE"],
+    }
+
+
+def determine_structural_signal(
+    nav_info: Dict[str, Any],
+    event_info: Dict[str, Any],
+) -> Dict[str, Any]:
+    reasons: List[str] = []
+    tags: List[str] = []
+    signal = "NONE"
+
+    median_discount_fresh = nav_info.get("median_discount_pct_fresh")
+    nav_cov_fresh = int(nav_info.get("coverage_fresh") or 0)
+    alert_recent = int(event_info.get("alert_recent_count") or 0)
+    watch_recent = int(event_info.get("watch_recent_count") or 0)
+
+    if alert_recent >= 1:
+        signal = "ALERT"
+        reasons.append(f"recent_manual_event_alert_count={alert_recent}")
+        tags.append("EVENT_ALERT")
     elif (
         median_discount_fresh is not None
         and nav_cov_fresh >= 3
@@ -584,28 +717,17 @@ def determine_module_signal(
         median_discount_fresh is not None
         and nav_cov_fresh >= 3
         and median_discount_fresh <= -15.0
-        and median_ret5 is not None
-        and median_ret5 <= -5.0
         and watch_recent >= 1
     ):
         signal = "ALERT"
-        reasons.append("fresh_nav_discount<=-15 + basket_ret5<=-5 + recent_watch_event")
+        reasons.append("fresh_nav_discount<=-15 with coverage>=3 + recent_watch_event")
         tags.append("COMPOSITE_STRESS")
 
-    # WATCH rules (only if not already ALERT)
     if signal != "ALERT":
         if watch_recent >= 1:
             signal = "WATCH"
             reasons.append(f"recent_manual_event_watch_count={watch_recent}")
             tags.append("EVENT_WATCH")
-        elif median_ret5 is not None and median_ret5 <= -4.0:
-            signal = "WATCH"
-            reasons.append("bdc_basket_median_ret5<=-4")
-            tags.append("MARKET_PROXY_WEAK")
-        elif extreme_z_share is not None and extreme_z_share >= 40.0:
-            signal = "WATCH"
-            reasons.append("bdc_basket_extreme_z_share>=40%")
-            tags.append("BREADTH_WEAK")
         elif (
             median_discount_fresh is not None
             and nav_cov_fresh >= 3
@@ -614,33 +736,96 @@ def determine_module_signal(
             signal = "WATCH"
             reasons.append("fresh_nav_median_discount<=-10 with coverage>=3")
             tags.append("NAV_DISCOUNT_WIDE")
-        elif bizd_z60 is not None and bizd_z60 <= -2.0:
-            signal = "WATCH"
-            reasons.append("BIZD z60<=-2")
-            tags.append("ETF_PROXY_WEAK")
-        elif bizd_ret5 is not None and bizd_ret5 <= -5.0:
-            signal = "WATCH"
-            reasons.append("BIZD ret5<=-5")
-            tags.append("ETF_PROXY_WEAK")
 
     return {
         "signal": signal,
-        "reasons": reasons or ["no_rule_triggered"],
+        "reasons": reasons or ["no_structural_rule_triggered"],
         "tags": tags or ["NONE"],
     }
 
 
-def infer_confidence(price_rows: List[Dict[str, Any]], nav_info: Dict[str, Any], event_info: Dict[str, Any], basket_tickers: List[str]) -> Dict[str, Any]:
+def combine_signals(proxy_info: Dict[str, Any], structural_info: Dict[str, Any]) -> Dict[str, Any]:
+    proxy_signal = proxy_info["signal"]
+    structural_signal = structural_info["signal"]
+
+    proxy_rank = SEVERITY_ORDER.get(proxy_signal, 0)
+    structural_rank = SEVERITY_ORDER.get(structural_signal, 0)
+
+    if max(proxy_rank, structural_rank) == 2:
+        combined_signal = "ALERT"
+    elif max(proxy_rank, structural_rank) == 1:
+        combined_signal = "WATCH"
+    else:
+        combined_signal = "NONE"
+
+    if proxy_rank > 0 and structural_rank == 0:
+        basis = "PROXY_ONLY"
+    elif proxy_rank == 0 and structural_rank > 0:
+        basis = "STRUCTURAL_ONLY"
+    elif proxy_rank > 0 and structural_rank > 0:
+        basis = "MIXED"
+    else:
+        basis = "NONE"
+
+    reasons = []
+    tags = []
+    if proxy_rank > 0:
+        reasons.extend([f"proxy:{x}" for x in proxy_info.get("reasons", [])])
+        tags.extend([f"proxy:{x}" for x in proxy_info.get("tags", [])])
+    if structural_rank > 0:
+        reasons.extend([f"structural:{x}" for x in structural_info.get("reasons", [])])
+        tags.extend([f"structural:{x}" for x in structural_info.get("tags", [])])
+
+    if not reasons:
+        reasons = ["no_rule_triggered"]
+    if not tags:
+        tags = ["NONE"]
+
+    return {
+        "combined_signal": combined_signal,
+        "signal_basis": basis,
+        "reasons": reasons,
+        "tags": tags,
+    }
+
+
+def infer_confidence(
+    price_rows: List[Dict[str, Any]],
+    nav_info: Dict[str, Any],
+    event_info: Dict[str, Any],
+    basket_tickers: List[str],
+) -> Dict[str, Any]:
     basket_cov = sum(1 for r in price_rows if r.get("ticker") in basket_tickers and r.get("close") is not None)
+
     price_conf = "OK" if basket_cov >= max(3, len(basket_tickers) - 1) else ("PARTIAL" if basket_cov >= 2 else "LOW")
     nav_conf = nav_info.get("confidence", "NA")
-    event_conf = "OK" if event_info.get("event_count_total", 0) > 0 else "NA"
 
-    # Conservative overall rule
+    event_valid_total = int(event_info.get("event_count_total") or 0)
+    event_raw_count = int(event_info.get("raw_row_count") or 0)
+    if event_valid_total >= 1:
+        event_conf = "OK"
+    elif event_raw_count >= 1:
+        event_conf = "TEMPLATE_ONLY"
+    else:
+        event_conf = "NA"
+
+    if nav_conf == "OK" and event_conf == "OK":
+        structural_conf = "OK"
+    elif nav_conf in {"OK", "PARTIAL", "LIMITED"} or event_conf == "OK":
+        structural_conf = "PARTIAL"
+    elif nav_conf == "TEMPLATE_ONLY" or event_conf == "TEMPLATE_ONLY":
+        structural_conf = "PROXY_ONLY"
+    else:
+        structural_conf = "NA"
+
     if price_conf == "LOW":
         overall = "LOW"
-    elif nav_conf == "OK" or event_conf == "OK":
+    elif structural_conf == "OK":
         overall = "OK"
+    elif structural_conf == "PARTIAL":
+        overall = "PARTIAL"
+    elif price_conf == "OK":
+        overall = "PROXY_ONLY"
     else:
         overall = "PARTIAL"
 
@@ -648,6 +833,7 @@ def infer_confidence(price_rows: List[Dict[str, Any]], nav_info: Dict[str, Any],
         "price_confidence": price_conf,
         "nav_confidence": nav_conf,
         "event_confidence": event_conf,
+        "structural_confidence": structural_conf,
         "overall_confidence": overall,
         "basket_coverage": basket_cov,
     }
@@ -656,7 +842,10 @@ def infer_confidence(price_rows: List[Dict[str, Any]], nav_info: Dict[str, Any],
 def make_history_row(latest: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "generated_at_utc": latest["meta"]["generated_at_utc"],
-        "module_signal": latest["summary"]["signal"],
+        "proxy_signal": latest["summary"]["proxy_signal"],
+        "structural_signal": latest["summary"]["structural_signal"],
+        "combined_signal": latest["summary"]["combined_signal"],
+        "signal_basis": latest["summary"]["signal_basis"],
         "overall_confidence": latest["summary"]["confidence"]["overall_confidence"],
         "basket_median_ret5_pct": latest["bdc_market_proxy"]["basket_summary"].get("median_ret5_pct"),
         "basket_extreme_z_share": latest["bdc_market_proxy"]["basket_summary"].get("extreme_z_share"),
@@ -716,7 +905,10 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append(f"- script: `{meta['script']}`")
     lines.append(f"- script_version: `{meta['script_version']}`")
     lines.append(f"- out_dir: `{meta['out_dir']}`")
-    lines.append(f"- signal: **{summary['signal']}**")
+    lines.append(f"- proxy_signal: **{summary['proxy_signal']}**")
+    lines.append(f"- structural_signal: **{summary['structural_signal']}**")
+    lines.append(f"- combined_signal: **{summary['combined_signal']}**")
+    lines.append(f"- signal_basis: `{summary['signal_basis']}`")
     lines.append(f"- overall_confidence: `{summary['confidence']['overall_confidence']}`")
     lines.append(f"- reasons: `{'; '.join(summary['reasons'])}`")
     lines.append(f"- tags: `{','.join(summary['tags'])}`")
@@ -762,6 +954,8 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append(f"- path: `{nav.get('path')}`")
     lines.append(f"- as_of_date: `{nav.get('as_of_date')}`")
     lines.append(f"- confidence: `{nav.get('confidence')}`")
+    lines.append(f"- raw_row_count: `{nav.get('raw_row_count')}`")
+    lines.append(f"- template_excluded_count: `{nav.get('template_excluded_count')}`")
     lines.append(f"- coverage_total: `{nav.get('coverage_total')}`")
     lines.append(f"- coverage_fresh: `{nav.get('coverage_fresh')}`")
     lines.append(f"- median_discount_pct_fresh: `{nav.get('median_discount_pct_fresh')}`")
@@ -778,6 +972,8 @@ def build_report(latest: Dict[str, Any]) -> str:
             ("premium_discount_pct", "premium_discount_pct"),
             ("nav_age_days", "nav_age_days"),
             ("fresh_for_rule", "fresh_for_rule"),
+            ("valid_for_stats", "valid_for_stats"),
+            ("template_excluded", "template_excluded"),
             ("source", "source_url"),
             ("note", "note"),
         ],
@@ -788,6 +984,8 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append(f"- path: `{events.get('path')}`")
     lines.append(f"- as_of_date: `{events.get('as_of_date')}`")
     lines.append(f"- recent_window_days: `{events.get('recent_window_days')}`")
+    lines.append(f"- raw_row_count: `{events.get('raw_row_count')}`")
+    lines.append(f"- template_excluded_count: `{events.get('template_excluded_count')}`")
     lines.append(f"- event_count_total: `{events.get('event_count_total')}`")
     lines.append(f"- event_count_recent: `{events.get('event_count_recent')}`")
     lines.append(f"- alert_recent_count: `{events.get('alert_recent_count')}`")
@@ -802,6 +1000,8 @@ def build_report(latest: Dict[str, Any]) -> str:
             ("entity", "entity"),
             ("severity", "severity"),
             ("is_recent", "is_recent"),
+            ("valid_for_stats", "valid_for_stats"),
+            ("template_excluded", "template_excluded"),
             ("title", "title"),
             ("source", "source_url"),
             ("note", "note"),
@@ -899,11 +1099,17 @@ def main() -> None:
         "note": "disabled",
     }
 
-    signal_info = determine_module_signal(
+    proxy_signal_info = determine_proxy_signal(
         basket_summary=basket_summary,
+        proxy_rows=price_rows,
+    )
+    structural_signal_info = determine_structural_signal(
         nav_info=nav_info,
         event_info=event_info,
-        proxy_rows=price_rows,
+    )
+    combined_signal_info = combine_signals(
+        proxy_info=proxy_signal_info,
+        structural_info=structural_signal_info,
     )
     confidence = infer_confidence(
         price_rows=price_rows,
@@ -930,9 +1136,18 @@ def main() -> None:
             },
         },
         "summary": {
-            "signal": signal_info["signal"],
-            "reasons": signal_info["reasons"],
-            "tags": signal_info["tags"],
+            # keep `signal` for backward compatibility
+            "signal": combined_signal_info["combined_signal"],
+            "proxy_signal": proxy_signal_info["signal"],
+            "structural_signal": structural_signal_info["signal"],
+            "combined_signal": combined_signal_info["combined_signal"],
+            "signal_basis": combined_signal_info["signal_basis"],
+            "proxy_reasons": proxy_signal_info["reasons"],
+            "structural_reasons": structural_signal_info["reasons"],
+            "reasons": combined_signal_info["reasons"],
+            "proxy_tags": proxy_signal_info["tags"],
+            "structural_tags": structural_signal_info["tags"],
+            "tags": combined_signal_info["tags"],
             "confidence": confidence,
         },
         "bdc_market_proxy": {
@@ -947,6 +1162,8 @@ def main() -> None:
             "This module is display-only / advisory-only by design.",
             "HY spread / HYG-IEF / OFR_FSI are NOT recomputed here.",
             "Manual overlays are expected for event flags and latest NAV values.",
+            "Template / invalid manual rows are excluded from coverage/count/median statistics.",
+            "combined_signal should be interpreted together with signal_basis and structural_confidence.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
@@ -969,7 +1186,8 @@ def main() -> None:
         "report_md": str(report_md_path),
         "manual_events": str(manual_events_path),
         "manual_nav": str(manual_nav_path),
-        "signal": latest["summary"]["signal"],
+        "signal": latest["summary"]["combined_signal"],
+        "signal_basis": latest["summary"]["signal_basis"],
         "confidence": latest["summary"]["confidence"]["overall_confidence"],
     }, ensure_ascii=False, indent=2))
 
