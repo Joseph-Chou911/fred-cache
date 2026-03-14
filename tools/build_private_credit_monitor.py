@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.1)
+build_private_credit_monitor.py (v1.2)
 
 Purpose
 -------
@@ -17,18 +17,14 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.1 changes
+v1.2 changes
 ------------
-- Exclude template / invalid manual rows from coverage/count/median statistics
-- Split signal into:
-  * proxy_signal
-  * structural_signal
-  * combined_signal
-  * signal_basis
-- Make overall confidence more conservative; add structural_confidence
-- Improve public-credit context extraction by collecting multiple candidates
-  and selecting the richest match
-- Clarify report so that PROXY_ONLY cases do not look like full structural evidence
+- Keep v1.1 structure
+- Public Credit Context now mirrors unified report signal more directly:
+  * fixed preferred source module by series
+  * direct use of row["signal"] when available
+  * fallback recursive search only when preferred module path misses
+- Add source_module to context output/report for auditability
 
 Outputs
 -------
@@ -39,24 +35,12 @@ All outputs go to a dedicated folder (default: private_credit_cache/):
 - inputs/manual_events.json   (template created if absent)
 - inputs/manual_nav.json      (template created if absent)
 
-Data layers (v1)
-----------------
-1) BDC market proxy (auto):
-   - Fetch daily close history for a basket of listed BDC names + BIZD ETF
-   - Compute z60 / p60 / p252 / ret1 / ret5 / 20D drawdown / breadth
-
-2) NAV overlay (manual, optional):
-   - User-maintained latest NAV values for selected BDCs
-   - Compute premium/discount to NAV using latest market close
-
-3) Event overlay (manual, optional):
-   - User-maintained event flags for private-credit-specific developments
-   - Categories include gate / withdrawal_limit / nav_markdown /
-     warehouse_tightening / bank_pullback / default_restructuring / pik_stress
-
-4) Optional public-credit context (reference-only, no recomputation):
-   - Reads unified_dashboard/latest.json if present and extracts a few series
-   - Purely for report context; not used in module signal rules by default
+Data layers
+-----------
+1) BDC market proxy (auto)
+2) NAV overlay (manual, optional)
+3) Event overlay (manual, optional)
+4) Optional public-credit context (reference-only, no recomputation)
 
 Dependencies
 ------------
@@ -64,12 +48,6 @@ Dependencies
 - requests
 - pandas
 - numpy
-
-Suggested run
--------------
-python build_private_credit_monitor.py \
-  --out-dir private_credit_cache \
-  --unified-json unified_dashboard/latest.json
 """
 
 from __future__ import annotations
@@ -87,7 +65,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.1"
+SCRIPT_VERSION = "v1.2"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -107,6 +85,13 @@ EVENT_CATEGORIES = {
     "other",
 }
 SEVERITY_ORDER = {"NONE": 0, "WATCH": 1, "ALERT": 2}
+
+# Public Credit Context preferred module mapping
+PREFERRED_CONTEXT_MODULES: Dict[str, List[str]] = {
+    "BAMLH0A0HYM2": ["fred_cache", "market_cache"],
+    "HYG_IEF_RATIO": ["market_cache", "fred_cache"],
+    "OFR_FSI": ["market_cache", "fred_cache"],
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -568,30 +553,39 @@ def collect_series_candidates(obj: Any, target_series: str, out: List[Dict[str, 
 def score_series_candidate(row: Dict[str, Any]) -> int:
     score = 0
     if row.get("signal") not in [None, ""]:
-        score += 6
-    if row.get("fred_signal") not in [None, ""]:
-        score += 5
-    if row.get("status") not in [None, ""]:
-        score += 4
+        score += 100
     if row.get("value") not in [None, ""]:
-        score += 3
+        score += 10
     if row.get("data_date") not in [None, ""]:
-        score += 2
+        score += 5
     if row.get("reason") not in [None, ""]:
-        score += 1
+        score += 2
     if row.get("tag") not in [None, ""]:
         score += 1
     return score
 
 
-def normalize_context_row(row: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_context_row(row: Dict[str, Any], source_module: str) -> Dict[str, Any]:
+    signal = row.get("signal")
+    if signal in [None, ""]:
+        signal = "NA_SOURCE_MISSING"
+
     return {
-        "signal": pick_first(row, ["signal", "fred_signal", "status", "state"]),
+        "signal": signal,
         "value": pick_first(row, ["value", "close", "last", "last_value"]),
         "data_date": pick_first(row, ["data_date", "date", "last_date"]),
         "reason": pick_first(row, ["reason", "notes"]),
         "tag": pick_first(row, ["tag", "tags"]),
+        "source_module": source_module,
     }
+
+
+def get_best_candidate_from_obj(obj: Any, series: str) -> Optional[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+    collect_series_candidates(obj, series, candidates)
+    if not candidates:
+        return None
+    return sorted(candidates, key=score_series_candidate, reverse=True)[0]
 
 
 def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
@@ -607,15 +601,55 @@ def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
     refs: Dict[str, Any] = {}
 
     for series in ["BAMLH0A0HYM2", "HYG_IEF_RATIO", "OFR_FSI"]:
-        candidates: List[Dict[str, Any]] = []
-        collect_series_candidates(raw, series, candidates)
+        preferred_modules = PREFERRED_CONTEXT_MODULES.get(series, [])
 
-        if not candidates:
+        chosen_row: Optional[Dict[str, Any]] = None
+        chosen_module: Optional[str] = None
+        weak_candidate: Optional[Dict[str, Any]] = None
+        weak_module: Optional[str] = None
+
+        # 1) preferred module search
+        for module_name in preferred_modules:
+            module_obj = raw.get(module_name) if isinstance(raw, dict) else None
+            if module_obj is None:
+                continue
+
+            cand = get_best_candidate_from_obj(module_obj, series)
+            if cand is None:
+                continue
+
+            if cand.get("signal") not in [None, ""]:
+                chosen_row = cand
+                chosen_module = module_name
+                break
+
+            if weak_candidate is None or score_series_candidate(cand) > score_series_candidate(weak_candidate):
+                weak_candidate = cand
+                weak_module = module_name
+
+        # 2) global fallback recursive search
+        if chosen_row is None:
+            fallback = get_best_candidate_from_obj(raw, series)
+            if fallback is not None and fallback.get("signal") not in [None, ""]:
+                chosen_row = fallback
+                chosen_module = "fallback_recursive"
+
+        # 3) weak preferred fallback
+        if chosen_row is None and weak_candidate is not None:
+            chosen_row = weak_candidate
+            chosen_module = weak_module or "preferred_module_no_signal"
+
+        # 4) last fallback
+        if chosen_row is None:
+            fallback_any = get_best_candidate_from_obj(raw, series)
+            if fallback_any is not None:
+                chosen_row = fallback_any
+                chosen_module = "fallback_recursive_no_signal"
+
+        if chosen_row is None:
             refs[series] = {"found": False}
-            continue
-
-        best = sorted(candidates, key=score_series_candidate, reverse=True)[0]
-        refs[series] = {"found": True, **normalize_context_row(best)}
+        else:
+            refs[series] = {"found": True, **normalize_context_row(chosen_row, chosen_module or "unknown")}
 
     return {
         "enabled": True,
@@ -1018,12 +1052,21 @@ def build_report(latest: Dict[str, Any]) -> str:
         if row.get("found"):
             ctx_rows.append({"series": series, **row})
         else:
-            ctx_rows.append({"series": series, "signal": "NA", "value": None, "data_date": None, "reason": "not_found", "tag": None})
+            ctx_rows.append({
+                "series": series,
+                "signal": "NA",
+                "value": None,
+                "data_date": None,
+                "reason": "not_found",
+                "tag": None,
+                "source_module": None,
+            })
     lines.append("")
     lines.append(markdown_table(
         ctx_rows,
         [
             ("series", "series"),
+            ("source_module", "source_module"),
             ("signal", "signal"),
             ("value", "value"),
             ("data_date", "data_date"),
@@ -1136,8 +1179,7 @@ def main() -> None:
             },
         },
         "summary": {
-            # keep `signal` for backward compatibility
-            "signal": combined_signal_info["combined_signal"],
+            "signal": combined_signal_info["combined_signal"],  # backward compatibility
             "proxy_signal": proxy_signal_info["signal"],
             "structural_signal": structural_signal_info["signal"],
             "combined_signal": combined_signal_info["combined_signal"],
@@ -1164,6 +1206,7 @@ def main() -> None:
             "Manual overlays are expected for event flags and latest NAV values.",
             "Template / invalid manual rows are excluded from coverage/count/median statistics.",
             "combined_signal should be interpreted together with signal_basis and structural_confidence.",
+            "Public Credit Context mirrors unified signal from preferred source modules when available.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
