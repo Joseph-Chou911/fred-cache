@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.2)
+build_private_credit_monitor.py (v1.3)
 
 Purpose
 -------
@@ -17,14 +17,13 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.2 changes
+v1.3 changes
 ------------
-- Keep v1.1 structure
-- Public Credit Context now mirrors unified report signal more directly:
-  * fixed preferred source module by series
-  * direct use of row["signal"] when available
-  * fallback recursive search only when preferred module path misses
-- Add source_module to context output/report for auditability
+- Fix Public Credit Context extraction against actual unified_dashboard/latest.json schema:
+  * use modules -> <module_name> -> dashboard_latest -> rows
+  * prefer signal_level over signal
+  * keep fallback recursive search only as backup
+- Keep source_module in context output/report for auditability
 
 Outputs
 -------
@@ -65,7 +64,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.2"
+SCRIPT_VERSION = "v1.3"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -552,7 +551,7 @@ def collect_series_candidates(obj: Any, target_series: str, out: List[Dict[str, 
 
 def score_series_candidate(row: Dict[str, Any]) -> int:
     score = 0
-    if row.get("signal") not in [None, ""]:
+    if pick_first(row, ["signal_level", "signal"]) not in [None, ""]:
         score += 100
     if row.get("value") not in [None, ""]:
         score += 10
@@ -566,7 +565,7 @@ def score_series_candidate(row: Dict[str, Any]) -> int:
 
 
 def normalize_context_row(row: Dict[str, Any], source_module: str) -> Dict[str, Any]:
-    signal = row.get("signal")
+    signal = pick_first(row, ["signal_level", "signal", "status", "state"])
     if signal in [None, ""]:
         signal = "NA_SOURCE_MISSING"
 
@@ -588,6 +587,26 @@ def get_best_candidate_from_obj(obj: Any, series: str) -> Optional[Dict[str, Any
     return sorted(candidates, key=score_series_candidate, reverse=True)[0]
 
 
+def get_module_rows(unified_raw: Dict[str, Any], module_name: str) -> List[Dict[str, Any]]:
+    try:
+        rows = (
+            unified_raw.get("modules", {})
+            .get(module_name, {})
+            .get("dashboard_latest", {})
+            .get("rows", [])
+        )
+        return rows if isinstance(rows, list) else []
+    except Exception:
+        return []
+
+
+def find_series_in_rows(rows: List[Dict[str, Any]], series: str) -> Optional[Dict[str, Any]]:
+    for row in rows:
+        if isinstance(row, dict) and str(row.get("series", "")).upper() == series.upper():
+            return row
+    return None
+
+
 def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
     if not unified_json_path.exists():
         return {
@@ -605,46 +624,24 @@ def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
 
         chosen_row: Optional[Dict[str, Any]] = None
         chosen_module: Optional[str] = None
-        weak_candidate: Optional[Dict[str, Any]] = None
-        weak_module: Optional[str] = None
 
-        # 1) preferred module search
+        # 1) fixed-path module search against actual unified schema
         for module_name in preferred_modules:
-            module_obj = raw.get(module_name) if isinstance(raw, dict) else None
-            if module_obj is None:
+            rows = get_module_rows(raw, module_name)
+            row = find_series_in_rows(rows, series)
+            if row is None:
                 continue
 
-            cand = get_best_candidate_from_obj(module_obj, series)
-            if cand is None:
-                continue
+            chosen_row = row
+            chosen_module = module_name
+            break
 
-            if cand.get("signal") not in [None, ""]:
-                chosen_row = cand
-                chosen_module = module_name
-                break
-
-            if weak_candidate is None or score_series_candidate(cand) > score_series_candidate(weak_candidate):
-                weak_candidate = cand
-                weak_module = module_name
-
-        # 2) global fallback recursive search
+        # 2) global fallback recursive search only if preferred path misses
         if chosen_row is None:
             fallback = get_best_candidate_from_obj(raw, series)
-            if fallback is not None and fallback.get("signal") not in [None, ""]:
+            if fallback is not None:
                 chosen_row = fallback
                 chosen_module = "fallback_recursive"
-
-        # 3) weak preferred fallback
-        if chosen_row is None and weak_candidate is not None:
-            chosen_row = weak_candidate
-            chosen_module = weak_module or "preferred_module_no_signal"
-
-        # 4) last fallback
-        if chosen_row is None:
-            fallback_any = get_best_candidate_from_obj(raw, series)
-            if fallback_any is not None:
-                chosen_row = fallback_any
-                chosen_module = "fallback_recursive_no_signal"
 
         if chosen_row is None:
             refs[series] = {"found": False}
