@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.10b)
+build_private_credit_monitor.py (v1.10)
 
 Purpose
 -------
@@ -17,16 +17,12 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.10b changes
---------------
-- Keep v1.10 structure
-- Expand implied NAV regex coverage for BXSL / FSK-style wording
-- Add direct price->NAV dollar pattern support
-- Add local N/A-table hard-skip filters for direct extraction
-- Shrink direct-method context window to reduce distant false penalties
-- Fix dead footnote regex for "(n) Represents ..."
-- Prioritize 8-K / 8-KA ahead of 10-K / 10-Q when scanning recent filings
-- Increase default --nav-auto-max-filings from 6 to 10
+v1.10 changes
+-------------
+- Keep v1.9 structure
+- Add negative-context hard skip / soft-penalty filters
+- Add section/context bonus-penalty scoring
+- Prefer higher-quality implied candidates more clearly
 - Keep:
   * price_obs_date / nav_ref_date split
   * markdown table escaping
@@ -50,7 +46,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.10b"
+SCRIPT_VERSION = "v1.10"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -82,7 +78,6 @@ SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik10}.json"
 SEC_ARCHIVES_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/{primary_doc}"
 
 AUTO_NAV_ALLOWED_FORMS = {"10-Q", "10-Q/A", "10-K", "10-K/A", "8-K", "8-K/A"}
-FORM_PRIORITY = {"8-K": 0, "8-K/A": 1, "10-K": 2, "10-K/A": 3, "10-Q": 4, "10-Q/A": 5}
 
 DIRECT_NAV_REGEX_SPECS = [
     (
@@ -110,38 +105,16 @@ DIRECT_NAV_REGEX_SPECS = [
     ),
 ]
 
-# mode:
-# - price_rel_pct       -> groups: price, rel(discount/premium), pct
-# - price_nav_value     -> groups: price, nav_direct
 IMPLIED_NAV_REGEX_SPECS = [
     (
         "closing_price_discount_to_nav",
         re.compile(
-            r"(?:closing sales price|last reported closing sales price|closing price|"
-            r"shares?\s+(?:were|was)\s+(?:traded at|closed at)|"
-            r"stock\s+(?:traded at|closed at)|"
-            r"common stock\s+(?:traded at|was trading at|closed at))[^$]{0,160}"
+            r"(?:closing sales price|last reported closing sales price|closing price)[^$]{0,140}"
             r"\$([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share"
-            r"[^%]{0,280}?(discount|premium)\s+of\s+(?:approximately\s+)?([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*%"
-            r"[^.]{0,260}?net asset value per share",
+            r"[^%]{0,260}?(discount|premium)\s+of\s+(?:approximately\s+)?([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*%"
+            r"[^.]{0,220}?net asset value per share",
             re.I,
         ),
-        "price_rel_pct",
-    ),
-    (
-        "closing_price_to_nav_direct_value",
-        re.compile(
-            r"(?:closing sales price|last reported closing sales price|closing price|"
-            r"shares?\s+(?:were|was)\s+(?:traded at|closed at)|"
-            r"stock\s+(?:traded at|closed at)|"
-            r"common stock\s+(?:traded at|was trading at|closed at))[^$]{0,160}"
-            r"\$([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share"
-            r"[^$]{0,320}?(?:discount|premium)[^$]{0,120}?"
-            r"net asset value per share(?:\s+reported by us)?(?:\s+as of [^.]{0,80})?[^$]{0,80}?"
-            r"\$([0-9]{1,3}(?:\.[0-9]{1,4})?)",
-            re.I,
-        ),
-        "price_nav_value",
     ),
 ]
 
@@ -150,7 +123,6 @@ PATTERN_BASE_SCORE = {
     "nav_value_after_phrase": 4.2,
     "net_asset_value_of_x_per_share": 5.6,
     "closing_price_discount_to_nav": 8.5,
-    "closing_price_to_nav_direct_value": 8.0,
 }
 
 DIRECT_PATTERN_EXTRA_PENALTY = {
@@ -207,7 +179,10 @@ MONTH_TOKEN_MAP = {
 ASOF_DATE_REGEX_SPECS = [
     (
         "as_of_monthname",
-        re.compile(r"\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})", re.I),
+        re.compile(
+            r"\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            re.I,
+        ),
     ),
     (
         "period_ended_monthname",
@@ -219,7 +194,10 @@ ASOF_DATE_REGEX_SPECS = [
     ),
     (
         "as_of_numeric",
-        re.compile(r"\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})", re.I),
+        re.compile(
+            r"\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            re.I,
+        ),
     ),
     (
         "period_ended_numeric",
@@ -236,7 +214,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_on_monthname",
         re.compile(
             r"\bon\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})"
-            r"[^.]{0,260}?(?:last reported )?(?:closing(?: sales)? price|shares?\s+(?:were|was)\s+(?:traded at|closed at)|stock\s+(?:traded at|closed at)|common stock\s+(?:traded at|was trading at|closed at))",
+            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -244,7 +222,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_asof_monthname",
         re.compile(
             r"\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})"
-            r"[^.]{0,260}?(?:last reported )?(?:closing(?: sales)? price|shares?\s+(?:were|was)\s+(?:traded at|closed at)|stock\s+(?:traded at|closed at)|common stock\s+(?:traded at|was trading at|closed at))",
+            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -252,7 +230,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_on_numeric",
         re.compile(
             r"\bon\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})"
-            r"[^.]{0,260}?(?:last reported )?(?:closing(?: sales)? price|shares?\s+(?:were|was)\s+(?:traded at|closed at)|stock\s+(?:traded at|closed at)|common stock\s+(?:traded at|was trading at|closed at))",
+            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -260,7 +238,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_asof_numeric",
         re.compile(
             r"\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})"
-            r"[^.]{0,260}?(?:last reported )?(?:closing(?: sales)? price|shares?\s+(?:were|was)\s+(?:traded at|closed at)|stock\s+(?:traded at|closed at)|common stock\s+(?:traded at|was trading at|closed at))",
+            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -270,42 +248,48 @@ NAV_REF_DATE_REGEX_SPECS = [
     (
         "nav_reported_asof_monthname",
         re.compile(
-            r"net asset value per share(?: reported by us)?[^.]{0,180}?\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            r"net asset value per share(?: reported by us)?[^.]{0,180}?\bas of\s+"
+            r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
             re.I,
         ),
     ),
     (
         "nav_asof_monthname",
         re.compile(
-            r"net asset value per share[^.]{0,180}?\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            r"net asset value per share[^.]{0,180}?\bas of\s+"
+            r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
             re.I,
         ),
     ),
     (
         "nav_period_ended_monthname",
         re.compile(
-            r"net asset value per share[^.]{0,220}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            r"net asset value per share[^.]{0,220}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
             re.I,
         ),
     ),
     (
         "nav_reported_asof_numeric",
         re.compile(
-            r"net asset value per share(?: reported by us)?[^.]{0,180}?\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            r"net asset value per share(?: reported by us)?[^.]{0,180}?\bas of\s+"
+            r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
             re.I,
         ),
     ),
     (
         "nav_asof_numeric",
         re.compile(
-            r"net asset value per share[^.]{0,180}?\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            r"net asset value per share[^.]{0,180}?\bas of\s+"
+            r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
             re.I,
         ),
     ),
     (
         "nav_period_ended_numeric",
         re.compile(
-            r"net asset value per share[^.]{0,220}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            r"net asset value per share[^.]{0,220}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
             re.I,
         ),
     ),
@@ -316,13 +300,11 @@ HARD_SKIP_CONTEXT_REGEX_SPECS = [
     ("hypothetical_nav_if", re.compile(r"\bif the (?:most recently computed|current) nav(?: per share)?\b", re.I)),
     ("sell_below_nav", re.compile(r"\bsell(?:ing)? (?:our )?common stock below net asset value\b", re.I)),
     ("stockholder_approval_below_nav", re.compile(r"\b(?:maintain|obtain) any stockholder approval[^.]{0,180}\bbelow net asset value\b", re.I)),
-    ("nav_not_available", re.compile(r"\bN/A\*?\b.{0,60}(?:nav per share|net asset value per share)", re.I)),
-    ("nav_table_na_row", re.compile(r"(?:nav per share|net asset value per share).{0,120}\bN/A\*?\b", re.I)),
 ]
 
 CONTEXT_PENALTY_REGEX_SPECS = [
-    ("reg_1940_act", re.compile(r"\b1940 act\b", re.I), 0.5),
-    ("preferred_stock", re.compile(r"\bpreferred (?:stock|shares)\b", re.I), 0.3),
+    ("reg_1940_act", re.compile(r"\b1940 act\b", re.I), 1.2),
+    ("preferred_stock", re.compile(r"\bpreferred (?:stock|shares)\b", re.I), 1.0),
     ("vwap_context", re.compile(r"\bvwap\b", re.I), 0.8),
     ("settlement_amount", re.compile(r"\b(?:ioc )?settlement amount\b", re.I), 1.0),
     ("merger_accounting", re.compile(r"\bmerger accounting\b", re.I), 1.0),
@@ -362,8 +344,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.10b contact@example.com", help="SEC User-Agent header")
-    p.add_argument("--nav-auto-max-filings", type=int, default=10, help="Max recent filings to scan per ticker for NAV extraction")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.10 contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     return p.parse_args()
 
 
@@ -399,15 +381,17 @@ def create_manual_event_template(path: Path) -> None:
             "Valid category: redemption_gate, withdrawal_limit, nav_markdown, warehouse_tightening, bank_pullback, default_restructuring, pik_stress, valuation_delay, semi_liquid_stress, other",
             "Template rows are excluded from counts/statistics until they become valid.",
         ],
-        "events": [{
-            "event_date": "YYYY-MM-DD",
-            "category": "withdrawal_limit",
-            "entity": "Example fund / lender / platform",
-            "severity": "WATCH",
-            "title": "Example title",
-            "source_url": "https://example.com/article",
-            "note": "Free-form note",
-        }],
+        "events": [
+            {
+                "event_date": "YYYY-MM-DD",
+                "category": "withdrawal_limit",
+                "entity": "Example fund / lender / platform",
+                "severity": "WATCH",
+                "title": "Example title",
+                "source_url": "https://example.com/article",
+                "note": "Free-form note",
+            }
+        ],
     }
     write_json(path, template)
 
@@ -425,13 +409,15 @@ def create_manual_nav_template(path: Path) -> None:
             "Template rows are excluded from counts/statistics until they become valid.",
             "Manual valid rows override auto SEC NAV rows for the same ticker.",
         ],
-        "items": [{
-            "ticker": "ARCC",
-            "nav": 0.0,
-            "nav_date": "YYYY-MM-DD",
-            "source_url": "https://example.com/investor-relations",
-            "note": "Reported NAV per share",
-        }],
+        "items": [
+            {
+                "ticker": "ARCC",
+                "nav": 0.0,
+                "nav_date": "YYYY-MM-DD",
+                "source_url": "https://example.com/investor-relations",
+                "note": "Reported NAV per share",
+            }
+        ],
     }
     write_json(path, template)
 
@@ -532,7 +518,10 @@ def norm_flag_token(s: str) -> str:
 
 def make_requests_session(user_agent: Optional[str] = None) -> requests.Session:
     s = requests.Session()
-    headers = {"Accept": "*/*", "Accept-Language": "en-US,en;q=0.9"}
+    headers = {
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
     if user_agent:
         headers["User-Agent"] = user_agent
     s.headers.update(headers)
@@ -596,6 +585,7 @@ def compute_price_stats(df: pd.DataFrame, z_window: int, p_window: int) -> Dict[
 
     ma20 = float(closes.tail(min(20, len(closes))).mean()) if len(closes) >= 5 else None
     price_vs_ma20_pct = safe_pct(last_close, ma20) if ma20 else None
+
     dd20 = safe_pct(last_close, float(closes.tail(20).max())) if len(closes) >= 20 else None
 
     return {
@@ -664,9 +654,10 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
     raw = read_json(path, default={}) or {}
     events = raw.get("events", []) if isinstance(raw, dict) else []
 
-    recent_cutoff = pd.Timestamp(UTC_NOW().date()) - pd.Timedelta(days=recent_days)
-    out_rows: List[Dict[str, Any]] = []
+    today = UTC_NOW().date()
+    recent_cutoff = pd.Timestamp(today) - pd.Timedelta(days=recent_days)
 
+    out_rows: List[Dict[str, Any]] = []
     for ev in events:
         if not isinstance(ev, dict):
             continue
@@ -705,6 +696,7 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
 
     valid_rows = [r for r in out_rows if r.get("valid_for_stats")]
     recent_rows = [r for r in valid_rows if r.get("is_recent")]
+
     dated_recent = [parse_date(r.get("event_date")) for r in recent_rows if r.get("event_date")]
     dated_recent = [d for d in dated_recent if d is not None]
     latest_recent_date = max(dated_recent).strftime("%Y-%m-%d") if dated_recent else None
@@ -791,7 +783,10 @@ def parse_date_match(label: str, m: re.Match) -> Optional[pd.Timestamp]:
         return None
 
 
-def extract_best_date_from_ctx(ctx: str, specs: List[Tuple[str, re.Pattern]]) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
+def extract_best_date_from_ctx(
+    ctx: str,
+    specs: List[Tuple[str, re.Pattern]],
+) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
     best_ts: Optional[pd.Timestamp] = None
     best_label: Optional[str] = None
     best_text: Optional[str] = None
@@ -830,14 +825,14 @@ def extract_nav_ref_date_for_implied(text: str, start: int, end: int) -> Tuple[O
 
 
 def analyze_candidate_context(text: str, start: int, end: int, extraction_method: str) -> Dict[str, Any]:
-    local_radius = 400 if extraction_method == "direct" else 1200
-    lo = max(0, start - local_radius)
-    hi = min(len(text), end + local_radius)
+    lo = max(0, start - 1200)
+    hi = min(len(text), end + 1200)
     ctx = text[lo:hi]
 
     hard_skip_tags: List[str] = []
     penalty_tags: List[str] = []
     bonus_tags: List[str] = []
+
     penalty_total = 0.0
     bonus_total = 0.0
 
@@ -856,7 +851,7 @@ def analyze_candidate_context(text: str, start: int, end: int, extraction_method
             bonus_tags.append(label)
 
     if extraction_method == "direct":
-        if re.search(r"(?:^|[\s.;])$begin:math:text$\\d\+$end:math:text$\s+represents\b", ctx, re.I):
+        if re.search(r"(?:^|[\s.;])$begin:math:text$\\d\+$end:math:text$\s*represents\b", ctx, re.I):
             penalty_total += 1.2
             penalty_tags.append("footnote_represents")
         if re.search(r"\bif the market price on the payment date\b", ctx, re.I):
@@ -933,7 +928,6 @@ def score_direct_nav_candidate(
 
 def score_implied_nav_candidate(
     *,
-    pattern_label: str,
     snippet: str,
     price_obs_present: bool,
     nav_ref_present: bool,
@@ -943,17 +937,18 @@ def score_implied_nav_candidate(
     hard_skip_context_flag: bool,
 ) -> float:
     snippet_lower = snippet.lower()
-    score = float(PATTERN_BASE_SCORE.get(pattern_label, 8.0))
+    score = float(PATTERN_BASE_SCORE.get("closing_price_discount_to_nav", 8.0))
 
     if "discount" in snippet_lower or "premium" in snippet_lower:
         score += 0.8
-    if any(x in snippet_lower for x in ["closing sales price", "closing price", "traded at", "closed at", "was trading at"]):
+    if "closing sales price" in snippet_lower or "closing price" in snippet_lower:
         score += 0.6
     if "net asset value per share" in snippet_lower:
         score += 0.8
 
     score += float(section_bonus_total)
     score -= float(context_penalty_total)
+
     score += 0.4 if price_obs_present else -0.8
     score += 0.8 if nav_ref_present else -1.0
 
@@ -987,6 +982,7 @@ def extract_nav_candidates_from_text(
 
             snippet = extract_local_snippet(text, m.start(), m.end(), radius=180)
             snippet_lower = snippet.lower()
+
             num_lo = max(0, m.start(1) - 25)
             num_hi = min(len(text), m.end(1) + 20)
             num_context = clean_snippet(text[num_lo:num_hi], max_len=120)
@@ -1015,7 +1011,10 @@ def extract_nav_candidates_from_text(
                 hard_skip_context_flag=bool(context_info["hard_skip_context_flag"]),
             )
 
-            premium_discount_est = safe_num((market_close / float(val) - 1.0) * 100.0) if (market_close is not None and market_close > 0) else None
+            premium_discount_est = None
+            if market_close is not None and market_close > 0:
+                premium_discount_est = safe_num((market_close / float(val) - 1.0) * 100.0)
+
             key = ("direct", round(float(val), 4), pattern_label, snippet[:140])
             if key in seen:
                 continue
@@ -1046,36 +1045,22 @@ def extract_nav_candidates_from_text(
                 "section_bonus_tags": context_info["section_bonus_tags"],
             })
 
-    for pattern_label, pat, mode in IMPLIED_NAV_REGEX_SPECS:
+    for pattern_label, pat in IMPLIED_NAV_REGEX_SPECS:
         for m in pat.finditer(text):
-            price = None
-            nav = None
-            rel = None
-            pct = None
-            nav_direct = None
+            price = to_float(m.group(1))
+            rel = str(m.group(2) or "").lower().strip()
+            pct = to_float(m.group(3))
+            if price is None or pct is None or price <= 0 or pct < 0 or pct >= 95:
+                continue
 
-            if mode == "price_nav_value":
-                price = to_float(m.group(1))
-                nav_direct = to_float(m.group(2))
-                if price is None or nav_direct is None or price <= 0 or nav_direct <= 0:
-                    continue
-                nav = float(nav_direct)
-                rel = "direct"
-                pct = safe_num(abs((price / nav_direct - 1.0) * 100.0)) if nav_direct else None
+            if rel == "discount":
+                nav = price / (1.0 - pct / 100.0)
+            elif rel == "premium":
+                nav = price / (1.0 + pct / 100.0)
             else:
-                price = to_float(m.group(1))
-                rel = str(m.group(2) or "").lower().strip()
-                pct = to_float(m.group(3))
-                if price is None or pct is None or price <= 0 or pct < 0 or pct >= 95:
-                    continue
-                if rel == "discount":
-                    nav = price / (1.0 - pct / 100.0)
-                elif rel == "premium":
-                    nav = price / (1.0 + pct / 100.0)
-                else:
-                    continue
+                continue
 
-            if nav is None or not (0.5 <= nav <= 100.0):
+            if not (0.5 <= nav <= 100.0):
                 continue
 
             snippet = extract_local_snippet(text, m.start(), m.end(), radius=180)
@@ -1088,7 +1073,6 @@ def extract_nav_candidates_from_text(
                 ordering_check = bool(nav_ref_date <= price_obs_date)
 
             score = score_implied_nav_candidate(
-                pattern_label=pattern_label,
                 snippet=snippet,
                 price_obs_present=bool(price_obs_date is not None),
                 nav_ref_present=bool(nav_ref_date is not None),
@@ -1098,7 +1082,10 @@ def extract_nav_candidates_from_text(
                 hard_skip_context_flag=bool(context_info["hard_skip_context_flag"]),
             )
 
-            premium_discount_est = safe_num((market_close / float(nav) - 1.0) * 100.0) if (market_close is not None and market_close > 0) else None
+            premium_discount_est = None
+            if market_close is not None and market_close > 0:
+                premium_discount_est = safe_num((market_close / float(nav) - 1.0) * 100.0)
+
             key = ("implied", round(float(nav), 4), pattern_label, snippet[:140])
             if key in seen:
                 continue
@@ -1118,7 +1105,6 @@ def extract_nav_candidates_from_text(
                 "derived_from_price": safe_num(price),
                 "derived_from_rel": rel,
                 "derived_from_pct": safe_num(pct),
-                "derived_from_nav_direct": safe_num(nav_direct),
                 "price_obs_date": price_obs_date.strftime("%Y-%m-%d") if price_obs_date is not None else None,
                 "price_obs_date_source": price_obs_date_source,
                 "price_obs_match_text": price_obs_match_text,
@@ -1140,13 +1126,14 @@ def extract_nav_candidates_from_text(
             0 if x.get("extraction_method") == "implied_from_price_and_rel" else 1,
             x.get("matched_pattern") or "",
             -(float(x.get("nav") or 0)),
-        ),
+        )
     )
 
     trimmed = candidates[:max_candidates]
     for idx, c in enumerate(trimmed, start=1):
         c["candidate_rank"] = idx
         c["candidate_count"] = len(candidates)
+
     return trimmed
 
 
@@ -1198,7 +1185,9 @@ def make_nav_overlay_row(
     fresh_for_rule = False
     if valid_for_stats and nav_date is not None and market_date is not None:
         nav_age_days = int((market_date - nav_date).days)
-        fresh_for_rule = bool(nav_age_days is not None and 0 <= nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None)
+        fresh_for_rule = bool(
+            nav_age_days is not None and 0 <= nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None
+        )
 
     row = {
         "ticker": ticker,
@@ -1312,7 +1301,11 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
-def load_manual_nav_rows(path: Path, latest_price_by_ticker: Dict[str, Dict[str, Any]], nav_fresh_max_days: int) -> Dict[str, Any]:
+def load_manual_nav_rows(
+    path: Path,
+    latest_price_by_ticker: Dict[str, Dict[str, Any]],
+    nav_fresh_max_days: int,
+) -> Dict[str, Any]:
     raw = read_json(path, default={}) or {}
     items = raw.get("items", []) if isinstance(raw, dict) else []
     rows: List[Dict[str, Any]] = []
@@ -1405,6 +1398,7 @@ def get_sec_filing_candidates(session: requests.Session, cik10: str, timeout: in
         form = str(forms[i] or "").strip().upper()
         if form not in AUTO_NAV_ALLOWED_FORMS:
             continue
+
         filing_date = str(filing_dates[i] or "").strip()
         accession = str(accession_numbers[i] or "").strip()
         primary_doc = str(primary_documents[i] or "").strip()
@@ -1423,12 +1417,6 @@ def get_sec_filing_candidates(session: requests.Session, cik10: str, timeout: in
             ),
         })
 
-    out.sort(
-        key=lambda x: (
-            FORM_PRIORITY.get(x["form"], 9),
-            -(parse_date(x["filing_date"]).toordinal() if parse_date(x["filing_date"]) is not None else 0),
-        )
-    )
     return out
 
 
@@ -1460,7 +1448,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v7_recallplus",
+            "source": "sec_filings_regex_v6_contextfilter",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -1501,7 +1489,11 @@ def fetch_auto_nav_rows_from_sec(
                 continue
 
             market_close = to_float((latest_price_by_ticker.get(ticker) or {}).get("close"))
-            candidates = extract_nav_candidates_from_text(text=text, market_close=market_close, max_candidates=AUTO_NAV_MAX_CANDIDATES_PER_FILING)
+            candidates = extract_nav_candidates_from_text(
+                text=text,
+                market_close=market_close,
+                max_candidates=AUTO_NAV_MAX_CANDIDATES_PER_FILING,
+            )
             if not candidates:
                 continue
 
@@ -1538,7 +1530,6 @@ def fetch_auto_nav_rows_from_sec(
                         "derived_from_price": cand.get("derived_from_price"),
                         "derived_from_rel": cand.get("derived_from_rel"),
                         "derived_from_pct": cand.get("derived_from_pct"),
-                        "derived_from_nav_direct": cand.get("derived_from_nav_direct"),
                         "nav_date_source": nav_date_source,
                         "price_obs_date": cand.get("price_obs_date"),
                         "price_obs_date_source": cand.get("price_obs_date_source"),
@@ -1592,7 +1583,7 @@ def fetch_auto_nav_rows_from_sec(
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v7_recallplus",
+        "source": "sec_filings_regex_v6_contextfilter",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -1611,6 +1602,7 @@ def build_nav_overlay(
     auto_rows = list(auto_nav_result.get("rows") or [])
 
     effective_by_ticker: Dict[str, Dict[str, Any]] = {}
+
     for r in auto_rows:
         if r.get("used_in_stats"):
             effective_by_ticker[r["ticker"]] = r
@@ -1628,9 +1620,14 @@ def build_nav_overlay(
             effective_by_ticker[r["ticker"]] = r
 
     effective_rows = list(effective_by_ticker.values())
+
     display_rows = sorted(
         auto_rows + manual_rows,
-        key=lambda x: (0 if x.get("used_in_stats") else 1, x.get("ticker") or "", x.get("source_kind") or ""),
+        key=lambda x: (
+            0 if x.get("used_in_stats") else 1,
+            x.get("ticker") or "",
+            x.get("source_kind") or "",
+        )
     )
 
     rows_with_discount = [r for r in effective_rows if r.get("premium_discount_pct") is not None]
@@ -1744,7 +1741,12 @@ def get_best_candidate_from_obj(obj: Any, series: str) -> Optional[Dict[str, Any
 
 def get_module_rows(unified_raw: Dict[str, Any], module_name: str) -> List[Dict[str, Any]]:
     try:
-        rows = unified_raw.get("modules", {}).get(module_name, {}).get("dashboard_latest", {}).get("rows", [])
+        rows = (
+            unified_raw.get("modules", {})
+            .get(module_name, {})
+            .get("dashboard_latest", {})
+            .get("rows", [])
+        )
         return rows if isinstance(rows, list) else []
     except Exception:
         return []
@@ -1759,13 +1761,19 @@ def find_series_in_rows(rows: List[Dict[str, Any]], series: str) -> Optional[Dic
 
 def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
     if not unified_json_path.exists():
-        return {"enabled": False, "note": "reference file not found", "source_path": str(unified_json_path), "reference_only": True}
+        return {
+            "enabled": False,
+            "note": "reference file not found",
+            "source_path": str(unified_json_path),
+            "reference_only": True,
+        }
 
     raw = read_json(unified_json_path, default={}) or {}
     refs: Dict[str, Any] = {}
 
     for series in ["BAMLH0A0HYM2", "HYG_IEF_RATIO", "OFR_FSI"]:
         preferred_modules = PREFERRED_CONTEXT_MODULES.get(series, [])
+
         chosen_row: Optional[Dict[str, Any]] = None
         chosen_module: Optional[str] = None
 
@@ -1789,7 +1797,12 @@ def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
         else:
             refs[series] = {"found": True, **normalize_context_row(chosen_row, chosen_module or "unknown")}
 
-    return {"enabled": True, "reference_only": True, "source_path": str(unified_json_path), "series": refs}
+    return {
+        "enabled": True,
+        "reference_only": True,
+        "source_path": str(unified_json_path),
+        "series": refs,
+    }
 
 
 def determine_proxy_signal(basket_summary: Dict[str, Any], proxy_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1877,8 +1890,12 @@ def determine_structural_signal(nav_info: Dict[str, Any], event_info: Dict[str, 
 
 
 def combine_signals(proxy_info: Dict[str, Any], structural_info: Dict[str, Any]) -> Dict[str, Any]:
-    proxy_rank = SEVERITY_ORDER.get(proxy_info["signal"], 0)
-    structural_rank = SEVERITY_ORDER.get(structural_info["signal"], 0)
+    proxy_signal = proxy_info["signal"]
+    structural_signal = structural_info["signal"]
+
+    proxy_rank = SEVERITY_ORDER.get(proxy_signal, 0)
+    structural_rank = SEVERITY_ORDER.get(structural_signal, 0)
+
     combined_signal = "ALERT" if max(proxy_rank, structural_rank) == 2 else ("WATCH" if max(proxy_rank, structural_rank) == 1 else "NONE")
 
     if proxy_rank > 0 and structural_rank == 0:
@@ -1907,8 +1924,14 @@ def combine_signals(proxy_info: Dict[str, Any], structural_info: Dict[str, Any])
     }
 
 
-def infer_confidence(price_rows: List[Dict[str, Any]], nav_info: Dict[str, Any], event_info: Dict[str, Any], basket_tickers: List[str]) -> Dict[str, Any]:
+def infer_confidence(
+    price_rows: List[Dict[str, Any]],
+    nav_info: Dict[str, Any],
+    event_info: Dict[str, Any],
+    basket_tickers: List[str],
+) -> Dict[str, Any]:
     basket_cov = sum(1 for r in price_rows if r.get("ticker") in basket_tickers and r.get("close") is not None)
+
     price_conf = "OK" if basket_cov >= max(3, len(basket_tickers) - 1) else ("PARTIAL" if basket_cov >= 2 else "LOW")
     nav_conf = nav_info.get("confidence", "NA")
 
@@ -2024,28 +2047,79 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append("")
 
     lines.append("## 1) BDC Market Proxy")
-    for k in ["coverage", "median_ret1_pct", "median_ret5_pct", "median_z60", "median_drawdown_20d_pct", "extreme_z_count", "extreme_z_share", "ret5_le_minus5_count", "ret5_le_minus5_share", "below_ma20_count", "below_ma20_share"]:
+    for k in [
+        "coverage", "median_ret1_pct", "median_ret5_pct", "median_z60",
+        "median_drawdown_20d_pct", "extreme_z_count", "extreme_z_share",
+        "ret5_le_minus5_count", "ret5_le_minus5_share", "below_ma20_count",
+        "below_ma20_share",
+    ]:
         lines.append(f"- {k}: `{basket.get(k)}`")
     lines.append("")
-    lines.append(markdown_table(price_rows, [("ticker", "ticker"), ("class", "class"), ("close", "close"), ("data_date", "data_date"), ("ret1%", "ret1_pct"), ("ret5%", "ret5_pct"), ("z60", "z60"), ("p60", "p60"), ("p252", "p252"), ("dd20%", "drawdown_20d_pct"), ("px_vs_ma20%", "price_vs_ma20_pct"), ("source", "source_url"), ("note", "note")]))
+    lines.append(markdown_table(
+        price_rows,
+        [
+            ("ticker", "ticker"), ("class", "class"), ("close", "close"), ("data_date", "data_date"),
+            ("ret1%", "ret1_pct"), ("ret5%", "ret5_pct"), ("z60", "z60"), ("p60", "p60"),
+            ("p252", "p252"), ("dd20%", "drawdown_20d_pct"), ("px_vs_ma20%", "price_vs_ma20_pct"),
+            ("source", "source_url"), ("note", "note"),
+        ],
+    ))
     lines.append("")
 
     lines.append("## 2) NAV Overlay (manual + auto SEC, optional)")
-    for k in ["path", "as_of_date", "confidence", "raw_row_count", "template_excluded_count", "manual_valid_count", "auto_enabled", "auto_source", "auto_attempted_count", "auto_found_count", "manual_override_tickers", "coverage_total", "coverage_fresh", "median_discount_pct_fresh", "median_discount_pct_all"]:
+    for k in [
+        "path", "as_of_date", "confidence", "raw_row_count", "template_excluded_count",
+        "manual_valid_count", "auto_enabled", "auto_source", "auto_attempted_count",
+        "auto_found_count", "manual_override_tickers", "coverage_total", "coverage_fresh",
+        "median_discount_pct_fresh", "median_discount_pct_all",
+    ]:
         lines.append(f"- {k}: `{nav.get(k)}`")
     lines.append("")
     lines.append("### Coverage decomposition")
-    for k in ["auto_total_count", "auto_used_in_stats_count", "auto_review_count", "auto_excluded_count", "auto_review_only_count", "manual_used_in_stats_count", "manual_invalid_count", "effective_auto_count", "effective_manual_count", "effective_structural_count", "effective_structural_fresh_count"]:
+    for k in [
+        "auto_total_count", "auto_used_in_stats_count", "auto_review_count", "auto_excluded_count",
+        "auto_review_only_count", "manual_used_in_stats_count", "manual_invalid_count",
+        "effective_auto_count", "effective_manual_count", "effective_structural_count",
+        "effective_structural_fresh_count",
+    ]:
         lines.append(f"- {k}: `{nav.get(k)}`")
     lines.append("")
-    lines.append(markdown_table(nav.get("items", []), [("ticker", "ticker"), ("source_kind", "source_kind"), ("extraction_method", "extraction_method"), ("used_in_stats", "used_in_stats"), ("dq_status", "dq_status"), ("review_flag", "review_flag"), ("match_score", "match_score"), ("matched_pattern", "matched_pattern"), ("price_obs_date", "price_obs_date"), ("nav_ref_date", "nav_ref_date_extracted"), ("nav_date_used", "nav_date"), ("nav_date_source", "nav_date_source"), ("filing_date", "filing_date"), ("market_close", "market_close"), ("market_date", "market_date"), ("premium_discount_pct", "premium_discount_pct"), ("nav_age_days", "nav_age_days"), ("fresh_for_rule", "fresh_for_rule"), ("source", "source_url"), ("note", "note")]))
+    lines.append(markdown_table(
+        nav.get("items", []),
+        [
+            ("ticker", "ticker"),
+            ("source_kind", "source_kind"),
+            ("extraction_method", "extraction_method"),
+            ("used_in_stats", "used_in_stats"),
+            ("dq_status", "dq_status"),
+            ("review_flag", "review_flag"),
+            ("match_score", "match_score"),
+            ("matched_pattern", "matched_pattern"),
+            ("price_obs_date", "price_obs_date"),
+            ("nav_ref_date", "nav_ref_date_extracted"),
+            ("nav_date_used", "nav_date"),
+            ("nav_date_source", "nav_date_source"),
+            ("filing_date", "filing_date"),
+            ("market_close", "market_close"),
+            ("market_date", "market_date"),
+            ("premium_discount_pct", "premium_discount_pct"),
+            ("nav_age_days", "nav_age_days"),
+            ("fresh_for_rule", "fresh_for_rule"),
+            ("source", "source_url"),
+            ("note", "note"),
+        ],
+    ))
 
     auto_snippets = [r for r in nav.get("items", []) if r.get("source_kind") == "auto_sec"]
     if auto_snippets:
         lines.append("")
         lines.append("### NAV auto match snippets")
         for r in auto_snippets:
-            lines.append(f"- {r.get('ticker')} | used_in_stats={r.get('used_in_stats')} | dq_status={r.get('dq_status')} | score={r.get('match_score')} | pattern={r.get('matched_pattern')} | method={r.get('extraction_method')}")
+            lines.append(
+                f"- {r.get('ticker')} | used_in_stats={r.get('used_in_stats')} | "
+                f"dq_status={r.get('dq_status')} | score={r.get('match_score')} | "
+                f"pattern={r.get('matched_pattern')} | method={r.get('extraction_method')}"
+            )
             lines.append(f"  - snippet: `{sanitize_inline_code_text(r.get('matched_snippet'))}`")
             if r.get("price_obs_match_text"):
                 lines.append(f"  - price_obs_match: `{sanitize_inline_code_text(r.get('price_obs_match_text'))}`")
@@ -2058,10 +2132,10 @@ def build_report(latest: Dict[str, Any]) -> str:
             if r.get("section_bonus_tags"):
                 lines.append(f"  - section_bonus: `{sanitize_inline_code_text(','.join(r.get('section_bonus_tags') or []))}`")
             if r.get("derived_from_price") is not None:
-                extra = f"price={r.get('derived_from_price')} | rel={r.get('derived_from_rel')} | pct={r.get('derived_from_pct')}"
-                if r.get("derived_from_nav_direct") is not None:
-                    extra += f" | nav_direct={r.get('derived_from_nav_direct')}"
-                lines.append(f"  - implied_from: {extra}")
+                lines.append(
+                    f"  - implied_from: price={r.get('derived_from_price')} | "
+                    f"rel={r.get('derived_from_rel')} | pct={r.get('derived_from_pct')}"
+                )
 
     if nav.get("auto_notes"):
         lines.append("")
@@ -2071,10 +2145,22 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append("")
 
     lines.append("## 3) Event Overlay (manual, optional)")
-    for k in ["path", "as_of_date", "recent_window_days", "raw_row_count", "template_excluded_count", "event_count_total", "event_count_recent", "alert_recent_count", "watch_recent_count", "latest_recent_event_date"]:
+    for k in [
+        "path", "as_of_date", "recent_window_days", "raw_row_count", "template_excluded_count",
+        "event_count_total", "event_count_recent", "alert_recent_count", "watch_recent_count",
+        "latest_recent_event_date",
+    ]:
         lines.append(f"- {k}: `{events.get(k)}`")
     lines.append("")
-    lines.append(markdown_table(events.get("events", []), [("event_date", "event_date"), ("category", "category"), ("entity", "entity"), ("severity", "severity"), ("is_recent", "is_recent"), ("valid_for_stats", "valid_for_stats"), ("template_excluded", "template_excluded"), ("title", "title"), ("source", "source_url"), ("note", "note")]))
+    lines.append(markdown_table(
+        events.get("events", []),
+        [
+            ("event_date", "event_date"), ("category", "category"), ("entity", "entity"),
+            ("severity", "severity"), ("is_recent", "is_recent"), ("valid_for_stats", "valid_for_stats"),
+            ("template_excluded", "template_excluded"), ("title", "title"), ("source", "source_url"),
+            ("note", "note"),
+        ],
+    ))
     lines.append("")
 
     lines.append("## 4) Public Credit Context (reference-only; not recomputed here)")
@@ -2086,9 +2172,23 @@ def build_report(latest: Dict[str, Any]) -> str:
         if row.get("found"):
             ctx_rows.append({"series": series, **row})
         else:
-            ctx_rows.append({"series": series, "signal": "NA", "value": None, "data_date": None, "reason": "not_found", "tag": None, "source_module": None})
+            ctx_rows.append({
+                "series": series,
+                "signal": "NA",
+                "value": None,
+                "data_date": None,
+                "reason": "not_found",
+                "tag": None,
+                "source_module": None,
+            })
     lines.append("")
-    lines.append(markdown_table(ctx_rows, [("series", "series"), ("source_module", "source_module"), ("signal", "signal"), ("value", "value"), ("data_date", "data_date"), ("reason", "reason"), ("tag", "tag")]))
+    lines.append(markdown_table(
+        ctx_rows,
+        [
+            ("series", "series"), ("source_module", "source_module"), ("signal", "signal"),
+            ("value", "value"), ("data_date", "data_date"), ("reason", "reason"), ("tag", "tag"),
+        ],
+    ))
     lines.append("")
 
     lines.append("## 5) Confidence / DQ")
@@ -2131,7 +2231,13 @@ def main() -> None:
     for t in tickers:
         df, source_url, err = fetch_stooq_daily(t, start_date, end_date, timeout=args.timeout)
         stats = compute_price_stats(df, z_window=args.z_window, p_window=args.p_window)
-        row = {"ticker": t, "class": "BDC" if t in basket_tickers else "ETF_PROXY", **stats, "source_url": source_url, "note": err or "OK"}
+        row = {
+            "ticker": t,
+            "class": "BDC" if t in basket_tickers else "ETF_PROXY",
+            **stats,
+            "source_url": source_url,
+            "note": err or "OK",
+        }
         price_rows.append(row)
         latest_price_by_ticker[t] = row
         if err:
@@ -2149,16 +2255,37 @@ def main() -> None:
             nav_auto_max_filings=args.nav_auto_max_filings,
         )
     else:
-        auto_nav_result = {"enabled": False, "source": "off", "attempted_count": 0, "found_count": 0, "rows": [], "notes": ["auto_nav_disabled"]}
+        auto_nav_result = {
+            "enabled": False,
+            "source": "off",
+            "attempted_count": 0,
+            "found_count": 0,
+            "rows": [],
+            "notes": ["auto_nav_disabled"],
+        }
 
-    nav_info = build_nav_overlay(manual_nav_path=manual_nav_path, latest_price_by_ticker=latest_price_by_ticker, nav_fresh_max_days=args.nav_fresh_max_days, auto_nav_result=auto_nav_result)
+    nav_info = build_nav_overlay(
+        manual_nav_path=manual_nav_path,
+        latest_price_by_ticker=latest_price_by_ticker,
+        nav_fresh_max_days=args.nav_fresh_max_days,
+        auto_nav_result=auto_nav_result,
+    )
     event_info = load_manual_events(manual_events_path, recent_days=args.event_recent_days)
-    reference_context = load_reference_context(unified_json_path) if unified_json_path else {"enabled": False, "reference_only": True, "note": "disabled"}
+    reference_context = load_reference_context(unified_json_path) if unified_json_path else {
+        "enabled": False,
+        "reference_only": True,
+        "note": "disabled",
+    }
 
     proxy_signal_info = determine_proxy_signal(basket_summary=basket_summary, proxy_rows=price_rows)
     structural_signal_info = determine_structural_signal(nav_info=nav_info, event_info=event_info)
     combined_signal_info = combine_signals(proxy_info=proxy_signal_info, structural_info=structural_signal_info)
-    confidence = infer_confidence(price_rows=price_rows, nav_info=nav_info, event_info=event_info, basket_tickers=basket_tickers)
+    confidence = infer_confidence(
+        price_rows=price_rows,
+        nav_info=nav_info,
+        event_info=event_info,
+        basket_tickers=basket_tickers,
+    )
 
     latest = {
         "meta": {
@@ -2166,7 +2293,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_recallplus + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v6_contextfilter + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -2214,11 +2341,10 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.10b expands implied regex recall and adds direct price-to-NAV pattern support for alternate BDC wording.",
-            "v1.10b adds local N/A hard-skip filters and fixes the dead '(n) Represents' footnote penalty regex.",
-            "v1.10b prioritizes 8-K / 8-KA earlier in filing scan order and increases default nav_auto_max_filings to 10.",
-            "v1.10b keeps price_obs_date / nav_ref_date split, while nav_date remains the effective date used in stats.",
-            "v1.10b keeps markdown-safe table escaping and NAV coverage decomposition for auditability.",
+            "v1.10 adds hard-skip filters for hypothetical / boilerplate contexts before they can pass into structural stats.",
+            "v1.10 adds section/context bonus-penalty scoring so cleaner disclosure zones outrank footnotes and boilerplate.",
+            "v1.10 keeps price_obs_date / nav_ref_date split, while nav_date remains the effective date used in stats.",
+            "v1.10 keeps markdown-safe table escaping and NAV coverage decomposition for auditability.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
