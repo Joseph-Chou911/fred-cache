@@ -1,9 +1,9 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-14T08:31:01Z`
+- generated_at_utc: `2026-03-14T09:40:06Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.7`
+- script_version: `v1.8c`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
 - structural_signal: **NONE**
@@ -43,7 +43,7 @@
 - template_excluded_count: `1`
 - manual_valid_count: `0`
 - auto_enabled: `True`
-- auto_source: `sec_filings_regex_v4`
+- auto_source: `sec_filings_regex_v4_guarded`
 - auto_attempted_count: `5`
 - auto_found_count: `5`
 - manual_override_tickers: `[]`
@@ -129,4 +129,6 @@
 - Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.
 - Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.
 - When available, nav_asof_date extracted from filing text is used for nav_age_days / fresh_for_rule; filing_date is retained for audit.
+- v1.8c normalizes all comparison timestamps to tz-naive before date guard checks.
+- v1.8c hard guards reject future effective NAV dates and require non-negative nav_age_days for fresh_for_rule.
 - data_fetch_notes: all price fetches OK
