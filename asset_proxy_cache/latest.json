@@ -1,6 +1,6 @@
 [
   {
-    "as_of_ts": "2026-03-14T08:38:00+08:00",
+    "as_of_ts": "2026-03-14T11:07:57+08:00",
     "series_id": "GLD.US_CLOSE",
     "data_date": "2026-03-13",
     "value": "460.84",
@@ -8,7 +8,7 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-14T08:38:00+08:00",
+    "as_of_ts": "2026-03-14T11:07:57+08:00",
     "series_id": "IAU.US_CLOSE",
     "data_date": "2026-03-13",
     "value": "94.38",
@@ -16,15 +16,15 @@
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-14T08:38:00+08:00",
+    "as_of_ts": "2026-03-14T11:07:57+08:00",
     "series_id": "VNQ.US_CLOSE",
     "data_date": "2026-03-13",
-    "value": "92.17",
+    "value": "92.16",
     "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20260212&d2=20260314&i=d",
     "notes": "NA"
   },
   {
-    "as_of_ts": "2026-03-14T08:38:00+08:00",
+    "as_of_ts": "2026-03-14T11:07:57+08:00",
     "series_id": "IYR.US_CLOSE",
     "data_date": "2026-03-13",
     "value": "97.5",
