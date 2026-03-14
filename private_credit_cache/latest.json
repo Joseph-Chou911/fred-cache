@@ -1,10 +1,10 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-14T10:04:00Z",
+    "generated_at_utc": "2026-03-14T11:59:40Z",
     "script": "build_private_credit_monitor.py",
-    "script_version": "v1.9",
+    "script_version": "v1.10",
     "out_dir": "private_credit_cache",
-    "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v5_splitdates + manual_event_overlay + optional_unified_reference_only",
+    "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v6_contextfilter + manual_event_overlay + optional_unified_reference_only",
     "basket_tickers": [
       "ARCC",
       "BXSL",
@@ -197,15 +197,15 @@
     "template_excluded_count": 1,
     "manual_valid_count": 0,
     "auto_enabled": true,
-    "auto_source": "sec_filings_regex_v5_splitdates",
+    "auto_source": "sec_filings_regex_v6_contextfilter",
     "auto_attempted_count": 5,
     "auto_found_count": 5,
     "auto_notes": [
-      "ARCC:OK:10-K:2026-02-04:score=9.9:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted",
-      "BXSL:REVIEW_ONLY:10-K:2026-02-25:score=5.4:dq=REVIEW_SNIPPET_TERMS:method=direct:nav_date_source=filing_date_fallback",
-      "OBDC:OK:10-K:2026-02-18:score=9.9:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted",
-      "FSK:REVIEW_ONLY:10-K:2026-02-25:score=3.5:dq=EXCLUDED_PREMIUM_TOO_HIGH:method=direct:nav_date_source=filing_date_fallback",
-      "PSEC:REVIEW_ONLY:10-Q:2026-02-09:score=1.5:dq=REVIEW_DISCOUNT_DEEP:method=direct:nav_date_source=filing_date_fallback"
+      "ARCC:OK:10-K:2026-02-04:score=12.3:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted",
+      "BXSL:REVIEW_ONLY:10-K:2026-02-25:score=1.7:dq=EXCLUDED_CONTEXT_HARD_SKIP:method=direct:nav_date_source=filing_date_fallback",
+      "OBDC:OK:10-K:2026-02-18:score=12.4:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted",
+      "FSK:REVIEW_ONLY:10-K:2026-02-25:score=1.6:dq=EXCLUDED_PREMIUM_TOO_HIGH:method=direct:nav_date_source=filing_date_fallback",
+      "PSEC:REVIEW_ONLY:10-Q:2026-02-09:score=-7.5:dq=EXCLUDED_CONTEXT_HARD_SKIP:method=direct:nav_date_source=filing_date_fallback"
     ],
     "manual_override_tickers": [],
     "coverage_total": 2,
@@ -215,8 +215,8 @@
     "confidence": "PARTIAL",
     "auto_total_count": 5,
     "auto_used_in_stats_count": 2,
-    "auto_review_count": 2,
-    "auto_excluded_count": 1,
+    "auto_review_count": 0,
+    "auto_excluded_count": 3,
     "auto_review_only_count": 3,
     "manual_used_in_stats_count": 0,
     "manual_invalid_count": 1,
@@ -241,7 +241,7 @@
         "source_kind": "auto_sec",
         "filing_form": "10-K",
         "filing_date": "2026-02-04",
-        "match_score": 9.9,
+        "match_score": 12.3,
         "matched_pattern": "closing_price_discount_to_nav",
         "matched_snippet": "ue, divided by net asset value (in each case, as of the applicable quarter). (3) Represents the dividend or distribution declared in the relevant quarter. On January 29, 2026, the last reported closing sales price of our common stock on The NASDAQ Global Select Market was $20.16 per share, which represented a premium o...",
         "candidate_rank": 1,
@@ -260,6 +260,14 @@
         "nav_ref_date_extracted": "2025-12-31",
         "nav_ref_date_source": "nav_reported_asof_monthname",
         "nav_ref_match_text": "net asset value per share reported by us as of December 31, 2025",
+        "hard_skip_context_flag": false,
+        "hard_skip_context_tags": [],
+        "context_penalty_total": 0.0,
+        "context_penalty_tags": [],
+        "section_bonus_total": 0.8,
+        "section_bonus_tags": [
+          "nav_section"
+        ],
         "review_flag": "NONE",
         "dq_status": "OK",
         "used_in_stats": true
@@ -280,7 +288,7 @@
         "source_kind": "auto_sec",
         "filing_form": "10-K",
         "filing_date": "2026-02-18",
-        "match_score": 9.9,
+        "match_score": 12.4,
         "matched_pattern": "closing_price_discount_to_nav",
         "matched_snippet": "re. See “ ITEM 1A. RISK FACTORS — Risks Related to an Investment in Our Common Stock —The market value of our common stock may fluctuate significantly .” On February 11, 2026, the last reported closing sales price of our common stock on the NYSE was $11.95 per share, which represented a discount of approximately 19.3% ...",
         "candidate_rank": 1,
@@ -299,6 +307,17 @@
         "nav_ref_date_extracted": "2025-12-31",
         "nav_ref_date_source": "nav_reported_asof_monthname",
         "nav_ref_match_text": "net asset value per share reported by us as of December 31, 2025",
+        "hard_skip_context_flag": false,
+        "hard_skip_context_tags": [],
+        "context_penalty_total": 0.5,
+        "context_penalty_tags": [
+          "risk_factors"
+        ],
+        "section_bonus_total": 1.4,
+        "section_bonus_tags": [
+          "nav_section",
+          "shareholder_returns"
+        ],
         "review_flag": "NONE",
         "dq_status": "OK",
         "used_in_stats": true
@@ -325,6 +344,12 @@
         "nav_ref_date_extracted": null,
         "nav_ref_date_source": "manual_input",
         "nav_ref_match_text": null,
+        "hard_skip_context_flag": false,
+        "hard_skip_context_tags": [],
+        "context_penalty_total": 0.0,
+        "context_penalty_tags": [],
+        "section_bonus_total": 0.0,
+        "section_bonus_tags": [],
         "review_flag": "NONE",
         "dq_status": "MANUAL_INVALID",
         "used_in_stats": false,
@@ -354,9 +379,9 @@
         "source_kind": "auto_sec",
         "filing_form": "10-K",
         "filing_date": "2026-02-25",
-        "match_score": 5.4,
+        "match_score": 1.7,
         "matched_pattern": "strict_nav_with_dollar",
-        "matched_snippet": "per share (or such lesser discount to the current market price per share that still exceeded the most recently computed NAV per share). For example, if the most recently computed NAV per share is $25.00 and the market price on the payment date of a cash dividend is $24.00 per share, the Company will issue shares at $24...",
+        "matched_snippet": "r share is $25.00 and the market price on the payment date of a cash dividend is $24.00 per share, the Company will issue shares at $24.00 per share. If the most recently computed NAV per share is $25.00 and the market price on the payment date of a cash dividend is $27.00 per share, the Company will issue shares at $2...",
         "candidate_rank": 1,
         "candidate_count": 7,
         "percent_context_flag": false,
@@ -373,17 +398,28 @@
         "nav_ref_date_extracted": null,
         "nav_ref_date_source": null,
         "nav_ref_match_text": null,
-        "review_flag": "SUSPICIOUS_SNIPPET_TERMS",
-        "dq_status": "REVIEW_SNIPPET_TERMS",
+        "hard_skip_context_flag": true,
+        "hard_skip_context_tags": [
+          "example_context",
+          "hypothetical_nav_if"
+        ],
+        "context_penalty_total": 0.0,
+        "context_penalty_tags": [],
+        "section_bonus_total": 0.8,
+        "section_bonus_tags": [
+          "nav_section"
+        ],
+        "review_flag": "CONTEXT_HARD_SKIP_EXAMPLE_CONTEXT|CONTEXT_HARD_SKIP_HYPOTHETICAL_NAV_IF|LOW_MATCH_SCORE_LT_3.0|SUSPICIOUS_SNIPPET_TERMS",
+        "dq_status": "EXCLUDED_CONTEXT_HARD_SKIP",
         "used_in_stats": false
       },
       {
         "ticker": "FSK",
-        "nav": 5.0,
+        "nav": 1.0,
         "nav_date": "2026-02-25",
         "market_close": 10.09,
         "market_date": "2026-03-13",
-        "premium_discount_pct": 101.8,
+        "premium_discount_pct": 909.0,
         "nav_age_days": 16,
         "fresh_for_rule": true,
         "valid_for_stats": true,
@@ -393,9 +429,9 @@
         "source_kind": "auto_sec",
         "filing_form": "10-K",
         "filing_date": "2026-02-25",
-        "match_score": 3.5,
+        "match_score": 1.6,
         "matched_pattern": "nav_value_after_phrase",
-        "matched_snippet": "sulting from the 2021 Merger. (4) Represents the incremental impact of the Company’s respective stock repurchase programs by buying shares in the open market at a price lower than net asset value per share. (5) Represents the impact on NAV of merger accounting by the permanent write-off of the Company’s deferred merger...",
+        "matched_snippet": "Closing Sales Price Premium / (Discount) of High Sales Price to NAV (2) Premium / (Discount) of Low Sales Price to NAV (2) For the Three Months Ended (unless otherwise indicated) NAV per Share (1) High Low Fiscal Year Ending December 31, 2026 First Quarter of 2026 (through February 20, 2026) N/A* $ 14.93 $ 12.75 N/A* N...",
         "candidate_rank": 1,
         "candidate_count": 4,
         "percent_context_flag": false,
@@ -412,7 +448,17 @@
         "nav_ref_date_extracted": null,
         "nav_ref_date_source": null,
         "nav_ref_match_text": null,
-        "review_flag": "PREMIUM_GT_25",
+        "hard_skip_context_flag": false,
+        "hard_skip_context_tags": [],
+        "context_penalty_total": 0.5,
+        "context_penalty_tags": [
+          "risk_factors"
+        ],
+        "section_bonus_total": 0.8,
+        "section_bonus_tags": [
+          "nav_section"
+        ],
+        "review_flag": "LOW_MATCH_SCORE_LT_3.0|PREMIUM_GT_25",
         "dq_status": "EXCLUDED_PREMIUM_TOO_HIGH",
         "used_in_stats": false
       },
@@ -432,7 +478,7 @@
         "source_kind": "auto_sec",
         "filing_form": "10-Q",
         "filing_date": "2026-02-09",
-        "match_score": 1.5,
+        "match_score": -7.5,
         "matched_pattern": "nav_value_after_phrase",
         "matched_snippet": "aintain any stockholder approval that may be required under the 1940 Act to permit us to sell our common stock below net asset value if the 5-day VWAP represents a discount to our net asset value per share of common stock. For the 5.50 % Preferred Stock and 6.50 % Preferred Stock, “IOC Settlement Amount” means (A) the ...",
         "candidate_rank": 1,
@@ -451,8 +497,24 @@
         "nav_ref_date_extracted": null,
         "nav_ref_date_source": null,
         "nav_ref_match_text": null,
-        "review_flag": "LOW_MATCH_SCORE_LT_3.0|DISCOUNT_LE_-45|PERCENT_NEAR_MATCH|SUSPICIOUS_SNIPPET_TERMS",
-        "dq_status": "REVIEW_DISCOUNT_DEEP",
+        "hard_skip_context_flag": true,
+        "hard_skip_context_tags": [
+          "sell_below_nav",
+          "stockholder_approval_below_nav"
+        ],
+        "context_penalty_total": 4.0,
+        "context_penalty_tags": [
+          "reg_1940_act",
+          "preferred_stock",
+          "vwap_context",
+          "settlement_amount"
+        ],
+        "section_bonus_total": 0.8,
+        "section_bonus_tags": [
+          "nav_section"
+        ],
+        "review_flag": "CONTEXT_HARD_SKIP_SELL_BELOW_NAV|CONTEXT_HARD_SKIP_STOCKHOLDER_APPROVAL_BELOW_NAV|LOW_MATCH_SCORE_LT_3.0|DISCOUNT_LE_-45|PERCENT_NEAR_MATCH|SUSPICIOUS_SNIPPET_TERMS",
+        "dq_status": "EXCLUDED_CONTEXT_HARD_SKIP",
         "used_in_stats": false
       }
     ]
@@ -532,9 +594,10 @@
     "Public Credit Context mirrors unified signal from preferred source modules when available.",
     "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
     "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-    "v1.9 splits implied-date auditing into price_obs_date and nav_ref_date, while nav_date remains the effective date used in stats.",
-    "v1.9 escapes markdown table cells so review_flag and similar fields do not break report tables.",
-    "v1.9 adds NAV coverage decomposition for easier audit of why structural coverage is thin.",
+    "v1.10 adds hard-skip filters for hypothetical / boilerplate contexts before they can pass into structural stats.",
+    "v1.10 adds section/context bonus-penalty scoring so cleaner disclosure zones outrank footnotes and boilerplate.",
+    "v1.10 keeps price_obs_date / nav_ref_date split, while nav_date remains the effective date used in stats.",
+    "v1.10 keeps markdown-safe table escaping and NAV coverage decomposition for auditability.",
     "data_fetch_notes: all price fetches OK"
   ]
 }
