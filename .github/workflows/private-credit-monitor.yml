@@ -1,0 +1,140 @@
+name: private-credit-monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      out_dir:
+        description: "Output directory"
+        required: false
+        default: "private_credit_cache"
+      unified_json:
+        description: "Optional unified dashboard JSON path (reference-only)"
+        required: false
+        default: "unified_dashboard/latest.json"
+      tickers:
+        description: "Comma-separated tickers"
+        required: false
+        default: "ARCC,BXSL,OBDC,FSK,PSEC,BIZD"
+      history_max_rows:
+        description: "Max rows to keep in history.json"
+        required: false
+        default: "1000"
+      lookback_calendar_days:
+        description: "Calendar days to request from stooq"
+        required: false
+        default: "600"
+      z_window:
+        description: "Short z-score window"
+        required: false
+        default: "60"
+      p_window:
+        description: "Long percentile window"
+        required: false
+        default: "252"
+      event_recent_days:
+        description: "Recent window for event-based rules"
+        required: false
+        default: "45"
+      nav_fresh_max_days:
+        description: "NAV freshness max days"
+        required: false
+        default: "120"
+      timeout:
+        description: "HTTP timeout seconds"
+        required: false
+        default: "20"
+
+  # GitHub cron uses UTC.
+  # 00:55 UTC Tue-Sat = 08:55 Asia/Taipei Tue-Sat
+  # This is suitable for pulling the latest U.S. market close data.
+  schedule:
+    - cron: "55 0 * * 2-6"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: private-credit-monitor
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy requests
+
+      - name: Resolve parameters
+        id: vars
+        shell: bash
+        run: |
+          echo "out_dir=${{ github.event.inputs.out_dir || 'private_credit_cache' }}" >> "$GITHUB_OUTPUT"
+          echo "unified_json=${{ github.event.inputs.unified_json || 'unified_dashboard/latest.json' }}" >> "$GITHUB_OUTPUT"
+          echo "tickers=${{ github.event.inputs.tickers || 'ARCC,BXSL,OBDC,FSK,PSEC,BIZD' }}" >> "$GITHUB_OUTPUT"
+          echo "history_max_rows=${{ github.event.inputs.history_max_rows || '1000' }}" >> "$GITHUB_OUTPUT"
+          echo "lookback_calendar_days=${{ github.event.inputs.lookback_calendar_days || '600' }}" >> "$GITHUB_OUTPUT"
+          echo "z_window=${{ github.event.inputs.z_window || '60' }}" >> "$GITHUB_OUTPUT"
+          echo "p_window=${{ github.event.inputs.p_window || '252' }}" >> "$GITHUB_OUTPUT"
+          echo "event_recent_days=${{ github.event.inputs.event_recent_days || '45' }}" >> "$GITHUB_OUTPUT"
+          echo "nav_fresh_max_days=${{ github.event.inputs.nav_fresh_max_days || '120' }}" >> "$GITHUB_OUTPUT"
+          echo "timeout=${{ github.event.inputs.timeout || '20' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare output directory
+        shell: bash
+        run: |
+          mkdir -p "${{ steps.vars.outputs.out_dir }}/inputs"
+
+      - name: Run private credit monitor
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python tools/build_private_credit_monitor.py \
+            --out-dir "${{ steps.vars.outputs.out_dir }}" \
+            --manual-events "${{ steps.vars.outputs.out_dir }}/inputs/manual_events.json" \
+            --manual-nav "${{ steps.vars.outputs.out_dir }}/inputs/manual_nav.json" \
+            --unified-json "${{ steps.vars.outputs.unified_json }}" \
+            --history-max-rows "${{ steps.vars.outputs.history_max_rows }}" \
+            --lookback-calendar-days "${{ steps.vars.outputs.lookback_calendar_days }}" \
+            --z-window "${{ steps.vars.outputs.z_window }}" \
+            --p-window "${{ steps.vars.outputs.p_window }}" \
+            --event-recent-days "${{ steps.vars.outputs.event_recent_days }}" \
+            --nav-fresh-max-days "${{ steps.vars.outputs.nav_fresh_max_days }}" \
+            --timeout "${{ steps.vars.outputs.timeout }}" \
+            --tickers "${{ steps.vars.outputs.tickers }}"
+
+      - name: Show generated files
+        shell: bash
+        run: |
+          echo "Generated files under ${{ steps.vars.outputs.out_dir }}:"
+          find "${{ steps.vars.outputs.out_dir }}" -maxdepth 3 -type f | sort
+
+      - name: Commit and push outputs
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${{ steps.vars.outputs.out_dir }}"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(private_credit): update monitor outputs"
+          git push
