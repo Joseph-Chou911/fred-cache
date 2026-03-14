@@ -1,9 +1,9 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-14T04:40:54Z`
+- generated_at_utc: `2026-03-14T06:17:27Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.1`
+- script_version: `v1.2`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
 - structural_signal: **NONE**
@@ -71,11 +71,11 @@
 - source_path: `unified_dashboard/latest.json`
 - reference_only: `True`
 
-| series | signal | value | data_date | reason | tag |
-| --- | --- | --- | --- | --- | --- |
-| BAMLH0A0HYM2 | NA | 3.170000 | 2026-03-12 | abs(Z60)>=2 | EXTREME_Z |
-| HYG_IEF_RATIO | NA | 0.828539 | 2026-03-13 | NA | NA |
-| OFR_FSI | NA | -0.925000 | 2026-03-11 | abs(Z60)>=2;abs(Z60)>=2.5;abs(ZΔ60)>=0.75;abs(ret1%1d)>=2 | EXTREME_Z,JUMP_ZD,JUMP_RET |
+| series | source_module | signal | value | data_date | reason | tag |
+| --- | --- | --- | --- | --- | --- | --- |
+| BAMLH0A0HYM2 | fallback_recursive_no_signal | NA_SOURCE_MISSING | 3.170000 | 2026-03-12 | abs(Z60)>=2 | EXTREME_Z |
+| HYG_IEF_RATIO | fallback_recursive_no_signal | NA_SOURCE_MISSING | 0.828539 | 2026-03-13 | NA | NA |
+| OFR_FSI | fallback_recursive_no_signal | NA_SOURCE_MISSING | -0.925000 | 2026-03-11 | abs(Z60)>=2;abs(Z60)>=2.5;abs(ZΔ60)>=0.75;abs(ret1%1d)>=2 | EXTREME_Z,JUMP_ZD,JUMP_RET |
 
 ## 5) Confidence / DQ
 - price_confidence: `OK`
@@ -91,4 +91,5 @@
 - Manual overlays are expected for event flags and latest NAV values.
 - Template / invalid manual rows are excluded from coverage/count/median statistics.
 - combined_signal should be interpreted together with signal_basis and structural_confidence.
+- Public Credit Context mirrors unified signal from preferred source modules when available.
 - data_fetch_notes: all price fetches OK

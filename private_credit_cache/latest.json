@@ -1,8 +1,8 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-14T04:40:54Z",
+    "generated_at_utc": "2026-03-14T06:17:27Z",
     "script": "build_private_credit_monitor.py",
-    "script_version": "v1.1",
+    "script_version": "v1.2",
     "out_dir": "private_credit_cache",
     "source_policy": "stooq_bdc_proxy + manual_nav_overlay + manual_event_overlay + optional_unified_reference_only",
     "basket_tickers": [
@@ -250,27 +250,30 @@
     "series": {
       "BAMLH0A0HYM2": {
         "found": true,
-        "signal": null,
+        "signal": "NA_SOURCE_MISSING",
         "value": 3.17,
         "data_date": "2026-03-12",
         "reason": "abs(Z60)>=2",
-        "tag": "EXTREME_Z"
+        "tag": "EXTREME_Z",
+        "source_module": "fallback_recursive_no_signal"
       },
       "HYG_IEF_RATIO": {
         "found": true,
-        "signal": null,
+        "signal": "NA_SOURCE_MISSING",
         "value": 0.8285385500575374,
         "data_date": "2026-03-13",
         "reason": "NA",
-        "tag": "NA"
+        "tag": "NA",
+        "source_module": "fallback_recursive_no_signal"
       },
       "OFR_FSI": {
         "found": true,
-        "signal": null,
+        "signal": "NA_SOURCE_MISSING",
         "value": -0.925,
         "data_date": "2026-03-11",
         "reason": "abs(Z60)>=2;abs(Z60)>=2.5;abs(ZΔ60)>=0.75;abs(ret1%1d)>=2",
-        "tag": "EXTREME_Z,JUMP_ZD,JUMP_RET"
+        "tag": "EXTREME_Z,JUMP_ZD,JUMP_RET",
+        "source_module": "fallback_recursive_no_signal"
       }
     }
   },
@@ -280,6 +283,7 @@
     "Manual overlays are expected for event flags and latest NAV values.",
     "Template / invalid manual rows are excluded from coverage/count/median statistics.",
     "combined_signal should be interpreted together with signal_basis and structural_confidence.",
+    "Public Credit Context mirrors unified signal from preferred source modules when available.",
     "data_fetch_notes: all price fetches OK"
   ]
 }
