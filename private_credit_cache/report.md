@@ -1,9 +1,9 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-14T09:40:06Z`
+- generated_at_utc: `2026-03-14T10:04:00Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.8c`
+- script_version: `v1.9`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
 - structural_signal: **NONE**
@@ -43,7 +43,7 @@
 - template_excluded_count: `1`
 - manual_valid_count: `0`
 - auto_enabled: `True`
-- auto_source: `sec_filings_regex_v4_guarded`
+- auto_source: `sec_filings_regex_v5_splitdates`
 - auto_attempted_count: `5`
 - auto_found_count: `5`
 - manual_override_tickers: `[]`
@@ -52,23 +52,38 @@
 - median_discount_pct_fresh: `-18.243683`
 - median_discount_pct_all: `-18.243683`
 
-| ticker | source_kind | extraction_method | used_in_stats | dq_status | review_flag | match_score | matched_pattern | nav | nav_date | nav_date_source | filing_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | source | note |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ARCC | auto_sec | implied_from_price_and_rel | True | OK | NONE | 9.900000 | closing_price_discount_to_nav | 19.940653 | 2026-01-29 | nav_asof_extracted | 2026-02-04 | 17.860000 | 2026-03-13 | -10.434227 | 43 | True | https://www.sec.gov/Archives/edgar/data/1287750/000128775026000006/arcc-20251231.htm | auto_sec:10-K:2026-02-04:candidate_rank=1 |
-| OBDC | auto_sec | implied_from_price_and_rel | True | OK | NONE | 9.900000 | closing_price_discount_to_nav | 14.807931 | 2026-02-11 | nav_asof_extracted | 2026-02-18 | 10.950000 | 2026-03-13 | -26.053140 | 30 | True | https://www.sec.gov/Archives/edgar/data/1655888/000165588826000010/obdc-20251231.htm | auto_sec:10-K:2026-02-18:candidate_rank=1 |
-| ARCC | manual | manual | False | MANUAL_INVALID | NONE | NA | NA | 0.000000 | NA | manual_input | NA | 17.860000 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
-| BXSL | auto_sec | direct | False | REVIEW_SNIPPET_TERMS | SUSPICIOUS_SNIPPET_TERMS | 5.400000 | strict_nav_with_dollar | 25.000000 | 2026-02-25 | filing_date_fallback | 2026-02-25 | 23.650000 | 2026-03-13 | -5.400000 | 16 | True | https://www.sec.gov/Archives/edgar/data/1736035/000173603526000004/bxsl-20251231.htm | auto_sec:10-K:2026-02-25:candidate_rank=1 |
-| FSK | auto_sec | direct | False | EXCLUDED_PREMIUM_TOO_HIGH | PREMIUM_GT_25 | 3.500000 | nav_value_after_phrase | 5.000000 | 2026-02-25 | filing_date_fallback | 2026-02-25 | 10.090000 | 2026-03-13 | 101.800000 | 16 | True | https://www.sec.gov/Archives/edgar/data/1422183/000162828026011734/fsk-20251231.htm | auto_sec:10-K:2026-02-25:candidate_rank=1 |
-| PSEC | auto_sec | direct | False | REVIEW_DISCOUNT_DEEP | LOW_MATCH_SCORE_LT_3.0|DISCOUNT_LE_-45|PERCENT_NEAR_MATCH|SUSPICIOUS_SNIPPET_TERMS | 1.500000 | nav_value_after_phrase | 5.500000 | 2026-02-09 | filing_date_fallback | 2026-02-09 | 2.560000 | 2026-03-13 | -53.454545 | 32 | True | https://www.sec.gov/Archives/edgar/data/1287032/000128703226000045/psec-20251231.htm | auto_sec:10-Q:2026-02-09:candidate_rank=1 |
+### Coverage decomposition
+- auto_total_count: `5`
+- auto_used_in_stats_count: `2`
+- auto_review_count: `2`
+- auto_excluded_count: `1`
+- auto_review_only_count: `3`
+- manual_used_in_stats_count: `0`
+- manual_invalid_count: `1`
+- effective_auto_count: `2`
+- effective_manual_count: `0`
+- effective_structural_count: `2`
+- effective_structural_fresh_count: `2`
+
+| ticker | source_kind | extraction_method | used_in_stats | dq_status | review_flag | match_score | matched_pattern | price_obs_date | nav_ref_date | nav_date_used | nav_date_source | filing_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | source | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ARCC | auto_sec | implied_from_price_and_rel | True | OK | NONE | 9.900000 | closing_price_discount_to_nav | 2026-01-29 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-04 | 17.860000 | 2026-03-13 | -10.434227 | 72 | True | https://www.sec.gov/Archives/edgar/data/1287750/000128775026000006/arcc-20251231.htm | auto_sec:10-K:2026-02-04:candidate_rank=1 |
+| OBDC | auto_sec | implied_from_price_and_rel | True | OK | NONE | 9.900000 | closing_price_discount_to_nav | 2026-02-11 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-18 | 10.950000 | 2026-03-13 | -26.053140 | 72 | True | https://www.sec.gov/Archives/edgar/data/1655888/000165588826000010/obdc-20251231.htm | auto_sec:10-K:2026-02-18:candidate_rank=1 |
+| ARCC | manual | manual | False | MANUAL_INVALID | NONE | NA | NA | NA | NA | NA | manual_input | NA | 17.860000 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
+| BXSL | auto_sec | direct | False | REVIEW_SNIPPET_TERMS | SUSPICIOUS_SNIPPET_TERMS | 5.400000 | strict_nav_with_dollar | NA | NA | 2026-02-25 | filing_date_fallback | 2026-02-25 | 23.650000 | 2026-03-13 | -5.400000 | 16 | True | https://www.sec.gov/Archives/edgar/data/1736035/000173603526000004/bxsl-20251231.htm | auto_sec:10-K:2026-02-25:candidate_rank=1 |
+| FSK | auto_sec | direct | False | EXCLUDED_PREMIUM_TOO_HIGH | PREMIUM_GT_25 | 3.500000 | nav_value_after_phrase | NA | NA | 2026-02-25 | filing_date_fallback | 2026-02-25 | 10.090000 | 2026-03-13 | 101.800000 | 16 | True | https://www.sec.gov/Archives/edgar/data/1422183/000162828026011734/fsk-20251231.htm | auto_sec:10-K:2026-02-25:candidate_rank=1 |
+| PSEC | auto_sec | direct | False | REVIEW_DISCOUNT_DEEP | LOW_MATCH_SCORE_LT_3.0\|DISCOUNT_LE_-45\|PERCENT_NEAR_MATCH\|SUSPICIOUS_SNIPPET_TERMS | 1.500000 | nav_value_after_phrase | NA | NA | 2026-02-09 | filing_date_fallback | 2026-02-09 | 2.560000 | 2026-03-13 | -53.454545 | 32 | True | https://www.sec.gov/Archives/edgar/data/1287032/000128703226000045/psec-20251231.htm | auto_sec:10-Q:2026-02-09:candidate_rank=1 |
 
 ### NAV auto match snippets
 - ARCC | used_in_stats=True | dq_status=OK | score=9.9 | pattern=closing_price_discount_to_nav | method=implied_from_price_and_rel
   - snippet: `ue, divided by net asset value (in each case, as of the applicable quarter). (3) Represents the dividend or distribution declared in the relevant quarter. On January 29, 2026, the last reported closing sales price of our common stock on The NASDAQ Global Select Market was $20.16 per share, which represented a premium o...`
-  - nav_asof_match: `As of January 29, 2026`
+  - price_obs_match: `On January 29, 2026, the last reported closing sales price`
+  - nav_ref_match: `net asset value per share reported by us as of December 31, 2025`
   - implied_from: price=20.16 | rel=premium | pct=1.1
 - OBDC | used_in_stats=True | dq_status=OK | score=9.9 | pattern=closing_price_discount_to_nav | method=implied_from_price_and_rel
   - snippet: `re. See “ ITEM 1A. RISK FACTORS — Risks Related to an Investment in Our Common Stock —The market value of our common stock may fluctuate significantly .” On February 11, 2026, the last reported closing sales price of our common stock on the NYSE was $11.95 per share, which represented a discount of approximately 19.3% ...`
-  - nav_asof_match: `As of February 11, 2026`
+  - price_obs_match: `On February 11, 2026, the last reported closing sales price`
+  - nav_ref_match: `net asset value per share reported by us as of December 31, 2025`
   - implied_from: price=11.95 | rel=discount | pct=19.3
 - BXSL | used_in_stats=False | dq_status=REVIEW_SNIPPET_TERMS | score=5.4 | pattern=strict_nav_with_dollar | method=direct
   - snippet: `per share (or such lesser discount to the current market price per share that still exceeded the most recently computed NAV per share). For example, if the most recently computed NAV per share is $25.00 and the market price on the payment date of a cash dividend is $24.00 per share, the Company will issue shares at $24...`
@@ -78,9 +93,9 @@
   - snippet: `aintain any stockholder approval that may be required under the 1940 Act to permit us to sell our common stock below net asset value if the 5-day VWAP represents a discount to our net asset value per share of common stock. For the 5.50 % Preferred Stock and 6.50 % Preferred Stock, “IOC Settlement Amount” means (A) the ...`
 
 ### NAV auto fetch notes
-- ARCC:OK:10-K:2026-02-04:score=9.9:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_asof_extracted
+- ARCC:OK:10-K:2026-02-04:score=9.9:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted
 - BXSL:REVIEW_ONLY:10-K:2026-02-25:score=5.4:dq=REVIEW_SNIPPET_TERMS:method=direct:nav_date_source=filing_date_fallback
-- OBDC:OK:10-K:2026-02-18:score=9.9:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_asof_extracted
+- OBDC:OK:10-K:2026-02-18:score=9.9:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted
 - FSK:REVIEW_ONLY:10-K:2026-02-25:score=3.5:dq=EXCLUDED_PREMIUM_TOO_HIGH:method=direct:nav_date_source=filing_date_fallback
 - PSEC:REVIEW_ONLY:10-Q:2026-02-09:score=1.5:dq=REVIEW_DISCOUNT_DEEP:method=direct:nav_date_source=filing_date_fallback
 
@@ -128,7 +143,7 @@
 - Public Credit Context mirrors unified signal from preferred source modules when available.
 - Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.
 - Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.
-- When available, nav_asof_date extracted from filing text is used for nav_age_days / fresh_for_rule; filing_date is retained for audit.
-- v1.8c normalizes all comparison timestamps to tz-naive before date guard checks.
-- v1.8c hard guards reject future effective NAV dates and require non-negative nav_age_days for fresh_for_rule.
+- v1.9 splits implied-date auditing into price_obs_date and nav_ref_date, while nav_date remains the effective date used in stats.
+- v1.9 escapes markdown table cells so review_flag and similar fields do not break report tables.
+- v1.9 adds NAV coverage decomposition for easier audit of why structural coverage is thin.
 - data_fetch_notes: all price fetches OK
