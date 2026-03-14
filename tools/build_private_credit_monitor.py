@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.3)
+build_private_credit_monitor.py (v1.4)
 
 Purpose
 -------
@@ -17,13 +17,15 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.3 changes
+v1.4 changes
 ------------
-- Fix Public Credit Context extraction against actual unified_dashboard/latest.json schema:
-  * use modules -> <module_name> -> dashboard_latest -> rows
-  * prefer signal_level over signal
-  * keep fallback recursive search only as backup
-- Keep source_module in context output/report for auditability
+- Keep v1.3 Public Credit Context extraction fixes
+- Add auto NAV fetch from official SEC endpoints:
+  * company_tickers.json -> ticker to CIK
+  * submissions JSON -> recent filing candidates
+  * filing document text regex -> NAV per share extraction
+- Manual NAV remains supported and overrides auto NAV for same ticker
+- Event overlay remains manual
 
 Outputs
 -------
@@ -37,7 +39,7 @@ All outputs go to a dedicated folder (default: private_credit_cache/):
 Data layers
 -----------
 1) BDC market proxy (auto)
-2) NAV overlay (manual, optional)
+2) NAV overlay (manual + optional auto SEC)
 3) Event overlay (manual, optional)
 4) Optional public-credit context (reference-only, no recomputation)
 
@@ -52,8 +54,10 @@ Dependencies
 from __future__ import annotations
 
 import argparse
+import html as html_lib
 import json
 import math
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -64,7 +68,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.3"
+SCRIPT_VERSION = "v1.4"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -92,6 +96,22 @@ PREFERRED_CONTEXT_MODULES: Dict[str, List[str]] = {
     "OFR_FSI": ["market_cache", "fred_cache"],
 }
 
+SEC_TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
+SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik10}.json"
+SEC_ARCHIVES_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/{primary_doc}"
+
+AUTO_NAV_ALLOWED_FORMS = {"10-Q", "10-Q/A", "10-K", "10-K/A", "8-K", "8-K/A"}
+
+NAV_REGEX_PATTERNS = [
+    re.compile(r"net asset value per share[^0-9$]{0,120}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)", re.I),
+    re.compile(r"net assets per share[^0-9$]{0,120}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)", re.I),
+    re.compile(r"nav per share[^0-9$]{0,120}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)", re.I),
+    re.compile(r"net asset value[^0-9$]{0,80}of[^0-9$]{0,40}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share", re.I),
+]
+
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+WHITESPACE_RE = re.compile(r"\s+")
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build standalone private credit monitor sidecar")
@@ -107,6 +127,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--nav-fresh-max-days", type=int, default=120, help="NAV older than this is treated as stale for aggregate rules")
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
+
+    # auto NAV from SEC
+    p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.4 contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     return p.parse_args()
 
 
@@ -168,6 +193,7 @@ def create_manual_nav_template(path: Path) -> None:
             "nav_date should be the date the reported NAV applies to, e.g. quarter-end.",
             "This script will compare latest market close vs provided NAV.",
             "Template rows are excluded from counts/statistics until they become valid.",
+            "Manual valid rows override auto SEC NAV rows for the same ticker.",
         ],
         "items": [
             {
@@ -250,6 +276,18 @@ def pick_first(row: Dict[str, Any], keys: List[str]) -> Any:
         if k in row and row.get(k) not in [None, ""]:
             return row.get(k)
     return None
+
+
+def make_requests_session(user_agent: Optional[str] = None) -> requests.Session:
+    s = requests.Session()
+    headers = {
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    s.headers.update(headers)
+    return s
 
 
 def fetch_stooq_daily(symbol: str, start_date: pd.Timestamp, end_date: pd.Timestamp, timeout: int) -> Tuple[pd.DataFrame, str, Optional[str]]:
@@ -460,81 +498,375 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
     }
 
 
-def load_manual_nav(path: Path, latest_price_by_ticker: Dict[str, Dict[str, Any]], nav_fresh_max_days: int) -> Dict[str, Any]:
+def make_nav_overlay_row(
+    *,
+    ticker: str,
+    nav: Optional[float],
+    nav_date: Optional[pd.Timestamp],
+    source_url: Optional[str],
+    note: Optional[str],
+    source_kind: str,
+    latest_price_by_ticker: Dict[str, Dict[str, Any]],
+    nav_fresh_max_days: int,
+) -> Dict[str, Any]:
+    ticker = str(ticker or "").upper().strip()
+    px = latest_price_by_ticker.get(ticker, {})
+    market_close = to_float(px.get("close"))
+    market_date = parse_date(px.get("data_date"))
+
+    valid_for_stats = bool(ticker and nav is not None and nav > 0 and nav_date is not None)
+    premium_discount_pct = safe_pct(market_close, nav) if (valid_for_stats and market_close is not None) else None
+
+    nav_age_days = None
+    fresh_for_rule = False
+    if valid_for_stats and nav_date is not None and market_date is not None:
+        nav_age_days = int((market_date - nav_date).days)
+        fresh_for_rule = bool(nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None)
+
+    return {
+        "ticker": ticker,
+        "nav": safe_num(nav),
+        "nav_date": nav_date.strftime("%Y-%m-%d") if nav_date is not None else None,
+        "market_close": safe_num(market_close),
+        "market_date": market_date.strftime("%Y-%m-%d") if market_date is not None else None,
+        "premium_discount_pct": safe_num(premium_discount_pct),
+        "nav_age_days": nav_age_days,
+        "fresh_for_rule": fresh_for_rule,
+        "valid_for_stats": valid_for_stats,
+        "template_excluded": not valid_for_stats,
+        "source_url": source_url,
+        "note": note,
+        "source_kind": source_kind,
+    }
+
+
+def load_manual_nav_rows(
+    path: Path,
+    latest_price_by_ticker: Dict[str, Dict[str, Any]],
+    nav_fresh_max_days: int,
+) -> Dict[str, Any]:
     raw = read_json(path, default={}) or {}
     items = raw.get("items", []) if isinstance(raw, dict) else []
-    out_rows: List[Dict[str, Any]] = []
+    rows: List[Dict[str, Any]] = []
 
     for item in items:
         if not isinstance(item, dict):
             continue
+        row = make_nav_overlay_row(
+            ticker=str(item.get("ticker", "")).upper().strip(),
+            nav=to_float(item.get("nav")),
+            nav_date=parse_date(item.get("nav_date")),
+            source_url=item.get("source_url"),
+            note=item.get("note"),
+            source_kind="manual",
+            latest_price_by_ticker=latest_price_by_ticker,
+            nav_fresh_max_days=nav_fresh_max_days,
+        )
+        rows.append(row)
 
-        ticker = str(item.get("ticker", "")).upper().strip()
-        nav = to_float(item.get("nav"))
-        nav_date = parse_date(item.get("nav_date"))
-        px = latest_price_by_ticker.get(ticker, {})
-        market_close = to_float(px.get("close"))
-        market_date = parse_date(px.get("data_date"))
-
-        valid_for_stats = bool(ticker and nav is not None and nav > 0 and nav_date is not None)
-        premium_discount_pct = safe_pct(market_close, nav) if (valid_for_stats and market_close is not None) else None
-
-        nav_age_days = None
-        fresh_for_rule = False
-        if valid_for_stats and nav_date is not None and market_date is not None:
-            nav_age_days = int((market_date - nav_date).days)
-            fresh_for_rule = bool(nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None)
-
-        out_rows.append({
-            "ticker": ticker,
-            "nav": safe_num(nav),
-            "nav_date": nav_date.strftime("%Y-%m-%d") if nav_date is not None else None,
-            "market_close": safe_num(market_close),
-            "market_date": market_date.strftime("%Y-%m-%d") if market_date is not None else None,
-            "premium_discount_pct": safe_num(premium_discount_pct),
-            "nav_age_days": nav_age_days,
-            "fresh_for_rule": fresh_for_rule,
-            "valid_for_stats": valid_for_stats,
-            "template_excluded": not valid_for_stats,
-            "source_url": item.get("source_url"),
-            "note": item.get("note"),
-        })
-
-    valid_rows = [r for r in out_rows if r.get("valid_for_stats")]
-    rows_with_discount = [r for r in valid_rows if r.get("premium_discount_pct") is not None]
-    fresh_rows = [r for r in rows_with_discount if r.get("fresh_for_rule")]
-
-    median_discount_fresh = np.median([float(r["premium_discount_pct"]) for r in fresh_rows]) if fresh_rows else None
-    median_discount_all = np.median([float(r["premium_discount_pct"]) for r in rows_with_discount]) if rows_with_discount else None
-
-    raw_row_count = len(out_rows)
-    valid_count = len(valid_rows)
+    raw_row_count = len(rows)
+    valid_count = sum(1 for r in rows if r.get("valid_for_stats"))
     template_excluded_count = raw_row_count - valid_count
-
-    if len(fresh_rows) >= 3:
-        nav_confidence = "OK"
-    elif len(fresh_rows) >= 1:
-        nav_confidence = "PARTIAL"
-    elif len(valid_rows) >= 1:
-        nav_confidence = "LIMITED"
-    elif raw_row_count > 0:
-        nav_confidence = "TEMPLATE_ONLY"
-    else:
-        nav_confidence = "NA"
 
     return {
         "path": str(path),
         "schema_version": raw.get("schema_version") if isinstance(raw, dict) else None,
         "as_of_date": raw.get("as_of_date") if isinstance(raw, dict) else None,
-        "nav_fresh_max_days": nav_fresh_max_days,
+        "notes": raw.get("notes") if isinstance(raw, dict) else None,
         "raw_row_count": raw_row_count,
         "template_excluded_count": template_excluded_count,
-        "coverage_total": valid_count,
+        "items": rows,
+    }
+
+
+def sec_fetch_json(session: requests.Session, url: str, timeout: int) -> Any:
+    r = session.get(url, timeout=timeout)
+    r.raise_for_status()
+    return r.json()
+
+
+def sec_fetch_text(session: requests.Session, url: str, timeout: int) -> str:
+    r = session.get(url, timeout=timeout)
+    r.raise_for_status()
+    return r.text
+
+
+def get_sec_ticker_to_cik_map(session: requests.Session, timeout: int) -> Dict[str, str]:
+    raw = sec_fetch_json(session, SEC_TICKER_MAP_URL, timeout=timeout)
+    out: Dict[str, str] = {}
+    if isinstance(raw, dict):
+        for _, item in raw.items():
+            if not isinstance(item, dict):
+                continue
+            ticker = str(item.get("ticker", "")).upper().strip()
+            cik_str = str(item.get("cik_str", "")).strip()
+            if ticker and cik_str.isdigit():
+                out[ticker] = cik_str.zfill(10)
+    return out
+
+
+def get_sec_filing_candidates(
+    session: requests.Session,
+    cik10: str,
+    timeout: int,
+) -> List[Dict[str, Any]]:
+    url = SEC_SUBMISSIONS_URL.format(cik10=cik10)
+    raw = sec_fetch_json(session, url, timeout=timeout)
+
+    recent = (((raw or {}).get("filings") or {}).get("recent") or {})
+    forms = recent.get("form", []) or []
+    filing_dates = recent.get("filingDate", []) or []
+    accession_numbers = recent.get("accessionNumber", []) or []
+    primary_documents = recent.get("primaryDocument", []) or []
+
+    n = min(len(forms), len(filing_dates), len(accession_numbers), len(primary_documents))
+    out: List[Dict[str, Any]] = []
+
+    for i in range(n):
+        form = str(forms[i] or "").strip().upper()
+        if form not in AUTO_NAV_ALLOWED_FORMS:
+            continue
+
+        filing_date = str(filing_dates[i] or "").strip()
+        accession = str(accession_numbers[i] or "").strip()
+        primary_doc = str(primary_documents[i] or "").strip()
+        if not filing_date or not accession or not primary_doc:
+            continue
+
+        out.append({
+            "form": form,
+            "filing_date": filing_date,
+            "accession_number": accession,
+            "primary_document": primary_doc,
+            "source_url": SEC_ARCHIVES_DOC_URL.format(
+                cik_int=str(int(cik10)),
+                accession_nodash=accession.replace("-", ""),
+                primary_doc=primary_doc,
+            ),
+        })
+
+    # recent arrays are usually latest-first; keep order
+    return out
+
+
+def filing_html_to_text(raw_text: str) -> str:
+    text = html_lib.unescape(raw_text or "")
+    text = HTML_TAG_RE.sub(" ", text)
+    text = WHITESPACE_RE.sub(" ", text)
+    return text.strip()
+
+
+def extract_nav_per_share_from_text(text: str, market_close: Optional[float] = None) -> Tuple[Optional[float], Optional[str]]:
+    if not text:
+        return None, None
+
+    candidates: List[Tuple[float, str]] = []
+
+    for pat in NAV_REGEX_PATTERNS:
+        for m in pat.finditer(text):
+            val = to_float(m.group(1))
+            if val is None:
+                continue
+            if not (0.5 <= val <= 100.0):
+                continue
+            candidates.append((float(val), pat.pattern))
+
+    if not candidates:
+        return None, None
+
+    # dedupe while keeping first pattern hit
+    dedup: List[Tuple[float, str]] = []
+    seen_vals = set()
+    for val, pat in candidates:
+        key = round(val, 4)
+        if key in seen_vals:
+            continue
+        seen_vals.add(key)
+        dedup.append((val, pat))
+
+    if market_close is None or market_close <= 0:
+        best_val, best_pat = dedup[0]
+        return round(best_val, 6), best_pat
+
+    def score(item: Tuple[float, str]) -> float:
+        val = item[0]
+        ratio = val / market_close if market_close > 0 else 1.0
+        if ratio <= 0:
+            return 1e9
+        return abs(math.log(ratio))
+
+    best_val, best_pat = sorted(dedup, key=score)[0]
+    return round(best_val, 6), best_pat
+
+
+def fetch_auto_nav_rows_from_sec(
+    tickers: List[str],
+    latest_price_by_ticker: Dict[str, Dict[str, Any]],
+    nav_fresh_max_days: int,
+    timeout: int,
+    sec_user_agent: str,
+    nav_auto_max_filings: int,
+) -> Dict[str, Any]:
+    session = make_requests_session(sec_user_agent)
+
+    out_rows: List[Dict[str, Any]] = []
+    notes: List[str] = []
+    attempted = 0
+    found = 0
+
+    try:
+        ticker_map = get_sec_ticker_to_cik_map(session, timeout=timeout)
+    except Exception as e:
+        return {
+            "enabled": True,
+            "source": "sec_filings_regex",
+            "attempted_count": 0,
+            "found_count": 0,
+            "rows": [],
+            "notes": [f"ERR:ticker_map:{type(e).__name__}:{str(e)[:160]}"],
+        }
+
+    for ticker in tickers:
+        if ticker not in DEFAULT_BDC_TICKERS:
+            continue
+        attempted += 1
+
+        cik10 = ticker_map.get(ticker)
+        market_close = to_float((latest_price_by_ticker.get(ticker) or {}).get("close"))
+
+        if not cik10:
+            notes.append(f"{ticker}:ERR:no_cik")
+            continue
+
+        try:
+            candidates = get_sec_filing_candidates(session, cik10, timeout=timeout)
+        except Exception as e:
+            notes.append(f"{ticker}:ERR:submissions:{type(e).__name__}:{str(e)[:120]}")
+            continue
+
+        if not candidates:
+            notes.append(f"{ticker}:ERR:no_recent_filing_candidates")
+            continue
+
+        matched = False
+        for cand in candidates[:max(1, nav_auto_max_filings)]:
+            url = cand["source_url"]
+            try:
+                raw_text = sec_fetch_text(session, url, timeout=timeout)
+                text = filing_html_to_text(raw_text)
+                nav_val, pat = extract_nav_per_share_from_text(text, market_close=market_close)
+                if nav_val is None:
+                    continue
+
+                nav_date = parse_date(cand.get("filing_date"))
+                note = f"auto_sec:{cand.get('form')}:{cand.get('filing_date')}:pattern_match"
+                if pat:
+                    note += f":regex={pat[:80]}"
+
+                row = make_nav_overlay_row(
+                    ticker=ticker,
+                    nav=nav_val,
+                    nav_date=nav_date,
+                    source_url=url,
+                    note=note,
+                    source_kind="auto_sec",
+                    latest_price_by_ticker=latest_price_by_ticker,
+                    nav_fresh_max_days=nav_fresh_max_days,
+                )
+                out_rows.append(row)
+                found += 1
+                matched = True
+                notes.append(f"{ticker}:OK:{cand.get('form')}:{cand.get('filing_date')}")
+                break
+            except Exception as e:
+                notes.append(f"{ticker}:WARN:doc_fetch:{cand.get('form')}:{type(e).__name__}:{str(e)[:100]}")
+                continue
+
+        if not matched:
+            notes.append(f"{ticker}:ERR:no_nav_match")
+
+    return {
+        "enabled": True,
+        "source": "sec_filings_regex",
+        "attempted_count": attempted,
+        "found_count": found,
+        "rows": out_rows,
+        "notes": notes,
+    }
+
+
+def build_nav_overlay(
+    manual_nav_path: Path,
+    latest_price_by_ticker: Dict[str, Dict[str, Any]],
+    nav_fresh_max_days: int,
+    auto_nav_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    manual = load_manual_nav_rows(manual_nav_path, latest_price_by_ticker, nav_fresh_max_days)
+    manual_rows = manual["items"]
+    auto_rows = list(auto_nav_result.get("rows") or [])
+
+    # effective rows: auto first, then manual valid rows override same ticker
+    effective_by_ticker: Dict[str, Dict[str, Any]] = {}
+
+    for r in auto_rows:
+        if r.get("valid_for_stats"):
+            effective_by_ticker[r["ticker"]] = r
+
+    manual_override_tickers: List[str] = []
+    for r in manual_rows:
+        if r.get("valid_for_stats"):
+            if r["ticker"] in effective_by_ticker:
+                manual_override_tickers.append(r["ticker"])
+            effective_by_ticker[r["ticker"]] = r
+
+    effective_rows = list(effective_by_ticker.values())
+    invalid_manual_rows = [r for r in manual_rows if not r.get("valid_for_stats")]
+
+    display_rows = sorted(
+        effective_rows + invalid_manual_rows,
+        key=lambda x: (
+            0 if x.get("valid_for_stats") else 1,
+            x.get("ticker") or "",
+        )
+    )
+
+    rows_with_discount = [r for r in effective_rows if r.get("premium_discount_pct") is not None]
+    fresh_rows = [r for r in rows_with_discount if r.get("fresh_for_rule")]
+
+    median_discount_fresh = np.median([float(r["premium_discount_pct"]) for r in fresh_rows]) if fresh_rows else None
+    median_discount_all = np.median([float(r["premium_discount_pct"]) for r in rows_with_discount]) if rows_with_discount else None
+
+    if len(fresh_rows) >= 3:
+        nav_confidence = "OK"
+    elif len(fresh_rows) >= 1:
+        nav_confidence = "PARTIAL"
+    elif len(effective_rows) >= 1:
+        nav_confidence = "LIMITED"
+    elif int(manual.get("raw_row_count") or 0) > 0:
+        nav_confidence = "TEMPLATE_ONLY"
+    else:
+        nav_confidence = "NA"
+
+    return {
+        "path": str(manual_nav_path),
+        "schema_version": manual.get("schema_version"),
+        "as_of_date": manual.get("as_of_date"),
+        "nav_fresh_max_days": nav_fresh_max_days,
+        "raw_row_count": manual.get("raw_row_count"),
+        "template_excluded_count": manual.get("template_excluded_count"),
+        "manual_valid_count": sum(1 for r in manual_rows if r.get("valid_for_stats")),
+        "auto_enabled": bool(auto_nav_result.get("enabled")),
+        "auto_source": auto_nav_result.get("source"),
+        "auto_attempted_count": int(auto_nav_result.get("attempted_count") or 0),
+        "auto_found_count": int(auto_nav_result.get("found_count") or 0),
+        "auto_notes": auto_nav_result.get("notes") or [],
+        "manual_override_tickers": sorted(set(manual_override_tickers)),
+        "coverage_total": len(effective_rows),
         "coverage_fresh": len(fresh_rows),
         "median_discount_pct_fresh": safe_num(median_discount_fresh),
         "median_discount_pct_all": safe_num(median_discount_all),
         "confidence": nav_confidence,
-        "items": sorted(out_rows, key=lambda x: (x.get("premium_discount_pct") if x.get("premium_discount_pct") is not None else 9999.0)),
+        "items": display_rows,
     }
 
 
@@ -625,18 +957,15 @@ def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
         chosen_row: Optional[Dict[str, Any]] = None
         chosen_module: Optional[str] = None
 
-        # 1) fixed-path module search against actual unified schema
         for module_name in preferred_modules:
             rows = get_module_rows(raw, module_name)
             row = find_series_in_rows(rows, series)
             if row is None:
                 continue
-
             chosen_row = row
             chosen_module = module_name
             break
 
-        # 2) global fallback recursive search only if preferred path misses
         if chosen_row is None:
             fallback = get_best_candidate_from_obj(raw, series)
             if fallback is not None:
@@ -981,12 +1310,18 @@ def build_report(latest: Dict[str, Any]) -> str:
     ))
     lines.append("")
 
-    lines.append("## 2) NAV Overlay (manual, optional)")
+    lines.append("## 2) NAV Overlay (manual + auto SEC, optional)")
     lines.append(f"- path: `{nav.get('path')}`")
     lines.append(f"- as_of_date: `{nav.get('as_of_date')}`")
     lines.append(f"- confidence: `{nav.get('confidence')}`")
     lines.append(f"- raw_row_count: `{nav.get('raw_row_count')}`")
     lines.append(f"- template_excluded_count: `{nav.get('template_excluded_count')}`")
+    lines.append(f"- manual_valid_count: `{nav.get('manual_valid_count')}`")
+    lines.append(f"- auto_enabled: `{nav.get('auto_enabled')}`")
+    lines.append(f"- auto_source: `{nav.get('auto_source')}`")
+    lines.append(f"- auto_attempted_count: `{nav.get('auto_attempted_count')}`")
+    lines.append(f"- auto_found_count: `{nav.get('auto_found_count')}`")
+    lines.append(f"- manual_override_tickers: `{nav.get('manual_override_tickers')}`")
     lines.append(f"- coverage_total: `{nav.get('coverage_total')}`")
     lines.append(f"- coverage_fresh: `{nav.get('coverage_fresh')}`")
     lines.append(f"- median_discount_pct_fresh: `{nav.get('median_discount_pct_fresh')}`")
@@ -996,6 +1331,7 @@ def build_report(latest: Dict[str, Any]) -> str:
         nav.get("items", []),
         [
             ("ticker", "ticker"),
+            ("source_kind", "source_kind"),
             ("nav", "nav"),
             ("nav_date", "nav_date"),
             ("market_close", "market_close"),
@@ -1009,6 +1345,11 @@ def build_report(latest: Dict[str, Any]) -> str:
             ("note", "note"),
         ],
     ))
+    if nav.get("auto_notes"):
+        lines.append("")
+        lines.append("### NAV auto fetch notes")
+        for note in nav.get("auto_notes", []):
+            lines.append(f"- {note}")
     lines.append("")
 
     lines.append("## 3) Event Overlay (manual, optional)")
@@ -1131,7 +1472,32 @@ def main() -> None:
             source_notes.append(f"{t}:{err}")
 
     basket_summary = compute_basket_summary(price_rows, basket_tickers)
-    nav_info = load_manual_nav(manual_nav_path, latest_price_by_ticker, nav_fresh_max_days=args.nav_fresh_max_days)
+
+    if args.nav_auto_source == "sec":
+        auto_nav_result = fetch_auto_nav_rows_from_sec(
+            tickers=tickers,
+            latest_price_by_ticker=latest_price_by_ticker,
+            nav_fresh_max_days=args.nav_fresh_max_days,
+            timeout=args.timeout,
+            sec_user_agent=args.sec_user_agent,
+            nav_auto_max_filings=args.nav_auto_max_filings,
+        )
+    else:
+        auto_nav_result = {
+            "enabled": False,
+            "source": "off",
+            "attempted_count": 0,
+            "found_count": 0,
+            "rows": [],
+            "notes": ["auto_nav_disabled"],
+        }
+
+    nav_info = build_nav_overlay(
+        manual_nav_path=manual_nav_path,
+        latest_price_by_ticker=latest_price_by_ticker,
+        nav_fresh_max_days=args.nav_fresh_max_days,
+        auto_nav_result=auto_nav_result,
+    )
     event_info = load_manual_events(manual_events_path, recent_days=args.event_recent_days)
     reference_context = load_reference_context(unified_json_path) if unified_json_path else {
         "enabled": False,
@@ -1164,7 +1530,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -1173,6 +1539,8 @@ def main() -> None:
                 "lookback_calendar_days": args.lookback_calendar_days,
                 "event_recent_days": args.event_recent_days,
                 "nav_fresh_max_days": args.nav_fresh_max_days,
+                "nav_auto_source": args.nav_auto_source,
+                "nav_auto_max_filings": args.nav_auto_max_filings,
             },
         },
         "summary": {
@@ -1200,10 +1568,11 @@ def main() -> None:
         "notes": [
             "This module is display-only / advisory-only by design.",
             "HY spread / HYG-IEF / OFR_FSI are NOT recomputed here.",
-            "Manual overlays are expected for event flags and latest NAV values.",
+            "Manual overlays are expected for event flags and may override auto NAV values.",
             "Template / invalid manual rows are excluded from coverage/count/median statistics.",
             "combined_signal should be interpreted together with signal_basis and structural_confidence.",
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
+            "Auto NAV from SEC uses heuristic regex extraction on official filing text and may fail; manual valid rows override auto rows.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
