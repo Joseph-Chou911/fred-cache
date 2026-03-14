@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.6)
+build_private_credit_monitor.py (v1.7)
 
 Purpose
 -------
@@ -17,13 +17,14 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.6 changes
+v1.7 changes
 ------------
-- Keep v1.5 structure
-- Add hard exclusion for date-component contamination (e.g. Dec 31, 2025 -> 31)
-- REVIEW rows are no longer included in structural stats
-- Add implied NAV extractor from price + premium/discount sentence
-- Keep matched_snippet / review_flag / dq_status / used_in_stats for auditability
+- Keep v1.6 structure
+- Add nav_asof_date extraction from filing text/snippets
+- Use nav_asof_date (when available) for nav_age_days / fresh_for_rule
+- Keep filing_date separately for auditability
+- Add nav_date_source / nav_asof_match_text fields to report and JSON
+- Fallback to filing_date only when no reliable as-of date is found
 
 Outputs
 -------
@@ -59,7 +60,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.6"
+SCRIPT_VERSION = "v1.7"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -118,16 +119,14 @@ DIRECT_NAV_REGEX_SPECS = [
     ),
 ]
 
-# Example:
-# "... closing sales price ... was $11.95 per share, which represented a discount of approximately 19.3% to net asset value per share ..."
 IMPLIED_NAV_REGEX_SPECS = [
     (
         "closing_price_discount_to_nav",
         re.compile(
-            r"(?:closing sales price|last reported closing sales price|closing price)[^$]{0,120}"
+            r"(?:closing sales price|last reported closing sales price|closing price)[^$]{0,140}"
             r"\$([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share"
-            r"[^%]{0,220}?(discount|premium)\s+of\s+(?:approximately\s+)?([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*%"
-            r"[^.]{0,180}?net asset value per share",
+            r"[^%]{0,260}?(discount|premium)\s+of\s+(?:approximately\s+)?([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*%"
+            r"[^.]{0,220}?net asset value per share",
             re.I,
         ),
     ),
@@ -166,7 +165,56 @@ SUSPICIOUS_SNIPPET_TERMS = [
 
 MONTH_HINTS = [
     "january", "february", "march", "april", "may", "june",
-    "july", "august", "september", "october", "november", "december"
+    "july", "august", "september", "october", "november", "december",
+    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+]
+
+MONTH_TOKEN_MAP = {
+    "january": 1, "jan": 1,
+    "february": 2, "feb": 2,
+    "march": 3, "mar": 3,
+    "april": 4, "apr": 4,
+    "may": 5,
+    "june": 6, "jun": 6,
+    "july": 7, "jul": 7,
+    "august": 8, "aug": 8,
+    "september": 9, "sep": 9, "sept": 9,
+    "october": 10, "oct": 10,
+    "november": 11, "nov": 11,
+    "december": 12, "dec": 12,
+}
+
+ASOF_DATE_REGEX_SPECS = [
+    (
+        "as_of_monthname",
+        re.compile(
+            r"\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            re.I,
+        ),
+    ),
+    (
+        "period_ended_monthname",
+        re.compile(
+            r"\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
+            re.I,
+        ),
+    ),
+    (
+        "as_of_numeric",
+        re.compile(
+            r"\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            re.I,
+        ),
+    ),
+    (
+        "period_ended_numeric",
+        re.compile(
+            r"\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
+            re.I,
+        ),
+    ),
 ]
 
 HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -196,7 +244,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
 
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.6 contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.7 contact@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     return p.parse_args()
 
@@ -256,7 +304,7 @@ def create_manual_nav_template(path: Path) -> None:
         "as_of_date": "YYYY-MM-DD",
         "notes": [
             "Manual NAV overlay for selected BDC / proxy names.",
-            "nav_date should be the date the reported NAV applies to, e.g. quarter-end.",
+            "nav_date should be the NAV as-of date, e.g. quarter-end.",
             "This script will compare latest market close vs provided NAV.",
             "Template rows are excluded from counts/statistics until they become valid.",
             "Manual valid rows override auto SEC NAV rows for the same ticker.",
@@ -593,6 +641,61 @@ def is_date_component_near_number(text: str, num_start: int, num_end: int) -> bo
     return bool(has_month_left and has_year_right)
 
 
+def normalize_month_token(token: str) -> Optional[int]:
+    t = (token or "").strip().lower().rstrip(".")
+    return MONTH_TOKEN_MAP.get(t)
+
+
+def make_ts(year: int, month: int, day: int) -> Optional[pd.Timestamp]:
+    try:
+        return pd.Timestamp(year=year, month=month, day=day).normalize()
+    except Exception:
+        return None
+
+
+def extract_nav_asof_date(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
+    """
+    Extract NAV as-of date from local context around a candidate match.
+    Preference:
+    1) explicit 'as of'
+    2) 'period ended' / 'year ended' patterns
+    """
+    lo = max(0, start - 450)
+    hi = min(len(text), end + 450)
+    ctx = text[lo:hi]
+
+    best_ts: Optional[pd.Timestamp] = None
+    best_label: Optional[str] = None
+    best_text: Optional[str] = None
+    best_rank: Optional[int] = None
+
+    for idx, (label, pat) in enumerate(ASOF_DATE_REGEX_SPECS):
+        for m in pat.finditer(ctx):
+            ts: Optional[pd.Timestamp] = None
+            if label.endswith("monthname"):
+                month = normalize_month_token(m.group(1))
+                day = int(m.group(2))
+                year = int(m.group(3))
+                if month is not None:
+                    ts = make_ts(year=year, month=month, day=day)
+            else:
+                a = int(m.group(1))
+                b = int(m.group(2))
+                year = int(m.group(3))
+                ts = make_ts(year=year, month=a, day=b)
+
+            if ts is None:
+                continue
+
+            if best_rank is None or idx < best_rank or (idx == best_rank and ts > (best_ts or ts)):
+                best_ts = ts
+                best_label = label
+                best_text = clean_snippet(m.group(0), max_len=120)
+                best_rank = idx
+
+    return best_ts, best_label, best_text
+
+
 def score_direct_nav_candidate(
     *,
     value: float,
@@ -656,7 +759,6 @@ def extract_nav_candidates_from_text(
     candidates: List[Dict[str, Any]] = []
     seen = set()
 
-    # 1) Direct NAV candidates
     for pattern_label, pat in DIRECT_NAV_REGEX_SPECS:
         for m in pat.finditer(text):
             val = to_float(m.group(1))
@@ -677,6 +779,8 @@ def extract_nav_candidates_from_text(
             suspicious_terms_flag = has_suspicious_terms(snippet_lower)
             date_component_flag = is_date_component_near_number(text, m.start(1), m.end(1))
             dollar_near_value = "$" in text[max(0, m.start(1) - 5):m.start(1)]
+
+            nav_asof_date, nav_date_source, nav_asof_match_text = extract_nav_asof_date(text, m.start(), m.end())
 
             score = score_direct_nav_candidate(
                 value=float(val),
@@ -709,9 +813,11 @@ def extract_nav_candidates_from_text(
                 "date_component_flag": date_component_flag,
                 "match_score": score,
                 "premium_discount_est": premium_discount_est,
+                "nav_asof_date": nav_asof_date.strftime("%Y-%m-%d") if nav_asof_date is not None else None,
+                "nav_date_source": nav_date_source,
+                "nav_asof_match_text": nav_asof_match_text,
             })
 
-    # 2) Implied NAV candidates from price + discount/premium sentence
     for pattern_label, pat in IMPLIED_NAV_REGEX_SPECS:
         for m in pat.finditer(text):
             price = to_float(m.group(1))
@@ -734,6 +840,7 @@ def extract_nav_candidates_from_text(
 
             snippet = extract_local_snippet(text, m.start(), m.end(), radius=180)
             score = score_implied_nav_candidate(snippet)
+            nav_asof_date, nav_date_source, nav_asof_match_text = extract_nav_asof_date(text, m.start(), m.end())
 
             premium_discount_est = None
             if market_close is not None and market_close > 0:
@@ -758,6 +865,9 @@ def extract_nav_candidates_from_text(
                 "derived_from_price": safe_num(price),
                 "derived_from_rel": rel,
                 "derived_from_pct": safe_num(pct),
+                "nav_asof_date": nav_asof_date.strftime("%Y-%m-%d") if nav_asof_date is not None else None,
+                "nav_date_source": nav_date_source,
+                "nav_asof_match_text": nav_asof_match_text,
             })
 
     candidates = sorted(
@@ -776,6 +886,19 @@ def extract_nav_candidates_from_text(
         c["candidate_count"] = len(candidates)
 
     return trimmed
+
+
+def choose_effective_nav_date(nav_asof_date: Optional[pd.Timestamp], filing_date: Optional[pd.Timestamp]) -> Tuple[Optional[pd.Timestamp], str]:
+    """
+    Prefer NAV as-of date when available and not after the filing date.
+    Otherwise fall back to filing date.
+    """
+    if nav_asof_date is not None:
+        if filing_date is None or nav_asof_date <= filing_date:
+            return nav_asof_date, "nav_asof_extracted"
+    if filing_date is not None:
+        return filing_date, "filing_date_fallback"
+    return nav_asof_date, "nav_date_unknown"
 
 
 def make_nav_overlay_row(
@@ -841,6 +964,9 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("suspicious_terms_flag", False)
         row.setdefault("date_component_flag", False)
         row.setdefault("extraction_method", "manual")
+        row.setdefault("filing_date", None)
+        row.setdefault("nav_date_source", "manual_input")
+        row.setdefault("nav_asof_match_text", None)
         return row
 
     used = bool(row.get("valid_for_stats"))
@@ -903,15 +1029,21 @@ def load_manual_nav_rows(
     for item in items:
         if not isinstance(item, dict):
             continue
+        nav_date = parse_date(item.get("nav_date"))
         row = make_nav_overlay_row(
             ticker=str(item.get("ticker", "")).upper().strip(),
             nav=to_float(item.get("nav")),
-            nav_date=parse_date(item.get("nav_date")),
+            nav_date=nav_date,
             source_url=item.get("source_url"),
             note=item.get("note"),
             source_kind="manual",
             latest_price_by_ticker=latest_price_by_ticker,
             nav_fresh_max_days=nav_fresh_max_days,
+            extra_fields={
+                "filing_date": None,
+                "nav_date_source": "manual_input",
+                "nav_asof_match_text": None,
+            },
         )
         row = finalize_nav_row_dq(row)
         rows.append(row)
@@ -1027,7 +1159,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v3",
+            "source": "sec_filings_regex_v4",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -1058,6 +1190,7 @@ def fetch_auto_nav_rows_from_sec(
         fallback_review_row: Optional[Dict[str, Any]] = None
 
         for filing in filings[:max(1, nav_auto_max_filings)]:
+            filing_date = parse_date(filing.get("filing_date"))
             try:
                 raw_text = sec_fetch_text(session, filing["source_url"], timeout=timeout)
                 text = filing_html_to_text(raw_text)
@@ -1076,10 +1209,13 @@ def fetch_auto_nav_rows_from_sec(
                 continue
 
             for cand in candidates:
+                extracted_asof = parse_date(cand.get("nav_asof_date"))
+                effective_nav_date, nav_date_source = choose_effective_nav_date(extracted_asof, filing_date)
+
                 row = make_nav_overlay_row(
                     ticker=ticker,
                     nav=to_float(cand.get("nav")),
-                    nav_date=parse_date(filing.get("filing_date")),
+                    nav_date=effective_nav_date,
                     source_url=filing["source_url"],
                     note=f"auto_sec:{filing.get('form')}:{filing.get('filing_date')}:candidate_rank={cand.get('candidate_rank')}",
                     source_kind="auto_sec",
@@ -1100,7 +1236,9 @@ def fetch_auto_nav_rows_from_sec(
                         "derived_from_price": cand.get("derived_from_price"),
                         "derived_from_rel": cand.get("derived_from_rel"),
                         "derived_from_pct": cand.get("derived_from_pct"),
-                        "nav_date_source": "filing_date_fallback",
+                        "nav_date_source": nav_date_source,
+                        "nav_asof_match_text": cand.get("nav_asof_match_text"),
+                        "nav_asof_date_extracted": cand.get("nav_asof_date"),
                     },
                 )
                 row = finalize_nav_row_dq(row)
@@ -1126,7 +1264,7 @@ def fetch_auto_nav_rows_from_sec(
             notes.append(
                 f"{ticker}:OK:{chosen_row.get('filing_form')}:{chosen_row.get('filing_date')}:"
                 f"score={chosen_row.get('match_score')}:dq={chosen_row.get('dq_status')}:"
-                f"method={chosen_row.get('extraction_method')}"
+                f"method={chosen_row.get('extraction_method')}:nav_date_source={chosen_row.get('nav_date_source')}"
             )
         elif fallback_review_row is not None:
             out_rows.append(fallback_review_row)
@@ -1134,14 +1272,14 @@ def fetch_auto_nav_rows_from_sec(
             notes.append(
                 f"{ticker}:REVIEW_ONLY:{fallback_review_row.get('filing_form')}:{fallback_review_row.get('filing_date')}:"
                 f"score={fallback_review_row.get('match_score')}:dq={fallback_review_row.get('dq_status')}:"
-                f"method={fallback_review_row.get('extraction_method')}"
+                f"method={fallback_review_row.get('extraction_method')}:nav_date_source={fallback_review_row.get('nav_date_source')}"
             )
         else:
             notes.append(f"{ticker}:ERR:no_nav_match")
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v3",
+        "source": "sec_filings_regex_v4",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -1698,6 +1836,8 @@ def build_report(latest: Dict[str, Any]) -> str:
             ("matched_pattern", "matched_pattern"),
             ("nav", "nav"),
             ("nav_date", "nav_date"),
+            ("nav_date_source", "nav_date_source"),
+            ("filing_date", "filing_date"),
             ("market_close", "market_close"),
             ("market_date", "market_date"),
             ("premium_discount_pct", "premium_discount_pct"),
@@ -1719,6 +1859,8 @@ def build_report(latest: Dict[str, Any]) -> str:
             )
             snippet = r.get("matched_snippet")
             lines.append(f"  - snippet: `{snippet if snippet else 'NA'}`")
+            if r.get("nav_asof_match_text"):
+                lines.append(f"  - nav_asof_match: `{r.get('nav_asof_match_text')}`")
             if r.get("derived_from_price") is not None:
                 lines.append(
                     f"  - implied_from: price={r.get('derived_from_price')} | "
@@ -1909,7 +2051,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v3 + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v4 + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -1957,6 +2099,7 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
+            "When available, nav_asof_date extracted from filing text is used for nav_age_days / fresh_for_rule; filing_date is retained for audit.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
