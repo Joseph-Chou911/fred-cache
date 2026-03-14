@@ -1,14 +1,17 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-14T03:57:53Z`
+- generated_at_utc: `2026-03-14T04:40:54Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.0`
+- script_version: `v1.1`
 - out_dir: `private_credit_cache`
-- signal: **WATCH**
-- overall_confidence: `OK`
-- reasons: `bdc_basket_median_ret5<=-4`
-- tags: `MARKET_PROXY_WEAK`
+- proxy_signal: **WATCH**
+- structural_signal: **NONE**
+- combined_signal: **WATCH**
+- signal_basis: `PROXY_ONLY`
+- overall_confidence: `PROXY_ONLY`
+- reasons: `proxy:bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%`
+- tags: `proxy:MARKET_PROXY_WEAK`
 
 ## 1) BDC Market Proxy
 - coverage: `5`
@@ -35,29 +38,33 @@
 ## 2) NAV Overlay (manual, optional)
 - path: `private_credit_cache/inputs/manual_nav.json`
 - as_of_date: `YYYY-MM-DD`
-- confidence: `NA`
-- coverage_total: `1`
+- confidence: `TEMPLATE_ONLY`
+- raw_row_count: `1`
+- template_excluded_count: `1`
+- coverage_total: `0`
 - coverage_fresh: `0`
 - median_discount_pct_fresh: `None`
 - median_discount_pct_all: `None`
 
-| ticker | nav | nav_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | source | note |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ARCC | 0.000000 | NA | 17.860000 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
+| ticker | nav | nav_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | valid_for_stats | template_excluded | source | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ARCC | 0.000000 | NA | 17.860000 | 2026-03-13 | NA | NA | False | False | True | https://example.com/investor-relations | Reported NAV per share |
 
 ## 3) Event Overlay (manual, optional)
 - path: `private_credit_cache/inputs/manual_events.json`
 - as_of_date: `YYYY-MM-DD`
 - recent_window_days: `45`
-- event_count_total: `1`
+- raw_row_count: `1`
+- template_excluded_count: `1`
+- event_count_total: `0`
 - event_count_recent: `0`
 - alert_recent_count: `0`
 - watch_recent_count: `0`
 - latest_recent_event_date: `None`
 
-| event_date | category | entity | severity | is_recent | title | source | note |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| NA | withdrawal_limit | Example fund / lender / platform | WATCH | False | Example title | https://example.com/article | Free-form note |
+| event_date | category | entity | severity | is_recent | valid_for_stats | template_excluded | title | source | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| NA | withdrawal_limit | Example fund / lender / platform | WATCH | False | False | True | Example title | https://example.com/article | Free-form note |
 
 ## 4) Public Credit Context (reference-only; not recomputed here)
 - enabled: `True`
@@ -72,13 +79,16 @@
 
 ## 5) Confidence / DQ
 - price_confidence: `OK`
-- nav_confidence: `NA`
-- event_confidence: `OK`
-- overall_confidence: `OK`
+- nav_confidence: `TEMPLATE_ONLY`
+- event_confidence: `TEMPLATE_ONLY`
+- structural_confidence: `PROXY_ONLY`
+- overall_confidence: `PROXY_ONLY`
 - basket_coverage: `5`
 
 ## 6) Notes
 - This module is display-only / advisory-only by design.
 - HY spread / HYG-IEF / OFR_FSI are NOT recomputed here.
 - Manual overlays are expected for event flags and latest NAV values.
+- Template / invalid manual rows are excluded from coverage/count/median statistics.
+- combined_signal should be interpreted together with signal_basis and structural_confidence.
 - data_fetch_notes: all price fetches OK

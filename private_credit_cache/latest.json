@@ -1,8 +1,8 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-14T03:57:53Z",
+    "generated_at_utc": "2026-03-14T04:40:54Z",
     "script": "build_private_credit_monitor.py",
-    "script_version": "v1.0",
+    "script_version": "v1.1",
     "out_dir": "private_credit_cache",
     "source_policy": "stooq_bdc_proxy + manual_nav_overlay + manual_event_overlay + optional_unified_reference_only",
     "basket_tickers": [
@@ -25,17 +25,34 @@
   },
   "summary": {
     "signal": "WATCH",
+    "proxy_signal": "WATCH",
+    "structural_signal": "NONE",
+    "combined_signal": "WATCH",
+    "signal_basis": "PROXY_ONLY",
+    "proxy_reasons": [
+      "bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%"
+    ],
+    "structural_reasons": [
+      "no_structural_rule_triggered"
+    ],
     "reasons": [
-      "bdc_basket_median_ret5<=-4"
+      "proxy:bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%"
+    ],
+    "proxy_tags": [
+      "MARKET_PROXY_WEAK"
+    ],
+    "structural_tags": [
+      "NONE"
     ],
     "tags": [
-      "MARKET_PROXY_WEAK"
+      "proxy:MARKET_PROXY_WEAK"
     ],
     "confidence": {
       "price_confidence": "OK",
-      "nav_confidence": "NA",
-      "event_confidence": "OK",
-      "overall_confidence": "OK",
+      "nav_confidence": "TEMPLATE_ONLY",
+      "event_confidence": "TEMPLATE_ONLY",
+      "structural_confidence": "PROXY_ONLY",
+      "overall_confidence": "PROXY_ONLY",
       "basket_coverage": 5
     }
   },
@@ -170,11 +187,13 @@
     "schema_version": "private_credit_manual_nav_v1",
     "as_of_date": "YYYY-MM-DD",
     "nav_fresh_max_days": 120,
-    "coverage_total": 1,
+    "raw_row_count": 1,
+    "template_excluded_count": 1,
+    "coverage_total": 0,
     "coverage_fresh": 0,
     "median_discount_pct_fresh": null,
     "median_discount_pct_all": null,
-    "confidence": "NA",
+    "confidence": "TEMPLATE_ONLY",
     "items": [
       {
         "ticker": "ARCC",
@@ -185,6 +204,8 @@
         "premium_discount_pct": null,
         "nav_age_days": null,
         "fresh_for_rule": false,
+        "valid_for_stats": false,
+        "template_excluded": true,
         "source_url": "https://example.com/investor-relations",
         "note": "Reported NAV per share"
       }
@@ -200,7 +221,9 @@
       "Valid category: redemption_gate, withdrawal_limit, nav_markdown, warehouse_tightening, bank_pullback, default_restructuring, pik_stress, valuation_delay, semi_liquid_stress, other"
     ],
     "recent_window_days": 45,
-    "event_count_total": 1,
+    "raw_row_count": 1,
+    "template_excluded_count": 1,
+    "event_count_total": 0,
     "event_count_recent": 0,
     "alert_recent_count": 0,
     "watch_recent_count": 0,
@@ -214,7 +237,9 @@
         "title": "Example title",
         "source_url": "https://example.com/article",
         "note": "Free-form note",
-        "is_recent": false
+        "is_recent": false,
+        "valid_for_stats": false,
+        "template_excluded": true
       }
     ]
   },
@@ -253,6 +278,8 @@
     "This module is display-only / advisory-only by design.",
     "HY spread / HYG-IEF / OFR_FSI are NOT recomputed here.",
     "Manual overlays are expected for event flags and latest NAV values.",
+    "Template / invalid manual rows are excluded from coverage/count/median statistics.",
+    "combined_signal should be interpreted together with signal_basis and structural_confidence.",
     "data_fetch_notes: all price fetches OK"
   ]
 }
