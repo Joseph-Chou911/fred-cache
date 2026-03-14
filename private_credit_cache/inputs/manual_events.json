@@ -1,0 +1,20 @@
+{
+  "schema_version": "private_credit_manual_events_v1",
+  "as_of_date": "YYYY-MM-DD",
+  "notes": [
+    "Manual event overlay for private-credit-specific stress.",
+    "Valid severity: NONE / WATCH / ALERT",
+    "Valid category: redemption_gate, withdrawal_limit, nav_markdown, warehouse_tightening, bank_pullback, default_restructuring, pik_stress, valuation_delay, semi_liquid_stress, other"
+  ],
+  "events": [
+    {
+      "event_date": "YYYY-MM-DD",
+      "category": "withdrawal_limit",
+      "entity": "Example fund / lender / platform",
+      "severity": "WATCH",
+      "title": "Example title",
+      "source_url": "https://example.com/article",
+      "note": "Free-form note"
+    }
+  ]
+}

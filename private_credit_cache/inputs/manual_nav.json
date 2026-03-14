@@ -1,0 +1,18 @@
+{
+  "schema_version": "private_credit_manual_nav_v1",
+  "as_of_date": "YYYY-MM-DD",
+  "notes": [
+    "Manual NAV overlay for selected BDC / proxy names.",
+    "nav_date should be the date the reported NAV applies to, e.g. quarter-end.",
+    "This script will compare latest market close vs provided NAV."
+  ],
+  "items": [
+    {
+      "ticker": "ARCC",
+      "nav": 0.0,
+      "nav_date": "YYYY-MM-DD",
+      "source_url": "https://example.com/investor-relations",
+      "note": "Reported NAV per share"
+    }
+  ]
+}

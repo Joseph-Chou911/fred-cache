@@ -1,0 +1,258 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-03-14T03:57:53Z",
+    "script": "build_private_credit_monitor.py",
+    "script_version": "v1.0",
+    "out_dir": "private_credit_cache",
+    "source_policy": "stooq_bdc_proxy + manual_nav_overlay + manual_event_overlay + optional_unified_reference_only",
+    "basket_tickers": [
+      "ARCC",
+      "BXSL",
+      "OBDC",
+      "FSK",
+      "PSEC"
+    ],
+    "proxy_tickers": [
+      "BIZD"
+    ],
+    "params": {
+      "z_window": 60,
+      "p_window": 252,
+      "lookback_calendar_days": 600,
+      "event_recent_days": 45,
+      "nav_fresh_max_days": 120
+    }
+  },
+  "summary": {
+    "signal": "WATCH",
+    "reasons": [
+      "bdc_basket_median_ret5<=-4"
+    ],
+    "tags": [
+      "MARKET_PROXY_WEAK"
+    ],
+    "confidence": {
+      "price_confidence": "OK",
+      "nav_confidence": "NA",
+      "event_confidence": "OK",
+      "overall_confidence": "OK",
+      "basket_coverage": 5
+    }
+  },
+  "bdc_market_proxy": {
+    "status": "OK",
+    "items": [
+      {
+        "ticker": "ARCC",
+        "class": "BDC",
+        "data_date": "2026-03-13",
+        "close": 17.86,
+        "prev_close": 18.07,
+        "ret1_pct": -1.162147,
+        "ret5_pct": -4.644955,
+        "z60": -2.447509,
+        "p60": 1.666667,
+        "p252": 0.396825,
+        "drawdown_20d_pct": -8.457201,
+        "ma20": 18.910245,
+        "price_vs_ma20_pct": -5.553841,
+        "points": 413,
+        "source_url": "https://stooq.com/q/d/l/?s=arcc.us&d1=20240722&d2=20260314&i=d",
+        "note": "OK"
+      },
+      {
+        "ticker": "BXSL",
+        "class": "BDC",
+        "data_date": "2026-03-13",
+        "close": 23.65,
+        "prev_close": 23.71,
+        "ret1_pct": -0.253058,
+        "ret5_pct": -0.713686,
+        "z60": -1.494594,
+        "p60": 3.333333,
+        "p252": 0.793651,
+        "drawdown_20d_pct": -4.056795,
+        "ma20": 24.075,
+        "price_vs_ma20_pct": -1.765317,
+        "points": 413,
+        "source_url": "https://stooq.com/q/d/l/?s=bxsl.us&d1=20240722&d2=20260314&i=d",
+        "note": "OK"
+      },
+      {
+        "ticker": "FSK",
+        "class": "BDC",
+        "data_date": "2026-03-13",
+        "close": 10.09,
+        "prev_close": 10.24,
+        "ret1_pct": -1.464844,
+        "ret5_pct": -5.612722,
+        "z60": -2.230994,
+        "p60": 1.666667,
+        "p252": 0.396825,
+        "drawdown_20d_pct": -24.813711,
+        "ma20": 11.7015,
+        "price_vs_ma20_pct": -13.771739,
+        "points": 413,
+        "source_url": "https://stooq.com/q/d/l/?s=fsk.us&d1=20240722&d2=20260314&i=d",
+        "note": "OK"
+      },
+      {
+        "ticker": "OBDC",
+        "class": "BDC",
+        "data_date": "2026-03-13",
+        "close": 10.95,
+        "prev_close": 10.99,
+        "ret1_pct": -0.363967,
+        "ret5_pct": -4.533566,
+        "z60": -1.819365,
+        "p60": 3.333333,
+        "p252": 0.793651,
+        "drawdown_20d_pct": -8.060453,
+        "ma20": 11.4475,
+        "price_vs_ma20_pct": -4.345927,
+        "points": 413,
+        "source_url": "https://stooq.com/q/d/l/?s=obdc.us&d1=20240722&d2=20260314&i=d",
+        "note": "OK"
+      },
+      {
+        "ticker": "PSEC",
+        "class": "BDC",
+        "data_date": "2026-03-13",
+        "close": 2.56,
+        "prev_close": 2.65,
+        "ret1_pct": -3.396226,
+        "ret5_pct": -6.055046,
+        "z60": -1.19085,
+        "p60": 18.333333,
+        "p252": 5.15873,
+        "drawdown_20d_pct": -16.065574,
+        "ma20": 2.7858,
+        "price_vs_ma20_pct": -8.105392,
+        "points": 413,
+        "source_url": "https://stooq.com/q/d/l/?s=psec.us&d1=20240722&d2=20260314&i=d",
+        "note": "OK"
+      },
+      {
+        "ticker": "BIZD",
+        "class": "ETF_PROXY",
+        "data_date": "2026-03-13",
+        "close": 12.48,
+        "prev_close": 12.51,
+        "ret1_pct": -0.239808,
+        "ret5_pct": -2.727981,
+        "z60": -2.010963,
+        "p60": 1.666667,
+        "p252": 0.396825,
+        "drawdown_20d_pct": -7.142857,
+        "ma20": 13.004,
+        "price_vs_ma20_pct": -4.029529,
+        "points": 413,
+        "source_url": "https://stooq.com/q/d/l/?s=bizd.us&d1=20240722&d2=20260314&i=d",
+        "note": "OK"
+      }
+    ],
+    "basket_summary": {
+      "coverage": 5,
+      "median_ret1_pct": -1.162147,
+      "median_ret5_pct": -4.644955,
+      "median_z60": -1.819365,
+      "median_drawdown_20d_pct": -8.457201,
+      "extreme_z_count": 2,
+      "extreme_z_share": 40.0,
+      "ret5_le_minus5_count": 2,
+      "ret5_le_minus5_share": 40.0,
+      "below_ma20_count": 5,
+      "below_ma20_share": 100.0
+    }
+  },
+  "nav_overlay": {
+    "path": "private_credit_cache/inputs/manual_nav.json",
+    "schema_version": "private_credit_manual_nav_v1",
+    "as_of_date": "YYYY-MM-DD",
+    "nav_fresh_max_days": 120,
+    "coverage_total": 1,
+    "coverage_fresh": 0,
+    "median_discount_pct_fresh": null,
+    "median_discount_pct_all": null,
+    "confidence": "NA",
+    "items": [
+      {
+        "ticker": "ARCC",
+        "nav": 0.0,
+        "nav_date": null,
+        "market_close": 17.86,
+        "market_date": "2026-03-13",
+        "premium_discount_pct": null,
+        "nav_age_days": null,
+        "fresh_for_rule": false,
+        "source_url": "https://example.com/investor-relations",
+        "note": "Reported NAV per share"
+      }
+    ]
+  },
+  "event_overlay": {
+    "path": "private_credit_cache/inputs/manual_events.json",
+    "schema_version": "private_credit_manual_events_v1",
+    "as_of_date": "YYYY-MM-DD",
+    "notes": [
+      "Manual event overlay for private-credit-specific stress.",
+      "Valid severity: NONE / WATCH / ALERT",
+      "Valid category: redemption_gate, withdrawal_limit, nav_markdown, warehouse_tightening, bank_pullback, default_restructuring, pik_stress, valuation_delay, semi_liquid_stress, other"
+    ],
+    "recent_window_days": 45,
+    "event_count_total": 1,
+    "event_count_recent": 0,
+    "alert_recent_count": 0,
+    "watch_recent_count": 0,
+    "latest_recent_event_date": null,
+    "events": [
+      {
+        "event_date": null,
+        "category": "withdrawal_limit",
+        "entity": "Example fund / lender / platform",
+        "severity": "WATCH",
+        "title": "Example title",
+        "source_url": "https://example.com/article",
+        "note": "Free-form note",
+        "is_recent": false
+      }
+    ]
+  },
+  "public_credit_context": {
+    "enabled": true,
+    "reference_only": true,
+    "source_path": "unified_dashboard/latest.json",
+    "series": {
+      "BAMLH0A0HYM2": {
+        "found": true,
+        "signal": null,
+        "value": 3.17,
+        "data_date": "2026-03-12",
+        "reason": "abs(Z60)>=2",
+        "tag": "EXTREME_Z"
+      },
+      "HYG_IEF_RATIO": {
+        "found": true,
+        "signal": null,
+        "value": 0.8285385500575374,
+        "data_date": "2026-03-13",
+        "reason": "NA",
+        "tag": "NA"
+      },
+      "OFR_FSI": {
+        "found": true,
+        "signal": null,
+        "value": -0.925,
+        "data_date": "2026-03-11",
+        "reason": "abs(Z60)>=2;abs(Z60)>=2.5;abs(ZΔ60)>=0.75;abs(ret1%1d)>=2",
+        "tag": "EXTREME_Z,JUMP_ZD,JUMP_RET"
+      }
+    }
+  },
+  "notes": [
+    "This module is display-only / advisory-only by design.",
+    "HY spread / HYG-IEF / OFR_FSI are NOT recomputed here.",
+    "Manual overlays are expected for event flags and latest NAV values.",
+    "data_fetch_notes: all price fetches OK"
+  ]
+}
