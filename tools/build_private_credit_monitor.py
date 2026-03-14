@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.9)
+build_private_credit_monitor.py (v1.10)
 
 Purpose
 -------
@@ -17,42 +17,16 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.9 changes
-------------
-- Keep v1.8c structure
-- Split implied sentence dates into:
-  * price_obs_date   : date for observed market closing price in the sentence
-  * nav_ref_date     : date the referenced NAV belongs to
-- Keep nav_date as the effective date actually used for nav_age_days / fresh_for_rule
-- Add report markdown table escaping so pipe characters do not break table layout
-- Add NAV coverage decomposition:
-  * auto_total_count
-  * auto_used_in_stats_count
-  * auto_review_count
-  * auto_excluded_count
-  * auto_review_only_count
-  * manual_used_in_stats_count
-  * manual_invalid_count
-  * effective_auto_count
-  * effective_manual_count
-  * effective_structural_count
-  * effective_structural_fresh_count
-
-Outputs
--------
-All outputs go to a dedicated folder (default: private_credit_cache/):
-- latest.json
-- history.json
-- report.md
-- inputs/manual_events.json   (template created if absent)
-- inputs/manual_nav.json      (template created if absent)
-
-Dependencies
-------------
-- Python 3.11+
-- requests
-- pandas
-- numpy
+v1.10 changes
+-------------
+- Keep v1.9 structure
+- Add negative-context hard skip / soft-penalty filters
+- Add section/context bonus-penalty scoring
+- Prefer higher-quality implied candidates more clearly
+- Keep:
+  * price_obs_date / nav_ref_date split
+  * markdown table escaping
+  * coverage decomposition
 """
 
 from __future__ import annotations
@@ -72,7 +46,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.9"
+SCRIPT_VERSION = "v1.10"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -149,6 +123,12 @@ PATTERN_BASE_SCORE = {
     "nav_value_after_phrase": 4.2,
     "net_asset_value_of_x_per_share": 5.6,
     "closing_price_discount_to_nav": 8.5,
+}
+
+DIRECT_PATTERN_EXTRA_PENALTY = {
+    "strict_nav_with_dollar": 0.0,
+    "nav_value_after_phrase": 0.8,
+    "net_asset_value_of_x_per_share": 0.2,
 }
 
 SUSPICIOUS_SNIPPET_TERMS = [
@@ -315,6 +295,29 @@ NAV_REF_DATE_REGEX_SPECS = [
     ),
 ]
 
+HARD_SKIP_CONTEXT_REGEX_SPECS = [
+    ("example_context", re.compile(r"\bfor (?:example|instance)\b", re.I)),
+    ("hypothetical_nav_if", re.compile(r"\bif the (?:most recently computed|current) nav(?: per share)?\b", re.I)),
+    ("sell_below_nav", re.compile(r"\bsell(?:ing)? (?:our )?common stock below net asset value\b", re.I)),
+    ("stockholder_approval_below_nav", re.compile(r"\b(?:maintain|obtain) any stockholder approval[^.]{0,180}\bbelow net asset value\b", re.I)),
+]
+
+CONTEXT_PENALTY_REGEX_SPECS = [
+    ("reg_1940_act", re.compile(r"\b1940 act\b", re.I), 1.2),
+    ("preferred_stock", re.compile(r"\bpreferred (?:stock|shares)\b", re.I), 1.0),
+    ("vwap_context", re.compile(r"\bvwap\b", re.I), 0.8),
+    ("settlement_amount", re.compile(r"\b(?:ioc )?settlement amount\b", re.I), 1.0),
+    ("merger_accounting", re.compile(r"\bmerger accounting\b", re.I), 1.0),
+    ("stock_repurchase_impact", re.compile(r"\bstock repurchase programs?\b|\bincremental impact\b|\bimpact on nav\b", re.I), 0.8),
+    ("risk_factors", re.compile(r"\brisk factors\b", re.I), 0.5),
+]
+
+SECTION_BONUS_REGEX_SPECS = [
+    ("market_common_equity", re.compile(r"market for (?:registrant(?:'s)?|our) common (?:equity|stock)|common stock price range", re.I), 1.0),
+    ("nav_section", re.compile(r"\bnet asset value\b|\bfinancial highlights\b|\bper share data\b", re.I), 0.8),
+    ("shareholder_returns", re.compile(r"\bmarket value of our common stock\b|\bpremium\s*/\s*\(discount\)\b", re.I), 0.6),
+]
+
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 WHITESPACE_RE = re.compile(r"\s+")
 YEAR_RE = re.compile(r"\b20[0-9]{2}\b")
@@ -340,9 +343,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--nav-fresh-max-days", type=int, default=120, help="NAV older than this is treated as stale for aggregate rules")
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
-
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.9 contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.10 contact@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     return p.parse_args()
 
@@ -421,12 +423,6 @@ def create_manual_nav_template(path: Path) -> None:
 
 
 def normalize_ts_naive(x: Any) -> Optional[pd.Timestamp]:
-    """
-    Convert input into tz-naive normalized pandas Timestamp.
-    - tz-aware -> convert to UTC then strip tz
-    - tz-naive -> keep as-is
-    - invalid -> None
-    """
     if x is None or x == "":
         return None
     try:
@@ -502,6 +498,24 @@ def pick_first(row: Dict[str, Any], keys: List[str]) -> Any:
     return None
 
 
+def dedupe_keep_order(items: List[str]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for item in items:
+        if not item:
+            continue
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def norm_flag_token(s: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9]+", "_", str(s).upper()).strip("_")
+    return token or "UNKNOWN"
+
+
 def make_requests_session(user_agent: Optional[str] = None) -> requests.Session:
     s = requests.Session()
     headers = {
@@ -572,11 +586,7 @@ def compute_price_stats(df: pd.DataFrame, z_window: int, p_window: int) -> Dict[
     ma20 = float(closes.tail(min(20, len(closes))).mean()) if len(closes) >= 5 else None
     price_vs_ma20_pct = safe_pct(last_close, ma20) if ma20 else None
 
-    if len(closes) >= 20:
-        peak20 = float(closes.tail(20).max())
-        dd20 = safe_pct(last_close, peak20)
-    else:
-        dd20 = None
+    dd20 = safe_pct(last_close, float(closes.tail(20).max())) if len(closes) >= 20 else None
 
     return {
         "data_date": dates.iloc[-1].strftime("%Y-%m-%d"),
@@ -620,10 +630,10 @@ def compute_basket_summary(rows: List[Dict[str, Any]], basket_tickers: List[str]
     ddvals = vals("drawdown_20d_pct")
     ma_gap_vals = vals("price_vs_ma20_pct")
 
+    coverage = len(sub)
     extreme_z_count = sum(1 for v in zvals if v <= -2.0)
     ret5_bad_count = sum(1 for v in r5vals if v <= -5.0)
     below_ma20_count = sum(1 for v in ma_gap_vals if v < 0)
-    coverage = len(sub)
 
     return {
         "coverage": coverage,
@@ -648,7 +658,6 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
     recent_cutoff = pd.Timestamp(today) - pd.Timedelta(days=recent_days)
 
     out_rows: List[Dict[str, Any]] = []
-
     for ev in events:
         if not isinstance(ev, dict):
             continue
@@ -688,18 +697,9 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
     valid_rows = [r for r in out_rows if r.get("valid_for_stats")]
     recent_rows = [r for r in valid_rows if r.get("is_recent")]
 
-    alert_recent = sum(1 for r in recent_rows if r.get("severity") == "ALERT")
-    watch_recent = sum(1 for r in recent_rows if r.get("severity") == "WATCH")
-
-    latest_recent_date = None
     dated_recent = [parse_date(r.get("event_date")) for r in recent_rows if r.get("event_date")]
     dated_recent = [d for d in dated_recent if d is not None]
-    if dated_recent:
-        latest_recent_date = max(dated_recent).strftime("%Y-%m-%d")
-
-    raw_row_count = len(out_rows)
-    valid_count = len(valid_rows)
-    template_excluded_count = raw_row_count - valid_count
+    latest_recent_date = max(dated_recent).strftime("%Y-%m-%d") if dated_recent else None
 
     return {
         "path": str(path),
@@ -707,12 +707,12 @@ def load_manual_events(path: Path, recent_days: int) -> Dict[str, Any]:
         "as_of_date": raw.get("as_of_date") if isinstance(raw, dict) else None,
         "notes": raw.get("notes") if isinstance(raw, dict) else None,
         "recent_window_days": recent_days,
-        "raw_row_count": raw_row_count,
-        "template_excluded_count": template_excluded_count,
-        "event_count_total": valid_count,
+        "raw_row_count": len(out_rows),
+        "template_excluded_count": len(out_rows) - len(valid_rows),
+        "event_count_total": len(valid_rows),
         "event_count_recent": len(recent_rows),
-        "alert_recent_count": alert_recent,
-        "watch_recent_count": watch_recent,
+        "alert_recent_count": sum(1 for r in recent_rows if r.get("severity") == "ALERT"),
+        "watch_recent_count": sum(1 for r in recent_rows if r.get("severity") == "WATCH"),
         "latest_recent_event_date": latest_recent_date,
         "events": sorted(out_rows, key=lambda x: (x.get("event_date") or "", x.get("severity") or ""), reverse=True),
     }
@@ -739,9 +739,7 @@ def extract_local_snippet(text: str, start: int, end: int, radius: int = 180) ->
 def has_month_or_asof_hint(snippet_lower: str) -> bool:
     if " as of " in snippet_lower:
         return True
-    if any(m in snippet_lower for m in MONTH_HINTS) and YEAR_RE.search(snippet_lower):
-        return True
-    return False
+    return bool(any(m in snippet_lower for m in MONTH_HINTS) and YEAR_RE.search(snippet_lower))
 
 
 def has_suspicious_terms(snippet_lower: str) -> bool:
@@ -811,25 +809,65 @@ def extract_best_date_from_ctx(
 def extract_nav_asof_date(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
     lo = max(0, start - 450)
     hi = min(len(text), end + 450)
-    ctx = text[lo:hi]
-    return extract_best_date_from_ctx(ctx, ASOF_DATE_REGEX_SPECS)
+    return extract_best_date_from_ctx(text[lo:hi], ASOF_DATE_REGEX_SPECS)
 
 
 def extract_price_obs_date(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
     lo = max(0, start - 500)
     hi = min(len(text), end + 250)
-    ctx = text[lo:hi]
-    return extract_best_date_from_ctx(ctx, PRICE_OBS_DATE_REGEX_SPECS)
+    return extract_best_date_from_ctx(text[lo:hi], PRICE_OBS_DATE_REGEX_SPECS)
 
 
 def extract_nav_ref_date_for_implied(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
     lo = max(0, start - 200)
     hi = min(len(text), end + 550)
+    return extract_best_date_from_ctx(text[lo:hi], NAV_REF_DATE_REGEX_SPECS)
+
+
+def analyze_candidate_context(text: str, start: int, end: int, extraction_method: str) -> Dict[str, Any]:
+    lo = max(0, start - 1200)
+    hi = min(len(text), end + 1200)
     ctx = text[lo:hi]
-    best_ts, best_label, best_text = extract_best_date_from_ctx(ctx, NAV_REF_DATE_REGEX_SPECS)
-    if best_ts is not None:
-        return best_ts, best_label, best_text
-    return None, None, None
+
+    hard_skip_tags: List[str] = []
+    penalty_tags: List[str] = []
+    bonus_tags: List[str] = []
+
+    penalty_total = 0.0
+    bonus_total = 0.0
+
+    for label, pat in HARD_SKIP_CONTEXT_REGEX_SPECS:
+        if pat.search(ctx):
+            hard_skip_tags.append(label)
+
+    for label, pat, amt in CONTEXT_PENALTY_REGEX_SPECS:
+        if pat.search(ctx):
+            penalty_total += amt
+            penalty_tags.append(label)
+
+    for label, pat, amt in SECTION_BONUS_REGEX_SPECS:
+        if pat.search(ctx):
+            bonus_total += amt
+            bonus_tags.append(label)
+
+    if extraction_method == "direct":
+        if re.search(r"(?:^|[\s.;])$begin:math:text$\\d\+$end:math:text$\s*represents\b", ctx, re.I):
+            penalty_total += 1.2
+            penalty_tags.append("footnote_represents")
+        if re.search(r"\bif the market price on the payment date\b", ctx, re.I):
+            penalty_total += 0.8
+            penalty_tags.append("payment_date_example")
+        if re.search(r"\bmost recently computed nav per share\b", ctx, re.I) and re.search(r"\bfor example\b", ctx, re.I):
+            hard_skip_tags.append("example_context")
+
+    return {
+        "hard_skip_context_flag": bool(hard_skip_tags),
+        "hard_skip_context_tags": dedupe_keep_order(hard_skip_tags),
+        "context_penalty_total": round(float(penalty_total), 3),
+        "context_penalty_tags": dedupe_keep_order(penalty_tags),
+        "section_bonus_total": round(float(bonus_total), 3),
+        "section_bonus_tags": dedupe_keep_order(bonus_tags),
+    }
 
 
 def score_direct_nav_candidate(
@@ -842,6 +880,10 @@ def score_direct_nav_candidate(
     suspicious_terms_flag: bool,
     date_component_flag: bool,
     dollar_near_value: bool,
+    nav_ref_present: bool,
+    context_penalty_total: float,
+    section_bonus_total: float,
+    hard_skip_context_flag: bool,
 ) -> float:
     snippet_lower = snippet.lower()
     score = float(PATTERN_BASE_SCORE.get(pattern_label, 3.0))
@@ -854,13 +896,25 @@ def score_direct_nav_candidate(
         score += 0.4
     if has_month_or_asof_hint(snippet_lower):
         score += 0.5
+    if nav_ref_present:
+        score += 0.4
+    else:
+        score -= 0.5
 
+    score += float(section_bonus_total)
+    score -= float(context_penalty_total)
+    score -= float(DIRECT_PATTERN_EXTRA_PENALTY.get(pattern_label, 0.0))
+
+    if not dollar_near_value and pattern_label != "strict_nav_with_dollar":
+        score -= 0.5
     if percent_context_flag:
         score -= 1.5
     if suspicious_terms_flag:
         score -= 2.0
     if date_component_flag:
         score -= 5.0
+    if hard_skip_context_flag:
+        score -= 4.0
 
     if market_close is not None and market_close > 0 and value > 0:
         prem = (market_close / value - 1.0) * 100.0
@@ -872,15 +926,40 @@ def score_direct_nav_candidate(
     return round(score, 3)
 
 
-def score_implied_nav_candidate(snippet: str) -> float:
+def score_implied_nav_candidate(
+    *,
+    snippet: str,
+    price_obs_present: bool,
+    nav_ref_present: bool,
+    price_obs_before_or_equal_ref_check: Optional[bool],
+    context_penalty_total: float,
+    section_bonus_total: float,
+    hard_skip_context_flag: bool,
+) -> float:
     snippet_lower = snippet.lower()
     score = float(PATTERN_BASE_SCORE.get("closing_price_discount_to_nav", 8.0))
+
     if "discount" in snippet_lower or "premium" in snippet_lower:
         score += 0.8
     if "closing sales price" in snippet_lower or "closing price" in snippet_lower:
         score += 0.6
     if "net asset value per share" in snippet_lower:
         score += 0.8
+
+    score += float(section_bonus_total)
+    score -= float(context_penalty_total)
+
+    score += 0.4 if price_obs_present else -0.8
+    score += 0.8 if nav_ref_present else -1.0
+
+    if price_obs_before_or_equal_ref_check is True:
+        score += 0.4
+    elif price_obs_before_or_equal_ref_check is False:
+        score -= 0.6
+
+    if hard_skip_context_flag:
+        score -= 3.0
+
     return round(score, 3)
 
 
@@ -898,9 +977,7 @@ def extract_nav_candidates_from_text(
     for pattern_label, pat in DIRECT_NAV_REGEX_SPECS:
         for m in pat.finditer(text):
             val = to_float(m.group(1))
-            if val is None:
-                continue
-            if not (0.5 <= val <= 100.0):
+            if val is None or not (0.5 <= val <= 100.0):
                 continue
 
             snippet = extract_local_snippet(text, m.start(), m.end(), radius=180)
@@ -917,6 +994,7 @@ def extract_nav_candidates_from_text(
             dollar_near_value = "$" in text[max(0, m.start(1) - 5):m.start(1)]
 
             nav_ref_date, nav_ref_date_source, nav_ref_match_text = extract_nav_asof_date(text, m.start(), m.end())
+            context_info = analyze_candidate_context(text, m.start(), m.end(), extraction_method="direct")
 
             score = score_direct_nav_candidate(
                 value=float(val),
@@ -927,6 +1005,10 @@ def extract_nav_candidates_from_text(
                 suspicious_terms_flag=suspicious_terms_flag,
                 date_component_flag=date_component_flag,
                 dollar_near_value=dollar_near_value,
+                nav_ref_present=bool(nav_ref_date is not None),
+                context_penalty_total=float(context_info["context_penalty_total"]),
+                section_bonus_total=float(context_info["section_bonus_total"]),
+                hard_skip_context_flag=bool(context_info["hard_skip_context_flag"]),
             )
 
             premium_discount_est = None
@@ -955,6 +1037,12 @@ def extract_nav_candidates_from_text(
                 "nav_ref_date": nav_ref_date.strftime("%Y-%m-%d") if nav_ref_date is not None else None,
                 "nav_ref_date_source": nav_ref_date_source,
                 "nav_ref_match_text": nav_ref_match_text,
+                "hard_skip_context_flag": context_info["hard_skip_context_flag"],
+                "hard_skip_context_tags": context_info["hard_skip_context_tags"],
+                "context_penalty_total": context_info["context_penalty_total"],
+                "context_penalty_tags": context_info["context_penalty_tags"],
+                "section_bonus_total": context_info["section_bonus_total"],
+                "section_bonus_tags": context_info["section_bonus_tags"],
             })
 
     for pattern_label, pat in IMPLIED_NAV_REGEX_SPECS:
@@ -962,9 +1050,7 @@ def extract_nav_candidates_from_text(
             price = to_float(m.group(1))
             rel = str(m.group(2) or "").lower().strip()
             pct = to_float(m.group(3))
-            if price is None or pct is None:
-                continue
-            if price <= 0 or pct < 0 or pct >= 95:
+            if price is None or pct is None or price <= 0 or pct < 0 or pct >= 95:
                 continue
 
             if rel == "discount":
@@ -978,10 +1064,23 @@ def extract_nav_candidates_from_text(
                 continue
 
             snippet = extract_local_snippet(text, m.start(), m.end(), radius=180)
-            score = score_implied_nav_candidate(snippet)
-
             price_obs_date, price_obs_date_source, price_obs_match_text = extract_price_obs_date(text, m.start(), m.end())
             nav_ref_date, nav_ref_date_source, nav_ref_match_text = extract_nav_ref_date_for_implied(text, m.start(), m.end())
+            context_info = analyze_candidate_context(text, m.start(), m.end(), extraction_method="implied")
+
+            ordering_check: Optional[bool] = None
+            if price_obs_date is not None and nav_ref_date is not None:
+                ordering_check = bool(nav_ref_date <= price_obs_date)
+
+            score = score_implied_nav_candidate(
+                snippet=snippet,
+                price_obs_present=bool(price_obs_date is not None),
+                nav_ref_present=bool(nav_ref_date is not None),
+                price_obs_before_or_equal_ref_check=ordering_check,
+                context_penalty_total=float(context_info["context_penalty_total"]),
+                section_bonus_total=float(context_info["section_bonus_total"]),
+                hard_skip_context_flag=bool(context_info["hard_skip_context_flag"]),
+            )
 
             premium_discount_est = None
             if market_close is not None and market_close > 0:
@@ -1012,6 +1111,12 @@ def extract_nav_candidates_from_text(
                 "nav_ref_date": nav_ref_date.strftime("%Y-%m-%d") if nav_ref_date is not None else None,
                 "nav_ref_date_source": nav_ref_date_source,
                 "nav_ref_match_text": nav_ref_match_text,
+                "hard_skip_context_flag": context_info["hard_skip_context_flag"],
+                "hard_skip_context_tags": context_info["hard_skip_context_tags"],
+                "context_penalty_total": context_info["context_penalty_total"],
+                "context_penalty_tags": context_info["context_penalty_tags"],
+                "section_bonus_total": context_info["section_bonus_total"],
+                "section_bonus_tags": context_info["section_bonus_tags"],
             })
 
     candidates = sorted(
@@ -1038,22 +1143,14 @@ def choose_effective_nav_date(
     market_date: Optional[pd.Timestamp],
     today_utc: Optional[pd.Timestamp],
 ) -> Tuple[Optional[pd.Timestamp], str]:
-    """
-    Prefer NAV reference date when available and not in the future versus
-    filing_date / market_date / today_utc.
-    Otherwise fall back to filing_date only if filing_date itself is not future.
-    All timestamps are normalized to tz-naive before comparison.
-    """
-
     nav_ref_date = normalize_ts_naive(nav_ref_date)
     filing_date = normalize_ts_naive(filing_date)
     market_date = normalize_ts_naive(market_date)
     today_utc = normalize_ts_naive(today_utc)
 
     upper_bounds_for_ref = [d for d in [filing_date, market_date, today_utc] if d is not None]
-    if nav_ref_date is not None:
-        if all(nav_ref_date <= ub for ub in upper_bounds_for_ref):
-            return nav_ref_date, "nav_ref_extracted"
+    if nav_ref_date is not None and all(nav_ref_date <= ub for ub in upper_bounds_for_ref):
+        return nav_ref_date, "nav_ref_extracted"
 
     upper_bounds_for_filing = [d for d in [market_date, today_utc] if d is not None]
     if filing_date is not None:
@@ -1089,9 +1186,7 @@ def make_nav_overlay_row(
     if valid_for_stats and nav_date is not None and market_date is not None:
         nav_age_days = int((market_date - nav_date).days)
         fresh_for_rule = bool(
-            nav_age_days is not None
-            and 0 <= nav_age_days <= nav_fresh_max_days
-            and premium_discount_pct is not None
+            nav_age_days is not None and 0 <= nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None
         )
 
     row = {
@@ -1139,16 +1234,28 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("nav_ref_date_extracted", None)
         row.setdefault("nav_ref_date_source", None)
         row.setdefault("nav_ref_match_text", None)
+        row.setdefault("hard_skip_context_flag", False)
+        row.setdefault("hard_skip_context_tags", [])
+        row.setdefault("context_penalty_total", 0.0)
+        row.setdefault("context_penalty_tags", [])
+        row.setdefault("section_bonus_total", 0.0)
+        row.setdefault("section_bonus_tags", [])
         return row
 
     used = bool(row.get("valid_for_stats"))
     dq_status = "OK" if used else "INVALID"
     flags: List[str] = []
 
+    hard_skip_tags = list(row.get("hard_skip_context_tags") or [])
+    if row.get("hard_skip_context_flag"):
+        used = False
+        flags.extend([f"CONTEXT_HARD_SKIP_{norm_flag_token(t)}" for t in hard_skip_tags])
+
     match_score = to_float(row.get("match_score"))
     if match_score is not None and match_score < AUTO_NAV_MIN_MATCH_SCORE:
         used = False
-        dq_status = "EXCLUDED_LOW_MATCH_SCORE"
+        if dq_status == "OK":
+            dq_status = "EXCLUDED_LOW_MATCH_SCORE"
         flags.append(f"LOW_MATCH_SCORE_LT_{AUTO_NAV_MIN_MATCH_SCORE}")
 
     if bool(row.get("date_component_flag")):
@@ -1164,11 +1271,13 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
             flags.append(f"PREMIUM_GT_{int(AUTO_NAV_EXCLUDE_PREMIUM_PCT)}")
         elif premium_discount_pct > AUTO_NAV_REVIEW_PREMIUM_PCT:
             used = False
-            dq_status = "REVIEW_PREMIUM_HIGH"
+            if dq_status == "OK":
+                dq_status = "REVIEW_PREMIUM_HIGH"
             flags.append(f"PREMIUM_GT_{int(AUTO_NAV_REVIEW_PREMIUM_PCT)}")
         elif premium_discount_pct <= AUTO_NAV_REVIEW_DISCOUNT_PCT:
             used = False
-            dq_status = "REVIEW_DISCOUNT_DEEP"
+            if dq_status == "OK":
+                dq_status = "REVIEW_DISCOUNT_DEEP"
             flags.append(f"DISCOUNT_LE_{int(AUTO_NAV_REVIEW_DISCOUNT_PCT)}")
 
     if bool(row.get("percent_context_flag")):
@@ -1183,7 +1292,10 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
             dq_status = "REVIEW_SNIPPET_TERMS"
         flags.append("SUSPICIOUS_SNIPPET_TERMS")
 
-    row["review_flag"] = "|".join(flags) if flags else "NONE"
+    if row.get("hard_skip_context_flag"):
+        dq_status = "EXCLUDED_CONTEXT_HARD_SKIP"
+
+    row["review_flag"] = "|".join(dedupe_keep_order(flags)) if flags else "NONE"
     row["dq_status"] = dq_status
     row["used_in_stats"] = bool(used and row.get("valid_for_stats") and dq_status == "OK")
     return row
@@ -1220,22 +1332,25 @@ def load_manual_nav_rows(
                 "nav_ref_date_extracted": nav_date.strftime("%Y-%m-%d") if nav_date is not None else None,
                 "nav_ref_date_source": "manual_input",
                 "nav_ref_match_text": None,
+                "hard_skip_context_flag": False,
+                "hard_skip_context_tags": [],
+                "context_penalty_total": 0.0,
+                "context_penalty_tags": [],
+                "section_bonus_total": 0.0,
+                "section_bonus_tags": [],
             },
         )
         row = finalize_nav_row_dq(row)
         rows.append(row)
 
-    raw_row_count = len(rows)
     valid_count = sum(1 for r in rows if r.get("valid_for_stats"))
-    template_excluded_count = raw_row_count - valid_count
-
     return {
         "path": str(path),
         "schema_version": raw.get("schema_version") if isinstance(raw, dict) else None,
         "as_of_date": raw.get("as_of_date") if isinstance(raw, dict) else None,
         "notes": raw.get("notes") if isinstance(raw, dict) else None,
-        "raw_row_count": raw_row_count,
-        "template_excluded_count": template_excluded_count,
+        "raw_row_count": len(rows),
+        "template_excluded_count": len(rows) - valid_count,
         "items": rows,
     }
 
@@ -1266,11 +1381,7 @@ def get_sec_ticker_to_cik_map(session: requests.Session, timeout: int) -> Dict[s
     return out
 
 
-def get_sec_filing_candidates(
-    session: requests.Session,
-    cik10: str,
-    timeout: int,
-) -> List[Dict[str, Any]]:
+def get_sec_filing_candidates(session: requests.Session, cik10: str, timeout: int) -> List[Dict[str, Any]]:
     url = SEC_SUBMISSIONS_URL.format(cik10=cik10)
     raw = sec_fetch_json(session, url, timeout=timeout)
 
@@ -1337,7 +1448,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v5_splitdates",
+            "source": "sec_filings_regex_v6_contextfilter",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -1383,7 +1494,6 @@ def fetch_auto_nav_rows_from_sec(
                 market_close=market_close,
                 max_candidates=AUTO_NAV_MAX_CANDIDATES_PER_FILING,
             )
-
             if not candidates:
                 continue
 
@@ -1427,6 +1537,12 @@ def fetch_auto_nav_rows_from_sec(
                         "nav_ref_date_extracted": cand.get("nav_ref_date"),
                         "nav_ref_date_source": cand.get("nav_ref_date_source"),
                         "nav_ref_match_text": cand.get("nav_ref_match_text"),
+                        "hard_skip_context_flag": cand.get("hard_skip_context_flag"),
+                        "hard_skip_context_tags": cand.get("hard_skip_context_tags"),
+                        "context_penalty_total": cand.get("context_penalty_total"),
+                        "context_penalty_tags": cand.get("context_penalty_tags"),
+                        "section_bonus_total": cand.get("section_bonus_total"),
+                        "section_bonus_tags": cand.get("section_bonus_tags"),
                     },
                 )
                 row = finalize_nav_row_dq(row)
@@ -1467,7 +1583,7 @@ def fetch_auto_nav_rows_from_sec(
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v5_splitdates",
+        "source": "sec_filings_regex_v6_contextfilter",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -1535,14 +1651,9 @@ def build_nav_overlay(
     auto_used_in_stats_count = sum(1 for r in auto_rows if r.get("source_kind") == "auto_sec" and r.get("used_in_stats"))
     auto_review_count = sum(1 for r in auto_rows if str(r.get("dq_status") or "").startswith("REVIEW"))
     auto_excluded_count = sum(1 for r in auto_rows if str(r.get("dq_status") or "").startswith("EXCLUDED"))
-    auto_review_only_count = sum(
-        1 for r in auto_rows
-        if r.get("source_kind") == "auto_sec" and not r.get("used_in_stats")
-    )
-
+    auto_review_only_count = sum(1 for r in auto_rows if r.get("source_kind") == "auto_sec" and not r.get("used_in_stats"))
     manual_used_in_stats_count = sum(1 for r in manual_rows if r.get("used_in_stats"))
     manual_invalid_count = sum(1 for r in manual_rows if not r.get("valid_for_stats"))
-
     effective_auto_count = sum(1 for r in effective_rows if r.get("source_kind") == "auto_sec")
     effective_manual_count = sum(1 for r in effective_rows if r.get("source_kind") == "manual")
 
@@ -1610,7 +1721,6 @@ def normalize_context_row(row: Dict[str, Any], source_module: str) -> Dict[str, 
     signal = pick_first(row, ["signal_level", "signal", "status", "state"])
     if signal in [None, ""]:
         signal = "NA_SOURCE_MISSING"
-
     return {
         "signal": signal,
         "value": pick_first(row, ["value", "close", "last", "last_value"]),
@@ -1695,10 +1805,7 @@ def load_reference_context(unified_json_path: Path) -> Dict[str, Any]:
     }
 
 
-def determine_proxy_signal(
-    basket_summary: Dict[str, Any],
-    proxy_rows: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+def determine_proxy_signal(basket_summary: Dict[str, Any], proxy_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     reasons: List[str] = []
     tags: List[str] = []
     signal = "NONE"
@@ -1713,24 +1820,16 @@ def determine_proxy_signal(
     bizd_ret5 = bizd.get("ret5_pct") if bizd else None
 
     if (
-        median_ret5 is not None
-        and median_ret5 <= -8.0
-        and extreme_z_share is not None
-        and extreme_z_share >= 50.0
-        and below_ma20_share is not None
-        and below_ma20_share >= 80.0
+        median_ret5 is not None and median_ret5 <= -8.0 and
+        extreme_z_share is not None and extreme_z_share >= 50.0 and
+        below_ma20_share is not None and below_ma20_share >= 80.0
     ):
         signal = "ALERT"
         reasons.append("bdc_basket_median_ret5<=-8 AND extreme_z_share>=50% AND below_ma20_share>=80%")
         tags.append("MARKET_PROXY_STRESS")
 
     if signal != "ALERT":
-        if (
-            median_ret5 is not None
-            and median_ret5 <= -4.0
-            and below_ma20_share is not None
-            and below_ma20_share >= 80.0
-        ):
+        if median_ret5 is not None and median_ret5 <= -4.0 and below_ma20_share is not None and below_ma20_share >= 80.0:
             signal = "WATCH"
             reasons.append("bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%")
             tags.append("MARKET_PROXY_WEAK")
@@ -1751,17 +1850,10 @@ def determine_proxy_signal(
             reasons.append("BIZD ret5<=-5")
             tags.append("ETF_PROXY_WEAK")
 
-    return {
-        "signal": signal,
-        "reasons": reasons or ["no_proxy_rule_triggered"],
-        "tags": tags or ["NONE"],
-    }
+    return {"signal": signal, "reasons": reasons or ["no_proxy_rule_triggered"], "tags": tags or ["NONE"]}
 
 
-def determine_structural_signal(
-    nav_info: Dict[str, Any],
-    event_info: Dict[str, Any],
-) -> Dict[str, Any]:
+def determine_structural_signal(nav_info: Dict[str, Any], event_info: Dict[str, Any]) -> Dict[str, Any]:
     reasons: List[str] = []
     tags: List[str] = []
     signal = "NONE"
@@ -1775,20 +1867,11 @@ def determine_structural_signal(
         signal = "ALERT"
         reasons.append(f"recent_manual_event_alert_count={alert_recent}")
         tags.append("EVENT_ALERT")
-    elif (
-        median_discount_fresh is not None
-        and nav_cov_fresh >= 3
-        and median_discount_fresh <= -20.0
-    ):
+    elif median_discount_fresh is not None and nav_cov_fresh >= 3 and median_discount_fresh <= -20.0:
         signal = "ALERT"
         reasons.append("fresh_nav_median_discount<=-20 with coverage>=3")
         tags.append("NAV_DISCOUNT_STRESS")
-    elif (
-        median_discount_fresh is not None
-        and nav_cov_fresh >= 3
-        and median_discount_fresh <= -15.0
-        and watch_recent >= 1
-    ):
+    elif median_discount_fresh is not None and nav_cov_fresh >= 3 and median_discount_fresh <= -15.0 and watch_recent >= 1:
         signal = "ALERT"
         reasons.append("fresh_nav_discount<=-15 with coverage>=3 + recent_watch_event")
         tags.append("COMPOSITE_STRESS")
@@ -1798,20 +1881,12 @@ def determine_structural_signal(
             signal = "WATCH"
             reasons.append(f"recent_manual_event_watch_count={watch_recent}")
             tags.append("EVENT_WATCH")
-        elif (
-            median_discount_fresh is not None
-            and nav_cov_fresh >= 3
-            and median_discount_fresh <= -10.0
-        ):
+        elif median_discount_fresh is not None and nav_cov_fresh >= 3 and median_discount_fresh <= -10.0:
             signal = "WATCH"
             reasons.append("fresh_nav_median_discount<=-10 with coverage>=3")
             tags.append("NAV_DISCOUNT_WIDE")
 
-    return {
-        "signal": signal,
-        "reasons": reasons or ["no_structural_rule_triggered"],
-        "tags": tags or ["NONE"],
-    }
+    return {"signal": signal, "reasons": reasons or ["no_structural_rule_triggered"], "tags": tags or ["NONE"]}
 
 
 def combine_signals(proxy_info: Dict[str, Any], structural_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -1821,12 +1896,7 @@ def combine_signals(proxy_info: Dict[str, Any], structural_info: Dict[str, Any])
     proxy_rank = SEVERITY_ORDER.get(proxy_signal, 0)
     structural_rank = SEVERITY_ORDER.get(structural_signal, 0)
 
-    if max(proxy_rank, structural_rank) == 2:
-        combined_signal = "ALERT"
-    elif max(proxy_rank, structural_rank) == 1:
-        combined_signal = "WATCH"
-    else:
-        combined_signal = "NONE"
+    combined_signal = "ALERT" if max(proxy_rank, structural_rank) == 2 else ("WATCH" if max(proxy_rank, structural_rank) == 1 else "NONE")
 
     if proxy_rank > 0 and structural_rank == 0:
         basis = "PROXY_ONLY"
@@ -1837,8 +1907,8 @@ def combine_signals(proxy_info: Dict[str, Any], structural_info: Dict[str, Any])
     else:
         basis = "NONE"
 
-    reasons = []
-    tags = []
+    reasons: List[str] = []
+    tags: List[str] = []
     if proxy_rank > 0:
         reasons.extend([f"proxy:{x}" for x in proxy_info.get("reasons", [])])
         tags.extend([f"proxy:{x}" for x in proxy_info.get("tags", [])])
@@ -1846,16 +1916,11 @@ def combine_signals(proxy_info: Dict[str, Any], structural_info: Dict[str, Any])
         reasons.extend([f"structural:{x}" for x in structural_info.get("reasons", [])])
         tags.extend([f"structural:{x}" for x in structural_info.get("tags", [])])
 
-    if not reasons:
-        reasons = ["no_rule_triggered"]
-    if not tags:
-        tags = ["NONE"]
-
     return {
         "combined_signal": combined_signal,
         "signal_basis": basis,
-        "reasons": reasons,
-        "tags": tags,
+        "reasons": reasons or ["no_rule_triggered"],
+        "tags": tags or ["NONE"],
     }
 
 
@@ -1872,12 +1937,7 @@ def infer_confidence(
 
     event_valid_total = int(event_info.get("event_count_total") or 0)
     event_raw_count = int(event_info.get("raw_row_count") or 0)
-    if event_valid_total >= 1:
-        event_conf = "OK"
-    elif event_raw_count >= 1:
-        event_conf = "TEMPLATE_ONLY"
-    else:
-        event_conf = "NA"
+    event_conf = "OK" if event_valid_total >= 1 else ("TEMPLATE_ONLY" if event_raw_count >= 1 else "NA")
 
     if nav_conf == "OK" and event_conf == "OK":
         structural_conf = "OK"
@@ -1928,14 +1988,10 @@ def make_history_row(latest: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def merge_history(existing: Any, new_row: Dict[str, Any], max_rows: int) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    if isinstance(existing, list):
-        rows = [r for r in existing if isinstance(r, dict)]
+    rows = [r for r in existing if isinstance(r, dict)] if isinstance(existing, list) else []
     rows.append(new_row)
     rows = sorted(rows, key=lambda x: x.get("generated_at_utc", ""))
-    if max_rows > 0:
-        rows = rows[-max_rows:]
-    return rows
+    return rows[-max_rows:] if max_rows > 0 else rows
 
 
 def escape_markdown_cell(v: Any) -> str:
@@ -1945,7 +2001,6 @@ def escape_markdown_cell(v: Any) -> str:
         s = "NA"
     else:
         s = str(v)
-
     s = s.replace("\r\n", "\n").replace("\r", "\n")
     s = s.replace("\\", "\\\\")
     s = s.replace("|", "\\|")
@@ -1993,16 +2048,9 @@ def build_report(latest: Dict[str, Any]) -> str:
 
     lines.append("## 1) BDC Market Proxy")
     for k in [
-        "coverage",
-        "median_ret1_pct",
-        "median_ret5_pct",
-        "median_z60",
-        "median_drawdown_20d_pct",
-        "extreme_z_count",
-        "extreme_z_share",
-        "ret5_le_minus5_count",
-        "ret5_le_minus5_share",
-        "below_ma20_count",
+        "coverage", "median_ret1_pct", "median_ret5_pct", "median_z60",
+        "median_drawdown_20d_pct", "extreme_z_count", "extreme_z_share",
+        "ret5_le_minus5_count", "ret5_le_minus5_share", "below_ma20_count",
         "below_ma20_share",
     ]:
         lines.append(f"- {k}: `{basket.get(k)}`")
@@ -2010,52 +2058,28 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append(markdown_table(
         price_rows,
         [
-            ("ticker", "ticker"),
-            ("class", "class"),
-            ("close", "close"),
-            ("data_date", "data_date"),
-            ("ret1%", "ret1_pct"),
-            ("ret5%", "ret5_pct"),
-            ("z60", "z60"),
-            ("p60", "p60"),
-            ("p252", "p252"),
-            ("dd20%", "drawdown_20d_pct"),
-            ("px_vs_ma20%", "price_vs_ma20_pct"),
-            ("source", "source_url"),
-            ("note", "note"),
+            ("ticker", "ticker"), ("class", "class"), ("close", "close"), ("data_date", "data_date"),
+            ("ret1%", "ret1_pct"), ("ret5%", "ret5_pct"), ("z60", "z60"), ("p60", "p60"),
+            ("p252", "p252"), ("dd20%", "drawdown_20d_pct"), ("px_vs_ma20%", "price_vs_ma20_pct"),
+            ("source", "source_url"), ("note", "note"),
         ],
     ))
     lines.append("")
 
     lines.append("## 2) NAV Overlay (manual + auto SEC, optional)")
-    lines.append(f"- path: `{nav.get('path')}`")
-    lines.append(f"- as_of_date: `{nav.get('as_of_date')}`")
-    lines.append(f"- confidence: `{nav.get('confidence')}`")
-    lines.append(f"- raw_row_count: `{nav.get('raw_row_count')}`")
-    lines.append(f"- template_excluded_count: `{nav.get('template_excluded_count')}`")
-    lines.append(f"- manual_valid_count: `{nav.get('manual_valid_count')}`")
-    lines.append(f"- auto_enabled: `{nav.get('auto_enabled')}`")
-    lines.append(f"- auto_source: `{nav.get('auto_source')}`")
-    lines.append(f"- auto_attempted_count: `{nav.get('auto_attempted_count')}`")
-    lines.append(f"- auto_found_count: `{nav.get('auto_found_count')}`")
-    lines.append(f"- manual_override_tickers: `{nav.get('manual_override_tickers')}`")
-    lines.append(f"- coverage_total: `{nav.get('coverage_total')}`")
-    lines.append(f"- coverage_fresh: `{nav.get('coverage_fresh')}`")
-    lines.append(f"- median_discount_pct_fresh: `{nav.get('median_discount_pct_fresh')}`")
-    lines.append(f"- median_discount_pct_all: `{nav.get('median_discount_pct_all')}`")
+    for k in [
+        "path", "as_of_date", "confidence", "raw_row_count", "template_excluded_count",
+        "manual_valid_count", "auto_enabled", "auto_source", "auto_attempted_count",
+        "auto_found_count", "manual_override_tickers", "coverage_total", "coverage_fresh",
+        "median_discount_pct_fresh", "median_discount_pct_all",
+    ]:
+        lines.append(f"- {k}: `{nav.get(k)}`")
     lines.append("")
     lines.append("### Coverage decomposition")
     for k in [
-        "auto_total_count",
-        "auto_used_in_stats_count",
-        "auto_review_count",
-        "auto_excluded_count",
-        "auto_review_only_count",
-        "manual_used_in_stats_count",
-        "manual_invalid_count",
-        "effective_auto_count",
-        "effective_manual_count",
-        "effective_structural_count",
+        "auto_total_count", "auto_used_in_stats_count", "auto_review_count", "auto_excluded_count",
+        "auto_review_only_count", "manual_used_in_stats_count", "manual_invalid_count",
+        "effective_auto_count", "effective_manual_count", "effective_structural_count",
         "effective_structural_fresh_count",
     ]:
         lines.append(f"- {k}: `{nav.get(k)}`")
@@ -2096,12 +2120,17 @@ def build_report(latest: Dict[str, Any]) -> str:
                 f"dq_status={r.get('dq_status')} | score={r.get('match_score')} | "
                 f"pattern={r.get('matched_pattern')} | method={r.get('extraction_method')}"
             )
-            snippet = r.get("matched_snippet")
-            lines.append(f"  - snippet: `{sanitize_inline_code_text(snippet)}`")
+            lines.append(f"  - snippet: `{sanitize_inline_code_text(r.get('matched_snippet'))}`")
             if r.get("price_obs_match_text"):
                 lines.append(f"  - price_obs_match: `{sanitize_inline_code_text(r.get('price_obs_match_text'))}`")
             if r.get("nav_ref_match_text"):
                 lines.append(f"  - nav_ref_match: `{sanitize_inline_code_text(r.get('nav_ref_match_text'))}`")
+            if r.get("hard_skip_context_tags"):
+                lines.append(f"  - context_hard_skip: `{sanitize_inline_code_text(','.join(r.get('hard_skip_context_tags') or []))}`")
+            if r.get("context_penalty_tags"):
+                lines.append(f"  - context_penalties: `{sanitize_inline_code_text(','.join(r.get('context_penalty_tags') or []))}`")
+            if r.get("section_bonus_tags"):
+                lines.append(f"  - section_bonus: `{sanitize_inline_code_text(','.join(r.get('section_bonus_tags') or []))}`")
             if r.get("derived_from_price") is not None:
                 lines.append(
                     f"  - implied_from: price={r.get('derived_from_price')} | "
@@ -2116,29 +2145,19 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append("")
 
     lines.append("## 3) Event Overlay (manual, optional)")
-    lines.append(f"- path: `{events.get('path')}`")
-    lines.append(f"- as_of_date: `{events.get('as_of_date')}`")
-    lines.append(f"- recent_window_days: `{events.get('recent_window_days')}`")
-    lines.append(f"- raw_row_count: `{events.get('raw_row_count')}`")
-    lines.append(f"- template_excluded_count: `{events.get('template_excluded_count')}`")
-    lines.append(f"- event_count_total: `{events.get('event_count_total')}`")
-    lines.append(f"- event_count_recent: `{events.get('event_count_recent')}`")
-    lines.append(f"- alert_recent_count: `{events.get('alert_recent_count')}`")
-    lines.append(f"- watch_recent_count: `{events.get('watch_recent_count')}`")
-    lines.append(f"- latest_recent_event_date: `{events.get('latest_recent_event_date')}`")
+    for k in [
+        "path", "as_of_date", "recent_window_days", "raw_row_count", "template_excluded_count",
+        "event_count_total", "event_count_recent", "alert_recent_count", "watch_recent_count",
+        "latest_recent_event_date",
+    ]:
+        lines.append(f"- {k}: `{events.get(k)}`")
     lines.append("")
     lines.append(markdown_table(
         events.get("events", []),
         [
-            ("event_date", "event_date"),
-            ("category", "category"),
-            ("entity", "entity"),
-            ("severity", "severity"),
-            ("is_recent", "is_recent"),
-            ("valid_for_stats", "valid_for_stats"),
-            ("template_excluded", "template_excluded"),
-            ("title", "title"),
-            ("source", "source_url"),
+            ("event_date", "event_date"), ("category", "category"), ("entity", "entity"),
+            ("severity", "severity"), ("is_recent", "is_recent"), ("valid_for_stats", "valid_for_stats"),
+            ("template_excluded", "template_excluded"), ("title", "title"), ("source", "source_url"),
             ("note", "note"),
         ],
     ))
@@ -2148,7 +2167,7 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append(f"- enabled: `{context.get('enabled')}`")
     lines.append(f"- source_path: `{context.get('source_path')}`")
     lines.append(f"- reference_only: `{context.get('reference_only')}`")
-    ctx_rows = []
+    ctx_rows: List[Dict[str, Any]] = []
     for series, row in (context.get("series") or {}).items():
         if row.get("found"):
             ctx_rows.append({"series": series, **row})
@@ -2166,20 +2185,14 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append(markdown_table(
         ctx_rows,
         [
-            ("series", "series"),
-            ("source_module", "source_module"),
-            ("signal", "signal"),
-            ("value", "value"),
-            ("data_date", "data_date"),
-            ("reason", "reason"),
-            ("tag", "tag"),
+            ("series", "series"), ("source_module", "source_module"), ("signal", "signal"),
+            ("value", "value"), ("data_date", "data_date"), ("reason", "reason"), ("tag", "tag"),
         ],
     ))
     lines.append("")
 
     lines.append("## 5) Confidence / DQ")
-    conf = summary["confidence"]
-    for k, v in conf.items():
+    for k, v in summary["confidence"].items():
         lines.append(f"- {k}: `{v}`")
     lines.append("")
 
@@ -2205,12 +2218,8 @@ def main() -> None:
     create_manual_nav_template(manual_nav_path)
 
     tickers = [t.strip().upper() for t in str(args.tickers).split(",") if t.strip()]
-    basket_tickers = [t for t in tickers if t in DEFAULT_BDC_TICKERS]
-    proxy_tickers = [t for t in tickers if t in DEFAULT_PROXY_TICKERS]
-    if not basket_tickers:
-        basket_tickers = DEFAULT_BDC_TICKERS.copy()
-    if not proxy_tickers:
-        proxy_tickers = DEFAULT_PROXY_TICKERS.copy()
+    basket_tickers = [t for t in tickers if t in DEFAULT_BDC_TICKERS] or DEFAULT_BDC_TICKERS.copy()
+    proxy_tickers = [t for t in tickers if t in DEFAULT_PROXY_TICKERS] or DEFAULT_PROXY_TICKERS.copy()
 
     end_date = normalize_ts_naive(UTC_NOW())
     start_date = end_date - pd.Timedelta(days=args.lookback_calendar_days)
@@ -2268,18 +2277,9 @@ def main() -> None:
         "note": "disabled",
     }
 
-    proxy_signal_info = determine_proxy_signal(
-        basket_summary=basket_summary,
-        proxy_rows=price_rows,
-    )
-    structural_signal_info = determine_structural_signal(
-        nav_info=nav_info,
-        event_info=event_info,
-    )
-    combined_signal_info = combine_signals(
-        proxy_info=proxy_signal_info,
-        structural_info=structural_signal_info,
-    )
+    proxy_signal_info = determine_proxy_signal(basket_summary=basket_summary, proxy_rows=price_rows)
+    structural_signal_info = determine_structural_signal(nav_info=nav_info, event_info=event_info)
+    combined_signal_info = combine_signals(proxy_info=proxy_signal_info, structural_info=structural_signal_info)
     confidence = infer_confidence(
         price_rows=price_rows,
         nav_info=nav_info,
@@ -2293,7 +2293,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v5_splitdates + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v6_contextfilter + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -2341,9 +2341,10 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.9 splits implied-date auditing into price_obs_date and nav_ref_date, while nav_date remains the effective date used in stats.",
-            "v1.9 escapes markdown table cells so review_flag and similar fields do not break report tables.",
-            "v1.9 adds NAV coverage decomposition for easier audit of why structural coverage is thin.",
+            "v1.10 adds hard-skip filters for hypothetical / boilerplate contexts before they can pass into structural stats.",
+            "v1.10 adds section/context bonus-penalty scoring so cleaner disclosure zones outrank footnotes and boilerplate.",
+            "v1.10 keeps price_obs_date / nav_ref_date split, while nav_date remains the effective date used in stats.",
+            "v1.10 keeps markdown-safe table escaping and NAV coverage decomposition for auditability.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
@@ -2356,8 +2357,7 @@ def main() -> None:
     existing_history = read_json(history_json_path, default=[])
     history = merge_history(existing_history, make_history_row(latest), max_rows=args.history_max_rows)
     write_json(history_json_path, history)
-    report_text = build_report(latest)
-    report_md_path.write_text(report_text, encoding="utf-8")
+    report_md_path.write_text(build_report(latest), encoding="utf-8")
 
     print(json.dumps({
         "status": "OK",
