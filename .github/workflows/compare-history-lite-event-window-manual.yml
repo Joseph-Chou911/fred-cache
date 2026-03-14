@@ -1,4 +1,4 @@
-name: Compare history_lite event window (manual only)
+name: Compare history_lite event window (manual baseline + auto latest)
 
 on:
   workflow_dispatch:
@@ -11,10 +11,10 @@ on:
         description: "Optional series_id filter. Leave blank to compare ALL series."
         required: false
         default: ""
-      event_dates:
-        description: "Comma-separated event dates, e.g. 2025-04-07,2026-03-05"
+      baseline_date:
+        description: "Old/baseline event date, e.g. 2025-04-07"
         required: true
-        default: "2025-04-07,2026-03-05"
+        default: "2025-04-07"
       pre_days:
         description: "Number of calendar days before each event date"
         required: true
@@ -24,7 +24,7 @@ on:
         required: true
         default: "10"
       max_gap_days:
-        description: "Mark as STALE_MATCH if matched_date is older than this many days from target_date"
+        description: "Mark as STALE_MATCH if matched_date is older than this many days from target date"
         required: true
         default: "7"
       json_out:
@@ -72,7 +72,7 @@ jobs:
         run: |
           echo "file=${{ github.event.inputs.file }}"
           echo "series=${{ github.event.inputs.series }}"
-          echo "event_dates=${{ github.event.inputs.event_dates }}"
+          echo "baseline_date=${{ github.event.inputs.baseline_date }}"
           echo "pre_days=${{ github.event.inputs.pre_days }}"
           echo "post_days=${{ github.event.inputs.post_days }}"
           echo "max_gap_days=${{ github.event.inputs.max_gap_days }}"
@@ -94,6 +94,69 @@ jobs:
           mkdir -p "$(dirname "${{ github.event.inputs.csv_out }}")"
           mkdir -p "$(dirname "${{ github.event.inputs.report_out }}")"
 
+      - name: Resolve latest date from history_lite.json
+        id: resolve_dates
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          file_path = Path("${{ github.event.inputs.file }}")
+          baseline_date = "${{ github.event.inputs.baseline_date }}"
+
+          if not file_path.exists():
+              raise SystemExit(f"Input file not found: {file_path}")
+
+          with file_path.open("r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+          candidate_keys = {"date", "data_date", "obs_date"}
+
+          found_dates = []
+
+          def walk(x):
+              if isinstance(x, dict):
+                  for k, v in x.items():
+                      if k in candidate_keys and isinstance(v, str) and date_re.match(v):
+                          found_dates.append(v)
+                      walk(v)
+              elif isinstance(x, list):
+                  for item in x:
+                      walk(item)
+
+          walk(data)
+
+          if not found_dates:
+              raise SystemExit(
+                  "No valid dates found in history_lite.json. "
+                  "Please check date field names (expected one of: date, data_date, obs_date)."
+              )
+
+          latest_date = max(found_dates)
+          event_dates = f"{baseline_date},{latest_date}"
+
+          github_env = os.environ["GITHUB_ENV"]
+          with open(github_env, "a", encoding="utf-8") as envf:
+              envf.write(f"LATEST_DATE={latest_date}\n")
+              envf.write(f"EVENT_DATES={event_dates}\n")
+
+          print(f"baseline_date={baseline_date}")
+          print(f"latest_date={latest_date}")
+          print(f"event_dates={event_dates}")
+          PY
+
+      - name: Show resolved dates
+        shell: bash
+        run: |
+          echo "Resolved latest date: ${LATEST_DATE}"
+          echo "Resolved event_dates: ${EVENT_DATES}"
+
       - name: Run compare_history_lite_event_window.py
         shell: bash
         run: |
@@ -102,7 +165,7 @@ jobs:
           CMD=(
             python tools/compare_history_lite_event_window.py
             --file "${{ github.event.inputs.file }}"
-            --event-dates "${{ github.event.inputs.event_dates }}"
+            --event-dates "${EVENT_DATES}"
             --pre-days "${{ github.event.inputs.pre_days }}"
             --post-days "${{ github.event.inputs.post_days }}"
             --max-gap-days "${{ github.event.inputs.max_gap_days }}"
