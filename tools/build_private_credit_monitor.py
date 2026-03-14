@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.10)
+build_private_credit_monitor.py (v1.11)
 
 Purpose
 -------
@@ -17,27 +17,30 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.10 changes
+v1.11 changes
 -------------
-- Keep v1.9 structure
-- Add negative-context hard skip / soft-penalty filters
-- Add section/context bonus-penalty scoring
-- Prefer higher-quality implied candidates more clearly
-- Keep:
-  * price_obs_date / nav_ref_date split
-  * markdown table escaping
-  * coverage decomposition
+- Keep v1.10 structure / audit philosophy
+- Add SEC retry/backoff + local cache
+- Scan filing index and score multiple candidate docs per filing
+  instead of reading only primaryDocument
+- Improve HTML-to-text conversion for table/paragraph preservation
+- Expand NAV regex coverage modestly
+- If NAV date is inferred only from filing date:
+  keep as display/review row, but EXCLUDE from structural stats
+- Add doc_name / doc_score fields for auditability
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html as html_lib
 import json
 import math
 import re
-from pathlib import Path
+import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -46,7 +49,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.10"
+SCRIPT_VERSION = "v1.11"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -76,8 +79,12 @@ PREFERRED_CONTEXT_MODULES: Dict[str, List[str]] = {
 SEC_TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik10}.json"
 SEC_ARCHIVES_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/{primary_doc}"
+SEC_ARCHIVES_INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/index.json"
 
 AUTO_NAV_ALLOWED_FORMS = {"10-Q", "10-Q/A", "10-K", "10-K/A", "8-K", "8-K/A"}
+
+REQUEST_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+REQUEST_RETRY_SLEEP_SECONDS = [2, 4, 8]
 
 DIRECT_NAV_REGEX_SPECS = [
     (
@@ -103,16 +110,32 @@ DIRECT_NAV_REGEX_SPECS = [
             re.I,
         ),
     ),
+    (
+        "nav_attributable_to_common_stock",
+        re.compile(
+            r"(?:net asset value|nav)[^0-9$]{0,100}(?:attributable to common stock|for common stockholders)"
+            r"[^0-9$]{0,60}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share",
+            re.I,
+        ),
+    ),
+    (
+        "net_assets_attributable_per_share",
+        re.compile(
+            r"net assets[^0-9$]{0,100}(?:attributable to common stock|for common stockholders)"
+            r"[^0-9$]{0,60}\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share",
+            re.I,
+        ),
+    ),
 ]
 
 IMPLIED_NAV_REGEX_SPECS = [
     (
         "closing_price_discount_to_nav",
         re.compile(
-            r"(?:closing sales price|last reported closing sales price|closing price)[^$]{0,140}"
+            r"(?:closing sales price|last reported closing sales price|closing price)[^$]{0,160}"
             r"\$([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*per share"
-            r"[^%]{0,260}?(discount|premium)\s+of\s+(?:approximately\s+)?([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*%"
-            r"[^.]{0,220}?net asset value per share",
+            r"[^%]{0,320}?(discount|premium)\s+of\s+(?:approximately\s+)?([0-9]{1,3}(?:\.[0-9]{1,4})?)\s*%"
+            r"[^.]{0,260}?net asset value per share",
             re.I,
         ),
     ),
@@ -122,6 +145,8 @@ PATTERN_BASE_SCORE = {
     "strict_nav_with_dollar": 6.0,
     "nav_value_after_phrase": 4.2,
     "net_asset_value_of_x_per_share": 5.6,
+    "nav_attributable_to_common_stock": 6.8,
+    "net_assets_attributable_per_share": 6.2,
     "closing_price_discount_to_nav": 8.5,
 }
 
@@ -129,6 +154,8 @@ DIRECT_PATTERN_EXTRA_PENALTY = {
     "strict_nav_with_dollar": 0.0,
     "nav_value_after_phrase": 0.8,
     "net_asset_value_of_x_per_share": 0.2,
+    "nav_attributable_to_common_stock": 0.1,
+    "net_assets_attributable_per_share": 0.2,
 }
 
 SUSPICIOUS_SNIPPET_TERMS = [
@@ -214,7 +241,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_on_monthname",
         re.compile(
             r"\bon\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})"
-            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
+            r"[^.]{0,260}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -222,7 +249,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_asof_monthname",
         re.compile(
             r"\bas of\s+([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})"
-            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
+            r"[^.]{0,260}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -230,7 +257,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_on_numeric",
         re.compile(
             r"\bon\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})"
-            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
+            r"[^.]{0,260}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -238,7 +265,7 @@ PRICE_OBS_DATE_REGEX_SPECS = [
         "price_asof_numeric",
         re.compile(
             r"\bas of\s+([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})"
-            r"[^.]{0,220}?(?:last reported )?closing(?: sales)? price",
+            r"[^.]{0,260}?(?:last reported )?closing(?: sales)? price",
             re.I,
         ),
     ),
@@ -248,7 +275,7 @@ NAV_REF_DATE_REGEX_SPECS = [
     (
         "nav_reported_asof_monthname",
         re.compile(
-            r"net asset value per share(?: reported by us)?[^.]{0,180}?\bas of\s+"
+            r"net asset value per share(?: reported by us)?[^.]{0,220}?\bas of\s+"
             r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
             re.I,
         ),
@@ -256,7 +283,7 @@ NAV_REF_DATE_REGEX_SPECS = [
     (
         "nav_asof_monthname",
         re.compile(
-            r"net asset value per share[^.]{0,180}?\bas of\s+"
+            r"net asset value per share[^.]{0,220}?\bas of\s+"
             r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
             re.I,
         ),
@@ -264,7 +291,7 @@ NAV_REF_DATE_REGEX_SPECS = [
     (
         "nav_period_ended_monthname",
         re.compile(
-            r"net asset value per share[^.]{0,220}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"net asset value per share[^.]{0,260}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
             r"([A-Za-z]{3,9}\.?)\s+([0-9]{1,2}),\s*(20[0-9]{2})",
             re.I,
         ),
@@ -272,7 +299,7 @@ NAV_REF_DATE_REGEX_SPECS = [
     (
         "nav_reported_asof_numeric",
         re.compile(
-            r"net asset value per share(?: reported by us)?[^.]{0,180}?\bas of\s+"
+            r"net asset value per share(?: reported by us)?[^.]{0,220}?\bas of\s+"
             r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
             re.I,
         ),
@@ -280,7 +307,7 @@ NAV_REF_DATE_REGEX_SPECS = [
     (
         "nav_asof_numeric",
         re.compile(
-            r"net asset value per share[^.]{0,180}?\bas of\s+"
+            r"net asset value per share[^.]{0,220}?\bas of\s+"
             r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
             re.I,
         ),
@@ -288,7 +315,7 @@ NAV_REF_DATE_REGEX_SPECS = [
     (
         "nav_period_ended_numeric",
         re.compile(
-            r"net asset value per share[^.]{0,220}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
+            r"net asset value per share[^.]{0,260}?\b(?:for the (?:three|six|nine|twelve)\s+months ended|for the fiscal year ended|for the quarter ended|for the period ended|quarter ended|year ended)\s+"
             r"([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})",
             re.I,
         ),
@@ -319,6 +346,10 @@ SECTION_BONUS_REGEX_SPECS = [
 ]
 
 HTML_TAG_RE = re.compile(r"<[^>]+>")
+HTML_SCRIPT_STYLE_RE = re.compile(r"<(?:script|style|noscript)[^>]*>.*?</(?:script|style|noscript)>", re.I | re.S)
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+HTML_BLOCK_BREAK_RE = re.compile(r"</?(?:br|p|div|tr|li|ul|ol|table|section|article|h[1-6])\b[^>]*>", re.I)
+HTML_CELL_BREAK_RE = re.compile(r"</?(?:td|th)\b[^>]*>", re.I)
 WHITESPACE_RE = re.compile(r"\s+")
 YEAR_RE = re.compile(r"\b20[0-9]{2}\b")
 
@@ -344,8 +375,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.10 contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11 your_email@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
+    p.add_argument("--sec-max-docs-per-filing", type=int, default=5, help="Max SEC docs to scan per filing after document scoring")
+    p.add_argument("--sec-use-cache", action="store_true", help="Use local SEC response cache")
+    p.add_argument("--sec-cache-dir", default=None, help="Override SEC cache dir (default: <out-dir>/sec_cache)")
     return p.parse_args()
 
 
@@ -364,9 +398,24 @@ def read_json(path: Path, default: Any = None) -> Any:
 
 
 def write_json(path: Path, obj: Any) -> None:
+    ensure_dir(path.parent)
     with path.open("w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
         f.write("\n")
+
+
+def read_text(path: Path, default: Optional[str] = None) -> Optional[str]:
+    if not path.exists():
+        return default
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return default
+
+
+def write_text(path: Path, text: str) -> None:
+    ensure_dir(path.parent)
+    path.write_text(text, encoding="utf-8")
 
 
 def create_manual_event_template(path: Path) -> None:
@@ -807,20 +856,20 @@ def extract_best_date_from_ctx(
 
 
 def extract_nav_asof_date(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
-    lo = max(0, start - 450)
-    hi = min(len(text), end + 450)
+    lo = max(0, start - 500)
+    hi = min(len(text), end + 500)
     return extract_best_date_from_ctx(text[lo:hi], ASOF_DATE_REGEX_SPECS)
 
 
 def extract_price_obs_date(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
-    lo = max(0, start - 500)
-    hi = min(len(text), end + 250)
+    lo = max(0, start - 550)
+    hi = min(len(text), end + 300)
     return extract_best_date_from_ctx(text[lo:hi], PRICE_OBS_DATE_REGEX_SPECS)
 
 
 def extract_nav_ref_date_for_implied(text: str, start: int, end: int) -> Tuple[Optional[pd.Timestamp], Optional[str], Optional[str]]:
-    lo = max(0, start - 200)
-    hi = min(len(text), end + 550)
+    lo = max(0, start - 240)
+    hi = min(len(text), end + 650)
     return extract_best_date_from_ctx(text[lo:hi], NAV_REF_DATE_REGEX_SPECS)
 
 
@@ -851,8 +900,8 @@ def analyze_candidate_context(text: str, start: int, end: int, extraction_method
             bonus_tags.append(label)
 
     if extraction_method == "direct":
-        if re.search(r"(?:^|[\s.;])$begin:math:text$\\d\+$end:math:text$\s*represents\b", ctx, re.I):
-            penalty_total += 1.2
+        if re.search(r"(?:^|[\s.;])\$?\d+\s*represents\b", ctx, re.I):
+            penalty_total += 1.0
             penalty_tags.append("footnote_represents")
         if re.search(r"\bif the market price on the payment date\b", ctx, re.I):
             penalty_total += 0.8
@@ -893,7 +942,7 @@ def score_direct_nav_candidate(
     if "net asset value per share" in snippet_lower:
         score += 0.8
     elif "nav per share" in snippet_lower:
-        score += 0.4
+        score += 0.5
     if has_month_or_asof_hint(snippet_lower):
         score += 0.5
     if nav_ref_present:
@@ -991,7 +1040,7 @@ def extract_nav_candidates_from_text(
             percent_context_flag = ("%" in num_context) or (" percent" in num_context_lower)
             suspicious_terms_flag = has_suspicious_terms(snippet_lower)
             date_component_flag = is_date_component_near_number(text, m.start(1), m.end(1))
-            dollar_near_value = "$" in text[max(0, m.start(1) - 5):m.start(1)]
+            dollar_near_value = "$" in text[max(0, m.start(1) - 6):m.start(1)]
 
             nav_ref_date, nav_ref_date_source, nav_ref_match_text = extract_nav_asof_date(text, m.start(), m.end())
             context_info = analyze_candidate_context(text, m.start(), m.end(), extraction_method="direct")
@@ -1155,7 +1204,7 @@ def choose_effective_nav_date(
     upper_bounds_for_filing = [d for d in [market_date, today_utc] if d is not None]
     if filing_date is not None:
         if all(filing_date <= ub for ub in upper_bounds_for_filing):
-            return filing_date, "filing_date_fallback"
+            return filing_date, "filing_date_inferred_review_only"
         return None, "nav_date_future_rejected"
 
     return None, "nav_date_unknown"
@@ -1171,6 +1220,7 @@ def make_nav_overlay_row(
     source_kind: str,
     latest_price_by_ticker: Dict[str, Dict[str, Any]],
     nav_fresh_max_days: int,
+    nav_date_source: Optional[str] = None,
     extra_fields: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     ticker = str(ticker or "").upper().strip()
@@ -1183,10 +1233,15 @@ def make_nav_overlay_row(
 
     nav_age_days = None
     fresh_for_rule = False
+    structurally_reliable_nav_date = nav_date_source in {"manual_input", "nav_ref_extracted"}
+
     if valid_for_stats and nav_date is not None and market_date is not None:
         nav_age_days = int((market_date - nav_date).days)
         fresh_for_rule = bool(
-            nav_age_days is not None and 0 <= nav_age_days <= nav_fresh_max_days and premium_discount_pct is not None
+            structurally_reliable_nav_date and
+            nav_age_days is not None and
+            0 <= nav_age_days <= nav_fresh_max_days and
+            premium_discount_pct is not None
         )
 
     row = {
@@ -1203,6 +1258,8 @@ def make_nav_overlay_row(
         "source_url": source_url,
         "note": note,
         "source_kind": source_kind,
+        "structurally_reliable_nav_date": structurally_reliable_nav_date,
+        "nav_date_source": nav_date_source,
     }
     if extra_fields:
         row.update(extra_fields)
@@ -1227,7 +1284,6 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("date_component_flag", False)
         row.setdefault("extraction_method", "manual")
         row.setdefault("filing_date", None)
-        row.setdefault("nav_date_source", "manual_input")
         row.setdefault("price_obs_date", None)
         row.setdefault("price_obs_date_source", None)
         row.setdefault("price_obs_match_text", None)
@@ -1240,11 +1296,23 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("context_penalty_tags", [])
         row.setdefault("section_bonus_total", 0.0)
         row.setdefault("section_bonus_tags", [])
+        row.setdefault("doc_name", None)
+        row.setdefault("doc_score", None)
         return row
 
     used = bool(row.get("valid_for_stats"))
     dq_status = "OK" if used else "INVALID"
     flags: List[str] = []
+
+    nav_date_source = str(row.get("nav_date_source") or "")
+    if nav_date_source == "filing_date_inferred_review_only":
+        used = False
+        dq_status = "REVIEW_NAV_DATE_INFERRED"
+        flags.append("NAV_DATE_INFERRED_FROM_FILING")
+    elif nav_date_source in {"nav_date_unknown", "nav_date_future_rejected"}:
+        used = False
+        dq_status = "EXCLUDED_NAV_DATE_INVALID"
+        flags.append(f"NAV_DATE_STATUS_{norm_flag_token(nav_date_source)}")
 
     hard_skip_tags = list(row.get("hard_skip_context_tags") or [])
     if row.get("hard_skip_context_flag"):
@@ -1323,9 +1391,9 @@ def load_manual_nav_rows(
             source_kind="manual",
             latest_price_by_ticker=latest_price_by_ticker,
             nav_fresh_max_days=nav_fresh_max_days,
+            nav_date_source="manual_input",
             extra_fields={
                 "filing_date": None,
-                "nav_date_source": "manual_input",
                 "price_obs_date": None,
                 "price_obs_date_source": None,
                 "price_obs_match_text": None,
@@ -1338,6 +1406,8 @@ def load_manual_nav_rows(
                 "context_penalty_tags": [],
                 "section_bonus_total": 0.0,
                 "section_bonus_tags": [],
+                "doc_name": None,
+                "doc_score": None,
             },
         )
         row = finalize_nav_row_dq(row)
@@ -1355,20 +1425,98 @@ def load_manual_nav_rows(
     }
 
 
-def sec_fetch_json(session: requests.Session, url: str, timeout: int) -> Any:
-    r = session.get(url, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+def cache_key_path(cache_dir: Optional[Path], url: str, ext: str) -> Optional[Path]:
+    if cache_dir is None:
+        return None
+    ensure_dir(cache_dir)
+    key = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    return cache_dir / f"{key}.{ext}"
 
 
-def sec_fetch_text(session: requests.Session, url: str, timeout: int) -> str:
-    r = session.get(url, timeout=timeout)
-    r.raise_for_status()
-    return r.text
+def is_retryable_exception(e: Exception) -> bool:
+    if isinstance(e, (requests.Timeout, requests.ConnectionError)):
+        return True
+    if isinstance(e, requests.HTTPError):
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        return status in REQUEST_RETRYABLE_STATUS
+    return False
 
 
-def get_sec_ticker_to_cik_map(session: requests.Session, timeout: int) -> Dict[str, str]:
-    raw = sec_fetch_json(session, SEC_TICKER_MAP_URL, timeout=timeout)
+def sec_http_get(session: requests.Session, url: str, timeout: int) -> requests.Response:
+    last_err: Optional[Exception] = None
+    max_attempts = len(REQUEST_RETRY_SLEEP_SECONDS) + 1
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            r = session.get(url, timeout=timeout)
+            if r.status_code in REQUEST_RETRYABLE_STATUS:
+                raise requests.HTTPError(
+                    f"retryable_http_status:{r.status_code}",
+                    response=r,
+                )
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            last_err = e
+            retryable = is_retryable_exception(e)
+            if not retryable or attempt >= max_attempts:
+                raise
+            time.sleep(REQUEST_RETRY_SLEEP_SECONDS[attempt - 1])
+
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError("sec_http_get_unknown_error")
+
+
+def sec_fetch_json(
+    session: requests.Session,
+    url: str,
+    timeout: int,
+    cache_dir: Optional[Path] = None,
+    use_cache: bool = False,
+) -> Any:
+    cache_path = cache_key_path(cache_dir, url, "json") if use_cache else None
+    if cache_path and cache_path.exists():
+        cached = read_json(cache_path, default=None)
+        if cached is not None:
+            return cached
+
+    r = sec_http_get(session, url, timeout=timeout)
+    obj = r.json()
+
+    if cache_path is not None:
+        write_json(cache_path, obj)
+    return obj
+
+
+def sec_fetch_text(
+    session: requests.Session,
+    url: str,
+    timeout: int,
+    cache_dir: Optional[Path] = None,
+    use_cache: bool = False,
+) -> str:
+    cache_path = cache_key_path(cache_dir, url, "txt") if use_cache else None
+    if cache_path and cache_path.exists():
+        cached = read_text(cache_path, default=None)
+        if cached is not None:
+            return cached
+
+    r = sec_http_get(session, url, timeout=timeout)
+    text = r.text
+
+    if cache_path is not None:
+        write_text(cache_path, text)
+    return text
+
+
+def get_sec_ticker_to_cik_map(
+    session: requests.Session,
+    timeout: int,
+    cache_dir: Optional[Path] = None,
+    use_cache: bool = False,
+) -> Dict[str, str]:
+    raw = sec_fetch_json(session, SEC_TICKER_MAP_URL, timeout=timeout, cache_dir=cache_dir, use_cache=use_cache)
     out: Dict[str, str] = {}
     if isinstance(raw, dict):
         for _, item in raw.items():
@@ -1381,9 +1529,15 @@ def get_sec_ticker_to_cik_map(session: requests.Session, timeout: int) -> Dict[s
     return out
 
 
-def get_sec_filing_candidates(session: requests.Session, cik10: str, timeout: int) -> List[Dict[str, Any]]:
+def get_sec_filing_candidates(
+    session: requests.Session,
+    cik10: str,
+    timeout: int,
+    cache_dir: Optional[Path] = None,
+    use_cache: bool = False,
+) -> List[Dict[str, Any]]:
     url = SEC_SUBMISSIONS_URL.format(cik10=cik10)
-    raw = sec_fetch_json(session, url, timeout=timeout)
+    raw = sec_fetch_json(session, url, timeout=timeout, cache_dir=cache_dir, use_cache=use_cache)
 
     recent = (((raw or {}).get("filings") or {}).get("recent") or {})
     forms = recent.get("form", []) or []
@@ -1405,14 +1559,19 @@ def get_sec_filing_candidates(session: requests.Session, cik10: str, timeout: in
         if not filing_date or not accession or not primary_doc:
             continue
 
+        accession_nodash = accession.replace("-", "")
+        cik_int = str(int(cik10))
+
         out.append({
             "form": form,
             "filing_date": filing_date,
             "accession_number": accession,
+            "accession_nodash": accession_nodash,
+            "cik_int": cik_int,
             "primary_document": primary_doc,
             "source_url": SEC_ARCHIVES_DOC_URL.format(
-                cik_int=str(int(cik10)),
-                accession_nodash=accession.replace("-", ""),
+                cik_int=cik_int,
+                accession_nodash=accession_nodash,
                 primary_doc=primary_doc,
             ),
         })
@@ -1420,8 +1579,135 @@ def get_sec_filing_candidates(session: requests.Session, cik10: str, timeout: in
     return out
 
 
+def score_sec_document_name(doc_name: str, primary_document: str) -> int:
+    name = str(doc_name or "").strip()
+    lower = name.lower()
+    primary_lower = str(primary_document or "").strip().lower()
+
+    if not lower:
+        return -999
+
+    if lower.endswith((".jpg", ".jpeg", ".png", ".gif", ".zip", ".xls", ".xlsx", ".pdf")):
+        return -999
+    if lower.endswith((".xsd", ".xml")):
+        return -999
+    if any(x in lower for x in ["_cal.xml", "_def.xml", "_lab.xml", "_pre.xml"]):
+        return -999
+
+    score = 0
+    if lower == primary_lower:
+        score += 100
+
+    if lower.endswith((".htm", ".html")):
+        score += 12
+    elif lower.endswith(".txt"):
+        score += 10
+    else:
+        return -999
+
+    if re.search(r"(?:ex|exhibit)[\-_ ]?99", lower):
+        score += 55
+    if re.search(r"99[\._\- ]?1", lower):
+        score += 35
+    if re.search(r"99[\._\- ]?2", lower):
+        score += 25
+
+    for term, pts in [
+        ("earnings", 30),
+        ("results", 24),
+        ("release", 22),
+        ("supplement", 22),
+        ("presentation", 16),
+        ("investor", 10),
+        ("press", 10),
+        ("quarter", 8),
+        ("qtr", 8),
+    ]:
+        if term in lower:
+            score += pts
+
+    if lower.endswith(".txt"):
+        score += 5
+
+    if "index" in lower:
+        score -= 20
+
+    return score
+
+
+def get_sec_document_candidates_for_filing(
+    session: requests.Session,
+    filing: Dict[str, Any],
+    timeout: int,
+    max_docs_per_filing: int,
+    cache_dir: Optional[Path] = None,
+    use_cache: bool = False,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    notes: List[str] = []
+
+    primary_doc = str(filing.get("primary_document") or "").strip()
+    accession_nodash = str(filing.get("accession_nodash") or "").strip()
+    cik_int = str(filing.get("cik_int") or "").strip()
+
+    docs: List[Dict[str, Any]] = []
+    seen_urls = set()
+
+    primary_url = filing.get("source_url")
+    if primary_url:
+        docs.append({
+            "doc_name": primary_doc,
+            "url": primary_url,
+            "doc_score": score_sec_document_name(primary_doc, primary_doc),
+            "doc_source": "primary_document",
+        })
+        seen_urls.add(primary_url)
+
+    index_url = SEC_ARCHIVES_INDEX_URL.format(cik_int=cik_int, accession_nodash=accession_nodash)
+    try:
+        raw = sec_fetch_json(session, index_url, timeout=timeout, cache_dir=cache_dir, use_cache=use_cache)
+        items = (((raw or {}).get("directory") or {}).get("item") or [])
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            score = score_sec_document_name(name, primary_doc)
+            if score < 0:
+                continue
+            url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/{name}"
+            if url in seen_urls:
+                continue
+            docs.append({
+                "doc_name": name,
+                "url": url,
+                "doc_score": score,
+                "doc_source": "filing_index",
+            })
+            seen_urls.add(url)
+    except Exception as e:
+        notes.append(f"WARN:index_fetch:{type(e).__name__}:{str(e)[:120]}")
+
+    docs = sorted(
+        docs,
+        key=lambda x: (
+            -(int(x.get("doc_score") or -999)),
+            0 if x.get("doc_source") == "primary_document" else 1,
+            x.get("doc_name") or "",
+        )
+    )
+
+    trimmed = docs[:max(1, max_docs_per_filing)]
+    return trimmed, notes
+
+
 def filing_html_to_text(raw_text: str) -> str:
     text = html_lib.unescape(raw_text or "")
+    text = text.replace("&nbsp;", " ")
+    text = HTML_COMMENT_RE.sub(" ", text)
+    text = HTML_SCRIPT_STYLE_RE.sub(" ", text)
+    text = HTML_CELL_BREAK_RE.sub(" | ", text)
+    text = HTML_BLOCK_BREAK_RE.sub("\n", text)
     text = HTML_TAG_RE.sub(" ", text)
     text = WHITESPACE_RE.sub(" ", text)
     return text.strip()
@@ -1434,6 +1720,9 @@ def fetch_auto_nav_rows_from_sec(
     timeout: int,
     sec_user_agent: str,
     nav_auto_max_filings: int,
+    sec_max_docs_per_filing: int,
+    sec_cache_dir: Optional[Path],
+    sec_use_cache: bool,
 ) -> Dict[str, Any]:
     session = make_requests_session(sec_user_agent)
 
@@ -1444,11 +1733,16 @@ def fetch_auto_nav_rows_from_sec(
     today_utc = normalize_ts_naive(UTC_NOW())
 
     try:
-        ticker_map = get_sec_ticker_to_cik_map(session, timeout=timeout)
+        ticker_map = get_sec_ticker_to_cik_map(
+            session,
+            timeout=timeout,
+            cache_dir=(sec_cache_dir / "ticker_map") if sec_cache_dir else None,
+            use_cache=sec_use_cache,
+        )
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v6_contextfilter",
+            "source": "sec_filings_regex_v7_docscan",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -1466,7 +1760,13 @@ def fetch_auto_nav_rows_from_sec(
             continue
 
         try:
-            filings = get_sec_filing_candidates(session, cik10, timeout=timeout)
+            filings = get_sec_filing_candidates(
+                session,
+                cik10,
+                timeout=timeout,
+                cache_dir=(sec_cache_dir / "submissions") if sec_cache_dir else None,
+                use_cache=sec_use_cache,
+            )
         except Exception as e:
             notes.append(f"{ticker}:ERR:submissions:{type(e).__name__}:{str(e)[:120]}")
             continue
@@ -1478,95 +1778,149 @@ def fetch_auto_nav_rows_from_sec(
         chosen_row: Optional[Dict[str, Any]] = None
         fallback_review_row: Optional[Dict[str, Any]] = None
         market_date = parse_date((latest_price_by_ticker.get(ticker) or {}).get("data_date"))
+        market_close = to_float((latest_price_by_ticker.get(ticker) or {}).get("close"))
 
         for filing in filings[:max(1, nav_auto_max_filings)]:
             filing_date = parse_date(filing.get("filing_date"))
+
             try:
-                raw_text = sec_fetch_text(session, filing["source_url"], timeout=timeout)
-                text = filing_html_to_text(raw_text)
+                docs_to_scan, doc_notes = get_sec_document_candidates_for_filing(
+                    session=session,
+                    filing=filing,
+                    timeout=timeout,
+                    max_docs_per_filing=sec_max_docs_per_filing,
+                    cache_dir=(sec_cache_dir / "filing_index") if sec_cache_dir else None,
+                    use_cache=sec_use_cache,
+                )
+                for dn in doc_notes:
+                    notes.append(f"{ticker}:{filing.get('form')}:{filing.get('filing_date')}:{dn}")
             except Exception as e:
-                notes.append(f"{ticker}:WARN:doc_fetch:{filing.get('form')}:{type(e).__name__}:{str(e)[:100]}")
-                continue
+                notes.append(f"{ticker}:WARN:doc_candidates:{filing.get('form')}:{type(e).__name__}:{str(e)[:100]}")
+                docs_to_scan = [{
+                    "doc_name": filing.get("primary_document"),
+                    "url": filing.get("source_url"),
+                    "doc_score": score_sec_document_name(str(filing.get("primary_document") or ""), str(filing.get("primary_document") or "")),
+                    "doc_source": "primary_document",
+                }]
 
-            market_close = to_float((latest_price_by_ticker.get(ticker) or {}).get("close"))
-            candidates = extract_nav_candidates_from_text(
-                text=text,
-                market_close=market_close,
-                max_candidates=AUTO_NAV_MAX_CANDIDATES_PER_FILING,
-            )
-            if not candidates:
-                continue
+            filing_had_any_candidates = False
 
-            for cand in candidates:
-                nav_ref_date = parse_date(cand.get("nav_ref_date"))
-                effective_nav_date, nav_date_source = choose_effective_nav_date(
-                    nav_ref_date=nav_ref_date,
-                    filing_date=filing_date,
-                    market_date=market_date,
-                    today_utc=today_utc,
+            for doc in docs_to_scan:
+                try:
+                    raw_text = sec_fetch_text(
+                        session,
+                        doc["url"],
+                        timeout=timeout,
+                        cache_dir=(sec_cache_dir / "docs") if sec_cache_dir else None,
+                        use_cache=sec_use_cache,
+                    )
+                    text = filing_html_to_text(raw_text)
+                except Exception as e:
+                    notes.append(
+                        f"{ticker}:WARN:doc_fetch:{filing.get('form')}:{filing.get('filing_date')}:"
+                        f"{doc.get('doc_name')}:{type(e).__name__}:{str(e)[:100]}"
+                    )
+                    continue
+
+                candidates = extract_nav_candidates_from_text(
+                    text=text,
+                    market_close=market_close,
+                    max_candidates=AUTO_NAV_MAX_CANDIDATES_PER_FILING,
                 )
+                if not candidates:
+                    continue
 
-                row = make_nav_overlay_row(
-                    ticker=ticker,
-                    nav=to_float(cand.get("nav")),
-                    nav_date=effective_nav_date,
-                    source_url=filing["source_url"],
-                    note=f"auto_sec:{filing.get('form')}:{filing.get('filing_date')}:candidate_rank={cand.get('candidate_rank')}",
-                    source_kind="auto_sec",
-                    latest_price_by_ticker=latest_price_by_ticker,
-                    nav_fresh_max_days=nav_fresh_max_days,
-                    extra_fields={
-                        "filing_form": filing.get("form"),
-                        "filing_date": filing.get("filing_date"),
-                        "match_score": cand.get("match_score"),
-                        "matched_pattern": cand.get("matched_pattern"),
-                        "matched_snippet": cand.get("matched_snippet"),
-                        "candidate_rank": cand.get("candidate_rank"),
-                        "candidate_count": cand.get("candidate_count"),
-                        "percent_context_flag": cand.get("percent_context_flag"),
-                        "suspicious_terms_flag": cand.get("suspicious_terms_flag"),
-                        "date_component_flag": cand.get("date_component_flag"),
-                        "extraction_method": cand.get("extraction_method"),
-                        "derived_from_price": cand.get("derived_from_price"),
-                        "derived_from_rel": cand.get("derived_from_rel"),
-                        "derived_from_pct": cand.get("derived_from_pct"),
-                        "nav_date_source": nav_date_source,
-                        "price_obs_date": cand.get("price_obs_date"),
-                        "price_obs_date_source": cand.get("price_obs_date_source"),
-                        "price_obs_match_text": cand.get("price_obs_match_text"),
-                        "nav_ref_date_extracted": cand.get("nav_ref_date"),
-                        "nav_ref_date_source": cand.get("nav_ref_date_source"),
-                        "nav_ref_match_text": cand.get("nav_ref_match_text"),
-                        "hard_skip_context_flag": cand.get("hard_skip_context_flag"),
-                        "hard_skip_context_tags": cand.get("hard_skip_context_tags"),
-                        "context_penalty_total": cand.get("context_penalty_total"),
-                        "context_penalty_tags": cand.get("context_penalty_tags"),
-                        "section_bonus_total": cand.get("section_bonus_total"),
-                        "section_bonus_tags": cand.get("section_bonus_tags"),
-                    },
-                )
-                row = finalize_nav_row_dq(row)
+                filing_had_any_candidates = True
 
-                if fallback_review_row is None:
-                    fallback_review_row = row
-                else:
-                    prev_score = to_float(fallback_review_row.get("match_score")) or -999.0
-                    curr_score = to_float(row.get("match_score")) or -999.0
-                    if curr_score > prev_score:
+                for cand in candidates:
+                    nav_ref_date = parse_date(cand.get("nav_ref_date"))
+                    effective_nav_date, nav_date_source = choose_effective_nav_date(
+                        nav_ref_date=nav_ref_date,
+                        filing_date=filing_date,
+                        market_date=market_date,
+                        today_utc=today_utc,
+                    )
+
+                    row = make_nav_overlay_row(
+                        ticker=ticker,
+                        nav=to_float(cand.get("nav")),
+                        nav_date=effective_nav_date,
+                        source_url=doc["url"],
+                        note=(
+                            f"auto_sec:{filing.get('form')}:{filing.get('filing_date')}:"
+                            f"doc={doc.get('doc_name')}:doc_score={doc.get('doc_score')}:"
+                            f"candidate_rank={cand.get('candidate_rank')}"
+                        ),
+                        source_kind="auto_sec",
+                        latest_price_by_ticker=latest_price_by_ticker,
+                        nav_fresh_max_days=nav_fresh_max_days,
+                        nav_date_source=nav_date_source,
+                        extra_fields={
+                            "filing_form": filing.get("form"),
+                            "filing_date": filing.get("filing_date"),
+                            "match_score": cand.get("match_score"),
+                            "matched_pattern": cand.get("matched_pattern"),
+                            "matched_snippet": cand.get("matched_snippet"),
+                            "candidate_rank": cand.get("candidate_rank"),
+                            "candidate_count": cand.get("candidate_count"),
+                            "percent_context_flag": cand.get("percent_context_flag"),
+                            "suspicious_terms_flag": cand.get("suspicious_terms_flag"),
+                            "date_component_flag": cand.get("date_component_flag"),
+                            "extraction_method": cand.get("extraction_method"),
+                            "derived_from_price": cand.get("derived_from_price"),
+                            "derived_from_rel": cand.get("derived_from_rel"),
+                            "derived_from_pct": cand.get("derived_from_pct"),
+                            "price_obs_date": cand.get("price_obs_date"),
+                            "price_obs_date_source": cand.get("price_obs_date_source"),
+                            "price_obs_match_text": cand.get("price_obs_match_text"),
+                            "nav_ref_date_extracted": cand.get("nav_ref_date"),
+                            "nav_ref_date_source": cand.get("nav_ref_date_source"),
+                            "nav_ref_match_text": cand.get("nav_ref_match_text"),
+                            "hard_skip_context_flag": cand.get("hard_skip_context_flag"),
+                            "hard_skip_context_tags": cand.get("hard_skip_context_tags"),
+                            "context_penalty_total": cand.get("context_penalty_total"),
+                            "context_penalty_tags": cand.get("context_penalty_tags"),
+                            "section_bonus_total": cand.get("section_bonus_total"),
+                            "section_bonus_tags": cand.get("section_bonus_tags"),
+                            "doc_name": doc.get("doc_name"),
+                            "doc_score": doc.get("doc_score"),
+                            "doc_source": doc.get("doc_source"),
+                        },
+                    )
+                    row = finalize_nav_row_dq(row)
+
+                    if fallback_review_row is None:
                         fallback_review_row = row
+                    else:
+                        prev_score = to_float(fallback_review_row.get("match_score")) or -999.0
+                        curr_score = to_float(row.get("match_score")) or -999.0
+                        prev_doc_score = to_float(fallback_review_row.get("doc_score")) or -999.0
+                        curr_doc_score = to_float(row.get("doc_score")) or -999.0
+                        if (curr_score, curr_doc_score) > (prev_score, prev_doc_score):
+                            fallback_review_row = row
 
-                if row.get("used_in_stats"):
-                    chosen_row = row
+                    if row.get("used_in_stats"):
+                        chosen_row = row
+                        break
+
+                if chosen_row is not None:
                     break
 
             if chosen_row is not None:
                 break
+
+            if not filing_had_any_candidates:
+                notes.append(
+                    f"{ticker}:INFO:no_match_in_filing:{filing.get('form')}:{filing.get('filing_date')}:"
+                    f"docs_scanned={len(docs_to_scan)}"
+                )
 
         if chosen_row is not None:
             out_rows.append(chosen_row)
             found += 1
             notes.append(
                 f"{ticker}:OK:{chosen_row.get('filing_form')}:{chosen_row.get('filing_date')}:"
+                f"doc={chosen_row.get('doc_name')}:doc_score={chosen_row.get('doc_score')}:"
                 f"score={chosen_row.get('match_score')}:dq={chosen_row.get('dq_status')}:"
                 f"method={chosen_row.get('extraction_method')}:nav_date_source={chosen_row.get('nav_date_source')}"
             )
@@ -1575,6 +1929,7 @@ def fetch_auto_nav_rows_from_sec(
             found += 1
             notes.append(
                 f"{ticker}:REVIEW_ONLY:{fallback_review_row.get('filing_form')}:{fallback_review_row.get('filing_date')}:"
+                f"doc={fallback_review_row.get('doc_name')}:doc_score={fallback_review_row.get('doc_score')}:"
                 f"score={fallback_review_row.get('match_score')}:dq={fallback_review_row.get('dq_status')}:"
                 f"method={fallback_review_row.get('extraction_method')}:nav_date_source={fallback_review_row.get('nav_date_source')}"
             )
@@ -1583,7 +1938,7 @@ def fetch_auto_nav_rows_from_sec(
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v6_contextfilter",
+        "source": "sec_filings_regex_v7_docscan",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -2089,6 +2444,8 @@ def build_report(latest: Dict[str, Any]) -> str:
         [
             ("ticker", "ticker"),
             ("source_kind", "source_kind"),
+            ("doc_name", "doc_name"),
+            ("doc_score", "doc_score"),
             ("extraction_method", "extraction_method"),
             ("used_in_stats", "used_in_stats"),
             ("dq_status", "dq_status"),
@@ -2117,8 +2474,8 @@ def build_report(latest: Dict[str, Any]) -> str:
         for r in auto_snippets:
             lines.append(
                 f"- {r.get('ticker')} | used_in_stats={r.get('used_in_stats')} | "
-                f"dq_status={r.get('dq_status')} | score={r.get('match_score')} | "
-                f"pattern={r.get('matched_pattern')} | method={r.get('extraction_method')}"
+                f"dq_status={r.get('dq_status')} | doc={r.get('doc_name')} | doc_score={r.get('doc_score')} | "
+                f"score={r.get('match_score')} | pattern={r.get('matched_pattern')} | method={r.get('extraction_method')}"
             )
             lines.append(f"  - snippet: `{sanitize_inline_code_text(r.get('matched_snippet'))}`")
             if r.get("price_obs_match_text"):
@@ -2210,6 +2567,10 @@ def main() -> None:
     inputs_dir = out_dir / "inputs"
     ensure_dir(inputs_dir)
 
+    sec_cache_dir = Path(args.sec_cache_dir) if args.sec_cache_dir else (out_dir / "sec_cache")
+    if args.sec_use_cache:
+        ensure_dir(sec_cache_dir)
+
     manual_events_path = Path(args.manual_events) if args.manual_events else inputs_dir / "manual_events.json"
     manual_nav_path = Path(args.manual_nav) if args.manual_nav else inputs_dir / "manual_nav.json"
     unified_json_path = Path(args.unified_json) if args.unified_json else None
@@ -2253,6 +2614,9 @@ def main() -> None:
             timeout=args.timeout,
             sec_user_agent=args.sec_user_agent,
             nav_auto_max_filings=args.nav_auto_max_filings,
+            sec_max_docs_per_filing=args.sec_max_docs_per_filing,
+            sec_cache_dir=sec_cache_dir if args.sec_use_cache else None,
+            sec_use_cache=bool(args.sec_use_cache),
         )
     else:
         auto_nav_result = {
@@ -2293,7 +2657,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v6_contextfilter + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -2304,6 +2668,9 @@ def main() -> None:
                 "nav_fresh_max_days": args.nav_fresh_max_days,
                 "nav_auto_source": args.nav_auto_source,
                 "nav_auto_max_filings": args.nav_auto_max_filings,
+                "sec_max_docs_per_filing": args.sec_max_docs_per_filing,
+                "sec_use_cache": bool(args.sec_use_cache),
+                "sec_cache_dir": str(sec_cache_dir) if args.sec_use_cache else None,
                 "auto_nav_min_match_score": AUTO_NAV_MIN_MATCH_SCORE,
                 "auto_nav_review_premium_pct": AUTO_NAV_REVIEW_PREMIUM_PCT,
                 "auto_nav_exclude_premium_pct": AUTO_NAV_EXCLUDE_PREMIUM_PCT,
@@ -2341,10 +2708,10 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.10 adds hard-skip filters for hypothetical / boilerplate contexts before they can pass into structural stats.",
-            "v1.10 adds section/context bonus-penalty scoring so cleaner disclosure zones outrank footnotes and boilerplate.",
-            "v1.10 keeps price_obs_date / nav_ref_date split, while nav_date remains the effective date used in stats.",
-            "v1.10 keeps markdown-safe table escaping and NAV coverage decomposition for auditability.",
+            "v1.11 adds SEC retry/backoff and optional cache for better fetch stability.",
+            "v1.11 scans filing index and scores multiple docs per filing instead of only primaryDocument.",
+            "v1.11 improves HTML-to-text normalization for table/paragraph preservation.",
+            "v1.11 treats filing-date-only NAV dating as REVIEW_ONLY, excluding it from structural stats.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
