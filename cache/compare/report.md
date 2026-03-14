@@ -2,8 +2,8 @@
 
 - report_type: `compare_history_lite_event_window_renderer.v1`
 - source_json: `cache/history_lite.json`
-- generated_at: `2026-03-14T16:49:37`
-- input_generated_at: `2026-03-14T16:49:37`
+- generated_at: `2026-03-14T16:59:04`
+- input_generated_at: `2026-03-14T16:59:03`
 - event_dates: `['2025-04-07', '2026-03-05']`
 - pre_days / post_days: `10` / `10`
 - max_gap_days: `7`
