@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.8b)
+build_private_credit_monitor.py (v1.8c)
 
 Purpose
 -------
@@ -17,14 +17,17 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.8b changes
+v1.8c changes
 -------------
-- Keep v1.7 structure
-- Replace pd.Timestamp.utcnow() usage with UTC_NOW()-based timestamp construction
-- Guard fresh_for_rule against negative nav_age_days
-- Harden choose_effective_nav_date() so future dates are rejected
-  using filing_date / market_date / today_utc guardrails
-- Preserve nav_asof_date extraction / audit fields from v1.7
+- Keep v1.8b structure
+- Fix tz-naive / tz-aware comparison bug by normalizing all date comparisons
+  to tz-naive normalized pandas Timestamps
+- Replace parse_date internals with normalize_ts_naive()
+- Replace UTC_NOW() -> pandas Timestamp conversion sites with normalize_ts_naive()
+- Keep:
+  * future-date guards
+  * non-negative nav_age_days requirement for fresh_for_rule
+  * nav_asof_date extraction / audit fields
 
 Outputs
 -------
@@ -60,7 +63,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.8b"
+SCRIPT_VERSION = "v1.8c"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -244,7 +247,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
 
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.8b contact@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.8c contact@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     return p.parse_args()
 
@@ -322,6 +325,26 @@ def create_manual_nav_template(path: Path) -> None:
     write_json(path, template)
 
 
+def normalize_ts_naive(x: Any) -> Optional[pd.Timestamp]:
+    """
+    Convert input into tz-naive normalized pandas Timestamp.
+    - tz-aware -> convert to UTC then strip tz
+    - tz-naive -> keep as-is
+    - invalid -> None
+    """
+    if x is None or x == "":
+        return None
+    try:
+        ts = pd.Timestamp(x)
+        if pd.isna(ts):
+            return None
+        if getattr(ts, "tzinfo", None) is not None:
+            ts = ts.tz_convert("UTC").tz_localize(None)
+        return pd.Timestamp(ts).normalize()
+    except Exception:
+        return None
+
+
 def to_float(x: Any) -> Optional[float]:
     try:
         if x is None or x == "":
@@ -335,15 +358,7 @@ def to_float(x: Any) -> Optional[float]:
 
 
 def parse_date(x: Any) -> Optional[pd.Timestamp]:
-    if x is None or x == "":
-        return None
-    try:
-        ts = pd.to_datetime(x, errors="coerce")
-        if pd.isna(ts):
-            return None
-        return pd.Timestamp(ts).normalize()
-    except Exception:
-        return None
+    return normalize_ts_naive(x)
 
 
 def percentile_rank(window: pd.Series, value: float) -> Optional[float]:
@@ -898,7 +913,13 @@ def choose_effective_nav_date(
     Prefer NAV as-of date when available and not in the future versus
     filing_date / market_date / today_utc.
     Otherwise fall back to filing_date only if filing_date itself is not future.
+    All timestamps are normalized to tz-naive before comparison.
     """
+
+    nav_asof_date = normalize_ts_naive(nav_asof_date)
+    filing_date = normalize_ts_naive(filing_date)
+    market_date = normalize_ts_naive(market_date)
+    today_utc = normalize_ts_naive(today_utc)
 
     upper_bounds_for_asof = [d for d in [filing_date, market_date, today_utc] if d is not None]
     if nav_asof_date is not None:
@@ -1170,7 +1191,7 @@ def fetch_auto_nav_rows_from_sec(
     notes: List[str] = []
     attempted = 0
     found = 0
-    today_utc = pd.Timestamp(UTC_NOW()).normalize()
+    today_utc = normalize_ts_naive(UTC_NOW())
 
     try:
         ticker_map = get_sec_ticker_to_cik_map(session, timeout=timeout)
@@ -1994,7 +2015,7 @@ def main() -> None:
     if not proxy_tickers:
         proxy_tickers = DEFAULT_PROXY_TICKERS.copy()
 
-    end_date = pd.Timestamp(UTC_NOW()).normalize()
+    end_date = normalize_ts_naive(UTC_NOW())
     start_date = end_date - pd.Timedelta(days=args.lookback_calendar_days)
 
     price_rows: List[Dict[str, Any]] = []
@@ -2124,7 +2145,8 @@ def main() -> None:
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
             "When available, nav_asof_date extracted from filing text is used for nav_age_days / fresh_for_rule; filing_date is retained for audit.",
-            "v1.8b hard guards reject future effective NAV dates and require non-negative nav_age_days for fresh_for_rule.",
+            "v1.8c normalizes all comparison timestamps to tz-naive before date guard checks.",
+            "v1.8c hard guards reject future effective NAV dates and require non-negative nav_age_days for fresh_for_rule.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
