@@ -72,7 +72,6 @@ import hashlib
 import html
 import json
 import math
-import os
 import re
 import sys
 import time
@@ -94,7 +93,7 @@ except Exception:  # pragma: no cover
 
 
 SCRIPT_NAME = "nav_sec_pipeline.py"
-SCRIPT_VERSION = "v1.0.0"
+SCRIPT_VERSION = "v1.0.1"
 
 DEFAULT_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
 DEFAULT_OUT_DIR = "nav_only_cache"
@@ -225,6 +224,8 @@ NEGATIVE_CONTEXT_TERMS = {
     "versus",
     "vs.",
 }
+
+XBRL_METHODS = {"xbrl_companyconcept", "xbrl_companyfacts_discovery"}
 
 
 @dataclass
@@ -407,6 +408,7 @@ class Fetcher:
 def create_manual_nav_template(path: Path, tickers: Sequence[str]) -> None:
     if path.exists():
         return
+    ensure_dir(path.parent)
     template = []
     for t in tickers:
         template.append(
@@ -1008,6 +1010,19 @@ def candidate_priority(c: Dict[str, Any]) -> Tuple[float, int, int, float]:
     return (float(c.get("match_score") or 0.0), method_rank, nav_ord, filing_ord)
 
 
+def is_high_confidence_xbrl_row(row: Dict[str, Any]) -> bool:
+    method = str(row.get("method") or "")
+    source = str(row.get("source") or "")
+    score = float(row.get("match_score") or 0.0)
+    nav_date = parse_date_any(row.get("nav_date"))
+    return (
+        source == "sec_xbrl"
+        and method in XBRL_METHODS
+        and score >= 90.0
+        and nav_date is not None
+    )
+
+
 def finalize_nav_row_dq(
     row: Dict[str, Any],
     market_date: dt.date,
@@ -1063,6 +1078,7 @@ def finalize_nav_row_dq(
     if nav and market_close and nav > 0:
         premium_discount_pct = (market_close / nav - 1.0) * 100.0
         row["premium_discount_pct"] = round(premium_discount_pct, 6)
+
         if dq_status == "OK" and premium_discount_pct > 50:
             dq_status = "EXCLUDED_PREMIUM_TOO_HIGH"
             used_in_stats = False
@@ -1070,8 +1086,13 @@ def finalize_nav_row_dq(
             dq_status = "REVIEW_PREMIUM_HIGH"
             used_in_stats = False
         elif dq_status == "OK" and premium_discount_pct < -50:
-            dq_status = "EXCLUDED_DISCOUNT_TOO_DEEP"
-            used_in_stats = False
+            if is_high_confidence_xbrl_row(row):
+                dq_status = "REVIEW_DISCOUNT_TOO_DEEP"
+                used_in_stats = False
+                notes.append("deep_discount_preserved_for_review_high_confidence_xbrl")
+            else:
+                dq_status = "EXCLUDED_DISCOUNT_TOO_DEEP"
+                used_in_stats = False
         elif dq_status == "OK" and premium_discount_pct < -30:
             dq_status = "REVIEW_DISCOUNT_DEEP"
             used_in_stats = False
@@ -1125,6 +1146,7 @@ def build_nav_overlay(
             }
         base["ticker"] = ticker
         m = market_map.get(ticker, {})
+        base["report_date"] = date_to_str(market_date)
         base["market_date"] = date_to_str(market_date)
         base["market_price_date"] = m.get("market_price_date")
         base["market_close"] = m.get("market_close")
@@ -1137,7 +1159,9 @@ def build_nav_overlay(
 def summarize_rows(rows: Sequence[Dict[str, Any]], nav_fresh_max_days: int) -> Dict[str, Any]:
     usable = [r for r in rows if r.get("used_in_stats")]
     fresh = [r for r in rows if r.get("fresh_for_rule")]
-    pd_all = [float(r["premium_discount_pct"]) for r in usable if r.get("premium_discount_pct") is not None]
+    rows_with_pd = [r for r in rows if r.get("premium_discount_pct") is not None]
+    pd_usable = [float(r["premium_discount_pct"]) for r in usable if r.get("premium_discount_pct") is not None]
+    pd_all_rows = [float(r["premium_discount_pct"]) for r in rows_with_pd]
     pd_fresh = [float(r["premium_discount_pct"]) for r in fresh if r.get("premium_discount_pct") is not None]
 
     def median(xs: Sequence[float]) -> Optional[float]:
@@ -1153,6 +1177,7 @@ def summarize_rows(rows: Sequence[Dict[str, Any]], nav_fresh_max_days: int) -> D
     coverage_total = len([r for r in rows if to_float(r.get("nav")) is not None])
     coverage_usable = len(usable)
     coverage_fresh = len(fresh)
+    coverage_all_with_pd = len(rows_with_pd)
     confidence = "LOW"
     if coverage_fresh >= 4:
         confidence = "HIGH"
@@ -1166,8 +1191,10 @@ def summarize_rows(rows: Sequence[Dict[str, Any]], nav_fresh_max_days: int) -> D
         "coverage_total": coverage_total,
         "coverage_usable": coverage_usable,
         "coverage_fresh": coverage_fresh,
+        "coverage_all_with_pd": coverage_all_with_pd,
         "nav_fresh_max_days": nav_fresh_max_days,
-        "median_discount_pct_all": None if median(pd_all) is None else round(median(pd_all), 6),
+        "median_discount_pct_usable": None if median(pd_usable) is None else round(median(pd_usable), 6),
+        "median_discount_pct_all_rows": None if median(pd_all_rows) is None else round(median(pd_all_rows), 6),
         "median_discount_pct_fresh": None if median(pd_fresh) is None else round(median(pd_fresh), 6),
         "confidence": confidence,
     }
@@ -1216,18 +1243,15 @@ def fetch_auto_nav_rows_from_sec(
 
         per_ticker_candidates: List[Candidate] = []
 
-        # XBRL first: companyconcept
         ccands = fetch_xbrl_companyconcept_nav_candidates(fetcher, cik, t, market_date)
         per_ticker_candidates.extend(ccands)
         best_xbrl = choose_best_xbrl_candidate(per_ticker_candidates, market_date)
 
-        # companyfacts discovery if no usable standard candidate
         if best_xbrl is None:
             fcands = fetch_xbrl_companyfacts_nav_candidates(fetcher, cik, t, market_date)
             per_ticker_candidates.extend(fcands)
             best_xbrl = choose_best_xbrl_candidate(per_ticker_candidates, market_date)
 
-        # Filing fallback only if XBRL still not available
         if best_xbrl is None:
             filings = get_recent_filing_candidates(fetcher, cik, nav_auto_max_filings)
             for filing in filings:
@@ -1258,12 +1282,19 @@ def render_markdown_report(summary: Dict[str, Any], rows: Sequence[Dict[str, Any
         "coverage_total",
         "coverage_usable",
         "coverage_fresh",
+        "coverage_all_with_pd",
         "nav_fresh_max_days",
-        "median_discount_pct_all",
+        "median_discount_pct_usable",
+        "median_discount_pct_all_rows",
         "median_discount_pct_fresh",
         "confidence",
     ]:
         lines.append(f"- {k}: `{summary.get(k)}`")
+    lines.append("")
+    lines.append("## Interpretation Notes")
+    lines.append("- `median_discount_pct_usable`: median using only rows with `used_in_stats=true`")
+    lines.append("- `median_discount_pct_all_rows`: median using all rows that have a calculable premium/discount, even if DQ marked them as review/excluded")
+    lines.append("- `median_discount_pct_fresh`: median using rows with `fresh_for_rule=true`")
     lines.append("")
     lines.append("## SEC Fetch Meta")
     lines.append(f"- ticker_map_ok: `{auto_meta.get('ticker_map_ok')}`")
@@ -1277,21 +1308,26 @@ def render_markdown_report(summary: Dict[str, Any], rows: Sequence[Dict[str, Any
     lines.append("")
     lines.append("## Rows")
     lines.append("")
-    lines.append("| ticker | source | method | nav | nav_date | market_close | premium_discount_pct | dq_status | used_in_stats | snippet |")
-    lines.append("|---|---|---:|---:|---|---:|---:|---|---|---|")
+    lines.append("| ticker | source | method | nav | nav_date | report_date | market_price_date | market_close | premium_discount_pct | dq_status | used_in_stats | fresh_for_rule | review_flags | snippet |")
+    lines.append("|---|---|---|---:|---|---|---|---:|---:|---|---|---|---|---|")
     for r in rows:
         snippet = str(r.get("snippet") or "").replace("|", "\\|")
+        review_flags = ",".join(str(x) for x in (r.get("review_flags") or []))
         lines.append(
-            "| {ticker} | {source} | {method} | {nav} | {nav_date} | {market_close} | {premium_discount_pct} | {dq_status} | {used_in_stats} | {snippet} |".format(
+            "| {ticker} | {source} | {method} | {nav} | {nav_date} | {report_date} | {market_price_date} | {market_close} | {premium_discount_pct} | {dq_status} | {used_in_stats} | {fresh_for_rule} | {review_flags} | {snippet} |".format(
                 ticker=r.get("ticker"),
                 source=r.get("source"),
                 method=r.get("method"),
                 nav=r.get("nav"),
                 nav_date=r.get("nav_date"),
+                report_date=r.get("report_date"),
+                market_price_date=r.get("market_price_date"),
                 market_close=r.get("market_close"),
                 premium_discount_pct=r.get("premium_discount_pct"),
                 dq_status=r.get("dq_status"),
                 used_in_stats=r.get("used_in_stats"),
+                fresh_for_rule=r.get("fresh_for_rule"),
+                review_flags=clip(review_flags, 80).replace("|", "\\|"),
                 snippet=clip(snippet, 120),
             )
         )
@@ -1299,7 +1335,7 @@ def render_markdown_report(summary: Dict[str, Any], rows: Sequence[Dict[str, Any
     lines.append("## Detailed Rows (JSON preview)")
     lines.append("")
     lines.append("```json")
-    lines.append(json.dumps(rows, ensure_ascii=False, indent=2)[:5000])
+    lines.append(json.dumps(rows, ensure_ascii=False, indent=2)[:7000])
     lines.append("```")
     return "\n".join(lines) + "\n"
 
