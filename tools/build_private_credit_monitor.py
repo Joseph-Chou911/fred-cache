@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.11e)
+build_private_credit_monitor.py (v1.12)
 
 Purpose
 -------
@@ -17,16 +17,13 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.11e changes
---------------
-- Keep v1.11d structure / audit philosophy
-- Keep HTML table anchor-binding for "Net Asset Value per share" rows
-- Improve date parsing for SEC HTML table headers:
-  * support both numeric dates (12/31/2025) and month-name dates (December 31, 2025)
-- Add nearby-header fallback for table-like NAV rows:
-  * when HTML table parsing misses, bind multi-value NAV rows to nearby date headers
-    if doc_period_anchor matches one of the nearby header dates
-- Keep ambiguity guard for unresolved current_first_column rows
+v1.12 changes
+-------------
+- Add XBRL-first NAV extraction using SEC JSON APIs:
+  * try companyconcept for standard concepts first
+  * fall back to companyfacts keyword discovery across standard taxonomies
+- Keep HTML / regex extraction only as fallback paths
+- Preserve existing DQ / REVIEW logic for non-XBRL fallback rows
 - Preserve filing-date-only fallback as REVIEW_ONLY
 """
 
@@ -49,7 +46,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.11e"
+SCRIPT_VERSION = "v1.12"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -80,6 +77,16 @@ SEC_TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik10}.json"
 SEC_ARCHIVES_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/{primary_doc}"
 SEC_ARCHIVES_INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_nodash}/index.json"
+SEC_XBRL_COMPANYCONCEPT_URL = "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik10}/{taxonomy}/{concept}.json"
+SEC_XBRL_COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik10}.json"
+XBRL_STANDARD_TAXONOMIES = {"us-gaap", "ifrs-full", "dei", "srt"}
+XBRL_NAV_STANDARD_CONCEPTS = [("us-gaap", "NetAssetValuePerShare")]
+XBRL_NAV_LABEL_KEYWORDS = [
+    "net asset value per share",
+    "net assets per share",
+    "nav per share",
+]
+
 
 AUTO_NAV_ALLOWED_FORMS = {"10-Q", "10-Q/A", "10-K", "10-K/A", "8-K", "8-K/A"}
 
@@ -417,7 +424,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11e your_email@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.12 your_email@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     p.add_argument("--sec-max-docs-per-filing", type=int, default=5, help="Max SEC docs to scan per filing after document scoring")
     p.add_argument("--sec-use-cache", action="store_true", help="Use local SEC response cache")
@@ -1849,7 +1856,7 @@ def make_nav_overlay_row(
 
     nav_age_days = None
     fresh_for_rule = False
-    structurally_reliable_nav_date = nav_date_source in {"manual_input", "nav_ref_extracted", "doc_period_anchor_extracted"}
+    structurally_reliable_nav_date = nav_date_source in {"manual_input", "nav_ref_extracted", "doc_period_anchor_extracted", "xbrl_fact_end_date"}
 
     if valid_for_stats and nav_date is not None and market_date is not None:
         nav_age_days = int((market_date - nav_date).days)
@@ -1927,6 +1934,10 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("table_bound_index", None)
         row.setdefault("table_index", None)
         row.setdefault("table_row_index", None)
+        row.setdefault("xbrl_taxonomy", None)
+        row.setdefault("xbrl_concept", None)
+        row.setdefault("xbrl_label", None)
+        row.setdefault("xbrl_unit", None)
         return row
 
     used = bool(row.get("valid_for_stats"))
@@ -2070,6 +2081,10 @@ def load_manual_nav_rows(
                 "table_bound_index": None,
                 "table_index": None,
                 "table_row_index": None,
+                "xbrl_taxonomy": None,
+                "xbrl_concept": None,
+                "xbrl_label": None,
+                "xbrl_unit": None,
             },
         )
         row = finalize_nav_row_dq(row)
@@ -2170,6 +2185,249 @@ def sec_fetch_text(
     if cache_path is not None:
         write_text(cache_path, text)
     return text
+
+
+def _norm_phrase(s: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).strip()
+
+
+def _xbrl_nav_label_match(concept: str, label: Optional[str] = None, description: Optional[str] = None) -> bool:
+    hay = " | ".join([_norm_phrase(concept), _norm_phrase(label), _norm_phrase(description)])
+    if _norm_phrase(concept) == "netassetvaluepershare":
+        return True
+    return any(_norm_phrase(k) in hay for k in XBRL_NAV_LABEL_KEYWORDS)
+
+
+def _extract_xbrl_candidates_from_fact_payload(
+    payload: Dict[str, Any],
+    *,
+    taxonomy: str,
+    concept: str,
+    source_url: str,
+    extraction_method: str,
+    match_score: float,
+    role: str,
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    label = payload.get("label") if isinstance(payload, dict) else None
+    description = payload.get("description") if isinstance(payload, dict) else None
+    units = (payload or {}).get("units", {}) if isinstance(payload, dict) else {}
+
+    for unit_name, facts in units.items():
+        if not isinstance(facts, list):
+            continue
+        for fact in facts:
+            if not isinstance(fact, dict):
+                continue
+            form = str(fact.get("form") or "").upper().strip()
+            if form and form not in AUTO_NAV_ALLOWED_FORMS:
+                continue
+            end_ts = parse_date(fact.get("end"))
+            filed_ts = parse_date(fact.get("filed"))
+            val = to_float(fact.get("val"))
+            if end_ts is None or val is None or not (0.5 <= val <= 100.0):
+                continue
+            out.append({
+                "nav": round(float(val), 6),
+                "nav_date": end_ts.strftime("%Y-%m-%d"),
+                "filing_date": filed_ts.strftime("%Y-%m-%d") if filed_ts is not None else None,
+                "filing_form": form or None,
+                "source_url": source_url,
+                "xbrl_taxonomy": taxonomy,
+                "xbrl_concept": concept,
+                "xbrl_label": label,
+                "xbrl_description": description,
+                "xbrl_unit": unit_name,
+                "match_score": safe_num(match_score),
+                "matched_pattern": f"{taxonomy}:{concept}",
+                "matched_snippet": clean_snippet(f"XBRL fact {taxonomy}:{concept} end={end_ts.strftime('%Y-%m-%d')} val={safe_num(val)} unit={unit_name}", max_len=220),
+                "extraction_method": extraction_method,
+                "candidate_value_role": role,
+                "nav_ref_date": end_ts.strftime("%Y-%m-%d"),
+                "nav_ref_date_source": "xbrl_fact_end_date",
+                "nav_ref_match_text": end_ts.strftime("%Y-%m-%d"),
+                "price_obs_date": None,
+                "price_obs_date_source": None,
+                "price_obs_match_text": None,
+                "percent_context_flag": False,
+                "suspicious_terms_flag": False,
+                "date_component_flag": False,
+                "hard_skip_context_flag": False,
+                "hard_skip_context_tags": [],
+                "context_penalty_total": 0.0,
+                "context_penalty_tags": [],
+                "section_bonus_total": 1.0,
+                "section_bonus_tags": ["xbrl_api"],
+                "comparison_context_flag": False,
+                "multi_value_row_flag": False,
+                "date_binding_mode": "xbrl_fact_end_date",
+                "local_role_ctx": clean_snippet(str(label or concept), max_len=140),
+                "table_header_dates": None,
+                "table_row_values": None,
+                "table_bound_index": None,
+                "table_index": None,
+                "table_row_index": None,
+            })
+    return out
+
+
+def fetch_xbrl_companyconcept_nav_candidates(
+    session: requests.Session,
+    cik10: str,
+    timeout: int,
+    cache_dir: Optional[Path] = None,
+    use_cache: bool = False,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    candidates: List[Dict[str, Any]] = []
+    notes: List[str] = []
+    for taxonomy, concept in XBRL_NAV_STANDARD_CONCEPTS:
+        url = SEC_XBRL_COMPANYCONCEPT_URL.format(cik10=cik10, taxonomy=taxonomy, concept=concept)
+        try:
+            payload = sec_fetch_json(session, url, timeout=timeout, cache_dir=cache_dir, use_cache=use_cache)
+        except Exception as e:
+            notes.append(f"companyconcept:{taxonomy}:{concept}:{type(e).__name__}:{str(e)[:80]}")
+            continue
+        candidates.extend(_extract_xbrl_candidates_from_fact_payload(
+            payload,
+            taxonomy=taxonomy,
+            concept=concept,
+            source_url=url,
+            extraction_method="xbrl_companyconcept",
+            match_score=20.0,
+            role="current_xbrl_standard_concept",
+        ))
+    return candidates, notes
+
+
+def fetch_xbrl_companyfacts_nav_candidates(
+    session: requests.Session,
+    cik10: str,
+    timeout: int,
+    cache_dir: Optional[Path] = None,
+    use_cache: bool = False,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    url = SEC_XBRL_COMPANYFACTS_URL.format(cik10=cik10)
+    notes: List[str] = []
+    try:
+        raw = sec_fetch_json(session, url, timeout=timeout, cache_dir=cache_dir, use_cache=use_cache)
+    except Exception as e:
+        return [], [f"companyfacts:{type(e).__name__}:{str(e)[:100]}"]
+
+    candidates: List[Dict[str, Any]] = []
+    facts_root = (raw or {}).get("facts", {}) if isinstance(raw, dict) else {}
+    for taxonomy, concept_map in facts_root.items():
+        if taxonomy not in XBRL_STANDARD_TAXONOMIES or not isinstance(concept_map, dict):
+            continue
+        for concept, payload in concept_map.items():
+            if not isinstance(payload, dict):
+                continue
+            if not _xbrl_nav_label_match(concept, payload.get("label"), payload.get("description")):
+                continue
+            candidates.extend(_extract_xbrl_candidates_from_fact_payload(
+                payload,
+                taxonomy=taxonomy,
+                concept=concept,
+                source_url=url,
+                extraction_method="xbrl_companyfacts",
+                match_score=17.0,
+                role="current_xbrl_discovered_concept",
+            ))
+    return candidates, notes
+
+
+def _choose_best_xbrl_candidate(
+    candidates: List[Dict[str, Any]],
+    market_date: Optional[pd.Timestamp],
+) -> Optional[Dict[str, Any]]:
+    if not candidates:
+        return None
+    mkt = normalize_ts_naive(market_date)
+    usable = []
+    for c in candidates:
+        end_ts = parse_date(c.get("nav_date"))
+        filed_ts = parse_date(c.get("filing_date"))
+        if end_ts is None:
+            continue
+        if mkt is not None and end_ts > mkt:
+            continue
+        usable.append((end_ts, filed_ts or pd.Timestamp("1900-01-01"), c))
+    if not usable:
+        return None
+    usable = sorted(usable, key=lambda x: (x[0].value, x[1].value, float(x[2].get("match_score") or 0.0)), reverse=True)
+    return usable[0][2]
+
+
+def build_nav_row_from_xbrl_candidate(
+    *,
+    ticker: str,
+    cand: Dict[str, Any],
+    latest_price_by_ticker: Dict[str, Dict[str, Any]],
+    nav_fresh_max_days: int,
+) -> Dict[str, Any]:
+    nav_date = parse_date(cand.get("nav_date"))
+    row = make_nav_overlay_row(
+        ticker=ticker,
+        nav=to_float(cand.get("nav")),
+        nav_date=nav_date,
+        source_url=cand.get("source_url"),
+        note=(
+            f"auto_xbrl:{cand.get('extraction_method')}:{cand.get('xbrl_taxonomy')}:{cand.get('xbrl_concept')}:"
+            f"filed={cand.get('filing_date')}:end={cand.get('nav_date')}"
+        ),
+        source_kind="auto_sec",
+        latest_price_by_ticker=latest_price_by_ticker,
+        nav_fresh_max_days=nav_fresh_max_days,
+        nav_date_source="xbrl_fact_end_date",
+        extra_fields={
+            "filing_form": cand.get("filing_form"),
+            "filing_date": cand.get("filing_date"),
+            "match_score": cand.get("match_score"),
+            "matched_pattern": cand.get("matched_pattern"),
+            "matched_snippet": cand.get("matched_snippet"),
+            "candidate_rank": 1,
+            "candidate_count": 1,
+            "percent_context_flag": False,
+            "suspicious_terms_flag": False,
+            "date_component_flag": False,
+            "extraction_method": cand.get("extraction_method"),
+            "derived_from_price": None,
+            "derived_from_rel": None,
+            "derived_from_pct": None,
+            "price_obs_date": None,
+            "price_obs_date_source": None,
+            "price_obs_match_text": None,
+            "nav_ref_date_extracted": cand.get("nav_ref_date"),
+            "nav_ref_date_source": cand.get("nav_ref_date_source"),
+            "nav_ref_match_text": cand.get("nav_ref_match_text"),
+            "hard_skip_context_flag": False,
+            "hard_skip_context_tags": [],
+            "context_penalty_total": 0.0,
+            "context_penalty_tags": [],
+            "section_bonus_total": cand.get("section_bonus_total", 1.0),
+            "section_bonus_tags": cand.get("section_bonus_tags") or ["xbrl_api"],
+            "doc_name": f"{cand.get('xbrl_taxonomy')}:{cand.get('xbrl_concept')}",
+            "doc_score": 250,
+            "doc_source": "xbrl_api",
+            "doc_period_anchor": cand.get("nav_date"),
+            "doc_period_anchor_source": "xbrl_fact_end_date",
+            "doc_period_anchor_match_text": cand.get("nav_date"),
+            "candidate_value_role": cand.get("candidate_value_role"),
+            "comparison_context_flag": False,
+            "multi_value_row_flag": False,
+            "date_binding_mode": "xbrl_fact_end_date",
+            "local_role_ctx": cand.get("local_role_ctx"),
+            "table_header_dates": None,
+            "table_row_values": None,
+            "table_bound_index": None,
+            "table_index": None,
+            "table_row_index": None,
+            "xbrl_taxonomy": cand.get("xbrl_taxonomy"),
+            "xbrl_concept": cand.get("xbrl_concept"),
+            "xbrl_label": cand.get("xbrl_label"),
+            "xbrl_unit": cand.get("xbrl_unit"),
+        },
+    )
+    return finalize_nav_row_dq(row)
 
 
 def get_sec_ticker_to_cik_map(
@@ -2403,7 +2661,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v7_docscan_v11e",
+            "source": "sec_xbrl_first_v1_docscan_fallback_v1.12",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -2440,6 +2698,52 @@ def fetch_auto_nav_rows_from_sec(
         fallback_review_row: Optional[Dict[str, Any]] = None
         market_date = parse_date((latest_price_by_ticker.get(ticker) or {}).get("data_date"))
         market_close = to_float((latest_price_by_ticker.get(ticker) or {}).get("close"))
+
+        xbrl_candidates: List[Dict[str, Any]] = []
+        concept_candidates, concept_notes = fetch_xbrl_companyconcept_nav_candidates(
+            session=session,
+            cik10=cik10,
+            timeout=timeout,
+            cache_dir=(sec_cache_dir / "xbrl_companyconcept") if sec_cache_dir else None,
+            use_cache=sec_use_cache,
+        )
+        for n in concept_notes:
+            notes.append(f"{ticker}:XBRL_NOTE:{n}")
+        xbrl_candidates.extend(concept_candidates)
+        if not xbrl_candidates:
+            facts_candidates, facts_notes = fetch_xbrl_companyfacts_nav_candidates(
+                session=session,
+                cik10=cik10,
+                timeout=timeout,
+                cache_dir=(sec_cache_dir / "xbrl_companyfacts") if sec_cache_dir else None,
+                use_cache=sec_use_cache,
+            )
+            for n in facts_notes:
+                notes.append(f"{ticker}:XBRL_NOTE:{n}")
+            xbrl_candidates.extend(facts_candidates)
+
+        best_xbrl = _choose_best_xbrl_candidate(xbrl_candidates, market_date=market_date)
+        if best_xbrl is not None:
+            xbrl_row = build_nav_row_from_xbrl_candidate(
+                ticker=ticker,
+                cand=best_xbrl,
+                latest_price_by_ticker=latest_price_by_ticker,
+                nav_fresh_max_days=nav_fresh_max_days,
+            )
+            if xbrl_row.get("used_in_stats"):
+                chosen_row = xbrl_row
+            else:
+                fallback_review_row = xbrl_row
+
+        if chosen_row is not None:
+            out_rows.append(chosen_row)
+            found += 1
+            notes.append(
+                f"{ticker}:OK_XBRL:{chosen_row.get('filing_form')}:{chosen_row.get('filing_date')}:"
+                f"doc={chosen_row.get('doc_name')}:score={chosen_row.get('match_score')}:"
+                f"dq={chosen_row.get('dq_status')}:method={chosen_row.get('extraction_method')}"
+            )
+            continue
 
         for filing in filings[:max(1, nav_auto_max_filings)]:
             filing_date = parse_date(filing.get("filing_date"))
@@ -2625,7 +2929,7 @@ def fetch_auto_nav_rows_from_sec(
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v7_docscan_v11e",
+        "source": "sec_xbrl_first_v1_docscan_fallback_v1.12",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -3183,6 +3487,8 @@ def build_report(latest: Dict[str, Any]) -> str:
                 lines.append(f"  - context_penalties: `{sanitize_inline_code_text(','.join(r.get('context_penalty_tags') or []))}`")
             if r.get("section_bonus_tags"):
                 lines.append(f"  - section_bonus: `{sanitize_inline_code_text(','.join(r.get('section_bonus_tags') or []))}`")
+            if r.get("xbrl_taxonomy") or r.get("xbrl_concept"):
+                lines.append(f"  - xbrl: `{sanitize_inline_code_text(str(r.get('xbrl_taxonomy')) + ":" + str(r.get('xbrl_concept')) + " | unit=" + str(r.get('xbrl_unit')) )}`")
             if r.get("table_header_dates"):
                 lines.append(f"  - table_header_dates: `{sanitize_inline_code_text(r.get('table_header_dates'))}`")
             if r.get("table_row_values"):
@@ -3358,7 +3664,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan_v11e + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_xbrl_first_v1.12 + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -3409,14 +3715,11 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.11e keeps SEC retry/backoff and optional cache for fetch stability.",
-            "v1.11e keeps filing index doc scan instead of primaryDocument-only logic.",
-            "v1.11e filters doc_period_anchor toward dates <= filing_date when possible.",
-            "v1.11e uses match-local role context to reduce false comparison classification.",
-            "v1.11e adds HTML table anchor binding for NAV per share rows.",
-            "v1.11e adds nearby-header fallback binding for table-like NAV rows when HTML table parsing misses month-name headers.",
-            "v1.11e blocks current_first_column table-like candidates when column order is ambiguous.",
-            "v1.11e keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
+            "v1.12 uses SEC XBRL APIs as the first NAV extraction path (companyconcept first, companyfacts discovery second).",
+            "v1.12 keeps HTML / regex extraction only as fallback when XBRL does not yield a usable NAV fact.",
+            "v1.12 preserves SEC retry/backoff and optional cache for fetch stability.",
+            "v1.12 preserves filing index doc scan as a fallback path instead of primaryDocument-only logic.",
+            "v1.12 keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
