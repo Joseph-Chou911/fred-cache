@@ -1,7 +1,7 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-15T11:39:01Z`
+- generated_at_utc: `2026-03-15T12:25:21Z`
 - script: `build_private_credit_monitor.py`
 - script_version: `v1.12-yf`
 - out_dir: `private_credit_cache`
