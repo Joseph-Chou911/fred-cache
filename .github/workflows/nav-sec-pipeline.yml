@@ -11,10 +11,6 @@ on:
         description: "Output directory"
         required: false
         default: "nav_sec_pipeline_cache"
-      manual_nav:
-        description: "Manual NAV JSON path"
-        required: false
-        default: "config/manual_nav.json"
       nav_auto_max_filings:
         description: "Max SEC filings to scan per ticker"
         required: false
@@ -45,7 +41,7 @@ jobs:
     env:
       DEFAULT_TICKERS: ${{ inputs.tickers }}
       OUT_DIR: ${{ inputs.out_dir }}
-      MANUAL_NAV: ${{ inputs.manual_nav }}
+      MANUAL_NAV: ${{ format('{0}/config/manual_nav.json', inputs.out_dir) }}
       NAV_AUTO_MAX_FILINGS: ${{ inputs.nav_auto_max_filings }}
       SEC_MAX_DOCS_PER_FILING: ${{ inputs.sec_max_docs_per_filing }}
       SEC_USE_CACHE: ${{ inputs.sec_use_cache }}
@@ -83,12 +79,11 @@ jobs:
           fi
           echo "SEC_USER_AGENT=$SEC_UA" >> "$GITHUB_ENV"
 
-      - name: Ensure output and config directories
+      - name: Ensure output directories
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$OUT_DIR"
-          mkdir -p "$(dirname "$MANUAL_NAV")"
+          mkdir -p "$OUT_DIR/config"
 
       - name: Run NAV SEC pipeline
         shell: bash
@@ -114,15 +109,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "Output directory: $OUT_DIR"
-          find "$OUT_DIR" -maxdepth 2 -type f | sort || true
+          find "$OUT_DIR" -maxdepth 3 -type f | sort || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: nav-sec-pipeline-output
-          path: |
-            ${{ env.OUT_DIR }}/
-            ${{ env.MANUAL_NAV }}
+          path: ${{ env.OUT_DIR }}/
           if-no-files-found: warn
           retention-days: 14
 
@@ -133,7 +126,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add "$OUT_DIR" "$MANUAL_NAV" || true
+          git add "$OUT_DIR" || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
