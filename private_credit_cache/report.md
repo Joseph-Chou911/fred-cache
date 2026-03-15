@@ -1,17 +1,17 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-15T00:05:16Z`
+- generated_at_utc: `2026-03-15T03:57:32Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.11c`
+- script_version: `v1.11d`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
-- structural_signal: **WATCH**
+- structural_signal: **NONE**
 - combined_signal: **WATCH**
-- signal_basis: `MIXED`
+- signal_basis: `PROXY_ONLY`
 - overall_confidence: `PARTIAL`
-- reasons: `proxy:bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%; structural:fresh_nav_median_discount<=-10 with coverage>=3`
-- tags: `proxy:MARKET_PROXY_WEAK,structural:NAV_DISCOUNT_WIDE`
+- reasons: `proxy:bdc_basket_median_ret5<=-4 AND below_ma20_share>=80%`
+- tags: `proxy:MARKET_PROXY_WEAK`
 
 ## 1) BDC Market Proxy
 - coverage: `5`
@@ -38,39 +38,39 @@
 ## 2) NAV Overlay (manual + auto SEC, optional)
 - path: `private_credit_cache/inputs/manual_nav.json`
 - as_of_date: `YYYY-MM-DD`
-- confidence: `OK`
+- confidence: `PARTIAL`
 - raw_row_count: `1`
 - template_excluded_count: `1`
 - manual_valid_count: `0`
 - auto_enabled: `True`
-- auto_source: `sec_filings_regex_v7_docscan_v11c`
+- auto_source: `sec_filings_regex_v7_docscan_v11d`
 - auto_attempted_count: `5`
 - auto_found_count: `5`
 - manual_override_tickers: `[]`
-- coverage_total: `3`
-- coverage_fresh: `3`
-- median_discount_pct_fresh: `-13.654618`
-- median_discount_pct_all: `-13.654618`
+- coverage_total: `2`
+- coverage_fresh: `2`
+- median_discount_pct_fresh: `-18.243683`
+- median_discount_pct_all: `-18.243683`
 
 ### Coverage decomposition
 - auto_total_count: `5`
-- auto_used_in_stats_count: `3`
-- auto_review_count: `1`
+- auto_used_in_stats_count: `2`
+- auto_review_count: `2`
 - auto_excluded_count: `1`
-- auto_review_only_count: `2`
+- auto_review_only_count: `3`
 - manual_used_in_stats_count: `0`
 - manual_invalid_count: `1`
-- effective_auto_count: `3`
+- effective_auto_count: `2`
 - effective_manual_count: `0`
-- effective_structural_count: `3`
-- effective_structural_fresh_count: `3`
+- effective_structural_count: `2`
+- effective_structural_fresh_count: `2`
 
 | ticker | source_kind | doc_name | doc_score | doc_period_anchor | candidate_role | date_binding_mode | extraction_method | used_in_stats | dq_status | review_flag | match_score | matched_pattern | price_obs_date | nav_ref_date | nav_date_used | nav_date_source | filing_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | source | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ARCC | auto_sec | arcc-20251231.htm | 112 | NA | current_implied | local_nav_ref | implied_from_price_and_rel | True | OK | NONE | 12.300000 | closing_price_discount_to_nav | 2026-01-29 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-04 | 17.860000 | 2026-03-13 | -10.434227 | 72 | True | https://www.sec.gov/Archives/edgar/data/1287750/000128775026000006/arcc-20251231.htm | auto_sec:10-K:2026-02-04:doc=arcc-20251231.htm:doc_score=112:candidate_rank=1 |
-| BXSL | auto_sec | ea0277994-01_ex991.htm | 102 | 2025-12-31 | current_first_column | doc_period_anchor | direct | True | OK | NONE | 4.700000 | nav_value_after_phrase | NA | NA | 2025-12-31 | doc_period_anchor_extracted | 2026-02-25 | 23.650000 | 2026-03-13 | -13.654618 | 72 | True | https://www.sec.gov/Archives/edgar/data/1736035/000121390026020083/ea0277994-01_ex991.htm | auto_sec:8-K:2026-02-25:doc=ea0277994-01_ex991.htm:doc_score=102:candidate_rank=1 |
 | OBDC | auto_sec | obdc-20251231.htm | 112 | NA | current_implied | local_nav_ref | implied_from_price_and_rel | True | OK | NONE | 12.400000 | closing_price_discount_to_nav | 2026-02-11 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-18 | 10.950000 | 2026-03-13 | -26.053140 | 72 | True | https://www.sec.gov/Archives/edgar/data/1655888/000165588826000010/obdc-20251231.htm | auto_sec:10-K:2026-02-18:doc=obdc-20251231.htm:doc_score=112:candidate_rank=1 |
 | ARCC | manual | NA | NA | NA | manual | manual_input | manual | False | MANUAL_INVALID | NONE | NA | NA | NA | NA | NA | manual_input | NA | 17.860000 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
+| BXSL | auto_sec | ea0277994-01_ex991.htm | 102 | 2025-12-31 | current_first_column | doc_period_anchor | direct | False | REVIEW_COLUMN_ORDER_AMBIGUOUS | COLUMN_ORDER_AMBIGUOUS_FIRST_COLUMN_WITH_ANCHOR | 4.700000 | nav_value_after_phrase | NA | NA | 2025-12-31 | doc_period_anchor_extracted | 2026-02-25 | 23.650000 | 2026-03-13 | -13.654618 | 72 | True | https://www.sec.gov/Archives/edgar/data/1736035/000121390026020083/ea0277994-01_ex991.htm | auto_sec:8-K:2026-02-25:doc=ea0277994-01_ex991.htm:doc_score=102:candidate_rank=1 |
 | FSK | auto_sec | tm267104d1_ex99-1.htm | 102 | 2025-12-31 | current | doc_period_anchor_after_comparison_guard | direct | False | REVIEW_DISCOUNT_DEEP | DISCOUNT_LE_-45 | 7.900000 | net_asset_value_of_x_per_share | NA | NA | 2025-12-31 | doc_period_anchor_extracted | 2026-02-25 | 10.090000 | 2026-03-13 | -51.699378 | 72 | True | https://www.sec.gov/Archives/edgar/data/1422183/000110465926019719/tm267104d1_ex99-1.htm | auto_sec:8-K:2026-02-25:doc=tm267104d1_ex99-1.htm:doc_score=102:candidate_rank=1 |
 | PSEC | auto_sec | psec-20251231.htm | 112 | NA | current_first_column | filing_date_fallback | direct | False | EXCLUDED_CONTEXT_HARD_SKIP | NAV_DATE_INFERRED_FROM_FILING\|CONTEXT_HARD_SKIP_SELL_BELOW_NAV\|CONTEXT_HARD_SKIP_STOCKHOLDER_APPROVAL_BELOW_NAV\|LOW_MATCH_SCORE_LT_3.0\|DISCOUNT_LE_-45\|PERCENT_NEAR_MATCH\|SUSPICIOUS_SNIPPET_TERMS | -6.800000 | nav_value_after_phrase | NA | NA | 2026-02-09 | filing_date_inferred_review_only | 2026-02-09 | 2.560000 | 2026-03-13 | -53.454545 | 32 | False | https://www.sec.gov/Archives/edgar/data/1287032/000128703226000045/psec-20251231.htm | auto_sec:10-Q:2026-02-09:doc=psec-20251231.htm:doc_score=112:candidate_rank=1 |
 
@@ -81,11 +81,6 @@
   - nav_ref_match: `net asset value per share reported by us as of December 31, 2025`
   - section_bonus: `nav_section`
   - implied_from: price=20.16 | rel=premium | pct=1.1
-- BXSL | used_in_stats=True | dq_status=OK | doc=ea0277994-01_ex991.htm | doc_score=102 | candidate_role=current_first_column | date_binding_mode=doc_period_anchor | score=4.7 | pattern=nav_value_after_phrase | method=direct
-  - snippet: `ce sheet Investments at fair value 13,093$ 14,207$ Total debt outstanding, carrying value (3) 7,056 8,080 Total debt outstanding, principal 7,094 8,101 Net asset value 6,077 6,245 Net asset value per share 27.39 26.92 Ending debt-to-equity (3) 1.17x 1.30x Average debt-to-equity (3) 1.15x 1.27x % First lien 98.0% 97.6% ...`
-  - doc_period_anchor_match: `for the period ended December 31, 2025`
-  - local_role_ctx: `7,094 8,101 Net asset value 6,077 6,245 Net asset value per share 27.39 26.92 Ending debt-to-equity (3) 1.17x 1.30x Average debt-to-equity (3) 1.15x 1.27x % First lien 98.0% 97.6% Weighted av`
-  - section_bonus: `nav_section`
 - OBDC | used_in_stats=True | dq_status=OK | doc=obdc-20251231.htm | doc_score=112 | candidate_role=current_implied | date_binding_mode=local_nav_ref | score=12.4 | pattern=closing_price_discount_to_nav | method=implied_from_price_and_rel
   - snippet: `re. See “ ITEM 1A. RISK FACTORS — Risks Related to an Investment in Our Common Stock —The market value of our common stock may fluctuate significantly .” On February 11, 2026, the last reported closing sales price of our common stock on the NYSE was $11.95 per share, which represented a discount of approximately 19.3% ...`
   - price_obs_match: `On February 11, 2026, the last reported closing sales price`
@@ -93,6 +88,11 @@
   - context_penalties: `risk_factors`
   - section_bonus: `nav_section,shareholder_returns`
   - implied_from: price=11.95 | rel=discount | pct=19.3
+- BXSL | used_in_stats=False | dq_status=REVIEW_COLUMN_ORDER_AMBIGUOUS | doc=ea0277994-01_ex991.htm | doc_score=102 | candidate_role=current_first_column | date_binding_mode=doc_period_anchor | score=4.7 | pattern=nav_value_after_phrase | method=direct
+  - snippet: `ce sheet Investments at fair value 13,093$ 14,207$ Total debt outstanding, carrying value (3) 7,056 8,080 Total debt outstanding, principal 7,094 8,101 Net asset value 6,077 6,245 Net asset value per share 27.39 26.92 Ending debt-to-equity (3) 1.17x 1.30x Average debt-to-equity (3) 1.15x 1.27x % First lien 98.0% 97.6% ...`
+  - doc_period_anchor_match: `for the period ended December 31, 2025`
+  - local_role_ctx: `7,094 8,101 Net asset value 6,077 6,245 Net asset value per share 27.39 26.92 Ending debt-to-equity (3) 1.17x 1.30x Average debt-to-equity (3) 1.15x 1.27x % First lien 98.0% 97.6% Weighted av`
+  - section_bonus: `nav_section`
 - FSK | used_in_stats=False | dq_status=REVIEW_DISCOUNT_DEEP | doc=tm267104d1_ex99-1.htm | doc_score=102 | candidate_role=current | date_binding_mode=doc_period_anchor_after_comparison_guard | score=7.9 | pattern=net_asset_value_of_x_per_share | method=direct
   - snippet: `er ended September 30, 2025 | | | | · | | Adjusted net investment income (2) of $0.52 per share, compared to $0.57 per share for the quarter ended September 30, 2025 | | | | · | | Net asset value of $20.89 per share, compared to $21.99 per share as of September 30, 2025 and $23.64 per share as of December 31, 2024 | | ...`
   - doc_period_anchor_match: `year ended December 31, 2025`
@@ -109,7 +109,8 @@
 - ARCC:INFO:no_match_in_filing:8-K:2026-02-27:docs_scanned=4
 - ARCC:OK:10-K:2026-02-04:doc=arcc-20251231.htm:doc_score=112:score=12.3:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted:date_binding_mode=local_nav_ref
 - BXSL:INFO:no_match_in_filing:8-K:2026-03-03:docs_scanned=5
-- BXSL:OK:8-K:2026-02-25:doc=ea0277994-01_ex991.htm:doc_score=102:score=4.7:dq=OK:method=direct:nav_date_source=doc_period_anchor_extracted:date_binding_mode=doc_period_anchor
+- BXSL:INFO:no_match_in_filing:8-K:2025-10-14:docs_scanned=5
+- BXSL:REVIEW_ONLY:8-K:2026-02-25:doc=ea0277994-01_ex991.htm:doc_score=102:score=4.7:dq=REVIEW_COLUMN_ORDER_AMBIGUOUS:method=direct:nav_date_source=doc_period_anchor_extracted:date_binding_mode=doc_period_anchor
 - OBDC:OK:10-K:2026-02-18:doc=obdc-20251231.htm:doc_score=112:score=12.4:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted:date_binding_mode=local_nav_ref
 - FSK:INFO:no_match_in_filing:8-K:2026-03-05:docs_scanned=3
 - FSK:INFO:no_match_in_filing:8-K:2026-01-21:docs_scanned=4
@@ -151,7 +152,7 @@
 
 ## 5) Confidence / DQ
 - price_confidence: `OK`
-- nav_confidence: `OK`
+- nav_confidence: `PARTIAL`
 - event_confidence: `TEMPLATE_ONLY`
 - structural_confidence: `PARTIAL`
 - overall_confidence: `PARTIAL`
@@ -166,9 +167,11 @@
 - Public Credit Context mirrors unified signal from preferred source modules when available.
 - Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.
 - Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.
-- v1.11c keeps SEC retry/backoff and optional cache for fetch stability.
-- v1.11c keeps filing index doc scan instead of primaryDocument-only logic.
-- v1.11c filters doc_period_anchor toward dates <= filing_date when possible.
-- v1.11c uses match-local role context to reduce false comparison classification.
-- v1.11c keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.
+- v1.11d keeps SEC retry/backoff and optional cache for fetch stability.
+- v1.11d keeps filing index doc scan instead of primaryDocument-only logic.
+- v1.11d filters doc_period_anchor toward dates <= filing_date when possible.
+- v1.11d uses match-local role context to reduce false comparison classification.
+- v1.11d adds HTML table anchor binding for NAV per share rows.
+- v1.11d blocks current_first_column table-like candidates when column order is ambiguous.
+- v1.11d keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.
 - data_fetch_notes: all price fetches OK
