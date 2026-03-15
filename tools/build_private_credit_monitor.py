@@ -3488,7 +3488,8 @@ def build_report(latest: Dict[str, Any]) -> str:
             if r.get("section_bonus_tags"):
                 lines.append(f"  - section_bonus: `{sanitize_inline_code_text(','.join(r.get('section_bonus_tags') or []))}`")
             if r.get("xbrl_taxonomy") or r.get("xbrl_concept"):
-                lines.append(f"  - xbrl: `{sanitize_inline_code_text(str(r.get('xbrl_taxonomy')) + ":" + str(r.get('xbrl_concept')) + " | unit=" + str(r.get('xbrl_unit')) )}`")
+                xbrl_desc = f"{r.get('xbrl_taxonomy')}:{r.get('xbrl_concept')} | unit={r.get('xbrl_unit')}"
+                lines.append(f"  - xbrl: `{sanitize_inline_code_text(xbrl_desc)}`")
             if r.get("table_header_dates"):
                 lines.append(f"  - table_header_dates: `{sanitize_inline_code_text(r.get('table_header_dates'))}`")
             if r.get("table_row_values"):
