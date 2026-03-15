@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.12)
+build_private_credit_monitor.py (v1.12-yf)
 
 Purpose
 -------
@@ -17,14 +17,13 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.12 changes
--------------
-- Add XBRL-first NAV extraction using SEC JSON APIs:
-  * try companyconcept for standard concepts first
-  * fall back to companyfacts keyword discovery across standard taxonomies
-- Keep HTML / regex extraction only as fallback paths
-- Preserve existing DQ / REVIEW logic for non-XBRL fallback rows
-- Preserve filing-date-only fallback as REVIEW_ONLY
+v1.12-yf changes
+----------------
+- Keep v1.12 NAV XBRL-first extraction logic unchanged
+- Replace BDC Market Proxy price source with yfinance daily history
+- Compute proxy metrics on adjusted price series (Adj Close)
+- Preserve raw Close for NAV overlay premium/discount calculations
+- Keep explicit NA handling and audit-friendly source disclosure
 """
 
 from __future__ import annotations
@@ -43,10 +42,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import requests
+import yfinance as yf
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.12"
+SCRIPT_VERSION = "v1.12-yf"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -626,35 +626,96 @@ def make_requests_session(user_agent: Optional[str] = None) -> requests.Session:
     return s
 
 
-def fetch_stooq_daily(symbol: str, start_date: pd.Timestamp, end_date: pd.Timestamp, timeout: int) -> Tuple[pd.DataFrame, str, Optional[str]]:
-    ticker = f"{symbol.lower()}.us"
-    d1 = start_date.strftime("%Y%m%d")
-    d2 = end_date.strftime("%Y%m%d")
-    url = f"https://stooq.com/q/d/l/?s={ticker}&d1={d1}&d2={d2}&i=d"
+def fetch_yfinance_daily(symbol: str, start_date: pd.Timestamp, end_date: pd.Timestamp, timeout: int) -> Tuple[pd.DataFrame, str, Optional[str]]:
+    """
+    Fetch US daily history from Yahoo Finance via yfinance.
+
+    Proxy metrics are computed from adjusted prices (Adj Close),
+    while NAV overlay continues to use raw Close.
+    """
+    start_ts = normalize_ts_naive(start_date)
+    end_ts = normalize_ts_naive(end_date)
+    if start_ts is None or end_ts is None:
+        return pd.DataFrame(), f"yfinance://{symbol}", "ERR:bad_date_range"
+
+    # yfinance end is effectively exclusive for date strings.
+    end_exclusive = end_ts + pd.Timedelta(days=1)
+    url = (
+        f"yfinance://{symbol}"
+        f"?start={start_ts.strftime('%Y-%m-%d')}"
+        f"&end={end_exclusive.strftime('%Y-%m-%d')}"
+        f"&interval=1d&auto_adjust=false&actions=true"
+    )
+
     try:
-        r = requests.get(url, timeout=timeout)
-        r.raise_for_status()
-        text = r.text.strip()
-        if not text or text.lower().startswith("no data"):
+        df = yf.download(
+            symbol,
+            start=start_ts.strftime("%Y-%m-%d"),
+            end=end_exclusive.strftime("%Y-%m-%d"),
+            interval="1d",
+            auto_adjust=False,
+            actions=True,
+            progress=False,
+            threads=False,
+            timeout=timeout,
+        )
+
+        if df is None or df.empty:
             return pd.DataFrame(), url, "ERR:no_data"
-        from io import StringIO
-        df = pd.read_csv(StringIO(text))
-        if df.empty or "Date" not in df.columns or "Close" not in df.columns:
-            return pd.DataFrame(), url, "ERR:bad_csv_shape"
+
+        if isinstance(df.columns, pd.MultiIndex):
+            flat_cols = []
+            for col in df.columns:
+                if isinstance(col, tuple):
+                    flat_cols.append(col[0])
+                else:
+                    flat_cols.append(col)
+            df.columns = flat_cols
+
+        df = df.reset_index()
+        if "Date" not in df.columns:
+            if "Datetime" in df.columns:
+                df = df.rename(columns={"Datetime": "Date"})
+            else:
+                first_col = df.columns[0]
+                df = df.rename(columns={first_col: "Date"})
+
+        for col in ["Close", "Adj Close", "Dividends", "Stock Splits"]:
+            if col not in df.columns:
+                if col == "Adj Close" and "Close" in df.columns:
+                    df[col] = df["Close"]
+                else:
+                    df[col] = 0.0 if col in {"Dividends", "Stock Splits"} else np.nan
+
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+        for col in ["Close", "Adj Close", "Dividends", "Stock Splits"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
         df = df.dropna(subset=["Date", "Close"]).copy()
+        if "Adj Close" in df.columns:
+            df["Adj Close"] = df["Adj Close"].fillna(df["Close"])
+
         df = df.sort_values("Date").reset_index(drop=True)
-        return df, url, None
+        if df.empty:
+            return pd.DataFrame(), url, "ERR:empty_after_clean"
+
+        return df[["Date", "Close", "Adj Close", "Dividends", "Stock Splits"]].copy(), url, None
     except Exception as e:
         return pd.DataFrame(), url, f"ERR:{type(e).__name__}:{str(e)[:160]}"
 
-
-def compute_price_stats(df: pd.DataFrame, z_window: int, p_window: int) -> Dict[str, Any]:
+def compute_price_stats(
+    df: pd.DataFrame,
+    z_window: int,
+    p_window: int,
+    price_col: str = "Adj Close",
+) -> Dict[str, Any]:
     if df is None or df.empty or len(df) < 3:
         return {
             "data_date": None,
             "close": None,
+            "raw_close": None,
+            "adj_close": None,
+            "proxy_price_basis": price_col,
             "prev_close": None,
             "ret1_pct": None,
             "ret5_pct": None,
@@ -664,13 +725,73 @@ def compute_price_stats(df: pd.DataFrame, z_window: int, p_window: int) -> Dict[
             "drawdown_20d_pct": None,
             "ma20": None,
             "price_vs_ma20_pct": None,
+            "dividends_30d": None,
+            "dividend_events_30d": 0,
             "points": 0,
         }
 
-    closes = df["Close"].astype(float).reset_index(drop=True)
-    dates = pd.to_datetime(df["Date"]).reset_index(drop=True)
+    use_col = price_col if price_col in df.columns else ("Close" if "Close" in df.columns else None)
+    if use_col is None:
+        return {
+            "data_date": None,
+            "close": None,
+            "raw_close": None,
+            "adj_close": None,
+            "proxy_price_basis": price_col,
+            "prev_close": None,
+            "ret1_pct": None,
+            "ret5_pct": None,
+            "z60": None,
+            "p60": None,
+            "p252": None,
+            "drawdown_20d_pct": None,
+            "ma20": None,
+            "price_vs_ma20_pct": None,
+            "dividends_30d": None,
+            "dividend_events_30d": 0,
+            "points": 0,
+        }
+
+    work = df.copy()
+    closes = pd.to_numeric(work[use_col], errors="coerce").reset_index(drop=True)
+    dates = pd.to_datetime(work["Date"], errors="coerce").reset_index(drop=True)
+    raw_series = pd.to_numeric(work["Close"], errors="coerce").reset_index(drop=True) if "Close" in work.columns else closes.copy()
+    adj_series = pd.to_numeric(work["Adj Close"], errors="coerce").reset_index(drop=True) if "Adj Close" in work.columns else closes.copy()
+    dividends = pd.to_numeric(work["Dividends"], errors="coerce").fillna(0.0).reset_index(drop=True) if "Dividends" in work.columns else pd.Series([0.0] * len(work))
+
+    valid_mask = (~dates.isna()) & (~closes.isna())
+    dates = dates[valid_mask].reset_index(drop=True)
+    closes = closes[valid_mask].reset_index(drop=True)
+    raw_series = raw_series[valid_mask].reset_index(drop=True)
+    adj_series = adj_series[valid_mask].reset_index(drop=True)
+    dividends = dividends[valid_mask].reset_index(drop=True)
+
+    if len(closes) < 3:
+        return {
+            "data_date": None,
+            "close": None,
+            "raw_close": None,
+            "adj_close": None,
+            "proxy_price_basis": use_col,
+            "prev_close": None,
+            "ret1_pct": None,
+            "ret5_pct": None,
+            "z60": None,
+            "p60": None,
+            "p252": None,
+            "drawdown_20d_pct": None,
+            "ma20": None,
+            "price_vs_ma20_pct": None,
+            "dividends_30d": None,
+            "dividend_events_30d": 0,
+            "points": int(len(closes)),
+        }
+
     last_close = float(closes.iloc[-1])
     prev_close = float(closes.iloc[-2]) if len(closes) >= 2 else None
+    raw_close = float(raw_series.iloc[-1]) if len(raw_series) >= 1 and not pd.isna(raw_series.iloc[-1]) else last_close
+    adj_close = float(adj_series.iloc[-1]) if len(adj_series) >= 1 and not pd.isna(adj_series.iloc[-1]) else last_close
+
     ret1 = safe_pct(last_close, prev_close)
     close_5 = float(closes.iloc[-6]) if len(closes) >= 6 else None
     ret5 = safe_pct(last_close, close_5)
@@ -683,12 +804,17 @@ def compute_price_stats(df: pd.DataFrame, z_window: int, p_window: int) -> Dict[
 
     ma20 = float(closes.tail(min(20, len(closes))).mean()) if len(closes) >= 5 else None
     price_vs_ma20_pct = safe_pct(last_close, ma20) if ma20 else None
-
     dd20 = safe_pct(last_close, float(closes.tail(20).max())) if len(closes) >= 20 else None
+
+    div30 = float(dividends.tail(min(30, len(dividends))).sum()) if len(dividends) >= 1 else 0.0
+    div_events_30d = int((dividends.tail(min(30, len(dividends))) > 0).sum()) if len(dividends) >= 1 else 0
 
     return {
         "data_date": dates.iloc[-1].strftime("%Y-%m-%d"),
         "close": safe_num(last_close),
+        "raw_close": safe_num(raw_close),
+        "adj_close": safe_num(adj_close),
+        "proxy_price_basis": use_col,
         "prev_close": safe_num(prev_close),
         "ret1_pct": safe_num(ret1),
         "ret5_pct": safe_num(ret5),
@@ -698,9 +824,10 @@ def compute_price_stats(df: pd.DataFrame, z_window: int, p_window: int) -> Dict[
         "drawdown_20d_pct": safe_num(dd20),
         "ma20": safe_num(ma20),
         "price_vs_ma20_pct": safe_num(price_vs_ma20_pct),
+        "dividends_30d": safe_num(div30),
+        "dividend_events_30d": div_events_30d,
         "points": int(len(closes)),
     }
-
 
 def compute_basket_summary(rows: List[Dict[str, Any]], basket_tickers: List[str]) -> Dict[str, Any]:
     sub = [r for r in rows if r.get("ticker") in basket_tickers and r.get("close") is not None]
@@ -3393,6 +3520,8 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append("")
 
     lines.append("## 1) BDC Market Proxy")
+    lines.append("- proxy_price_basis: `Adj Close (yfinance)`")
+    lines.append("- nav_overlay_market_price_basis: `raw Close (yfinance)`")
     for k in [
         "coverage", "median_ret1_pct", "median_ret5_pct", "median_z60",
         "median_drawdown_20d_pct", "extreme_z_count", "extreme_z_share",
@@ -3404,9 +3533,11 @@ def build_report(latest: Dict[str, Any]) -> str:
     lines.append(markdown_table(
         price_rows,
         [
-            ("ticker", "ticker"), ("class", "class"), ("close", "close"), ("data_date", "data_date"),
-            ("ret1%", "ret1_pct"), ("ret5%", "ret5_pct"), ("z60", "z60"), ("p60", "p60"),
-            ("p252", "p252"), ("dd20%", "drawdown_20d_pct"), ("px_vs_ma20%", "price_vs_ma20_pct"),
+            ("ticker", "ticker"), ("class", "class"), ("proxy_close", "close"), ("raw_close", "raw_close"),
+            ("basis", "proxy_price_basis"), ("data_date", "data_date"), ("ret1%", "ret1_pct"),
+            ("ret5%", "ret5_pct"), ("z60", "z60"), ("p60", "p60"), ("p252", "p252"),
+            ("dd20%", "drawdown_20d_pct"), ("px_vs_ma20%", "price_vs_ma20_pct"),
+            ("div30", "dividends_30d"), ("div_events30", "dividend_events_30d"),
             ("source", "source_url"), ("note", "note"),
         ],
     ))
@@ -3594,21 +3725,41 @@ def main() -> None:
     start_date = end_date - pd.Timedelta(days=args.lookback_calendar_days)
 
     price_rows: List[Dict[str, Any]] = []
-    latest_price_by_ticker: Dict[str, Dict[str, Any]] = {}
+    latest_price_by_ticker_nav: Dict[str, Dict[str, Any]] = {}
     source_notes: List[str] = []
 
     for t in tickers:
-        df, source_url, err = fetch_stooq_daily(t, start_date, end_date, timeout=args.timeout)
-        stats = compute_price_stats(df, z_window=args.z_window, p_window=args.p_window)
+        df, source_url, err = fetch_yfinance_daily(t, start_date, end_date, timeout=args.timeout)
+        stats = compute_price_stats(df, z_window=args.z_window, p_window=args.p_window, price_col="Adj Close")
+
+        note_parts: List[str] = []
+        if err:
+            note_parts.append(err)
+        else:
+            note_parts.append("OK")
+        if stats.get("proxy_price_basis"):
+            note_parts.append(f"proxy_basis={stats.get('proxy_price_basis')}")
+        if stats.get("dividend_events_30d") not in [None, 0]:
+            note_parts.append(f"div_events30={stats.get('dividend_events_30d')}")
+        if stats.get("dividends_30d") not in [None, 0, 0.0]:
+            note_parts.append(f"div30={stats.get('dividends_30d')}")
+
         row = {
             "ticker": t,
             "class": "BDC" if t in basket_tickers else "ETF_PROXY",
             **stats,
             "source_url": source_url,
-            "note": err or "OK",
+            "note": "|".join(str(x) for x in note_parts if x not in [None, ""]),
         }
         price_rows.append(row)
-        latest_price_by_ticker[t] = row
+        latest_price_by_ticker_nav[t] = {
+            "ticker": t,
+            "close": stats.get("raw_close"),
+            "data_date": stats.get("data_date"),
+            "source_url": source_url,
+            "note": err or "OK",
+            "adj_close": stats.get("adj_close"),
+        }
         if err:
             source_notes.append(f"{t}:{err}")
 
@@ -3617,7 +3768,7 @@ def main() -> None:
     if args.nav_auto_source == "sec":
         auto_nav_result = fetch_auto_nav_rows_from_sec(
             tickers=tickers,
-            latest_price_by_ticker=latest_price_by_ticker,
+            latest_price_by_ticker=latest_price_by_ticker_nav,
             nav_fresh_max_days=args.nav_fresh_max_days,
             timeout=args.timeout,
             sec_user_agent=args.sec_user_agent,
@@ -3638,7 +3789,7 @@ def main() -> None:
 
     nav_info = build_nav_overlay(
         manual_nav_path=manual_nav_path,
-        latest_price_by_ticker=latest_price_by_ticker,
+        latest_price_by_ticker=latest_price_by_ticker_nav,
         nav_fresh_max_days=args.nav_fresh_max_days,
         auto_nav_result=auto_nav_result,
     )
@@ -3665,7 +3816,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_xbrl_first_v1.12 + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "yfinance_adjclose_bdc_proxy + raw_close_for_nav_overlay + manual_nav_overlay + auto_sec_nav_xbrl_first_v1.12 + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -3716,11 +3867,13 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.12 uses SEC XBRL APIs as the first NAV extraction path (companyconcept first, companyfacts discovery second).",
-            "v1.12 keeps HTML / regex extraction only as fallback when XBRL does not yield a usable NAV fact.",
-            "v1.12 preserves SEC retry/backoff and optional cache for fetch stability.",
-            "v1.12 preserves filing index doc scan as a fallback path instead of primaryDocument-only logic.",
-            "v1.12 keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
+            "v1.12-yf uses yfinance daily history for BDC Market Proxy metrics on Adj Close.",
+            "v1.12-yf preserves raw Close for NAV overlay premium/discount calculations.",
+            "v1.12-yf uses SEC XBRL APIs as the first NAV extraction path (companyconcept first, companyfacts discovery second).",
+            "v1.12-yf keeps HTML / regex extraction only as fallback when XBRL does not yield a usable NAV fact.",
+            "v1.12-yf preserves SEC retry/backoff and optional cache for fetch stability.",
+            "v1.12-yf preserves filing index doc scan as a fallback path instead of primaryDocument-only logic.",
+            "v1.12-yf keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
