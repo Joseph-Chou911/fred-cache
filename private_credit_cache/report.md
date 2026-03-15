@@ -1,9 +1,9 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-15T05:42:25Z`
+- generated_at_utc: `2026-03-15T07:11:21Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.12`
+- script_version: `v1.12-yf`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
 - structural_signal: **WATCH**
@@ -14,26 +14,28 @@
 - tags: `proxy:MARKET_PROXY_WEAK,structural:NAV_DISCOUNT_WIDE`
 
 ## 1) BDC Market Proxy
+- proxy_price_basis: `Adj Close (yfinance)`
+- nav_overlay_market_price_basis: `raw Close (yfinance)`
 - coverage: `5`
-- median_ret1_pct: `-1.162147`
-- median_ret5_pct: `-4.644955`
-- median_z60: `-1.819365`
-- median_drawdown_20d_pct: `-8.457201`
-- extreme_z_count: `2`
-- extreme_z_share: `40.0`
+- median_ret1_pct: `-0.363967`
+- median_ret5_pct: `-4.53357`
+- median_z60: `-1.874566`
+- median_drawdown_20d_pct: `-8.060454`
+- extreme_z_count: `1`
+- extreme_z_share: `20.0`
 - ret5_le_minus5_count: `2`
 - ret5_le_minus5_share: `40.0`
 - below_ma20_count: `5`
 - below_ma20_share: `100.0`
 
-| ticker | class | close | data_date | ret1% | ret5% | z60 | p60 | p252 | dd20% | px_vs_ma20% | source | note |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ARCC | BDC | 17.860000 | 2026-03-13 | -1.162147 | -4.644955 | -2.447509 | 1.666667 | 0.396825 | -8.457201 | -5.553841 | https://stooq.com/q/d/l/?s=arcc.us&d1=20240723&d2=20260315&i=d | OK |
-| BXSL | BDC | 23.650000 | 2026-03-13 | -0.253058 | -0.713686 | -1.494594 | 3.333333 | 0.793651 | -4.056795 | -1.765317 | https://stooq.com/q/d/l/?s=bxsl.us&d1=20240723&d2=20260315&i=d | OK |
-| FSK | BDC | 10.090000 | 2026-03-13 | -1.464844 | -5.612722 | -2.230994 | 1.666667 | 0.396825 | -24.813711 | -13.771739 | https://stooq.com/q/d/l/?s=fsk.us&d1=20240723&d2=20260315&i=d | OK |
-| OBDC | BDC | 10.950000 | 2026-03-13 | -0.363967 | -4.533566 | -1.819365 | 3.333333 | 0.793651 | -8.060453 | -4.345927 | https://stooq.com/q/d/l/?s=obdc.us&d1=20240723&d2=20260315&i=d | OK |
-| PSEC | BDC | 2.560000 | 2026-03-13 | -3.396226 | -6.055046 | -1.190850 | 18.333333 | 5.158730 | -16.065574 | -8.105392 | https://stooq.com/q/d/l/?s=psec.us&d1=20240723&d2=20260315&i=d | OK |
-| BIZD | ETF_PROXY | 12.480000 | 2026-03-13 | -0.239808 | -2.727981 | -2.010963 | 1.666667 | 0.396825 | -7.142857 | -4.029529 | https://stooq.com/q/d/l/?s=bizd.us&d1=20240723&d2=20260315&i=d | OK |
+| ticker | class | proxy_close | raw_close | basis | data_date | ret1% | ret5% | z60 | p60 | p252 | dd20% | px_vs_ma20% | div30 | div_events30 | source | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ARCC | BDC | 17.860001 | 17.860001 | Adj Close | 2026-03-13 | 1.534966 | -2.095153 | -1.874566 | 3.333333 | 1.587302 | -5.959157 | -3.105301 | 0.480000 | 1 | yfinance://ARCC?start=2024-07-23&end=2026-03-16&interval=1d&auto_adjust=false&actions=true | OK\|proxy_basis=Adj Close\|div_events30=1\|div30=0.48 |
+| BXSL | BDC | 23.650000 | 23.650000 | Adj Close | 2026-03-13 | -0.253056 | -0.713686 | -1.602224 | 3.333333 | 0.793651 | -4.056795 | -1.765318 | 0.000000 | 0 | yfinance://BXSL?start=2024-07-23&end=2026-03-16&interval=1d&auto_adjust=false&actions=true | OK\|proxy_basis=Adj Close |
+| FSK | BDC | 10.090000 | 10.090000 | Adj Close | 2026-03-13 | -1.464840 | -5.612717 | -2.230994 | 1.666667 | 0.396825 | -24.813710 | -13.771737 | 0.000000 | 0 | yfinance://FSK?start=2024-07-23&end=2026-03-16&interval=1d&auto_adjust=false&actions=true | OK\|proxy_basis=Adj Close |
+| OBDC | BDC | 10.950000 | 10.950000 | Adj Close | 2026-03-13 | -0.363967 | -4.533570 | -1.907789 | 3.333333 | 0.793651 | -8.060454 | -4.345929 | 0.000000 | 0 | yfinance://OBDC?start=2024-07-23&end=2026-03-16&interval=1d&auto_adjust=false&actions=true | OK\|proxy_basis=Adj Close |
+| PSEC | BDC | 2.560000 | 2.560000 | Adj Close | 2026-03-13 | -3.396232 | -6.227109 | -0.714509 | 21.666667 | 32.539683 | -14.723820 | -7.559497 | 0.045000 | 1 | yfinance://PSEC?start=2024-07-23&end=2026-03-16&interval=1d&auto_adjust=false&actions=true | OK\|proxy_basis=Adj Close\|div_events30=1\|div30=0.045 |
+| BIZD | ETF_PROXY | 12.480000 | 12.480000 | Adj Close | 2026-03-13 | -0.239814 | -2.727984 | -2.076790 | 1.666667 | 0.396825 | -7.142858 | -4.029532 | 0.000000 | 0 | yfinance://BIZD?start=2024-07-23&end=2026-03-16&interval=1d&auto_adjust=false&actions=true | OK\|proxy_basis=Adj Close |
 
 ## 2) NAV Overlay (manual + auto SEC, optional)
 - path: `private_credit_cache/inputs/manual_nav.json`
@@ -67,10 +69,10 @@
 
 | ticker | source_kind | doc_name | doc_score | doc_period_anchor | candidate_role | date_binding_mode | extraction_method | used_in_stats | dq_status | review_flag | match_score | matched_pattern | price_obs_date | nav_ref_date | nav_date_used | nav_date_source | filing_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | source | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ARCC | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | True | OK | NONE | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-04 | 17.860000 | 2026-03-13 | -10.431294 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001287750/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-04:end=2025-12-31 |
+| ARCC | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | True | OK | NONE | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-04 | 17.860001 | 2026-03-13 | -10.431289 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001287750/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-04:end=2025-12-31 |
 | BXSL | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | True | OK | NONE | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-25 | 23.650000 | 2026-03-13 | -12.147103 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001736035/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-25:end=2025-12-31 |
 | OBDC | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | True | OK | NONE | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-18 | 10.950000 | 2026-03-13 | -26.063471 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001655888/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-18:end=2025-12-31 |
-| ARCC | manual | NA | NA | NA | manual | manual_input | manual | False | MANUAL_INVALID | NONE | NA | NA | NA | NA | NA | manual_input | NA | 17.860000 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
+| ARCC | manual | NA | NA | NA | manual | manual_input | manual | False | MANUAL_INVALID | NONE | NA | NA | NA | NA | NA | manual_input | NA | 17.860001 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
 | FSK | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | False | REVIEW_DISCOUNT_DEEP | DISCOUNT_LE_-45 | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-25 | 10.090000 | 2026-03-13 | -51.699378 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001422183/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-25:end=2025-12-31 |
 | PSEC | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | False | REVIEW_DISCOUNT_DEEP | DISCOUNT_LE_-45 | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-09 | 2.560000 | 2026-03-13 | -58.776167 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001287032/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-09:end=2025-12-31 |
 
@@ -170,9 +172,11 @@
 - Public Credit Context mirrors unified signal from preferred source modules when available.
 - Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.
 - Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.
-- v1.12 uses SEC XBRL APIs as the first NAV extraction path (companyconcept first, companyfacts discovery second).
-- v1.12 keeps HTML / regex extraction only as fallback when XBRL does not yield a usable NAV fact.
-- v1.12 preserves SEC retry/backoff and optional cache for fetch stability.
-- v1.12 preserves filing index doc scan as a fallback path instead of primaryDocument-only logic.
-- v1.12 keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.
+- v1.12-yf uses yfinance daily history for BDC Market Proxy metrics on Adj Close.
+- v1.12-yf preserves raw Close for NAV overlay premium/discount calculations.
+- v1.12-yf uses SEC XBRL APIs as the first NAV extraction path (companyconcept first, companyfacts discovery second).
+- v1.12-yf keeps HTML / regex extraction only as fallback when XBRL does not yield a usable NAV fact.
+- v1.12-yf preserves SEC retry/backoff and optional cache for fetch stability.
+- v1.12-yf preserves filing index doc scan as a fallback path instead of primaryDocument-only logic.
+- v1.12-yf keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.
 - data_fetch_notes: all price fetches OK
