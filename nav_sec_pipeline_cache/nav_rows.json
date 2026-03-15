@@ -24,6 +24,7 @@
       "unit=USD/shares"
     ],
     "cik": "1287750",
+    "report_date": "2026-03-15",
     "market_date": "2026-03-15",
     "market_price_date": "2026-03-13",
     "market_close": 17.860001,
@@ -59,6 +60,7 @@
       "unit=USD/shares"
     ],
     "cik": "1736035",
+    "report_date": "2026-03-15",
     "market_date": "2026-03-15",
     "market_price_date": "2026-03-13",
     "market_close": 23.65,
@@ -91,16 +93,18 @@
     "implied_pct": null,
     "review_flags": [],
     "notes": [
-      "unit=USD/shares"
+      "unit=USD/shares",
+      "deep_discount_preserved_for_review_high_confidence_xbrl"
     ],
     "cik": "1422183",
+    "report_date": "2026-03-15",
     "market_date": "2026-03-15",
     "market_price_date": "2026-03-13",
     "market_close": 10.09,
     "market_price_status": "ok",
     "premium_discount_pct": -51.699378,
     "nav_age_days": 74,
-    "dq_status": "EXCLUDED_DISCOUNT_TOO_DEEP",
+    "dq_status": "REVIEW_DISCOUNT_TOO_DEEP",
     "used_in_stats": false,
     "fresh_for_rule": false
   },
@@ -129,6 +133,7 @@
       "unit=USD/shares"
     ],
     "cik": "1655888",
+    "report_date": "2026-03-15",
     "market_date": "2026-03-15",
     "market_price_date": "2026-03-13",
     "market_close": 10.95,
@@ -161,16 +166,18 @@
     "implied_pct": null,
     "review_flags": [],
     "notes": [
-      "unit=USD/shares"
+      "unit=USD/shares",
+      "deep_discount_preserved_for_review_high_confidence_xbrl"
     ],
     "cik": "1287032",
+    "report_date": "2026-03-15",
     "market_date": "2026-03-15",
     "market_price_date": "2026-03-13",
     "market_close": 2.56,
     "market_price_status": "ok",
     "premium_discount_pct": -58.776167,
     "nav_age_days": 74,
-    "dq_status": "EXCLUDED_DISCOUNT_TOO_DEEP",
+    "dq_status": "REVIEW_DISCOUNT_TOO_DEEP",
     "used_in_stats": false,
     "fresh_for_rule": false
   }
