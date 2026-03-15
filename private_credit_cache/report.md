@@ -1,9 +1,9 @@
 # Private Credit Monitor Report
 
 ## Summary
-- generated_at_utc: `2026-03-15T05:13:11Z`
+- generated_at_utc: `2026-03-15T05:42:25Z`
 - script: `build_private_credit_monitor.py`
-- script_version: `v1.11e`
+- script_version: `v1.12`
 - out_dir: `private_credit_cache`
 - proxy_signal: **WATCH**
 - structural_signal: **WATCH**
@@ -43,20 +43,20 @@
 - template_excluded_count: `1`
 - manual_valid_count: `0`
 - auto_enabled: `True`
-- auto_source: `sec_filings_regex_v7_docscan_v11e`
+- auto_source: `sec_xbrl_first_v1_docscan_fallback_v1.12`
 - auto_attempted_count: `5`
 - auto_found_count: `5`
 - manual_override_tickers: `[]`
 - coverage_total: `3`
 - coverage_fresh: `3`
-- median_discount_pct_fresh: `-12.891344`
-- median_discount_pct_all: `-12.891344`
+- median_discount_pct_fresh: `-12.147103`
+- median_discount_pct_all: `-12.147103`
 
 ### Coverage decomposition
 - auto_total_count: `5`
 - auto_used_in_stats_count: `3`
-- auto_review_count: `1`
-- auto_excluded_count: `1`
+- auto_review_count: `2`
+- auto_excluded_count: `0`
 - auto_review_only_count: `2`
 - manual_used_in_stats_count: `0`
 - manual_invalid_count: `1`
@@ -67,64 +67,64 @@
 
 | ticker | source_kind | doc_name | doc_score | doc_period_anchor | candidate_role | date_binding_mode | extraction_method | used_in_stats | dq_status | review_flag | match_score | matched_pattern | price_obs_date | nav_ref_date | nav_date_used | nav_date_source | filing_date | market_close | market_date | premium_discount_pct | nav_age_days | fresh_for_rule | source | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ARCC | auto_sec | arcc-20251231.htm | 112 | NA | current_implied | local_nav_ref | implied_from_price_and_rel | True | OK | NONE | 12.300000 | closing_price_discount_to_nav | 2026-01-29 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-04 | 17.860000 | 2026-03-13 | -10.434227 | 72 | True | https://www.sec.gov/Archives/edgar/data/1287750/000128775026000006/arcc-20251231.htm | auto_sec:10-K:2026-02-04:doc=arcc-20251231.htm:doc_score=112:candidate_rank=1 |
-| BXSL | auto_sec | ea0277994-01_ex991.htm | 102 | 2025-12-31 | current_bound_by_nearby_header | local_nav_ref | nearby_header_anchor | True | OK | NONE | 10.900000 | nearby_header_nav_per_share_anchor | NA | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-25 | 23.650000 | 2026-03-13 | -12.891344 | 72 | True | https://www.sec.gov/Archives/edgar/data/1736035/000121390026020083/ea0277994-01_ex991.htm | auto_sec:8-K:2026-02-25:doc=ea0277994-01_ex991.htm:doc_score=102:candidate_rank=1 |
-| OBDC | auto_sec | obdc-20251231.htm | 112 | NA | current_implied | local_nav_ref | implied_from_price_and_rel | True | OK | NONE | 12.400000 | closing_price_discount_to_nav | 2026-02-11 | 2025-12-31 | 2025-12-31 | nav_ref_extracted | 2026-02-18 | 10.950000 | 2026-03-13 | -26.053140 | 72 | True | https://www.sec.gov/Archives/edgar/data/1655888/000165588826000010/obdc-20251231.htm | auto_sec:10-K:2026-02-18:doc=obdc-20251231.htm:doc_score=112:candidate_rank=1 |
+| ARCC | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | True | OK | NONE | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-04 | 17.860000 | 2026-03-13 | -10.431294 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001287750/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-04:end=2025-12-31 |
+| BXSL | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | True | OK | NONE | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-25 | 23.650000 | 2026-03-13 | -12.147103 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001736035/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-25:end=2025-12-31 |
+| OBDC | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | True | OK | NONE | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-18 | 10.950000 | 2026-03-13 | -26.063471 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001655888/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-18:end=2025-12-31 |
 | ARCC | manual | NA | NA | NA | manual | manual_input | manual | False | MANUAL_INVALID | NONE | NA | NA | NA | NA | NA | manual_input | NA | 17.860000 | 2026-03-13 | NA | NA | False | https://example.com/investor-relations | Reported NAV per share |
-| FSK | auto_sec | tm267104d1_ex99-1.htm | 102 | 2025-12-31 | current | doc_period_anchor_after_comparison_guard | direct | False | REVIEW_DISCOUNT_DEEP | DISCOUNT_LE_-45 | 7.900000 | net_asset_value_of_x_per_share | NA | NA | 2025-12-31 | doc_period_anchor_extracted | 2026-02-25 | 10.090000 | 2026-03-13 | -51.699378 | 72 | True | https://www.sec.gov/Archives/edgar/data/1422183/000110465926019719/tm267104d1_ex99-1.htm | auto_sec:8-K:2026-02-25:doc=tm267104d1_ex99-1.htm:doc_score=102:candidate_rank=1 |
-| PSEC | auto_sec | psec-20251231.htm | 112 | NA | current_first_column | filing_date_fallback | direct | False | EXCLUDED_CONTEXT_HARD_SKIP | NAV_DATE_INFERRED_FROM_FILING\|CONTEXT_HARD_SKIP_SELL_BELOW_NAV\|CONTEXT_HARD_SKIP_STOCKHOLDER_APPROVAL_BELOW_NAV\|LOW_MATCH_SCORE_LT_3.0\|DISCOUNT_LE_-45\|PERCENT_NEAR_MATCH\|SUSPICIOUS_SNIPPET_TERMS | -6.800000 | nav_value_after_phrase | NA | NA | 2026-02-09 | filing_date_inferred_review_only | 2026-02-09 | 2.560000 | 2026-03-13 | -53.454545 | 32 | False | https://www.sec.gov/Archives/edgar/data/1287032/000128703226000045/psec-20251231.htm | auto_sec:10-Q:2026-02-09:doc=psec-20251231.htm:doc_score=112:candidate_rank=1 |
+| FSK | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | False | REVIEW_DISCOUNT_DEEP | DISCOUNT_LE_-45 | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-25 | 10.090000 | 2026-03-13 | -51.699378 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001422183/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-25:end=2025-12-31 |
+| PSEC | auto_sec | us-gaap:NetAssetValuePerShare | 250 | 2025-12-31 | current_xbrl_standard_concept | xbrl_fact_end_date | xbrl_companyconcept | False | REVIEW_DISCOUNT_DEEP | DISCOUNT_LE_-45 | 20.000000 | us-gaap:NetAssetValuePerShare | NA | 2025-12-31 | 2025-12-31 | xbrl_fact_end_date | 2026-02-09 | 2.560000 | 2026-03-13 | -58.776167 | 72 | True | https://data.sec.gov/api/xbrl/companyconcept/CIK0001287032/us-gaap/NetAssetValuePerShare.json | auto_xbrl:xbrl_companyconcept:us-gaap:NetAssetValuePerShare:filed=2026-02-09:end=2025-12-31 |
 
 ### NAV auto match snippets
-- ARCC | used_in_stats=True | dq_status=OK | doc=arcc-20251231.htm | doc_score=112 | candidate_role=current_implied | date_binding_mode=local_nav_ref | score=12.3 | pattern=closing_price_discount_to_nav | method=implied_from_price_and_rel
-  - snippet: `ue, divided by net asset value (in each case, as of the applicable quarter). (3) Represents the dividend or distribution declared in the relevant quarter. On January 29, 2026, the last reported closing sales price of our common stock on The NASDAQ Global Select Market was $20.16 per share, which represented a premium o...`
-  - price_obs_match: `On January 29, 2026, the last reported closing sales price`
-  - nav_ref_match: `net asset value per share reported by us as of December 31, 2025`
-  - section_bonus: `nav_section`
-  - implied_from: price=20.16 | rel=premium | pct=1.1
-- BXSL | used_in_stats=True | dq_status=OK | doc=ea0277994-01_ex991.htm | doc_score=102 | candidate_role=current_bound_by_nearby_header | date_binding_mode=local_nav_ref | score=10.9 | pattern=nearby_header_nav_per_share_anchor | method=nearby_header_anchor
-  - snippet: `set value 6,077 6,241 6,288 6,270 6,245 Net asset value per share 27.39 27.39 27.33 27.15 26.92 Ending debt-to-equity (3) 1.17x 1.19x 1.13x 1.22x 1.30x Average debt-to-equity (3) 1.15x 1.16x 1.13x 1.15x 1.27x % First lien 98.0% 98.2% 98.2% 97.5% 97.6% Weighted average yield on performing de`
+- ARCC | used_in_stats=True | dq_status=OK | doc=us-gaap:NetAssetValuePerShare | doc_score=250 | candidate_role=current_xbrl_standard_concept | date_binding_mode=xbrl_fact_end_date | score=20.0 | pattern=us-gaap:NetAssetValuePerShare | method=xbrl_companyconcept
+  - snippet: `XBRL fact us-gaap:NetAssetValuePerShare end=2025-12-31 val=19.94 unit=USD/shares`
   - nav_ref_match: `2025-12-31`
-  - doc_period_anchor_match: `for the period ended December 31, 2025`
-  - local_role_ctx: `set value 6,077 6,241 6,288 6,270 6,245 Net asset value per share 27.39 27.39 27.33 27.15 26.92 Ending debt-to-equity (3) 1.17x 1.19x 1.13x 1.22x 1.30x Average debt-to-equity (3) 1...`
-  - section_bonus: `nearby_header_anchor`
-  - table_header_dates: `['2025-03-31', '2025-06-30', '2025-09-30', '2025-12-31']`
-  - table_row_values: `[27.39, 27.39, 27.33, 27.15]`
-  - table_bound_index: `3`
-- OBDC | used_in_stats=True | dq_status=OK | doc=obdc-20251231.htm | doc_score=112 | candidate_role=current_implied | date_binding_mode=local_nav_ref | score=12.4 | pattern=closing_price_discount_to_nav | method=implied_from_price_and_rel
-  - snippet: `re. See “ ITEM 1A. RISK FACTORS — Risks Related to an Investment in Our Common Stock —The market value of our common stock may fluctuate significantly .” On February 11, 2026, the last reported closing sales price of our common stock on the NYSE was $11.95 per share, which represented a discount of approximately 19.3% ...`
-  - price_obs_match: `On February 11, 2026, the last reported closing sales price`
-  - nav_ref_match: `net asset value per share reported by us as of December 31, 2025`
-  - context_penalties: `risk_factors`
-  - section_bonus: `nav_section,shareholder_returns`
-  - implied_from: price=11.95 | rel=discount | pct=19.3
-- FSK | used_in_stats=False | dq_status=REVIEW_DISCOUNT_DEEP | doc=tm267104d1_ex99-1.htm | doc_score=102 | candidate_role=current | date_binding_mode=doc_period_anchor_after_comparison_guard | score=7.9 | pattern=net_asset_value_of_x_per_share | method=direct
-  - snippet: `er ended September 30, 2025 | | | | · | | Adjusted net investment income (2) of $0.52 per share, compared to $0.57 per share for the quarter ended September 30, 2025 | | | | · | | Net asset value of $20.89 per share, compared to $21.99 per share as of September 30, 2025 and $23.64 per share as of December 31, 2024 | | ...`
-  - doc_period_anchor_match: `year ended December 31, 2025`
-  - local_role_ctx: `ended September 30, 2025 | | | | · | | Net asset value of $20.89 per share, compared to $21.99 per share as of September 30, 2025 and $23.64 per share as of December 31, 2024 | | | | · | | Total`
-  - section_bonus: `nav_section`
-- PSEC | used_in_stats=False | dq_status=EXCLUDED_CONTEXT_HARD_SKIP | doc=psec-20251231.htm | doc_score=112 | candidate_role=current_first_column | date_binding_mode=filing_date_fallback | score=-6.8 | pattern=nav_value_after_phrase | method=direct
-  - snippet: `aintain any stockholder approval that may be required under the 1940 Act to permit us to sell our common stock below net asset value if the 5-day VWAP represents a discount to our net asset value per share of common stock. For the 5.50 % Preferred Stock and 6.50 % Preferred Stock, “IOC Settlement Amount” means (A) the ...`
-  - local_role_ctx: `5-day VWAP represents a discount to our net asset value per share of common stock. For the 5.50 % Preferred Stock and 6.50 % Preferred Stock, “IOC Settlement Amount” means (A) the Stated Value, plus (B) unpaid divid`
-  - context_hard_skip: `sell_below_nav,stockholder_approval_below_nav`
-  - context_penalties: `reg_1940_act,preferred_stock,vwap_context,settlement_amount`
-  - section_bonus: `nav_section`
+  - doc_period_anchor_match: `2025-12-31`
+  - local_role_ctx: `Net Asset Value Per Share`
+  - section_bonus: `xbrl_api`
+  - xbrl: `us-gaap:NetAssetValuePerShare | unit=USD/shares`
+- BXSL | used_in_stats=True | dq_status=OK | doc=us-gaap:NetAssetValuePerShare | doc_score=250 | candidate_role=current_xbrl_standard_concept | date_binding_mode=xbrl_fact_end_date | score=20.0 | pattern=us-gaap:NetAssetValuePerShare | method=xbrl_companyconcept
+  - snippet: `XBRL fact us-gaap:NetAssetValuePerShare end=2025-12-31 val=26.92 unit=USD/shares`
+  - nav_ref_match: `2025-12-31`
+  - doc_period_anchor_match: `2025-12-31`
+  - local_role_ctx: `Net Asset Value Per Share`
+  - section_bonus: `xbrl_api`
+  - xbrl: `us-gaap:NetAssetValuePerShare | unit=USD/shares`
+- OBDC | used_in_stats=True | dq_status=OK | doc=us-gaap:NetAssetValuePerShare | doc_score=250 | candidate_role=current_xbrl_standard_concept | date_binding_mode=xbrl_fact_end_date | score=20.0 | pattern=us-gaap:NetAssetValuePerShare | method=xbrl_companyconcept
+  - snippet: `XBRL fact us-gaap:NetAssetValuePerShare end=2025-12-31 val=14.81 unit=USD/shares`
+  - nav_ref_match: `2025-12-31`
+  - doc_period_anchor_match: `2025-12-31`
+  - local_role_ctx: `Net Asset Value Per Share`
+  - section_bonus: `xbrl_api`
+  - xbrl: `us-gaap:NetAssetValuePerShare | unit=USD/shares`
+- FSK | used_in_stats=False | dq_status=REVIEW_DISCOUNT_DEEP | doc=us-gaap:NetAssetValuePerShare | doc_score=250 | candidate_role=current_xbrl_standard_concept | date_binding_mode=xbrl_fact_end_date | score=20.0 | pattern=us-gaap:NetAssetValuePerShare | method=xbrl_companyconcept
+  - snippet: `XBRL fact us-gaap:NetAssetValuePerShare end=2025-12-31 val=20.89 unit=USD/shares`
+  - nav_ref_match: `2025-12-31`
+  - doc_period_anchor_match: `2025-12-31`
+  - local_role_ctx: `Net Asset Value Per Share`
+  - section_bonus: `xbrl_api`
+  - xbrl: `us-gaap:NetAssetValuePerShare | unit=USD/shares`
+- PSEC | used_in_stats=False | dq_status=REVIEW_DISCOUNT_DEEP | doc=us-gaap:NetAssetValuePerShare | doc_score=250 | candidate_role=current_xbrl_standard_concept | date_binding_mode=xbrl_fact_end_date | score=20.0 | pattern=us-gaap:NetAssetValuePerShare | method=xbrl_companyconcept
+  - snippet: `XBRL fact us-gaap:NetAssetValuePerShare end=2025-12-31 val=6.21 unit=USD/shares`
+  - nav_ref_match: `2025-12-31`
+  - doc_period_anchor_match: `2025-12-31`
+  - local_role_ctx: `Net Asset Value Per Share`
+  - section_bonus: `xbrl_api`
+  - xbrl: `us-gaap:NetAssetValuePerShare | unit=USD/shares`
 
 ### NAV auto fetch notes
-- ARCC:INFO:no_match_in_filing:8-K:2026-02-27:docs_scanned=4
-- ARCC:OK:10-K:2026-02-04:doc=arcc-20251231.htm:doc_score=112:score=12.3:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted:date_binding_mode=local_nav_ref
-- BXSL:INFO:no_match_in_filing:8-K:2026-03-03:docs_scanned=5
-- BXSL:OK:8-K:2026-02-25:doc=ea0277994-01_ex991.htm:doc_score=102:score=10.9:dq=OK:method=nearby_header_anchor:nav_date_source=nav_ref_extracted:date_binding_mode=local_nav_ref
-- OBDC:OK:10-K:2026-02-18:doc=obdc-20251231.htm:doc_score=112:score=12.4:dq=OK:method=implied_from_price_and_rel:nav_date_source=nav_ref_extracted:date_binding_mode=local_nav_ref
+- ARCC:OK_XBRL:10-K:2026-02-04:doc=us-gaap:NetAssetValuePerShare:score=20.0:dq=OK:method=xbrl_companyconcept
+- BXSL:OK_XBRL:10-K:2026-02-25:doc=us-gaap:NetAssetValuePerShare:score=20.0:dq=OK:method=xbrl_companyconcept
+- OBDC:OK_XBRL:10-K:2026-02-18:doc=us-gaap:NetAssetValuePerShare:score=20.0:dq=OK:method=xbrl_companyconcept
 - FSK:INFO:no_match_in_filing:8-K:2026-03-05:docs_scanned=3
 - FSK:INFO:no_match_in_filing:8-K:2026-01-21:docs_scanned=4
 - FSK:INFO:no_match_in_filing:8-K:2025-12-23:docs_scanned=5
 - FSK:INFO:no_match_in_filing:8-K:2025-11-13:docs_scanned=3
-- FSK:REVIEW_ONLY:8-K:2026-02-25:doc=tm267104d1_ex99-1.htm:doc_score=102:score=7.9:dq=REVIEW_DISCOUNT_DEEP:method=direct:nav_date_source=doc_period_anchor_extracted:date_binding_mode=doc_period_anchor_after_comparison_guard
+- FSK:REVIEW_ONLY:10-K:2026-02-25:doc=us-gaap:NetAssetValuePerShare:doc_score=250:score=20.0:dq=REVIEW_DISCOUNT_DEEP:method=xbrl_companyconcept:nav_date_source=xbrl_fact_end_date:date_binding_mode=xbrl_fact_end_date
 - PSEC:INFO:no_match_in_filing:8-K:2026-02-11:docs_scanned=5
 - PSEC:INFO:no_match_in_filing:8-K:2026-02-09:docs_scanned=4
 - PSEC:INFO:no_match_in_filing:8-K:2026-01-15:docs_scanned=3
 - PSEC:INFO:no_match_in_filing:8-K:2025-11-06:docs_scanned=4
-- PSEC:REVIEW_ONLY:10-Q:2026-02-09:doc=psec-20251231.htm:doc_score=112:score=-6.8:dq=EXCLUDED_CONTEXT_HARD_SKIP:method=direct:nav_date_source=filing_date_inferred_review_only:date_binding_mode=filing_date_fallback
+- PSEC:REVIEW_ONLY:10-Q:2026-02-09:doc=us-gaap:NetAssetValuePerShare:doc_score=250:score=20.0:dq=REVIEW_DISCOUNT_DEEP:method=xbrl_companyconcept:nav_date_source=xbrl_fact_end_date:date_binding_mode=xbrl_fact_end_date
 
 ## 3) Event Overlay (manual, optional)
 - path: `private_credit_cache/inputs/manual_events.json`
@@ -170,12 +170,9 @@
 - Public Credit Context mirrors unified signal from preferred source modules when available.
 - Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.
 - Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.
-- v1.11e keeps SEC retry/backoff and optional cache for fetch stability.
-- v1.11e keeps filing index doc scan instead of primaryDocument-only logic.
-- v1.11e filters doc_period_anchor toward dates <= filing_date when possible.
-- v1.11e uses match-local role context to reduce false comparison classification.
-- v1.11e adds HTML table anchor binding for NAV per share rows.
-- v1.11e adds nearby-header fallback binding for table-like NAV rows when HTML table parsing misses month-name headers.
-- v1.11e blocks current_first_column table-like candidates when column order is ambiguous.
-- v1.11e keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.
+- v1.12 uses SEC XBRL APIs as the first NAV extraction path (companyconcept first, companyfacts discovery second).
+- v1.12 keeps HTML / regex extraction only as fallback when XBRL does not yield a usable NAV fact.
+- v1.12 preserves SEC retry/backoff and optional cache for fetch stability.
+- v1.12 preserves filing index doc scan as a fallback path instead of primaryDocument-only logic.
+- v1.12 keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.
 - data_fetch_notes: all price fetches OK
