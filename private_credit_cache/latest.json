@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at_utc": "2026-03-14T15:12:45Z",
+    "generated_at_utc": "2026-03-15T00:05:16Z",
     "script": "build_private_credit_monitor.py",
     "script_version": "v1.11c",
     "out_dir": "private_credit_cache",
@@ -84,8 +84,8 @@
         "drawdown_20d_pct": -8.457201,
         "ma20": 18.910245,
         "price_vs_ma20_pct": -5.553841,
-        "points": 413,
-        "source_url": "https://stooq.com/q/d/l/?s=arcc.us&d1=20240722&d2=20260314&i=d",
+        "points": 412,
+        "source_url": "https://stooq.com/q/d/l/?s=arcc.us&d1=20240723&d2=20260315&i=d",
         "note": "OK"
       },
       {
@@ -102,8 +102,8 @@
         "drawdown_20d_pct": -4.056795,
         "ma20": 24.075,
         "price_vs_ma20_pct": -1.765317,
-        "points": 413,
-        "source_url": "https://stooq.com/q/d/l/?s=bxsl.us&d1=20240722&d2=20260314&i=d",
+        "points": 412,
+        "source_url": "https://stooq.com/q/d/l/?s=bxsl.us&d1=20240723&d2=20260315&i=d",
         "note": "OK"
       },
       {
@@ -120,8 +120,8 @@
         "drawdown_20d_pct": -24.813711,
         "ma20": 11.7015,
         "price_vs_ma20_pct": -13.771739,
-        "points": 413,
-        "source_url": "https://stooq.com/q/d/l/?s=fsk.us&d1=20240722&d2=20260314&i=d",
+        "points": 412,
+        "source_url": "https://stooq.com/q/d/l/?s=fsk.us&d1=20240723&d2=20260315&i=d",
         "note": "OK"
       },
       {
@@ -138,8 +138,8 @@
         "drawdown_20d_pct": -8.060453,
         "ma20": 11.4475,
         "price_vs_ma20_pct": -4.345927,
-        "points": 413,
-        "source_url": "https://stooq.com/q/d/l/?s=obdc.us&d1=20240722&d2=20260314&i=d",
+        "points": 412,
+        "source_url": "https://stooq.com/q/d/l/?s=obdc.us&d1=20240723&d2=20260315&i=d",
         "note": "OK"
       },
       {
@@ -156,8 +156,8 @@
         "drawdown_20d_pct": -16.065574,
         "ma20": 2.7858,
         "price_vs_ma20_pct": -8.105392,
-        "points": 413,
-        "source_url": "https://stooq.com/q/d/l/?s=psec.us&d1=20240722&d2=20260314&i=d",
+        "points": 412,
+        "source_url": "https://stooq.com/q/d/l/?s=psec.us&d1=20240723&d2=20260315&i=d",
         "note": "OK"
       },
       {
@@ -174,8 +174,8 @@
         "drawdown_20d_pct": -7.142857,
         "ma20": 13.004,
         "price_vs_ma20_pct": -4.029529,
-        "points": 413,
-        "source_url": "https://stooq.com/q/d/l/?s=bizd.us&d1=20240722&d2=20260314&i=d",
+        "points": 412,
+        "source_url": "https://stooq.com/q/d/l/?s=bizd.us&d1=20240723&d2=20260315&i=d",
         "note": "OK"
       }
     ],
