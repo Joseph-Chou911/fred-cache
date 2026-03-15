@@ -1,0 +1,12 @@
+{
+  "generated_at_utc": "2026-03-15T14:28:38Z",
+  "script": "nav_sec_pipeline.py",
+  "script_version": "v1.0.0",
+  "coverage_total": 5,
+  "coverage_usable": 3,
+  "coverage_fresh": 3,
+  "nav_fresh_max_days": 150,
+  "median_discount_pct_all": -12.147103,
+  "median_discount_pct_fresh": -12.147103,
+  "confidence": "PARTIAL"
+}
