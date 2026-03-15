@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.11c)
+build_private_credit_monitor.py (v1.11d)
 
 Purpose
 -------
@@ -17,16 +17,16 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.11c changes
+v1.11d changes
 --------------
-- Keep v1.11b structure / audit philosophy
-- Fix doc_period_anchor selection:
-  * choose the best anchor <= filing_date when possible
-  * prefer period-ended / year-ended anchors over generic as-of anchors
-- Fix candidate_value_role inference:
-  * use match-local clause instead of full large snippet
-  * reduce false "comparison" classification caused by unrelated nearby text
-- Keep filing-date-only fallback as REVIEW_ONLY
+- Keep v1.11c structure / audit philosophy
+- Add HTML table anchor-binding for "Net Asset Value per share" rows:
+  * parse SEC HTML tables with colspan expansion
+  * bind NAV value to exact doc_period_anchor column when available
+- Add ambiguity guard:
+  * block current_first_column candidates when doc_period_anchor exists
+    and the match came from a multi-value row
+- Preserve filing-date-only fallback as REVIEW_ONLY
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.11c"
+SCRIPT_VERSION = "v1.11d"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -387,6 +387,12 @@ YEAR_RE = re.compile(r"\b20[0-9]{2}\b")
 NUMERIC_TOKEN_RE = re.compile(r"\$?\s*([0-9]{1,3}(?:\.[0-9]{1,4})?)")
 COMPARISON_PHRASE_RE = re.compile(r"\b(compared to|compares to|versus|vs\.?)\b", re.I)
 
+HTML_TABLE_RE = re.compile(r"<table\b[^>]*>.*?</table>", re.I | re.S)
+HTML_TR_RE = re.compile(r"<tr\b[^>]*>.*?</tr>", re.I | re.S)
+HTML_TDTH_RE = re.compile(r"<(td|th)\b([^>]*)>(.*?)</\1>", re.I | re.S)
+HTML_COLSPAN_RE = re.compile(r'\bcolspan\s*=\s*["\']?([0-9]+)', re.I)
+MDY_DATE_RE = re.compile(r"\b([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})\b")
+
 AUTO_NAV_MIN_MATCH_SCORE = 3.0
 AUTO_NAV_REVIEW_PREMIUM_PCT = 15.0
 AUTO_NAV_EXCLUDE_PREMIUM_PCT = 25.0
@@ -409,7 +415,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11c your_email@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11d your_email@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     p.add_argument("--sec-max-docs-per-filing", type=int, default=5, help="Max SEC docs to scan per filing after document scoring")
     p.add_argument("--sec-use-cache", action="store_true", help="Use local SEC response cache")
@@ -1184,16 +1190,209 @@ def score_implied_nav_candidate(
     return round(score, 3)
 
 
+def _clean_html_cell_text(s: str) -> str:
+    x = html_lib.unescape(s or "")
+    x = HTML_COMMENT_RE.sub(" ", x)
+    x = HTML_SCRIPT_STYLE_RE.sub(" ", x)
+    x = HTML_TAG_RE.sub(" ", x)
+    x = WHITESPACE_RE.sub(" ", x)
+    return x.strip()
+
+
+def _cell_colspan(attrs: str) -> int:
+    m = HTML_COLSPAN_RE.search(attrs or "")
+    if not m:
+        return 1
+    try:
+        n = int(m.group(1))
+        return max(1, n)
+    except Exception:
+        return 1
+
+
+def _parse_mdy_date_cell(text: str) -> Optional[pd.Timestamp]:
+    if not text:
+        return None
+    m = MDY_DATE_RE.search(text)
+    if not m:
+        return None
+    try:
+        mm = int(m.group(1))
+        dd = int(m.group(2))
+        yy = int(m.group(3))
+        return pd.Timestamp(year=yy, month=mm, day=dd).normalize()
+    except Exception:
+        return None
+
+
+def _parse_numeric_cell_value(text: str) -> Optional[float]:
+    if text is None:
+        return None
+    s = _clean_html_cell_text(text)
+    if not s or s in {"-", "—", "NA", "N/A", "$"}:
+        return None
+    s = s.replace("$", "").replace(",", "").strip()
+    if s.startswith("(") and s.endswith(")"):
+        s = "-" + s[1:-1].strip()
+    if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
+        try:
+            return float(s)
+        except Exception:
+            return None
+    return None
+
+
+def _parse_html_tables(raw_html: str) -> List[List[List[str]]]:
+    if not raw_html or "<table" not in raw_html.lower():
+        return []
+    tables: List[List[List[str]]] = []
+    for table_html in HTML_TABLE_RE.findall(raw_html):
+        table_rows: List[List[str]] = []
+        for tr_html in HTML_TR_RE.findall(table_html):
+            cells: List[str] = []
+            for m in HTML_TDTH_RE.finditer(tr_html):
+                attrs = m.group(2) or ""
+                inner = m.group(3) or ""
+                text = _clean_html_cell_text(inner)
+                colspan = _cell_colspan(attrs)
+                for _ in range(colspan):
+                    cells.append(text)
+            if cells:
+                table_rows.append(cells)
+        if table_rows:
+            tables.append(table_rows)
+    return tables
+
+
+def _is_nav_per_share_label(text: str) -> bool:
+    s = _clean_html_cell_text(text).lower()
+    return (
+        "net asset value per share" in s
+        or s == "nav per share"
+        or "asset value per share" in s
+    )
+
+
+def extract_nav_candidates_from_html_tables(
+    raw_html: str,
+    doc_period_anchor: Optional[pd.Timestamp],
+    market_close: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    anchor = normalize_ts_naive(doc_period_anchor)
+    if anchor is None or not raw_html:
+        return []
+
+    candidates: List[Dict[str, Any]] = []
+    tables = _parse_html_tables(raw_html)
+    if not tables:
+        return candidates
+
+    for table_idx, rows in enumerate(tables):
+        header_idx = None
+        header_dates: List[Optional[pd.Timestamp]] = []
+
+        for i, row in enumerate(rows[:8]):
+            parsed_dates = [_parse_mdy_date_cell(cell) for cell in row]
+            if sum(d is not None for d in parsed_dates) >= 2:
+                header_idx = i
+                header_dates = parsed_dates
+                break
+
+        if header_idx is None:
+            continue
+
+        for row_idx in range(header_idx + 1, len(rows)):
+            row = rows[row_idx]
+            if not row:
+                continue
+
+            label = row[0] if row else ""
+            if not _is_nav_per_share_label(label):
+                continue
+
+            max_len = min(len(row), len(header_dates))
+            bound_idx = None
+            bound_val = None
+            for idx in range(max_len):
+                d = header_dates[idx]
+                if d is None or d != anchor:
+                    continue
+                v = _parse_numeric_cell_value(row[idx])
+                if v is None:
+                    continue
+                bound_idx = idx
+                bound_val = v
+                break
+
+            if bound_idx is None or bound_val is None:
+                continue
+
+            premium_discount_est = None
+            if market_close is not None and market_close > 0:
+                premium_discount_est = safe_num((market_close / float(bound_val) - 1.0) * 100.0)
+
+            candidates.append({
+                "extraction_method": "html_table_exact_anchor",
+                "nav": round(float(bound_val), 6),
+                "matched_pattern": "html_table_nav_per_share_anchor",
+                "matched_snippet": clean_snippet(" | ".join(row), max_len=320),
+                "num_context": clean_snippet(" | ".join(row), max_len=200),
+                "percent_context_flag": False,
+                "suspicious_terms_flag": False,
+                "date_component_flag": False,
+                "match_score": 12.5,
+                "premium_discount_est": premium_discount_est,
+                "price_obs_date": None,
+                "price_obs_date_source": None,
+                "price_obs_match_text": None,
+                "nav_ref_date": anchor.strftime("%Y-%m-%d"),
+                "nav_ref_date_source": "html_table_header_exact_anchor",
+                "nav_ref_match_text": anchor.strftime("%m/%d/%Y"),
+                "hard_skip_context_flag": False,
+                "hard_skip_context_tags": [],
+                "context_penalty_total": 0.0,
+                "context_penalty_tags": [],
+                "section_bonus_total": 0.8,
+                "section_bonus_tags": ["html_table_nav_row"],
+                "candidate_value_role": "current_bound_by_table_anchor",
+                "comparison_context_flag": False,
+                "multi_value_row_flag": True,
+                "date_binding_mode": "html_table_exact_anchor",
+                "local_role_ctx": clean_snippet(label, max_len=120),
+                "table_header_dates": [d.strftime("%Y-%m-%d") if d is not None else None for d in header_dates],
+                "table_row_values": [_parse_numeric_cell_value(cell) for cell in row],
+                "table_bound_index": bound_idx,
+                "table_index": table_idx,
+                "table_row_index": row_idx,
+            })
+
+    return candidates
+
+
 def extract_nav_candidates_from_text(
     text: str,
     market_close: Optional[float] = None,
     max_candidates: int = AUTO_NAV_MAX_CANDIDATES_PER_FILING,
+    raw_html: Optional[str] = None,
+    doc_period_anchor: Optional[pd.Timestamp] = None,
 ) -> List[Dict[str, Any]]:
-    if not text:
+    if not text and not raw_html:
         return []
 
     candidates: List[Dict[str, Any]] = []
     seen = set()
+
+    if raw_html and doc_period_anchor is not None:
+        for cand in extract_nav_candidates_from_html_tables(
+            raw_html=raw_html,
+            doc_period_anchor=doc_period_anchor,
+            market_close=market_close,
+        ):
+            key = ("html_table_exact_anchor", round(float(cand.get("nav") or 0), 4), cand.get("matched_snippet", "")[:140])
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(cand)
 
     for pattern_label, pat in DIRECT_NAV_REGEX_SPECS:
         for m in pat.finditer(text):
@@ -1286,6 +1485,11 @@ def extract_nav_candidates_from_text(
                 "multi_value_row_flag": multi_value_row_flag,
                 "date_binding_mode": "local_nav_ref" if nav_ref_date is not None else "none_yet",
                 "local_role_ctx": local_role_ctx,
+                "table_header_dates": None,
+                "table_row_values": None,
+                "table_bound_index": None,
+                "table_index": None,
+                "table_row_index": None,
             })
 
     for pattern_label, pat in IMPLIED_NAV_REGEX_SPECS:
@@ -1365,13 +1569,24 @@ def extract_nav_candidates_from_text(
                 "multi_value_row_flag": False,
                 "date_binding_mode": "local_nav_ref" if nav_ref_date is not None else "none_yet",
                 "local_role_ctx": None,
+                "table_header_dates": None,
+                "table_row_values": None,
+                "table_bound_index": None,
+                "table_index": None,
+                "table_row_index": None,
             })
+
+    extraction_priority = {
+        "html_table_exact_anchor": 0,
+        "implied_from_price_and_rel": 1,
+        "direct": 2,
+    }
 
     candidates = sorted(
         candidates,
         key=lambda x: (
+            extraction_priority.get(str(x.get("extraction_method") or ""), 9),
             -(float(x.get("match_score") or -999)),
-            0 if x.get("extraction_method") == "implied_from_price_and_rel" else 1,
             x.get("matched_pattern") or "",
             -(float(x.get("nav") or 0)),
         )
@@ -1411,6 +1626,7 @@ def choose_effective_nav_date(
         "current_table_like",
         "current_single_value",
         "current_implied",
+        "current_bound_by_table_anchor",
     } or (multi_value_row_flag and candidate_value_role not in {"comparison"})
 
     upper_bounds_for_doc = [d for d in [filing_date, market_date, today_utc] if d is not None]
@@ -1524,6 +1740,11 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         row.setdefault("multi_value_row_flag", False)
         row.setdefault("date_binding_mode", "manual_input")
         row.setdefault("local_role_ctx", None)
+        row.setdefault("table_header_dates", None)
+        row.setdefault("table_row_values", None)
+        row.setdefault("table_bound_index", None)
+        row.setdefault("table_index", None)
+        row.setdefault("table_row_index", None)
         return row
 
     used = bool(row.get("valid_for_stats"))
@@ -1532,6 +1753,7 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
 
     nav_date_source = str(row.get("nav_date_source") or "")
     candidate_value_role = str(row.get("candidate_value_role") or "")
+    extraction_method = str(row.get("extraction_method") or "")
 
     if nav_date_source == "filing_date_inferred_review_only":
         used = False
@@ -1547,6 +1769,17 @@ def finalize_nav_row_dq(row: Dict[str, Any]) -> Dict[str, Any]:
         if dq_status == "OK":
             dq_status = "REVIEW_COMPARISON_VALUE"
         flags.append("CANDIDATE_VALUE_IS_COMPARISON")
+
+    if (
+        extraction_method == "direct"
+        and candidate_value_role == "current_first_column"
+        and bool(row.get("doc_period_anchor"))
+        and bool(row.get("multi_value_row_flag"))
+    ):
+        used = False
+        if dq_status == "OK":
+            dq_status = "REVIEW_COLUMN_ORDER_AMBIGUOUS"
+        flags.append("COLUMN_ORDER_AMBIGUOUS_FIRST_COLUMN_WITH_ANCHOR")
 
     hard_skip_tags = list(row.get("hard_skip_context_tags") or [])
     if row.get("hard_skip_context_flag"):
@@ -1650,6 +1883,11 @@ def load_manual_nav_rows(
                 "multi_value_row_flag": False,
                 "date_binding_mode": "manual_input",
                 "local_role_ctx": None,
+                "table_header_dates": None,
+                "table_row_values": None,
+                "table_bound_index": None,
+                "table_index": None,
+                "table_row_index": None,
             },
         )
         row = finalize_nav_row_dq(row)
@@ -1769,7 +2007,6 @@ def get_sec_ticker_to_cik_map(
             if ticker and cik_str.isdigit():
                 out[ticker] = cik_str.zfill(10)
     return out
-
 
 def get_sec_filing_candidates(
     session: requests.Session,
@@ -1984,7 +2221,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v7_docscan_v11c",
+            "source": "sec_filings_regex_v7_docscan_v11d",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -2073,6 +2310,8 @@ def fetch_auto_nav_rows_from_sec(
                     text=text,
                     market_close=market_close,
                     max_candidates=AUTO_NAV_MAX_CANDIDATES_PER_FILING,
+                    raw_html=raw_text,
+                    doc_period_anchor=doc_period_anchor,
                 )
                 if not candidates:
                     continue
@@ -2144,6 +2383,11 @@ def fetch_auto_nav_rows_from_sec(
                             "multi_value_row_flag": cand.get("multi_value_row_flag"),
                             "date_binding_mode": date_binding_mode,
                             "local_role_ctx": cand.get("local_role_ctx"),
+                            "table_header_dates": cand.get("table_header_dates"),
+                            "table_row_values": cand.get("table_row_values"),
+                            "table_bound_index": cand.get("table_bound_index"),
+                            "table_index": cand.get("table_index"),
+                            "table_row_index": cand.get("table_row_index"),
                         },
                     )
                     row = finalize_nav_row_dq(row)
@@ -2199,7 +2443,7 @@ def fetch_auto_nav_rows_from_sec(
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v7_docscan_v11c",
+        "source": "sec_filings_regex_v7_docscan_v11d",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -2757,6 +3001,12 @@ def build_report(latest: Dict[str, Any]) -> str:
                 lines.append(f"  - context_penalties: `{sanitize_inline_code_text(','.join(r.get('context_penalty_tags') or []))}`")
             if r.get("section_bonus_tags"):
                 lines.append(f"  - section_bonus: `{sanitize_inline_code_text(','.join(r.get('section_bonus_tags') or []))}`")
+            if r.get("table_header_dates"):
+                lines.append(f"  - table_header_dates: `{sanitize_inline_code_text(r.get('table_header_dates'))}`")
+            if r.get("table_row_values"):
+                lines.append(f"  - table_row_values: `{sanitize_inline_code_text(r.get('table_row_values'))}`")
+            if r.get("table_bound_index") is not None:
+                lines.append(f"  - table_bound_index: `{sanitize_inline_code_text(r.get('table_bound_index'))}`")
             if r.get("derived_from_price") is not None:
                 lines.append(
                     f"  - implied_from: price={r.get('derived_from_price')} | "
@@ -2926,7 +3176,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan_v11c + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan_v11d + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -2977,11 +3227,13 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.11c keeps SEC retry/backoff and optional cache for fetch stability.",
-            "v1.11c keeps filing index doc scan instead of primaryDocument-only logic.",
-            "v1.11c filters doc_period_anchor toward dates <= filing_date when possible.",
-            "v1.11c uses match-local role context to reduce false comparison classification.",
-            "v1.11c keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
+            "v1.11d keeps SEC retry/backoff and optional cache for fetch stability.",
+            "v1.11d keeps filing index doc scan instead of primaryDocument-only logic.",
+            "v1.11d filters doc_period_anchor toward dates <= filing_date when possible.",
+            "v1.11d uses match-local role context to reduce false comparison classification.",
+            "v1.11d adds HTML table anchor binding for NAV per share rows.",
+            "v1.11d blocks current_first_column table-like candidates when column order is ambiguous.",
+            "v1.11d keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
