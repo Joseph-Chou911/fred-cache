@@ -1,0 +1,37 @@
+[
+  {
+    "ticker": "ARCC",
+    "nav": 0.0,
+    "nav_date": "YYYY-MM-DD",
+    "source": "manual",
+    "note": "fill nav and nav_date to override auto SEC row"
+  },
+  {
+    "ticker": "BXSL",
+    "nav": 0.0,
+    "nav_date": "YYYY-MM-DD",
+    "source": "manual",
+    "note": "fill nav and nav_date to override auto SEC row"
+  },
+  {
+    "ticker": "OBDC",
+    "nav": 0.0,
+    "nav_date": "YYYY-MM-DD",
+    "source": "manual",
+    "note": "fill nav and nav_date to override auto SEC row"
+  },
+  {
+    "ticker": "FSK",
+    "nav": 0.0,
+    "nav_date": "YYYY-MM-DD",
+    "source": "manual",
+    "note": "fill nav and nav_date to override auto SEC row"
+  },
+  {
+    "ticker": "PSEC",
+    "nav": 0.0,
+    "nav_date": "YYYY-MM-DD",
+    "source": "manual",
+    "note": "fill nav and nav_date to override auto SEC row"
+  }
+]
