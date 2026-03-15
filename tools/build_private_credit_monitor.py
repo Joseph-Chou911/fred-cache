@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-build_private_credit_monitor.py (v1.11d)
+build_private_credit_monitor.py (v1.11e)
 
 Purpose
 -------
@@ -17,15 +17,16 @@ Design principles
 - Prefer a small set of robust market proxies plus manual event/NAV overlays.
 - Display-only / advisory-first: this script does not control a parent strategy mode.
 
-v1.11d changes
+v1.11e changes
 --------------
-- Keep v1.11c structure / audit philosophy
-- Add HTML table anchor-binding for "Net Asset Value per share" rows:
-  * parse SEC HTML tables with colspan expansion
-  * bind NAV value to exact doc_period_anchor column when available
-- Add ambiguity guard:
-  * block current_first_column candidates when doc_period_anchor exists
-    and the match came from a multi-value row
+- Keep v1.11d structure / audit philosophy
+- Keep HTML table anchor-binding for "Net Asset Value per share" rows
+- Improve date parsing for SEC HTML table headers:
+  * support both numeric dates (12/31/2025) and month-name dates (December 31, 2025)
+- Add nearby-header fallback for table-like NAV rows:
+  * when HTML table parsing misses, bind multi-value NAV rows to nearby date headers
+    if doc_period_anchor matches one of the nearby header dates
+- Keep ambiguity guard for unresolved current_first_column rows
 - Preserve filing-date-only fallback as REVIEW_ONLY
 """
 
@@ -48,7 +49,7 @@ import requests
 
 
 SCRIPT_NAME = "build_private_credit_monitor.py"
-SCRIPT_VERSION = "v1.11d"
+SCRIPT_VERSION = "v1.11e"
 UTC_NOW = lambda: datetime.now(timezone.utc).replace(microsecond=0)
 
 DEFAULT_BDC_TICKERS = ["ARCC", "BXSL", "OBDC", "FSK", "PSEC"]
@@ -392,6 +393,7 @@ HTML_TR_RE = re.compile(r"<tr\b[^>]*>.*?</tr>", re.I | re.S)
 HTML_TDTH_RE = re.compile(r"<(td|th)\b([^>]*)>(.*?)</\1>", re.I | re.S)
 HTML_COLSPAN_RE = re.compile(r'\bcolspan\s*=\s*["\']?([0-9]+)', re.I)
 MDY_DATE_RE = re.compile(r"\b([0-9]{1,2})/([0-9]{1,2})/(20[0-9]{2})\b")
+MONTHNAME_DATE_RE = re.compile(r"\b([A-Za-z]{3,9}\.?)[ ]+([0-9]{1,2}),[ ]*(20[0-9]{2})\b", re.I)
 
 AUTO_NAV_MIN_MATCH_SCORE = 3.0
 AUTO_NAV_REVIEW_PREMIUM_PCT = 15.0
@@ -415,7 +417,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=int, default=20, help="HTTP timeout seconds")
     p.add_argument("--tickers", default=",".join(ALL_DEFAULT_TICKERS), help="Comma-separated tickers to monitor")
     p.add_argument("--nav-auto-source", default="sec", choices=["sec", "off"], help="Auto NAV source")
-    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11d your_email@example.com", help="SEC User-Agent header")
+    p.add_argument("--sec-user-agent", default="private-credit-monitor/1.11e your_email@example.com", help="SEC User-Agent header")
     p.add_argument("--nav-auto-max-filings", type=int, default=6, help="Max recent filings to scan per ticker for NAV extraction")
     p.add_argument("--sec-max-docs-per-filing", type=int, default=5, help="Max SEC docs to scan per filing after document scoring")
     p.add_argument("--sec-use-cache", action="store_true", help="Use local SEC response cache")
@@ -1213,16 +1215,172 @@ def _cell_colspan(attrs: str) -> int:
 def _parse_mdy_date_cell(text: str) -> Optional[pd.Timestamp]:
     if not text:
         return None
+
     m = MDY_DATE_RE.search(text)
+    if m:
+        try:
+            mm = int(m.group(1))
+            dd = int(m.group(2))
+            yy = int(m.group(3))
+            return pd.Timestamp(year=yy, month=mm, day=dd).normalize()
+        except Exception:
+            pass
+
+    m2 = MONTHNAME_DATE_RE.search(text)
+    if m2:
+        try:
+            month = normalize_month_token(m2.group(1))
+            day = int(m2.group(2))
+            year = int(m2.group(3))
+            if month is not None:
+                return pd.Timestamp(year=year, month=month, day=day).normalize()
+        except Exception:
+            pass
+
+    return None
+
+
+def _extract_unique_nearby_dates(ctx: str, limit: int = 6) -> List[pd.Timestamp]:
+    out: List[pd.Timestamp] = []
+    seen = set()
+
+    for pat_label, pat in [
+        ("generic_monthname", MONTHNAME_DATE_RE),
+        ("generic_numeric", MDY_DATE_RE),
+    ]:
+        for m in pat.finditer(ctx or ""):
+            try:
+                if pat_label == "generic_monthname":
+                    month = normalize_month_token(m.group(1))
+                    day = int(m.group(2))
+                    year = int(m.group(3))
+                    if month is None:
+                        continue
+                    ts = pd.Timestamp(year=year, month=month, day=day).normalize()
+                else:
+                    mm = int(m.group(1))
+                    dd = int(m.group(2))
+                    year = int(m.group(3))
+                    ts = pd.Timestamp(year=year, month=mm, day=dd).normalize()
+            except Exception:
+                continue
+
+            key = ts.strftime("%Y-%m-%d")
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(ts)
+
+    out = sorted(out, key=lambda x: x.value)
+    return out[-limit:]
+
+
+def _extract_row_values_after_nav_label(ctx: str, max_values: int = 4) -> List[float]:
+    if not ctx:
+        return []
+
+    m = re.search(r"(?:net asset value per share|net assets per share|nav per share)", ctx, re.I)
     if not m:
+        return []
+
+    tail = ctx[m.end():m.end() + 180]
+    tokens = re.findall(r"\$?[0-9]{1,3}(?:\.[0-9]{1,4})?|[A-Za-z][A-Za-z\-]*|[%xX]", tail)
+
+    values: List[float] = []
+    started = False
+    for tok in tokens:
+        clean = tok.replace("$", "").strip()
+
+        if re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,4})?", clean):
+            try:
+                values.append(float(clean))
+                started = True
+                if len(values) >= max_values:
+                    break
+                continue
+            except Exception:
+                continue
+
+        if started:
+            break
+
+    return values
+
+
+def extract_nearby_header_bound_candidate(
+    text: str,
+    start: int,
+    end: int,
+    doc_period_anchor: Optional[pd.Timestamp],
+    market_close: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    anchor = normalize_ts_naive(doc_period_anchor)
+    if anchor is None:
         return None
+
+    header_ctx = text[max(0, start - 1600):start]
+    row_ctx = text[max(0, start - 40):min(len(text), end + 220)]
+
+    nearby_dates = _extract_unique_nearby_dates(header_ctx, limit=6)
+    row_values = _extract_row_values_after_nav_label(row_ctx, max_values=4)
+
+    if len(nearby_dates) < 2 or len(row_values) < 2:
+        return None
+
+    candidate_dates = nearby_dates[-len(row_values):]
+    if len(candidate_dates) != len(row_values):
+        return None
+
     try:
-        mm = int(m.group(1))
-        dd = int(m.group(2))
-        yy = int(m.group(3))
-        return pd.Timestamp(year=yy, month=mm, day=dd).normalize()
-    except Exception:
+        bound_index = next(i for i, d in enumerate(candidate_dates) if d == anchor)
+    except StopIteration:
         return None
+
+    if bound_index >= len(row_values):
+        return None
+
+    bound_val = row_values[bound_index]
+    if bound_val is None or not (0.5 <= bound_val <= 100.0):
+        return None
+
+    premium_discount_est = None
+    if market_close is not None and market_close > 0:
+        premium_discount_est = safe_num((market_close / float(bound_val) - 1.0) * 100.0)
+
+    return {
+        "extraction_method": "nearby_header_anchor",
+        "nav": round(float(bound_val), 6),
+        "matched_pattern": "nearby_header_nav_per_share_anchor",
+        "matched_snippet": clean_snippet(row_ctx, max_len=320),
+        "num_context": clean_snippet(row_ctx, max_len=200),
+        "percent_context_flag": False,
+        "suspicious_terms_flag": False,
+        "date_component_flag": False,
+        "match_score": 10.9,
+        "premium_discount_est": premium_discount_est,
+        "price_obs_date": None,
+        "price_obs_date_source": None,
+        "price_obs_match_text": None,
+        "nav_ref_date": anchor.strftime("%Y-%m-%d"),
+        "nav_ref_date_source": "nearby_header_exact_anchor",
+        "nav_ref_match_text": anchor.strftime("%Y-%m-%d"),
+        "hard_skip_context_flag": False,
+        "hard_skip_context_tags": [],
+        "context_penalty_total": 0.0,
+        "context_penalty_tags": [],
+        "section_bonus_total": 0.6,
+        "section_bonus_tags": ["nearby_header_anchor"],
+        "candidate_value_role": "current_bound_by_nearby_header",
+        "comparison_context_flag": False,
+        "multi_value_row_flag": True,
+        "date_binding_mode": "nearby_header_anchor",
+        "local_role_ctx": clean_snippet(row_ctx, max_len=180),
+        "table_header_dates": [d.strftime("%Y-%m-%d") for d in candidate_dates],
+        "table_row_values": [safe_num(v) for v in row_values],
+        "table_bound_index": bound_index,
+        "table_index": None,
+        "table_row_index": None,
+    }
 
 
 def _parse_numeric_cell_value(text: str) -> Optional[float]:
@@ -1452,6 +1610,28 @@ def extract_nav_candidates_from_text(
             if market_close is not None and market_close > 0:
                 premium_discount_est = safe_num((market_close / float(val) - 1.0) * 100.0)
 
+            if (
+                doc_period_anchor is not None
+                and candidate_value_role == "current_first_column"
+                and multi_value_row_flag
+            ):
+                nearby_cand = extract_nearby_header_bound_candidate(
+                    text=text,
+                    start=m.start(),
+                    end=m.end(),
+                    doc_period_anchor=doc_period_anchor,
+                    market_close=market_close,
+                )
+                if nearby_cand is not None:
+                    nearby_key = (
+                        "nearby_header_anchor",
+                        round(float(nearby_cand.get("nav") or 0), 4),
+                        nearby_cand.get("matched_snippet", "")[:140],
+                    )
+                    if nearby_key not in seen:
+                        seen.add(nearby_key)
+                        candidates.append(nearby_cand)
+
             key = ("direct", round(float(val), 4), pattern_label, snippet[:140])
             if key in seen:
                 continue
@@ -1578,8 +1758,9 @@ def extract_nav_candidates_from_text(
 
     extraction_priority = {
         "html_table_exact_anchor": 0,
-        "implied_from_price_and_rel": 1,
-        "direct": 2,
+        "nearby_header_anchor": 1,
+        "implied_from_price_and_rel": 2,
+        "direct": 3,
     }
 
     candidates = sorted(
@@ -1627,6 +1808,7 @@ def choose_effective_nav_date(
         "current_single_value",
         "current_implied",
         "current_bound_by_table_anchor",
+        "current_bound_by_nearby_header",
     } or (multi_value_row_flag and candidate_value_role not in {"comparison"})
 
     upper_bounds_for_doc = [d for d in [filing_date, market_date, today_utc] if d is not None]
@@ -2221,7 +2403,7 @@ def fetch_auto_nav_rows_from_sec(
     except Exception as e:
         return {
             "enabled": True,
-            "source": "sec_filings_regex_v7_docscan_v11d",
+            "source": "sec_filings_regex_v7_docscan_v11e",
             "attempted_count": 0,
             "found_count": 0,
             "rows": [],
@@ -2443,7 +2625,7 @@ def fetch_auto_nav_rows_from_sec(
 
     return {
         "enabled": True,
-        "source": "sec_filings_regex_v7_docscan_v11d",
+        "source": "sec_filings_regex_v7_docscan_v11e",
         "attempted_count": attempted,
         "found_count": found,
         "rows": out_rows,
@@ -3176,7 +3358,7 @@ def main() -> None:
             "script": SCRIPT_NAME,
             "script_version": SCRIPT_VERSION,
             "out_dir": str(out_dir),
-            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan_v11d + manual_event_overlay + optional_unified_reference_only",
+            "source_policy": "stooq_bdc_proxy + manual_nav_overlay + auto_sec_nav_v7_docscan_v11e + manual_event_overlay + optional_unified_reference_only",
             "basket_tickers": basket_tickers,
             "proxy_tickers": proxy_tickers,
             "params": {
@@ -3227,13 +3409,14 @@ def main() -> None:
             "Public Credit Context mirrors unified signal from preferred source modules when available.",
             "Auto NAV from SEC excludes date-component contamination and all REVIEW rows from structural stats.",
             "Implied NAV extraction from price + premium/discount sentences is enabled to reduce false data loss.",
-            "v1.11d keeps SEC retry/backoff and optional cache for fetch stability.",
-            "v1.11d keeps filing index doc scan instead of primaryDocument-only logic.",
-            "v1.11d filters doc_period_anchor toward dates <= filing_date when possible.",
-            "v1.11d uses match-local role context to reduce false comparison classification.",
-            "v1.11d adds HTML table anchor binding for NAV per share rows.",
-            "v1.11d blocks current_first_column table-like candidates when column order is ambiguous.",
-            "v1.11d keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
+            "v1.11e keeps SEC retry/backoff and optional cache for fetch stability.",
+            "v1.11e keeps filing index doc scan instead of primaryDocument-only logic.",
+            "v1.11e filters doc_period_anchor toward dates <= filing_date when possible.",
+            "v1.11e uses match-local role context to reduce false comparison classification.",
+            "v1.11e adds HTML table anchor binding for NAV per share rows.",
+            "v1.11e adds nearby-header fallback binding for table-like NAV rows when HTML table parsing misses month-name headers.",
+            "v1.11e blocks current_first_column table-like candidates when column order is ambiguous.",
+            "v1.11e keeps filing-date-only NAV dating as REVIEW_ONLY, excluded from structural stats.",
             f"data_fetch_notes: {'; '.join(source_notes) if source_notes else 'all price fetches OK'}",
         ],
     }
