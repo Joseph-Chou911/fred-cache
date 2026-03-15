@@ -1,16 +1,16 @@
 {
   "schema_version": "stats_latest_v1",
-  "generated_at_utc": "2026-03-14T16:50:21Z",
-  "as_of_ts": "2026-03-15T00:50:18+08:00",
+  "generated_at_utc": "2026-03-15T08:56:46Z",
+  "as_of_ts": "2026-03-15T16:56:42+08:00",
   "script_version": "cycle_sidecars_stats_v1",
   "series_count": 4,
   "series": {
     "GLD.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-03-15T00:50:18+08:00",
+        "as_of_ts": "2026-03-15T16:56:42+08:00",
         "data_date": "2026-03-13",
         "value": 460.84,
-        "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20260212&d2=20260314&i=d",
+        "source_url": "https://stooq.com/q/d/l/?s=gld.us&d1=20260213&d2=20260315&i=d",
         "notes": "NA",
         "data_lag_days": 2
       },
@@ -34,10 +34,10 @@
     },
     "IAU.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-03-15T00:50:18+08:00",
+        "as_of_ts": "2026-03-15T16:56:42+08:00",
         "data_date": "2026-03-13",
         "value": 94.38,
-        "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20260212&d2=20260314&i=d",
+        "source_url": "https://stooq.com/q/d/l/?s=iau.us&d1=20260213&d2=20260315&i=d",
         "notes": "NA",
         "data_lag_days": 2
       },
@@ -61,10 +61,10 @@
     },
     "VNQ.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-03-15T00:50:18+08:00",
+        "as_of_ts": "2026-03-15T16:56:42+08:00",
         "data_date": "2026-03-13",
         "value": 92.16,
-        "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20260212&d2=20260314&i=d",
+        "source_url": "https://stooq.com/q/d/l/?s=vnq.us&d1=20260213&d2=20260315&i=d",
         "notes": "NA",
         "data_lag_days": 2
       },
@@ -88,10 +88,10 @@
     },
     "IYR.US_CLOSE": {
       "latest": {
-        "as_of_ts": "2026-03-15T00:50:18+08:00",
+        "as_of_ts": "2026-03-15T16:56:42+08:00",
         "data_date": "2026-03-13",
         "value": 97.5,
-        "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20260212&d2=20260314&i=d",
+        "source_url": "https://stooq.com/q/d/l/?s=iyr.us&d1=20260213&d2=20260315&i=d",
         "notes": "NA",
         "data_lag_days": 2
       },

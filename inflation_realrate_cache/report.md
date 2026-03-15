@@ -1,11 +1,11 @@
 # Risk Dashboard (inflation_realrate_cache)
 
 - Summary: ALERT=0 / WATCH=1 / INFO=0 / NONE=1; CHANGED=0; WATCH_STREAK>=3=0
-- SCRIPT_FINGERPRINT: `render_dashboard_py_signals_v8@7850663`
+- SCRIPT_FINGERPRINT: `render_dashboard_py_signals_v8@3dfc10d`
 - RULESET_ID: `signals_v8`
-- RUN_TS_UTC: `2026-03-14T16:50:21.857408+00:00`
-- STATS.generated_at_utc: `2026-03-14T16:50:21Z`
-- STATS.as_of_ts: `2026-03-15T00:50:18+08:00`
+- RUN_TS_UTC: `2026-03-15T08:56:46.812544+00:00`
+- STATS.generated_at_utc: `2026-03-15T08:56:46Z`
+- STATS.as_of_ts: `2026-03-15T16:56:42+08:00`
 - script_version: `cycle_sidecars_stats_v1`
 - stale_hours: `36.0`
 - stats_path: `inflation_realrate_cache/stats_latest.json`
@@ -19,5 +19,5 @@
 
 | Signal | Tag | Near | Dir | DirNote | PrevSignal | DeltaSignal | StreakHist | StreakWA | Series | DQ | age_h | data_date | value | z60 | p60 | p252 | z252 | z_poschg60 | p_poschg60 | ret1_pct1d_absPrev | Reason | Source | as_of_ts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| WATCH | JUMP_P,JUMP_RET | NA | MOVE | MOVE_ONLY | WATCH | SAME | 1 | 2 | DFII10 | OK | 0 | 2026-03-12 | 1.89 | 0.347068 | 51.666667 | 46.428571 | -0.203742 | 0.632742 | 17.768362 | 2.162162 | abs(PΔ60)>=15;abs(ret1%1d)>=2 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 | 2026-03-15T00:50:18+08:00 |
-| NONE | NA | NA | MOVE | MOVE_ONLY | NONE | SAME | 0 | 0 | T10YIE | OK | 0 | 2026-03-13 | 2.36 | 1.499576 | 98.333333 | 80.15873 | 0.834547 | -0.514907 | -1.666667 | -0.840336 | NA | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 | 2026-03-15T00:50:18+08:00 |
+| WATCH | JUMP_P,JUMP_RET | NA | MOVE | MOVE_ONLY | WATCH | SAME | 1 | 2 | DFII10 | OK | 0 | 2026-03-12 | 1.89 | 0.347068 | 51.666667 | 46.428571 | -0.203742 | 0.632742 | 17.768362 | 2.162162 | abs(PΔ60)>=15;abs(ret1%1d)>=2 | https://api.stlouisfed.org/fred/series/observations?series_id=DFII10&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 | 2026-03-15T16:56:42+08:00 |
+| NONE | NA | NA | MOVE | MOVE_ONLY | NONE | SAME | 0 | 0 | T10YIE | OK | 0 | 2026-03-13 | 2.36 | 1.499576 | 98.333333 | 80.15873 | 0.834547 | -0.514907 | -1.666667 | -0.840336 | NA | https://api.stlouisfed.org/fred/series/observations?series_id=T10YIE&api_key=REDACTED&file_type=json&sort_order=desc&limit=1 | 2026-03-15T16:56:42+08:00 |
