@@ -1,0 +1,144 @@
+name: nav-sec-pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "Comma-separated tickers"
+        required: false
+        default: "ARCC,BXSL,OBDC,FSK,PSEC"
+      out_dir:
+        description: "Output directory"
+        required: false
+        default: "nav_sec_pipeline_cache"
+      manual_nav:
+        description: "Manual NAV JSON path"
+        required: false
+        default: "config/manual_nav.json"
+      nav_auto_max_filings:
+        description: "Max SEC filings to scan per ticker"
+        required: false
+        default: "6"
+      sec_max_docs_per_filing:
+        description: "Max docs to scan per filing"
+        required: false
+        default: "5"
+      sec_use_cache:
+        description: "Use local SEC cache (true/false)"
+        required: false
+        default: "true"
+      sec_user_agent:
+        description: "Optional SEC User-Agent override. Leave blank to use repository secret SEC_USER_AGENT."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nav-sec-pipeline
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      DEFAULT_TICKERS: ${{ inputs.tickers }}
+      OUT_DIR: ${{ inputs.out_dir }}
+      MANUAL_NAV: ${{ inputs.manual_nav }}
+      NAV_AUTO_MAX_FILINGS: ${{ inputs.nav_auto_max_filings }}
+      SEC_MAX_DOCS_PER_FILING: ${{ inputs.sec_max_docs_per_filing }}
+      SEC_USE_CACHE: ${{ inputs.sec_use_cache }}
+      SEC_USER_AGENT_INPUT: ${{ inputs.sec_user_agent }}
+      SEC_USER_AGENT_SECRET: ${{ secrets.SEC_USER_AGENT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests yfinance beautifulsoup4 lxml pandas
+
+      - name: Resolve SEC User-Agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          SEC_UA="${SEC_USER_AGENT_INPUT:-}"
+          if [ -z "$SEC_UA" ]; then
+            SEC_UA="${SEC_USER_AGENT_SECRET:-}"
+          fi
+          if [ -z "$SEC_UA" ]; then
+            echo "SEC User-Agent is missing."
+            echo "Please either:"
+            echo "1) set workflow_dispatch input sec_user_agent, or"
+            echo "2) create repository secret SEC_USER_AGENT"
+            exit 1
+          fi
+          echo "SEC_USER_AGENT=$SEC_UA" >> "$GITHUB_ENV"
+
+      - name: Ensure output and config directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT_DIR"
+          mkdir -p "$(dirname "$MANUAL_NAV")"
+
+      - name: Run NAV SEC pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXTRA_ARGS=""
+          if [ "${SEC_USE_CACHE,,}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --sec-use-cache"
+          fi
+
+          python tools/nav_sec_pipeline.py \
+            --tickers "$DEFAULT_TICKERS" \
+            --out-dir "$OUT_DIR" \
+            --manual-nav "$MANUAL_NAV" \
+            --sec-user-agent "$SEC_USER_AGENT" \
+            --nav-auto-max-filings "$NAV_AUTO_MAX_FILINGS" \
+            --sec-max-docs-per-filing "$SEC_MAX_DOCS_PER_FILING" \
+            $EXTRA_ARGS
+
+      - name: Show output files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Output directory: $OUT_DIR"
+          find "$OUT_DIR" -maxdepth 2 -type f | sort || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nav-sec-pipeline-output
+          path: |
+            ${{ env.OUT_DIR }}/
+            ${{ env.MANUAL_NAV }}
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Commit generated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "$OUT_DIR" "$MANUAL_NAV" || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: update nav sec pipeline output"
+          git push
